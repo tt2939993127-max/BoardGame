@@ -394,6 +394,54 @@ describe('InteractionSystem - 通用刷新', () => {
         expect(options).toHaveLength(3); // 保持原始的 3 个选项
     });
 
+    it('required 单选在动态刷新后变成空数组时，应自动注入紧急跳过选项', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'required-empty-after-refresh',
+            'p1',
+            '选择一张卡牌',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+            ],
+            { sourceId: 'test', autoRefresh: 'hand', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [],
+                    },
+                },
+            },
+        };
+
+        state = refreshInteractionOptions(state);
+
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(1);
+        expect(options[0].id).toBe('__emergency_skip__');
+        expect(options[0].value.__emergency_skip__).toBe(true);
+    });
+
     it('紧急跳过选项应该在刷新时被保留', () => {
         // 测试场景：当 createSimpleChoice 创建了空选项交互时，会自动添加紧急跳过选项
         // 刷新时应该保留这个选项（类似 __cancel__）
@@ -568,6 +616,54 @@ describe('InteractionSystem - 通用刷新', () => {
 
         expect(result?.halt).toBe(true);
         expect(result?.error).toBe('无效的选择');
+    });
+
+    it('紧急跳过选项被响应时，应取消交互而不是报无效选择', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [],
+                    },
+                },
+            },
+            sys: {
+                interaction: {
+                    current: {
+                        id: 'required-empty-live',
+                        playerId: 'p1',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'test',
+                            options: [
+                                { id: '__emergency_skip__', label: '跳过（无可用选项）', value: { __emergency_skip__: true } },
+                            ],
+                            responseValidationMode: 'live',
+                            autoRefresh: 'hand',
+                        },
+                    },
+                    queue: [],
+                },
+            },
+        } as any;
+
+        const system = createSimpleChoiceSystem<TestCore>();
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: 'p1',
+                payload: { optionId: '__emergency_skip__' },
+            } as any,
+            events: [],
+            random: dummyRandom as any,
+            playerIds: ['p1'],
+        });
+
+        expect(result?.halt).toBe(false);
+        expect(result?.state?.sys.interaction.current).toBeUndefined();
+        expect(result?.events?.[0].type).toBe(INTERACTION_EVENTS.CANCELLED);
+        expect((result?.events?.[0] as any)?.payload?.reason).toBe('empty-options');
     });
 
     it('旧字段 revalidateOnRespond 仍兼容映射到 live 语义', () => {

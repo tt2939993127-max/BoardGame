@@ -488,7 +488,8 @@ export function queueInteraction<TCore>(
             if (data.optionsGenerator) {
                 // 传递 state 和 data（包含 continuationContext）给 optionsGenerator
                 console.log('[InteractionSystem] popInteraction: Calling optionsGenerator...');
-                const freshOptions = data.optionsGenerator(state, data);
+                const generatedOptions = data.optionsGenerator(state, data);
+                const freshOptions = normalizeFreshSimpleChoiceOptions(generatedOptions, data);
                 console.log('[InteractionSystem] popInteraction: optionsGenerator returned:', {
                     freshOptionsCount: freshOptions.length,
                     freshOptions,
@@ -610,8 +611,10 @@ export function resolveInteraction<TCore>(
             freshOptions = refreshOptionsGeneric(state, next, data.options, autoRefresh);
         }
         
+        freshOptions = normalizeFreshSimpleChoiceOptions(freshOptions, data);
+
         // 智能处理 multi.min 限制
-        if (!(data.multi?.min && freshOptions.length < data.multi.min)) {
+        if (!(data.multi?.min && freshOptions.length > 0 && freshOptions.length < data.multi.min)) {
             next = {
                 ...next,
                 data: { ...data, options: freshOptions },
@@ -750,15 +753,51 @@ function refreshOptionsGeneric<T>(
     });
 }
 
+function buildEmergencySkipOption<T>(): PromptOption<T> {
+    return {
+        id: '__emergency_skip__',
+        label: '跳过（无可用选项）',
+        value: { __emergency_skip__: true } as T,
+        displayMode: 'button' as const,
+    };
+}
+
+function normalizeFreshSimpleChoiceOptions<T>(
+    freshOptions: PromptOption<T>[],
+    data: SimpleChoiceData<T>,
+): PromptOption<T>[] {
+    if (freshOptions.length > 0) return freshOptions;
+
+    const minSelections = data.multi?.min ?? 1;
+    if (minSelections === 0) {
+        return freshOptions;
+    }
+
+    const fallbackOptions = (data.options ?? []).filter((option) => {
+        const value = option.value as Record<string, unknown> | undefined;
+        return Boolean(
+            value
+            && typeof value === 'object'
+            && (value.skip || value.cancel || value.__cancel__ || value.__emergency_skip__),
+        );
+    });
+
+    if (fallbackOptions.length > 0) {
+        return fallbackOptions;
+    }
+
+    return [buildEmergencySkipOption<T>()];
+}
+
 export function getFreshSimpleChoiceOptions<TCore, T = unknown>(
     state: MatchState<TCore>,
     interaction: InteractionDescriptor<SimpleChoiceData<T>>,
 ): PromptOption<T>[] {
     const data = interaction.data;
-    if (data.optionsGenerator) {
-        return data.optionsGenerator(state, data);
-    }
-    return refreshOptionsGeneric(state, interaction, data.options, data.autoRefresh);
+    const freshOptions = data.optionsGenerator
+        ? data.optionsGenerator(state, data)
+        : refreshOptionsGeneric(state, interaction, data.options, data.autoRefresh);
+    return normalizeFreshSimpleChoiceOptions(freshOptions, data);
 }
 
 export function getSimpleChoiceResponseValidationMode(
@@ -802,9 +841,11 @@ export function refreshInteractionOptions<TCore>(
         freshOptions = refreshOptionsGeneric(state, currentInteraction, data.options, autoRefresh);
     }
     
+    freshOptions = normalizeFreshSimpleChoiceOptions(freshOptions, data);
+
     // 智能处理 multi.min 限制
-    // 如果过滤后无法满足最小选择数，保持原始选项（安全降级）
-    if (data.multi?.min && freshOptions.length < data.multi.min) {
+    // 如果过滤后无法满足最小选择数，且又不是“已经明确没有任何可选项”的场景，则保持原始选项（安全降级）
+    if (data.multi?.min && freshOptions.length > 0 && freshOptions.length < data.multi.min) {
         return state;
     }
     

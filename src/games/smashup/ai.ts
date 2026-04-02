@@ -6,7 +6,7 @@ import {
     createScoredLocalAiPolicy,
 } from '../../engine/ai';
 import type { AiDecisionContext, AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
-import type { InteractionDescriptor as EngineInteractionDescriptor, PromptMultiConfig } from '../../engine/systems/InteractionSystem';
+import { getFreshSimpleChoiceOptions, type InteractionDescriptor as EngineInteractionDescriptor, type PromptMultiConfig } from '../../engine/systems/InteractionSystem';
 import {
     SU_COMMANDS,
     getCurrentPlayerId,
@@ -108,6 +108,14 @@ const hasPendingScoreBasesSpecialActivation = (state: SmashUpState, playerId: Pl
             }) as never);
             if (result.valid) return true;
         }
+
+        for (const titan of state.core.titans ?? []) {
+            const result = validate(state, createCommand(playerId, SU_COMMANDS.ACTIVATE_SPECIAL, {
+                titanUid: titan.uid,
+                baseIndex,
+            }) as never);
+            if (result.valid) return true;
+        }
     }
 
     return false;
@@ -200,6 +208,31 @@ const buildSimpleChoicePayload = (
     return { optionIds };
 };
 
+const enumerateInteractionOptionCombinations = <T extends { id: string }>(
+    options: T[],
+    minCount: number,
+    maxCount: number,
+): T[][] => {
+    const results: T[][] = [];
+    const path: T[] = [];
+
+    const dfs = (start: number) => {
+        if (path.length >= minCount && path.length <= maxCount) {
+            results.push([...path]);
+        }
+        if (path.length === maxCount) return;
+
+        for (let index = start; index < options.length; index += 1) {
+            path.push(options[index]);
+            dfs(index + 1);
+            path.pop();
+        }
+    };
+
+    dfs(0);
+    return results;
+};
+
 const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLegalAction[] | null => {
     const current = state.sys.interaction?.current as EngineInteractionDescriptor | undefined;
     if (!current || current.playerId !== playerId) return null;
@@ -209,10 +242,12 @@ const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLeg
         options?: SmashUpInteractionOption[];
         multi?: PromptMultiConfig;
     };
-    const options = (data.options ?? []).filter((option): option is Required<Pick<SmashUpInteractionOption, 'id'>> & SmashUpInteractionOption => {
+    const refreshedOptions = getFreshSimpleChoiceOptions(state, current as EngineInteractionDescriptor<any>);
+    const options = refreshedOptions.filter((option): option is Required<Pick<SmashUpInteractionOption, 'id'>> & SmashUpInteractionOption => {
         return typeof option.id === 'string' && option.disabled !== true;
     });
     const minCount = data.multi?.min ?? 1;
+    const maxCount = data.multi?.max ?? minCount;
     const actions: AiLegalAction[] = [];
 
     if (minCount === 0) {
@@ -233,17 +268,36 @@ const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLeg
         });
     }
 
+    if (data.multi) {
+        const combinations = enumerateInteractionOptionCombinations(options, minCount, maxCount);
+        actions.push(...combinations.map((combination, index) => ({
+            actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
+            kind: 'interaction-choice',
+            label: combination.map((option) => option.label ?? option.id).join(' + ') || `交互多选 ${index + 1}`,
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: buildSimpleChoicePayload(
+                    combination.map((option) => option.id),
+                    data.multi,
+                ),
+            }],
+            metadata: {
+                interactionId: current.id,
+                optionIds: combination.map((option) => option.id),
+                displayMode: combination[0]?.displayMode,
+                optionValue: combination.map((option) => option.value),
+            },
+        })));
+        return actions;
+    }
+
     actions.push(...options.map((option, index) => ({
         actionId: createAiLegalActionId('interaction', current.id, option.id),
         kind: 'interaction-choice',
         label: option.label ?? `交互选择 ${index + 1}`,
         commands: [{
             type: 'SYS_INTERACTION_RESPOND',
-            payload: buildSimpleChoicePayload(
-                minCount > 1 ? options.slice(0, minCount).map((item) => item.id) : [option.id],
-                data.multi,
-                option.value,
-            ),
+            payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
         }],
         metadata: {
             interactionId: current.id,
@@ -547,6 +601,25 @@ const buildSpecialActions = (state: SmashUpState, playerId: PlayerId): AiLegalAc
                     baseIndex,
                     minionUid: minion.uid,
                     defId: minion.defId,
+                    scoringBase: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
+                },
+            });
+        }
+
+        for (const titan of state.core.titans ?? []) {
+            appendAction(actions, state, playerId, {
+                actionId: createAiLegalActionId('activate-special', 'titan', titan.uid, baseIndex),
+                kind: 'activate-special',
+                label: `激活泰坦特殊能力 ${titan.defId}`,
+                commands: [{
+                    type: SU_COMMANDS.ACTIVATE_SPECIAL,
+                    payload: { titanUid: titan.uid, baseIndex },
+                }],
+                metadata: {
+                    baseIndex,
+                    titanUid: titan.uid,
+                    defId: titan.defId,
+                    sourceType: 'titan',
                     scoringBase: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
                 },
             });

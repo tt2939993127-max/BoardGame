@@ -1395,6 +1395,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
             const newBases = [...state.bases];
             newBases.splice(baseIndex, 0, newBase);
+            const adjustedTitans = (state.titans ?? []).map(titan => {
+                if (titan.location.zone !== 'base') return titan;
+                if (titan.location.baseIndex >= baseIndex) {
+                    return {
+                        ...titan,
+                        location: {
+                            ...titan.location,
+                            baseIndex: titan.location.baseIndex + 1,
+                        },
+                    };
+                }
+                return titan;
+            });
             // 插入基地后，eligible 列表中 >= baseIndex 的索引需要 +1（数组扩张）
             const prevEligible = state.scoringEligibleBaseIndices;
             const adjustedEligible = prevEligible
@@ -1403,6 +1416,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return {
                 ...state,
                 bases: newBases,
+                titans: adjustedTitans,
                 baseDeck: newBaseDeck,
                 beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
                 afterScoringTriggeredBases: cleanedAfterScoring.length > 0 ? cleanedAfterScoring : undefined,
