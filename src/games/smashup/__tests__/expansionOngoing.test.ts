@@ -1421,10 +1421,15 @@ describe('米斯卡塔尼克 新增能力', () => {
                 now: 1006,
             });
 
+            const limitModified = events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED) as any;
+            expect(limitModified).toBeDefined();
+            expect(limitModified.payload?.limitType).toBe('action');
+            expect(limitModified.payload?.delta).toBe(1);
+
             const actionPlayed = events.find(e => e.type === SU_EVENTS.ACTION_PLAYED) as any;
             expect(actionPlayed).toBeDefined();
             expect(actionPlayed.payload?.defId).toBe(MADNESS_CARD_DEF_ID);
-            expect(actionPlayed.payload?.isExtraAction).toBe(true);
+            expect(actionPlayed.payload?.isExtraAction).toBeUndefined();
         });
     });
 });

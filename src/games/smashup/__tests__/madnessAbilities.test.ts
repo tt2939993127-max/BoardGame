@@ -103,10 +103,15 @@ describe('interaction handler regressions', () => {
             2001,
         );
 
+        const limitModified = playMadnessResult.events.find(event => event.type === SU_EVENTS.LIMIT_MODIFIED) as any;
+        expect(limitModified).toBeDefined();
+        expect(limitModified.payload?.limitType).toBe('action');
+        expect(limitModified.payload?.delta).toBe(1);
+
         const actionPlayed = playMadnessResult.events.find(event => event.type === SU_EVENTS.ACTION_PLAYED) as any;
         expect(actionPlayed).toBeDefined();
         expect(actionPlayed.payload?.defId).toBe(MADNESS_CARD_DEF_ID);
-        expect(actionPlayed.payload?.isExtraAction).toBe(true);
+        expect(actionPlayed.payload?.isExtraAction).toBeUndefined();
 
         const interaction = playMadnessResult.state.sys.interaction;
         const queuedInteractions = [
@@ -114,6 +119,41 @@ describe('interaction handler regressions', () => {
             ...interaction.queue,
         ];
         expect(queuedInteractions.some(item => (item.data as any)?.sourceId === 'special_madness')).toBe(true);
+    });
+
+    it('miskatonic_librarian_pod extra mode keeps counters in sync after the regular action is already spent', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('mad2', MADNESS_CARD_DEF_ID, 'action', '0')],
+                    actionsPlayed: 1,
+                    actionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+        const ms = makeMatchState(state);
+
+        const modeHandler = getInteractionHandler('miskatonic_librarian_pod');
+        expect(modeHandler).toBeDefined();
+        const modeResult = modeHandler!(ms, '0', { mode: 'extra' }, undefined, defaultRandom, 2010);
+        const playMadnessHandler = getInteractionHandler('miskatonic_librarian_pod_play_madness');
+        expect(playMadnessHandler).toBeDefined();
+
+        const playMadnessResult = playMadnessHandler!(
+            modeResult.state ?? ms,
+            '0',
+            { cardUid: 'mad2' },
+            undefined,
+            defaultRandom,
+            2011,
+        );
+        const finalCore = playMadnessResult.events.reduce((core, event) => reduce(core, event), state);
+
+        expect(finalCore.players['0'].actionLimit).toBe(2);
+        expect(finalCore.players['0'].actionsPlayed).toBe(2);
+        expect(finalCore.players['0'].actionLimit - finalCore.players['0'].actionsPlayed).toBe(0);
     });
 });
 

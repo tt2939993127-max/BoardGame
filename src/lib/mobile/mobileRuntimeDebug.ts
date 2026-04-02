@@ -106,6 +106,20 @@ export const logMobileRuntime = (
     console.info(message);
 };
 
+const tryNativeLog = (message: string) => {
+    try {
+        const win = typeof window !== 'undefined' ? window as unknown as Record<string, unknown> : null;
+        const cap = win?.Capacitor as Record<string, unknown> | undefined;
+        const plugins = cap?.Plugins as Record<string, unknown> | undefined;
+        const gamePackage = plugins?.GamePackage as Record<string, unknown> | undefined;
+        if (typeof gamePackage?.logDiagnostic === 'function') {
+            void (gamePackage.logDiagnostic as (opts: { message: string }) => Promise<void>)({ message });
+        }
+    } catch {
+        // best-effort
+    }
+};
+
 export const logMobileRuntimeCritical = (
     scope: string,
     stage: string,
@@ -119,4 +133,5 @@ export const logMobileRuntimeCritical = (
         ...normalizedPayload,
     })}`;
     console.info(message);
+    tryNativeLog(message);
 };
