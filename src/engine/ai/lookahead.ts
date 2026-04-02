@@ -9,6 +9,7 @@ import type {
     LocalAiPolicy,
 } from './types';
 import { evaluateLocalAiActions } from './scoring';
+import { buildDeterministicAiNoise } from './noise';
 
 export interface AiProjectedActionScore {
     score: number;
@@ -59,26 +60,6 @@ function stableSortedEvaluations(
             }
             return left.index - right.index;
         });
-}
-
-function buildDeterministicNoise(
-    context: AiDecisionContext,
-    action: AiLegalAction,
-): number {
-    const stateTurnNumber = typeof context.visibleState.sys?.turnNumber === 'number'
-        ? context.visibleState.sys.turnNumber
-        : 0;
-    const eventStreamNextId = typeof context.visibleState.sys?.eventStream?.nextId === 'number'
-        ? context.visibleState.sys.eventStream.nextId
-        : 0;
-    const seed = `${context.matchId}|${context.playerId}|${stateTurnNumber}|${eventStreamNextId}|${action.actionId}`;
-    let hash = 2166136261;
-    for (let index = 0; index < seed.length; index += 1) {
-        hash ^= seed.charCodeAt(index);
-        hash = Math.imul(hash, 16777619);
-    }
-    const normalized = (hash >>> 0) / 0xffffffff;
-    return normalized * 2 - 1;
 }
 
 function buildConfidence(finalEvaluations: FinalEvaluation[], best: FinalEvaluation): number | undefined {
@@ -156,7 +137,7 @@ export function createLookaheadLocalAiPolicy(
                 let noiseScore = 0;
                 if (context.difficulty.randomness > 0) {
                     noiseScore = Number(
-                        (buildDeterministicNoise(context, evaluation.action) * context.difficulty.randomness).toFixed(3),
+                        (buildDeterministicAiNoise(context, evaluation.action) * context.difficulty.randomness).toFixed(3),
                     );
                     if (noiseScore !== 0) {
                         contributions.push({
