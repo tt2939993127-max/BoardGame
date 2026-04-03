@@ -361,7 +361,7 @@ function steampunkZeppelin(ctx: AbilityContext): AbilityResult {
 
     if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    const options = buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId });
+    const options = buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId });
     const interaction = createSimpleChoice(
         `steampunk_zeppelin_minion_${ctx.now}`, ctx.playerId,
         '齐柏林飞艇：点击要移动的随从', options,
