@@ -1691,6 +1691,70 @@ async function waitForLayoutSettle(page: { waitForTimeout: (timeout: number) => 
     await page.waitForTimeout(LAYOUT_SETTLE_MS);
 }
 
+async function expectTitanCenteredOnBase(
+    page: any,
+    baseIndex: number,
+    titanUid: string,
+    tolerancePx = 6,
+): Promise<void> {
+    const base = page.locator(`[data-base-index="${baseIndex}"]`).first();
+    const titan = page.locator(`[data-titan-uid="${titanUid}"] > div`).first();
+    await expect(base).toBeVisible();
+    await expect(titan).toBeVisible();
+
+    const [baseBox, titanBox] = await Promise.all([base.boundingBox(), titan.boundingBox()]);
+    expect(baseBox, `未获取到基地 ${baseIndex} 的边界`).toBeTruthy();
+    expect(titanBox, `未获取到泰坦 ${titanUid} 的边界`).toBeTruthy();
+
+    const baseCenterX = (baseBox?.x ?? 0) + (baseBox?.width ?? 0) / 2;
+    const titanCenterX = (titanBox?.x ?? 0) + (titanBox?.width ?? 0) / 2;
+    const delta = Math.abs(baseCenterX - titanCenterX);
+
+    expect(
+        delta,
+        `泰坦 ${titanUid} 未与基地 ${baseIndex} 居中对齐，水平偏差 ${delta.toFixed(2)}px；base[x=${(baseBox?.x ?? 0).toFixed(2)},w=${(baseBox?.width ?? 0).toFixed(2)},cx=${baseCenterX.toFixed(2)}] titan[x=${(titanBox?.x ?? 0).toFixed(2)},w=${(titanBox?.width ?? 0).toFixed(2)},cx=${titanCenterX.toFixed(2)}]`,
+    ).toBeLessThanOrEqual(tolerancePx);
+}
+
+async function expectOngoingsWrapTitan(
+    page: any,
+    titanUid: string,
+    ongoingUids: string[],
+): Promise<void> {
+    const titan = page.locator(`[data-titan-uid="${titanUid}"] > div`).first();
+    await expect(titan).toBeVisible();
+    const titanBox = await titan.boundingBox();
+    expect(titanBox, `未获取到泰坦 ${titanUid} 的边界`).toBeTruthy();
+    const titanCenterX = (titanBox?.x ?? 0) + (titanBox?.width ?? 0) / 2;
+
+    const ongoingBoxes = await Promise.all(ongoingUids.map(async (uid) => {
+        const card = page.locator(`[data-ongoing-uid="${uid}"]`).first();
+        await expect(card).toBeVisible();
+        const box = await card.boundingBox();
+        expect(box, `未获取到持续行动 ${uid} 的边界`).toBeTruthy();
+        return {
+            uid,
+            left: box?.x ?? 0,
+            centerX: (box?.x ?? 0) + (box?.width ?? 0) / 2,
+        };
+    }));
+
+    expect(
+        ongoingBoxes.some((card) => card.centerX < titanCenterX),
+        `持续行动没有分布到泰坦 ${titanUid} 左侧`,
+    ).toBe(true);
+    expect(
+        ongoingBoxes.some((card) => card.centerX > titanCenterX),
+        `持续行动没有分布到泰坦 ${titanUid} 右侧`,
+    ).toBe(true);
+
+    const leftMostCard = [...ongoingBoxes].sort((a, b) => a.left - b.left)[0];
+    expect(
+        leftMostCard?.uid,
+        `最左侧持续行动应保持第一张卡，当前最左侧为 ${leftMostCard?.uid ?? 'unknown'}`,
+    ).toBe(ongoingUids[0]);
+}
+
 async function selectInteractionOptionBy(
     game: any,
     matcher: (option: any) => boolean,
@@ -1786,6 +1850,10 @@ function buildFiveOngoingActions(ownerId = '0') {
         { uid: `${ownerId}-ongoing-enchantress`, defId: 'wizard_enchantress', ownerId, talentUsed: false },
         { uid: `${ownerId}-ongoing-portal`, defId: 'wizard_portal', ownerId, talentUsed: false },
     ];
+}
+
+function buildOneOngoingAction(ownerId = '0') {
+    return buildFiveOngoingActions(ownerId).slice(0, 1);
 }
 
 async function openFourPlayerTitanLayoutScene(game: any): Promise<void> {
@@ -2856,6 +2924,8 @@ test.describe('Smash Up - Alien Terraform', () => {
     });
 
     test('泰坦与持续行动布局在二人局和四人局下都应稳定', async ({ game, page }, testInfo) => {
+        test.setTimeout(60_000);
+
         await openTitanRailScene(game, {
             bases: [
                 {
@@ -2886,6 +2956,8 @@ test.describe('Smash Up - Alien Terraform', () => {
             baseIndex: 0,
         });
         await waitForLayoutSettle(page);
+        await expectTitanCenteredOnBase(page, 0, 'titan-right-row');
+        await expectOngoingsWrapTitan(page, 'titan-right-row', buildFiveOngoingActions('0').map((card) => card.uid));
         await game.screenshot('01-2p-five-ongoings-with-titan', testInfo);
 
         await openTitanRailScene(game, {
@@ -2916,7 +2988,88 @@ test.describe('Smash Up - Alien Terraform', () => {
             baseIndex: 0,
         });
         await waitForLayoutSettle(page);
+        await expectTitanCenteredOnBase(page, 0, 'titan-four-player-layout');
+        await expectOngoingsWrapTitan(page, 'titan-four-player-layout', buildFiveOngoingActions('0').map((card) => card.uid));
         await game.screenshot('03-4p-five-bases-with-titan', testInfo);
+    });
+
+    test('二人局下 1 张与 5 张持续行动在有无泰坦时的布局截图', async ({ game, page }, testInfo) => {
+        test.setTimeout(60_000);
+
+        await openTitanRailScene(game, {
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    ongoingActions: buildOneOngoingAction('0'),
+                },
+            ],
+        });
+        await waitForLayoutSettle(page);
+        await game.screenshot('01-2p-one-ongoing-no-titan', testInfo);
+
+        await openTitanRailScene(game, {
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    ongoingActions: buildFiveOngoingActions('0'),
+                },
+            ],
+        });
+        await waitForLayoutSettle(page);
+        await game.screenshot('02-2p-five-ongoings-no-titan', testInfo);
+
+        await openTitanRailScene(game, {
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    ongoingActions: buildOneOngoingAction('0'),
+                },
+            ],
+            extraCore: {
+                titans: [
+                    {
+                        uid: 'titan-one-ongoing',
+                        defId: 'tricksters_big_funny_giant',
+                        faction: 'tricksters',
+                        ownerId: '0',
+                        controllerId: '0',
+                        powerCounters: 1,
+                        talentUsed: false,
+                        location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+                    },
+                ],
+            },
+        });
+        await waitForLayoutSettle(page);
+        await expectTitanCenteredOnBase(page, 0, 'titan-one-ongoing');
+        await game.screenshot('03-2p-one-ongoing-with-titan', testInfo);
+
+        await openTitanRailScene(game, {
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    ongoingActions: buildFiveOngoingActions('0'),
+                },
+            ],
+            extraCore: {
+                titans: [
+                    {
+                        uid: 'titan-five-ongoings',
+                        defId: 'tricksters_big_funny_giant',
+                        faction: 'tricksters',
+                        ownerId: '0',
+                        controllerId: '0',
+                        powerCounters: 1,
+                        talentUsed: false,
+                        location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+                    },
+                ],
+            },
+        });
+        await waitForLayoutSettle(page);
+        await expectTitanCenteredOnBase(page, 0, 'titan-five-ongoings');
+        await expectOngoingsWrapTitan(page, 'titan-five-ongoings', buildFiveOngoingActions('0').map((card) => card.uid));
+        await game.screenshot('04-2p-five-ongoings-with-titan', testInfo);
     });
 
     test('Major Ursa 天赋应在移动泰坦后把 3 战力敌方随从挪到新基地', async ({ game, page }, testInfo) => {
