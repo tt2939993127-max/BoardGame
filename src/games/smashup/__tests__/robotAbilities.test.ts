@@ -297,4 +297,51 @@ describe('robot_microbot_reclaimer（微型机回收者 onPlay 额外出牌）',
         // 非第一个随从 → 不额外出牌 → minionLimit 保持 2
         expect(result.finalState.core.players['0'].minionLimit).toBe(2);
     });
+
+    it('先解洗牌交互后，仍可把额外随从打到荣誉之地', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('r1', 'robot_microbot_reclaimer', 'minion', '0'),
+                        makeCard('p1', 'pirate_first_mate', 'minion', '0'),
+                    ],
+                    discard: [makeCard('mb1', 'robot_microbot_alpha', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'base_the_field_of_honor', minions: [], ongoingActions: [] }],
+        });
+
+        const firstPlay = runCommand(makeMatchState(state), {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'r1', baseIndex: 0 },
+        } as any, defaultRandom);
+        expect(firstPlay.success).toBe(true);
+        expect(firstPlay.finalState.core.players['0'].minionLimit).toBe(2);
+
+        const interaction = (firstPlay.finalState.sys as any)?.interaction?.current;
+        expect(interaction?.data?.sourceId).toBe('robot_microbot_reclaimer');
+        const selected = interaction?.data?.options?.find((option: any) => option.value?.cardUid === 'mb1');
+        expect(selected).toBeDefined();
+
+        const afterRespond = runCommand(firstPlay.finalState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionIds: [selected.id] },
+        } as any, defaultRandom);
+        expect(afterRespond.success).toBe(true);
+        expect(afterRespond.finalState.core.players['0'].minionLimit).toBe(2);
+        expect(afterRespond.finalState.core.players['0'].minionsPlayed).toBe(1);
+
+        const secondPlay = runCommand(afterRespond.finalState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'p1', baseIndex: 0 },
+        } as any, defaultRandom);
+        expect(secondPlay.success).toBe(true);
+        expect(secondPlay.finalState.core.players['0'].minionsPlayed).toBe(2);
+        expect(secondPlay.finalState.core.bases[0].minions.some(m => m.uid === 'p1')).toBe(true);
+    });
 });
