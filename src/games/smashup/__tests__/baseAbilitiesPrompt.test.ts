@@ -490,6 +490,30 @@ describe('base_ninja_dojo: 计分后冠军消灭随从', () => {
 
         expect(events).toHaveLength(0);
     });
+
+    it('并列冠军时应为每位冠军各生成一个 Prompt', () => {
+        const result = triggerBaseAbilityWithMS('base_ninja_dojo', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_ninja_dojo', {
+                    minions: [
+                        makeMinion('m1', '0', 4),
+                        makeMinion('m2', '1', 4),
+                    ],
+                })],
+            }),
+            baseDefId: 'base_ninja_dojo',
+            rankings: [
+                { playerId: '0', power: 8, vp: 2 },
+                { playerId: '1', power: 8, vp: 2 },
+            ],
+        }));
+
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(2);
+        expect(interactions.map(interaction => interaction.playerId)).toEqual(['0', '1']);
+        expect(interactions.every(interaction => interaction.data.sourceId === 'base_ninja_dojo')).toBe(true);
+        expect(interactions.every(interaction => interaction.data.options.length === 3)).toBe(true);
+    });
 });
 
 describe('stale return/destroy regression: 基础基地 Prompt', () => {
