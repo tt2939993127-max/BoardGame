@@ -127,7 +127,7 @@ beforeAll(() => {
 });
 
 describe('feedback regression: ancient_egyptians_mummy_strength', () => {
-  it('walks the real RESPOND chain for the +4 branch without throwing a command exception', () => {
+  it('walks the real RESPOND chain with target-first selection without throwing a command exception', () => {
     const empowered = makeMinion('empowered', 'ancient_egyptians_priest_of_anubis', '0', 2);
     const allyNoBuriedBase = makeMinion('other-base', 'ghost_apparition', '0', 3);
     const enemy = makeMinion('enemy', 'ghost_spectre', '1', 3);
@@ -161,20 +161,15 @@ describe('feedback regression: ancient_egyptians_mummy_strength', () => {
       now: 11,
     });
 
-    const modePrompt = initial.matchState?.sys.interaction.current as any;
-    expect(modePrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_mode');
-    const plusFourOption = modePrompt?.data?.options.find((option: any) => option.value?.amount === 4);
-    expect(plusFourOption).toBeTruthy();
-
-    const chooseTarget = respond(initial.matchState!, '0', plusFourOption!.id, 'mummy_strength: choose +4');
-    expect(chooseTarget.error).toBeUndefined();
-
-    const targetPrompt = chooseTarget.finalState.sys.interaction.current as any;
+    const targetPrompt = initial.matchState?.sys.interaction.current as any;
     expect(targetPrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_target');
-    const targetMinions = targetPrompt?.data?.options.map((option: any) => option.value?.minionUid).filter(Boolean);
-    expect(targetMinions).toEqual(['empowered']);
+    const targetMinions = targetPrompt?.data?.options.map((option: any) => option.value?.minionUid).filter(Boolean).sort();
+    expect(targetMinions).toEqual(['empowered', 'other-base']);
 
-    const chooseMinion = respond(chooseTarget.finalState, '0', targetPrompt!.data.options[0].id, 'mummy_strength: choose target');
+    const empoweredOption = targetPrompt!.data.options.find((option: any) => option.value?.minionUid === 'empowered');
+    expect(empoweredOption).toBeTruthy();
+
+    const chooseMinion = respond(initial.matchState!, '0', empoweredOption!.id, 'mummy_strength: choose target');
     expect(chooseMinion.error).toBeUndefined();
     expect(chooseMinion.finalState.sys.interaction.current).toBeFalsy();
 

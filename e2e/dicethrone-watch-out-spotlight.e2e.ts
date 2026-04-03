@@ -1987,6 +1987,9 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await disableFabMenu(page);
 
     const playerBoardMagnifyButton = page.locator('[data-testid="player-board-magnify-button"]');
+    const playerBoardSurface = page.locator('[data-testid="player-board-surface"]');
+    const playerBoardAbilitySlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="combo"]').first();
+    const tipBoardSurface = page.locator('[data-testid="tip-board-surface"]');
     const discardPileInspectButton = page.locator('[data-testid="discard-pile-inspect-button"]');
     const autoResponseToggle = page.locator('[data-testid="auto-response-toggle"]');
     const boardMagnifyOverlay = page.locator('[data-testid="board-magnify-overlay"]');
@@ -2011,17 +2014,40 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await expectElementInsideViewport(discardPileInspectButton, 'discard pile inspect button', viewport!.width, viewport!.height);
     await expectElementInsideViewport(rollButton, 'roll button', viewport!.width, viewport!.height);
     await expectElementInsideViewport(confirmButton, 'confirm button', viewport!.width, viewport!.height);
+    await expect(playerBoardSurface).toBeVisible({ timeout: 5000 });
+    await expect(playerBoardAbilitySlot).toBeVisible({ timeout: 5000 });
+    await expect(tipBoardSurface).toBeVisible({ timeout: 5000 });
 
     await game.screenshot('10-mobile-main-board-state', testInfo);
 
+    await playerBoardSurface.click({ position: { x: 44, y: 44 } });
+    await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
+    let overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
+    await game.screenshot('11-mobile-player-board-surface-magnify-open', testInfo);
+    await boardMagnifyOverlay.click({ position: { x: 10, y: 10 } });
+    await expect(boardMagnifyOverlay).toBeHidden({ timeout: 5000 });
+
+    await playerBoardAbilitySlot.click();
+    await page.waitForTimeout(300);
+    await expect(boardMagnifyOverlay).toBeHidden();
+
+    await tipBoardSurface.click({ position: { x: 28, y: 80 } });
+    await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
+    overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
+    await game.screenshot('12-mobile-tip-board-surface-magnify-open', testInfo);
+    await boardMagnifyOverlay.click({ position: { x: 10, y: 10 } });
+    await expect(boardMagnifyOverlay).toBeHidden({ timeout: 5000 });
+
     await playerBoardMagnifyButton.click();
     await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
-    const overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
     await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
     const magnifiedBoardFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
     await expect(magnifiedBoardFrame).toBeVisible({ timeout: 5000 });
     const magnifiedBoardImage = boardMagnifyOverlay.locator('img[alt="Preview"]').first();
-    await game.screenshot('11-mobile-player-board-magnify-open', testInfo);
+    await game.screenshot('13-mobile-player-board-button-magnify-open', testInfo);
     const magnifiedBoardImageCount = await magnifiedBoardImage.count();
     if (magnifiedBoardImageCount > 0) {
         const naturalSize = await magnifiedBoardImage.evaluate((node) => ({
@@ -2046,7 +2072,7 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
     const discardPreviewFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
     await expect(discardPreviewFrame).toBeVisible({ timeout: 5000 });
-    await game.screenshot('12-mobile-discard-pile-inspect-open', testInfo);
+    await game.screenshot('14-mobile-discard-pile-inspect-open', testInfo);
 });
 
 test('mobile long press hand card should open magnify without playing card', async ({ page, game }, testInfo) => {

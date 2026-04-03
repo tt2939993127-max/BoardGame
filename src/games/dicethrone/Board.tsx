@@ -141,10 +141,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const playerNames = React.useMemo(() => {
         const names: Record<string, string> = {};
         Object.keys(G.players).forEach(pid => {
-            names[pid] = matchData?.find(p => String(p.id) === pid)?.name ?? t('common.opponent');
+            names[pid] = matchData?.find(p => String(p.id) === pid)?.name ?? `P${Number(pid) + 1}`;
         });
         return names;
-    }, [G.players, matchData, t]);
+    }, [G.players, matchData]);
     const isResponseWindowOpen = !!rawG.sys.responseWindow?.current;
     const currentResponseWindow = rawG.sys.responseWindow?.current;
     const currentResponderIndex = rawG.sys.responseWindow?.current?.currentResponderIndex;
@@ -1078,10 +1078,14 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                             readyPlayers={G.readyPlayers ?? {}}
                             playerNames={playerNames}
                             seatingOrder={G.seatingOrder}
+                            seatControllers={G.seatControllers}
+                            seatSwapRequest={G.seatSwapRequest}
                             onSelect={engineMoves.selectCharacter}
                             onReady={engineMoves.playerReady}
                             onUnready={engineMoves.playerUnready}
-                            onMoveSeat={engineMoves.moveSeat}
+                            onRequestSeatSwap={engineMoves.requestSeatSwap}
+                            onRespondSeatSwap={engineMoves.respondSeatSwap}
+                            onCancelSeatSwap={engineMoves.cancelSeatSwap}
                             onStart={engineMoves.hostStartGame}
                             locale={locale}
                         />

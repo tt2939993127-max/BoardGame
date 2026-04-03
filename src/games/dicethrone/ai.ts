@@ -1953,6 +1953,18 @@ const defaultLocalPolicy = createLookaheadLocalAiPolicy({
     },
 });
 
+const REMOTE_VISIBLE_MAJOR_ACTION_KINDS = new Set<AiLegalAction['kind']>([
+    'setup-select-character',
+    'play-card',
+    'play-upgrade-card',
+    'response-play-card',
+    'select-ability',
+]);
+
+function shouldUseRemoteDecisionForDiceThrone(context: AiDecisionContext): boolean {
+    return context.legalActions.some((action) => REMOTE_VISIBLE_MAJOR_ACTION_KINDS.has(action.kind));
+}
+
 export const diceThroneAiRuntime: GameAiRuntime = {
     gameId: 'dicethrone',
     buildLegalActions: buildDiceThroneAiLegalActions,
@@ -1960,4 +1972,5 @@ export const diceThroneAiRuntime: GameAiRuntime = {
         baseline: defaultLocalPolicy,
     },
     defaultLocalPolicyId: 'baseline',
+    shouldUseRemoteDecision: shouldUseRemoteDecisionForDiceThrone,
 };

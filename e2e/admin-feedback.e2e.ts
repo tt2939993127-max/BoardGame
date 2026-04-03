@@ -111,7 +111,7 @@ test.describe('后台反馈管理 E2E', () => {
         });
     });
 
-    test('反馈页可展示分诊上下文并复制压缩 AI 摘要', async ({ page }) => {
+    test('反馈页可展示分诊上下文并复制 AI 诊断包', async ({ page }) => {
         await setStoredAuth(page, {
             id: 'admin_1',
             username: 'Admin',
@@ -157,6 +157,7 @@ test.describe('后台反馈管理 E2E', () => {
                 name: 'TypeError',
                 message: 'Cannot read properties of undefined',
                 source: 'react.error_boundary',
+                stack: 'TypeError: Cannot read properties of undefined\n    at resolveEffect (Feedback.tsx:120:18)\n    at onClick (Board.tsx:88:9)',
             },
             createdAt: '2026-03-14T10:00:00.000Z',
         };
@@ -200,17 +201,35 @@ test.describe('后台反馈管理 E2E', () => {
 
         expect(payloadText).toBe(clipboardText);
         expect(payloadText.startsWith('{')).toBeFalsy();
-        expect(payloadText.includes('\n')).toBeFalsy();
-        expect(payloadText).toContain('反馈ID=feedback_001');
-        expect(payloadText).toContain('游戏=大杀四方(smashup)');
-        expect(payloadText).toContain('内容=这张卡效果不对，会把弃牌堆单位放回手牌。');
-        expect(payloadText).toContain('客户端=route=/play/smashup/match/abc, match=abc, player=0, game=smashup, mode=online');
-        expect(payloadText).toContain('错误=react.error_boundary | TypeError | Cannot read properties of undefined');
-        expect(payloadText).toContain('操作=1.step=play-card, cardId=card-001; 2.step=select-target, targetId=minion-77');
-        expect(payloadText).toContain('状态=game=smashup, turn=3, player=P1, field=1(minion-77@P1)');
+        expect(payloadText.includes('\n')).toBeTruthy();
+        expect(payloadText).toContain('# AI 排障诊断包');
+        expect(payloadText).toContain('## 1. 工单信息');
+        expect(payloadText).toContain('- 反馈ID: feedback_001');
+        expect(payloadText).toContain('- 游戏: 大杀四方(smashup)');
+        expect(payloadText).toContain('## 2. 用户反馈原文');
+        expect(payloadText).toContain('这张卡效果不对，会把弃牌堆单位放回手牌。');
+        expect(payloadText).toContain('## 3. 证据索引');
+        expect(payloadText).toContain('- 内嵌截图: 0 张');
+        expect(payloadText).toContain('- route: /play/smashup/match/abc');
+        expect(payloadText).toContain('- mode: online');
+        expect(payloadText).toContain('- userAgent: -');
+        expect(payloadText).toContain('## 5. 错误上下文');
+        expect(payloadText).toContain('- source: react.error_boundary');
+        expect(payloadText).toContain('- name: TypeError');
+        expect(payloadText).toContain('- message: Cannot read properties of undefined');
+        expect(payloadText).toContain('### 错误堆栈');
+        expect(payloadText).toContain('TypeError: Cannot read properties of undefined');
+        expect(payloadText).toContain('## 6. 操作日志摘要');
+        expect(payloadText).toContain('1.step=play-card, cardId=card-001; 2.step=select-target, targetId=minion-77');
+        expect(payloadText).toContain('## 7. 操作日志原文');
+        expect(payloadText).toContain('"step": "play-card"');
+        expect(payloadText).toContain('## 8. 状态快照摘要');
+        expect(payloadText).toContain('game=smashup, turn=3, player=P1, field=1(minion-77@P1)');
+        expect(payloadText).toContain('## 9. 状态快照原文');
+        expect(payloadText).toContain('"gameId": "smashup"');
 
         await page.screenshot({
-            path: 'test-results/evidence-screenshots/admin-feedback-ai-summary-copy.png',
+            path: 'test-results/evidence-screenshots/admin-feedback-ai-diagnostic-packet.png',
             fullPage: true,
         });
     });
@@ -396,7 +415,7 @@ test.describe('后台反馈管理 E2E', () => {
         });
     });
 
-    test('developer 可以进入反馈页并复制反馈摘要', async ({ page }) => {
+    test('developer 可以进入反馈页并复制反馈诊断包', async ({ page }) => {
         await setStoredAuth(page, {
             id: 'developer_1',
             username: 'Developer',

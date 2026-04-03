@@ -55,6 +55,9 @@ export const COMMAND_CATEGORIES: Record<string, CommandCategory> = {
     'SELECT_CHARACTER': CommandCategory.STRATEGIC,
     'HOST_START_GAME': CommandCategory.STRATEGIC,
     'MOVE_SEAT': CommandCategory.STRATEGIC,
+    'REQUEST_SEAT_SWAP': CommandCategory.STRATEGIC,
+    'RESPOND_SEAT_SWAP': CommandCategory.STRATEGIC,
+    'CANCEL_SEAT_SWAP': CommandCategory.STRATEGIC,
     'PLAYER_READY': CommandCategory.STRATEGIC,
     'PLAYER_UNREADY': CommandCategory.STRATEGIC,
     

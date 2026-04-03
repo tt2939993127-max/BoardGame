@@ -351,10 +351,10 @@ describe('Feedback Module (e2e)', () => {
         expect(listRes.body.items[1].content).toBe('newer feedback');
     });
 
-    it('bug 类型必须附带 actionLog 或 stateSnapshot', async () => {
+    it('bug 类型不附带 actionLog 或 stateSnapshot 也允许提交', async () => {
         const { userToken } = await seedUsers();
 
-        await request(app.getHttpServer())
+        const acceptedWithoutDiagnostic = await request(app.getHttpServer())
             .post('/feedback')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
@@ -363,7 +363,11 @@ describe('Feedback Module (e2e)', () => {
                 severity: 'high',
                 gameName: 'smashup',
             })
-            .expect(400);
+            .expect(201);
+
+        expect(acceptedWithoutDiagnostic.body.type).toBe('bug');
+        expect(acceptedWithoutDiagnostic.body.actionLog).toBeUndefined();
+        expect(acceptedWithoutDiagnostic.body.stateSnapshot).toBeUndefined();
 
         const accepted = await request(app.getHttpServer())
             .post('/feedback')

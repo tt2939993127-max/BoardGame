@@ -135,7 +135,7 @@ type DebugDie = Record<string, unknown> & {
 
 export const createDTRoomViaAPI = async (
     page: Page,
-    options?: { guestId?: string; numPlayers?: number; gameServerBaseURL?: string },
+    options?: { guestId?: string; numPlayers?: number; gameServerBaseURL?: string; setupData?: Record<string, unknown> },
 ): Promise<string | null> => {
     try {
         const actualGuestId = options?.guestId ?? createDtGuestId('dt_e2e');
@@ -145,7 +145,10 @@ export const createDTRoomViaAPI = async (
 
         const response = await postJsonWithRetry(page, url, {
             numPlayers,
-            setupData: { guestId: actualGuestId },
+            setupData: {
+                ...(options?.setupData ?? {}),
+                guestId: actualGuestId,
+            },
         }, {
             label: 'create-room',
         });
@@ -333,10 +336,16 @@ const createPlayerContext = async (
 export const setupDTOnlineMatchWithPlayers = async (
     browser: Browser,
     baseURL: string | undefined,
-    options?: { numPlayers?: number; gameServerBaseURL?: string },
+    options?: {
+        numPlayers?: number;
+        gameServerBaseURL?: string;
+        joinPlayerIds?: string[];
+        setupData?: Record<string, unknown>;
+    },
 ): Promise<DTMatchSetup | null> => {
     const numPlayers = options?.numPlayers ?? 2;
     const gameServerBaseURL = options?.gameServerBaseURL ?? getGameServerBaseURL();
+    const joinPlayerIdSet = new Set(options?.joinPlayerIds ?? Array.from({ length: Math.max(0, numPlayers - 1) }, (_, index) => String(index + 1)));
     const openedContexts: BrowserContext[] = [];
     let setupStep = `start numPlayers=${numPlayers} baseURL=${baseURL ?? 'undefined'} gameServer=${gameServerBaseURL}`;
 
@@ -357,7 +366,12 @@ export const setupDTOnlineMatchWithPlayers = async (
         setupStep = 'game_server_available';
 
         const hostGuestId = createDtGuestId('e2e_host');
-        const matchId = await createDTRoomViaAPI(hostPage, { guestId: hostGuestId, numPlayers, gameServerBaseURL });
+        const matchId = await createDTRoomViaAPI(hostPage, {
+            guestId: hostGuestId,
+            numPlayers,
+            gameServerBaseURL,
+            setupData: options?.setupData,
+        });
         if (!matchId) {
             appendSetupDebug(`FAIL step=${setupStep} numPlayers=${numPlayers} reason=create_room_failed`);
             return null;
@@ -393,6 +407,9 @@ export const setupDTOnlineMatchWithPlayers = async (
 
         for (let index = 1; index < numPlayers; index++) {
             const playerId = String(index);
+            if (!joinPlayerIdSet.has(playerId)) {
+                continue;
+            }
             const { context: guestContext, page: guestPage } = await createPlayerContext(
                 browser,
                 baseURL,

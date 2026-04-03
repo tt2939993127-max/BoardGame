@@ -93,11 +93,11 @@
     "card_placeholder": "卡牌",
     "me_first_title": "⚡ 先手响应！",
     "after_scoring_title": "计分后响应",
-    "duel_in_progress": "决斗进行中：先处理 Pinkerton / 决斗牌 / Deputy，再结算胜负",
-    "duel_prompt_pinkerton_title": "Pinkerton：选择这场决斗前要放置多少个 +1 力量指示物",
-    "duel_prompt_card_title": "决斗：从手牌选择 1 张决斗牌，或跳过",
-    "duel_prompt_deputy_title": "Deputy：你可以弃掉一张 Deputy，使一个随从直到回合结束获得 +2 力量",
-    "duel_prompt_deputy_target_title": "Deputy：选择一个随从获得 +2 力量直到回合结束",
+    "duel_in_progress": "决斗进行中：依次处理平克顿加指示物、从手牌打出决斗牌、弃副警长加力量，最后再结算胜负",
+    "duel_prompt_pinkerton_title": "平克顿：选择这场决斗前要放置的 +1 力量指示物数量",
+    "duel_prompt_card_title": "决斗牌：从手牌选择 1 张要用于这场决斗的牌，或跳过",
+    "duel_prompt_deputy_title": "副警长：你可以弃掉 1 张副警长，使 1 个随从直到回合结束获得 +2 力量",
+    "duel_prompt_deputy_target_title": "副警长：选择 1 个随从，使其直到回合结束获得 +2 力量",
     "duel_prompt_ongoing_base_title": "决斗牌：选择此持续行动的目标基地",
     "duel_prompt_ongoing_minion_title": "决斗牌：选择此持续行动的目标随从",
     "duel_prompt_run_em_off_title": "赶走他们：选择失败者要移动到的基地",
@@ -105,8 +105,8 @@
     "duel_prompt_resolve_title": "决斗结算",
     "duel_option_no_counters": "不放置指示物",
     "duel_option_add_counters": "放置 {{count}} 个指示物",
-    "duel_option_skip_duel_card": "跳过（不放决斗牌）",
-    "duel_option_skip_deputy": "跳过（不弃 Deputy）",
+    "duel_option_skip_duel_card": "跳过（不从手牌打出决斗牌）",
+    "duel_option_skip_deputy": "跳过（不弃副警长）",
     "reaction_timing": {
       "onMinionPlayed": "随从打出后",
       "onActionPlayed": "行动打出后",
@@ -2907,7 +2907,7 @@
     },
     "ancient_egyptians_plague_of_locusts": {
       "name": "蝗灾",
-      "effectText": "特殊：在一个基地计分前打出。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
     },
     "ancient_egyptians_mummy_strength": {
       "name": "木乃伊之力",

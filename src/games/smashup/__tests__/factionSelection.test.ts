@@ -12,7 +12,7 @@ import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { createFlowSystem, createBaseSystems } from '../../../engine';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
-import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from '../domain/types';
+import { SU_COMMANDS, STARTING_HAND_SIZE } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { initAllAbilities } from '../abilities';
 import smashUpEnglishMap from '../data/englishAtlasMap.json';
@@ -200,6 +200,7 @@ describe('派系选择系统', () => {
             ]);
             expect(result.finalState.sys.phase).toBe('playCards');
         });
+
     });
 
     // Property 2: 牌库构建正确性

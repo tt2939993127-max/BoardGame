@@ -42,6 +42,9 @@ export type DiceThroneMoveMap = {
     selectCharacter: (characterId: string) => void;
     hostStartGame: () => void;
     moveSeat: (playerId: string, targetSeatIndex: number) => void;
+    requestSeatSwap: (targetPlayerId: string) => void;
+    respondSeatSwap: (approve: boolean) => void;
+    cancelSeatSwap: () => void;
     playerReady: () => void;
     playerUnready: () => void;
 };
@@ -86,6 +89,9 @@ export const resolveMoves = (
     selectCharacter: (characterId) => dispatch('SELECT_CHARACTER', { characterId }),
     hostStartGame: () => dispatch('HOST_START_GAME', {}),
     moveSeat: (playerId, targetSeatIndex) => dispatch('MOVE_SEAT', { playerId, targetSeatIndex }),
+    requestSeatSwap: (targetPlayerId) => dispatch('REQUEST_SEAT_SWAP', { targetPlayerId }),
+    respondSeatSwap: (approve) => dispatch('RESPOND_SEAT_SWAP', { approve }),
+    cancelSeatSwap: () => dispatch('CANCEL_SEAT_SWAP', {}),
     playerReady: () => dispatch('PLAYER_READY', {}),
     playerUnready: () => dispatch('PLAYER_UNREADY', {}),
 });

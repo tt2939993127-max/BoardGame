@@ -1,5 +1,5 @@
 /* @vitest-environment happy-dom */
-import { cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Home } from '../Home';
 import { MaintenancePage } from '../Maintenance';
@@ -551,10 +551,89 @@ describe('useGameNamespaceReady', () => {
             },
         );
 
+        await act(async () => {
+            await Promise.resolve();
+        });
+
         expect(result.current.isGameNamespaceReady).toBe(true);
         expect(result.current.gameNamespaceError).toBeNull();
         expect(i18n.loadNamespaces).not.toHaveBeenCalled();
         expect(mockLoggerError).not.toHaveBeenCalled();
+    });
+
+    it('namespace 请求长期 pending 时会在 4000ms 后显式报超时', async () => {
+        vi.useFakeTimers();
+        try {
+            const { GAME_NAMESPACE_LOAD_TIMEOUT_MS, useGameNamespaceReady } = await import('../../hooks/useGameNamespaceReady');
+            const i18n = {
+                language: 'zh-CN',
+                resolvedLanguage: 'zh-CN',
+                hasLoadedNamespace: vi.fn(() => false),
+                loadNamespaces: vi.fn(() => new Promise<void>(() => {})),
+            };
+
+            const { result } = renderHook(
+                ({ gameId, instance }) => useGameNamespaceReady(gameId, instance as never),
+                {
+                    initialProps: {
+                        gameId: 'smashup',
+                        instance: i18n,
+                    },
+                },
+            );
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(GAME_NAMESPACE_LOAD_TIMEOUT_MS);
+                await Promise.resolve();
+            });
+
+            expect(result.current.gameNamespaceError).toContain('游戏文案加载超时');
+            expect(result.current.isGameNamespaceReady).toBe(false);
+            expect(mockLoggerError).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('useGameImplementationReady', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/registry');
+        vi.resetModules();
+    });
+
+    it('加载失败后支持重试，并在成功后恢复 ready', async () => {
+        const mockGetGameImplementation = vi.fn(() => null);
+        const mockLoadGameImplementation = vi.fn()
+            .mockRejectedValueOnce(new Error('游戏客户端加载超时：smashup（4000ms）'))
+            .mockResolvedValueOnce({ engineConfig: {}, board: () => null });
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            loadGameImplementation: mockLoadGameImplementation,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup'));
+
+        await waitFor(() => {
+            expect(result.current.gameImplementationError).toContain('游戏客户端加载超时');
+        });
+
+        act(() => {
+            result.current.retryGameImplementationLoad();
+        });
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
+
+        expect(result.current.gameImplementationError).toBeNull();
+        expect(mockLoadGameImplementation).toHaveBeenCalledTimes(2);
     });
 });
 

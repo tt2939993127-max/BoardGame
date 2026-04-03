@@ -1116,6 +1116,8 @@ describe('ancient_egyptians audit regressions', () => {
         const optionCardUids = prompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toContain('own-buried');
         expect(optionCardUids).not.toContain('opp-buried');
+        const ownOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        expect(ownOption?.displayMode).toBe('card');
     });
 
     it('Pharaoh 在计分前只提示翻开这里你的一张埋葬牌', () => {
@@ -1155,10 +1157,12 @@ describe('ancient_egyptians audit regressions', () => {
         const optionCardUids = prompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toContain('own-buried');
         expect(optionCardUids).not.toContain('opp-buried');
+        const ownPromptOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        expect(ownPromptOption?.displayMode).toBe('card');
 
         const handler = getInteractionHandler('ancient_egyptians_pharaoh_before_scoring');
         expect(handler).toBeDefined();
-        const ownOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        const ownOption = ownPromptOption;
         const resolved = handler!(triggered.matchState!, '0', ownOption.value, prompt.data, dummyRandom, 3);
         expect(resolved?.events.some((event: any) => event.type === SU_EVENTS.BURIED_CARD_UNCOVERED)).toBe(true);
     });
@@ -1359,7 +1363,7 @@ describe('ancient_egyptians audit regressions', () => {
         expect(tempPowerEvents.every(event => event.payload.amount === -1 && event.payload.baseIndex === 0)).toBe(true);
     });
 
-    it('Mummy Strength 的 +4 模式可作用于存在任意埋葬牌的基地', () => {
+    it('Mummy Strength 先选随从，再按所选随从所在基地是否有埋葬牌决定 +4 或 +2', () => {
         const executor = resolveAbility('ancient_egyptians_mummy_strength', 'onPlay');
         expect(executor).toBeDefined();
 
@@ -1392,25 +1396,25 @@ describe('ancient_egyptians audit regressions', () => {
             random: dummyRandom,
             now: 11,
         });
-        const modePrompt = initial.matchState?.sys.interaction.current as any;
-        expect(modePrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_mode');
-
-        const modeHandler = getInteractionHandler('ancient_egyptians_mummy_strength_mode');
-        expect(modeHandler).toBeDefined();
-        const plusFourOption = modePrompt.data.options.find((option: any) => option.value?.amount === 4);
-        const chooseTarget = modeHandler!(initial.matchState!, '0', plusFourOption.value, modePrompt.data, dummyRandom, 12);
-        const targetPrompt = chooseTarget.state.sys.interaction.queue[0] as any;
+        const targetPrompt = initial.matchState?.sys.interaction.current as any;
         expect(targetPrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_target');
-        expect(targetPrompt.data.options.map((option: any) => option.value?.minionUid).filter(Boolean)).toEqual(['empowered']);
+        expect(targetPrompt.data.options.map((option: any) => option.value?.minionUid).filter(Boolean).sort()).toEqual(['empowered', 'other']);
 
         const targetHandler = getInteractionHandler('ancient_egyptians_mummy_strength_target');
         expect(targetHandler).toBeDefined();
-        const targetOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'empowered');
-        const resolved = targetHandler!(chooseTarget.state, '0', targetOption.value, targetPrompt.data, dummyRandom, 13);
-        const powerEvent = resolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
-        expect(powerEvent?.payload.amount).toBe(4);
-        expect(powerEvent?.payload.minionUid).toBe('empowered');
-        expect(powerEvent?.payload.baseIndex).toBe(0);
+        const empoweredOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'empowered');
+        const empoweredResolved = targetHandler!(initial.matchState!, '0', empoweredOption.value, targetPrompt.data, dummyRandom, 12);
+        const empoweredEvent = empoweredResolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
+        expect(empoweredEvent?.payload.amount).toBe(4);
+        expect(empoweredEvent?.payload.minionUid).toBe('empowered');
+        expect(empoweredEvent?.payload.baseIndex).toBe(0);
+
+        const otherOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'other');
+        const otherResolved = targetHandler!(initial.matchState!, '0', otherOption.value, targetPrompt.data, dummyRandom, 13);
+        const otherEvent = otherResolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
+        expect(otherEvent?.payload.amount).toBe(2);
+        expect(otherEvent?.payload.minionUid).toBe('other');
+        expect(otherEvent?.payload.baseIndex).toBe(1);
     });
 
     it('Tomb Trap 翻开后可消灭所选的力量≤4随从', () => {
@@ -1558,6 +1562,7 @@ describe('ancient_egyptians audit regressions', () => {
         expect(buriedPrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_uncover');
         const optionCardUids = buriedPrompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toEqual(['own-here']);
+        expect(buriedPrompt.data.options.every((option: any) => option.displayMode === 'card')).toBe(true);
     });
 });
 
