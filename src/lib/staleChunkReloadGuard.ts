@@ -18,10 +18,16 @@ type ReloadOnceDeps = {
     getStoredLocation: () => string | null;
     setStoredLocation: (value: string) => void;
     reload: () => void;
+    shouldReload?: () => boolean;
     warn?: (message: string, payload: { reason: string }) => void;
 };
 
 export const reloadForStaleChunkOnceWithDeps = (reason: string, deps: ReloadOnceDeps): boolean => {
+    if (deps.shouldReload && !deps.shouldReload()) {
+        deps.warn?.('[bootstrap] stale chunk detected after bootstrap window, skip auto reload', { reason });
+        return false;
+    }
+
     try {
         const previous = deps.getStoredLocation();
         if (previous === deps.currentLocation) {
@@ -37,10 +43,15 @@ export const reloadForStaleChunkOnceWithDeps = (reason: string, deps: ReloadOnce
     return true;
 };
 
-export const reloadForStaleChunkOnce = (reason: string, win: Window = window): boolean => reloadForStaleChunkOnceWithDeps(reason, {
+export const reloadForStaleChunkOnce = (
+    reason: string,
+    win: Window = window,
+    options?: { shouldReload?: () => boolean },
+): boolean => reloadForStaleChunkOnceWithDeps(reason, {
     currentLocation: `${win.location.pathname}${win.location.search}${win.location.hash}`,
     getStoredLocation: () => win.sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY),
     setStoredLocation: (value: string) => win.sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, value),
     reload: () => win.location.reload(),
+    shouldReload: options?.shouldReload,
     warn: (message, payload) => console.warn(message, payload),
 });
