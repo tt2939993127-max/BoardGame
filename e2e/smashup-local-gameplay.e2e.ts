@@ -65,22 +65,28 @@ const completeFactionSelectionLocal = async (page: Page) => {
         // 等待派系网格可见且没有弹窗遮挡
         await page.waitForTimeout(600);
 
-        // 通过派系名称文本找到对应卡片的父级可点击容器
+        // 通过派系名称文本找到对应派系列表项，避免命中错误的 group 父节点
         const factionPattern = new RegExp(`^(?:${aliases.join('|')})(?:\\s*\\((?:POD|POD版)\\))?$`, 'i');
-        const factionCard = page.locator('h3').filter({ hasText: factionPattern }).first()
-            .locator('xpath=ancestor::div[contains(@class,"group")]').first();
+        const factionCard = page.locator('h3')
+            .filter({ hasText: factionPattern })
+            .first()
+            .locator('xpath=ancestor::*[starts-with(@data-testid,"faction-option-")]')
+            .first();
         await expect(factionCard).toBeVisible({ timeout: 5000 });
         await factionCard.click({ force: true });
-        
+
+        const detailPanel = page.getByTestId('faction-detail-panel');
+        await expect(detailPanel).toBeVisible({ timeout: 8000 });
+
         // 等待弹窗出现：确认按钮或已选/已被占用的状态
-        const confirmBtn = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
+        const confirmBtn = page.getByTestId('faction-confirm-button');
         await expect(confirmBtn).toBeVisible({ timeout: 8000 });
         await expect(confirmBtn).toBeEnabled({ timeout: 3000 });
         await page.waitForTimeout(400);
         await confirmBtn.click({ force: true });
 
         // 等待弹窗关闭（focusedFactionId 被设为 null 后弹窗消失）
-        await expect(confirmBtn).toBeHidden({ timeout: 5000 });
+        await expect(detailPanel).toBeHidden({ timeout: 5000 });
     }
     // 等待派系选择完成，游戏界面加载
     await page.waitForTimeout(1500);
@@ -157,8 +163,10 @@ test.describe('SmashUp 本地模式 E2E', () => {
     });
 
     test('本地模式：出牌 → 结束回合 → 回合切换', async ({ page }, testInfo) => {
-        await gotoLocalSmashUp(page);
-        await completeFactionSelectionLocal(page);
+        await page.goto('/play/smashup?p0=pirates,aliens&p1=ninjas,dinosaurs&seed=24680', {
+            waitUntil: 'domcontentloaded',
+        });
+        await dismissViteOverlay(page);
         await waitForHandArea(page);
 
         // P0 出第一张牌到第一个基地
