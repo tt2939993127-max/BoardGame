@@ -1617,6 +1617,8 @@ describe('cross hero battles', () => {
                     cmd('ADVANCE_PHASE', '0'),
                     cmd('ROLL_DICE', '1'),
                     cmd('CONFIRM_ROLL', '1'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
                     cmd('ADVANCE_PHASE', '1'),
                     cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
