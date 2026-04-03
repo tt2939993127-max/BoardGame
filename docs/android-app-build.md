@@ -121,6 +121,7 @@ npm run mobile:android:doctor
   - 连接已存在的 adb 设备；如果没有，则自动启动一个本地 AVD
   - 安装现有 APK（默认优先 `android/app/build/outputs/apk/debug/easyboardgame-debug.apk`）
   - 启动 App，等待首屏稳定
+  - 若传 `--route`，会在 App 启动后优先通过 WebView CDP 直切到目标 H5 路由；即使 Android 自定义深链不稳定，也能直接进入游戏页采图
   - 采集截图、UI dump、`logcat`、WebView/Chrome 版本信息
   - 自动判断是否疑似纯黑屏，以及是否低于兼容基线
 - 当前兼容基线：`WebView/Chrome 主版本 >= 88`
@@ -145,11 +146,13 @@ npm run mobile:android:compat:smoke -- --serial emulator-5554
 - `--skip-install`：跳过安装，只复用设备上的现有 App
 - `--min-webview-major <n>`：覆盖默认 WebView 基线，默认 `88`
 - `--launch-delay-ms <ms>`：启动后等待多久再抓证据
+- `--route <path>`：直达指定 H5 路由，例如 `/play/dicethrone/tutorial`、`/play/dicethrone/local`
 - `--keep-emulator`：脚本启动的模拟器结束后不自动关闭
 
 产物说明：
 
 - `screen.png`：设备截图
+- `webview-cdp.png`：若使用 `--route`，额外保存一份 WebView CDP 截图，便于和设备整屏截图交叉判断
 - `window_dump.xml`：`uiautomator dump` 导出的界面层级
 - `logcat.txt`：本次启动后的日志快照
 - `summary.json` / `summary.txt`：结构化结论，包含 Android 版本、WebView 版本、黑屏分析与产物路径

@@ -439,15 +439,15 @@ html[data-keyboard-visible="true"] .modal-base-container {
 
     [data-game-page][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
         --mobile-board-shell-design-width: 1280px;
-        --mobile-board-shell-scale: calc(var(--runtime-viewport-width, 100vw) / var(--mobile-board-shell-design-width));
-        --mobile-board-shell-inverse-scale: calc(1 / var(--mobile-board-shell-scale));
+        --mobile-board-shell-scale: 1;
+        --mobile-board-shell-inverse-scale: 1;
         position: absolute;
         inset: 0 auto auto 0;
         transform-origin: top left;
         transform: scale(var(--mobile-board-shell-scale));
         width: var(--mobile-board-shell-design-width);
-        height: calc(100vh / var(--mobile-board-shell-scale));
-        height: calc(var(--runtime-viewport-height, 100vh) / var(--mobile-board-shell-scale));
+        height: calc(100vh * var(--mobile-board-shell-inverse-scale, 1));
+        height: calc(var(--runtime-viewport-height, 100vh) * var(--mobile-board-shell-inverse-scale, 1));
         max-width: none;
         padding: 0;
     }

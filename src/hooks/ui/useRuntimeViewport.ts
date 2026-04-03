@@ -20,6 +20,11 @@ export interface RuntimeViewportMetrics extends RuntimeViewportSize {
 const EMPTY_SAFE_AREA: RuntimeSafeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const EMPTY_VIEWPORT: RuntimeViewportMetrics = { width: 0, height: 0, safeArea: EMPTY_SAFE_AREA, keyboardInsetBottom: 0 };
 const MIN_KEYBOARD_INSET_PX = 72;
+const DEFAULT_BOARD_SHELL_DESIGN_WIDTH = 1280;
+const BOARD_SHELL_DESIGN_WIDTH_BY_GAME: Record<string, number> = {
+    dicethrone: 940,
+    smashup: 1160,
+};
 
 const parseCssPixels = (value: string) => {
     const parsed = Number.parseFloat(value);
@@ -121,6 +126,34 @@ export const applyRuntimeViewportCssVars = (viewport: RuntimeViewportSize | Runt
     root.style.setProperty('--runtime-viewport-height', `${viewport.height}px`);
     root.style.setProperty('--keyboard-inset-height', `${keyboardInsetBottom}px`);
     root.dataset.keyboardVisible = keyboardInsetBottom > 0 ? 'true' : 'false';
+
+    const gamePageTarget = document.body?.dataset.gamePage === 'true'
+        ? document.body
+        : document.documentElement.dataset.gamePage === 'true'
+            ? document.documentElement
+            : null;
+    const mobileLayoutPreset = gamePageTarget?.dataset.mobileLayoutPreset;
+    const mobileProfile = gamePageTarget?.dataset.mobileProfile;
+    const gameId = gamePageTarget?.dataset.gameId?.trim().toLowerCase() ?? '';
+    const isLandscapeViewport = viewport.width > viewport.height;
+    const shouldUseBoardShellScale = mobileLayoutPreset === 'board-shell'
+        && mobileProfile === 'landscape-adapted'
+        && viewport.width <= 1023
+        && isLandscapeViewport;
+
+    if (!shouldUseBoardShellScale) {
+        root.style.removeProperty('--mobile-board-shell-design-width');
+        root.style.removeProperty('--mobile-board-shell-scale');
+        root.style.removeProperty('--mobile-board-shell-inverse-scale');
+        return;
+    }
+
+    const designWidth = BOARD_SHELL_DESIGN_WIDTH_BY_GAME[gameId] ?? DEFAULT_BOARD_SHELL_DESIGN_WIDTH;
+    const scale = Math.max(0.01, viewport.width / designWidth);
+    const inverseScale = 1 / scale;
+    root.style.setProperty('--mobile-board-shell-design-width', `${designWidth}px`);
+    root.style.setProperty('--mobile-board-shell-scale', scale.toFixed(6));
+    root.style.setProperty('--mobile-board-shell-inverse-scale', inverseScale.toFixed(6));
 };
 
 interface UseRuntimeViewportOptions {
