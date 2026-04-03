@@ -21,7 +21,7 @@ import { getCardDef, getBaseDef } from '../data/cards';
 import { matchesDefId } from '../domain/utils';
 import {
     drawMadnessCards, grantExtraAction, destroyMinion,
-    returnMadnessCard, getMinionPower, buildMinionTargetOptions,
+    returnMadnessCard, getMinionPower, buildActionMinionTargetOptions,
     addTempPower, revealAndPickFromDeck,
     buildAbilityFeedback,
 } from '../domain/abilityHelpers';
@@ -208,10 +208,16 @@ function cthulhuCorruption(ctx: AbilityContext): AbilityResult {
     if (targets.length === 0) return { events };
     // Prompt 选择
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    const targetOptions = buildActionMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'destroy',
+    });
+    if (targetOptions.length === 0) return { events };
     const interaction = createSimpleChoice(
         `cthulhu_corruption_${ctx.now}`, ctx.playerId,
         '选择要消灭的随从',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        targetOptions,
         { sourceId: 'cthulhu_corruption', targetType: 'minion' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
