@@ -76,6 +76,7 @@ export const Home = () => {
     const { t, i18n } = useTranslation(['lobby', 'auth']);
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, guestId ?? undefined);
+
     const seoT = useMemo(() => {
         if (typeof i18n?.getFixedT === 'function') {
             return i18n.getFixedT('zh-CN', ['lobby', 'common']);
@@ -83,6 +84,8 @@ export const Home = () => {
         return t;
     }, [i18n, t]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
+    const prefetchAiRepoWorkbench = useCallback(() => import('./devtools/AIRepoWorkbench'), []);
+
     useEffect(() => {
         if (user?.id) return;
         setGuestId((current) => current ?? getOrCreateGuestId());
@@ -217,7 +220,9 @@ export const Home = () => {
             return;
         }
         if (id === 'airepoworkbench') {
-            navigate('/dev/ai-repo-workbench');
+            void prefetchAiRepoWorkbench().then(() => {
+                navigate('/dev/ai-repo-workbench');
+            });
             return;
         }
 
@@ -234,11 +239,15 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
-        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview' || id === 'airepoworkbench') {
+        if (id === 'airepoworkbench') {
+            void prefetchAiRepoWorkbench();
+            return;
+        }
+        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
             return;
         }
         void import('../components/lobby/GameDetailsModal');
-    }, []);
+    }, [prefetchAiRepoWorkbench]);
 
     const handleLogout = () => {
         logout();

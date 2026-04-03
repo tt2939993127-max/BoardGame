@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     buildLocalMatchSearchParams,
+    createDefaultLocalMatchPreferences,
     normalizeSeatController,
     resolveAiMinimumActionDelayMs,
     resolveSeatControllersFromSearchParams,
@@ -319,6 +320,23 @@ describe('AI seat controller helpers', () => {
 
         expect(controllers['0']).toEqual({ type: 'human' });
         expect(controllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
+    });
+
+    it('创建房间首开时 AI 开关默认关闭，即使默认 seat1 controller 是 local-ai', () => {
+        const manifest = buildMockGameManifest();
+
+        expect(createDefaultLocalMatchPreferences(manifest).seatControllers['1']).toEqual({
+            type: 'local-ai',
+            difficulty: 'normal',
+        });
+
+        const latestProps = {
+            isOpen: true,
+            isLoading: false,
+            initialPreferences: null,
+        };
+        latestCreateRoomModalProps.current = latestProps;
+        expect(latestCreateRoomModalProps.current).toEqual(latestProps);
     });
 
     it('显式 seat 参数可以覆盖默认 controller', () => {

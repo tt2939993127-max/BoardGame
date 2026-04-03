@@ -12,7 +12,7 @@
 - [x] 1.1 定义 `RepoSession`、`WorktreeTask`、`WorkflowRun`、`NodeExecutionRecord` 的持久化 schema，并让工作台能管理多个 `WorktreeTask`；每次模板运行仍必须绑定到单一工作树。
 - [x] 1.2 定义 `WorkflowOrchestrator` 与 `LocalRuntime` 的分层接口；如采用 LangGraph，只允许它藏在 orchestrator 适配层后面。
 - [x] 1.3 实现 `LocalRuntime` 的最小执行接口：`runNode`、`pauseForDecision`、`resumeRun`、`publishArtifactBundle`。
-- [ ] 1.4 选择并落地本地状态存储方案（文件 journal / SQLite / 等价实现），确保节点状态、决策对象与产物索引可在进程重启后恢复。
+- [x] 1.4 选择并落地本地状态存储方案（文件 journal / SQLite / 等价实现），确保节点状态、决策对象与产物索引可在进程重启后恢复。
 
 ## 2. New-Faction Workflow
 - [x] 2.1 实现 `new-faction` 画布式固定节点图：`capture-faction-intent -> select-rule-source -> acquire-rule-material -> transcribe-or-normalize-rules -> inspect-assets -> draft-faction-definition -> review-faction-definition -> publish-artifact-bundle`。
@@ -48,6 +48,21 @@
 - [ ] 7.2 细化受保护分支 / 无权限场景的安全降级：定义只到 commit、只到 PR、必须人工 merge 三种交付上限。
 - [ ] 7.3 细化 ArtifactBundle 网页展示层级：运行总览卡、节点证据卡、原始文件跳转、失败节点恢复入口。
 
-## 8. Future-Proofing
-- [ ] 8.1 把执行器接口与领域模型解耦，确保后续接入 Temporal 或替换 LangGraph 实现时，无需改写 `DecisionRequest`、节点 I/O schema 与 `ArtifactBundle`。
-- [ ] 8.2 为 Temporal 适配预留边界说明：Temporal 只接管 durable orchestration，不接管仓库安全策略、前端展示与证据结构。
+## 8. LangGraph Backend Orchestrator
+- [x] 8.1 创建 NestJS 侧全流程 LangGraph StateGraph (`langgraph-orchestrator.ts`)，覆盖 9 个工作流节点，在决策点使用 `interrupt()` 实现 human-in-the-loop。
+- [x] 8.2 创建 journal sync 层 (`langgraph-journal-sync.ts`)，将 LangGraph 内部状态转换为前端期望的 `WorkbenchJournal` 格式。
+- [x] 8.3 更新 `ai-repo-workbench.service.ts`，使用 LangGraph orchestrator 替代旧的前端侧 LocalRuntime 驱动。
+- [x] 8.4 确保决策 ID 生成为确定性（`decision-{runId}-{nodeId}`），避免 LangGraph resume 后重新执行时 ID 不匹配。
+- [x] 8.5 验证 API bundle 编译通过（425.6kb）。
+
+## 9. Frontend Flowise Canvas Rewrite
+- [x] 9.1 前端 `applyAsyncJournalMutation` 改为 server-first：server 模式下跳过冗余的本地计算，直接使用后端返回的权威 journal。
+- [x] 9.2 简化 auto-advance：server 模式下 LangGraph 一次调用完成所有节点，不再需要 300ms 定时器轮询。
+- [x] 9.3 重写 `AIRepoWorkbench.tsx` 页面布局：让 Flowise shell 成为页面主骨架，模板/RepoSession/工作树填入 header + palette，右侧决策/节点/产物改为覆盖在画布边缘的业务层。
+- [x] 9.4 所有子组件（`StatusBadge`、`NodeStatusRail`、`DecisionPanel`、`ArtifactPanel`、`NodeDetailCard`、`WorktreeManagerPanel`）统一适配当前 Flowise 主布局，不再维护与主画布平级的自绘节点图风格。
+- [x] 9.5 同步更新工作台 E2E 测试钩子与断言：保留核心入口与业务文本稳定，同时将图区域断言从旧的 `node-graph-*` 收敛到 `flowise-shell-panel` / `node-status-*`。
+- [x] 9.6 右侧面板自动切换：出现决策时切到决策 tab，完成后切到产物 tab。
+
+## 10. Future-Proofing
+- [ ] 10.1 把执行器接口与领域模型解耦，确保后续接入 Temporal 或替换 LangGraph 实现时，无需改写 `DecisionRequest`、节点 I/O schema 与 `ArtifactBundle`。
+- [ ] 10.2 为 Temporal 适配预留边界说明：Temporal 只接管 durable orchestration，不接管仓库安全策略、前端展示与证据结构。

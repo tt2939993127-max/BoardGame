@@ -325,6 +325,10 @@ export default defineConfig(({ mode }) => {
           target: `http://127.0.0.1:${apiServerPort}`,
           changeOrigin: true,
         },
+        '/devtools/ai-repo-workbench': {
+          target: `http://127.0.0.1:${apiServerPort}`,
+          changeOrigin: true,
+        },
       },
     },
   }

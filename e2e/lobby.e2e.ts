@@ -99,24 +99,40 @@ test.describe('Lobby E2E', () => {
         await toolCard.click();
         await expect(page).toHaveURL(/\/dev\/ai-repo-workbench/);
         await expect(page.getByTestId('workbench-page-heading')).toHaveText('AI 仓库工作台');
+        await expect(page.getByTestId('workbench-journal-mode')).toContainText('server-file + git worktree');
+        await expect(page.getByTestId('start-new-faction-run')).toBeEnabled();
+        await page.getByTestId('reset-workbench-journal').click();
+        await expect(page.getByTestId('start-new-faction-run')).toBeEnabled();
+        await expect(page.getByTestId('repo-session-card')).toBeVisible();
+        await expect(page.getByTestId('managed-worktree-list')).toBeVisible();
         await expect(page.getByTestId('template-new-faction-card')).toContainText('new-faction');
+        await expect(page.getByTestId('toggle-button-run-e2e-validation')).toContainText('已关闭');
+
+        await page.getByTestId('managed-worktree-branch-input').fill('feat/managed-worktree-e2e');
+        await page.getByTestId('managed-worktree-path-input').fill('D:\\gongzuo\\webgame\\BoardGame-wt-managed-worktree-e2e');
+        await page.getByTestId('register-managed-worktree').click();
+        await expect(page.getByTestId('managed-worktree-list')).toContainText('feat/managed-worktree-e2e');
+        await expect(page.getByTestId('managed-worktree-list')).toContainText('已聚焦');
 
         await page.getByTestId('start-new-faction-run').click();
         await expect(page.getByTestId('decision-request-panel')).toBeVisible();
-        await expect(page.getByTestId('node-card-select-rule-source')).toContainText('等待决策');
+        await expect(page.getByTestId('flowise-shell-panel')).toBeVisible();
+        await expect(page.getByTestId('node-status-panel')).toBeVisible();
+        await expect(page.getByTestId('node-status-select-rule-source')).toContainText('等待决策');
 
-        await game.screenshot('ai-repo-workbench-rule-source-decision', testInfo);
+        await game.screenshot('ai-repo-workbench-node-graph-waiting-decision', testInfo);
 
         await page.getByTestId('decision-option-wiki').click();
         await page.getByTestId('submit-rule-source-decision').click();
 
-        await expect(page.getByTestId('node-card-publish-artifact-bundle')).toContainText('已完成', { timeout: 10000 });
+        await expect(page.getByTestId('node-status-publish-artifact-bundle')).toContainText('已完成', { timeout: 10000 });
+        await expect(page.getByTestId('node-status-run-e2e-validation')).toContainText('已跳过');
         await expect(page.getByTestId('artifact-bundle-panel')).toContainText('ArtifactBundle');
-        await expect(page.getByTestId('artifact-bundle-panel')).toContainText('not_applicable');
+        await expect(page.getByTestId('artifact-bundle-panel')).toContainText('skipped');
         await expect(page.getByText('规则来源索引')).toBeVisible();
         await expect(page.getByText('派系定义快照')).toBeVisible();
 
-        await game.screenshot('ai-repo-workbench-artifact-bundle-complete', testInfo);
+        await game.screenshot('ai-repo-workbench-node-graph-complete', testInfo);
     });
 
     test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {
@@ -160,7 +176,7 @@ test.describe('Lobby E2E', () => {
         await page.getByRole('button', { name: '3人' }).click();
         await page.getByTestId('setup-option-toggle-expansions-titans').click();
         await page.getByRole('button', { name: /加入 AI/ }).click();
-        await expect(page.getByText('已开启')).toBeVisible();
+        await expect(page.getByRole('button', { name: /加入 AI/ })).toContainText('已开启');
         await expect(page.getByRole('button', { name: '1 号位（房主）' })).toBeDisabled();
         await page.getByRole('button', { name: '3 号位' }).click();
 

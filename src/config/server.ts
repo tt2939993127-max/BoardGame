@@ -115,5 +115,13 @@ export const LAYOUT_API_URL = normalizeUrl(
     (metaEnv.VITE_LAYOUT_API_URL as string | undefined) || FALLBACK_LAYOUT_API_URL
 );
 
+const FALLBACK_DEVTOOLS_AI_REPO_WORKBENCH_API_URL = isDev
+    ? '/devtools/ai-repo-workbench'
+    : (BACKEND_URL ? `${BACKEND_URL}/devtools/ai-repo-workbench` : '/devtools/ai-repo-workbench');
+
+export const DEVTOOLS_AI_REPO_WORKBENCH_API_URL = normalizeUrl(
+    (metaEnv.VITE_DEVTOOLS_AI_REPO_WORKBENCH_API_URL as string | undefined) || FALLBACK_DEVTOOLS_AI_REPO_WORKBENCH_API_URL
+);
+
 // 第三方监控配置
 export const SENTRY_DSN = (metaEnv.VITE_SENTRY_DSN as string | undefined) || '';
