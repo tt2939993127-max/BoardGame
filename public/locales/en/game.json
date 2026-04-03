@@ -164,6 +164,17 @@
     "toggle": {
       "collapse": "Collapse menu",
       "expand": "Expand menu - draggable"
+    },
+    "smashup": {
+      "title": "Smash Up",
+      "interaction": "Interaction mode",
+      "interactionHint": "Switch between click and drag at any time. Default is click.",
+      "modeClick": "Click",
+      "modeDrag": "Drag",
+      "overlay": "Chinese overlay",
+      "overlayHint": "Show Chinese name and rules text on English card art.",
+      "enabled": "On",
+      "disabled": "Off"
     }
   },
   "audio": {
