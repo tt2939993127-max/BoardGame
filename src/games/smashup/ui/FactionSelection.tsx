@@ -28,7 +28,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     const { t, i18n } = useTranslation('game-smashup');
     const selectionState = core.factionSelection;
     const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
-    const [activeFactionId, setActiveFactionId] = useState<string | null>(null);
     const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' | 'titan' } | null>(null);
     const [viewportSize, setViewportSize] = useState(() => ({
         width: typeof window === 'undefined' ? 1440 : window.innerWidth,
@@ -64,6 +63,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         () => (focusedGroupId ? getFactionVariantGroupById(focusedGroupId) ?? null : null),
         [focusedGroupId],
     );
+    const [activeFactionId, setActiveFactionId] = useState<string | null>(null);
 
     useEffect(() => {
         if (!focusedGroupId) {

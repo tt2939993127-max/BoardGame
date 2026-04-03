@@ -2,7 +2,7 @@ import type { StoredGamePackageState } from './types';
 import { mergeGamePackageState } from './types';
 
 const STORAGE_PREFIX = 'mobile-package-state:';
-const STALE_IN_PROGRESS_ERROR_MESSAGE = '上次下载未完成，请重新发起。';
+export const STALE_IN_PROGRESS_ERROR_MESSAGE = '上次下载未完成，请重新发起。';
 
 const getStorage = () => {
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {

@@ -1,10 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { normalizeDeveloperGameIds } from '../auth/schemas/developer-game-access';
 import { User, type UserDocument } from '../auth/schemas/user.schema';
 import type { UserRole } from '../auth/schemas/user-role';
-import { Feedback, FeedbackDocument, FeedbackStatus, FeedbackType } from './feedback.schema';
+import { Feedback, FeedbackDocument, FeedbackStatus } from './feedback.schema';
 import { CreateFeedbackDto, FeedbackFilterDto, QueryFeedbackDto } from './dto';
 
 type FeedbackManagerScope = {
@@ -20,14 +20,6 @@ export class FeedbackService {
     ) { }
 
     async create(userId: string | null, dto: CreateFeedbackDto): Promise<Feedback> {
-        if (
-            dto.type === FeedbackType.BUG
-            && !dto.actionLog?.trim()
-            && !dto.stateSnapshot?.trim()
-        ) {
-            throw new BadRequestException('bug 反馈必须附带操作日志或状态快照');
-        }
-
         return this.feedbackModel.create({
             ...dto,
             gameId: this.normalizeFeedbackGameId(dto.clientContext?.gameId ?? dto.gameName),

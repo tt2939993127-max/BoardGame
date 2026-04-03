@@ -171,6 +171,30 @@ const waitForPendingDefender = async (page: Page, defenderId: string, timeout = 
     }, defenderId, { timeout });
 };
 
+const waitForSeatingOrder = async (matchId: string, page: Page, expected: string[]) => {
+    await expect.poll(async () => {
+        const state = await getMatchState(matchId, page);
+        return state.core?.seatingOrder ?? null;
+    }, {
+        timeout: 15000,
+        intervals: [200, 300, 500],
+    }).toEqual(expected);
+};
+
+const waitForSeatSwapRequest = async (
+    matchId: string,
+    page: Page,
+    expected: { requesterId: string; targetPlayerId: string } | null,
+) => {
+    await expect.poll(async () => {
+        const state = await getMatchState(matchId, page);
+        return state.core?.seatSwapRequest ?? null;
+    }, {
+        timeout: 15000,
+        intervals: [200, 300, 500],
+    }).toEqual(expected);
+};
+
 const buildFourPlayerNoResponseState = (state: any) => {
     const next = structuredClone(state);
     for (const player of Object.values<any>(next.core.players ?? {})) {
@@ -955,57 +979,106 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 4-player seating panel: host can move to empty slot and occupied seat is rejected', async ({ browser }, testInfo) => {
+    test('Online 4-player seating panel: clicking an AI portrait swaps seats immediately', async ({ browser }, testInfo) => {
         test.setTimeout(120000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
         const setup = await setupDTOnlineMatchWithPlayers(browser, baseURL, {
             numPlayers: 4,
             gameServerBaseURL: getGameServerBaseURL(),
+            joinPlayerIds: ['1'],
+            setupData: {
+                seatControllers: {
+                    '0': { type: 'human' },
+                    '1': { type: 'human' },
+                    '2': { type: 'local-ai' },
+                    '3': { type: 'human' },
+                },
+            },
         });
         if (!setup) {
             test.skip(true, '游戏服务器不可用或四人房间创建失败');
             return;
         }
 
-        const { hostPage } = setup;
+        const { guestPage: requesterPage, matchId } = setup;
 
-        await expect(hostPage.getByText('2v2 Seating')).toBeVisible({ timeout: 10000 });
-        await expect(hostPage.getByText('Team A')).toBeVisible({ timeout: 5000 });
-        await expect(hostPage.getByText('P1 / P3')).toBeVisible({ timeout: 5000 });
-        await expect(hostPage.getByText('Team B')).toBeVisible({ timeout: 5000 });
-        await expect(hostPage.getByText('P2 / P4')).toBeVisible({ timeout: 5000 });
-
-        const seatOneButton = hostPage.locator('button')
-            .filter({ hasText: 'Seat 1' })
-            .filter({ hasText: 'P1' })
-            .first();
-        await expect(seatOneButton).toBeVisible({ timeout: 5000 });
-        await seatOneButton.click();
-
-        await expect(hostPage.getByText('P1 selected. Click an empty slot to finish the move.')).toBeVisible({ timeout: 5000 });
-
-        const occupiedSeatButton = hostPage.locator('button')
-            .filter({ hasText: 'P2' })
-            .first();
-        await expect(occupiedSeatButton).toBeVisible({ timeout: 5000 });
-        await occupiedSeatButton.click();
-
-        await expect(hostPage.getByText('That position is already occupied. Seat swapping is not supported.')).toBeVisible({ timeout: 5000 });
-
-        const emptySeatThreeButton = hostPage.locator('button')
-            .filter({ hasText: 'Empty' })
-            .filter({ hasText: 'Seat 3' })
-            .first();
-        await expect(emptySeatThreeButton).toBeVisible({ timeout: 5000 });
-        await emptySeatThreeButton.click();
-
-        await expect(hostPage.getByText('Click a player first, then click an empty slot to move them. Swapping seats is not allowed.')).toBeVisible({ timeout: 5000 });
-        await expect(hostPage.getByText('P2 / P1')).toBeVisible({ timeout: 5000 });
-        await expect(hostPage.getByText('P3 / P4')).toBeVisible({ timeout: 5000 });
+        await expect(requesterPage.getByText(/2v2 Seating|2v2 站位/i)).toBeVisible({ timeout: 10000 });
+        await expect(requesterPage.getByTestId('dt-seat-swap-seat-2')).toBeVisible({ timeout: 10000 });
+        await expect(requesterPage.getByTestId('dt-seat-swap-seat-2').getByText(/^AI$/)).toBeVisible({ timeout: 5000 });
 
         await clearEvidenceScreenshotsForTest(testInfo);
-        await saveEvidenceScreenshot(hostPage, testInfo, '03-four-player-seating-panel-moved');
+        await saveEvidenceScreenshot(requesterPage, testInfo, '03-four-player-seat-swap-ai-before');
+
+        await requesterPage.getByTestId('dt-seat-swap-avatar-2').click();
+
+        await waitForSeatingOrder(matchId, requesterPage, ['0', '2', '1', '3']);
+        await waitForSeatSwapRequest(matchId, requesterPage, null);
+        await expect(requesterPage.getByTestId('dt-seat-swap-cancel')).toHaveCount(0);
+        await expect(requesterPage.getByText(/P1 \/ P2/)).toBeVisible({ timeout: 5000 });
+        await expect(requesterPage.getByText(/P3 \/ P4/)).toBeVisible({ timeout: 5000 });
+
+        await saveEvidenceScreenshot(requesterPage, testInfo, '04-four-player-seat-swap-ai-after');
+
+        await cleanupDTMatch(setup);
+    });
+
+    test('Online 4-player seating panel: clicking a human portrait enters request UI and approval completes the swap', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatchWithPlayers(browser, baseURL, {
+            numPlayers: 4,
+            gameServerBaseURL: getGameServerBaseURL(),
+            joinPlayerIds: ['1', '2'],
+        });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或四人房间创建失败');
+            return;
+        }
+
+        const requesterPage = setup.guestPage;
+        const approverPage = setup.extraPlayers[0]?.page;
+        const matchId = setup.matchId;
+        if (!approverPage) {
+            await cleanupDTMatch(setup);
+            test.skip(true, '未拿到审批方页面');
+            return;
+        }
+
+        await expect(requesterPage.getByText(/2v2 Seating|2v2 站位/i)).toBeVisible({ timeout: 10000 });
+        await expect(approverPage.getByText(/2v2 Seating|2v2 站位/i)).toBeVisible({ timeout: 10000 });
+
+        await requesterPage.getByTestId('dt-seat-swap-avatar-2').click();
+
+        await Promise.all([
+            waitForSeatSwapRequest(matchId, requesterPage, { requesterId: '1', targetPlayerId: '2' }),
+            waitForSeatSwapRequest(matchId, approverPage, { requesterId: '1', targetPlayerId: '2' }),
+        ]);
+
+        await expect(requesterPage.getByTestId('dt-seat-swap-cancel')).toBeVisible({ timeout: 5000 });
+        await expect(approverPage.getByTestId('dt-seat-swap-approve')).toBeVisible({ timeout: 5000 });
+        await expect(approverPage.getByTestId('dt-seat-swap-reject')).toBeVisible({ timeout: 5000 });
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(requesterPage, testInfo, '05-four-player-seat-swap-human-requester');
+        await saveEvidenceScreenshot(approverPage, testInfo, '06-four-player-seat-swap-human-approver');
+
+        await approverPage.getByTestId('dt-seat-swap-approve').click();
+
+        await Promise.all([
+            waitForSeatingOrder(matchId, requesterPage, ['0', '2', '1', '3']),
+            waitForSeatingOrder(matchId, approverPage, ['0', '2', '1', '3']),
+            waitForSeatSwapRequest(matchId, requesterPage, null),
+            waitForSeatSwapRequest(matchId, approverPage, null),
+        ]);
+
+        await expect(requesterPage.getByTestId('dt-seat-swap-cancel')).toHaveCount(0);
+        await expect(approverPage.getByTestId('dt-seat-swap-approve')).toHaveCount(0);
+        await expect(requesterPage.getByText(/P1 \/ P2/)).toBeVisible({ timeout: 5000 });
+        await expect(requesterPage.getByText(/P3 \/ P4/)).toBeVisible({ timeout: 5000 });
+
+        await saveEvidenceScreenshot(requesterPage, testInfo, '07-four-player-seat-swap-human-approved');
 
         await cleanupDTMatch(setup);
     });

@@ -159,11 +159,13 @@ describe('FeedbackModal', () => {
 
     it('应该在取消勾选后不包含 actionLog', async () => {
         const actionLog = '玩家 0 打出了卡牌';
+        const snapshot = JSON.stringify({ gameId: 'test', core: {} });
         render(
             <TestWrapper>
                 <FeedbackModal 
                     onClose={mockOnClose} 
                     actionLogText={actionLog}
+                    stateSnapshot={snapshot}
                 />
             </TestWrapper>
         );
@@ -181,6 +183,7 @@ describe('FeedbackModal', () => {
             const callArgs = (global.fetch as any).mock.calls[0];
             const body = JSON.parse(callArgs[1].body);
             expect(body.actionLog).toBeUndefined();
+            expect(body.stateSnapshot).toBe(snapshot);
         });
     });
 
@@ -210,11 +213,13 @@ describe('FeedbackModal', () => {
 
     it('应该在取消勾选后不包含 stateSnapshot', async () => {
         const snapshot = JSON.stringify({ gameId: 'test', core: {} });
+        const actionLog = '玩家 0 打出了卡牌';
         render(
             <TestWrapper>
                 <FeedbackModal 
                     onClose={mockOnClose} 
                     stateSnapshot={snapshot}
+                    actionLogText={actionLog}
                 />
             </TestWrapper>
         );
@@ -231,6 +236,38 @@ describe('FeedbackModal', () => {
         await waitFor(() => {
             const callArgs = (global.fetch as any).mock.calls[0];
             const body = JSON.parse(callArgs[1].body);
+            expect(body.stateSnapshot).toBeUndefined();
+            expect(body.actionLog).toBe(actionLog);
+        });
+    });
+
+    it('bug 类型在没有任何调试附件时仍可提交', async () => {
+        const snapshot = JSON.stringify({ gameId: 'test', core: {} });
+        const actionLog = '玩家 0 打出了卡牌';
+        render(
+            <TestWrapper>
+                <FeedbackModal
+                    onClose={mockOnClose}
+                    actionLogText={actionLog}
+                    stateSnapshot={snapshot}
+                />
+            </TestWrapper>
+        );
+
+        fireEvent.click(screen.getByLabelText(/附带操作日志/i));
+        fireEvent.click(screen.getByLabelText(/附带状态快照/i));
+
+        const textarea = screen.getByPlaceholderText(/描述/i);
+        fireEvent.change(textarea, { target: { value: '测试反馈' } });
+
+        const submitButton = screen.getByRole('button', { name: /提交/i });
+        fireEvent.click(submitButton);
+
+        await waitFor(() => {
+            const callArgs = (global.fetch as any).mock.calls[0];
+            const body = JSON.parse(callArgs[1].body);
+            expect(body.type).toBe('bug');
+            expect(body.actionLog).toBeUndefined();
             expect(body.stateSnapshot).toBeUndefined();
         });
     });

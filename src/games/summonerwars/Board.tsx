@@ -108,11 +108,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
   };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
+  const isPhoneLandscapeViewport = shouldUseMobileLandscapeMapFraming;
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
   const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
-  const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
-  const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const phaseTrackerClass = isPhoneLandscapeViewport
+    ? 'bg-slate-900/46 backdrop-blur-sm px-2.5 py-2 rounded-lg border border-slate-700/20 min-w-[6.75rem] max-w-[6.75rem]'
+    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = isPhoneLandscapeViewport
+    ? 'absolute top-[35%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
+    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const boardShellVars = isPhoneLandscapeViewport
+    ? { '--sw-hand-card-width-ratio': '0.14' } as React.CSSProperties
+    : undefined;
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -701,7 +709,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
           </>
         </TutorialSelectionGate>
       ) : (
-        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900" data-game-page data-game-id="summonerwars">
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900" data-game-page data-game-id="summonerwars" style={boardShellVars}>
           {isEditingLayout ? (
             <div className="flex-1 overflow-auto p-4">
               <div className="mb-2 flex items-center gap-2">

@@ -1,7 +1,7 @@
 import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { loadGameImplementation, getGameImplementation } from '../games/registry';
+import { getGameImplementation } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
 import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
@@ -24,6 +24,7 @@ import {
 } from '../engine/ai';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { useGameImplementationReady } from '../hooks/useGameImplementationReady';
 import { createLocalMatchSeed, ensureLocalMatchSeedSearchParams } from '../engine/transport/localSession';
 import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 
@@ -42,6 +43,11 @@ export const LocalMatchRoom = () => {
         gameNamespaceError,
         retryGameNamespaceLoad,
     } = useGameNamespaceReady(gameId, i18n);
+    const {
+        isGameImplementationReady,
+        gameImplementationError,
+        retryGameImplementationLoad,
+    } = useGameImplementationReady(gameId);
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const gamePageDataAttributes = useMemo(
@@ -51,19 +57,6 @@ export const LocalMatchRoom = () => {
 
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
-    // 异步加载游戏实现
-    const [loadedGameId, setLoadedGameId] = useState<string | null>(null);
-    const gameImplReady = !gameId || loadedGameId === gameId;
-    useEffect(() => {
-        if (!gameId) return;
-        let cancelled = false;
-        loadGameImplementation(gameId).then(() => {
-            if (!cancelled) setLoadedGameId(gameId);
-        }).catch(() => {
-            if (!cancelled) setLoadedGameId(gameId);
-        });
-        return () => { cancelled = true; };
-    }, [gameId]);
 
     const seedFromUrl = searchParams.get('seed');
     const [fallbackSeed] = useState(() => seedFromUrl || createLocalMatchSeed());
@@ -108,17 +101,17 @@ export const LocalMatchRoom = () => {
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
-        if (!gameId || !gameImplReady) return null;
+        if (!gameId || !isGameImplementationReady) return null;
         return getGameImplementation(gameId)?.engineConfig ?? null;
-    }, [gameId, gameImplReady]);
+    }, [gameId, isGameImplementationReady]);
 
     // 包装 Board 组件，注入 CriticalImageGate
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
-        if (!gameId || !gameImplReady) return null;
+        if (!gameId || !isGameImplementationReady) return null;
         const impl = getGameImplementation(gameId);
         if (!impl) return null;
         const Board = impl.board as unknown as ComponentType<GameBoardProps>;
-        const WrappedBoard = (props: GameBoardProps) => (
+        const WrappedLocalBoard: ComponentType<GameBoardProps> = (props) => (
             <CriticalImageGate
                 gameId={gameId}
                 gameState={props?.G}
@@ -129,8 +122,8 @@ export const LocalMatchRoom = () => {
                 <Board {...props} />
             </CriticalImageGate>
         );
-        return WrappedBoard;
-    }, [gameId, i18n.language, t, gameImplReady]);
+        return WrappedLocalBoard;
+    }, [gameId, i18n.language, t, isGameImplementationReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
@@ -154,7 +147,23 @@ export const LocalMatchRoom = () => {
         );
     }
 
+    if (gameImplementationError) {
+        return (
+            <GameNamespaceLoadError
+                gameId={gameId}
+                error={gameImplementationError}
+                onRetry={retryGameImplementationLoad}
+                titleKey="matchRoom.clientLoadFailed"
+                descriptionKey="matchRoom.clientLoadFailedDesc"
+            />
+        );
+    }
+
     if (!isGameNamespaceReady) {
+        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
+    }
+
+    if (!isGameImplementationReady) {
         return <LoadingScreen description={t('matchRoom.loadingResources')} />;
     }
 

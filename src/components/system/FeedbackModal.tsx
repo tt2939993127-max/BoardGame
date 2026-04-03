@@ -168,13 +168,20 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                 })
             });
 
-            if (!res.ok) throw new Error(t('hud.feedback.errors.submitFailed'));
+            if (!res.ok) {
+                const payload = await res.json().catch(() => null) as { error?: string; message?: string } | null;
+                throw new Error(
+                    payload?.error
+                    || payload?.message
+                    || t('hud.feedback.errors.submitFailed')
+                );
+            }
 
             success(t('hud.feedback.success'));
             onClose();
         } catch (err) {
             console.error(err);
-            error(t('hud.feedback.errors.submitFailed'));
+            error(err instanceof Error ? err.message : t('hud.feedback.errors.submitFailed'));
         } finally {
             setSubmitting(false);
         }

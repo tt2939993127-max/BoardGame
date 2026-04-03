@@ -79,6 +79,22 @@ export const CenterBoard = ({
     const playerBoardBackground = buildLocalizedImageSet(playerBoardPath, locale);
     const tipBoardBackground = buildLocalizedImageSet(tipBoardPath, locale);
 
+    const handleMagnifySurfaceClick = React.useCallback((
+        event: React.MouseEvent<HTMLElement>,
+        imagePath: string,
+    ) => {
+        if (isLayoutEditing) {
+            return;
+        }
+
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('[data-ability-slot], [data-board-magnify-ignore="true"]')) {
+            return;
+        }
+
+        onMagnifyImage(imagePath);
+    }, [isLayoutEditing, onMagnifyImage]);
+
     return (
         <div
             className={shellFrameClassName}
@@ -88,11 +104,13 @@ export const CenterBoard = ({
         >
             <div className={`relative flex items-center justify-center ${boardGapClassName}`}>
                 <div
-                    className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
                     style={boardUiTuning.playerBoardTranslateY === 0
                         ? undefined
                         : { transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)` }}
                     data-tutorial-id="player-board"
+                    data-testid="player-board-surface"
+                    onClick={(event) => handleMagnifySurfaceClick(event, playerBoardPath)}
                 >
                     <div
                         className="h-full"
@@ -127,6 +145,7 @@ export const CenterBoard = ({
                         className={overlayButtonClassName}
                         style={{ ...overlayButtonStyle, zIndex: UI_Z_INDEX.hud + 10 }}
                         data-testid="player-board-magnify-button"
+                        data-board-magnify-ignore="true"
                         aria-label="查看大图"
                     >
                         <span className={overlayButtonVisualClassName}>
@@ -137,11 +156,20 @@ export const CenterBoard = ({
                     </button>
                 </div>
                 <div className="flex items-center relative h-[35vw]" data-tutorial-id="tip-board">
-                    <button type="button" onClick={onToggleTip} className={tipToggleButtonClassName}>
+                    <button
+                        type="button"
+                        onClick={onToggleTip}
+                        className={tipToggleButtonClassName}
+                        data-board-magnify-ignore="true"
+                    >
                         {isTipOpen ? '<' : '>'}
                     </button>
                     <div className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
-                        <div className="relative h-full w-auto aspect-[1311/2048] group">
+                        <div
+                            className={`relative h-full w-auto aspect-[1311/2048] group ${isLayoutEditing ? '' : 'cursor-zoom-in'}`}
+                            data-testid="tip-board-surface"
+                            onClick={(event) => handleMagnifySurfaceClick(event, tipBoardPath)}
+                        >
                             <div
                                 className="w-full h-full"
                                 role="img"
@@ -159,6 +187,7 @@ export const CenterBoard = ({
                                 className={overlayButtonClassName}
                                 style={{ ...overlayButtonStyle, zIndex: UI_Z_INDEX.hud + 10 }}
                                 data-testid="tip-board-magnify-button"
+                                data-board-magnify-ignore="true"
                                 aria-label="查看大图"
                             >
                                 <span className={overlayButtonVisualClassName}>

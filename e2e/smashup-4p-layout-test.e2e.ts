@@ -219,6 +219,53 @@ function buildFourPlayerMobileScene() {
     };
 }
 
+function buildDiscardOverflowScene() {
+    return {
+        gameId: 'smashup',
+        currentPlayer: '0' as const,
+        phase: 'draw',
+        bases: [
+            { defId: 'base_the_jungle' },
+            { defId: 'base_dread_lookout' },
+            { defId: 'base_tsars_palace' },
+        ],
+        player0: {
+            factions: ['aliens', 'pirates'],
+            hand: [
+                'alien_invader',
+                'alien_invader',
+                'alien_collector',
+                'pirate_first_mate',
+                'alien_invader',
+                'pirate_first_mate',
+                'alien_invader',
+                'alien_collector',
+                'pirate_first_mate',
+                'alien_invader',
+                'alien_collector',
+            ],
+            deck: ['alien_invader'],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            vp: 3,
+        },
+        player1: {
+            factions: ['dinosaurs', 'ninjas'],
+            hand: [],
+            deck: [],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            vp: 2,
+        },
+    };
+}
+
 function buildMonsterWithoutCountersMobileScene() {
     return {
         gameId: 'smashup',
@@ -727,6 +774,25 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await game.screenshot('13-desktop-end-turn-restored', testInfo);
     });
 
+    test('手牌超限时继续按钮应保持与结束回合同款白色描边', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await setChineseLocale(page.context());
+        await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildDiscardOverflowScene());
+
+        await waitForSmashUpMainUiReady(page);
+
+        const continueButton = page.getByRole('button', { name: /^继续$/ });
+        await expect(continueButton).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText(/你需要丢弃 1 张牌以继续游戏/i)).toBeVisible({ timeout: 10000 });
+        await expect(continueButton).toHaveAttribute('class', /border-white\/95/);
+        await expect(continueButton).toHaveAttribute('class', /ring-white\/55/);
+
+        await game.screenshot('14-discard-continue-border-restored', testInfo);
+    });
+
     test('移动端不会把没有+1力量指示物的怪物当成可发动天赋', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
@@ -828,6 +894,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(monster).toBeVisible({ timeout: 15000 });
         await expect(monster).toContainText('+1');
         await expect(monster).toHaveAttribute('data-activation-armed', 'false');
+        await game.screenshot('12-monster-with-counter-before-activation', testInfo);
 
         await clickCenter(monster, page);
         await expect(monster).toHaveAttribute('data-expanded', 'true');

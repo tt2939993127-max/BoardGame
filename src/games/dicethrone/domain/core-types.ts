@@ -417,6 +417,13 @@ export interface HeroState {
     pendingBonusDamage?: number;
 }
 
+export type SeatControllerKind = 'human' | 'ai';
+
+export interface PendingSeatSwapRequest {
+    requesterId: PlayerId;
+    targetPlayerId: PlayerId;
+}
+
 // ============================================================================
 // 核心状态
 // ============================================================================
@@ -428,6 +435,10 @@ export interface DiceThroneCore {
     players: Record<PlayerId, HeroState>;
     /** 2v2 模式下的环桌座位顺序，用于分队与回合顺序推导 */
     seatingOrder?: PlayerId[];
+    /** 座位控制信息：仅区分真人 / AI，用于准备阶段换位流程 */
+    seatControllers?: Record<PlayerId, SeatControllerKind>;
+    /** 待处理的换位申请（仅真人目标需要审批） */
+    seatSwapRequest?: PendingSeatSwapRequest;
     /** 2v2 模式下按座位推导后的队伍归属 */
     teamIdByPlayerId?: Record<PlayerId, TeamId>;
     /** 2v2 模式下的共享体力；同队成员 HP 需要与该值保持同步 */

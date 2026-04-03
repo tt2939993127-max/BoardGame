@@ -12,6 +12,7 @@ import type {
     PendingDamage,
     PendingBonusDiceSettlement,
     BonusDieInfo,
+    PendingSeatSwapRequest,
 } from './core-types';
 import type { AbilityDef } from './combat';
 
@@ -67,6 +68,9 @@ export const DT_EVENTS = defineEvents({
   PLAYER_UNREADY: 'ui',          // 玩家取消准备（UI 层播放）
   HOST_STARTED: 'ui',            // 房主开始（UI 层播放）
   SEATING_MOVED: 'ui',           // 站位调整（UI 层播放）
+  SEAT_SWAP_REQUESTED: 'ui',     // 发起换位申请
+  SEAT_SWAP_REJECTED: 'ui',      // 换位申请被拒绝
+  SEAT_SWAP_CANCELLED: 'ui',     // 换位申请取消
 
   // ========== 即时反馈（EventStream）==========
   DICE_ROLLED: { audio: 'immediate', sound: DICE_ROLL_SINGLE_KEY },
@@ -217,6 +221,18 @@ export interface SeatingMovedEvent extends GameEvent<'SEATING_MOVED'> {
         targetSeatIndex: number;
         seatingOrder: PlayerId[];
     };
+}
+
+export interface SeatSwapRequestedEvent extends GameEvent<'SEAT_SWAP_REQUESTED'> {
+    payload: PendingSeatSwapRequest;
+}
+
+export interface SeatSwapRejectedEvent extends GameEvent<'SEAT_SWAP_REJECTED'> {
+    payload: PendingSeatSwapRequest;
+}
+
+export interface SeatSwapCancelledEvent extends GameEvent<'SEAT_SWAP_CANCELLED'> {
+    payload: PendingSeatSwapRequest;
 }
 
 /** 玩家准备事件 */
@@ -837,6 +853,9 @@ export type DiceThroneEvent =
     | OffensiveRollAttemptsRecordedEvent
     | HostStartedEvent
     | SeatingMovedEvent
+    | SeatSwapRequestedEvent
+    | SeatSwapRejectedEvent
+    | SeatSwapCancelledEvent
     | PlayerReadyEvent
     | PlayerUnreadyEvent
     | AbilityActivatedEvent

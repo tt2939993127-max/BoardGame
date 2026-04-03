@@ -7,9 +7,9 @@
  * 3. RESOLVE_CHOICE — 解决选择交互
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
-import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildAiDecisionContext, registerRemoteAiProvider, resolveNextLocalAiAction } from '../../../engine/ai';
 import { DiceThroneDomain } from '../domain';
 import { buildDiceThroneAiLegalActions, diceThroneAiRuntime } from '../ai';
 import { engineConfig } from '../game';
@@ -1099,6 +1099,86 @@ describe('AI legal actions', () => {
         expect(easyEvaluations.some((item) => item.searched)).toBe(false);
         expect(expertEvaluations.some((item) => item.searched)).toBe(true);
         expect(expertEvaluations.every((item) => item.noiseScore === 0)).toBe(true);
+    });
+
+    it('远程 AI 在可见大动作决策点应调用 provider', async () => {
+        const providerId = 'test-remote-major-visible';
+        const decide = vi.fn(async (context) => {
+            const action = context.legalActions.find((candidate) => candidate.kind === 'play-card');
+            return action ? { actionId: action.actionId } : null;
+        });
+        registerRemoteAiProvider({
+            id: providerId,
+            decide,
+        });
+
+        const state = createSetupWithHand(['card-enlightenment'], { cp: 0 })(['0', '1'], fixedRandom);
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'remote-major-visible',
+            seatControllers: {
+                '0': { type: 'remote-ai', providerId, fallbackPolicyId: 'baseline' },
+            },
+        });
+
+        expect(decide).toHaveBeenCalledTimes(1);
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('remote-ai');
+        expect(resolution?.action.kind).toBe('play-card');
+        expect(resolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
+    });
+
+    it('远程 AI 在微决策响应窗口应直接走本地 fallback，不发远程请求', async () => {
+        const providerId = 'test-remote-micro-bypass';
+        const decide = vi.fn(async (context) => {
+            const action = context.legalActions[0];
+            return action ? { actionId: action.actionId } : null;
+        });
+        registerRemoteAiProvider({
+            id: providerId,
+            decide,
+        });
+
+        let state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-remote-micro-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-remote-micro-response',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'remote-micro-bypass',
+            seatControllers: {
+                '0': { type: 'remote-ai', providerId, fallbackPolicyId: 'baseline' },
+            },
+        });
+
+        expect(decide).not.toHaveBeenCalled();
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('remote-ai-fallback');
+        expect(resolution?.action.kind).toBe('token-response');
+        expect(resolution?.action.metadata).toMatchObject({
+            tokenId: TOKEN_IDS.TAIJI,
+        });
     });
 });
 

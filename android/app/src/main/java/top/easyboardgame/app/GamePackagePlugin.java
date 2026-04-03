@@ -93,6 +93,7 @@ public class GamePackagePlugin extends Plugin {
     @PluginMethod
     public void logDiagnostic(PluginCall call) {
         String message = call.getString("message", "");
+        Log.i(TAG, "logDiagnostic invoked length=" + message.length());
         Log.i(TAG, "[JS-DIAG] " + message);
         call.resolve();
     }
