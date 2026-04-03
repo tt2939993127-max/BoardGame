@@ -70,9 +70,11 @@
 - 验证命令：
   - `npm run typecheck`
   - `npx openspec validate add-ai-repo-workbench --strict --no-interactive`
+  - `npm run merge:audit:strict -- HEAD`
 - 验证结果：
   - `typecheck` 通过
   - `openspec validate` 通过
+  - `merge:audit:strict` 通过；17 个审计文件全部为“混合结果”，没有单边覆盖
 
 ## 5. 回归与行为变化登记
 - 原 PR 目标问题：
@@ -84,5 +86,5 @@
   - `add-ai-repo-workbench` OpenSpec 文档采用当前分支版本，不是行为回归，而是以已落地实现为准收敛 capability 口径。
 
 ## 6. 结果
-- 提交：待 merge commit 后回填
+- 提交：`503cb937` `merge(main): 同步主分支到 ai-repo-workbench`
 - 推送：未执行
