@@ -186,7 +186,7 @@ function handleSimpleChoiceRespond<TCore>(
 
     let resolvedValue: unknown;
     if (payload.mergedValue !== undefined) {
-        if (isMulti || !data.slider) {
+        if (isMulti) {
             return { halt: true, error: '非法的选择值' };
         }
 
@@ -200,29 +200,39 @@ function handleSimpleChoiceRespond<TCore>(
             return { halt: true, error: '非法的选择值' };
         }
 
-        const selectedNumericValue = (selectedOptionValue as { value?: unknown }).value;
-        const mergedNumericValue = (mergedValue as { value?: unknown }).value;
-        if (
-            typeof selectedNumericValue !== 'number'
-            || !Number.isFinite(selectedNumericValue)
-            || typeof mergedNumericValue !== 'number'
-            || !Number.isFinite(mergedNumericValue)
-            || !Number.isInteger(mergedNumericValue)
-            || mergedNumericValue < 1
-            || mergedNumericValue > selectedNumericValue
-        ) {
+        const selectedOptionRecord = selectedOptionValue as Record<string, unknown>;
+
+        if (data.slider) {
+            const selectedNumericValue = (selectedOptionValue as { value?: unknown }).value;
+            const mergedNumericValue = (mergedValue as { value?: unknown }).value;
+            if (
+                typeof selectedNumericValue !== 'number'
+                || !Number.isFinite(selectedNumericValue)
+                || typeof mergedNumericValue !== 'number'
+                || !Number.isFinite(mergedNumericValue)
+                || !Number.isInteger(mergedNumericValue)
+                || mergedNumericValue < 1
+                || mergedNumericValue > selectedNumericValue
+            ) {
+                return { halt: true, error: '非法的选择值' };
+            }
+
+            const resolvedSliderValue: Record<string, unknown> = {
+                ...selectedOptionRecord,
+                value: mergedNumericValue,
+            };
+            if (typeof selectedOptionRecord.amount === 'number' && Number.isFinite(selectedOptionRecord.amount)) {
+                resolvedSliderValue.amount = mergedNumericValue;
+            }
+            resolvedValue = resolvedSliderValue;
+        } else if (data.targetType === 'discard_minion') {
+            resolvedValue = {
+                ...selectedOptionRecord,
+                ...(mergedValue as Record<string, unknown>),
+            };
+        } else {
             return { halt: true, error: '非法的选择值' };
         }
-
-        const selectedOptionRecord = selectedOptionValue as Record<string, unknown>;
-        const resolvedSliderValue: Record<string, unknown> = {
-            ...selectedOptionRecord,
-            value: mergedNumericValue,
-        };
-        if (typeof selectedOptionRecord.amount === 'number' && Number.isFinite(selectedOptionRecord.amount)) {
-            resolvedSliderValue.amount = mergedNumericValue;
-        }
-        resolvedValue = resolvedSliderValue;
     } else {
         resolvedValue = isMulti
             ? selectedOptions.map((option) => option.value)
