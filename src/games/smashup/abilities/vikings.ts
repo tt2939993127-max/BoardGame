@@ -899,8 +899,8 @@ function playRaidingPartyCard(
         }
         return event;
     });
-    const currentInteractionId = state.sys.interaction?.current?.interactionId;
-    const nextInteractionId = simulatedState.sys.interaction?.current?.interactionId;
+    const currentInteractionId = state.sys.interaction?.current?.id;
+    const nextInteractionId = simulatedState.sys.interaction?.current?.id;
     const hasNewInteraction = (
         !!nextInteractionId && nextInteractionId !== currentInteractionId
     ) || ((simulatedState.sys.interaction?.queue?.length ?? 0) > (state.sys.interaction?.queue?.length ?? 0));

@@ -98,21 +98,9 @@ export const BaseZone: React.FC<{
         ? -(layout.ongoingTopOffset + titanExcessHeightOverOngoing / 2)
         : -(titanCardHeight - 0.6);
     const hasTitanRail = titansOnBase.length > 0;
-    const isLeftEdgeBase = playerCount >= 4 && baseIndex === 0;
-    const isRightEdgeBase = playerCount >= 4 && baseIndex === core.bases.length - 1;
-    const defaultOngoingSplitIndex = hasTitanRail ? Math.ceil(ongoingActions.length / 2) : ongoingActions.length;
-    // 边缘基地不再做环绕式分布，直接切成“向棋盘内侧单侧展开”。
-    // 否则即使不歪，也会出现一张牌孤零零挂在外侧的错误观感。
-    const ongoingSplitIndex = hasTitanRail
-        ? isLeftEdgeBase
-            ? 0
-            : isRightEdgeBase
-                ? ongoingActions.length
-                : defaultOngoingSplitIndex
-        : defaultOngoingSplitIndex;
+    const ongoingSplitIndex = hasTitanRail ? Math.ceil(ongoingActions.length / 2) : ongoingActions.length;
     const leftOngoingActions = ongoingActions.slice(0, ongoingSplitIndex);
     const rightOngoingActions = ongoingActions.slice(ongoingSplitIndex);
-    const reversedLeftOngoingActions = [...leftOngoingActions].reverse();
     const ongoingCardOverlap = Math.max(layout.ongoingCardWidth * 0.2, 0.4);
     const titanSideContainerGap = Math.max(layout.ongoingCardWidth * 0.04, 0.08);
     const titanSideContainerAnchorOffset = titanRowWidth / 2 + titanSideContainerGap;
@@ -440,11 +428,11 @@ export const BaseZone: React.FC<{
             className="relative flex flex-col items-center group/base"
             style={{ marginLeft: `${layout.baseGap / 2}vw`, marginRight: `${layout.baseGap / 2}vw` }}
         >
-
+            <div className="relative flex flex-col items-center" style={{ width: `${layout.baseCardWidth}vw` }}>
             {/* --- ONGOING EFFECTS (above base card, absolute positioned) --- */}
             {hasOngoingRow && !hasTitanRail && (
                 <div 
-                    className="absolute left-1/2 -translate-x-1/2 flex items-end gap-0 z-30"
+                    className="absolute left-0 flex items-end gap-0 z-30"
                     style={{ top: `-${layout.ongoingTopOffset}vw` }}
                 >
                     {ongoingActions.map((oa, idx) => renderOngoingCard(oa, idx, idx === 0))}
@@ -453,7 +441,7 @@ export const BaseZone: React.FC<{
 
             {hasOngoingRow && hasTitanRail && (
                 <>
-                    {reversedLeftOngoingActions.length > 0 && (
+                    {leftOngoingActions.length > 0 && (
                         <div
                             className="absolute flex items-end gap-0 z-30"
                             style={{
@@ -462,7 +450,7 @@ export const BaseZone: React.FC<{
                                 transform: 'translateX(-100%)',
                             }}
                         >
-                            {reversedLeftOngoingActions.map((oa, idx) => renderOngoingCard(oa, idx, idx === 0))}
+                            {leftOngoingActions.map((oa, idx) => renderOngoingCard(oa, idx, idx === 0))}
                         </div>
                     )}
                     {rightOngoingActions.length > 0 && (
@@ -481,8 +469,12 @@ export const BaseZone: React.FC<{
 
             {titansOnBase.length > 0 && (
                 <div
-                    className="absolute left-1/2 -translate-x-1/2 flex items-center z-40"
-                    style={{ top: `${titanRowTop}vw`, gap: `${titanRowGap}vw` }}
+                    className="absolute left-1/2 flex items-center z-40"
+                    style={{
+                        top: `${titanRowTop}vw`,
+                        gap: `${titanRowGap}vw`,
+                        transform: 'translateX(-50%)',
+                    }}
                 >
                     {titansOnBase.map((titan, idx) => renderTitanCard(titan, idx, idx * 0.05))}
                 </div>
@@ -638,6 +630,7 @@ export const BaseZone: React.FC<{
                         })}
                     </div>
                 )}
+            </div>
             </div>
 
 
