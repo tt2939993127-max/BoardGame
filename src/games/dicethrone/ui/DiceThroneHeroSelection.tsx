@@ -403,7 +403,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 </div>
 
                 {isFourPlayerMode && (
-                    <div className="absolute right-[2vw] bottom-[9vw] w-[22vw] rounded-[1vw] border border-white/12 bg-black/45 p-[0.95vw] backdrop-blur-xl shadow-[0_1.2vw_3vw_rgba(0,0,0,0.35)]">
+                    <div className="absolute right-[2vw] bottom-[10.2vw] w-[22vw] rounded-[1vw] border border-white/12 bg-black/45 p-[0.95vw] backdrop-blur-xl shadow-[0_1.2vw_3vw_rgba(0,0,0,0.35)]">
                         <div>
                             <div className="text-[0.72vw] font-black uppercase tracking-[0.18em] text-white/88">
                                 {t('selection.seating.title')}
@@ -421,17 +421,19 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                             <div className="mt-[0.85vw] rounded-[0.9vw] border border-white/14 bg-black/35 p-[0.8vw] shadow-[0_0.8vw_2vw_rgba(0,0,0,0.22)]">
                                 {isTarget ? (
                                     <div className="flex flex-col gap-[0.65vw]">
-                                        <div className="flex items-center gap-[0.45vw] border-b border-white/10 pb-[0.45vw]">
-                                            <MessageSquareWarning className="h-[0.95vw] w-[0.95vw] text-amber-400" />
-                                            <span className="text-[0.62vw] font-black text-amber-400">
-                                                {t('selection.seating.swapIncoming', {
-                                                    player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
-                                                })}
-                                            </span>
+                                        <div className="rounded-[0.72vw] border border-sky-400/28 bg-sky-500/10 p-[0.7vw]">
+                                            <div className="flex items-center gap-[0.45vw]">
+                                                <MessageSquareWarning className="h-[0.95vw] w-[0.95vw] text-sky-300" />
+                                                <span className="text-[0.62vw] font-black text-sky-200">
+                                                    {t('selection.seating.swapIncoming', {
+                                                        player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <p className="mt-[0.3vw] text-[0.48vw] leading-relaxed text-white/68">
+                                                {t('selection.seating.swapReviewHint')}
+                                            </p>
                                         </div>
-                                        <p className="text-[0.5vw] leading-relaxed text-white/78">
-                                            {t('selection.seating.swapHint')}
-                                        </p>
                                         <div className="flex gap-[0.45vw]">
                                             <button
                                                 type="button"
@@ -440,7 +442,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                     onRespondSeatSwap(true);
                                                 }}
                                                 data-testid="dt-seat-swap-approve"
-                                                className="flex-1 rounded-[0.65vw] border border-emerald-500/50 bg-emerald-500/20 px-[0.8vw] py-[0.55vw] text-[0.58vw] font-black text-emerald-300 transition hover:bg-emerald-500/38 hover:text-white"
+                                                className="flex-1 rounded-[0.65vw] border border-emerald-500/50 bg-emerald-500/20 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-emerald-300 transition hover:bg-emerald-500/38 hover:text-white"
                                             >
                                                 {t('selection.seating.swapApprove')}
                                             </button>
@@ -451,7 +453,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                     onRespondSeatSwap(false);
                                                 }}
                                                 data-testid="dt-seat-swap-reject"
-                                                className="flex-1 rounded-[0.65vw] border border-rose-500/50 bg-rose-500/20 px-[0.8vw] py-[0.55vw] text-[0.58vw] font-black text-rose-300 transition hover:bg-rose-500/38 hover:text-white"
+                                                className="flex-1 rounded-[0.65vw] border border-rose-500/50 bg-rose-500/20 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-rose-300 transition hover:bg-rose-500/38 hover:text-white"
                                             >
                                                 {t('selection.seating.swapReject')}
                                             </button>
@@ -459,13 +461,18 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                     </div>
                                 ) : isRequester ? (
                                     <div className="flex flex-col gap-[0.65vw]">
-                                        <div className="flex items-center gap-[0.45vw] border-b border-white/10 pb-[0.45vw]">
-                                            <div className="h-[0.6vw] w-[0.6vw] rounded-full bg-amber-400 animate-pulse" />
-                                            <span className="text-[0.62vw] font-black text-amber-400">
-                                                {t('selection.seating.swapWaiting', {
-                                                    player: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
-                                                })}
-                                            </span>
+                                        <div className="rounded-[0.72vw] border border-amber-400/30 bg-amber-500/10 p-[0.7vw]">
+                                            <div className="flex items-center gap-[0.45vw]">
+                                                <div className="h-[0.6vw] w-[0.6vw] rounded-full bg-amber-400 animate-pulse" />
+                                                <span className="text-[0.62vw] font-black text-amber-300">
+                                                    {t('selection.seating.swapWaiting', {
+                                                        player: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <p className="mt-[0.3vw] text-[0.48vw] leading-relaxed text-white/68">
+                                                {t('selection.seating.swapWaitingHint')}
+                                            </p>
                                         </div>
                                         <button
                                             type="button"
@@ -474,17 +481,27 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                 onCancelSeatSwap();
                                             }}
                                             data-testid="dt-seat-swap-cancel"
-                                            className="w-full rounded-[0.65vw] border border-amber-500/45 bg-amber-500/16 px-[0.8vw] py-[0.55vw] text-[0.58vw] font-black text-amber-300 transition hover:bg-amber-500/32 hover:text-white"
+                                            className="w-full rounded-[0.65vw] border border-white/12 bg-white/5 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-white/82 transition hover:border-white/22 hover:bg-white/10 hover:text-white"
                                         >
                                             {t('selection.seating.swapCancel')}
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="text-[0.54vw] font-semibold text-white/78">
-                                        {t('selection.seating.swapPendingOther', {
+                                    <div className="rounded-[0.72vw] border border-white/10 bg-white/5 p-[0.7vw] text-[0.5vw] leading-relaxed text-white/72">
+                                        <div className="text-[0.58vw] font-black uppercase tracking-[0.14em] text-white/52">
+                                            {t('selection.seating.swapResolving')}
+                                        </div>
+                                        <div className="mt-[0.28vw]">
+                                            {t('selection.seating.swapIncoming', {
+                                                player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
+                                            })}
+                                        </div>
+                                        <div className="mt-[0.22vw] text-white/60">
+                                            {t('selection.seating.swapPendingOther', {
                                             requester: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
                                             target: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
                                         })}
+                                    </div>
                                     </div>
                                 )}
                             </div>

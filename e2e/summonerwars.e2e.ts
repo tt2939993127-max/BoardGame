@@ -13,6 +13,7 @@ import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import {
   createSummonerWarsMobileEvidenceState,
+  SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
   withSummonerWarsMobileEvidenceActionLog,
 } from '../src/games/summonerwars/mobileEvidence';
 
@@ -2443,7 +2444,7 @@ test.describe('SummonerWars', () => {
     });
     await seedMobileActionLog(desktopPage);
     const desktopActionLogPanel = await openFabPanel(desktopPage, 'action-log', 'exit');
-    await expect(desktopActionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(12);
+    await expect(desktopActionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
     const desktopActionLogLayout = await desktopActionLogPanel.evaluate((panel) => {
       const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
       const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
@@ -2456,16 +2457,16 @@ test.describe('SummonerWars', () => {
         panelScrollWidth: panel.scrollWidth,
         firstRowClientWidth: firstRow?.clientWidth ?? 0,
         firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
-        rowCount: rows.length,
-      };
-    });
+      rowCount: rows.length,
+    };
+  });
     expect(desktopActionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
     expect(desktopActionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
     expect(desktopActionLogLayout.rect.right).toBeLessThanOrEqual(desktopActionLogLayout.innerWidth + 1);
     expect(desktopActionLogLayout.rect.bottom).toBeLessThanOrEqual(desktopActionLogLayout.innerHeight + 1);
     expect(desktopActionLogLayout.panelScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.panelClientWidth + 1);
     expect(desktopActionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.firstRowClientWidth + 1);
-    expect(desktopActionLogLayout.rowCount).toBe(12);
+    expect(desktopActionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
     await expect(desktopActionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
     await desktopPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '01-pc-action-log-open-from-center', {
@@ -2617,7 +2618,7 @@ test.describe('SummonerWars', () => {
 
     await seedMobileActionLog(hostPage);
     const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
-    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(12);
+    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
     const actionLogLayout = await actionLogPanel.evaluate((panel) => {
       const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
       const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
@@ -2640,7 +2641,7 @@ test.describe('SummonerWars', () => {
     expect(actionLogLayout.panelScrollHeight).toBeGreaterThan(actionLogLayout.panelClientHeight);
     expect(actionLogLayout.panelScrollWidth).toBeLessThanOrEqual(actionLogLayout.panelClientWidth + 1);
     expect(actionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(actionLogLayout.firstRowClientWidth + 1);
-    expect(actionLogLayout.rowCount).toBe(12);
+    expect(actionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
     await expect(actionLogPanel).toContainText('最后一步把冠军停在外圈威胁位');
     await expect(actionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
     await actionLogPanel.evaluate((panel) => {
@@ -2736,7 +2737,7 @@ test.describe('SummonerWars', () => {
     await hostContext.close();
   });
 
-  test('移动横屏：悬浮球展开后应整体收进视口并让出结束阶段按钮', async ({ browser }, testInfo) => {
+  test('移动横屏：展开后的悬浮球上下拖拽时展开框仍会收回视口并让出结束阶段按钮', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
@@ -2764,81 +2765,200 @@ test.describe('SummonerWars', () => {
     await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await waitForSummonerWarsVisualStable(hostPage);
-
-    const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
-    await expect(exitFab).toBeVisible({ timeout: 5000 });
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+    await seedMobileActionLog(hostPage);
 
-    const beforeBox = await exitFab.boundingBox();
-    expect(beforeBox).not.toBeNull();
+    const runExpandedOverflowScenario = async ({
+      deltaY,
+      overflowDirection,
+      screenshotKey,
+      screenshotFilename,
+    }: {
+      deltaY: number;
+      overflowDirection: 'top' | 'bottom';
+      screenshotKey: string;
+      screenshotFilename: string;
+    }) => {
+      await hostPage.evaluate(() => {
+        localStorage.removeItem('hud_fab_position');
+        localStorage.removeItem('hud_fab_offset');
+      });
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
+      await collapseFabMenuToMainButton(hostPage);
 
-    await touchDragElement(exitFab, {
-      deltaX: -(SW_PHONE_LANDSCAPE_VIEWPORT.width - 120),
-      deltaY: Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.32),
-    });
-    await hostPage.waitForTimeout(180);
+      const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+      await expect(exitFab).toBeVisible({ timeout: 5000 });
+      await exitFab.click();
+      await expect(hostPage.getByTestId('fab-sheet-exit')).toHaveCount(0);
+      await expect(hostPage.getByTestId('fab-panel-exit')).toBeVisible({ timeout: 5000 });
 
-    const draggedBox = await exitFab.boundingBox();
-    const draggedStoredPosition = await getFabStoredPosition(hostPage);
-    expect(draggedBox).not.toBeNull();
-    expect(draggedStoredPosition).not.toBeNull();
-    expect((draggedStoredPosition?.leftPercent ?? 1)).toBeLessThan(0.08);
-    expect((draggedBox?.x ?? 999)).toBeLessThan(SW_PHONE_LANDSCAPE_VIEWPORT.width * 0.065);
-    expect(Math.abs((draggedBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeGreaterThan(120);
+      await touchDragElement(exitFab, {
+        deltaX: 0,
+        deltaY,
+        steps: 12,
+      });
+      await hostPage.waitForTimeout(180);
 
-    await exitFab.click();
-    await hostPage.waitForTimeout(180);
-    const expandedFabMetrics = await hostPage.evaluate(() => {
-      const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
-      return {
-        viewportWidth: window.innerWidth,
-        viewportHeight: window.innerHeight,
-        visibleButtons: buttons
-          .map((button) => {
-            const styles = window.getComputedStyle(button);
-            const rect = button.getBoundingClientRect();
-            return {
-              id: button.dataset.fabId ?? '',
-              visible: styles.display !== 'none'
-                && styles.visibility !== 'hidden'
-                && styles.opacity !== '0'
-                && rect.width > 0
-                && rect.height > 0,
-              rect: {
+      const draggedVisualBox = await hostPage.locator('[data-fab-visual-id="exit"]').boundingBox();
+      const draggedStoredPosition = await getFabStoredPosition(hostPage);
+      expect(draggedVisualBox).not.toBeNull();
+      expect(draggedStoredPosition).not.toBeNull();
+      if (overflowDirection === 'top') {
+        expect((draggedStoredPosition?.topPercent ?? 1)).toBeLessThan(0);
+        expect((draggedVisualBox?.y ?? 999)).toBeLessThan(20);
+      } else {
+        expect((draggedStoredPosition?.topPercent ?? 0)).toBeGreaterThan(0.9);
+        expect((draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0)).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height - 12);
+      }
+
+      const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
+      await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      await hostPage.waitForTimeout(160);
+      const expandedFabMetrics = await hostPage.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
+        const panel = document.querySelector('[data-testid="fab-panel-action-log"]') as HTMLElement | null;
+        const rows = Array.from(document.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+        const firstRow = rows[0] ?? null;
+        const mainVisual = document.querySelector('[data-fab-visual-id="exit"]') as HTMLElement | null;
+        const gamePage = document.querySelector('[data-game-page]') as HTMLElement | null;
+        return {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          pageScrollX: window.scrollX,
+          pageScrollY: window.scrollY,
+          gamePageRect: gamePage
+            ? (() => {
+              const rect = gamePage.getBoundingClientRect();
+              return {
                 left: rect.left,
                 top: rect.top,
                 right: rect.right,
                 bottom: rect.bottom,
-              },
-            };
-          })
-          .filter((entry) => entry.visible),
-      };
-    });
-    expect(expandedFabMetrics.visibleButtons.length).toBeGreaterThanOrEqual(6);
-    for (const button of expandedFabMetrics.visibleButtons) {
-      expect(button.rect.left, `${button.id} left should stay in viewport`).toBeGreaterThanOrEqual(0);
-      expect(button.rect.top, `${button.id} top should stay in viewport`).toBeGreaterThanOrEqual(0);
-      expect(button.rect.right, `${button.id} right should stay in viewport`).toBeLessThanOrEqual(expandedFabMetrics.viewportWidth + 1);
-      expect(button.rect.bottom, `${button.id} bottom should stay in viewport`).toBeLessThanOrEqual(expandedFabMetrics.viewportHeight + 1);
-    }
+              };
+            })()
+            : null,
+          mainVisualRect: mainVisual
+            ? (() => {
+              const rect = mainVisual.getBoundingClientRect();
+              return {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+              };
+            })()
+            : null,
+          panelRect: panel
+            ? (() => {
+              const rect = panel.getBoundingClientRect();
+              return {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+              };
+            })()
+            : null,
+          panelClientHeight: panel?.clientHeight ?? 0,
+          panelScrollHeight: panel?.scrollHeight ?? 0,
+          panelClientWidth: panel?.clientWidth ?? 0,
+          panelScrollWidth: panel?.scrollWidth ?? 0,
+          firstRowClientWidth: firstRow?.clientWidth ?? 0,
+          firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+          rowCount: rows.length,
+          visibleButtons: buttons
+            .map((button) => {
+              const styles = window.getComputedStyle(button);
+              const rect = button.getBoundingClientRect();
+              return {
+                id: button.dataset.fabId ?? '',
+                visible: styles.display !== 'none'
+                  && styles.visibility !== 'hidden'
+                  && styles.opacity !== '0'
+                  && rect.width > 0
+                  && rect.height > 0,
+                rect: {
+                  left: rect.left,
+                  top: rect.top,
+                  right: rect.right,
+                  bottom: rect.bottom,
+                },
+              };
+            })
+            .filter((entry) => entry.visible),
+        };
+      });
+      expect(expandedFabMetrics.panelRect).not.toBeNull();
+      expect(expandedFabMetrics.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      expect(expandedFabMetrics.panelScrollHeight).toBeGreaterThan(expandedFabMetrics.panelClientHeight);
+      expect(expandedFabMetrics.panelScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.panelClientWidth + 1);
+      expect(expandedFabMetrics.firstRowScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.firstRowClientWidth + 1);
+      expect(expandedFabMetrics.panelRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.right ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportWidth + 1);
+      expect(expandedFabMetrics.panelRect?.bottom ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportHeight + 1);
+      expect(expandedFabMetrics.pageScrollX).toBe(0);
+      expect(expandedFabMetrics.pageScrollY).toBe(0);
+      expect(expandedFabMetrics.gamePageRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.gamePageRect?.bottom ?? -1).toBeGreaterThanOrEqual(expandedFabMetrics.viewportHeight - 1);
 
-    await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-expanded-within-viewport', {
-        filename: '30-mobile-fab-expanded-within-viewport.png',
-      }),
-      fullPage: false,
+      const expandedButtons = expandedFabMetrics.visibleButtons.filter((button) => button.id !== 'exit');
+      const panelRect = expandedFabMetrics.panelRect;
+      if (!panelRect) {
+        throw new Error(`缺少 ${overflowDirection} 场景的日志面板尺寸`);
+      }
+      if (expandedButtons.length > 0) {
+        const visibleTop = Math.min(...expandedButtons.map((button) => button.rect.top));
+        if (overflowDirection === 'top') {
+          expect(
+            Math.abs((panelRect.top ?? 999) - visibleTop),
+            'top overflow should keep panel attached to the top of the expanded button column',
+          ).toBeLessThanOrEqual(12);
+        }
+      }
+      for (const button of expandedButtons) {
+        const overlapsVertically = panelRect.top < button.rect.bottom && panelRect.bottom > button.rect.top;
+        if (overlapsVertically) {
+          const leftClearance = button.rect.left - panelRect.right;
+          const rightClearance = panelRect.left - button.rect.right;
+          expect(
+            Math.max(leftClearance, rightClearance),
+            `${overflowDirection}:${button.id} panel should stay clear of visible expanded buttons`,
+          ).toBeGreaterThanOrEqual(8);
+        }
+      }
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, screenshotKey, {
+          filename: screenshotFilename,
+        }),
+        fullPage: false,
+      });
+    };
+
+    await runExpandedOverflowScenario({
+      deltaY: -Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.78),
+      overflowDirection: 'top',
+      screenshotKey: 'mobile-fab-expanded-top-overflow-recovered',
+      screenshotFilename: '30-mobile-fab-expanded-top-overflow-recovered.png',
     });
 
-    await hostPage.mouse.click(240, 40);
-    await hostPage.waitForTimeout(120);
+    await runExpandedOverflowScenario({
+      deltaY: Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.82),
+      overflowDirection: 'bottom',
+      screenshotKey: 'mobile-fab-expanded-bottom-overflow-recovered',
+      screenshotFilename: '31-mobile-fab-expanded-bottom-overflow-recovered.png',
+    });
+
     const phaseBeforeAdvance = await getCurrentPhase(hostPage);
     const phaseAfterAdvance = await advancePhase(hostPage, phaseBeforeAdvance);
     expect(phaseAfterAdvance).not.toBe(phaseBeforeAdvance);
 
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-and-end-phase-clickable', {
-        filename: '31-mobile-fab-overflow-and-end-phase-clickable.png',
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-expanded-end-phase-clickable', {
+        filename: '32-mobile-fab-expanded-end-phase-clickable.png',
       }),
       fullPage: false,
     });

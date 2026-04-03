@@ -601,7 +601,6 @@ export const GameHUD = ({
         id: 'exit',
         icon: <LogOut size={20} />,
         label: t('hud.actions.exit'),
-        mobilePanelVariant: 'sheet',
         content: (
             <div className="space-y-3">
                 {/* 本地模式：只显示返回大厅 */}

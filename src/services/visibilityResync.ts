@@ -9,6 +9,8 @@
  * 面向百游戏设计：通用工具，不依赖任何游戏层代码。
  */
 
+import { onAppVisible } from '../lib/mobile/appVisibility';
+
 type ResyncCallback = () => void;
 
 /**
@@ -18,13 +20,5 @@ type ResyncCallback = () => void;
  * @returns 清理函数（移除监听器）
  */
 export function onPageVisible(onVisible: ResyncCallback): () => void {
-    const handler = () => {
-        if (!document.hidden) {
-            onVisible();
-        }
-    };
-    document.addEventListener('visibilitychange', handler);
-    return () => {
-        document.removeEventListener('visibilitychange', handler);
-    };
+    return onAppVisible(onVisible);
 }

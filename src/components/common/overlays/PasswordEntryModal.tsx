@@ -34,9 +34,15 @@ export const PasswordEntryModal = ({
                     overlayClassName="bg-[#2b2114]/30"
                     overlayStyle={{ zIndex: UI_Z_INDEX.modalOverlay }}
                     containerClassName="p-4 sm:p-6"
-                    containerStyle={{ zIndex: UI_Z_INDEX.modalContent }}
+                    containerStyle={{
+                        zIndex: UI_Z_INDEX.modalContent,
+                        paddingTop: 'max(1rem, var(--safe-area-top))',
+                        paddingRight: 'max(1rem, var(--safe-area-right))',
+                        paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                        paddingLeft: 'max(1rem, var(--safe-area-left))',
+                    }}
                 >
-                    <div className="bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm text-center font-serif pointer-events-auto">
+                    <div className="bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm max-h-[var(--runtime-modal-max-height)] overflow-y-auto text-center font-serif pointer-events-auto">
                         <div className="text-xs sm:text-sm text-parchment-light-text font-bold uppercase tracking-wider mb-2">
                             {t('password.modalTitle', 'Private Room')}
                         </div>

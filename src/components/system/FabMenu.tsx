@@ -32,10 +32,13 @@ interface FabMenuProps {
 type FabAlignment = { v: 'top' | 'bottom'; h: 'left' | 'right' };
 type SafeAreaInsets = { top: number; right: number; bottom: number; left: number };
 type FabPosition = { left: number; top: number };
+type FabAnchorRect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 const FAB_EDGE_PEEK_SIZE_MOBILE = 32;
 const FAB_EDGE_PEEK_SIZE_DESKTOP = 20;
 const FAB_OPEN_BUTTON_SIZE_MOBILE = 40;
 const FAB_OPEN_BUTTON_GAP_MOBILE = 4;
+const FAB_PANEL_GAP_MOBILE = 14;
+const FAB_PANEL_GAP_DESKTOP = 10;
 
 export interface FabAction {
     mobilePanelVariant?: 'popover' | 'sheet';
@@ -87,6 +90,11 @@ export const FabMenu = ({
         && activeItem?.mobilePanelVariant === 'sheet'
         && Boolean(activeItem.content);
     useDocumentScrollLock(shouldLockDocumentScroll);
+
+    const normalizePosition = useCallback((target: FabPosition) => ({
+        left: Number.isFinite(target.left) ? target.left : 0,
+        top: Number.isFinite(target.top) ? target.top : 0,
+    }), []);
 
     const clampPosition = useCallback((
         target: FabPosition,
@@ -169,7 +177,7 @@ export const FabMenu = ({
                     localStorage.setItem('hud_fab_position', JSON.stringify(percent));
                 }
                 
-                next = clampPosition(next, { allowOverflow: true, resolvedButtonSize: dockedButtonSize });
+                next = normalizePosition(next);
                 setFabPosition(next);
                 setAlignment(getAlignmentForPosition(next, dockedButtonSize));
                 return;
@@ -179,10 +187,10 @@ export const FabMenu = ({
             const base = getInitialPosition();
             if (legacyOffset) {
                 const parsed = JSON.parse(legacyOffset);
-                const next = clampPosition({
+                const next = normalizePosition({
                     left: base.left + (parsed.x ?? 0),
                     top: base.top + (parsed.y ?? 0),
-                }, { allowOverflow: true, resolvedButtonSize: dockedButtonSize });
+                });
                 const percent = {
                     leftPercent: next.left / viewportWidth,
                     topPercent: next.top / viewportHeight,
@@ -203,15 +211,15 @@ export const FabMenu = ({
         });
 
         return () => window.cancelAnimationFrame(frameId);
-    }, [clampPosition, dockedButtonSize, getAlignmentForPosition, getInitialPosition, viewportHeight, viewportWidth]);
+    }, [clampPosition, dockedButtonSize, getAlignmentForPosition, getInitialPosition, normalizePosition, viewportHeight, viewportWidth]);
 
     const handleDragEnd = (_: any, info: any) => {
         if (!fabPosition || viewportWidth <= 0 || viewportHeight <= 0) return;
         setIsDragging(false);
-        const next = clampPosition({
+        const next = normalizePosition({
             left: fabPosition.left + info.offset.x,
             top: fabPosition.top + info.offset.y,
-        }, { allowOverflow: true, resolvedButtonSize: renderButtonSize });
+        });
         setFabPosition(next);
         // 保存为百分比格式
         const percent = {
@@ -302,10 +310,10 @@ export const FabMenu = ({
                 if (saved) {
                     const parsed = JSON.parse(saved);
                     if ('leftPercent' in parsed && 'topPercent' in parsed) {
-                        const next = clampPosition({
+                        const next = normalizePosition({
                             left: parsed.leftPercent * viewportWidth,
                             top: parsed.topPercent * viewportHeight,
-                        }, { allowOverflow: true, resolvedButtonSize: dockedButtonSize });
+                        });
                         setFabPosition(next);
                         setAlignment(getAlignmentForPosition(next, dockedButtonSize));
                         return;
@@ -315,13 +323,13 @@ export const FabMenu = ({
                 logger.error('FabMenu: 处理窗口缩放失败', { error });
             }
             // 降级：直接 clamp 当前位置
-            const next = clampPosition(fabPosition, { allowOverflow: true, resolvedButtonSize: dockedButtonSize });
+            const next = normalizePosition(fabPosition);
             setFabPosition(next);
             setAlignment(getAlignmentForPosition(next, dockedButtonSize));
         };
         window.addEventListener('resize', handleResize);
         return () => window.removeEventListener('resize', handleResize);
-    }, [clampPosition, dockedButtonSize, fabPosition, getAlignmentForPosition, viewportHeight, viewportWidth]);
+    }, [dockedButtonSize, fabPosition, getAlignmentForPosition, normalizePosition, viewportHeight, viewportWidth]);
 
     useEffect(() => {
         if (prevActiveItemIdRef.current === activeItemId) return;
@@ -339,65 +347,47 @@ export const FabMenu = ({
         prevActiveItemIdRef.current = activeItemId;
     }, [activeItemId, items]);
     const getExpandedLayout = useCallback((target: FabPosition) => {
-        const satelliteCount = Math.max(items.length - 1, 0);
-        const basePosition = clampPosition(target, {
-            allowOverflow: false,
-            resolvedButtonSize: expandedButtonSize,
-        });
-        const safeMinTop = edgePadding + safeAreaInsets.top;
-        const safeMaxTop = Math.max(
-            safeMinTop,
-            viewportHeight - expandedButtonSize - edgePadding - safeAreaInsets.bottom,
+        const rawPosition = normalizePosition(target);
+        const safeMinTop = safeAreaInsets.top;
+        const safeMaxBottom = Math.max(
+            safeMinTop + expandedButtonSize,
+            viewportHeight - safeAreaInsets.bottom,
         );
-        const stackExtent = satelliteCount * (expandedButtonSize + expandedButtonGap);
+        const buttonOffset = expandedButtonSize + expandedButtonGap;
         const preferredDirection = alignment.v === 'bottom' ? 'above' : 'below';
-        const aboveRange = {
-            direction: 'above' as const,
-            min: Math.min(safeMaxTop, safeMinTop + stackExtent),
-            max: safeMaxTop,
-        };
-        const belowRange = {
-            direction: 'below' as const,
-            min: safeMinTop,
-            max: Math.max(safeMinTop, safeMaxTop - stackExtent),
-        };
-        const getDistanceToRange = (value: number, range: { min: number; max: number }) => {
-            if (value < range.min) return range.min - value;
-            if (value > range.max) return value - range.max;
-            return 0;
-        };
-        const ranges = [aboveRange, belowRange];
-        const selectedRange = ranges.reduce((best, candidate) => {
-            const bestDistance = getDistanceToRange(basePosition.top, best);
-            const candidateDistance = getDistanceToRange(basePosition.top, candidate);
-            if (candidateDistance !== bestDistance) {
-                return candidateDistance < bestDistance ? candidate : best;
+        let listOffsetY = 0;
+        if (preferredDirection === 'below') {
+            const firstVisibleTop = rawPosition.top + buttonOffset;
+            if (firstVisibleTop < safeMinTop) {
+                listOffsetY = safeMinTop - firstVisibleTop;
             }
-            if (candidate.direction === preferredDirection && best.direction !== preferredDirection) {
-                return candidate;
+        } else {
+            const firstVisibleBottom = rawPosition.top - expandedButtonGap;
+            if (firstVisibleBottom > safeMaxBottom) {
+                listOffsetY = safeMaxBottom - firstVisibleBottom;
             }
-            const bestSpan = best.max - best.min;
-            const candidateSpan = candidate.max - candidate.min;
-            return candidateSpan > bestSpan ? candidate : best;
-        });
-        const top = Math.min(Math.max(basePosition.top, selectedRange.min), selectedRange.max);
-        const resolvedPosition = { left: basePosition.left, top };
-        const horizontalAlignment = getAlignmentForPosition(resolvedPosition, expandedButtonSize).h;
+        }
+        const shouldShiftMainButton = preferredDirection === 'below';
         return {
-            position: resolvedPosition,
+            position: {
+                left: rawPosition.left,
+                top: rawPosition.top + (shouldShiftMainButton ? listOffsetY : 0),
+            },
             alignment: {
-                v: selectedRange.direction === 'above' ? 'bottom' : 'top',
-                h: horizontalAlignment,
+                v: preferredDirection === 'above' ? 'bottom' : 'top',
+                h: getAlignmentForPosition(rawPosition, expandedButtonSize).h,
             } as FabAlignment,
+            listOffset: {
+                x: 0,
+                y: shouldShiftMainButton ? 0 : listOffsetY,
+            },
         };
     }, [
         alignment.v,
-        clampPosition,
-        edgePadding,
         expandedButtonGap,
         expandedButtonSize,
         getAlignmentForPosition,
-        items.length,
+        normalizePosition,
         safeAreaInsets.bottom,
         safeAreaInsets.top,
         viewportHeight,
@@ -411,6 +401,7 @@ export const FabMenu = ({
             return {
                 position: fabPosition,
                 alignment,
+                listOffset: { x: 0, y: 0 },
             };
         }
         return getExpandedLayout(fabPosition);
@@ -439,46 +430,35 @@ export const FabMenu = ({
             onPointerDownCapture={handlePointerDownCapture}
             animate={{ left: renderPosition.left, top: renderPosition.top }}
             transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.7 }}
-            style={{ x: dragX, y: dragY, zIndex }}
+            style={{ x: dragX, y: dragY, zIndex: zIndex + 2, touchAction: 'none' }}
             data-testid="fab-menu"
         >
             {/* 主球：锚点，位置固定 */}
-            <div className={`relative flex items-center justify-center ${activeItemId === items[0].id ? 'z-50' : 'z-20'}`}>
-                <Panel
-                    item={items[0]}
-                    isActive={activeItemId === items[0].id && isOpen}
-                    alignment={renderAlignment}
-                    isDark={isDark}
-                    anchorPosition={renderPosition}
-                    buttonSize={renderButtonSize}
-                    buttonGap={renderButtonGap}
-                    edgePadding={edgePadding}
-                    safeAreaInsets={safeAreaInsets}
-                    isMobileViewport={isMobileViewport}
-                    viewportWidth={viewportWidth}
-                    viewportHeight={viewportHeight}
-                    tooltipPortalRoot={tooltipPortalRoot}
-                    onRequestClose={() => {
-                        setIsOpen(false);
-                        setActiveItemId(null);
-                    }}
-                />
-                <MenuButton
-                    item={items[0]}
-                    onClick={handleMainClick}
-                    isActive={activeItemId === items[0].id && isOpen}
-                    showGlow={!isOpen ? hasAnyNotification : Boolean(items[0].active)}
-                    isMain={true}
-                    isDark={isDark}
-                    alignment={renderAlignment}
-                    tooltipPortalRoot={tooltipPortalRoot}
-                    glowColor={glowColor}
-                    isDragging={isDragging}
-                    buttonSize={renderButtonSize}
-                    isMobileViewport={isMobileViewport}
-                    viewportWidth={viewportWidth}
-                />
-            </div>
+            <FabButtonSlot
+                item={items[0]}
+                isActive={activeItemId === items[0].id && isOpen}
+                onClick={handleMainClick}
+                showGlow={!isOpen ? hasAnyNotification : Boolean(items[0].active)}
+                isMain={true}
+                isDark={isDark}
+                alignment={renderAlignment}
+                tooltipPortalRoot={tooltipPortalRoot}
+                glowColor={glowColor}
+                isDragging={isDragging}
+                buttonSize={renderButtonSize}
+                buttonGap={renderButtonGap}
+                edgePadding={edgePadding}
+                safeAreaInsets={safeAreaInsets}
+                isMobileViewport={isMobileViewport}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+                panelAnchorPosition={renderPosition}
+                layerZIndex={zIndex + 1}
+                onRequestClose={() => {
+                    setIsOpen(false);
+                    setActiveItemId(null);
+                }}
+            />
 
             {/* 卫星按钮：绝对定位，相对主球偏移 */}
             <SatelliteList
@@ -492,6 +472,7 @@ export const FabMenu = ({
                 glowColor={glowColor}
                 isDragging={isDragging}
                 fabPosition={renderPosition}
+                listOffset={renderLayout.listOffset}
                 buttonSize={renderButtonSize}
                 buttonGap={renderButtonGap}
                 edgePadding={edgePadding}
@@ -499,6 +480,7 @@ export const FabMenu = ({
                 isMobileViewport={isMobileViewport}
                 viewportWidth={viewportWidth}
                 viewportHeight={viewportHeight}
+                layerZIndex={zIndex + 1}
             />
         </motion.div>
     );
@@ -515,6 +497,7 @@ const SatelliteList = ({
     glowColor,
     isDragging,
     fabPosition,
+    listOffset,
     buttonSize,
     buttonGap,
     edgePadding,
@@ -522,11 +505,26 @@ const SatelliteList = ({
     isMobileViewport,
     viewportWidth,
     viewportHeight,
+    layerZIndex,
 }: any) => {
     const isButtonBottom = alignment.v === 'bottom';
     const flexDirection = isButtonBottom ? 'flex-col-reverse' : 'flex-col';
     const alignItems = alignment.h === 'right' ? 'items-start' : 'items-end';
     const offset = buttonSize + buttonGap;
+    const visibleColumnTop = isButtonBottom
+        ? fabPosition.top + (listOffset?.y ?? 0) - (items.length * (buttonSize + buttonGap))
+        : fabPosition.top + (listOffset?.y ?? 0) + offset;
+    const visibleColumnBottom = isButtonBottom
+        ? fabPosition.top + (listOffset?.y ?? 0) - offset + buttonSize
+        : fabPosition.top + (listOffset?.y ?? 0) + ((Math.max(items.length - 1, 0)) * (buttonSize + buttonGap)) + offset + buttonSize;
+    const panelReferenceRect = {
+        left: fabPosition.left + (listOffset?.x ?? 0),
+        right: fabPosition.left + (listOffset?.x ?? 0) + buttonSize,
+        top: visibleColumnTop,
+        bottom: visibleColumnBottom,
+        width: buttonSize,
+        height: Math.max(visibleColumnBottom - visibleColumnTop, buttonSize),
+    };
 
     return (
         <AnimatePresence>
@@ -536,6 +534,7 @@ const SatelliteList = ({
                     style={{
                         [isButtonBottom ? 'bottom' : 'top']: offset,
                         gap: isMobileViewport ? buttonGap : Math.max(buttonGap, 12),
+                        transform: `translate(${listOffset?.x ?? 0}px, ${listOffset?.y ?? 0}px)`,
                     }}
                     initial="hidden"
                     animate="visible"
@@ -548,34 +547,18 @@ const SatelliteList = ({
                     {items.map((item: FabAction, index: number) => {
                         const distanceFromMain = index + 1;
                         const anchorPosition: FabPosition = {
-                            left: fabPosition.left,
+                            left: fabPosition.left + (listOffset?.x ?? 0),
                             top: isButtonBottom
-                                ? fabPosition.top - distanceFromMain * (buttonSize + buttonGap)
-                                : fabPosition.top + distanceFromMain * (buttonSize + buttonGap),
+                                ? fabPosition.top + (listOffset?.y ?? 0) - distanceFromMain * (buttonSize + buttonGap)
+                                : fabPosition.top + (listOffset?.y ?? 0) + distanceFromMain * (buttonSize + buttonGap),
                         };
 
                         return (
-                        <div key={item.id} className={`relative flex items-center justify-center ${activeId === item.id ? 'z-50' : 'z-20'}`}>
-                            <Panel
+                            <FabButtonSlot
+                                key={item.id}
                                 item={item}
                                 isActive={activeId === item.id}
-                                alignment={alignment}
-                                isDark={isDark}
-                                anchorPosition={anchorPosition}
-                                buttonSize={buttonSize}
-                                buttonGap={buttonGap}
-                                edgePadding={edgePadding}
-                                safeAreaInsets={safeAreaInsets}
-                                isMobileViewport={isMobileViewport}
-                                viewportWidth={viewportWidth}
-                                viewportHeight={viewportHeight}
-                                tooltipPortalRoot={tooltipPortalRoot}
-                                onRequestClose={() => onItemClick(item)}
-                            />
-                            <MenuButton
-                                item={item}
                                 onClick={() => onItemClick(item)}
-                                isActive={activeId === item.id}
                                 showGlow={Boolean(item.active) && activeId !== item.id}
                                 isMain={false}
                                 isDark={isDark}
@@ -584,15 +567,89 @@ const SatelliteList = ({
                                 glowColor={glowColor}
                                 isDragging={isDragging}
                                 buttonSize={buttonSize}
+                                buttonGap={buttonGap}
+                                edgePadding={edgePadding}
+                                safeAreaInsets={safeAreaInsets}
                                 isMobileViewport={isMobileViewport}
                                 viewportWidth={viewportWidth}
+                                viewportHeight={viewportHeight}
+                                panelAnchorPosition={anchorPosition}
+                                panelReferenceRect={panelReferenceRect}
+                                layerZIndex={layerZIndex}
+                                onRequestClose={() => onItemClick(item)}
                             />
-                        </div>
-                    );
+                        );
                     })}
                 </motion.div>
             )}
         </AnimatePresence>
+    );
+};
+
+const FabButtonSlot = ({
+    item,
+    isActive,
+    onClick,
+    showGlow,
+    isMain,
+    isDark,
+    alignment,
+    tooltipPortalRoot,
+    glowColor,
+    isDragging,
+    buttonSize,
+    buttonGap,
+    edgePadding,
+    safeAreaInsets,
+    isMobileViewport,
+    viewportWidth,
+    viewportHeight,
+    panelAnchorPosition,
+    panelReferenceRect,
+    layerZIndex,
+    onRequestClose,
+}: any) => {
+    const [anchorRect, setAnchorRect] = useState<FabAnchorRect | null>(null);
+
+    return (
+        <div className={`relative flex items-center justify-center ${isActive ? 'z-50' : 'z-20'}`}>
+            <Panel
+                item={item}
+                isActive={isActive}
+                alignment={alignment}
+                isDark={isDark}
+                anchorPosition={panelAnchorPosition}
+                anchorRect={anchorRect}
+                buttonSize={buttonSize}
+                buttonGap={buttonGap}
+                edgePadding={edgePadding}
+                safeAreaInsets={safeAreaInsets}
+                isMobileViewport={isMobileViewport}
+                viewportWidth={viewportWidth}
+                viewportHeight={viewportHeight}
+                tooltipPortalRoot={tooltipPortalRoot}
+                layerZIndex={layerZIndex}
+                referenceRect={panelReferenceRect}
+                onRequestClose={onRequestClose}
+            />
+            <MenuButton
+                item={item}
+                onClick={onClick}
+                isActive={isActive}
+                showGlow={showGlow}
+                isMain={isMain}
+                isDark={isDark}
+                alignment={alignment}
+                tooltipPortalRoot={tooltipPortalRoot}
+                glowColor={glowColor}
+                isDragging={isDragging}
+                buttonSize={buttonSize}
+                isMobileViewport={isMobileViewport}
+                viewportWidth={viewportWidth}
+                anchorPosition={panelAnchorPosition}
+                onRectChange={setAnchorRect}
+            />
+        </div>
     );
 };
 
@@ -602,34 +659,46 @@ const Panel = ({
     alignment,
     isDark,
     anchorPosition,
+    anchorRect,
+    referenceRect,
     buttonSize,
-    buttonGap,
     edgePadding,
     safeAreaInsets,
     isMobileViewport,
     viewportWidth,
     viewportHeight,
     tooltipPortalRoot,
+    layerZIndex,
     onRequestClose,
 }: any) => {
-    const panelOffset = buttonSize + buttonGap;
+    const panelGap = isMobileViewport ? FAB_PANEL_GAP_MOBILE : FAB_PANEL_GAP_DESKTOP;
+    const resolvedAnchor = anchorRect ?? {
+        left: anchorPosition.left,
+        top: anchorPosition.top,
+        right: anchorPosition.left + buttonSize,
+        bottom: anchorPosition.top + buttonSize,
+        width: buttonSize,
+        height: buttonSize,
+    };
+    const resolvedReference = referenceRect ?? resolvedAnchor;
+    const panelAnchorOffset = resolvedAnchor.width + panelGap;
     const isMobileSheetPanel = isMobileViewport && item.mobilePanelVariant === 'sheet';
     const panelWidth = isMobileViewport ? 260 : 300;
     const spaceRight = Math.max(
         0,
-        Math.floor(viewportWidth - (anchorPosition?.left ?? 0) - panelOffset - safeAreaInsets.right - edgePadding),
+        Math.floor(viewportWidth - resolvedAnchor.right - panelGap - safeAreaInsets.right - edgePadding),
     );
     const spaceLeft = Math.max(
         0,
-        Math.floor((anchorPosition?.left ?? 0) - buttonGap - safeAreaInsets.left - edgePadding),
+        Math.floor(resolvedAnchor.left - panelGap - safeAreaInsets.left - edgePadding),
     );
     const spaceBelow = Math.max(
         0,
-        Math.floor(viewportHeight - (anchorPosition?.top ?? 0) - safeAreaInsets.bottom - edgePadding),
+        Math.floor(viewportHeight - resolvedReference.top - safeAreaInsets.bottom - edgePadding),
     );
     const spaceAbove = Math.max(
         0,
-        Math.floor((anchorPosition?.top ?? 0) + buttonSize - safeAreaInsets.top - edgePadding),
+        Math.floor(resolvedReference.bottom - safeAreaInsets.top - edgePadding),
     );
 
     const horizontalPlacement: FabAlignment['h'] = spaceRight === spaceLeft
@@ -638,7 +707,6 @@ const Panel = ({
     const verticalPlacement: FabAlignment['v'] = spaceBelow === spaceAbove
         ? alignment.v
         : (spaceBelow >= spaceAbove ? 'top' : 'bottom');
-    const verticalClass = verticalPlacement === 'top' ? 'top-0' : 'bottom-0';
     const safeAvailableWidth = horizontalPlacement === 'right' ? spaceRight : spaceLeft;
     const safeAvailableHeight = verticalPlacement === 'top' ? spaceBelow : spaceAbove;
     const resolvedPanelWidth = safeAvailableWidth > 0 ? Math.min(panelWidth, safeAvailableWidth) : panelWidth;
@@ -720,9 +788,25 @@ const Panel = ({
         );
     }
 
-    return (
+    if (!isActive || !item.content || !tooltipPortalRoot) {
+        return null;
+    }
+
+    return createPortal(
         <AnimatePresence>
-            {isActive && item.content && (
+            <div
+                style={{
+                    position: 'fixed',
+                    left: resolvedAnchor.left,
+                    top: verticalPlacement === 'top'
+                        ? resolvedReference.top
+                        : resolvedReference.bottom - resolvedAnchor.height,
+                    width: resolvedAnchor.width,
+                    height: resolvedAnchor.height,
+                    zIndex: layerZIndex ?? Math.max(UI_Z_INDEX.hud - 1, 1),
+                    pointerEvents: 'none',
+                }}
+            >
                 <motion.div
                     key="panel"
                     initial={{ opacity: 0, scale: 0.95, x: horizontalPlacement === 'right' ? -10 : 10 }}
@@ -730,11 +814,7 @@ const Panel = ({
                     exit={{ opacity: 0, scale: 0.95, x: horizontalPlacement === 'right' ? -10 : 10 }}
                     className={`
                         absolute p-4 max-md:p-3 rounded-xl shadow-2xl backdrop-blur-xl border-l-[3px]
-                        z-30
                         ${isDark ? "bg-black/95 border-white/20 border-l-neon-blue text-white" : "bg-[#fcfbf9]/95 border-[#d3ccba] border-l-[#8c7b64] text-[#433422]"}
-
-                        ${verticalClass}
-
                         overflow-y-auto overflow-x-hidden custom-scrollbar
                     `}
                     style={{
@@ -742,7 +822,9 @@ const Panel = ({
                         maxWidth: panelMaxWidth,
                         maxHeight: panelMaxHeight,
                         minWidth: 0,
-                        [horizontalPlacement === 'right' ? 'left' : 'right']: panelOffset,
+                        pointerEvents: 'auto',
+                        [horizontalPlacement === 'right' ? 'left' : 'right']: panelAnchorOffset,
+                        [verticalPlacement === 'top' ? 'top' : 'bottom']: 0,
                     }}
                     onPointerDown={(e) => e.stopPropagation()}
                     data-testid={`fab-panel-${item.id}`}
@@ -750,12 +832,29 @@ const Panel = ({
                     {panelHeading}
                     {item.content}
                 </motion.div>
-            )}
-        </AnimatePresence>
+            </div>,
+        </AnimatePresence>,
+        tooltipPortalRoot,
     );
 };
 
-const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, tooltipPortalRoot, showGlow, glowColor, isDragging, buttonSize, isMobileViewport, viewportWidth }: any) => {
+const MenuButton = ({
+    item,
+    onClick,
+    isActive,
+    isMain,
+    isDark,
+    alignment,
+    tooltipPortalRoot,
+    showGlow,
+    glowColor,
+    isDragging,
+    buttonSize,
+    isMobileViewport,
+    viewportWidth,
+    anchorPosition,
+    onRectChange,
+}: any) => {
     const [isHovered, setIsHovered] = useState(false);
     const showTooltip = !isMobileViewport && isHovered && !isDragging && !(isActive && item.content);
     const showPreview = !isMobileViewport && Boolean(item.preview) && !isDragging && !isActive;
@@ -765,8 +864,17 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
 
     const updateTooltipRect = useCallback(() => {
         if (!buttonRef.current) return;
-        setTooltipRect(buttonRef.current.getBoundingClientRect());
-    }, []);
+        const rect = buttonRef.current.getBoundingClientRect();
+        setTooltipRect(rect);
+        onRectChange?.({
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+            width: rect.width,
+            height: rect.height,
+        });
+    }, [onRectChange]);
 
     useEffect(() => {
         const shouldTrackRect = showTooltip || showPreview;
@@ -779,6 +887,10 @@ const MenuButton = ({ item, onClick, isActive, isMain, isDark, alignment, toolti
             window.removeEventListener('scroll', updateTooltipRect, true);
         };
     }, [showTooltip, showPreview, updateTooltipRect]);
+
+    useEffect(() => {
+        updateTooltipRect();
+    }, [anchorPosition?.left, anchorPosition?.top, buttonSize, isActive, updateTooltipRect]);
 
     const tooltipSide = useMemo(() => {
         // tooltip 出现在"展开方向"的一侧：对齐规则与 Panel 一致

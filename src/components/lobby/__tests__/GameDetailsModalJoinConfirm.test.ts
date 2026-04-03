@@ -934,14 +934,14 @@ describe('GameDetailsModal create room ai entry', () => {
         });
     });
 
-    it('已下载 package-managed 游戏时，默认展开已安装卡片并展示版本信息', () => {
+    it('已下载 package-managed 游戏时，不再展开安装卡片，只在标题右侧显示绿色版本号', () => {
         markGamePackageInstalled('dicethrone', '0.5.0');
         render(createElement(GameDetailsModal, baseProps));
 
-        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
-        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
-        expect(screen.getByText('packageManager.installedTitle')).toBeInTheDocument();
-        expect(screen.getByText('packageManager.installedVersionBadge')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-toggle')).toBeNull();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+        expect(screen.getByTestId('game-details-title')).toHaveAttribute('data-installed-version', '0.5.0');
+        expect(screen.queryByText('packageManager.installedTitle')).toBeNull();
     });
 
     it('已安装状态缺少版本号时，回退显示下载入口而不是已完成角标', () => {

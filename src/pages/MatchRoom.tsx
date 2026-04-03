@@ -50,6 +50,7 @@ import { preloadWarmImages } from '../core';
 import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
+import { logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
@@ -360,6 +361,19 @@ export const MatchRoom = () => {
     const { t, i18n } = useTranslation('lobby');
     const { user } = useAuth();
     const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
+    const renderLogKeyRef = useRef<string | null>(null);
+
+    const renderLogKey = `${gameId ?? 'unknown'}:${matchId ?? 'unknown'}:${searchParams.get('playerID') ?? 'no-player'}`;
+    if (renderLogKeyRef.current !== renderLogKey) {
+        renderLogKeyRef.current = renderLogKey;
+        logMobileRuntimeCritical('MatchRoom', 'render-enter', {
+            gameId,
+            matchId,
+            playerID: searchParams.get('playerID'),
+            spectate: searchParams.get('spectate'),
+            userId: user?.id ?? null,
+        });
+    }
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');

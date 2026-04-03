@@ -3,6 +3,7 @@ import {
     resolveStableViewportSize,
     type RuntimeViewportSize,
 } from '../../games/mobileSupport';
+import { isTextEntryElement } from '../../lib/textEntry';
 
 export interface RuntimeSafeAreaInsets {
     top: number;
@@ -13,10 +14,12 @@ export interface RuntimeSafeAreaInsets {
 
 export interface RuntimeViewportMetrics extends RuntimeViewportSize {
     safeArea: RuntimeSafeAreaInsets;
+    keyboardInsetBottom: number;
 }
 
 const EMPTY_SAFE_AREA: RuntimeSafeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 };
-const EMPTY_VIEWPORT: RuntimeViewportMetrics = { width: 0, height: 0, safeArea: EMPTY_SAFE_AREA };
+const EMPTY_VIEWPORT: RuntimeViewportMetrics = { width: 0, height: 0, safeArea: EMPTY_SAFE_AREA, keyboardInsetBottom: 0 };
+const MIN_KEYBOARD_INSET_PX = 72;
 
 const parseCssPixels = (value: string) => {
     const parsed = Number.parseFloat(value);
@@ -37,6 +40,43 @@ export const readRuntimeSafeAreaInsets = (): RuntimeSafeAreaInsets => {
     };
 };
 
+interface RuntimeKeyboardInsetInput {
+    visualViewportHeight?: number | null;
+    visualViewportOffsetTop?: number | null;
+    innerHeight?: number | null;
+    documentClientHeight?: number | null;
+    hasFocusedTextEntry?: boolean;
+}
+
+export const resolveRuntimeKeyboardInsetBottom = ({
+    visualViewportHeight,
+    visualViewportOffsetTop,
+    innerHeight,
+    documentClientHeight,
+    hasFocusedTextEntry = false,
+}: RuntimeKeyboardInsetInput): number => {
+    if (!hasFocusedTextEntry) {
+        return 0;
+    }
+
+    const resolvedVisualViewportHeight = typeof visualViewportHeight === 'number' && Number.isFinite(visualViewportHeight)
+        ? visualViewportHeight
+        : 0;
+    const resolvedLayoutViewportHeight = Math.max(
+        typeof innerHeight === 'number' && Number.isFinite(innerHeight) ? innerHeight : 0,
+        typeof documentClientHeight === 'number' && Number.isFinite(documentClientHeight) ? documentClientHeight : 0,
+    );
+    if (resolvedVisualViewportHeight <= 0 || resolvedLayoutViewportHeight <= 0) {
+        return 0;
+    }
+
+    const offsetTop = typeof visualViewportOffsetTop === 'number' && Number.isFinite(visualViewportOffsetTop)
+        ? Math.max(0, visualViewportOffsetTop)
+        : 0;
+    const inset = Math.round(resolvedLayoutViewportHeight - (resolvedVisualViewportHeight + offsetTop));
+    return inset >= MIN_KEYBOARD_INSET_PX ? inset : 0;
+};
+
 export const readRuntimeViewportMetrics = (
     previous: RuntimeViewportMetrics = EMPTY_VIEWPORT,
 ): RuntimeViewportMetrics => {
@@ -54,20 +94,33 @@ export const readRuntimeViewportMetrics = (
             height: document.documentElement.clientHeight,
         },
     );
+    const keyboardInsetBottom = resolveRuntimeKeyboardInsetBottom({
+        visualViewportHeight: visualViewport?.height,
+        visualViewportOffsetTop: visualViewport?.offsetTop,
+        innerHeight: window.innerHeight,
+        documentClientHeight: document.documentElement.clientHeight,
+        hasFocusedTextEntry: isTextEntryElement(document.activeElement),
+    });
 
     return {
         ...viewport,
         safeArea: readRuntimeSafeAreaInsets(),
+        keyboardInsetBottom,
     };
 };
 
-export const applyRuntimeViewportCssVars = (viewport: RuntimeViewportSize) => {
+export const applyRuntimeViewportCssVars = (viewport: RuntimeViewportSize | RuntimeViewportMetrics) => {
     if (typeof document === 'undefined') return;
     if (viewport.width <= 0 || viewport.height <= 0) return;
 
     const root = document.documentElement;
+    const keyboardInsetBottom = 'keyboardInsetBottom' in viewport
+        ? Math.max(0, viewport.keyboardInsetBottom)
+        : 0;
     root.style.setProperty('--runtime-viewport-width', `${viewport.width}px`);
     root.style.setProperty('--runtime-viewport-height', `${viewport.height}px`);
+    root.style.setProperty('--keyboard-inset-height', `${keyboardInsetBottom}px`);
+    root.dataset.keyboardVisible = keyboardInsetBottom > 0 ? 'true' : 'false';
 };
 
 interface UseRuntimeViewportOptions {
@@ -100,6 +153,7 @@ export const useRuntimeViewport = (
                     && next.safeArea.right === previous.safeArea.right
                     && next.safeArea.bottom === previous.safeArea.bottom
                     && next.safeArea.left === previous.safeArea.left
+                    && next.keyboardInsetBottom === previous.keyboardInsetBottom
                 ) {
                     return previous;
                 }

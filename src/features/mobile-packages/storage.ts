@@ -1,5 +1,6 @@
 import type { StoredGamePackageState } from './types';
 import { mergeGamePackageState } from './types';
+import { normalizeGamePackageAssetBaseUrl } from './assetBaseUrl';
 
 const STORAGE_PREFIX = 'mobile-package-state:';
 export const STALE_IN_PROGRESS_ERROR_MESSAGE = '上次下载未完成，请重新发起。';
@@ -75,7 +76,7 @@ const sanitizeStoredState = (
             ? candidate.installedVersion.trim()
             : undefined,
         localAssetBaseUrl: typeof candidate.localAssetBaseUrl === 'string' && candidate.localAssetBaseUrl.trim()
-            ? candidate.localAssetBaseUrl.trim()
+            ? normalizeGamePackageAssetBaseUrl(candidate.localAssetBaseUrl.trim())
             : undefined,
         errorMessage: typeof candidate.errorMessage === 'string' && candidate.errorMessage.trim()
             ? candidate.errorMessage
@@ -129,7 +130,10 @@ export const writeStoredGamePackageState = (state: StoredGamePackageState) => {
     }
 
     try {
-        storage.setItem(getStorageKey(state.gameId), JSON.stringify(state));
+        storage.setItem(getStorageKey(state.gameId), JSON.stringify({
+            ...state,
+            localAssetBaseUrl: normalizeGamePackageAssetBaseUrl(state.localAssetBaseUrl),
+        }));
     } catch {
         // 忽略 localStorage 不可用或空间不足
     }

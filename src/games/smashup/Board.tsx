@@ -139,6 +139,11 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     // 观战模式下默认显示玩家 0 的视角
     const myPlayer = corePlayers[rootPid];
     const isGameOver = G?.sys?.gameover;
+    const activeDuelParticipantUids = useMemo(() => {
+        const duel = core?.activeDuel;
+        if (!duel) return new Set<string>();
+        return new Set([duel.challengerMinionUid, duel.challengedMinionUid]);
+    }, [core?.activeDuel]);
     const activeDuelBanner = useMemo(() => {
         const duel = core?.activeDuel;
         if (!duel) return null;
@@ -2328,6 +2333,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 isMinionSelectMode={!isOngoingSelectPrompt && (((selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
                                 selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') ? ongoingMinionTargetUids : undefined}
                                 multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
+                                duelParticipantMinionUids={activeDuelParticipantUids.size > 0 ? activeDuelParticipantUids : undefined}
                                 isBuriedSelectMode={isBuriedSelectPrompt}
                                 selectableBuriedCardUids={isBuriedSelectPrompt ? selectableBuriedCardUids : undefined}
                                 multiSelectedBuriedCardUids={isMultiBuriedSelect ? multiSelectedBuriedCardUids : undefined}

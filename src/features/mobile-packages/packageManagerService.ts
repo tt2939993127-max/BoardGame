@@ -2,6 +2,7 @@ import { clearGameAssetBaseOverrides, setGameAssetBaseOverride } from '../../cor
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { runMockGamePackageInstall } from './mockInstallRunner';
 import { createNativeGamePackageInstallHandle, listInstalledNativeGamePackages } from './nativeGamePackagePlugin';
+import { normalizeGamePackageAssetBaseUrl } from './assetBaseUrl';
 import {
     clearStoredGamePackageState,
     readStoredGamePackageState,
@@ -75,21 +76,35 @@ const normalizeIncompleteInstalledState = (
 };
 
 const applyAssetBaseOverride = (gameId: string, assetBaseUrl?: string) => {
-    if (!assetBaseUrl) {
+    const normalizedAssetBaseUrl = normalizeGamePackageAssetBaseUrl(assetBaseUrl);
+    logMobileRuntimeCritical('PackageManagerService', 'apply-asset-base-override', {
+        gameId,
+        assetBaseUrl: assetBaseUrl ?? null,
+        normalizedAssetBaseUrl: normalizedAssetBaseUrl ?? null,
+    });
+    if (!normalizedAssetBaseUrl) {
         appliedAssetBaseOverrides.delete(gameId);
         setGameAssetBaseOverride(gameId, undefined);
         return;
     }
 
-    appliedAssetBaseOverrides.set(gameId, assetBaseUrl);
-    setGameAssetBaseOverride(gameId, assetBaseUrl);
+    appliedAssetBaseOverrides.set(gameId, normalizedAssetBaseUrl);
+    setGameAssetBaseOverride(gameId, normalizedAssetBaseUrl);
 };
 
 const normalizeStateBeforeEmit = (
     state: StoredGamePackageState,
 ): StoredGamePackageState => {
     const fallbackState = fallbackCache.get(state.gameId) ?? mergeGamePackageState(state, {});
-    return normalizeIncompleteInstalledState(state, fallbackState, 'cache');
+    const normalizedState = normalizeIncompleteInstalledState(state, fallbackState, 'cache');
+    const normalizedAssetBaseUrl = normalizeGamePackageAssetBaseUrl(normalizedState.localAssetBaseUrl);
+    if (normalizedAssetBaseUrl === normalizedState.localAssetBaseUrl) {
+        return normalizedState;
+    }
+    return {
+        ...normalizedState,
+        localAssetBaseUrl: normalizedAssetBaseUrl,
+    };
 };
 
 const emitState = (state: StoredGamePackageState) => {
@@ -210,6 +225,9 @@ export const resetGamePackageState = (
 
 export const hydrateInstalledNativeGamePackages = async () => {
     const installedPackages = await listInstalledNativeGamePackages();
+    logMobileRuntimeCritical('PackageManagerService', 'hydrate-installed-native-packages-critical', {
+        installedPackages,
+    });
     logMobileRuntime('PackageManagerService', 'hydrate-installed-native-packages', {
         installedPackages,
     });

@@ -75,7 +75,7 @@ public class GamePackagePlugin extends Plugin {
                     item.put("runtimeChannel", metadata.optString("runtimeChannel", "stable"));
                     item.put("installedAt", metadata.optLong("installedAt", 0L));
                     item.put("assetPackVersion", metadata.optString("assetPackVersion", ""));
-                    item.put("assetRootPath", assetRootDir.toURI().toString());
+                    item.put("assetRootPath", buildAssetRootPath(assetRootDir));
                     packages.put(item);
                 }
             }
@@ -257,7 +257,7 @@ public class GamePackagePlugin extends Plugin {
                 result.put("runtimeChannel", resolvedRuntimeChannel);
                 result.put("installedAt", installedAt);
                 result.put("assetPackVersion", resolvedAssetPackVersion);
-                result.put("assetRootPath", currentAssetsDir.toURI().toString());
+                result.put("assetRootPath", buildAssetRootPath(currentAssetsDir));
 
                 emitInstallState(
                     gameId,
@@ -266,7 +266,7 @@ public class GamePackagePlugin extends Plugin {
                     null,
                     null,
                     resolvedAssetPackVersion,
-                    currentAssetsDir.toURI().toString(),
+                    buildAssetRootPath(currentAssetsDir),
                     installedAt
                 );
                 Log.i(
@@ -302,6 +302,10 @@ public class GamePackagePlugin extends Plugin {
             rootDir.mkdirs();
         }
         return rootDir;
+    }
+
+    private String buildAssetRootPath(File assetRootDir) {
+        return assetRootDir.getAbsolutePath();
     }
 
     private void downloadArchive(

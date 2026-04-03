@@ -68,6 +68,8 @@
         --safe-area-right: env(safe-area-inset-right, 0px);
         --safe-area-bottom: env(safe-area-inset-bottom, 0px);
         --safe-area-left: env(safe-area-inset-left, 0px);
+        --keyboard-inset-height: 0px;
+        --safe-area-bottom-with-keyboard: max(var(--safe-area-bottom), var(--keyboard-inset-height));
         --runtime-viewport-width: 100vw;
         /*
          * 默认值必须先落到旧 WebView 也能识别的单位。
@@ -76,6 +78,11 @@
          * board-shell 就可能被算塌，只剩黑底和悬浮 HUD。
          */
         --runtime-viewport-height: 100vh;
+        --runtime-modal-max-height: calc(
+            var(--runtime-viewport-height, 100vh)
+            - max(1rem, var(--safe-area-top))
+            - max(1rem, var(--safe-area-bottom-with-keyboard))
+        );
         /*
          * 某些 Tailwind v4 阴影/渐变 utility 依赖的默认变量在当前兼容后处理链里没有稳定落地，
          * 会让按钮阴影和资源条渐变直接退化成 none。这里补回 Tailwind 默认初值。
@@ -94,6 +101,8 @@
         --tw-ring-shadow: 0 0 #0000;
         --tw-inset-ring-shadow: 0 0 #0000;
         --tw-ring-offset-shadow: 0 0 #0000;
+        --tw-ring-offset-width: 0px;
+        --tw-ring-offset-color: #fff;
     }
 
     /* Responsive Root Font Size System */
@@ -154,6 +163,15 @@
 #modal-root {
     max-width: 100%;
     overflow-x: hidden;
+}
+
+.modal-base-container {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+html[data-keyboard-visible="true"] .modal-base-container {
+    align-items: flex-start;
 }
 
 /* 娓告垙涓撳睘瀛椾綋锛歮anifest.fontFamily 閫氳繃 MatchRoom/LocalMatchRoom 娉ㄥ叆涓?CSS 鍙橀噺锛?

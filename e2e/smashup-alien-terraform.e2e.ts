@@ -2,7 +2,10 @@
  * Smash Up - Alien Terraform E2E 测试
  */
 
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { test, expect } from './framework';
+import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
 const SMASHUP_TERRAFORM_QUERY = {
     p0: 'aliens,pirates',
@@ -80,6 +83,26 @@ const SMASHUP_GREAT_WOLF_QUERY = {
     skipInitialization: false,
     seed: 12345,
 };
+
+async function saveEvidenceLocatorScreenshot(page: any, locator: any, testInfo: any, subdir: string, filename: string) {
+    const path = getEvidenceScreenshotPath(testInfo, filename, { subdir, filename });
+    mkdirSync(dirname(path), { recursive: true });
+    await expect(locator).toBeVisible({ timeout: 15000 });
+    const box = await locator.boundingBox();
+    expect(box, `未获取到截图目标 ${filename} 的边界`).not.toBeNull();
+    const padding = 10;
+    await page.screenshot({
+        path,
+        animations: 'disabled',
+        scale: 'device',
+        clip: {
+            x: Math.max((box?.x ?? 0) - padding, 0),
+            y: Math.max((box?.y ?? 0) - padding, 0),
+            width: (box?.width ?? 0) + padding * 2,
+            height: (box?.height ?? 0) + padding * 2,
+        },
+    });
+}
 
 async function openTitanRailScene(
     game: any,
@@ -2141,9 +2164,20 @@ test.describe('Smash Up - Alien Terraform', () => {
 
         const titan = page.locator('[data-titan-uid="titan-cthulhu-talent-draw"]');
         await expect(titan).toBeVisible();
+        await expect
+            .poll(async () => await titan.getAttribute('class'))
+            .toContain('ring-2 ring-amber-400');
+        await expect
+            .poll(async () => await titan.evaluate((element) => getComputedStyle(element as HTMLElement).borderColor))
+            .toContain('250, 188, 0');
+        await saveEvidenceLocatorScreenshot(
+            page,
+            titan,
+            testInfo,
+            'smashup-alien-terraform',
+            'cthulhu-titan-talent-ready-card.png',
+        );
         const titanMagnify = page.getByTestId('su-base-titan-magnify-titan-cthulhu-talent-draw');
-        await titan.hover();
-        await expect(titanMagnify).toBeVisible();
         await titanMagnify.click({ force: true });
         await expectSmashUpMagnifyTarget(page, 'titan', 'cthulhu_cthulhu_titan');
         await game.screenshot('cthulhu-titan-magnify', testInfo);

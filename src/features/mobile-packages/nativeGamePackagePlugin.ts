@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { mergeGamePackageState } from './types';
+import { normalizeGamePackageAssetBaseUrl, normalizeNativeAssetRootPath } from './assetBaseUrl';
 
 type PluginListenerHandle = {
     remove(): Promise<void>;
@@ -111,17 +112,9 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
     }
 };
 
-const toAssetBaseUrl = async (assetRootPath?: string) => {
-    if (!assetRootPath) {
-        return undefined;
-    }
+export { normalizeNativeAssetRootPath } from './assetBaseUrl';
 
-    try {
-        return Capacitor.convertFileSrc(assetRootPath);
-    } catch {
-        return undefined;
-    }
-};
+const toAssetBaseUrl = (assetRootPath?: string) => normalizeGamePackageAssetBaseUrl(assetRootPath);
 
 const getNativePlugin = (): NativeGamePackagePlugin | null => {
     if (nativePluginLoader !== undefined) {
@@ -165,18 +158,32 @@ export const listInstalledNativeGamePackages = async (): Promise<NativeInstalled
     }
 
     const response = await plugin.listInstalledPackages();
+    logMobileRuntimeCritical('NativeGamePackagePlugin', 'list-installed-raw-response', {
+        packages: response.packages ?? [],
+    });
     const installedPackages = await Promise.all(
-        (response.packages ?? []).map(async (item) => ({
-            gameId: item.gameId,
-            runtimeChannel: item.runtimeChannel?.trim() || 'stable',
-            installedAt: typeof item.installedAt === 'number' && Number.isFinite(item.installedAt)
-                ? item.installedAt
-                : undefined,
-            installedVersion: typeof item.assetPackVersion === 'string' && item.assetPackVersion.trim()
-                ? item.assetPackVersion.trim()
-                : undefined,
-            assetBaseUrl: await toAssetBaseUrl(item.assetRootPath),
-        })),
+        (response.packages ?? []).map(async (item) => {
+            const normalizedAssetRootPath = normalizeNativeAssetRootPath(item.assetRootPath);
+            const assetBaseUrl = toAssetBaseUrl(item.assetRootPath);
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'list-installed-item-normalized', {
+                gameId: item.gameId,
+                rawAssetRootPath: item.assetRootPath,
+                normalizedAssetRootPath,
+                assetBaseUrl,
+                assetPackVersion: item.assetPackVersion,
+            });
+            return {
+                gameId: item.gameId,
+                runtimeChannel: item.runtimeChannel?.trim() || 'stable',
+                installedAt: typeof item.installedAt === 'number' && Number.isFinite(item.installedAt)
+                    ? item.installedAt
+                    : undefined,
+                installedVersion: typeof item.assetPackVersion === 'string' && item.assetPackVersion.trim()
+                    ? item.assetPackVersion.trim()
+                    : undefined,
+                assetBaseUrl,
+            };
+        }),
     );
 
     const filteredPackages = installedPackages.filter((item) => Boolean(item.gameId));
@@ -282,7 +289,7 @@ export const createNativeGamePackageInstallHandle = async (
                             return;
                         }
 
-                        const assetBaseUrl = await toAssetBaseUrl(event.assetRootPath);
+                        const assetBaseUrl = toAssetBaseUrl(event.assetRootPath);
                         if (assetBaseUrl) {
                             options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
                         }
@@ -336,7 +343,7 @@ export const createNativeGamePackageInstallHandle = async (
                 result,
             });
 
-            const assetBaseUrl = await toAssetBaseUrl(result.assetRootPath);
+            const assetBaseUrl = toAssetBaseUrl(result.assetRootPath);
             if (assetBaseUrl) {
                 options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
             }

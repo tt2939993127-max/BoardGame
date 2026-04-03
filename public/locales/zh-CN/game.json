@@ -77,6 +77,7 @@
       "backToLobbyHint": "彻底离开房间",
       "social": "好友",
       "feedback": "反馈",
+      "downloadApp": "下载 App",
       "about": "关于",
       "fullscreen": "全屏",
       "exitFullscreen": "退出全屏",
@@ -160,6 +161,9 @@
     "fullscreen": {
       "enterFailed": "全屏失败，请检查浏览器权限或系统全屏占用。",
       "exitFailed": "退出全屏失败，请检查浏览器权限或系统状态。"
+    },
+    "download": {
+      "missingLink": "下载链接待配置，先把百度网盘地址填到环境变量里。"
     },
     "toggle": {
       "collapse": "收起菜单",
