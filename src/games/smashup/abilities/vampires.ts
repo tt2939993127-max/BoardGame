@@ -8,6 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     addPowerCounter, addOngoingCardCounter, destroyMinion,
+    buildActionMinionTargetOptions,
     buildMinionTargetOptions,
     resolveOrPrompt, findMinionOnBases, buildAbilityFeedback,
     buildBaseTargetOptions,
@@ -456,7 +457,7 @@ function vampireNightstalker(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
-    const minionOptions = buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
+    const minionOptions = buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' });
     if (minionOptions.length === 0) return { events: [] };
     const nsOptions: any[] = [...minionOptions];
     for (const option of nsOptions) {
@@ -563,7 +564,7 @@ function vampireBigGulp(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
-    const options = buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
+    const options = buildActionMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' });
     if (options.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.all_protected', ctx.now)] };
 
     // 添加"跳过"选项
@@ -858,7 +859,7 @@ const handleDinnerDateChooseMinion: IH = (state, playerId, value, _data, _random
         }
     }
     if (targets.length === 0) return { state, events };
-    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
+    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
     if (options.length === 0) return { state, events };
     const interaction = createSimpleChoice(
         `vampire_dinner_date_target_${now}`, playerId,
@@ -996,7 +997,7 @@ function vampireHeavyDrinkerPod(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '海量酒鬼：选择要消灭的随从（本随从放置两个+1战斗力指示物）',
         [
-            ...buildMinionTargetOptions(hereTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }).map(o => ({
+            ...buildActionMinionTargetOptions(hereTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }).map(o => ({
                 ...o,
                 id: `here-${o.id}`,
                 value: { ...o.value, sourceMinionUid: found.minion.uid, sourceBaseIndex: found.baseIndex },
@@ -1052,7 +1053,7 @@ function vampireCountPodTalent(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '吸血鬼伯爵：选择一个随从直到你的下回合开始时-1战斗力',
         [
-            ...buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }),
+            ...buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }),
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ] as any[],
         { sourceId: 'vampire_the_count_pod_talent', targetType: 'minion' },
@@ -1112,7 +1113,7 @@ function vampireBigGulpPod(ctx: AbilityContext): AbilityResult {
         `vampire_big_gulp_pod_${ctx.now}`,
         ctx.playerId,
         '选择要消灭的战斗力≤4的随从',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        buildActionMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }),
         { sourceId: 'vampire_big_gulp_pod', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -1150,7 +1151,7 @@ function vampireCullTheWeakPod(ctx: AbilityContext): AbilityResult {
         `vampire_cull_the_weak_pod_${ctx.now}`,
         ctx.playerId,
         '剔除弱者：选择一个随从放置+1战斗力指示物（每弃1张随从放1个）',
-        buildMinionTargetOptions(myMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }) as any,
+        buildMinionTargetOptions(myMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }) as any,
         { sourceId: 'vampire_cull_the_weak_pod', targetType: 'minion' },
     );
     (interaction.data as any).continuationContext = {
@@ -1226,7 +1227,7 @@ function vampireDinnerDatePod(ctx: AbilityContext): AbilityResult {
         `vampire_dinner_date_pod_${ctx.now}`,
         ctx.playerId,
         '晚餐约会：选择你的一个随从放置两个+1战斗力指示物',
-        buildMinionTargetOptions(own, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }) as any,
+        buildMinionTargetOptions(own, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }) as any,
         { sourceId: 'vampire_dinner_date_pod', targetType: 'minion' },
     );
     (interaction.data as any).continuationContext = { attachedMinionUid: ctx.targetMinionUid, attachedBaseIndex: ctx.baseIndex };
@@ -1277,7 +1278,7 @@ function vampireWolfPactPodMinionOnPlay(ctx: AbilityContext): AbilityResult {
                 ctx.state.bases.flatMap((b, i) =>
                     b.minions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: i, label: getCardDef(m.defId)?.name ?? m.defId })),
                 ),
-                { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' },
+                { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' },
             ),
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ] as any,

@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
-import { loadGameImplementation, getGameImplementation } from '../games/registry';
+import { getGameImplementation } from '../games/registry';
 import { GameProvider, LocalGameProvider, BoardBridge, useGameClient } from '../engine/transport/react';
 import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
@@ -50,9 +50,11 @@ import { preloadWarmImages } from '../core';
 import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
+import { logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { useGameImplementationReady } from '../hooks/useGameImplementationReady';
 import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 import {
@@ -360,6 +362,19 @@ export const MatchRoom = () => {
     const { t, i18n } = useTranslation('lobby');
     const { user } = useAuth();
     const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
+    const renderLogKeyRef = useRef<string | null>(null);
+
+    const renderLogKey = `${gameId ?? 'unknown'}:${matchId ?? 'unknown'}:${searchParams.get('playerID') ?? 'no-player'}`;
+    if (renderLogKeyRef.current !== renderLogKey) {
+        renderLogKeyRef.current = renderLogKey;
+        logMobileRuntimeCritical('MatchRoom', 'render-enter', {
+            gameId,
+            matchId,
+            playerID: searchParams.get('playerID'),
+            spectate: searchParams.get('spectate'),
+            userId: user?.id ?? null,
+        });
+    }
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
@@ -374,29 +389,6 @@ export const MatchRoom = () => {
     useEffect(() => {
         setOnlineTransportError(null);
     }, [gameId, matchId, isTutorialRoute]);
-
-    // 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
-    const [gameImplReady, setGameImplReady] = useState(false);
-    useEffect(() => {
-        if (!gameId || isUgcGame) return;
-        
-        // HMR 优化：如果游戏实现已经加载（通过检查 getGameImplementation），跳过重新加载
-        // 这避免了 HMR 时短暂的 gameImplReady=false 导致显示"未找到游戏客户端"
-        const impl = getGameImplementation(gameId);
-        if (impl) {
-            setGameImplReady(true);
-            return;
-        }
-        
-        let cancelled = false;
-        setGameImplReady(false);
-        loadGameImplementation(gameId).then(() => {
-            if (!cancelled) setGameImplReady(true);
-        }).catch(() => {
-            if (!cancelled) setGameImplReady(true); // 允许显示错误状态
-        });
-        return () => { cancelled = true; };
-    }, [gameId, isUgcGame]);
 
     // 在线模式：命令被服务端拒绝时的统一反馈
     const handleGameError = useCallback((error: string) => {
@@ -427,6 +419,18 @@ export const MatchRoom = () => {
     useEffect(() => {
         setHasCompletedInitialOnlinePreload(false);
     }, [gameId, matchId, isTutorialRoute]);
+
+    const {
+        isGameNamespaceReady,
+        gameNamespaceError,
+        retryGameNamespaceLoad,
+    } = useGameNamespaceReady(gameId, i18n, { required: requiresGameNamespace });
+    const {
+        isGameImplementationReady,
+        gameImplementationError,
+        retryGameImplementationLoad,
+    } = useGameImplementationReady(gameId, { enabled: !isUgcGame });
+    const gameImplReady = isGameImplementationReady;
 
     // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
     // 联机模式仅在首次进入对局时阻塞并显示真实素材进度，首轮完成后恢复后台预加载，
@@ -548,11 +552,6 @@ export const MatchRoom = () => {
     const hasTutorialBoard = Boolean(WrappedBoard && engineConfig && gameId);
 
     const [isLeaving, setIsLeaving] = useState(false);
-    const {
-        isGameNamespaceReady,
-        gameNamespaceError,
-        retryGameNamespaceLoad,
-    } = useGameNamespaceReady(gameId, i18n, { required: requiresGameNamespace });
     const [destroyModalId, setDestroyModalId] = useState<string | null>(null);
     const [forceExitModalId, setForceExitModalId] = useState<string | null>(null);
     const [shouldShowMatchError, setShouldShowMatchError] = useState(false);
@@ -1274,7 +1273,28 @@ export const MatchRoom = () => {
         );
     }
 
+    if (gameImplementationError) {
+        return (
+            <GameNamespaceLoadError
+                gameId={gameId}
+                error={gameImplementationError}
+                onRetry={retryGameImplementationLoad}
+                titleKey="matchRoom.clientLoadFailed"
+                descriptionKey="matchRoom.clientLoadFailedDesc"
+            />
+        );
+    }
+
     if (!isGameNamespaceReady) {
+        return (
+            <LoadingScreen
+                description={t('matchRoom.loadingResources')}
+                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+            />
+        );
+    }
+
+    if (!isUgcGame && !gameImplReady) {
         return (
             <LoadingScreen
                 description={t('matchRoom.loadingResources')}

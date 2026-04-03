@@ -1,6 +1,7 @@
 import type { PlayerId, RandomFn, ResponseWindowType } from '../../../engine/types';
 import type { ActionCardDef, CardInstance, FusionCardDef, PlayerState, SmashUpCore, MinionOnBase, SpecialTiming } from './types';
-import { getBaseDef, getCardDef, getFactionCards } from '../data/cards';
+import { getBaseDef, getCardDef, getFactionCards, getFusionDef, getMinionDef } from '../data/cards';
+import { getScoringEligibleBaseIndices } from './ongoingModifiers';
 
 // ============================================================================
 // 玩家显示名
@@ -147,6 +148,62 @@ export function isActionLikeRespondableInWindow(
     if (windowType === 'meFirst') return timing === 'beforeScoring';
     if (windowType === 'afterScoring') return timing === 'afterScoring';
     return false;
+}
+
+function isSpecialLimitBlockedByGroup(
+    state: SmashUpCore,
+    limitGroup: string | undefined,
+    baseIndex: number,
+): boolean {
+    if (!limitGroup) return false;
+    return state.specialLimitUsed?.[limitGroup]?.includes(baseIndex) ?? false;
+}
+
+/**
+ * 计算某张牌在 Me First! 窗口中可响应的基地索引。
+ *
+ * 仅处理两类需要“锁定到即将计分基地”的牌：
+ * - beforeScoringPlayable 随从（如影舞者）
+ * - 在 Me First! 窗口中需要选基地的行动卡（如便衣忍者）
+ */
+export function getMeFirstPlayableBaseIndicesForCard(
+    state: SmashUpCore,
+    cardDefId: string,
+): number[] {
+    const eligibleBaseIndices = getScoringEligibleBaseIndices(state);
+    if (eligibleBaseIndices.length === 0) return [];
+
+    const minionDef = getMinionDef(cardDefId);
+    if (minionDef?.beforeScoringPlayable) {
+        return eligibleBaseIndices.filter(baseIndex =>
+            !isSpecialLimitBlockedByGroup(state, minionDef.specialLimitGroup, baseIndex),
+        );
+    }
+
+    const fusionDef = getFusionDef(cardDefId);
+    if (fusionDef?.minionBeforeScoringPlayable) {
+        return eligibleBaseIndices.filter(baseIndex =>
+            !isSpecialLimitBlockedByGroup(state, fusionDef.minionSpecialLimitGroup, baseIndex),
+        );
+    }
+
+    const actionDef = getCardDef(cardDefId) as ActionCardDef | FusionCardDef | undefined;
+    if (!actionDef || !isActionLikeRespondableInWindow(actionDef, 'meFirst')) {
+        return [];
+    }
+    if (!actionLikeNeedsResponseWindowBase(actionDef)) {
+        return [];
+    }
+
+    if (isFusionActionDef(actionDef)) {
+        return eligibleBaseIndices.filter(baseIndex =>
+            !isSpecialLimitBlockedByGroup(state, actionDef.actionSpecialLimitGroup, baseIndex),
+        );
+    }
+
+    return eligibleBaseIndices.filter(baseIndex =>
+        !isSpecialLimitBlockedByGroup(state, actionDef.specialLimitGroup, baseIndex),
+    );
 }
 
 /**

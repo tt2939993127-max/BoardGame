@@ -27,6 +27,9 @@ import type {
     SelectCharacterCommand,
     HostStartGameCommand,
     MoveSeatCommand,
+    RequestSeatSwapCommand,
+    RespondSeatSwapCommand,
+    CancelSeatSwapCommand,
     PlayerReadyCommand,
     PlayerUnreadyCommand,
     ResponsePassCommand,
@@ -214,6 +217,10 @@ const validateHostStartGame = (
         return fail('player_mismatch');
     }
 
+    if (state.seatSwapRequest) {
+        return fail('seat_swap_request_pending');
+    }
+
     return ok();
 };
 
@@ -238,6 +245,10 @@ const validateMoveSeat = (
         return fail('game_already_started');
     }
 
+    if (state.seatSwapRequest) {
+        return fail('seat_swap_request_pending');
+    }
+
     if (!isMoveAllowed(playerId, state.hostPlayerId)) {
         return fail('player_mismatch');
     }
@@ -260,6 +271,99 @@ const validateMoveSeat = (
 
     if (targetSeatIndex === currentSeatIndex) {
         return fail('seat_not_changed');
+    }
+
+    return ok();
+};
+
+const validateRequestSeatSwap = (
+    state: DiceThroneCore,
+    cmd: RequestSeatSwapCommand,
+    playerId: PlayerId,
+    phase: TurnPhase,
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('not_team_mode');
+    }
+
+    if (state.hostStarted) {
+        return fail('game_already_started');
+    }
+
+    if (!state.players[playerId]) {
+        return fail('player_not_found');
+    }
+
+    const { targetPlayerId } = cmd.payload;
+    if (!state.players[targetPlayerId]) {
+        return fail('player_not_found');
+    }
+
+    if (targetPlayerId === playerId) {
+        return fail('invalid_seat_target');
+    }
+
+    if (state.seatSwapRequest) {
+        return fail('seat_swap_request_pending');
+    }
+
+    const seatingOrder = getSeatingOrder(state);
+    if (!seatingOrder.includes(playerId) || !seatingOrder.includes(targetPlayerId)) {
+        return fail('invalid_seat_target');
+    }
+
+    return ok();
+};
+
+const validateRespondSeatSwap = (
+    state: DiceThroneCore,
+    _cmd: RespondSeatSwapCommand,
+    playerId: PlayerId,
+    phase: TurnPhase,
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('not_team_mode');
+    }
+
+    if (!state.seatSwapRequest) {
+        return fail('no_pending_seat_swap_request');
+    }
+
+    if (!isMoveAllowed(playerId, state.seatSwapRequest.targetPlayerId)) {
+        return fail('player_mismatch');
+    }
+
+    return ok();
+};
+
+const validateCancelSeatSwap = (
+    state: DiceThroneCore,
+    _cmd: CancelSeatSwapCommand,
+    playerId: PlayerId,
+    phase: TurnPhase,
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('not_team_mode');
+    }
+
+    if (!state.seatSwapRequest) {
+        return fail('no_pending_seat_swap_request');
+    }
+
+    if (!isMoveAllowed(playerId, state.seatSwapRequest.requesterId)) {
+        return fail('player_mismatch');
     }
 
     return ok();
@@ -1376,6 +1480,9 @@ export const validateCommand = (
     if (isCommandType(command, 'SELECT_CHARACTER')) return validateSelectCharacter(state, command, playerId, phase);
     if (isCommandType(command, 'HOST_START_GAME')) return validateHostStartGame(state, command, playerId, phase);
     if (isCommandType(command, 'MOVE_SEAT')) return validateMoveSeat(state, command, playerId, phase);
+    if (isCommandType(command, 'REQUEST_SEAT_SWAP')) return validateRequestSeatSwap(state, command, playerId, phase);
+    if (isCommandType(command, 'RESPOND_SEAT_SWAP')) return validateRespondSeatSwap(state, command, playerId, phase);
+    if (isCommandType(command, 'CANCEL_SEAT_SWAP')) return validateCancelSeatSwap(state, command, playerId, phase);
     if (isCommandType(command, 'PLAYER_READY')) return validatePlayerReady(state, command, playerId, phase);
     if (isCommandType(command, 'PLAYER_UNREADY')) return validatePlayerUnready(state, command, playerId, phase);
     if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);

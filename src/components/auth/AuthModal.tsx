@@ -234,8 +234,14 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
             onClose={onClose}
             closeOnBackdrop={closeOnBackdrop}
             containerClassName="p-0"
+            containerStyle={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
         >
-            <div className="bg-[#fcfbf9] pointer-events-auto w-[calc(100vw-2rem)] max-w-[400px] shadow-[0_10px_40px_rgba(67,52,34,0.1)] border border-[#e5e0d0] p-6 sm:p-10 relative rounded-sm mx-4 overflow-hidden">
+            <div className="bg-[#fcfbf9] pointer-events-auto w-[calc(100vw-2rem)] max-w-[400px] max-h-[var(--runtime-modal-max-height)] shadow-[0_10px_40px_rgba(67,52,34,0.1)] border border-[#e5e0d0] p-6 sm:p-10 relative rounded-sm mx-4 overflow-y-auto overflow-x-hidden">
                 {/* 装饰边角 */}
                 <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-[#c0a080]" />
                 <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-[#c0a080]" />

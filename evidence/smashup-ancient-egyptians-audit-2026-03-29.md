@@ -1,5 +1,23 @@
 # Smash Up Ancient Egyptians 审计（2026-03-29）
 
+## 2026-04-03 修订记录：旧“已收口”结论失效
+- 失效项：
+  - 原文档中的 `Mummy Strength` 结论曾写成“`+4` 模式可作用于存在任意埋葬牌的基地”。
+- 失效原因：
+  - 这条结论没有按 `D1` 和 `D5` 逐字审语义与交互顺序，错误地把规则里的“先选随从，再根据该随从所在基地是否有埋葬牌决定 `+4/+2`”审成了“先选效果模式，再选目标”。
+  - 换句话说，旧审计只看到了数值条件，没检查“条件依附于目标还是依附于玩家前置决策”。
+- 当前修正：
+  - `src/games/smashup/abilities/ancient_egyptians.ts`
+    - 删除 `ancient_egyptians_mummy_strength_mode` 这段错误的前置模式交互。
+    - 改为单段 `ancient_egyptians_mummy_strength_target` 交互：先选己方随从，再在 handler 中按所选随从所在基地是否存在埋葬牌决定 `+4` 或 `+2`。
+  - `src/games/smashup/__tests__/newOngoingAbilities.test.ts`
+    - 改为显式验证两条分支：埋葬基地目标得 `+4`，非埋葬基地目标得 `+2`。
+  - `src/games/smashup/__tests__/ancientEgyptiansMummyStrength.feedback-regression.test.ts`
+    - 改为走真实 `RESPOND` 链验证“先选随从”的交互顺序。
+- 结论修订：
+  - 本文档不再接受“Ancient Egyptians 已完成首轮审计收口”这种无条件表述。
+  - 现状态应理解为：**古埃及审计文档存在，但曾发生漏审；后续引用本文件时，必须同时包含本修订记录。**
+
 ## 审计定位
 - 本文档是 `Oops, You Did It Again` 四派系逐派系审计的第 1 轮，先审 `Ancient Egyptians`。
 - 本轮已完成 `Ancient Egyptians` 首轮审计收口，当前文档用于沉淀规则依据、修复点、验证结果与收口结论。
@@ -73,8 +91,11 @@
     - `Lost Knowledge` 埋葬模式会排除自己，并在选手牌后再单独选择目标基地。
     - `Mummy` 在基地结算后可改为埋到另一个基地，而不是进入弃牌堆。
     - `Plague of Locusts` 只让所选基地上的其他玩家随从获得 `-1`。
-    - `Mummy Strength` 的 `+4` 模式可作用于存在任意埋葬牌的基地。
+    - `Mummy Strength` 先选随从，再按所选随从所在基地是否有埋葬牌决定 `+4 / +2`。
     - `Seal the Tomb` 的翻开模式只提供同一基地且属于你的埋葬牌。
+  - `src/games/smashup/__tests__/ancientEgyptiansMummyStrength.feedback-regression.test.ts`
+    - 覆盖：
+      - `Mummy Strength` 真实 `RESPOND` 链必须是“先选随从”，不能先弹“选模式”交互。
 - `src/games/smashup/__tests__/newBaseAbilities.test.ts`
   - 覆盖：
     - `Pyramids` 改为“你的回合中、每回合一次”的主动基地能力入口。
@@ -168,5 +189,7 @@
   - 普通行动在 `beforeScoring` 被翻开时会被违规打出
 
 ## 本轮状态
-- 状态：`Ancient Egyptians 已完成首轮审计收口`
-- 下一步：进入 `Vikings` 审计。
+- 状态：`Ancient Egyptians 审计文档已建立，但 2026-04-03 已确认存在漏审并完成一轮修订`
+- 下一步：
+  - 后续若再引用“古埃及已审计”，必须连同本修订记录一起看。
+  - 如要重新宣称“已收口”，必须基于本次修订后的结论重新做收口判断。

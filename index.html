@@ -55,11 +55,46 @@
     <script>
       (function(){
         var el = document.getElementById('initial-loader');
+        if (!el) return;
         var p = location.pathname;
         var isGame = p.indexOf('/play/') === 0 || p.indexOf('/dev/') === 0;
+        function showFriendlyFallback() {
+          var current = document.getElementById('initial-loader');
+          if (!current || !isGame) return;
+          current.setAttribute('data-bg-friendly-screen', 'true');
+          current.style.cssText = 'position:fixed;inset:0;z-index:9999;background:radial-gradient(circle at top, rgba(214,173,96,0.14), transparent 36%),linear-gradient(180deg,#0d0905 0%,#130d07 46%,#060403 100%);display:flex;align-items:center;justify-content:center;padding:20px;color:#f8e7bf;font-family:system-ui,sans-serif';
+          current.innerHTML = ''
+            + '<div style="width:min(100%,400px);border:1px solid rgba(255,231,191,0.14);background:rgba(22,16,8,0.94);border-radius:20px;padding:24px;text-align:center;box-shadow:0 30px 100px rgba(0,0,0,0.55);backdrop-filter:blur(12px)">'
+            +   '<div style="width:64px;height:64px;margin:0 auto;display:flex;align-items:center;justify-content:center;border-radius:999px;border:1px solid rgba(255,231,191,0.18);background:rgba(255,231,191,0.05);font-size:28px">!</div>'
+            +   '<div style="margin-top:20px;font-size:11px;font-weight:700;letter-spacing:0.28em;text-transform:uppercase;color:rgba(248,231,191,0.72)">游戏页保护</div>'
+            +   '<div style="margin-top:10px;font-size:24px;font-weight:700;line-height:1.3;color:#fff7dd">页面没有正常显示</div>'
+            +   '<div style="margin-top:12px;font-size:14px;line-height:1.8;color:rgba(248,231,191,0.78)">为了避免一直停留在黑屏，这里先切到友好提示。你可以刷新重试，或先返回大厅再重新进入。</div>'
+            +   '<div style="margin-top:20px;display:flex;flex-wrap:wrap;justify-content:center;gap:12px">'
+            +     '<button type="button" data-action="reload" style="min-height:44px;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,231,191,0.18);background:rgba(255,231,191,0.1);color:#fff7dd;font-weight:700">刷新重试</button>'
+            +     '<button type="button" data-action="home" style="min-height:44px;padding:10px 18px;border-radius:999px;border:1px solid rgba(255,255,255,0.12);background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.88);font-weight:700">返回大厅</button>'
+            +   '</div>'
+            + '</div>';
+          var reloadButton = current.querySelector('[data-action="reload"]');
+          var homeButton = current.querySelector('[data-action="home"]');
+          if (reloadButton) {
+            reloadButton.addEventListener('click', function() {
+              location.reload();
+            });
+          }
+          if (homeButton) {
+            homeButton.addEventListener('click', function() {
+              location.href = '/';
+            });
+          }
+        }
         if (isGame) {
           el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#000;display:flex;align-items:center;justify-content:center';
           el.innerHTML = '<div style="width:16px;height:16px;background:#d97706;border-radius:50%;filter:blur(2px);box-shadow:0 0 20px #f59e0b,0 0 60px rgba(245,158,11,0.3);animation:il-breath 2s ease-in-out infinite"></div>';
+          window.setTimeout(function() {
+            if (document.getElementById('initial-loader')) {
+              showFriendlyFallback();
+            }
+          }, 10000);
         } else {
           el.style.cssText = 'position:fixed;inset:0;z-index:9999;background:#f5f0e8;display:flex;align-items:center;justify-content:center;font-family:serif';
           el.innerHTML = '<div style="text-align:center"><img src="/logos/logo_1_grid.svg" alt="" width="48" height="48" style="opacity:0.7;margin:0 auto 16px;display:block"/><div style="font-size:1.5rem;color:#2c2216;letter-spacing:0.1em;font-weight:bold">易桌游</div><div style="font-size:0.75rem;color:#8b7355;letter-spacing:0.2em;margin-top:8px">加载中…</div></div>';

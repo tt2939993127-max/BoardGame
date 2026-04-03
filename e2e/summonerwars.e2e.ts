@@ -13,8 +13,12 @@ import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import {
   createSummonerWarsMobileEvidenceState,
+  SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
   withSummonerWarsMobileEvidenceActionLog,
 } from '../src/games/summonerwars/mobileEvidence';
+
+const SW_PHONE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
+const SW_TABLET_LANDSCAPE_VIEWPORT = { width: 1170, height: 540 } as const;
 
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
   if (process.env.PW_SW_USE_REAL_MAP === 'true') {
@@ -492,7 +496,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 667, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -587,7 +591,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2330,7 +2334,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2403,7 +2407,7 @@ test.describe('SummonerWars', () => {
     await desktopContext.addInitScript(() => {
       (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
       (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
-      localStorage.removeItem('hud_fab_position');
+      localStorage.setItem('hud_fab_position', JSON.stringify({ leftPercent: 0.5, topPercent: 0.5 }));
       localStorage.removeItem('hud_fab_offset');
     });
     await blockAudioRequests(desktopContext);
@@ -2414,6 +2418,23 @@ test.describe('SummonerWars', () => {
     await openSummonerWarsMobileEvidencePage(desktopPage);
     await waitForSummonerWarsVisualStable(desktopPage);
     await collapseFabMenuToMainButton(desktopPage);
+    let desktopFabPosition: { leftRatio: number; topRatio: number } | null = null;
+    await expect.poll(async () => {
+      const box = await desktopPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]').boundingBox();
+      const viewport = desktopPage.viewportSize();
+      if (!box || !viewport) {
+        return null;
+      }
+      desktopFabPosition = {
+        leftRatio: (box.x + box.width / 2) / viewport.width,
+        topRatio: (box.y + box.height / 2) / viewport.height,
+      };
+      return desktopFabPosition;
+    }).not.toBeNull();
+    expect(desktopFabPosition?.leftRatio ?? 0).toBeGreaterThan(0.42);
+    expect(desktopFabPosition?.leftRatio ?? 1).toBeLessThan(0.58);
+    expect(desktopFabPosition?.topRatio ?? 0).toBeGreaterThan(0.42);
+    expect(desktopFabPosition?.topRatio ?? 1).toBeLessThan(0.58);
     const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
     await desktopPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
@@ -2421,11 +2442,43 @@ test.describe('SummonerWars', () => {
       }),
       fullPage: false,
     });
+    await seedMobileActionLog(desktopPage);
+    const desktopActionLogPanel = await openFabPanel(desktopPage, 'action-log', 'exit');
+    await expect(desktopActionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    const desktopActionLogLayout = await desktopActionLogPanel.evaluate((panel) => {
+      const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
+      const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+      const rect = panel.getBoundingClientRect();
+      return {
+        rect,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        panelClientWidth: panel.clientWidth,
+        panelScrollWidth: panel.scrollWidth,
+        firstRowClientWidth: firstRow?.clientWidth ?? 0,
+        firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+      rowCount: rows.length,
+    };
+  });
+    expect(desktopActionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
+    expect(desktopActionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
+    expect(desktopActionLogLayout.rect.right).toBeLessThanOrEqual(desktopActionLogLayout.innerWidth + 1);
+    expect(desktopActionLogLayout.rect.bottom).toBeLessThanOrEqual(desktopActionLogLayout.innerHeight + 1);
+    expect(desktopActionLogLayout.panelScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.panelClientWidth + 1);
+    expect(desktopActionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.firstRowClientWidth + 1);
+    expect(desktopActionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    await expect(desktopActionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '01-pc-action-log-open-from-center', {
+        filename: '01-pc-action-log-open-from-center.png',
+      }),
+      fullPage: false,
+    });
     await desktopContext.close();
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2441,7 +2494,7 @@ test.describe('SummonerWars', () => {
     await setChineseLocale(hostContext);
     await disableAudio(hostContext);
     const hostPage = await hostContext.newPage();
-    await hostPage.setViewportSize({ width: 667, height: 375 });
+    await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
@@ -2459,8 +2512,8 @@ test.describe('SummonerWars', () => {
     expect(Number(initialScaleBadge.opacity)).toBeLessThan(0.05);
 
     const phoneViewport = hostPage.viewportSize();
-    expect(phoneViewport?.width).toBe(667);
-    expect(phoneViewport?.height).toBe(375);
+    expect(phoneViewport?.width).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.width);
+    expect(phoneViewport?.height).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.height);
 
     const phoneLayout = await hostPage.evaluate(() => {
       const root = document.documentElement;
@@ -2524,7 +2577,7 @@ test.describe('SummonerWars', () => {
     await expect.poll(async () => (await getMapScaleBadgeState(hostPage)).ariaHidden).toBe('true');
 
     const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
-    const initialMagnifyCloseButton = magnifyOverlay.getByRole('button', { name: /close/i });
+    const initialMagnifyCloseButton = magnifyOverlay.getByRole('button', { name: /关闭|Close/i });
     if (await magnifyOverlay.isVisible().catch(() => false)) {
       await initialMagnifyCloseButton.dispatchEvent('click');
       await waitForOverlayState(hostPage, 'sw-magnify-overlay', 'closed');
@@ -2565,30 +2618,44 @@ test.describe('SummonerWars', () => {
 
     await seedMobileActionLog(hostPage);
     const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
-    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(2);
+    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
     const actionLogLayout = await actionLogPanel.evaluate((panel) => {
       const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
+      const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
       const rect = panel.getBoundingClientRect();
       return {
         rect,
+        panelClientHeight: panel.clientHeight,
+        panelScrollHeight: panel.scrollHeight,
         panelClientWidth: panel.clientWidth,
         panelScrollWidth: panel.scrollWidth,
         firstRowClientWidth: firstRow?.clientWidth ?? 0,
         firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+        rowCount: rows.length,
       };
     });
     expect(actionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
+    expect(actionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
     expect(actionLogLayout.rect.right).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
     expect(actionLogLayout.rect.bottom).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
+    expect(actionLogLayout.panelScrollHeight).toBeGreaterThan(actionLogLayout.panelClientHeight);
     expect(actionLogLayout.panelScrollWidth).toBeLessThanOrEqual(actionLogLayout.panelClientWidth + 1);
     expect(actionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(actionLogLayout.firstRowClientWidth + 1);
+    expect(actionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    await expect(actionLogPanel).toContainText('最后一步把冠军停在外圈威胁位');
+    await expect(actionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
+    await actionLogPanel.evaluate((panel) => {
+      panel.scrollTop = panel.scrollHeight;
+    });
+    const actionLogScrollTop = await actionLogPanel.evaluate((panel) => panel.scrollTop);
+    expect(actionLogScrollTop).toBeGreaterThan(0);
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '13-phone-action-log-open', {
         filename: '13-phone-action-log-open.png',
       }),
       fullPage: false,
     });
-    await hostPage.setViewportSize({ width: 1024, height: 768 });
+    await hostPage.setViewportSize(SW_TABLET_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await waitForSummonerWarsVisualStable(hostPage);
     await assertHandAreaVisible(hostPage, 'tablet-landscape');
@@ -2653,9 +2720,11 @@ test.describe('SummonerWars', () => {
     expect(tabletLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(phoneLayout.playerEnergyRect?.width ?? 0);
     expect(tabletLayout.playerEnergyRect?.height ?? 0).toBeGreaterThanOrEqual(phoneLayout.playerEnergyRect?.height ?? 0);
     const tabletShellRatios = await getSummonerWarsShellRatios(hostPage);
-    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.02);
+    // 13:6 平板横屏会比 16:9 桌面更早受高度约束，地图横向占比允许比桌面基线更窄，
+    // 但不能窄到明显失去主战区存在感。
+    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.18);
     // 平板按 PC 风格验收：允许阶段流程宽度与桌面基线存在更大差值（不再强贴手机壳比例）
-    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.12);
+    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.16);
     expect(Math.abs(tabletShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
 
     await hostPage.screenshot({
@@ -2668,14 +2737,14 @@ test.describe('SummonerWars', () => {
     await hostContext.close();
   });
 
-  test('移动横屏：悬浮球可拖出边界并让出结束阶段按钮', async ({ browser }, testInfo) => {
+  test('移动横屏：展开后的悬浮球上下拖拽时展开框仍会收回视口并让出结束阶段按钮', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2693,36 +2762,194 @@ test.describe('SummonerWars', () => {
     await disableAudio(hostContext);
 
     const hostPage = await hostContext.newPage();
-    await hostPage.setViewportSize({ width: 667, height: 375 });
+    await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await waitForSummonerWarsVisualStable(hostPage);
-
-    const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
-    await expect(exitFab).toBeVisible({ timeout: 5000 });
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+    await seedMobileActionLog(hostPage);
 
-    const beforeBox = await exitFab.boundingBox();
-    expect(beforeBox).not.toBeNull();
+    const runExpandedOverflowScenario = async ({
+      deltaY,
+      overflowDirection,
+      screenshotKey,
+      screenshotFilename,
+    }: {
+      deltaY: number;
+      overflowDirection: 'top' | 'bottom';
+      screenshotKey: string;
+      screenshotFilename: string;
+    }) => {
+      await hostPage.evaluate(() => {
+        localStorage.removeItem('hud_fab_position');
+        localStorage.removeItem('hud_fab_offset');
+      });
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
+      await collapseFabMenuToMainButton(hostPage);
 
-    await touchDragElement(exitFab, {
-      deltaX: -520,
-      deltaY: 120,
+      const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+      await expect(exitFab).toBeVisible({ timeout: 5000 });
+      await exitFab.click();
+      await expect(hostPage.getByTestId('fab-sheet-exit')).toHaveCount(0);
+      await expect(hostPage.getByTestId('fab-panel-exit')).toBeVisible({ timeout: 5000 });
+
+      await touchDragElement(exitFab, {
+        deltaX: 0,
+        deltaY,
+        steps: 12,
+      });
+      await hostPage.waitForTimeout(180);
+
+      const draggedVisualBox = await hostPage.locator('[data-fab-visual-id="exit"]').boundingBox();
+      const draggedStoredPosition = await getFabStoredPosition(hostPage);
+      expect(draggedVisualBox).not.toBeNull();
+      expect(draggedStoredPosition).not.toBeNull();
+      if (overflowDirection === 'top') {
+        expect((draggedStoredPosition?.topPercent ?? 1)).toBeLessThan(0);
+        expect((draggedVisualBox?.y ?? 999)).toBeLessThan(20);
+      } else {
+        expect((draggedStoredPosition?.topPercent ?? 0)).toBeGreaterThan(0.9);
+        expect((draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0)).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height - 12);
+      }
+
+      const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
+      await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      await hostPage.waitForTimeout(160);
+      const expandedFabMetrics = await hostPage.evaluate(() => {
+        const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
+        const panel = document.querySelector('[data-testid="fab-panel-action-log"]') as HTMLElement | null;
+        const rows = Array.from(document.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+        const firstRow = rows[0] ?? null;
+        const mainVisual = document.querySelector('[data-fab-visual-id="exit"]') as HTMLElement | null;
+        const gamePage = document.querySelector('[data-game-page]') as HTMLElement | null;
+        return {
+          viewportWidth: window.innerWidth,
+          viewportHeight: window.innerHeight,
+          pageScrollX: window.scrollX,
+          pageScrollY: window.scrollY,
+          gamePageRect: gamePage
+            ? (() => {
+              const rect = gamePage.getBoundingClientRect();
+              return {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+              };
+            })()
+            : null,
+          mainVisualRect: mainVisual
+            ? (() => {
+              const rect = mainVisual.getBoundingClientRect();
+              return {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+              };
+            })()
+            : null,
+          panelRect: panel
+            ? (() => {
+              const rect = panel.getBoundingClientRect();
+              return {
+                left: rect.left,
+                top: rect.top,
+                right: rect.right,
+                bottom: rect.bottom,
+              };
+            })()
+            : null,
+          panelClientHeight: panel?.clientHeight ?? 0,
+          panelScrollHeight: panel?.scrollHeight ?? 0,
+          panelClientWidth: panel?.clientWidth ?? 0,
+          panelScrollWidth: panel?.scrollWidth ?? 0,
+          firstRowClientWidth: firstRow?.clientWidth ?? 0,
+          firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+          rowCount: rows.length,
+          visibleButtons: buttons
+            .map((button) => {
+              const styles = window.getComputedStyle(button);
+              const rect = button.getBoundingClientRect();
+              return {
+                id: button.dataset.fabId ?? '',
+                visible: styles.display !== 'none'
+                  && styles.visibility !== 'hidden'
+                  && styles.opacity !== '0'
+                  && rect.width > 0
+                  && rect.height > 0,
+                rect: {
+                  left: rect.left,
+                  top: rect.top,
+                  right: rect.right,
+                  bottom: rect.bottom,
+                },
+              };
+            })
+            .filter((entry) => entry.visible),
+        };
+      });
+      expect(expandedFabMetrics.panelRect).not.toBeNull();
+      expect(expandedFabMetrics.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      expect(expandedFabMetrics.panelScrollHeight).toBeGreaterThan(expandedFabMetrics.panelClientHeight);
+      expect(expandedFabMetrics.panelScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.panelClientWidth + 1);
+      expect(expandedFabMetrics.firstRowScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.firstRowClientWidth + 1);
+      expect(expandedFabMetrics.panelRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.right ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportWidth + 1);
+      expect(expandedFabMetrics.panelRect?.bottom ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportHeight + 1);
+      expect(expandedFabMetrics.pageScrollX).toBe(0);
+      expect(expandedFabMetrics.pageScrollY).toBe(0);
+      expect(expandedFabMetrics.gamePageRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.gamePageRect?.bottom ?? -1).toBeGreaterThanOrEqual(expandedFabMetrics.viewportHeight - 1);
+
+      const expandedButtons = expandedFabMetrics.visibleButtons.filter((button) => button.id !== 'exit');
+      const panelRect = expandedFabMetrics.panelRect;
+      if (!panelRect) {
+        throw new Error(`缺少 ${overflowDirection} 场景的日志面板尺寸`);
+      }
+      if (expandedButtons.length > 0) {
+        const visibleTop = Math.min(...expandedButtons.map((button) => button.rect.top));
+        if (overflowDirection === 'top') {
+          expect(
+            Math.abs((panelRect.top ?? 999) - visibleTop),
+            'top overflow should keep panel attached to the top of the expanded button column',
+          ).toBeLessThanOrEqual(12);
+        }
+      }
+      for (const button of expandedButtons) {
+        const overlapsVertically = panelRect.top < button.rect.bottom && panelRect.bottom > button.rect.top;
+        if (overlapsVertically) {
+          const leftClearance = button.rect.left - panelRect.right;
+          const rightClearance = panelRect.left - button.rect.right;
+          expect(
+            Math.max(leftClearance, rightClearance),
+            `${overflowDirection}:${button.id} panel should stay clear of visible expanded buttons`,
+          ).toBeGreaterThanOrEqual(8);
+        }
+      }
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, screenshotKey, {
+          filename: screenshotFilename,
+        }),
+        fullPage: false,
+      });
+    };
+
+    await runExpandedOverflowScenario({
+      deltaY: -Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.78),
+      overflowDirection: 'top',
+      screenshotKey: 'mobile-fab-expanded-top-overflow-recovered',
+      screenshotFilename: '30-mobile-fab-expanded-top-overflow-recovered.png',
     });
-    await hostPage.waitForTimeout(180);
 
-    const draggedBox = await exitFab.boundingBox();
-    const draggedStoredPosition = await getFabStoredPosition(hostPage);
-    expect(draggedBox).not.toBeNull();
-    expect(draggedStoredPosition).not.toBeNull();
-    expect((draggedStoredPosition?.leftPercent ?? 1)).toBeLessThan(0.08);
-    expect((draggedBox?.x ?? 999)).toBeLessThan(50);
-    expect(Math.abs((draggedBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeGreaterThan(120);
-
-    await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-position', {
-        filename: '30-mobile-fab-overflow-position.png',
-      }),
-      fullPage: false,
+    await runExpandedOverflowScenario({
+      deltaY: Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.82),
+      overflowDirection: 'bottom',
+      screenshotKey: 'mobile-fab-expanded-bottom-overflow-recovered',
+      screenshotFilename: '31-mobile-fab-expanded-bottom-overflow-recovered.png',
     });
 
     const phaseBeforeAdvance = await getCurrentPhase(hostPage);
@@ -2730,8 +2957,8 @@ test.describe('SummonerWars', () => {
     expect(phaseAfterAdvance).not.toBe(phaseBeforeAdvance);
 
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-and-end-phase-clickable', {
-        filename: '31-mobile-fab-overflow-and-end-phase-clickable.png',
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-expanded-end-phase-clickable', {
+        filename: '32-mobile-fab-expanded-end-phase-clickable.png',
       }),
       fullPage: false,
     });

@@ -970,9 +970,9 @@ export function assetsPath(path: string): string {
     if (overrideBaseUrl) {
         const relativePath = stripKnownAssetPrefixes(path);
         if (!relativePath) {
-            return overrideBaseUrl;
+            return resolveVersionedAssetUrl(overrideBaseUrl);
         }
-        return `${overrideBaseUrl}/${relativePath}`;
+        return resolveVersionedAssetUrl(`${overrideBaseUrl}/${relativePath}`);
     }
     if (path === assetsBaseUrl || path.startsWith(`${assetsBaseUrl}/`)) return resolveVersionedAssetUrl(path);
     if (path.startsWith('/assets/')) return resolveVersionedAssetUrl(path);
@@ -1141,8 +1141,9 @@ export function getDirectAssetPath(relativePath: string): string {
 export function getLocalAssetPath(path: string): string {
     if (!isString(path) || !path) return '/assets';
     if (isPassthroughSource(path)) return path;
-    const trimmed = path.startsWith('/') ? path.slice(1) : path;
-    return resolveVersionedAssetUrl(`/assets/${trimmed}`);
+    const trimmed = stripKnownAssetPrefixes(path);
+    if (!trimmed) return '/assets';
+    return assetsPath(`/assets/${trimmed}`);
 }
 
 /**
@@ -1151,13 +1152,9 @@ export function getLocalAssetPath(path: string): string {
  */
 export function getLocalizedLocalAssetPath(path: string, locale?: string): string {
     if (!locale || isPassthroughSource(path)) return getLocalAssetPath(path);
-    // 去掉可能的前缀
-    let relative = splitUrlParts(path).path;
-    if (relative.startsWith('/assets/')) relative = relative.slice('/assets/'.length);
-    if (relative.startsWith(assetsBaseUrl + '/')) relative = relative.slice(assetsBaseUrl.length + 1);
-    relative = relative.replace(/^\/+/, '');
-    // 幂等性检查
+    const relative = stripKnownAssetPrefixes(splitUrlParts(path).path);
+    if (!relative) return getLocalAssetPath(path);
     const localizedPrefix = `${LOCALIZED_ASSETS_SUBDIR}/${locale}/`;
-    if (relative.startsWith(localizedPrefix)) return resolveVersionedAssetUrl(`/assets/${relative}`);
-    return resolveVersionedAssetUrl(`/assets/${localizedPrefix}${relative}`);
+    if (relative.startsWith(localizedPrefix)) return getLocalAssetPath(relative);
+    return getLocalAssetPath(`${localizedPrefix}${relative}`);
 }

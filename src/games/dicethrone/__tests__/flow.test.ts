@@ -439,6 +439,245 @@ describe('王权骰铸流程测试', () => {
             expect(result.error).toBe('seat_not_changed');
         });
 
+        it('4 人 setup 阶段点到 AI 头像会直接交换座位', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            const state: MatchState<DiceThroneCore> = {
+                core: DiceThroneDomain.setup(playerIds, fixedRandom, {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'human' },
+                        '2': { type: 'local-ai' },
+                        '3': { type: 'human' },
+                    },
+                }),
+                sys: createInitialSystemState(playerIds, testSystems, undefined),
+            };
+
+            const result = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'REQUEST_SEAT_SWAP',
+                    playerId: '1',
+                    payload: { targetPlayerId: '2' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+
+            expect(result.success).toBe(true);
+            const nextState = result.state as MatchState<DiceThroneCore>;
+            expect(nextState.core.seatingOrder).toEqual(['0', '2', '1', '3']);
+            expect(nextState.core.seatSwapRequest).toBeUndefined();
+            expect(getTeamIdByPlayerIdMap(nextState.core)).toEqual({
+                '0': 'A',
+                '1': 'A',
+                '2': 'B',
+                '3': 'B',
+            });
+        });
+
+        it('4 人 setup 阶段点到真人头像会写入待审批换位申请', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            const state: MatchState<DiceThroneCore> = {
+                core: DiceThroneDomain.setup(playerIds, fixedRandom),
+                sys: createInitialSystemState(playerIds, testSystems, undefined),
+            };
+
+            const result = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'REQUEST_SEAT_SWAP',
+                    playerId: '1',
+                    payload: { targetPlayerId: '2' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+
+            expect(result.success).toBe(true);
+            const nextState = result.state as MatchState<DiceThroneCore>;
+            expect(nextState.core.seatingOrder).toEqual(['0', '1', '2', '3']);
+            expect(nextState.core.seatSwapRequest).toEqual({
+                requesterId: '1',
+                targetPlayerId: '2',
+            });
+        });
+
+        it('4 人 setup 阶段真人批准换位后会交换座位并清空申请', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            let state: MatchState<DiceThroneCore> = {
+                core: DiceThroneDomain.setup(playerIds, fixedRandom),
+                sys: createInitialSystemState(playerIds, testSystems, undefined),
+            };
+
+            const requestResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'REQUEST_SEAT_SWAP',
+                    playerId: '1',
+                    payload: { targetPlayerId: '2' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(requestResult.success).toBe(true);
+            state = requestResult.state as MatchState<DiceThroneCore>;
+
+            const approveResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'RESPOND_SEAT_SWAP',
+                    playerId: '2',
+                    payload: { approve: true },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+
+            expect(approveResult.success).toBe(true);
+            const nextState = approveResult.state as MatchState<DiceThroneCore>;
+            expect(nextState.core.seatingOrder).toEqual(['0', '2', '1', '3']);
+            expect(nextState.core.seatSwapRequest).toBeUndefined();
+        });
+
+        it('4 人 setup 阶段真人拒绝或请求者取消后仅清空申请，不改变座位', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            let state: MatchState<DiceThroneCore> = {
+                core: DiceThroneDomain.setup(playerIds, fixedRandom),
+                sys: createInitialSystemState(playerIds, testSystems, undefined),
+            };
+
+            const requestResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'REQUEST_SEAT_SWAP',
+                    playerId: '1',
+                    payload: { targetPlayerId: '2' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(requestResult.success).toBe(true);
+            state = requestResult.state as MatchState<DiceThroneCore>;
+
+            const rejectResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'RESPOND_SEAT_SWAP',
+                    playerId: '2',
+                    payload: { approve: false },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(rejectResult.success).toBe(true);
+            const rejectedState = rejectResult.state as MatchState<DiceThroneCore>;
+            expect(rejectedState.core.seatingOrder).toEqual(['0', '1', '2', '3']);
+            expect(rejectedState.core.seatSwapRequest).toBeUndefined();
+
+            const secondRequestResult = executePipeline(
+                pipelineConfig,
+                rejectedState,
+                {
+                    type: 'REQUEST_SEAT_SWAP',
+                    playerId: '1',
+                    payload: { targetPlayerId: '2' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(secondRequestResult.success).toBe(true);
+
+            const cancelResult = executePipeline(
+                pipelineConfig,
+                secondRequestResult.state as MatchState<DiceThroneCore>,
+                {
+                    type: 'CANCEL_SEAT_SWAP',
+                    playerId: '1',
+                    payload: {},
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(cancelResult.success).toBe(true);
+            const cancelledState = cancelResult.state as MatchState<DiceThroneCore>;
+            expect(cancelledState.core.seatingOrder).toEqual(['0', '1', '2', '3']);
+            expect(cancelledState.core.seatSwapRequest).toBeUndefined();
+        });
+
+        it('4 人 setup 阶段有待处理换位申请时禁止房主开始游戏', () => {
+            const playerIds: PlayerId[] = ['0', '1', '2', '3'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            let state: MatchState<DiceThroneCore> = {
+                core: DiceThroneDomain.setup(playerIds, fixedRandom),
+                sys: createInitialSystemState(playerIds, testSystems, undefined),
+            };
+
+            const requestResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'REQUEST_SEAT_SWAP',
+                    playerId: '1',
+                    payload: { targetPlayerId: '2' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(requestResult.success).toBe(true);
+            state = requestResult.state as MatchState<DiceThroneCore>;
+
+            const startResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'HOST_START_GAME',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+
+            expect(startResult.success).toBe(false);
+            expect(startResult.error).toBe('seat_swap_request_pending');
+        });
+
         it('4 人对局开始后锁定站位', () => {
             const playerIds: PlayerId[] = ['0', '1', '2', '3'];
             const pipelineConfig = {

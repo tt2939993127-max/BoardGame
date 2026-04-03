@@ -1061,7 +1061,7 @@ function FeedbackDetailPanel({
                             wrap="off"
                             data-testid="feedback-ai-payload-viewer"
                             value={aiPayloadPreview}
-                            className="min-h-[120px] w-full resize-y overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-700 outline-none"
+                            className="min-h-[260px] w-full resize-y overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-700 outline-none"
                         />
                     </section>
                 )}

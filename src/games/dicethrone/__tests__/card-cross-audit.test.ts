@@ -21,7 +21,10 @@ import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 import { SHADOW_THIEF_CARDS } from '../heroes/shadow_thief/cards';
 import { MOON_ELF_CARDS } from '../heroes/moon_elf/cards';
 import { PALADIN_CARDS } from '../heroes/paladin/cards';
+import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 import { COMMON_CARDS } from '../domain/commonCards';
+import { DICETHRONE_CARD_ATLAS_IDS, DICETHRONE_HAND_CARD_ATLAS_IDS } from '../domain/ids';
 
 // i18n
 import zhCN from '../../../../public/locales/zh-CN/game-dicethrone.json';
@@ -38,6 +41,7 @@ function getAllUniqueCards(): AbilityCard[] {
     const all = [
         ...MONK_CARDS, ...BARBARIAN_CARDS, ...PYROMANCER_CARDS,
         ...SHADOW_THIEF_CARDS, ...MOON_ELF_CARDS, ...PALADIN_CARDS,
+        ...GUNSLINGER_CARDS, ...SAMURAI_CARDS,
         ...COMMON_CARDS,
     ];
     for (const card of all) {
@@ -230,6 +234,127 @@ describe('卡牌效果 target 合理性', () => {
             }
         }
         expect(violations).toEqual([]);
+    });
+});
+
+describe('枪手 / 武士卡图接线一致性', () => {
+    it('枪手专属卡应使用 hand atlas 顺序，通用卡应使用角色原图真实索引', () => {
+        const gunslingerSpecificCardIds = [
+            'upgrade-revolver-2',
+            'upgrade-bounty-hunter-2',
+            'upgrade-showdown-2',
+            'upgrade-showdown-3',
+            'upgrade-fan-the-hammer-2',
+            'card-pistol-whip',
+            'upgrade-take-cover-2',
+            'card-mark-the-target',
+            'upgrade-deadeye-2',
+            'card-the-law',
+            'upgrade-duel-2',
+            'upgrade-quick-draw',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
+            'card-wild-west',
+            'card-eat-my-lead',
+        ] as const;
+
+        gunslingerSpecificCardIds.forEach((cardId, index) => {
+            const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_HAND_CARD_ATLAS_IDS.GUNSLINGER,
+                index,
+            });
+        });
+
+        const gunslingerCommonAtlasIndex: Record<string, number> = {
+            'card-play-six': 17,
+            'card-just-this': 16,
+            'card-give-hand': 15,
+            'card-i-can-again': 14,
+            'card-me-too': 13,
+            'card-surprise': 12,
+            'card-worthy-of-me': 11,
+            'card-unexpected': 10,
+            'card-next-time': 9,
+            'card-boss-generous': 8,
+            'card-flick': 7,
+            'card-bye-bye': 6,
+            'card-double': 5,
+            'card-super-double': 4,
+            'card-get-away': 3,
+            'card-one-throw-fortune': 2,
+            'card-what-status': 1,
+            'card-transfer-status': 0,
+        };
+
+        for (const [cardId, index] of Object.entries(gunslingerCommonAtlasIndex)) {
+            const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER,
+                index,
+            });
+        }
+    });
+
+    it('武士专属卡应使用 hand atlas 顺序，通用卡应使用前两行真实索引', () => {
+        const samuraiSpecificCardIds = [
+            'upgrade-katana-slice-2',
+            'upgrade-katana-slice-3',
+            'upgrade-wakizashi-2',
+            'upgrade-wakizashi-3',
+            'upgrade-solemnity-2',
+            'upgrade-budo-2',
+            'upgrade-masamune-2',
+            'upgrade-slot-06-2',
+            'upgrade-stand-tall-2',
+            'card-samurai-honor',
+            'card-you-should-be-ashamed',
+            'card-no-retreat',
+            'card-righteousness',
+            'card-zanshin',
+        ] as const;
+
+        samuraiSpecificCardIds.forEach((cardId, index) => {
+            const card = SAMURAI_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_HAND_CARD_ATLAS_IDS.SAMURAI,
+                index,
+            });
+        });
+
+        const samuraiCommonCardIds = [
+            'card-play-six',
+            'card-just-this',
+            'card-give-hand',
+            'card-i-can-again',
+            'card-me-too',
+            'card-surprise',
+            'card-worthy-of-me',
+            'card-unexpected',
+            'card-next-time',
+            'card-boss-generous',
+            'card-flick',
+            'card-bye-bye',
+            'card-double',
+            'card-super-double',
+            'card-get-away',
+            'card-one-throw-fortune',
+            'card-what-status',
+            'card-transfer-status',
+        ] as const;
+
+        samuraiCommonCardIds.forEach((cardId, index) => {
+            const card = SAMURAI_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.SAMURAI,
+                index,
+            });
+        });
     });
 });
 

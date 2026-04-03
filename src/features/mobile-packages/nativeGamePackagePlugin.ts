@@ -2,6 +2,7 @@ import { Capacitor, registerPlugin } from '@capacitor/core';
 import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { mergeGamePackageState } from './types';
+import { normalizeGamePackageAssetBaseUrl, normalizeNativeAssetRootPath } from './assetBaseUrl';
 
 type PluginListenerHandle = {
     remove(): Promise<void>;
@@ -74,7 +75,7 @@ export interface NativeRemoteJsonResponse {
 }
 
 const isAndroidShellBuild = import.meta.env.MODE === 'android';
-let nativePluginLoader: Promise<NativeGamePackagePlugin | null> | null = null;
+let nativePluginLoader: NativeGamePackagePlugin | null | undefined;
 const nativeGamePackagePlugin = registerPlugin<NativeGamePackagePlugin>('GamePackage');
 
 const buildBaseState = (manifest: ResolvedGamePackageManifest): StoredGamePackageState => ({
@@ -95,67 +96,94 @@ const clampPercent = (value: number | undefined) => {
     return Math.max(0, Math.min(100, Math.round(value)));
 };
 
-const toAssetBaseUrl = async (assetRootPath?: string) => {
-    if (!assetRootPath) {
-        return undefined;
-    }
-
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-        return Capacitor.convertFileSrc(assetRootPath);
-    } catch {
-        return undefined;
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
     }
 };
 
-const getNativePlugin = async () => {
-    if (!nativePluginLoader) {
-        nativePluginLoader = (async () => {
-            if (!isAndroidShellBuild) {
-                logMobileRuntime('NativeGamePackagePlugin', 'capacitor-core-skip-non-android', {
-                    mode: import.meta.env.MODE,
-                });
-                return null;
-            }
-            const isNative = Capacitor.isNativePlatform();
-            const platform = Capacitor.getPlatform();
-            logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-platform-check', {
-                isNative,
-                platform,
-            });
-            if (!isNative || platform !== 'android') {
-                return null;
-            }
-            logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-registered', {
-                hasPlugin: true,
-                methods: Object.keys(nativeGamePackagePlugin).slice(0, 10),
-            });
-            return nativeGamePackagePlugin;
-        })();
+export { normalizeNativeAssetRootPath } from './assetBaseUrl';
+
+const toAssetBaseUrl = (assetRootPath?: string) => normalizeGamePackageAssetBaseUrl(assetRootPath);
+
+const getNativePlugin = (): NativeGamePackagePlugin | null => {
+    if (nativePluginLoader !== undefined) {
+        return nativePluginLoader;
     }
 
+    if (!isAndroidShellBuild) {
+        logMobileRuntime('NativeGamePackagePlugin', 'capacitor-core-skip-non-android', {
+            mode: import.meta.env.MODE,
+        });
+        nativePluginLoader = null;
+        return nativePluginLoader;
+    }
+
+    const isNative = Capacitor.isNativePlatform();
+    const platform = Capacitor.getPlatform();
+    logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-platform-check', {
+        isNative,
+        platform,
+    });
+    if (!isNative || platform !== 'android') {
+        nativePluginLoader = null;
+        return nativePluginLoader;
+    }
+
+    // registerPlugin 返回的是 Proxy。不要把它包装进 async/await 返回链，
+    // 否则可能被 Promise 当成 thenable 吸收并卡住解析。
+    nativePluginLoader = nativeGamePackagePlugin;
+    logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-registered', {
+        hasPlugin: true,
+        methods: Object.keys(nativeGamePackagePlugin).slice(0, 10),
+    });
     return nativePluginLoader;
 };
 
 export const listInstalledNativeGamePackages = async (): Promise<NativeInstalledGamePackage[]> => {
-    const plugin = await getNativePlugin();
+    const plugin = getNativePlugin();
     if (!plugin) {
         logMobileRuntime('NativeGamePackagePlugin', 'list-installed-no-plugin', {}, 'warn');
         return [];
     }
 
     const response = await plugin.listInstalledPackages();
+    logMobileRuntimeCritical('NativeGamePackagePlugin', 'list-installed-raw-response', {
+        packages: response.packages ?? [],
+    });
     const installedPackages = await Promise.all(
-        (response.packages ?? []).map(async (item) => ({
-            gameId: item.gameId,
-            runtimeChannel: item.runtimeChannel?.trim() || 'stable',
-            installedAt: typeof item.installedAt === 'number' && Number.isFinite(item.installedAt)
-                ? item.installedAt
-                : undefined,
-            installedVersion: typeof item.assetPackVersion === 'string' && item.assetPackVersion.trim()
-                ? item.assetPackVersion.trim()
-                : undefined,
-            assetBaseUrl: await toAssetBaseUrl(item.assetRootPath),
-        })),
+        (response.packages ?? []).map(async (item) => {
+            const normalizedAssetRootPath = normalizeNativeAssetRootPath(item.assetRootPath);
+            const assetBaseUrl = toAssetBaseUrl(item.assetRootPath);
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'list-installed-item-normalized', {
+                gameId: item.gameId,
+                rawAssetRootPath: item.assetRootPath,
+                normalizedAssetRootPath,
+                assetBaseUrl,
+                assetPackVersion: item.assetPackVersion,
+            });
+            return {
+                gameId: item.gameId,
+                runtimeChannel: item.runtimeChannel?.trim() || 'stable',
+                installedAt: typeof item.installedAt === 'number' && Number.isFinite(item.installedAt)
+                    ? item.installedAt
+                    : undefined,
+                installedVersion: typeof item.assetPackVersion === 'string' && item.assetPackVersion.trim()
+                    ? item.assetPackVersion.trim()
+                    : undefined,
+                assetBaseUrl,
+            };
+        }),
     );
 
     const filteredPackages = installedPackages.filter((item) => Boolean(item.gameId));
@@ -168,7 +196,7 @@ export const listInstalledNativeGamePackages = async (): Promise<NativeInstalled
 export const fetchRemoteJsonThroughNativePlugin = async (
     url: string,
 ): Promise<NativeRemoteJsonResponse | null> => {
-    const plugin = await getNativePlugin();
+    const plugin = getNativePlugin();
     if (!plugin) {
         logMobileRuntimeCritical('NativeGamePackagePlugin', 'fetch-remote-json-no-plugin', { url });
         return null;
@@ -209,7 +237,17 @@ export const createNativeGamePackageInstallHandle = async (
     manifest: ResolvedGamePackageManifest,
     options: NativeInstallRunnerOptions,
 ): Promise<GamePackageInstallHandle | null> => {
-    const plugin = await getNativePlugin();
+    logMobileRuntimeCritical('NativeGamePackagePlugin', 'create-install-handle-entered', {
+        gameId: manifest.gameId,
+        manifestSource: manifest.source,
+        assetPackVersion: manifest.assetPackVersion,
+        hasAssetPackUrl: Boolean(manifest.assetPackUrl),
+    });
+    const plugin = getNativePlugin();
+    logMobileRuntimeCritical('NativeGamePackagePlugin', 'create-install-handle-plugin-resolved', {
+        gameId: manifest.gameId,
+        hasPlugin: Boolean(plugin),
+    });
     if (!plugin) {
         logMobileRuntime('NativeGamePackagePlugin', 'create-install-handle-no-plugin', {
             gameId: manifest.gameId,
@@ -241,35 +279,57 @@ export const createNativeGamePackageInstallHandle = async (
                 assetPackVersion: manifest.assetPackVersion,
                 assetPackUrl: manifest.assetPackUrl,
             });
-            listenerHandle = await plugin.addListener('installStateChanged', async (event) => {
-                if (event.gameId !== manifest.gameId) {
-                    return;
-                }
-
-                const assetBaseUrl = await toAssetBaseUrl(event.assetRootPath);
-                if (assetBaseUrl) {
-                    options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
-                }
-
-                currentState = mergeGamePackageState(currentState, {
-                    status: event.status,
-                    progressPercent: clampPercent(event.progressPercent),
-                    progressMode: event.progressMode,
-                    errorMessage: event.errorMessage,
-                    installedVersion: event.assetPackVersion?.trim() || undefined,
-                    localAssetBaseUrl: assetBaseUrl,
-                });
-                logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-state-changed', {
-                    gameId: manifest.gameId,
-                    status: event.status,
-                    progressMode: event.progressMode,
-                    progressPercent: event.progressPercent,
-                    errorMessage: event.errorMessage,
-                    assetPackVersion: event.assetPackVersion,
-                });
-                options.onStateChange(currentState);
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-listener-registering', {
+                gameId: manifest.gameId,
             });
+            try {
+                listenerHandle = await withTimeout(
+                    plugin.addListener('installStateChanged', async (event) => {
+                        if (event.gameId !== manifest.gameId) {
+                            return;
+                        }
 
+                        const assetBaseUrl = toAssetBaseUrl(event.assetRootPath);
+                        if (assetBaseUrl) {
+                            options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
+                        }
+
+                        currentState = mergeGamePackageState(currentState, {
+                            status: event.status,
+                            progressPercent: clampPercent(event.progressPercent),
+                            progressMode: event.progressMode,
+                            errorMessage: event.errorMessage,
+                            installedVersion: event.assetPackVersion?.trim() || undefined,
+                            localAssetBaseUrl: assetBaseUrl,
+                        });
+                        logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-state-changed', {
+                            gameId: manifest.gameId,
+                            status: event.status,
+                            progressMode: event.progressMode,
+                            progressPercent: event.progressPercent,
+                            errorMessage: event.errorMessage,
+                            assetPackVersion: event.assetPackVersion,
+                        });
+                        options.onStateChange(currentState);
+                    }),
+                    2000,
+                    'install listener registration timed out after 2000ms',
+                );
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-listener-registered', {
+                    gameId: manifest.gameId,
+                });
+            } catch (error) {
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-listener-registration-failed', {
+                    gameId: manifest.gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+
+            logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-native-call-dispatch', {
+                gameId: manifest.gameId,
+                assetPackUrl: manifest.assetPackUrl,
+                assetPackVersion: manifest.assetPackVersion,
+            });
             const result = await plugin.installGamePackage({
                 gameId: manifest.gameId,
                 runtimeChannel: manifest.runtimeChannel,
@@ -283,7 +343,7 @@ export const createNativeGamePackageInstallHandle = async (
                 result,
             });
 
-            const assetBaseUrl = await toAssetBaseUrl(result.assetRootPath);
+            const assetBaseUrl = toAssetBaseUrl(result.assetRootPath);
             if (assetBaseUrl) {
                 options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
             }

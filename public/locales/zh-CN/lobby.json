@@ -257,6 +257,8 @@
     "creatingRoom": "正在创建房间并进入对局...",
     "namespaceLoadFailed": "游戏文案加载失败",
     "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
+    "clientLoadFailed": "游戏客户端加载失败",
+    "clientLoadFailedDesc": "未能加载当前游戏的客户端代码或资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
     "loadingProgress": {
       "step": "{{current}}/{{total}}",
@@ -283,6 +285,26 @@
       "description": "无法连接到游戏服务器，请检查网络或服务状态",
       "retry": "重试",
       "backToLobby": "返回大厅"
+    },
+    "rescue": {
+      "eyebrow": "游戏页保护",
+      "title": "页面没有正常显示",
+      "description": "检测到当前游戏页没有正常渲染。为了避免继续停留在黑屏，这里先切到友好提示页。",
+      "reload": "刷新重试",
+      "backToLobby": "返回大厅",
+      "copyDiagnostics": "复制诊断",
+      "copied": "已复制",
+      "reason": {
+        "game-viewport-missing": "长时间没有检测到游戏视口容器，页面很可能卡在启动阶段。",
+        "game-shell-collapsed": "检测到游戏画布尺寸异常，主内容区已经塌缩到不可用状态。",
+        "game-content-missing": "检测到游戏主容器存在，但长时间没有渲染出可见内容。"
+      }
+    },
+    "routeLoadingTimeout": {
+      "eyebrow": "进入超时",
+      "title": "游戏页面加载超时",
+      "description": "当前设备迟迟没有完成游戏页面加载。为了避免一直停留在黑屏，这里先切到可操作提示页。",
+      "reason": "通常是游戏模块加载、WebView 兼容性或启动阶段资源初始化卡住了。你可以先刷新重试；如果反复出现，再返回大厅。"
     },
     "connectionError": {
       "unauthorizedTitle": "进入房间失败",

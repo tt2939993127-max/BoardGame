@@ -1,6 +1,12 @@
+import { registerPlugin } from '@capacitor/core';
+
 type MobileRuntimeLogLevel = 'info' | 'warn' | 'error';
 
 type MobileRuntimeLogPayload = Record<string, unknown>;
+
+type NativeDiagnosticPlugin = {
+    logDiagnostic(options: { message: string }): Promise<void>;
+};
 
 declare global {
     interface Window {
@@ -15,6 +21,7 @@ declare global {
 }
 
 const MAX_RUNTIME_LOG_COUNT = 200;
+const nativeDiagnosticPlugin = registerPlugin<NativeDiagnosticPlugin>('GamePackage');
 
 const shouldEmitMobileRuntimeLog = () => {
     if (typeof import.meta !== 'undefined' && import.meta.env?.DEV) {
@@ -58,6 +65,27 @@ const normalizePayload = (payload?: MobileRuntimeLogPayload) => {
     })) as MobileRuntimeLogPayload;
 };
 
+const pushRuntimeHistory = (
+    entry: {
+        at: string;
+        scope: string;
+        stage: string;
+        level: MobileRuntimeLogLevel;
+        payload?: MobileRuntimeLogPayload;
+    },
+) => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    const history = window.__BOARDGAME_MOBILE_RUNTIME_LOGS__ ?? [];
+    history.push(entry);
+    if (history.length > MAX_RUNTIME_LOG_COUNT) {
+        history.splice(0, history.length - MAX_RUNTIME_LOG_COUNT);
+    }
+    window.__BOARDGAME_MOBILE_RUNTIME_LOGS__ = history;
+};
+
 export const logMobileRuntime = (
     scope: string,
     stage: string,
@@ -78,14 +106,7 @@ export const logMobileRuntime = (
         payload: normalizedPayload,
     };
 
-    if (typeof window !== 'undefined') {
-        const history = window.__BOARDGAME_MOBILE_RUNTIME_LOGS__ ?? [];
-        history.push(entry);
-        if (history.length > MAX_RUNTIME_LOG_COUNT) {
-            history.splice(0, history.length - MAX_RUNTIME_LOG_COUNT);
-        }
-        window.__BOARDGAME_MOBILE_RUNTIME_LOGS__ = history;
-    }
+    pushRuntimeHistory(entry);
 
     const message = `[${scope}] ${JSON.stringify({
         at,
@@ -108,13 +129,7 @@ export const logMobileRuntime = (
 
 const tryNativeLog = (message: string) => {
     try {
-        const win = typeof window !== 'undefined' ? window as unknown as Record<string, unknown> : null;
-        const cap = win?.Capacitor as Record<string, unknown> | undefined;
-        const plugins = cap?.Plugins as Record<string, unknown> | undefined;
-        const gamePackage = plugins?.GamePackage as Record<string, unknown> | undefined;
-        if (typeof gamePackage?.logDiagnostic === 'function') {
-            void (gamePackage.logDiagnostic as (opts: { message: string }) => Promise<void>)({ message });
-        }
+        void nativeDiagnosticPlugin.logDiagnostic({ message }).catch(() => {});
     } catch {
         // best-effort
     }
@@ -127,6 +142,13 @@ export const logMobileRuntimeCritical = (
 ) => {
     const at = new Date().toISOString();
     const normalizedPayload = normalizePayload(payload);
+    pushRuntimeHistory({
+        at,
+        scope,
+        stage,
+        level: 'info',
+        payload: normalizedPayload,
+    });
     const message = `[MOBILE_CRITICAL][${scope}] ${JSON.stringify({
         at,
         stage,

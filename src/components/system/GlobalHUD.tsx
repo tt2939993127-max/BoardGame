@@ -5,7 +5,7 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { FabMenu, type FabAction } from './FabMenu';
-import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize } from 'lucide-react';
+import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize, Download } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
 
 const HUD_MODAL_NS = 'hud';
@@ -14,6 +14,10 @@ const LazyAudioControlSection = lazy(() => import('../game/framework/widgets/Aud
 const LazyFriendsChatModal = lazy(() => import('../social/FriendsChatModal').then(m => ({ default: m.FriendsChatModal })));
 const LazyAboutModal = lazy(() => import('./AboutModal').then(m => ({ default: m.AboutModal })));
 const LazyFeedbackModal = lazy(() => import('./FeedbackModal').then(m => ({ default: m.FeedbackModal })));
+
+const WEB_APP_DOWNLOAD_URL = typeof import.meta.env.VITE_ANDROID_APP_DOWNLOAD_URL === 'string'
+    ? import.meta.env.VITE_ANDROID_APP_DOWNLOAD_URL.trim()
+    : '';
 
 export const GlobalHUD = () => {
     const { t } = useTranslation('game');
@@ -73,6 +77,18 @@ export const GlobalHUD = () => {
         }
     };
 
+    const handleOpenAppDownload = () => {
+        if (!WEB_APP_DOWNLOAD_URL) {
+            toast.warning(t('hud.download.missingLink'));
+            return;
+        }
+
+        const openedWindow = window.open(WEB_APP_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
+        if (!openedWindow) {
+            window.location.assign(WEB_APP_DOWNLOAD_URL);
+        }
+    };
+
     useEffect(() => {
         if (isGamePage) {
             return;
@@ -120,7 +136,17 @@ export const GlobalHUD = () => {
         onClick: toggleFullscreen
     });
 
-    // 2. 关于
+    // 2. 网页端下载 App
+    if (!isAndroidShellBuild) {
+        items.push({
+            id: 'download-app',
+            icon: <Download size={20} />,
+            label: t('hud.actions.downloadApp'),
+            onClick: handleOpenAppDownload,
+        });
+    }
+
+    // 3. 关于
     items.push({
         id: 'about',
         icon: <Info size={20} />,
@@ -128,7 +154,7 @@ export const GlobalHUD = () => {
         onClick: () => setShowAbout((prev) => !prev)
     });
 
-    // 3. 反馈
+    // 4. 反馈
     items.push({
         id: 'feedback',
         icon: <MessageSquareWarning size={20} />,
@@ -136,7 +162,7 @@ export const GlobalHUD = () => {
         onClick: () => setShowFeedback((prev) => !prev)
     });
 
-    // 4. 社交（仅登录用户）
+    // 5. 社交（仅登录用户）
     if (user) {
         items.push({
             id: 'social',

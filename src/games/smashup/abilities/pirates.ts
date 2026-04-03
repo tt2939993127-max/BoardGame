@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildActionMinionTargetOptions, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -65,7 +65,7 @@ function pirateSaucyWench(ctx: AbilityContext): AbilityResult {
     // "你可以"：添加跳过选项
     const allOptions = [
         { id: 'skip', label: '跳过（不消灭随从）', value: { skip: true }, displayMode: 'button' as const },
-        ...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        ...buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }),
     ] as any[];
     const interaction = createSimpleChoice(
         `pirate_saucy_wench_${ctx.now}`, ctx.playerId,
@@ -139,10 +139,16 @@ function pirateCannon(ctx: AbilityContext): AbilityResult {
 
     // 创建选择第一个目标的 Interaction（点击式）
     const options = allTargets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    const targetOptions = buildActionMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'destroy',
+    });
+    if (targetOptions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const interaction = createSimpleChoice(
         `pirate_cannon_first_${ctx.now}`, ctx.playerId,
         '加农炮：点击第一个要消灭的力量≤2的随从',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        targetOptions,
         { sourceId: 'pirate_cannon_choose_first', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -466,7 +472,7 @@ function pirateDinghy(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `pirate_dinghy_first_${ctx.now}`, ctx.playerId, '选择要移动的己方随从（至多2个，第1个）', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }), { sourceId: 'pirate_dinghy_choose_first', targetType: 'minion' }
+        `pirate_dinghy_first_${ctx.now}`, ctx.playerId, '选择要移动的己方随从（至多2个，第1个）', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }), { sourceId: 'pirate_dinghy_choose_first', targetType: 'minion' }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -487,11 +493,11 @@ function pirateShanghai(ctx: AbilityContext): AbilityResult {
         }
     }
     if (targets.length === 0) return { events: [] };
-    const options = buildMinionTargetOptions(
+    const options = buildActionMinionTargetOptions(
         targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label })),
         {
             state: ctx.state,
-            sourcePlayerId: ctx.playerId,
+            sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
             effectType: 'affect',
         }
     );
@@ -552,7 +558,7 @@ function piratePowderkeg(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `pirate_powderkeg_${ctx.now}`, ctx.playerId, '选择要牺牲的己方随从（同基地力量≤它的随从也会被消灭）', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }), { sourceId: 'pirate_powderkeg', targetType: 'minion' }
+        `pirate_powderkeg_${ctx.now}`, ctx.playerId, '选择要牺牲的己方随从（同基地力量≤它的随从也会被消灭）', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }), { sourceId: 'pirate_powderkeg', targetType: 'minion' }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -669,7 +675,7 @@ export function registerPirateInteractionHandlers(): void {
             '加农炮：点击第二个要消灭的力量≤2的随从（可选）',
             [
                 { id: 'skip', label: '跳过（不消灭第二个）', value: { skip: true }, displayMode: 'button' as const },
-                ...buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }),
+                ...buildActionMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }),
             ] as any[],
             { sourceId: 'pirate_cannon_choose_second', targetType: 'minion' }
         );

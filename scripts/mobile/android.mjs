@@ -26,6 +26,7 @@ const defaultAppName = '易桌游';
 const defaultAndroidWebviewMode = 'embedded';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
+const commandArgs = process.argv.slice(3);
 const distDir = path.join(rootDir, 'dist');
 const distLocalesDir = path.join(distDir, 'locales');
 const distLocalizedAssetsDir = path.join(distDir, 'assets', 'i18n');
@@ -186,6 +187,8 @@ const getCapacitorPluginWiringStatus = () => {
         message: `ready(${plugins.length} plugins)`,
     };
 };
+
+const androidCompatSmokeScriptPath = path.join(rootDir, 'scripts', 'mobile', 'android-compat-smoke.mjs');
 
 const parseAndroidBuildMeta = (filePath, rawText) => {
     try {
@@ -971,9 +974,12 @@ const run = async () => {
             await runGradle(['bundleRelease']);
             console.log('Signed Release AAB 输出目录: android/app/build/outputs/bundle/release/');
             return;
+        case 'compat-smoke':
+            await runNodeScript(androidCompatSmokeScriptPath, commandArgs);
+            return;
         default:
             throw new Error(
-                '未知命令。可用命令: doctor | assets | prepare-release | init | sync | open | run | build-debug | build-release | build-bundle',
+                '未知命令。可用命令: doctor | assets | prepare-release | init | sync | open | run | build-debug | build-release | build-bundle | compat-smoke',
             );
     }
 };
