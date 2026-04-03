@@ -1216,7 +1216,7 @@ function sphinxOnTurnStart(ctx: TriggerContext) {
                 id: `buried-${choice.cardUid}`,
                 label: choice.label,
                 value: choice,
-                displayMode: 'button' as const,
+                displayMode: 'card' as const,
             })),
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
@@ -1258,7 +1258,7 @@ function sphinxAfterScoring(ctx: {
                     id: `buried-${choice.cardUid}`,
                     label: choice.label,
                     value: choice,
-                    displayMode: 'button' as const,
+                    displayMode: 'card' as const,
                 })),
                 { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ],
@@ -1462,7 +1462,7 @@ function penguinsEmperorPenguinTalent(ctx: AbilityContext): AbilityResult {
             id: option.cardUid,
             label: option.label,
             value: { cardUid: option.cardUid, defId: option.defId, zone: option.zone },
-            displayMode: 'button' as const,
+            displayMode: 'card' as const,
         })),
         { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic' },
     );
@@ -1701,7 +1701,7 @@ function werewolvesGreatWolfSpiritTalent(ctx: AbilityContext): AbilityResult {
         `titan_werewolves_great_wolf_spirit_talent_${ctx.now}`,
         ctx.playerId,
         '巨狼之灵：选择一个你的随从获得 +1 战力直到回合结束',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'buff' }),
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'buff' }),
         { sourceId: 'titan_werewolves_great_wolf_spirit_talent', targetType: 'minion' },
     );
 
@@ -1788,7 +1788,7 @@ function trickstersBigFunnyGiantTalent(ctx: AbilityContext): AbilityResult {
         `titan_tricksters_big_funny_giant_choose_minion_${ctx.now}`,
         ctx.playerId,
         '滑稽巨人：选择本基地一个战力 2 或更低的随从',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }),
         { sourceId: 'titan_tricksters_big_funny_giant_choose_minion', targetType: 'minion' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
@@ -2174,7 +2174,7 @@ function bearCavalryMajorUrsaOnTitanMoved(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '澶х唺搴э細閫夋嫨瑕佺Щ鍔ㄧ殑瀵规墜闅忎粠锛堝彲璺宠繃锛?',
         [
-            ...buildMinionTargetOptions(minionTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'move' }),
+            ...buildMinionTargetOptions(minionTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'move' }),
             { id: 'skip', label: '璺宠繃', value: 'skip' as const, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_bear_cavalry_major_ursa_choose_minion', targetType: 'minion' },
@@ -2213,7 +2213,7 @@ function vampireAncientLordTalent(ctx: AbilityContext): AbilityResult {
         `titan_vampires_ancient_lord_talent_${ctx.now}`,
         ctx.playerId,
         '鲜血领主：选择本基地一个已有 +1 力量标记的己方随从',
-        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }),
+        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }),
         { sourceId: 'titan_vampires_ancient_lord_talent', targetType: 'minion' },
     );
 

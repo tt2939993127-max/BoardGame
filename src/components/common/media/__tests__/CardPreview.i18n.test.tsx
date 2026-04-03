@@ -27,6 +27,10 @@ describe('CardPreview i18n atlas path', () => {
             image: 'smashup/cards/cards1',
             config: TEST_UNIFORM_ATLAS,
         });
+        const img = new Image();
+        Object.defineProperty(img, 'naturalWidth', { value: 100, configurable: true });
+        Object.defineProperty(img, 'naturalHeight', { value: 200, configurable: true });
+        markImageLoaded('smashup/cards/cards1', 'zh-CN', img);
 
         const html = renderToStaticMarkup(
             <CardPreview previewRef={{ type: 'atlas', atlasId, index: 0 }} />

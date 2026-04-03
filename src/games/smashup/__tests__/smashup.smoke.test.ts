@@ -709,6 +709,7 @@ describe('smashup', () => {
         expect(prompt?.data?.sourceId).toBe('titan_sphinx_start_turn');
         const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-start-buried');
         expect(option).toBeDefined();
+        expect(option.displayMode).toBe('card');
 
         const handler = getInteractionHandler('titan_sphinx_start_turn');
         expect(handler).toBeDefined();
@@ -774,6 +775,7 @@ describe('smashup', () => {
         expect(prompt?.data?.sourceId).toBe('titan_sphinx_after_scoring');
         const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-score-buried');
         expect(option).toBeDefined();
+        expect(option.displayMode).toBe('card');
 
         const handler = getInteractionHandler('titan_sphinx_after_scoring');
         expect(handler).toBeDefined();
@@ -3980,6 +3982,9 @@ describe('smashup', () => {
         const commandEvents = SmashUpDomain.execute(state, command, FIXED_RANDOM);
         expect(commandEvents.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
         expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_penguins_emperor_penguin_talent');
+        expect(
+            state.sys.interaction?.current?.data?.options?.every((option: any) => option.displayMode === 'card'),
+        ).toBe(true);
 
         const handler = getInteractionHandler('titan_penguins_emperor_penguin_talent');
         expect(handler).toBeDefined();

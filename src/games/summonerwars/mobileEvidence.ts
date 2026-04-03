@@ -6,6 +6,7 @@ import { SW_SELECTION_EVENTS } from './domain/types';
 import type { FactionId, PlayerId, SummonerWarsCore } from './domain/types';
 
 type TestHarness = Window['__BG_TEST_HARNESS__'];
+export const SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT = 30;
 
 interface MobileEvidenceOptions {
     faction0?: FactionId;
@@ -83,32 +84,38 @@ function createInitializedCore(
 }
 
 export function createSummonerWarsMobileEvidenceActionLogEntries(timestamp = Date.now()) {
-    return [
-        {
-            id: 'mobile-log-entry-1',
-            timestamp: timestamp - 1000,
-            actorId: '0',
-            kind: 'TEST_LOG',
-            segments: [
-                {
-                    type: 'text',
-                    text: 'Summoned a unit adjacent to the gate and spent extra magic to secure the front line.',
-                },
-            ],
-        },
-        {
-            id: 'mobile-log-entry-2',
-            timestamp,
-            actorId: '1',
-            kind: 'TEST_LOG',
-            segments: [
-                {
-                    type: 'text',
-                    text: 'Moved the champion to the exposed flank, then prepared a counterattack from long range.',
-                },
-            ],
-        },
+    const baseMessages = [
+        '在城门旁召唤近战单位并额外消耗魔力，先把中路前线顶稳。',
+        '冠军从右翼斜切到外侧通道，给下一轮长程反击留出发力角度。',
+        '后排弓手后撤半格，同时保持对中线桥头的连续压制。',
+        '把受伤单位换到掩体后方，顺手把魔力线补到下一次召唤阈值。',
+        '左翼建筑补位成功，敌方突进路线被迫改走更长的绕后路径。',
+        '手牌里的事件先不交，继续攒资源等对手先暴露召唤师站位。',
+        '前排压上后没有直接换血，而是优先卡住对面的逃跑格子。',
+        '最后一步把冠军停在外圈威胁位，逼对手回合先处理这条线。',
+        '右翼远程压制线已经形成，先维持火力覆盖，不急着把后排再往前送。',
+        '对手魔力池明显见底，这回合优先补刀，不给他留翻盘用的弃牌空间。',
+        '后场护卫横移半步把召唤师护住，避免被对面的突袭牌直接穿进中线。',
+        '中间据点虽然暂时失守，但换来了两翼包夹角度，下一轮可以反吃回来。',
     ];
+    const messages = Array.from({ length: SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT }, (_, index) => {
+        const base = baseMessages[index % baseMessages.length];
+        const wave = Math.floor(index / baseMessages.length) + 1;
+        return `第${wave}轮长日志压力回放：${base} 这条记录额外保留完整战况描述，用来验证 FAB 日志面板在极端长列表下仍会通过内部滚动承载，而不是把展开框直接顶出屏幕。`;
+    });
+
+    return messages.map((text, index) => ({
+        id: `mobile-log-entry-${index + 1}`,
+        timestamp: timestamp - ((messages.length - index - 1) * 1000),
+        actorId: index % 2 === 0 ? '0' : '1',
+        kind: 'TEST_LOG',
+        segments: [
+            {
+                type: 'text' as const,
+                text,
+            },
+        ],
+    }));
 }
 
 export function createSummonerWarsMobileEvidenceState(
@@ -132,7 +139,7 @@ export function createSummonerWarsMobileEvidenceState(
                 ...sys.tutorial,
                 active: false,
                 steps: [],
-                step: undefined,
+                step: null,
                 stepIndex: 0,
                 pendingAnimationAdvance: false,
             },

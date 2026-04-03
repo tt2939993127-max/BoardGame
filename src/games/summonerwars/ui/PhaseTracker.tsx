@@ -85,7 +85,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
     : null;
 
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
+    <div className={`relative flex flex-col gap-1.5 ${className}`}>
       {/* 回合数 */}
       <div className="text-center mb-2 pb-2 border-b border-slate-600/50">
         <span className="text-base text-amber-400 font-bold">
@@ -178,7 +178,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
 
       {isCoarsePointer && detailPhase && (
         <div
-          className="mt-2 rounded-lg border border-amber-500/30 bg-slate-950/85 px-3 py-2 text-left"
+          className="absolute right-[calc(100%+0.5rem)] top-1/2 z-10 w-[11rem] -translate-y-1/2 rounded-lg border border-amber-500/30 bg-slate-950/92 px-3 py-2 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
           data-testid="sw-phase-detail-panel"
         >
           <div className="mb-1 text-xs font-bold tracking-wide text-amber-300">

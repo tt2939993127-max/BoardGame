@@ -1,5 +1,28 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { test, expect } from './framework';
+import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import { setChineseLocale } from './helpers/common';
+
+async function saveEvidenceLocatorScreenshot(page: any, locator: any, testInfo: any, subdir: string, filename: string) {
+    const path = getEvidenceScreenshotPath(testInfo, filename, { subdir, filename });
+    mkdirSync(dirname(path), { recursive: true });
+    await expect(locator).toBeVisible({ timeout: 15000 });
+    const box = await locator.boundingBox();
+    expect(box, `未获取到截图目标 ${filename} 的边界`).not.toBeNull();
+    const padding = 10;
+    await page.screenshot({
+        path,
+        animations: 'disabled',
+        scale: 'device',
+        clip: {
+            x: Math.max((box?.x ?? 0) - padding, 0),
+            y: Math.max((box?.y ?? 0) - padding, 0),
+            width: (box?.width ?? 0) + padding * 2,
+            height: (box?.height ?? 0) + padding * 2,
+        },
+    });
+}
 
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
@@ -215,6 +238,53 @@ function buildFourPlayerMobileScene() {
                     },
                 },
             },
+        },
+    };
+}
+
+function buildDiscardOverflowScene() {
+    return {
+        gameId: 'smashup',
+        currentPlayer: '0' as const,
+        phase: 'draw',
+        bases: [
+            { defId: 'base_the_jungle' },
+            { defId: 'base_dread_lookout' },
+            { defId: 'base_tsars_palace' },
+        ],
+        player0: {
+            factions: ['aliens', 'pirates'],
+            hand: [
+                'alien_invader',
+                'alien_invader',
+                'alien_collector',
+                'pirate_first_mate',
+                'alien_invader',
+                'pirate_first_mate',
+                'alien_invader',
+                'alien_collector',
+                'pirate_first_mate',
+                'alien_invader',
+                'alien_collector',
+            ],
+            deck: ['alien_invader'],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            vp: 3,
+        },
+        player1: {
+            factions: ['dinosaurs', 'ninjas'],
+            hand: [],
+            deck: [],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            vp: 2,
         },
     };
 }
@@ -727,6 +797,25 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await game.screenshot('13-desktop-end-turn-restored', testInfo);
     });
 
+    test('手牌超限时继续按钮应保持与结束回合同款白色描边', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await setChineseLocale(page.context());
+        await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildDiscardOverflowScene());
+
+        await waitForSmashUpMainUiReady(page);
+
+        const continueButton = page.getByRole('button', { name: /^继续$/ });
+        await expect(continueButton).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText(/你需要丢弃 1 张牌以继续游戏/i)).toBeVisible({ timeout: 10000 });
+        await expect(continueButton).toHaveAttribute('class', /border-white\/95/);
+        await expect(continueButton).toHaveAttribute('class', /ring-white\/55/);
+
+        await game.screenshot('14-discard-continue-border-restored', testInfo);
+    });
+
     test('移动端不会把没有+1力量指示物的怪物当成可发动天赋', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
@@ -828,6 +917,20 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(monster).toBeVisible({ timeout: 15000 });
         await expect(monster).toContainText('+1');
         await expect(monster).toHaveAttribute('data-activation-armed', 'false');
+        await expect
+            .poll(async () => await monster.getAttribute('class'))
+            .toContain('ring-2 ring-amber-400');
+        await expect
+            .poll(async () => await monster.evaluate((element) => getComputedStyle(element as HTMLElement).borderColor))
+            .toContain('250, 188, 0');
+        await game.screenshot('12-monster-with-counter-before-activation', testInfo);
+        await saveEvidenceLocatorScreenshot(
+            page,
+            monster,
+            testInfo,
+            'smashup-4p-layout-test.e2e/移动端有+1力量指示物的怪物发动天赋后会移除指示物并提示额外随从机会',
+            '12a-monster-with-counter-card-before-activation.png',
+        );
 
         await clickCenter(monster, page);
         await expect(monster).toHaveAttribute('data-expanded', 'true');

@@ -3,6 +3,11 @@ import {
     isManifestCompatibleWithNativeVersion,
     readAndroidLiveUpdateConfig,
 } from '../mobile/androidLiveUpdates';
+import {
+    DEFAULT_FORCE_UPDATE_MESSAGE,
+    DEFAULT_FORCE_UPDATE_TITLE,
+    resolveOtaForceUpdateOptions,
+} from '../../../scripts/mobile/ota-publish-config.mjs';
 
 describe('androidLiveUpdates', () => {
     it('读取 OTA 配置时，只有启用且 manifest URL 合法才算开启', () => {
@@ -64,5 +69,25 @@ describe('androidLiveUpdates', () => {
             url: 'https://example.com/bundle.zip',
             maxNativeVersion: '0.5.2',
         }, '0.5.3').compatible).toBe(false);
+    });
+
+    it('OTA 发布默认走强制更新并补齐默认文案', () => {
+        expect(resolveOtaForceUpdateOptions()).toEqual({
+            forceUpdate: true,
+            forceUpdateTitle: DEFAULT_FORCE_UPDATE_TITLE,
+            forceUpdateMessage: DEFAULT_FORCE_UPDATE_MESSAGE,
+        });
+    });
+
+    it('显式关闭强制更新时不再写入强更文案', () => {
+        expect(resolveOtaForceUpdateOptions({
+            noForceUpdateFlag: true,
+            forceUpdateTitle: '自定义标题',
+            forceUpdateMessage: '自定义正文',
+        })).toEqual({
+            forceUpdate: false,
+            forceUpdateTitle: '',
+            forceUpdateMessage: '',
+        });
     });
 });

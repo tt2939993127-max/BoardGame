@@ -77,6 +77,7 @@
       "backToLobbyHint": "Leave room completely",
       "social": "Friends",
       "feedback": "Feedback",
+      "downloadApp": "Download App",
       "about": "About",
       "fullscreen": "Fullscreen",
       "exitFullscreen": "Exit Fullscreen",
@@ -160,6 +161,9 @@
     "fullscreen": {
       "enterFailed": "Failed to enter fullscreen. Check browser permissions.",
       "exitFailed": "Failed to exit fullscreen. Check browser status."
+    },
+    "download": {
+      "missingLink": "App download link is not configured yet. Add the Baidu Netdisk URL to the environment variable first."
     },
     "toggle": {
       "collapse": "Collapse menu",

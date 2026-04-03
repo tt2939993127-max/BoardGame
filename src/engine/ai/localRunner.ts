@@ -28,6 +28,23 @@ interface ResolveNextAiActionArgs {
     decisionBudgetMs?: number;
 }
 
+function shouldUseRemoteDecision(args: {
+    runtime: ReturnType<typeof getGameAiRuntime>;
+    context: ReturnType<typeof buildAiDecisionContext>;
+    seatController: Extract<AiSeatController, { type: 'remote-ai' }>;
+}): boolean {
+    const predicate = args.runtime?.shouldUseRemoteDecision;
+    if (!predicate) {
+        return true;
+    }
+
+    try {
+        return predicate(args.context, args.seatController);
+    } catch {
+        return true;
+    }
+}
+
 function buildAttemptKey(args: {
     state: MatchState<unknown>;
     playerId: string;
@@ -200,6 +217,26 @@ export async function resolveNextAiAction(
                 action,
                 attemptKey,
                 source: 'local-ai',
+            };
+        }
+
+        if (!shouldUseRemoteDecision({
+            runtime,
+            context,
+            seatController,
+        })) {
+            const action = await resolveRemoteFallbackAction({
+                runtimeGameId: args.engineConfig.gameId,
+                seatController,
+                context,
+            });
+            if (!action) continue;
+
+            return {
+                playerId,
+                action,
+                attemptKey,
+                source: 'remote-ai-fallback',
             };
         }
 

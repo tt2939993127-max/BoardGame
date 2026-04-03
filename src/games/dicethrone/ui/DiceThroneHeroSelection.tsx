@@ -6,14 +6,20 @@
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Check } from 'lucide-react';
+import { Check, MessageSquareWarning } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
 import { getPlayerBoardAspectRatio } from './abilitySlotLayout';
-import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId, type CharacterId } from '../domain/types';
+import {
+    DICETHRONE_CHARACTER_CATALOG,
+    type SelectableCharacterId,
+    type CharacterId,
+    type PendingSeatSwapRequest,
+    type SeatControllerKind,
+} from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import clsx from 'clsx';
 
@@ -25,10 +31,14 @@ export interface DiceThroneHeroSelectionProps {
     readyPlayers: Record<PlayerId, boolean>;
     playerNames: Record<PlayerId, string>;
     seatingOrder?: PlayerId[];
+    seatControllers?: Record<PlayerId, SeatControllerKind>;
+    seatSwapRequest?: PendingSeatSwapRequest;
     onSelect: (characterId: SelectableCharacterId) => void;
     onReady: () => void;
     onUnready: () => void;
-    onMoveSeat: (playerId: PlayerId, targetSeatIndex: number) => void;
+    onRequestSeatSwap: (targetPlayerId: PlayerId) => void;
+    onRespondSeatSwap: (approve: boolean) => void;
+    onCancelSeatSwap: () => void;
     onStart: () => void;
     locale: string;
 }
@@ -62,14 +72,18 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     readyPlayers,
     playerNames,
     seatingOrder,
+    seatControllers,
+    seatSwapRequest,
     onSelect,
     onReady,
     onUnready,
-    onMoveSeat,
+    onRequestSeatSwap,
+    onRespondSeatSwap,
+    onCancelSeatSwap,
     onStart,
     locale,
 }) => {
-    const { t, i18n } = useTranslation('game-dicethrone');
+    const { t } = useTranslation('game-dicethrone');
     const isHost = currentPlayerId === hostPlayerId;
     const playerIds = Object.keys(playerNames);
     const isFourPlayerMode = playerIds.length === 4;
@@ -94,34 +108,33 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     }, [selectedCharacters, currentPlayerId, availableCharacters]);
 
     const [magnifyPreview, setMagnifyPreview] = useState<MagnifyPreview>(null);
-    const [pendingSeatPlayerId, setPendingSeatPlayerId] = useState<PlayerId | null>(null);
-    const [seatFeedbackKey, setSeatFeedbackKey] = useState<string | null>(null);
     const playerBoardAspectRatio = getPlayerBoardAspectRatio(previewCharId);
 
     const effectiveSeatingOrder = useMemo(() => {
         const orderedPlayers = seatingOrder?.filter((pid) => playerIds.includes(pid)) ?? [];
         return orderedPlayers.length === playerIds.length ? orderedPlayers : playerIds;
     }, [seatingOrder, playerIds]);
-    const selectedSeatIndex = pendingSeatPlayerId
-        ? effectiveSeatingOrder.indexOf(pendingSeatPlayerId)
-        : -1;
     const teamAPlayers = effectiveSeatingOrder.filter((_, index) => index % 2 === 0);
     const teamBPlayers = effectiveSeatingOrder.filter((_, index) => index % 2 === 1);
-    const remainingSeatPlayers = pendingSeatPlayerId
-        ? effectiveSeatingOrder.filter((pid) => pid !== pendingSeatPlayerId)
-        : effectiveSeatingOrder;
-    const seatTargetIndexes = pendingSeatPlayerId
-        ? Array.from({ length: remainingSeatPlayers.length + 1 }, (_, index) => index)
-        : [];
 
     const getPlayerLabel = (pid: string) => PLAYER_LABELS[pid] ?? `P${Number(pid) + 1}`;
-
-    React.useEffect(() => {
-        if (pendingSeatPlayerId && !effectiveSeatingOrder.includes(pendingSeatPlayerId)) {
-            setPendingSeatPlayerId(null);
-            setSeatFeedbackKey(null);
+    const getPlayerDisplayName = (pid: PlayerId) => playerNames[pid] || getPlayerLabel(pid);
+    const currentSeatSwapRequest = React.useMemo(() => {
+        if (!seatSwapRequest) {
+            return undefined;
         }
-    }, [pendingSeatPlayerId, effectiveSeatingOrder]);
+        if (
+            !effectiveSeatingOrder.includes(seatSwapRequest.requesterId)
+            || !effectiveSeatingOrder.includes(seatSwapRequest.targetPlayerId)
+        ) {
+            return undefined;
+        }
+        return seatSwapRequest;
+    }, [seatSwapRequest, effectiveSeatingOrder]);
+    const isRequester = currentSeatSwapRequest?.requesterId === currentPlayerId;
+    const isTarget = currentSeatSwapRequest?.targetPlayerId === currentPlayerId;
+    const isSeatSwapPending = Boolean(currentSeatSwapRequest);
+    const startDisabled = !everyoneReady || isSeatSwapPending;
 
     const handleSelectCharacter = (characterId: SelectableCharacterId) => {
         playSound(HERO_SELECTION_CLICK_SOUND_KEY);
@@ -143,76 +156,70 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
         onStart();
     };
 
-    const handleSeatPlayerClick = (pid: PlayerId) => {
-        if (!isHost) {
-            setSeatFeedbackKey('selection.seating.readOnly');
+    const handleSeatSwapAvatarClick = (pid: PlayerId) => {
+        if (!isFourPlayerMode || isSeatSwapPending || pid === currentPlayerId) {
             return;
         }
-        if (!isFourPlayerMode) {
-            return;
-        }
-        if (pendingSeatPlayerId && pendingSeatPlayerId !== pid) {
-            setSeatFeedbackKey('selection.seating.occupied');
-            return;
-        }
-
-        setSeatFeedbackKey(null);
-        setPendingSeatPlayerId((current) => (current === pid ? null : pid));
-    };
-
-    const handleSeatTargetClick = (targetSeatIndex: number) => {
-        if (!pendingSeatPlayerId) {
-            return;
-        }
-        setSeatFeedbackKey(null);
-        onMoveSeat(pendingSeatPlayerId, targetSeatIndex);
-        setPendingSeatPlayerId(null);
+        playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+        onRequestSeatSwap(pid);
     };
 
     const seatHintText = (() => {
         if (!isFourPlayerMode) {
             return null;
         }
-        if (seatFeedbackKey) {
-            return i18n.exists(seatFeedbackKey) ? t(seatFeedbackKey) : seatFeedbackKey;
+        if (!currentSeatSwapRequest) {
+            return t('selection.seating.swapHint');
         }
-        if (!isHost) {
-            return t('selection.seating.readOnly');
-        }
-        if (pendingSeatPlayerId) {
-            return t('selection.seating.moveHint', {
-                player: getPlayerLabel(pendingSeatPlayerId),
+        if (isRequester) {
+            return t('selection.seating.swapWaiting', {
+                player: getPlayerDisplayName(currentSeatSwapRequest.targetPlayerId),
             });
         }
-        return t('selection.seating.hostTip');
+        if (isTarget) {
+            return t('selection.seating.swapIncoming', {
+                player: getPlayerDisplayName(currentSeatSwapRequest.requesterId),
+            });
+        }
+        return t('selection.seating.swapPendingOther', {
+            requester: getPlayerDisplayName(currentSeatSwapRequest.requesterId),
+            target: getPlayerDisplayName(currentSeatSwapRequest.targetPlayerId),
+        });
     })();
 
-    const renderSeatPlayerCard = (pid: PlayerId, seatIndex: number, compact = false) => {
-        const isSelected = pendingSeatPlayerId === pid;
+    const renderSeatPlayerCard = (pid: PlayerId, seatIndex: number) => {
         const colors = PLAYER_COLORS[pid] || PLAYER_COLORS['0'];
         const hasSelected = selectedCharacters[pid] && selectedCharacters[pid] !== 'unselected';
+        const isMe = pid === currentPlayerId;
+        const isAiSeat = (seatControllers?.[pid] ?? 'human') === 'ai';
+        const isRequesterSeat = currentSeatSwapRequest?.requesterId === pid;
+        const isTargetSeat = currentSeatSwapRequest?.targetPlayerId === pid;
+        const avatarDisabled = !isFourPlayerMode || isSeatSwapPending || isMe;
 
         return (
-            <button
+            <div
                 key={`seat-player-${pid}-${seatIndex}`}
-                type="button"
-                onClick={() => handleSeatPlayerClick(pid)}
+                data-testid={`dt-seat-swap-seat-${pid}`}
                 className={clsx(
-                    'rounded-[0.8vw] border text-left transition-all',
-                    compact
-                        ? 'min-w-[4.8vw] px-[0.55vw] py-[0.45vw]'
-                        : 'min-w-[8.4vw] px-[0.8vw] py-[0.65vw]',
-                    isSelected
-                        ? 'border-amber-400 bg-amber-500/12 shadow-[0_0_1vw_rgba(245,158,11,0.3)]'
-                        : 'border-white/12 bg-black/25 hover:border-white/28 hover:bg-white/8',
-                    !isHost && 'cursor-default hover:border-white/12 hover:bg-black/25'
+                    'min-w-[8.6vw] rounded-[0.9vw] border px-[0.8vw] py-[0.68vw] text-left transition-all',
+                    isRequesterSeat || isTargetSeat
+                        ? 'border-amber-300/70 bg-amber-500/12 shadow-[0_0_1vw_rgba(245,158,11,0.22)]'
+                        : isMe
+                            ? 'border-white/28 bg-white/10'
+                            : 'border-white/12 bg-black/25'
                 )}
             >
-                <div className="flex items-center gap-[0.5vw]">
-                    <div
+                <div className="flex items-center gap-[0.55vw]">
+                    <button
+                        type="button"
+                        onClick={() => handleSeatSwapAvatarClick(pid)}
+                        disabled={avatarDisabled}
+                        data-testid={`dt-seat-swap-avatar-${pid}`}
                         className={clsx(
-                            'rounded-full flex items-center justify-center font-black',
-                            compact ? 'h-[1.2vw] w-[1.2vw] text-[0.5vw]' : 'h-[1.5vw] w-[1.5vw] text-[0.62vw]'
+                            'relative flex h-[1.7vw] w-[1.7vw] items-center justify-center rounded-full font-black text-[0.62vw] transition-all',
+                            avatarDisabled
+                                ? 'cursor-default opacity-95'
+                                : 'cursor-pointer hover:scale-105 hover:ring-2 hover:ring-amber-300/55'
                         )}
                         style={{
                             backgroundColor: colors.bg,
@@ -221,51 +228,25 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                         }}
                     >
                         {getPlayerLabel(pid)}
-                    </div>
+                        {isAiSeat && (
+                            <span className="absolute -right-[0.16vw] -bottom-[0.12vw] rounded-full border border-sky-200/45 bg-sky-500 px-[0.16vw] py-[0.02vw] text-[0.34vw] font-black uppercase tracking-[0.08em] text-white shadow-[0_0_0.35vw_rgba(14,165,233,0.45)]">
+                                {t('selection.seating.aiBadge')}
+                            </span>
+                        )}
+                    </button>
                     <div className="min-w-0">
-                        <div className={clsx('font-black text-white/90', compact ? 'text-[0.46vw]' : 'text-[0.56vw]')}>
+                        <div className="text-[0.56vw] font-black text-white/90">
                             {t('selection.seating.seatNumber', { seat: seatIndex + 1 })}
                         </div>
-                        <div className={clsx('truncate', compact ? 'text-[0.42vw] text-white/55' : 'text-[0.52vw] text-white/60')}>
-                            {playerNames[pid]}
+                        <div className="truncate text-[0.52vw] text-white/60">
+                            {getPlayerDisplayName(pid)}
                         </div>
                     </div>
                 </div>
-                <div className={clsx(
-                    'mt-[0.35vw] truncate font-bold',
-                    compact ? 'text-[0.42vw]' : 'text-[0.5vw]',
-                    hasSelected ? 'text-amber-300' : 'text-white/35'
-                )}>
+                <div className={clsx('mt-[0.35vw] truncate text-[0.5vw] font-bold', hasSelected ? 'text-amber-300' : 'text-white/35')}>
                     {hasSelected ? t(`characters.${selectedCharacters[pid]}`) : t('selection.notSelected')}
                 </div>
-            </button>
-        );
-    };
-
-    const renderSeatTargetCard = (targetSeatIndex: number) => {
-        const isCurrentSlot = targetSeatIndex === selectedSeatIndex;
-        return (
-            <button
-                key={`seat-target-${targetSeatIndex}`}
-                type="button"
-                disabled={isCurrentSlot}
-                onClick={() => handleSeatTargetClick(targetSeatIndex)}
-                className={clsx(
-                    'min-w-[3.8vw] rounded-[0.75vw] border border-dashed px-[0.55vw] py-[0.45vw] text-center transition-all',
-                    isCurrentSlot
-                        ? 'border-white/10 bg-white/5 text-white/30 cursor-not-allowed'
-                        : 'border-emerald-400/45 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/16 hover:border-emerald-300'
-                )}
-            >
-                <div className="text-[0.42vw] font-black uppercase tracking-[0.18em]">
-                    {t('selection.seating.emptySlot')}
-                </div>
-                <div className="mt-[0.16vw] text-[0.48vw] font-semibold">
-                    {isCurrentSlot
-                        ? t('selection.seating.currentSlot')
-                        : t('selection.seating.seatNumber', { seat: targetSeatIndex + 1 })}
-                </div>
-            </button>
+            </div>
         );
     };
 
@@ -422,44 +403,107 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 </div>
 
                 {isFourPlayerMode && (
-                    <div className="absolute right-[2vw] bottom-[9vw] w-[22vw] rounded-[1vw] border border-white/12 bg-black/45 p-[0.95vw] backdrop-blur-xl shadow-[0_1.2vw_3vw_rgba(0,0,0,0.35)]">
-                        <div className="flex items-start justify-between gap-[0.8vw]">
-                            <div>
-                                <div className="text-[0.72vw] font-black uppercase tracking-[0.18em] text-white/88">
-                                    {t('selection.seating.title')}
-                                </div>
-                                <div className="mt-[0.2vw] text-[0.5vw] leading-relaxed text-white/56">
-                                    {seatHintText}
-                                </div>
+                    <div className="absolute right-[2vw] bottom-[10.2vw] w-[22vw] rounded-[1vw] border border-white/12 bg-black/45 p-[0.95vw] backdrop-blur-xl shadow-[0_1.2vw_3vw_rgba(0,0,0,0.35)]">
+                        <div>
+                            <div className="text-[0.72vw] font-black uppercase tracking-[0.18em] text-white/88">
+                                {t('selection.seating.title')}
                             </div>
-                            {pendingSeatPlayerId && (
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setPendingSeatPlayerId(null);
-                                        setSeatFeedbackKey(null);
-                                    }}
-                                    className="rounded-full border border-white/15 px-[0.65vw] py-[0.25vw] text-[0.48vw] font-semibold text-white/68 transition hover:border-white/30 hover:text-white"
-                                >
-                                    {t('selection.seating.cancel')}
-                                </button>
-                            )}
+                            <div className="mt-[0.2vw] text-[0.5vw] leading-relaxed text-white/56">
+                                {seatHintText}
+                            </div>
                         </div>
 
-                        {!pendingSeatPlayerId && (
-                            <div className="mt-[0.85vw] flex flex-wrap gap-[0.45vw]">
-                                {effectiveSeatingOrder.map((pid, seatIndex) => renderSeatPlayerCard(pid, seatIndex))}
-                            </div>
-                        )}
+                        <div className="mt-[0.85vw] flex flex-wrap gap-[0.45vw]">
+                            {effectiveSeatingOrder.map((pid, seatIndex) => renderSeatPlayerCard(pid, seatIndex))}
+                        </div>
 
-                        {pendingSeatPlayerId && (
-                            <div className="mt-[0.85vw] flex flex-wrap items-center gap-[0.38vw]">
-                                {seatTargetIndexes.map((targetSeatIndex, index) => (
-                                    <React.Fragment key={`seat-editor-${targetSeatIndex}`}>
-                                        {renderSeatTargetCard(targetSeatIndex)}
-                                        {remainingSeatPlayers[index] && renderSeatPlayerCard(remainingSeatPlayers[index], index, true)}
-                                    </React.Fragment>
-                                ))}
+                        {isSeatSwapPending && (
+                            <div className="mt-[0.85vw] rounded-[0.9vw] border border-white/14 bg-black/35 p-[0.8vw] shadow-[0_0.8vw_2vw_rgba(0,0,0,0.22)]">
+                                {isTarget ? (
+                                    <div className="flex flex-col gap-[0.65vw]">
+                                        <div className="rounded-[0.72vw] border border-sky-400/28 bg-sky-500/10 p-[0.7vw]">
+                                            <div className="flex items-center gap-[0.45vw]">
+                                                <MessageSquareWarning className="h-[0.95vw] w-[0.95vw] text-sky-300" />
+                                                <span className="text-[0.62vw] font-black text-sky-200">
+                                                    {t('selection.seating.swapIncoming', {
+                                                        player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <p className="mt-[0.3vw] text-[0.48vw] leading-relaxed text-white/68">
+                                                {t('selection.seating.swapReviewHint')}
+                                            </p>
+                                        </div>
+                                        <div className="flex gap-[0.45vw]">
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+                                                    onRespondSeatSwap(true);
+                                                }}
+                                                data-testid="dt-seat-swap-approve"
+                                                className="flex-1 rounded-[0.65vw] border border-emerald-500/50 bg-emerald-500/20 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-emerald-300 transition hover:bg-emerald-500/38 hover:text-white"
+                                            >
+                                                {t('selection.seating.swapApprove')}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+                                                    onRespondSeatSwap(false);
+                                                }}
+                                                data-testid="dt-seat-swap-reject"
+                                                className="flex-1 rounded-[0.65vw] border border-rose-500/50 bg-rose-500/20 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-rose-300 transition hover:bg-rose-500/38 hover:text-white"
+                                            >
+                                                {t('selection.seating.swapReject')}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : isRequester ? (
+                                    <div className="flex flex-col gap-[0.65vw]">
+                                        <div className="rounded-[0.72vw] border border-amber-400/30 bg-amber-500/10 p-[0.7vw]">
+                                            <div className="flex items-center gap-[0.45vw]">
+                                                <div className="h-[0.6vw] w-[0.6vw] rounded-full bg-amber-400 animate-pulse" />
+                                                <span className="text-[0.62vw] font-black text-amber-300">
+                                                    {t('selection.seating.swapWaiting', {
+                                                        player: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
+                                                    })}
+                                                </span>
+                                            </div>
+                                            <p className="mt-[0.3vw] text-[0.48vw] leading-relaxed text-white/68">
+                                                {t('selection.seating.swapWaitingHint')}
+                                            </p>
+                                        </div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                playSound(HERO_SELECTION_CLICK_SOUND_KEY);
+                                                onCancelSeatSwap();
+                                            }}
+                                            data-testid="dt-seat-swap-cancel"
+                                            className="w-full rounded-[0.65vw] border border-white/12 bg-white/5 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-white/82 transition hover:border-white/22 hover:bg-white/10 hover:text-white"
+                                        >
+                                            {t('selection.seating.swapCancel')}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="rounded-[0.72vw] border border-white/10 bg-white/5 p-[0.7vw] text-[0.5vw] leading-relaxed text-white/72">
+                                        <div className="text-[0.58vw] font-black uppercase tracking-[0.14em] text-white/52">
+                                            {t('selection.seating.swapResolving')}
+                                        </div>
+                                        <div className="mt-[0.28vw]">
+                                            {t('selection.seating.swapIncoming', {
+                                                player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
+                                            })}
+                                        </div>
+                                        <div className="mt-[0.22vw] text-white/60">
+                                            {t('selection.seating.swapPendingOther', {
+                                            requester: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
+                                            target: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
+                                        })}
+                                    </div>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -568,17 +612,23 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                             <motion.button
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
-                                disabled={!everyoneReady}
+                                disabled={startDisabled}
                                 onClick={handleStart}
                                 className={clsx(
                                     "px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
-                                    everyoneReady
+                                    !startDisabled
                                         ? "bg-amber-500 text-black border-amber-400 hover:bg-amber-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.5)]"
                                         : "bg-white/5 text-white/30 border-white/10 cursor-not-allowed"
                                 )}
                             >
                                 <span className="inline-flex items-center gap-[0.8vw]">
-                                    <span>{everyoneReady ? t('selection.pressStart') : t('selection.waitingAll')}</span>
+                                    <span>
+                                        {isSeatSwapPending
+                                            ? t('selection.seating.swapResolving')
+                                            : everyoneReady
+                                                ? t('selection.pressStart')
+                                                : t('selection.waitingAll')}
+                                    </span>
                                     <span className="flex items-center gap-[0.35vw]">{readyProgressDots}</span>
                                 </span>
                             </motion.button>

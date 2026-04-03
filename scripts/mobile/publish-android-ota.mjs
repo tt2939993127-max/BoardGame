@@ -4,6 +4,9 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import { zipSync, strToU8 } from 'fflate';
+import {
+    resolveOtaForceUpdateOptions,
+} from './ota-publish-config.mjs';
 
 const rootDir = process.cwd();
 
@@ -36,9 +39,16 @@ const minNativeVersion = readArgValue('min-native-version', '');
 const maxNativeVersion = readArgValue('max-native-version', '');
 const explicitBundleVersion = readArgValue('version', '');
 const notes = readArgValue('notes', 'Android embedded OTA bundle');
-const forceUpdate = hasFlag('force-update');
-const forceUpdateTitle = readArgValue('force-update-title', '');
-const forceUpdateMessage = readArgValue('force-update-message', '');
+const {
+    forceUpdate,
+    forceUpdateTitle,
+    forceUpdateMessage,
+} = resolveOtaForceUpdateOptions({
+    forceUpdateFlag: hasFlag('force-update'),
+    noForceUpdateFlag: hasFlag('no-force-update'),
+    forceUpdateTitle: readArgValue('force-update-title', ''),
+    forceUpdateMessage: readArgValue('force-update-message', ''),
+});
 const dryRun = hasFlag('dry-run');
 const skipLatest = hasFlag('skip-latest');
 const distDir = path.join(rootDir, 'dist');
@@ -161,6 +171,7 @@ console.log(`channel=${channel}`);
 console.log(`bundleVersion=${bundleVersion}`);
 console.log(`nativeVersion=${nativeVersion}`);
 console.log(`mode=${dryRun ? 'dry-run' : 'publish'}`);
+console.log(`forceUpdate=${forceUpdate ? 'true' : 'false'}`);
 console.log(`skipLatest=${skipLatest ? 'true' : 'false'}`);
 console.log(`zipBytes=${zipBuffer.length}`);
 console.log(`indexMtime=${distStats.mtime.toISOString()}`);

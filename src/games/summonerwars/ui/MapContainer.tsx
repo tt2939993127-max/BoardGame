@@ -8,6 +8,7 @@ import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 
 const DRAG_THRESHOLD = 5;
 const SCALE_EPSILON = 0.02;
 const SCALE_BADGE_HIDE_DELAY_MS = 1200;
+const SYSTEM_BACK_GESTURE_EDGE_PX = 24;
 
 interface TouchPoint {
   clientX: number;
@@ -47,6 +48,41 @@ const updateSizeState = (
   ));
 };
 
+interface SystemBackGestureReservationInput {
+  enabled: boolean;
+  clientX: number;
+  viewportWidth: number;
+  edgeInsetPx?: number;
+}
+
+export const shouldReserveSystemBackGesture = ({
+  enabled,
+  clientX,
+  viewportWidth,
+  edgeInsetPx = SYSTEM_BACK_GESTURE_EDGE_PX,
+}: SystemBackGestureReservationInput) => {
+  if (!enabled || viewportWidth <= 0) {
+    return false;
+  }
+
+  return clientX <= edgeInsetPx || clientX >= viewportWidth - edgeInsetPx;
+};
+
+const shouldEnableSystemBackGestureReservation = () => {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  const runtime = window as Window & {
+    Capacitor?: {
+      getPlatform?: () => string;
+      isNativePlatform?: () => boolean;
+    };
+  };
+  return runtime.Capacitor?.isNativePlatform?.() === true
+    && runtime.Capacitor?.getPlatform?.() === 'android';
+};
+
 export interface MapContainerProps {
   children: ReactNode;
   initialScale?: number;
@@ -82,6 +118,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const pointerStartRef = useRef({ x: 0, y: 0 });
   const positionStartRef = useRef({ x: 0, y: 0 });
   const isPointerDownRef = useRef(false);
+  const isGestureStartBlockedRef = useRef(false);
   const pinchStartDistanceRef = useRef<number | null>(null);
   const pinchStartZoomRef = useRef<number | null>(null);
   const scaleBadgeTimerRef = useRef<number | null>(null);
@@ -94,6 +131,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [isAnimating, setIsAnimating] = useState(false);
   const [isScaleBadgeVisible, setIsScaleBadgeVisible] = useState(false);
+  const shouldReserveSystemBackGestureEdge = shouldEnableSystemBackGestureReservation();
 
   const syncContainerSize = useCallback(() => {
     updateSizeState(setContainerSize, measureElementSize(containerRef.current));
@@ -257,6 +295,20 @@ export const MapContainer: React.FC<MapContainerProps> = ({
 
     if (event.touches.length === 1) {
       const touch = event.touches[0];
+      const shouldBlockDragStart = shouldReserveSystemBackGesture({
+        enabled: shouldReserveSystemBackGestureEdge,
+        clientX: touch.clientX,
+        viewportWidth: containerSize.width || window.innerWidth,
+      });
+      isGestureStartBlockedRef.current = shouldBlockDragStart;
+      if (shouldBlockDragStart) {
+        isPointerDownRef.current = false;
+        pinchStartDistanceRef.current = null;
+        pinchStartZoomRef.current = null;
+        setIsDragging(false);
+        return;
+      }
+
       isPointerDownRef.current = true;
       pinchStartDistanceRef.current = null;
       pinchStartZoomRef.current = null;
@@ -266,15 +318,17 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     }
 
     if (event.touches.length === 2) {
+      isGestureStartBlockedRef.current = false;
       isPointerDownRef.current = false;
       setIsDragging(false);
       pinchStartDistanceRef.current = getTouchDistance(event.touches[0], event.touches[1]);
       pinchStartZoomRef.current = zoomLevel;
     }
-  }, [clampedPosition.x, clampedPosition.y, interactionDisabled, zoomLevel]);
+  }, [clampedPosition.x, clampedPosition.y, containerSize.width, interactionDisabled, shouldReserveSystemBackGestureEdge, zoomLevel]);
 
   const handleTouchMove = useCallback((event: React.TouchEvent) => {
     if (interactionDisabled) return;
+    if (isGestureStartBlockedRef.current) return;
 
     if (event.touches.length === 2) {
       const startDistance = pinchStartDistanceRef.current;
@@ -318,6 +372,10 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     if (event.touches.length >= 2) return;
 
     if (event.touches.length === 1) {
+      if (isGestureStartBlockedRef.current) {
+        return;
+      }
+
       const touch = event.touches[0];
       isPointerDownRef.current = true;
       pointerStartRef.current = { x: touch.clientX, y: touch.clientY };
@@ -328,6 +386,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
     }
 
     isPointerDownRef.current = false;
+    isGestureStartBlockedRef.current = false;
     pinchStartDistanceRef.current = null;
     pinchStartZoomRef.current = null;
     setIsDragging(false);
@@ -504,7 +563,7 @@ export const MapContainer: React.FC<MapContainerProps> = ({
         cursor: interactionDisabled ? 'default' : isDragging ? 'grabbing' : 'grab',
         userSelect: 'none',
         WebkitUserSelect: 'none',
-        touchAction: interactionDisabled ? 'auto' : 'none',
+        touchAction: interactionDisabled ? 'auto' : shouldReserveSystemBackGestureEdge ? 'pinch-zoom' : 'none',
       }}
     >
       <div

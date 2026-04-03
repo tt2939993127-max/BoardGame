@@ -2,7 +2,13 @@ import { clearGameAssetBaseOverrides, setGameAssetBaseOverride } from '../../cor
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { runMockGamePackageInstall } from './mockInstallRunner';
 import { createNativeGamePackageInstallHandle, listInstalledNativeGamePackages } from './nativeGamePackagePlugin';
-import { clearStoredGamePackageState, readStoredGamePackageState, writeStoredGamePackageState } from './storage';
+import { normalizeGamePackageAssetBaseUrl } from './assetBaseUrl';
+import {
+    clearStoredGamePackageState,
+    readStoredGamePackageState,
+    STALE_IN_PROGRESS_ERROR_MESSAGE,
+    writeStoredGamePackageState,
+} from './storage';
 import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
 import { hasUsableInstalledGamePackageVersion, mergeGamePackageState } from './types';
 
@@ -17,6 +23,28 @@ const isDevRuntime = typeof import.meta !== 'undefined' && import.meta.env?.DEV;
 
 const hasInstalledVersion = (state: Pick<StoredGamePackageState, 'status' | 'installedVersion'>) =>
     state.status === 'installed' && hasUsableInstalledGamePackageVersion(state.installedVersion);
+
+const isInProgressStatus = (status: StoredGamePackageState['status']) =>
+    status === 'queued'
+    || status === 'manifest'
+    || status === 'downloading'
+    || status === 'verifying';
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+    }
+};
 
 const normalizeIncompleteInstalledState = (
     state: StoredGamePackageState,
@@ -48,21 +76,35 @@ const normalizeIncompleteInstalledState = (
 };
 
 const applyAssetBaseOverride = (gameId: string, assetBaseUrl?: string) => {
-    if (!assetBaseUrl) {
+    const normalizedAssetBaseUrl = normalizeGamePackageAssetBaseUrl(assetBaseUrl);
+    logMobileRuntimeCritical('PackageManagerService', 'apply-asset-base-override', {
+        gameId,
+        assetBaseUrl: assetBaseUrl ?? null,
+        normalizedAssetBaseUrl: normalizedAssetBaseUrl ?? null,
+    });
+    if (!normalizedAssetBaseUrl) {
         appliedAssetBaseOverrides.delete(gameId);
         setGameAssetBaseOverride(gameId, undefined);
         return;
     }
 
-    appliedAssetBaseOverrides.set(gameId, assetBaseUrl);
-    setGameAssetBaseOverride(gameId, assetBaseUrl);
+    appliedAssetBaseOverrides.set(gameId, normalizedAssetBaseUrl);
+    setGameAssetBaseOverride(gameId, normalizedAssetBaseUrl);
 };
 
 const normalizeStateBeforeEmit = (
     state: StoredGamePackageState,
 ): StoredGamePackageState => {
     const fallbackState = fallbackCache.get(state.gameId) ?? mergeGamePackageState(state, {});
-    return normalizeIncompleteInstalledState(state, fallbackState, 'cache');
+    const normalizedState = normalizeIncompleteInstalledState(state, fallbackState, 'cache');
+    const normalizedAssetBaseUrl = normalizeGamePackageAssetBaseUrl(normalizedState.localAssetBaseUrl);
+    if (normalizedAssetBaseUrl === normalizedState.localAssetBaseUrl) {
+        return normalizedState;
+    }
+    return {
+        ...normalizedState,
+        localAssetBaseUrl: normalizedAssetBaseUrl,
+    };
 };
 
 const emitState = (state: StoredGamePackageState) => {
@@ -84,11 +126,21 @@ const getCurrentOrStoredState = (
 ): StoredGamePackageState => {
     const cached = stateCache.get(gameId);
     if (cached) {
-        return normalizeIncompleteInstalledState(
+        const normalizedCached = normalizeIncompleteInstalledState(
             mergeGamePackageState(fallbackState, cached),
             fallbackState,
             'cache',
         );
+        if (isInProgressStatus(normalizedCached.status) && !activeInstallRegistry.has(gameId)) {
+            return mergeGamePackageState(fallbackState, {
+                status: 'failed',
+                progressPercent: undefined,
+                progressMode: undefined,
+                errorMessage: normalizedCached.errorMessage ?? STALE_IN_PROGRESS_ERROR_MESSAGE,
+                updatedAt: normalizedCached.updatedAt ?? Date.now(),
+            });
+        }
+        return normalizedCached;
     }
 
     const stored = readStoredGamePackageState(gameId, fallbackState);
@@ -173,6 +225,9 @@ export const resetGamePackageState = (
 
 export const hydrateInstalledNativeGamePackages = async () => {
     const installedPackages = await listInstalledNativeGamePackages();
+    logMobileRuntimeCritical('PackageManagerService', 'hydrate-installed-native-packages-critical', {
+        installedPackages,
+    });
     logMobileRuntime('PackageManagerService', 'hydrate-installed-native-packages', {
         installedPackages,
     });
@@ -273,10 +328,19 @@ export const startGamePackageInstall = (
         },
         finished: (async () => {
             try {
-                const nativeHandle = await createNativeGamePackageInstallHandle(manifest, {
-                    onStateChange: emitState,
-                    onInstalledAssetBaseUrl: applyAssetBaseOverride,
+                logMobileRuntimeCritical('PackageManagerService', 'install-handle-creating', {
+                    gameId: manifest.gameId,
+                    manifestSource: manifest.source,
+                    assetPackVersion: manifest.assetPackVersion,
                 });
+                const nativeHandle = await withTimeout(
+                    createNativeGamePackageInstallHandle(manifest, {
+                        onStateChange: emitState,
+                        onInstalledAssetBaseUrl: applyAssetBaseOverride,
+                    }),
+                    3000,
+                    '创建原生安装器超时，请重新发起。',
+                );
                 logMobileRuntime('PackageManagerService', 'install-handle-resolved', {
                     gameId: manifest.gameId,
                     source: nativeHandle ? 'native' : 'mock',

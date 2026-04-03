@@ -146,4 +146,8 @@ export interface GameAiRuntime {
     buildLegalActions(args: BuildGameAiLegalActionsArgs): AiLegalAction[];
     localPolicies?: Record<string, LocalAiPolicy>;
     defaultLocalPolicyId?: string;
+    shouldUseRemoteDecision?: (
+        context: AiDecisionContext,
+        seatController: Extract<AiSeatController, { type: 'remote-ai' }>,
+    ) => boolean;
 }

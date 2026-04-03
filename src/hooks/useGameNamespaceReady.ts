@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { i18n as I18nInstance } from 'i18next';
 import { logger } from '../lib/logger';
+import { logMobileRuntime, logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 
 interface GameNamespaceState {
     isReady: boolean;
@@ -10,6 +11,30 @@ interface GameNamespaceState {
 interface UseGameNamespaceReadyOptions {
     required?: boolean;
 }
+
+export const GAME_NAMESPACE_LOAD_TIMEOUT_MS = 4000;
+
+const createGameNamespaceTimeoutMessage = (gameId: string, namespace: string) => (
+    `游戏文案加载超时：${gameId}/${namespace}（${GAME_NAMESPACE_LOAD_TIMEOUT_MS}ms）`
+);
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(timeoutMessage));
+                }, timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+    }
+};
 
 /**
  * 管理游戏级 i18n namespace 的加载状态。
@@ -39,33 +64,73 @@ export function useGameNamespaceReady(
 
     useEffect(() => {
         if (!gameId || !required) {
-            setState({ isReady: true, error: null });
+            queueMicrotask(() => {
+                setState({ isReady: true, error: null });
+            });
             return;
         }
 
         const namespace = `game-${gameId}`;
         if (i18n.hasLoadedNamespace(namespace)) {
-            setState({ isReady: true, error: null });
+            logMobileRuntime('GameNamespace', 'load-cache-hit', {
+                gameId,
+                namespace,
+                language: languageKey,
+                resolvedLanguage: i18n.resolvedLanguage,
+            });
+            queueMicrotask(() => {
+                setState({ isReady: true, error: null });
+            });
             return;
         }
 
         let isActive = true;
+        const startedAt = Date.now();
+        const timeoutMessage = createGameNamespaceTimeoutMessage(gameId, namespace);
         setState({ isReady: false, error: null });
+        logMobileRuntime('GameNamespace', 'load-start', {
+            gameId,
+            namespace,
+            language: languageKey,
+            resolvedLanguage: i18n.resolvedLanguage,
+        });
 
-        i18n.loadNamespaces(namespace)
+        withTimeout(i18n.loadNamespaces(namespace), GAME_NAMESPACE_LOAD_TIMEOUT_MS, timeoutMessage)
             .then(() => {
                 if (!isActive) return;
+                logMobileRuntime('GameNamespace', 'load-success', {
+                    gameId,
+                    namespace,
+                    language: languageKey,
+                    resolvedLanguage: i18n.resolvedLanguage,
+                    durationMs: Date.now() - startedAt,
+                });
                 setState({ isReady: true, error: null });
             })
             .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : String(error);
-                logger.error('[i18n] 游戏 namespace 加载失败', {
+                const isTimeout = message === timeoutMessage;
+                const payload = {
                     gameId,
                     namespace,
                     language: languageKey,
                     resolvedLanguage: i18n.resolvedLanguage,
                     error: message,
+                    durationMs: Date.now() - startedAt,
+                };
+                logger.error('[i18n] 游戏 namespace 加载失败', {
+                    ...payload,
+                    timeoutMs: GAME_NAMESPACE_LOAD_TIMEOUT_MS,
                 });
+                logMobileRuntime(
+                    'GameNamespace',
+                    isTimeout ? 'load-timeout' : 'load-failed',
+                    payload,
+                    isTimeout ? 'warn' : 'error',
+                );
+                if (isTimeout) {
+                    logMobileRuntimeCritical('GameNamespace', 'load-timeout', payload);
+                }
                 if (!isActive) return;
                 setState({ isReady: false, error: message });
             });

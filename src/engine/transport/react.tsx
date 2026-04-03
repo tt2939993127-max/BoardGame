@@ -57,6 +57,7 @@ import {
     type AiSeatController,
 } from '../ai';
 import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
+import { onAppVisible } from '../../lib/mobile/appVisibility';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -320,6 +321,10 @@ export function GameProvider({
                     finalState = newState as MatchState<unknown>;
                 }
 
+                // reconcile 结果可能与原始服务端包不同（回滚过滤、保留乐观态、可疑确认兜底）。
+                // 回写传输层 patch 基线，避免后续 state:patch 基于错误快照继续叠错。
+                client.updateLatestState(finalState);
+
                 // 实时刷新交互选项（如果策略是 realtime）
                 const refreshedState = refreshInteractionOptions(finalState);
 
@@ -370,8 +375,7 @@ export function GameProvider({
     // 2. state:update 消息到达 WebSocket 缓冲区但 JS 回调未执行
     // 恢复可见时主动 resync 确保状态最新
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.hidden) return;
+        return onAppVisible(() => {
             const client = clientRef.current;
             if (!client) return;
             // 重置乐观引擎：后台期间可能错过了多次状态更新，pending 队列已过时
@@ -385,11 +389,7 @@ export function GameProvider({
                 }));
             }
             client.resync();
-        };
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
+        });
     }, []);
 
     const dispatch = useCallback((type: string, payload: unknown) => {
@@ -1211,7 +1211,7 @@ class BoardErrorBoundary extends React.Component<
             }
 
             return (
-                <div className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
+                <div data-bg-friendly-screen="true" className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
                     <div className="text-center">
                         <div className="mb-2">游戏加载失败</div>
                         <div className="text-xs text-white/50 mb-2">

@@ -277,6 +277,38 @@ describe('OptimisticEngine — Property 4: 链式乐观命令的正确调和', (
     });
 });
 
+describe('OptimisticEngine — stateID 确认健壮性', () => {
+    it('stateID 和 playerId 命中但 core 不一致时，不应把可疑服务端状态当作成功确认', () => {
+        const engine = createTestEngine({
+            INCREMENT: 'deterministic',
+        });
+
+        engine.reconcile(createTestState(10), { stateID: 0 });
+
+        const optimistic = engine.processCommand('INCREMENT', {}, '0');
+        expect((optimistic.stateToRender!.core as CounterCore).value).toBe(11);
+        expect(engine.hasPendingCommands()).toBe(true);
+
+        const suspicious = engine.reconcile(createTestState(10), {
+            stateID: 1,
+            lastCommandPlayerId: '0',
+        });
+
+        expect(suspicious.didRollback).toBe(false);
+        expect((suspicious.stateToRender.core as CounterCore).value).toBe(11);
+        expect(engine.hasPendingCommands()).toBe(true);
+
+        const corrected = engine.reconcile(createTestState(11), {
+            stateID: 1,
+            lastCommandPlayerId: '0',
+        });
+
+        expect(corrected.didRollback).toBe(false);
+        expect((corrected.stateToRender.core as CounterCore).value).toBe(11);
+        expect(engine.hasPendingCommands()).toBe(false);
+    });
+});
+
 // ============================================================================
 // Property 5：本地验证失败不更新乐观状态
 // ============================================================================

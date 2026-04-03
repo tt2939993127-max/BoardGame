@@ -22,9 +22,14 @@ import { RoomList } from '../RoomList';
 import * as matchApi from '../../../services/matchApi';
 import * as matchStatus from '../../../hooks/match/useMatchStatus';
 import { lobbySocket } from '../../../services/lobbySocket';
-import { resetGamePackageManagerForTests } from '../../../features/mobile-packages/packageManagerService';
+import {
+    resetGamePackageManagerForTests,
+    startGamePackageInstall,
+    syncGamePackageState,
+} from '../../../features/mobile-packages/packageManagerService';
 import * as manifestClient from '../../../features/mobile-packages/manifestClient';
 import * as nativeGamePackagePlugin from '../../../features/mobile-packages/nativeGamePackagePlugin';
+import { createDefaultGamePackageState } from '../../../features/mobile-packages/types';
 
 const navigateMock = vi.fn();
 const openModalMock = vi.fn();
@@ -110,6 +115,18 @@ const markGamePackageFailed = (gameId = 'dicethrone', errorMessage = '下载失�
         modulePackId: gameId,
         assetPackId: gameId,
         errorMessage,
+        updatedAt: Date.now(),
+    }));
+};
+
+const markGamePackageQueued = (gameId = 'dicethrone') => {
+    window.localStorage.setItem(`mobile-package-state:${gameId}`, JSON.stringify({
+        gameId,
+        runtimeChannel: 'stable',
+        status: 'queued',
+        progressMode: 'indeterminate',
+        modulePackId: gameId,
+        assetPackId: gameId,
         updatedAt: Date.now(),
     }));
 };
@@ -856,6 +873,57 @@ describe('GameDetailsModal create room ai entry', () => {
         });
     });
 
+    it('冷启动读到陈旧 queued 持久化状态时，回退为可重试失败态', async () => {
+        markGamePackageQueued();
+        render(createElement(GameDetailsModal, baseProps));
+
+        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        await waitFor(() => {
+            expect(screen.getByText('packageManager.retryAction')).toBeInTheDocument();
+        });
+        expect(screen.queryByText('packageManager.progress.label')).toBeNull();
+
+        const stored = JSON.parse(window.localStorage.getItem('mobile-package-state:dicethrone') ?? '{}');
+        expect(stored).toEqual(expect.objectContaining({
+            status: 'failed',
+            errorMessage: '上次下载未完成，请重新发起。',
+        }));
+    });
+
+    it('原生安装器创建卡住时，3 秒内失败而不是无限停留 queued', async () => {
+        vi.useFakeTimers();
+        vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle).mockImplementationOnce(
+            async () => await new Promise(() => {}),
+        );
+
+        const fallbackState = createDefaultGamePackageState('dicethrone', {
+            mode: 'package-managed',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+        });
+        syncGamePackageState('dicethrone', fallbackState);
+
+        const installPromise = startGamePackageInstall({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            assetPackVersion: 'test-asset-pack-v1',
+            assetPackUrl: 'https://example.com/dicethrone.zip',
+            source: 'remote',
+        }, 'packageManager.runtimeUnsupported');
+
+        await vi.advanceTimersByTimeAsync(3100);
+
+        await expect(installPromise).resolves.toEqual(expect.objectContaining({
+            status: 'failed',
+            errorMessage: '创建原生安装器超时，请重新发起。',
+        }));
+    });
+
     it('下载完成后，package-managed 游戏允许创建房间', async () => {
         markGamePackageInstalled();
         render(createElement(GameDetailsModal, baseProps));
@@ -866,14 +934,14 @@ describe('GameDetailsModal create room ai entry', () => {
         });
     });
 
-    it('已下载 package-managed 游戏时，默认展开已安装卡片并展示版本信息', () => {
+    it('已下载 package-managed 游戏时，不再展开安装卡片，只在标题右侧显示绿色版本号', () => {
         markGamePackageInstalled('dicethrone', '0.5.0');
         render(createElement(GameDetailsModal, baseProps));
 
-        expect(screen.getByTestId('game-details-mobile-package-toggle')).toBeInTheDocument();
-        expect(screen.getByTestId('game-details-mobile-package-card')).toBeInTheDocument();
-        expect(screen.getByText('packageManager.installedTitle')).toBeInTheDocument();
-        expect(screen.getByText('packageManager.installedVersionBadge')).toBeInTheDocument();
+        expect(screen.queryByTestId('game-details-mobile-package-toggle')).toBeNull();
+        expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
+        expect(screen.getByTestId('game-details-title')).toHaveAttribute('data-installed-version', '0.5.0');
+        expect(screen.queryByText('packageManager.installedTitle')).toBeNull();
     });
 
     it('已安装状态缺少版本号时，回退显示下载入口而不是已完成角标', () => {

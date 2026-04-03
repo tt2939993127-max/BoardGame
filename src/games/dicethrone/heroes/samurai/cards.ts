@@ -1,8 +1,12 @@
 import type { CardPreviewRef } from '../../../../core';
 import type { RandomFn } from '../../../../engine/types';
 import type { AbilityDef, AbilityEffect } from '../../domain/combat';
-import { COMMON_CARDS, injectCommonCardPreviewRefs } from '../../domain/commonCards';
-import { DICETHRONE_CARD_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
+import {
+    COMMON_CARDS,
+    SAMURAI_COMMON_ATLAS_INDEX,
+    injectCommonCardPreviewRefs,
+} from '../../domain/commonCards';
+import { DICETHRONE_CARD_ATLAS_IDS, DICETHRONE_HAND_CARD_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
 import type { AbilityCard } from '../../types';
 import {
     BUDO_2,
@@ -18,8 +22,7 @@ import {
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 
-const SAMURAI_CARD_ATLAS_ID = DICETHRONE_CARD_ATLAS_IDS.SAMURAI;
-const SAMURAI_CARD_ATLAS_BASE_INDEX = 18;
+const SAMURAI_CARD_ATLAS_ID = DICETHRONE_HAND_CARD_ATLAS_IDS.SAMURAI;
 
 const atlasPreview = (index: number): CardPreviewRef => ({
     type: 'atlas',
@@ -57,7 +60,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-katana-slice-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 0),
+        previewRef: atlasPreview(0),
         effects: [replaceAbility('katana-slice', KATANA_SLICE_2, 2, '升级太刀斩至 II 级。')],
     },
     {
@@ -67,7 +70,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('upgrade-katana-slice-3', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 1),
+        previewRef: atlasPreview(1),
         effects: [replaceAbility('katana-slice', KATANA_SLICE_3, 3, '升级太刀斩至 III 级。')],
     },
     {
@@ -77,7 +80,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-wakizashi-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 2),
+        previewRef: atlasPreview(2),
         effects: [replaceAbility('wakizashi', WAKIZASHI_2, 2, '升级胁差至 II 级。')],
     },
     {
@@ -87,7 +90,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('upgrade-wakizashi-3', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 3),
+        previewRef: atlasPreview(3),
         effects: [replaceAbility('wakizashi', WAKIZASHI_3, 3, '升级胁差至 III 级。')],
     },
     {
@@ -97,7 +100,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-solemnity-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 4),
+        previewRef: atlasPreview(4),
         effects: [replaceAbility('solemnity', SOLEMNITY_2, 2, '升级肃穆之仪至 II 级。')],
     },
     {
@@ -107,7 +110,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-budo-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 5),
+        previewRef: atlasPreview(5),
         effects: [replaceAbility('budo', BUDO_2, 2, '升级武道至 II 级。')],
     },
     {
@@ -117,7 +120,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-masamune-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 6),
+        previewRef: atlasPreview(6),
         effects: [replaceAbility('masamune', MASAMUNE_2, 2, '升级正宗至 II 级。')],
     },
     {
@@ -127,7 +130,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-slot-06-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 7),
+        previewRef: atlasPreview(7),
         effects: [replaceAbility('samurai-slot-06', SAMURAI_SLOT_06_2, 2, '升级叶隐之心至 II 级。')],
     },
     {
@@ -137,7 +140,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('upgrade-stand-tall-2', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 8),
+        previewRef: atlasPreview(8),
         effects: [replaceAbility('stand-tall', STAND_TALL_2, 2, '升级昂首无畏至 II 级。')],
     },
     {
@@ -147,7 +150,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-samurai-honor', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 9),
+        previewRef: atlasPreview(9),
         effects: [grantToken('self', TOKEN_IDS.HONOR, 2, '获得 2 个荣誉指示物。')],
     },
     {
@@ -157,7 +160,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-you-should-be-ashamed', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 10),
+        previewRef: atlasPreview(10),
         effects: [{
             description: '选择 1 位敌方玩家，使其获得 2 层耻辱。',
             action: { type: 'custom', target: 'self', customActionId: 'samurai-card-you-should-be-ashamed' },
@@ -171,7 +174,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-no-retreat', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 11),
+        previewRef: atlasPreview(11),
         effects: [grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。')],
     },
     {
@@ -182,7 +185,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'roll',
         description: cardText('card-righteousness', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 12),
+        previewRef: atlasPreview(12),
         isAttackModifier: true,
         playCondition: { requireDiceExists: true, requireHasRolled: true },
         effects: [
@@ -201,7 +204,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'roll',
         description: cardText('card-zanshin', 'description'),
-        previewRef: atlasPreview(SAMURAI_CARD_ATLAS_BASE_INDEX + 13),
+        previewRef: atlasPreview(13),
         isAttackModifier: true,
         playCondition: { requireDiceExists: true, requireHasRolled: true },
         effects: [
@@ -212,7 +215,11 @@ export const SAMURAI_CARDS: AbilityCard[] = [
             },
         ],
     },
-    ...injectCommonCardPreviewRefs(COMMON_CARDS, DICETHRONE_CARD_ATLAS_IDS.SAMURAI),
+    ...injectCommonCardPreviewRefs(
+        COMMON_CARDS,
+        DICETHRONE_CARD_ATLAS_IDS.SAMURAI,
+        SAMURAI_COMMON_ATLAS_INDEX,
+    ),
 ];
 
 export const getSamuraiStartingDeck = (random: RandomFn): AbilityCard[] => {

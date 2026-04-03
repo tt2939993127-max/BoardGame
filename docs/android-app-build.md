@@ -19,6 +19,7 @@
 - `npm run mobile:android:sync`
 - `npm run mobile:android:ota:publish -- --channel stable`
 - `npm run mobile:android:packages:publish -- --channel stable`
+- `npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
 - `npm run mobile:android:build:debug`
 - `npm run mobile:android:build:release`
 - `npm run mobile:android:build:bundle`
@@ -64,7 +65,8 @@ ANDROID_REMOTE_WEB_URL=https://your-domain.com
 
 - 运行时插件：`@capgo/capacitor-updater`
 - 发布源：自托管 manifest + zip bundle，当前约定放在对象存储 `official/app-updates/android/<channel>/...`
-- 默认策略：后台检查、后台下载、`next()` 排队、`background` 条件生效，不在当前对局里强制热切换
+- 当前默认发布策略：**强制 OTA**
+- 默认行为：启动后后台检查；一旦发现兼容的新 bundle，立即进入阻塞式下载与切换流程
 - 启动确认：App 每次原生启动时尽早调用 `notifyAppReady()`，避免已下载 bundle 被插件自动回滚
 
 ### OTA 何时生效
@@ -75,16 +77,17 @@ ANDROID_REMOTE_WEB_URL=https://your-domain.com
 
 ### 当前升级策略
 
+- 强制 OTA
+  - 这是当前默认发布策略
+  - App 启动后显示阻塞式全屏更新页
+  - 页面会显示检查中、下载中、切换中
+  - 下载完成后立即切到新 bundle
 - 普通 OTA
+  - 仅在发布时显式关闭强更后才会出现
   - manifest 未声明 `forceUpdate: true`
   - App 启动后后台检查，兼容则后台下载
   - 下载完成后排队，切到后台或下次重启后生效
   - 不阻塞用户
-- 强制 OTA
-  - manifest 声明 `forceUpdate: true`
-  - App 启动后显示阻塞式全屏更新页
-  - 页面会显示检查中、下载中、切换中
-  - 下载完成后立即切到新 bundle
 - 需要更新 App
   - manifest 声明 `forceUpdate: true`，但当前原生壳版本不满足兼容条件
   - 不会继续下载 OTA bundle
@@ -109,6 +112,47 @@ VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS=15000
 ```bash
 npm run mobile:android:doctor
 ```
+
+## 本地兼容性 Smoke
+
+- 命令：`npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
+- 目标：用于本地偶发性的 Android 功能兼容验证，不是长期 E2E 框架
+- 默认行为：
+  - 连接已存在的 adb 设备；如果没有，则自动启动一个本地 AVD
+  - 安装现有 APK（默认优先 `android/app/build/outputs/apk/debug/easyboardgame-debug.apk`）
+  - 启动 App，等待首屏稳定
+  - 采集截图、UI dump、`logcat`、WebView/Chrome 版本信息
+  - 自动判断是否疑似纯黑屏，以及是否低于兼容基线
+- 当前兼容基线：`WebView/Chrome 主版本 >= 88`
+- 默认输出目录：`test-results/android-compat-smoke/<时间戳>/`
+
+推荐最小流程：
+
+```bash
+npm run mobile:android:build:debug
+npm run mobile:android:compat:smoke -- --avd Pixel_3a_API_24
+```
+
+如果已经有设备连着，也可直接指定 serial：
+
+```bash
+npm run mobile:android:compat:smoke -- --serial emulator-5554
+```
+
+常用参数：
+
+- `--apk <path>`：安装指定 APK
+- `--skip-install`：跳过安装，只复用设备上的现有 App
+- `--min-webview-major <n>`：覆盖默认 WebView 基线，默认 `88`
+- `--launch-delay-ms <ms>`：启动后等待多久再抓证据
+- `--keep-emulator`：脚本启动的模拟器结束后不自动关闭
+
+产物说明：
+
+- `screen.png`：设备截图
+- `window_dump.xml`：`uiautomator dump` 导出的界面层级
+- `logcat.txt`：本次启动后的日志快照
+- `summary.json` / `summary.txt`：结构化结论，包含 Android 版本、WebView 版本、黑屏分析与产物路径
 
 ## 游戏包下载主线
 
@@ -193,7 +237,7 @@ npm run mobile:android:ota:publish -- --channel stable --skip-latest
 npm run mobile:android:ota:publish -- --channel stable
 ```
 
-如果这次是强制 OTA，可直接这样发布：
+当前默认发布已经是强制 OTA；下面写法只是显式声明：
 
 ```bash
 npm run mobile:android:ota:publish -- --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
@@ -233,6 +277,7 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 - `--min-native-version <version>`：声明最低兼容原生版本
 - `--max-native-version <version>`：声明最高兼容原生版本
 - `--force-update`：把这次 OTA 标记为强制更新
+- `--no-force-update`：显式关闭强制更新，退回普通 OTA；仅建议在灰度/应急时使用
 - `--force-update-title <text>`：覆盖强更页标题
 - `--force-update-message <text>`：覆盖强更页正文
 - `--notes <text>`：写入 manifest 备注

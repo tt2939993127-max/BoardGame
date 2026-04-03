@@ -66,6 +66,28 @@ export function __resetGameDetailsModalPackageStateLogForTests(): void {
     lastLoggedPackageStateByGame.clear();
 }
 
+const formatInstalledPackageVersionForTitle = (value: string | undefined): string => {
+    const normalized = value?.trim() ?? '';
+    if (!normalized) return '';
+
+    const semverMatch = normalized.match(/\d+\.\d+\.\d+/);
+    if (semverMatch) {
+        return semverMatch[0];
+    }
+
+    const dateVersionMatch = normalized.match(/\d{4}\.\d{2}\.\d{2}/);
+    if (dateVersionMatch) {
+        return dateVersionMatch[0];
+    }
+
+    const genericVersionMatch = normalized.match(/v?\d+(?:\.\d+){0,2}/i);
+    if (genericVersionMatch) {
+        return genericVersionMatch[0];
+    }
+
+    return normalized.length > 8 ? `${normalized.slice(0, 8)}…` : normalized;
+};
+
 export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptionKey, thumbnail, closeOnBackdrop, onNavigate }: GameDetailsModalProps) => {
     const navigate = useNavigate();
     const modalRef = useRef<HTMLDivElement>(null);
@@ -112,13 +134,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
     const hasInstalledPackageForMobileGame = packageInstallCardState.status === 'installed'
         && hasUsableInstalledGamePackageVersion(packageInstallCardState.installedVersion);
+    const installedPackageVersionLabel = hasInstalledPackageForMobileGame
+        ? formatInstalledPackageVersionForTitle(packageInstallCardState.installedVersion)
+        : '';
+    const shouldShowInstalledPackageVersionBadge = hasInstalledPackageForMobileGame && !isAppUpdateRequiredForMobileGame;
     const mobilePackageCardDisplayState = !hasInstalledPackageForMobileGame && packageInstallCardState.status === 'installed'
         ? {
             ...packageInstallCardState,
             status: 'not-installed' as const,
         }
         : packageInstallCardState;
-    const shouldShowMobilePackageCard = isPackageManagedMobileGame;
+    const shouldShowMobilePackageCard = isPackageManagedMobileGame && !shouldShowInstalledPackageVersionBadge;
     const [isMobilePackageCardExpanded, setIsMobilePackageCardExpanded] = useState(false);
     const shouldAutoExpandMobilePackageCard = packageInstallCardState.status === 'queued'
         || packageInstallCardState.status === 'manifest'
@@ -756,6 +782,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 persistAiSeatCredentials(matchID, {});
             }
 
+            logMobileRuntimeCritical('GameDetailsModal', 'create-room-navigate-match', {
+                gameId,
+                matchID,
+                enableAi,
+                seatControllerCount: Object.keys(normalizedSeatControllers).length,
+            });
             onNavigate?.();
             navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
             shouldPreserveLoading = true;
@@ -1395,10 +1427,21 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             </div>
 
                             {/* 标题 - 固定在顶部 */}
-                            <div className="mb-4 flex w-full shrink-0 items-baseline justify-between gap-3 md:mb-0 md:block">
-                                <h2 className="min-w-0 flex-1 text-lg font-bold leading-tight tracking-wide text-parchment-base-text md:mb-2 md:text-2xl">
-                                    {gameDisplayName}
-                                </h2>
+                            <div className="mb-4 flex w-full shrink-0 items-start justify-between gap-3 md:mb-0 md:flex-col md:items-center">
+                                <div className="min-w-0 flex-1 md:flex-none md:text-center">
+                                    <h2
+                                        data-testid="game-details-title"
+                                        data-installed-version={shouldShowInstalledPackageVersionBadge ? installedPackageVersionLabel : undefined}
+                                        className={clsx(
+                                            'inline-block max-w-full align-top text-lg font-bold leading-tight tracking-wide text-parchment-base-text md:mb-2 md:text-2xl',
+                                            shouldShowInstalledPackageVersionBadge && installedPackageVersionLabel
+                                                ? 'after:ml-1.5 after:inline-block after:max-w-[4.75rem] after:translate-y-[-0.05em] after:overflow-hidden after:text-ellipsis after:whitespace-nowrap after:rounded-full after:border after:border-emerald-700/25 after:bg-emerald-50/92 after:px-2 after:py-[0.1rem] after:text-[10px] after:font-semibold after:leading-none after:text-emerald-800 after:align-middle after:content-[attr(data-installed-version)]'
+                                                : '',
+                                        )}
+                                    >
+                                        {gameDisplayName}
+                                    </h2>
+                                </div>
                                 <button
                                     type="button"
                                     data-testid="game-details-author-button-mobile"
