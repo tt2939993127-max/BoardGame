@@ -65,4 +65,22 @@ describe('staleChunkReloadGuard', () => {
         expect(reload).toHaveBeenCalledTimes(1);
         expect(warn).toHaveBeenCalledTimes(1);
     });
+
+    it('skips auto reload after bootstrap window closes', () => {
+        const reload = vi.fn();
+        const warn = vi.fn();
+
+        const reloaded = reloadForStaleChunkOnceWithDeps('vite:preloadError', {
+            currentLocation: '/play/smashup/match/abc?playerID=0',
+            getStoredLocation: () => null,
+            setStoredLocation: vi.fn(),
+            reload,
+            warn,
+            shouldReload: () => false,
+        });
+
+        expect(reloaded).toBe(false);
+        expect(reload).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledTimes(1);
+    });
 });
