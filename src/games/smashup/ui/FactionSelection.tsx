@@ -53,7 +53,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     }, []);
 
     const takenFactions = new Set(selectionState?.takenFactions ?? []);
-    const mySelections = playerID && selectionState ? selectionState.playerSelections[playerID] || [] : [];
+    const mySelections = useMemo(
+        () => (playerID && selectionState ? selectionState.playerSelections[playerID] || [] : []),
+        [playerID, selectionState],
+    );
     const isMyTurn = playerID === getCurrentPlayerId(core);
     const currentPlayerId = getCurrentPlayerId(core);
     const locale = i18n.language;
@@ -64,27 +67,15 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         [focusedGroupId],
     );
     const [activeFactionId, setActiveFactionId] = useState<string | null>(null);
-
-    useEffect(() => {
-        if (!focusedGroupId) {
-            if (activeFactionId !== null) setActiveFactionId(null);
-            return;
-        }
-
-        if (!focusedFactionGroup) {
-            setFocusedGroupId(null);
-            setActiveFactionId(null);
-            return;
-        }
-
+    const resolvedActiveFactionId = useMemo(() => {
+        if (!focusedFactionGroup) return null;
         if (activeFactionId && focusedFactionGroup.variants.some((variant) => variant.id === activeFactionId)) {
-            return;
+            return activeFactionId;
         }
-
         const selectedVariantId = focusedFactionGroup.variants.find((variant) => mySelections.includes(variant.id))?.id;
         const preferredVariantId = getPreferredFactionVariant(focusedFactionGroup.groupId, locale)?.id;
-        setActiveFactionId(selectedVariantId ?? preferredVariantId ?? focusedFactionGroup.variants[0]?.id ?? null);
-    }, [activeFactionId, focusedFactionGroup, focusedGroupId, locale, mySelections]);
+        return selectedVariantId ?? preferredVariantId ?? focusedFactionGroup.variants[0]?.id ?? null;
+    }, [activeFactionId, focusedFactionGroup, locale, mySelections]);
 
     const isMobileLandscape = viewportSize.width < 1024 && viewportSize.width > viewportSize.height;
     const selectionDesignWidth = 1280;
@@ -109,7 +100,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         )
         : 1;
     const useScaledLandscapeModal = isMobileLandscape && mobileLandscapeScale < 0.98;
-    const focusedFactionMeta = activeFactionId ? getFactionMeta(activeFactionId) ?? null : null;
+    const focusedFactionMeta = resolvedActiveFactionId ? getFactionMeta(resolvedActiveFactionId) ?? null : null;
 
     if (!selectionState) return null;
 

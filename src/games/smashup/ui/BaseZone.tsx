@@ -889,7 +889,7 @@ const MinionCard: React.FC<{
     /** 玩家回合顺序（用于判断是否是最右边玩家） */
     turnOrder: string[];
     isCoarsePointer: boolean;
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, dispatch, isMinionSelectMode, isMultiSelected, isDuelParticipant = false, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isMobileViewport = false, layout, turnOrder, isCoarsePointer }) => {
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, dispatch, isMinionSelectMode, isMultiSelected, isDuelParticipant = false, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isMobileViewport: _isMobileViewport = false, layout, turnOrder, isCoarsePointer }) => {
     const { t } = useTranslation('game-smashup');
     // 兼容融合卡：Wolf Pact 这类作为随从打出时仍使用融合卡定义的图与文案
     const minionDef = getMinionDef(minion.defId);

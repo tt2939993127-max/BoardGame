@@ -489,7 +489,7 @@ export const MatchRoom = () => {
     const [ugcBoard, setUgcBoard] = useState<ComponentType<GameBoardProps> | null>(null);
     const [ugcLoading, setUgcLoading] = useState(false);
     const [ugcError, setUgcError] = useState<string | null>(null);
-    const [registryVersion, setRegistryVersion] = useState(0);
+    const [, setRegistryVersion] = useState(0);
 
     useEffect(() => {
         if (!gameId) return;
@@ -588,6 +588,7 @@ export const MatchRoom = () => {
     const shouldAutoJoin = searchParams.get('join') === 'true';
     const spectateParam = searchParams.get('spectate');
     const storedMatchCreds = useMemo(() => {
+        void localStorageTick;
         // 教程模式不需要房间凭据
         if (isTutorialRoute || !matchId) return null;
         const raw = localStorage.getItem(`match_creds_${matchId}`);
@@ -1048,14 +1049,22 @@ export const MatchRoom = () => {
         }
     }, [closeModal, closeTutorial, isActive, isBoardMounted, isTutorialRoute, openModal]);
 
-    const clearMatchLocalState = () => {
+    const navigateBackToLobby = useCallback(() => {
+        if (gameId) {
+            navigate(`/?game=${gameId}`, { replace: true });
+            return;
+        }
+        navigate('/', { replace: true });
+    }, [gameId, navigate]);
+
+    const clearMatchLocalState = useCallback(() => {
         if (!matchId) return;
         clearMatchCredentials(matchId);
         clearOwnerActiveMatch(matchId);
         // 关键：强制退出时，也要增加对当前房间的“主页活跃对局”抑制，
         // 确保即使在跨标签页同步延迟时，主页也能立即排除此房间。
         suppressOwnerActiveMatch(matchId);
-    };
+    }, [matchId]);
 
     const lobbyPresence = useLobbyMatchPresence({
         gameId,
@@ -1081,7 +1090,7 @@ export const MatchRoom = () => {
             { dedupeKey: `matchRoom.missing.${matchId}` }
         );
         navigateBackToLobby();
-    }, [isTutorialRoute, matchId, lobbyPresence.isMissing, matchStatus.error, toast, shouldAutoJoin, isAutoJoining]);
+    }, [clearMatchLocalState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.error, navigateBackToLobby, shouldAutoJoin, toast]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();
@@ -1115,14 +1124,6 @@ export const MatchRoom = () => {
             ),
         });
         setForceExitModalId(modalId);
-    };
-
-    const navigateBackToLobby = () => {
-        if (gameId) {
-            navigate(`/?game=${gameId}`, { replace: true });
-            return;
-        }
-        navigate('/', { replace: true });
     };
 
     // 离开房间处理 - 主动离开时释放座位（房主/非房主一致）
@@ -1261,7 +1262,7 @@ export const MatchRoom = () => {
             { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
             { dedupeKey: key }
         );
-    }, [gameId, matchId, shouldShowMatchError, t, toast]);
+    }, [gameId, matchId, matchStatus.error, shouldShowMatchError, t, toast]);
 
     if (gameNamespaceError) {
         return (

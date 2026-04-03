@@ -57,8 +57,7 @@ import type {
 } from './types';
 import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
-import { triggerAllBaseAbilities } from './baseAbilities';
-import { collectTriggers, fireTriggers } from './ongoingEffects';
+import { collectTriggers } from './ongoingEffects';
 import { getCardDef, getMinionDef, getTitanDef } from '../data/cards';
 import { drawCards } from './utils';
 
@@ -1247,7 +1246,7 @@ export function hasCthulhuExpansionFaction(players: Record<string, { factions: [
     for (const player of Object.values(players)) {
         for (const f of player.factions) {
             const baseFactionId = f.endsWith('_pod') ? f.slice(0, -4) : f;
-            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(baseFactionId as any)) return true;
+            if (CTHULHU_EXPANSION_FACTIONS.some((factionId) => factionId === baseFactionId)) return true;
         }
     }
     return false;
