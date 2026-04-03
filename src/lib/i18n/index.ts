@@ -13,9 +13,10 @@ const getInitialLanguage = () => {
     return DEFAULT_LANGUAGE;
 };
 
-// 构建时注入的 locale JSON content hash 映射
-// 开发模式为空对象（Vite dev server 不缓存）
-const localeHashes: Record<string, string> = __LOCALE_HASHES__;
+// 构建时注入的 locale JSON content hash 映射。
+// Node 侧 bundle / E2E 启动时可能没有 Vite define 注入，此时安全回退为空对象。
+const localeHashes: Record<string, string> =
+    typeof __LOCALE_HASHES__ !== 'undefined' ? __LOCALE_HASHES__ : {};
 
 /**
  * 根据语言和 namespace 生成带 content hash 的加载路径
