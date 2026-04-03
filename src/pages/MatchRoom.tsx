@@ -1367,169 +1367,133 @@ export const MatchRoom = () => {
                         } as React.CSSProperties}
                     >
                         <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={effectivePlayerID}>
-                            {isTutorialRoute ? (
-                                <GameModeProvider mode="tutorial">
-                                    {!gameImplReady ? (
-                                        <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
-                                    ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
-                                        <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
-                                            <TutorialDispatchBridge>
-                                                <BoardBridge
-                                                    board={WrappedBoard}
-                                                    loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
-                                                />
-                                            ) : (
+                            {(() => {
+                                if (isTutorialRoute) {
+                                    return (
+                                        <GameModeProvider mode="tutorial">
+                                            {!gameImplReady ? (
                                                 <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                                            ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
+                                                <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
+                                                    <TutorialDispatchBridge>
+                                                        <BoardBridge
+                                                            board={WrappedBoard}
+                                                            loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
+                                                        />
+                                                    </TutorialDispatchBridge>
+                                                </LocalGameProvider>
+                                            ) : (
+                                                <div className="w-full h-full flex items-center justify-center text-white/50">
+                                                    {t('matchRoom.noTutorial')}
+                                                </div>
                                             )}
-                                        </TutorialDispatchBridge>
-                                    </LocalGameProvider>
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-white/50">
-                                        {t('matchRoom.noTutorial')}
-                                    </div>
-                                )}
-                            </GameModeProvider>
-                        ) : (
-                            isUgcGame && ugcLoading ? (
-                                <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />
-                            ) : isUgcGame && ugcError ? (
-                                <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
-                                    {t('matchRoom.ugc.loadFailed', { error: ugcError })}
-                                </div>
-                            ) : isUgcGame && ugcBoard && ugcEngineConfig && matchId ? (
-                                <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                    <RematchProvider
-                                        matchId={matchId}
-                                        playerId={effectivePlayerID ?? undefined}
-                                        isMultiplayer={true}
-                                    >
-                                        <GameProvider
-                                            server={getGameServerUrl()}
-                                            matchId={matchId}
-                                            playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                            credentials={credentials}
-                                            onError={handleGameError}
-                                            onConnectionChange={(connected) => {
-                                                if (connected) {
-                                                    setOnlineTransportError(null);
-                                                }
-                                            }}
-                                        >
-                                            <BoardBridge
-                                                board={ugcBoard}
-                                                loading={(
-                                                    <OnlineRoomConnectionLoading
-                                                        title={t('matchRoom.title.joining')}
-                                                        description={t('matchRoom.joiningRoom')}
-                                                        gameId={gameId}
-                                                        transportError={onlineTransportError}
-                                                    />
-                                                )}
-                                            />
-                                        </GameProvider>
-                                    </RematchProvider>
-                                </GameModeProvider>
-                            ) : hasOnlineBoard && WrappedBoard && matchId ? (
-                                <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                    <RematchProvider
-                                        matchId={matchId}
-                                        playerId={effectivePlayerID ?? undefined}
-                                        isMultiplayer={true}
-                                    >
-                                        <GameProvider
-                                            server={getGameServerUrl()}
-                                            matchId={matchId}
-                                            playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                            credentials={credentials}
-                                            engineConfig={engineConfig ?? undefined}
-                                            latencyConfig={latencyConfig}
-                                            onError={handleGameError}
-                                            onConnectionChange={(connected) => {
-                                                if (connected) {
-                                                    setOnlineTransportError(null);
-                                                }
-                                            }}
-                                        >
-                                            {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
-                                                <OnlineAiSeatBridge
+                                        </GameModeProvider>
+                                    );
+                                }
+
+                                if (isUgcGame && ugcLoading) {
+                                    return <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />;
+                                }
+
+                                if (isUgcGame && ugcError) {
+                                    return (
+                                        <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
+                                            {t('matchRoom.ugc.loadFailed', { error: ugcError })}
+                                        </div>
+                                    );
+                                }
+
+                                if (isUgcGame && ugcBoard && ugcEngineConfig && matchId) {
+                                    return (
+                                        <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
+                                            <RematchProvider
+                                                matchId={matchId}
+                                                playerId={effectivePlayerID ?? undefined}
+                                                isMultiplayer={true}
+                                            >
+                                                <GameProvider
                                                     server={getGameServerUrl()}
                                                     matchId={matchId}
-                                                    engineConfig={engineConfig}
-                                                    seatControllers={onlineAiSeatControllers}
-                                                    seatCredentials={onlineAiSeatCredentials}
-                                                />
-                                            )}
-                                            <BoardBridge
-                                                board={WrappedBoard}
-                                                loading={(
-                                                    <OnlineRoomConnectionLoading
-                                                        title={t('matchRoom.title.connecting')}
-                                                        description={t('matchRoom.loadingResources')}
-                                                        gameId={gameId}
-                                                        transportError={onlineTransportError}
+                                                    playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
+                                                    credentials={credentials}
+                                                    onError={handleGameError}
+                                                    onConnectionChange={(connected) => {
+                                                        if (connected) {
+                                                            setOnlineTransportError(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    <BoardBridge
+                                                        board={ugcBoard}
+                                                        loading={(
+                                                            <OnlineRoomConnectionLoading
+                                                                title={t('matchRoom.title.joining')}
+                                                                description={t('matchRoom.joiningRoom')}
+                                                                gameId={gameId}
+                                                                transportError={onlineTransportError}
+                                                            />
+                                                        )}
                                                     />
-                                                )}
-                                            />
-                                        </GameProvider>
-                                    </RematchProvider>
-                                </GameModeProvider>
-                            ) : (
-                                isUgcGame && ugcLoading ? (
-                                    <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />
-                                ) : isUgcGame && ugcError ? (
-                                    <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
-                                        {t('matchRoom.ugc.loadFailed', { error: ugcError })}
-                                    </div>
-                                ) : isUgcGame && ugcBoard && ugcEngineConfig && matchId ? (
-                                    <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                        <RematchProvider
-                                            matchId={matchId}
-                                            playerId={effectivePlayerID ?? undefined}
-                                            isMultiplayer={true}
-                                        >
-                                            <GameProvider
-                                                server={getGameServerUrl()}
+                                                </GameProvider>
+                                            </RematchProvider>
+                                        </GameModeProvider>
+                                    );
+                                }
+
+                                if (hasOnlineBoard && WrappedBoard && matchId) {
+                                    return (
+                                        <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
+                                            <RematchProvider
                                                 matchId={matchId}
-                                                playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                                credentials={credentials}
-                                                onError={handleGameError}
+                                                playerId={effectivePlayerID ?? undefined}
+                                                isMultiplayer={true}
                                             >
-                                                <BoardBridge
-                                                    board={ugcBoard}
-                                                    loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
-                                                />
-                                            </GameProvider>
-                                        </RematchProvider>
-                                    </GameModeProvider>
-                                ) : hasOnlineBoard && WrappedBoard && matchId ? (
-                                    <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                        <RematchProvider
-                                            matchId={matchId}
-                                            playerId={effectivePlayerID ?? undefined}
-                                            isMultiplayer={true}
-                                        >
-                                            <GameProvider
-                                                server={getGameServerUrl()}
-                                                matchId={matchId}
-                                                playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                                credentials={credentials}
-                                                engineConfig={engineConfig ?? undefined}
-                                                latencyConfig={latencyConfig}
-                                                onError={handleGameError}
-                                            >
-                                                <BoardBridge
-                                                    board={WrappedBoard}
-                                                    loading={<ConnectionLoadingScreen anchor="container" title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
-                                                />
-                                            </GameProvider>
-                                        </RematchProvider>
-                                    </GameModeProvider>
-                                ) : (
+                                                <GameProvider
+                                                    server={getGameServerUrl()}
+                                                    matchId={matchId}
+                                                    playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
+                                                    credentials={credentials}
+                                                    engineConfig={engineConfig ?? undefined}
+                                                    latencyConfig={latencyConfig}
+                                                    onError={handleGameError}
+                                                    onConnectionChange={(connected) => {
+                                                        if (connected) {
+                                                            setOnlineTransportError(null);
+                                                        }
+                                                    }}
+                                                >
+                                                    {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
+                                                        <OnlineAiSeatBridge
+                                                            server={getGameServerUrl()}
+                                                            matchId={matchId}
+                                                            engineConfig={engineConfig}
+                                                            seatControllers={onlineAiSeatControllers}
+                                                            seatCredentials={onlineAiSeatCredentials}
+                                                        />
+                                                    )}
+                                                    <BoardBridge
+                                                        board={WrappedBoard}
+                                                        loading={(
+                                                            <OnlineRoomConnectionLoading
+                                                                title={t('matchRoom.title.connecting')}
+                                                                description={t('matchRoom.loadingResources')}
+                                                                gameId={gameId}
+                                                                transportError={onlineTransportError}
+                                                            />
+                                                        )}
+                                                    />
+                                                </GameProvider>
+                                            </RematchProvider>
+                                        </GameModeProvider>
+                                    );
+                                }
+
+                                return (
                                     <div className="w-full h-full flex items-center justify-center text-white/50">
                                         {t('matchRoom.noClient')}
                                     </div>
-                                )
-                            )}
+                                );
+                            })()}
                         </GameCursorProvider>
                     </div>
                 </MobileBoardShell>

@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { loadGameImplementation, getGameImplementation } from '../games/registry';
@@ -66,12 +66,12 @@ export const LocalMatchRoom = () => {
     }, [gameId]);
 
     const seedFromUrl = searchParams.get('seed');
-    const fallbackSeedRef = useRef(seedFromUrl || createLocalMatchSeed());
-    const gameSeed = seedFromUrl || fallbackSeedRef.current;
+    const [fallbackSeed] = useState(() => seedFromUrl || createLocalMatchSeed());
+    const gameSeed = seedFromUrl || fallbackSeed;
 
     useEffect(() => {
         if (seedFromUrl) return;
-        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeedRef.current);
+        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeed);
         navigate(
             {
                 pathname: gameId ? `/play/${gameId}/local` : undefined,
@@ -79,7 +79,7 @@ export const LocalMatchRoom = () => {
             },
             { replace: true },
         );
-    }, [gameId, navigate, searchParams, seedFromUrl]);
+    }, [fallbackSeed, gameId, navigate, searchParams, seedFromUrl]);
 
     const localPlayerCount = resolveLocalMatchPlayerCount(searchParams.get('players'), gameConfig?.playerOptions);
     const seatControllers = useMemo(
@@ -118,7 +118,7 @@ export const LocalMatchRoom = () => {
         const impl = getGameImplementation(gameId);
         if (!impl) return null;
         const Board = impl.board as unknown as ComponentType<GameBoardProps>;
-        const Wrapped: ComponentType<GameBoardProps> = (props) => (
+        const WrappedBoard = (props: GameBoardProps) => (
             <CriticalImageGate
                 gameId={gameId}
                 gameState={props?.G}
@@ -129,8 +129,7 @@ export const LocalMatchRoom = () => {
                 <Board {...props} />
             </CriticalImageGate>
         );
-        Wrapped.displayName = 'WrappedLocalBoard';
-        return Wrapped;
+        return WrappedBoard;
     }, [gameId, i18n.language, t, gameImplReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
