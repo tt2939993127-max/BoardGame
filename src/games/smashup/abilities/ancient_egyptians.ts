@@ -221,23 +221,9 @@ function ancientEgyptiansPlagueOfLocusts(ctx: AbilityContext): AbilityResult {
 }
 
 function ancientEgyptiansMummyStrength(ctx: AbilityContext): AbilityResult {
-    const bonusFourTargets = getOwnMinionsWithBuriedBase(ctx.state, ctx.playerId);
-    const bonusTwoTargets = getOwnMinions(ctx.state, ctx.playerId);
-    if (bonusTwoTargets.length === 0) return { events: [] };
-    if (bonusFourTargets.length === 0) {
-        return queueMummyStrengthTarget(ctx.matchState, ctx.playerId, ctx.now, 2, bonusTwoTargets);
-    }
-    const interaction = createSimpleChoice(
-        `ancient_egyptians_mummy_strength_mode_${ctx.now}`,
-        ctx.playerId,
-        '木乃伊之力：选择加成模式',
-        [
-            { id: 'plus4', label: '+4 力量（需该基地有埋葬牌）', value: { amount: 4 }, displayMode: 'button' as const },
-            { id: 'plus2', label: '+2 力量', value: { amount: 2 }, displayMode: 'button' as const },
-        ],
-        { sourceId: 'ancient_egyptians_mummy_strength_mode', targetType: 'button' },
-    );
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    const targets = getOwnMinions(ctx.state, ctx.playerId);
+    if (targets.length === 0) return { events: [] };
+    return queueMummyStrengthTarget(ctx.matchState, ctx.playerId, ctx.now, targets);
 }
 
 function ancientEgyptiansAncientCurse(ctx: AbilityContext): AbilityResult {
@@ -410,17 +396,15 @@ function queueMummyStrengthTarget(
     matchState: MatchState<SmashUpCore>,
     playerId: PlayerId,
     now: number,
-    amount: number,
     targets: Array<{ uid: string; defId: string; baseIndex: number; label: string }>,
 ): AbilityResult {
     const interaction = createSimpleChoice(
-        `ancient_egyptians_mummy_strength_target_${now}_${amount}`,
+        `ancient_egyptians_mummy_strength_target_${now}`,
         playerId,
-        `木乃伊之力：选择一个随从获得+${amount}力量直到回合结束`,
+        '木乃伊之力：选择一个你的随从',
         buildMinionTargetOptions(targets, { state: matchState.core, sourcePlayerId: playerId }) as any[],
         { sourceId: 'ancient_egyptians_mummy_strength_target', targetType: 'minion' },
     );
-    (interaction.data as any).continuationContext = { amount };
     return { events: [], matchState: queueInteraction(matchState, interaction) };
 }
 
@@ -574,18 +558,13 @@ const handleAncientCurseConfirm: InteractionHandler = (state, _playerId, value, 
     };
 };
 
-const handleMummyStrengthMode: InteractionHandler = (state, playerId, value, _data, _random, now) => {
-    const amount = (value as any)?.amount as 2 | 4 | undefined;
-    if (!amount) return { state, events: [] };
-    const targets = amount === 4 ? getOwnMinionsWithBuriedBase(state.core, playerId) : getOwnMinions(state.core, playerId);
-    const result = queueMummyStrengthTarget(state, playerId, now, amount, targets);
-    return { state: result.matchState ?? state, events: result.events };
-};
+const handleMummyStrengthMode: InteractionHandler = (state) => ({ state, events: [] });
 
-const handleMummyStrengthTarget: InteractionHandler = (state, _playerId, value, data, _random, now) => {
-    const amount = (data?.continuationContext as any)?.amount as number | undefined;
+const handleMummyStrengthTarget: InteractionHandler = (state, _playerId, value, _data, _random, now) => {
     const selected = value as { minionUid?: string; baseIndex?: number } | undefined;
-    if (!amount || !selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
+    if (!selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
+    const base = state.core.bases[selected.baseIndex];
+    const amount = (base?.buriedCards?.length ?? 0) > 0 ? 4 : 2;
     return {
         state,
         events: [addTempPower(selected.minionUid, selected.baseIndex, amount, 'ancient_egyptians_mummy_strength', now)],
@@ -760,7 +739,7 @@ function buildBuriedCardOptions(
             ? (getCardDef(buried.defId)?.name ?? buried.defId)
             : `埋葬牌 ${index + 1}`,
         value: { cardUid: buried.uid, defId: buried.defId, baseIndex, baseDefId },
-        displayMode: 'button' as const,
+        displayMode: 'card' as const,
         };
     });
 }
@@ -793,7 +772,7 @@ function buildBuriedCardChoiceOptions(
             id: `buried-${choice.cardUid}`,
             label: `${getCardDef(buried?.defId ?? '')?.name ?? buried?.defId ?? '埋葬牌'} @ ${baseName}`,
             value: { ...choice, defId: choice.defId ?? buried?.defId, baseDefId: choice.baseDefId ?? state.bases[choice.baseIndex].defId },
-            displayMode: 'button' as const,
+            displayMode: 'card' as const,
         };
     });
 }

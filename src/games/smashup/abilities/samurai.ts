@@ -369,6 +369,7 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
         state,
         events: [
             addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
+            addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
         ],
     };
 };
