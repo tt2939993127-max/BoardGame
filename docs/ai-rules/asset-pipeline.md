@@ -184,15 +184,25 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 7. ❌ **禁止**直接写 `<img src="/assets/xxx.png" />`
 8. ❌ **禁止**硬编码 `compressed/` 路径
 
-## R2 / CDN 上传收口规则（强制）
+## R2 / CDN 上传与排查规则（强制）
 
 适用于任意游戏的图片、音频、atlas、裁图、图标、提示板切片等运行时资源。
+
+### 上传收口
 
 1. **录入或资源改动完成后，AI 必须主动上传**：只要本轮改动涉及运行时资源新增、替换、移动或裁图派生，就必须主动执行 manifest 重建、`assets:check` / `assets:upload` 或等价上传流程，不等待用户额外提醒。
 2. **没有远端回查不算完成**：上传后至少抽查 1 个主资源 URL 和 1-3 个代表性裁图 / 子资源 URL，确认远端返回 `200`。
 3. **本地存在不代表交付完成**：即使本地文件、manifest、代码引用都已齐全，只要默认资源基址仍指向 R2 / CDN，就必须把远端状态作为最终完成判据。
 4. **上传失败必须显式告知用户**：如果因为 `.env` / `.env.example` 缺失、权限不足、脚本报错、网络失败或用户明确要求暂不上传而没有完成上传，最终汇报必须明确写出“未上传资源列表 + 原因 + 当前运行态风险”，禁止省略。
 5. **该规则不分游戏**：`dicethrone`、`smashup`、`summonerwars` 以及后续新游戏都按同一口径执行。
+
+### 故障排查
+
+1. **先查对应任务 worktree，不查错工作区**：如果问题来自某个任务分支 / 独立 `git worktree`，必须先到该 worktree 下核对 `public/assets/`、`assets-manifest.json` 与相关代码引用，禁止只在当前根工作区下判断“文件是否存在”。
+2. **先核对运行时真实请求路径**：图片运行时会自动补 `i18n/<locale>/` 与 `compressed/`，排查 404 时必须以最终请求 URL 为准，而不是只看源码里的相对路径。
+3. **裁切图也必须满足 `compressed/` 约定**：凡是运行时通过 `OptimizedImage` / `CardPreview` / `getOptimizedImageUrls()` 加载的裁切图，实际可访问文件必须位于对应目录的 `compressed/` 子目录；仅有 `crops/foo.webp` 而没有 `crops/compressed/foo.webp`，视为资源不完整。
+4. **上传前先重建清单**：资源目录有新增/移动后，先执行 `npm run assets:manifest` 或定向执行 `node scripts/assets/generate_asset_manifests.js --root public/assets/i18n/zh-CN --id <gameId>`，再上传到 R2。
+5. **上传脚本环境变量位置**：`scripts/assets/upload-to-r2.js` 会优先读取仓库根目录 `.env`；如果不存在 `.env`，会自动回退读取 `.env.example`。排查“为什么本机能传/不能传”时，必须先确认当前 worktree 根目录这两个文件的实际情况。
 
 ---
 
