@@ -16,6 +16,7 @@ import { getPortraitStyle } from './assets';
 
 type ViewMode = 'self' | 'opponent';
 type HeaderTone = 'enemy' | 'ally';
+type HeaderLayout = 'floating' | 'inline';
 
 interface OpponentHeaderProps {
     opponent: HeroState;
@@ -43,6 +44,8 @@ interface OpponentHeaderProps {
     compact?: boolean;
     tone?: HeaderTone;
     containerClassName?: string;
+    allowPointerEvents?: boolean;
+    layout?: HeaderLayout;
     disabled?: boolean;
     testId?: string;
 }
@@ -73,6 +76,8 @@ export const OpponentHeader = ({
     compact = false,
     tone = 'enemy',
     containerClassName,
+    allowPointerEvents = false,
+    layout = 'floating',
     disabled = false,
     testId,
 }: OpponentHeaderProps) => {
@@ -80,10 +85,19 @@ export const OpponentHeader = ({
     const isMobileNarrowViewport = useMobileViewport();
     const heroLabel = t(`hero.${opponent.characterId}`);
     const isObserved = observed ?? viewMode === 'opponent';
-    const defaultContainerClassName = isMobileNarrowViewport
-        ? 'absolute top-[0.2vw] left-0 right-0 z-50 flex flex-col items-center gap-[0.4vw] pointer-events-none scale-[0.88] origin-top'
-        : 'absolute top-3 left-0 right-0 z-50 flex flex-col items-center gap-1 pointer-events-none';
-    const wrapperClassName = containerClassName ?? defaultContainerClassName;
+    const pointerEventsClassName = allowPointerEvents ? 'pointer-events-auto' : 'pointer-events-none';
+    const baseContainerClassName = isMobileNarrowViewport
+        ? `flex flex-col items-center gap-[0.4vw] ${pointerEventsClassName} scale-[0.88] origin-top`
+        : `flex flex-col items-center gap-1 ${pointerEventsClassName}`;
+    const floatingPositionClassName = isMobileNarrowViewport
+        ? 'absolute top-[0.2vw] left-0 right-0 z-50'
+        : 'absolute top-3 left-0 right-0 z-50';
+    const defaultContainerClassName = layout === 'inline'
+        ? `relative ${baseContainerClassName}`
+        : `${floatingPositionClassName} ${baseContainerClassName}`;
+    const wrapperClassName = containerClassName
+        ? `${defaultContainerClassName} ${containerClassName}`
+        : defaultContainerClassName;
 
     const accent = tone === 'ally'
         ? {

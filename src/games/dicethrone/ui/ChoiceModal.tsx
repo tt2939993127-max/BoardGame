@@ -302,7 +302,9 @@ const TargetChoicePanel = ({
                             observed={false}
                             compact={false}
                             locale={locale}
-                            containerClassName="w-full pointer-events-auto"
+                            layout="inline"
+                            allowPointerEvents
+                            containerClassName="w-full"
                             disabled={option.disabled}
                             testId={`dt-target-option-${targetPlayerId}`}
                         />

@@ -9,6 +9,7 @@ import type {
     TurnPhase,
     DiceThroneCommand,
     DiceThroneEvent,
+    AbilityCard,
     CardDiscardedEvent,
     CardSoldEvent,
     SellUndoneEvent,
@@ -16,12 +17,17 @@ import type {
     CardPlayedEvent,
     CpChangedEvent,
     ResponseWindowOpenedEvent,
+    InteractionRequestedEvent,
 } from './types';
 import {
     getUpgradeTargetAbilityId,
+    cardNeedsSelectedDefender,
     hasOpponentTargetEffect,
+    getCombatOpponentId,
     getContextualOpponentId,
+    getOpponents,
     getResponderQueue,
+    isTeamMode,
 } from './rules';
 import { reduce } from './reducer';
 import { resourceSystem } from './resourceSystem';
@@ -196,24 +202,50 @@ export function executeCardCommand(
             
             // 通过效果系统执行卡牌效果（数据驱动）
             const opponentId = getContextualOpponentId(state, actingPlayerId) ?? actingPlayerId;
+            const needsSelectedOpponent = isTeamMode(state)
+                && getCombatOpponentId(state, actingPlayerId) === undefined
+                && getOpponents(state, actingPlayerId).length > 1
+                && cardNeedsSelectedDefender(card);
             if (card.effects && card.effects.length > 0) {
-                const effectCtx: EffectContext = {
-                    attackerId: actingPlayerId,
-                    defenderId: opponentId,
-                    sourceAbilityId: card.id,
-                    state,
-                    damageDealt: 0,
-                    timestamp,
-                };
-                const effectEvents = resolveEffectsToEvents(card.effects, 'immediate', effectCtx, { random });
-                events.push(...effectEvents);
+                if (needsSelectedOpponent) {
+                    const interactionEvent: InteractionRequestedEvent = {
+                        type: 'INTERACTION_REQUESTED',
+                        payload: {
+                            interaction: {
+                                id: `${card.id}-${timestamp}`,
+                                playerId: actingPlayerId,
+                                sourceCardId: card.id,
+                                type: 'selectPlayer',
+                                titleKey: 'interaction.selectPlayer',
+                                selectCount: 1,
+                                selected: [],
+                                targetPlayerIds: getOpponents(state, actingPlayerId),
+                                resolveCustomActionId: 'resolve-card-effects-on-selected-opponent',
+                            },
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    };
+                    events.push(interactionEvent);
+                } else {
+                    const effectCtx: EffectContext = {
+                        attackerId: actingPlayerId,
+                        defenderId: opponentId,
+                        sourceAbilityId: card.id,
+                        state,
+                        damageDealt: 0,
+                        timestamp,
+                    };
+                    const effectEvents = resolveEffectsToEvents(card.effects, 'immediate', effectCtx, { random });
+                    events.push(...effectEvents);
+                }
             }
             
             // 检测是否需要打开响应窗口
             // 条件：卡牌效果对对手生效 && 有玩家有可响应内容 && 当前不在响应窗口中
             // 规则：在响应窗口中打出的卡牌不再触发新的响应窗口（避免无限嵌套）
             const isInResponseWindow = !!matchState.sys?.responseWindow?.current;
-            if (hasOpponentTargetEffect(card) && !isInResponseWindow) {
+            if (hasOpponentTargetEffect(card) && !isInResponseWindow && !needsSelectedOpponent) {
                 // 先应用已产生的事件，然后检查响应队列（排除出牌玩家，因为可以主动出牌）
                 const stateAfterCard = applyEvents(state, events, reduce);
                 const responderQueue = getResponderQueue(stateAfterCard, 'afterCardPlayed', opponentId, card.id, actingPlayerId, phase);

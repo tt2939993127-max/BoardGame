@@ -13,8 +13,9 @@ import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameManifestEntry } from '../../games/manifest.types';
 import { UI_Z_INDEX } from '../../core';
-import type { AiSeatController } from '../../engine/ai';
+import type { AiDifficultyLevel, AiSeatController } from '../../engine/ai';
 import {
+    DEFAULT_LOCAL_AI_DIFFICULTY,
     createDefaultLocalMatchPreferences,
     normalizeLocalMatchPreferences,
     type LocalMatchPreferences,
@@ -32,6 +33,8 @@ const RETENTION_OPTIONS = [
     { value: 259200, key: '3days' },
     { value: 604800, key: '7days' },
 ] as const;
+
+const LOCAL_AI_DIFFICULTY_OPTIONS: AiDifficultyLevel[] = ['easy', 'normal', 'hard', 'expert'];
 
 export interface RoomConfig {
     roomName: string;
@@ -54,9 +57,12 @@ interface CreateRoomModalProps {
 
 const OWNER_PLAYER_ID = '0';
 
-function getDefaultEnabledAiController(gameManifest: GameManifestEntry): AiSeatController {
+function getEnabledAiController(
+    gameManifest: GameManifestEntry,
+    difficulty: AiDifficultyLevel,
+): AiSeatController {
     if (gameManifest.ai?.localAi) {
-        return { type: 'local-ai' };
+        return { type: 'local-ai', difficulty };
     }
     if (gameManifest.ai?.remoteAi) {
         return { type: 'remote-ai', providerId: 'astrbot' };
@@ -82,6 +88,38 @@ function countAiSeats(seatControllers: Record<string, AiSeatController>, numPlay
     return total;
 }
 
+function resolveLocalAiDifficulty(
+    seatControllers: Record<string, AiSeatController>,
+    numPlayers: number,
+): AiDifficultyLevel {
+    for (let index = 0; index < numPlayers; index += 1) {
+        const controller = seatControllers[String(index)];
+        if (controller?.type === 'local-ai') {
+            return controller.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY;
+        }
+    }
+    return DEFAULT_LOCAL_AI_DIFFICULTY;
+}
+
+function applyLocalAiDifficulty(
+    seatControllers: Record<string, AiSeatController>,
+    numPlayers: number,
+    difficulty: AiDifficultyLevel,
+): Record<string, AiSeatController> {
+    const nextControllers = forceHumanOwnerSeat({ ...seatControllers });
+    for (let index = 1; index < numPlayers; index += 1) {
+        const playerId = String(index);
+        const controller = nextControllers[playerId];
+        if (controller?.type === 'local-ai') {
+            nextControllers[playerId] = {
+                ...controller,
+                difficulty,
+            };
+        }
+    }
+    return nextControllers;
+}
+
 export const CreateRoomModal = ({
     isOpen,
     onClose,
@@ -100,21 +138,30 @@ export const CreateRoomModal = ({
     const [ttlSeconds, setTtlSeconds] = useState(0);
     const [password, setPassword] = useState('');
     const [enableAi, setEnableAi] = useState(false);
+    const [aiDifficulty, setAiDifficulty] = useState<AiDifficultyLevel>(DEFAULT_LOCAL_AI_DIFFICULTY);
     const [seatControllers, setSeatControllers] = useState<Record<string, AiSeatController>>({});
     const [setupSelections, setSetupSelections] = useState<GameSetupSelections>(() => getDefaultSetupSelections(gameManifest));
 
     useEffect(() => {
         if (!isOpen) return;
+        const hasSavedPreferences = initialPreferences != null;
         const nextPreferences = normalizeLocalMatchPreferences(
             gameManifest,
             (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
         );
-        const nextSeatControllers = forceHumanOwnerSeat(nextPreferences.seatControllers);
+        const nextSeatControllers = hasSavedPreferences
+            ? forceHumanOwnerSeat(nextPreferences.seatControllers)
+            : forceHumanOwnerSeat(
+                Object.fromEntries(
+                    Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+                ),
+            );
         setRoomName('');
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(initialPreferences ? countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0 : false);
+        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
+        setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
@@ -142,7 +189,7 @@ export const CreateRoomModal = ({
                     const nextControllers = forceHumanOwnerSeat({ ...existing });
                     const hasAiSeat = countAiSeats(nextControllers, numPlayers) > 0;
                     if (!hasAiSeat && numPlayers > 1) {
-                        nextControllers['1'] = getDefaultEnabledAiController(gameManifest);
+                        nextControllers['1'] = getEnabledAiController(gameManifest, aiDifficulty);
                     }
                     return nextControllers;
                 });
@@ -166,10 +213,15 @@ export const CreateRoomModal = ({
             const nextControllers = forceHumanOwnerSeat({ ...current });
             const currentController = nextControllers[playerId];
             nextControllers[playerId] = currentController?.type === 'human'
-                ? getDefaultEnabledAiController(gameManifest)
+                ? getEnabledAiController(gameManifest, aiDifficulty)
                 : { type: 'human' };
             return nextControllers;
         });
+    };
+
+    const handleDifficultyChange = (difficulty: AiDifficultyLevel) => {
+        setAiDifficulty(difficulty);
+        setSeatControllers((current) => applyLocalAiDifficulty(current, numPlayers, difficulty));
     };
 
     const handleConfirm = () => {
@@ -226,7 +278,7 @@ export const CreateRoomModal = ({
                         style={{ zIndex: UI_Z_INDEX.modalContent }}
                     >
                         <div
-                            className="bg-parchment-card-bg pointer-events-auto w-full max-w-md rounded-sm shadow-parchment-card-hover border border-parchment-card-border/30 relative overflow-hidden font-serif"
+                            className="bg-parchment-card-bg pointer-events-auto relative flex w-full max-w-md max-h-[min(88dvh,42rem)] flex-col overflow-hidden rounded-sm border border-parchment-card-border/30 shadow-parchment-card-hover font-serif sm:max-h-[min(84dvh,44rem)]"
                             onClick={(event) => event.stopPropagation()}
                         >
                             <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
@@ -234,13 +286,13 @@ export const CreateRoomModal = ({
                             <div className="absolute bottom-2 left-2 w-3 h-3 border-b border-l border-parchment-card-border/60" />
                             <div className="absolute bottom-2 right-2 w-3 h-3 border-b border-r border-parchment-card-border/60" />
 
-                            <div className="p-6 pb-4">
+                            <div className="shrink-0 p-6 pb-4">
                                 <h2 className="text-xl font-bold text-parchment-base-text tracking-wide text-center">
                                     {t('createRoom.title')}
                                 </h2>
                             </div>
 
-                            <div className="p-6 space-y-5">
+                            <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 space-y-5">
                                 <div>
                                     <div className="flex justify-between items-center mb-2">
                                         <label className="text-sm font-bold text-parchment-base-text">
@@ -334,51 +386,63 @@ export const CreateRoomModal = ({
                                 />
 
                                 {(gameManifest.ai?.localAi || gameManifest.ai?.remoteAi) && (
-                                    <div className="space-y-3">
+                                    <div className="rounded-[6px] border border-parchment-card-border/20 bg-parchment-base-bg/25 px-4 py-3 space-y-3">
                                         <button
                                             type="button"
                                             onClick={handleToggleAiEnabled}
-                                            className={`w-full rounded-[6px] border px-4 py-3 text-left transition-colors cursor-pointer ${
+                                            aria-pressed={enableAi}
+                                            className={`flex w-full items-center justify-between gap-3 rounded-[6px] border px-3 py-2 text-left transition-colors cursor-pointer ${
                                                 enableAi
                                                     ? 'border-emerald-700/20 bg-emerald-50/60'
                                                     : 'border-parchment-card-border/30 bg-parchment-base-bg/35 hover:bg-parchment-base-bg/60'
                                             }`}
                                         >
-                                            <div className="flex items-center justify-between gap-4">
-                                                <div className="min-w-0">
-                                                    <div className="text-sm font-bold text-parchment-base-text">
-                                                        {t('createRoom.enableRoomAi')}
-                                                    </div>
-                                                    <div className="mt-1 text-xs text-parchment-light-text">
-                                                        {enableAi
-                                                            ? t('createRoom.enableRoomAiSummary', {
-                                                                players: numPlayers,
-                                                                aiCount: countAiSeats(seatControllers, numPlayers),
-                                                            })
-                                                            : t('createRoom.enableRoomAiHint')}
-                                                    </div>
-                                                </div>
-                                                <span
-                                                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
-                                                        enableAi
-                                                            ? 'bg-emerald-600 text-white'
-                                                            : 'bg-parchment-card-bg text-parchment-light-text border border-parchment-card-border/30'
-                                                    }`}
-                                                >
-                                                    {enableAi ? t('createRoom.enabled') : t('createRoom.disabled')}
-                                                </span>
-                                            </div>
+                                            <span className="text-sm font-bold text-parchment-base-text">
+                                                {t('createRoom.enableRoomAi')}
+                                            </span>
+                                            <span
+                                                className={`shrink-0 rounded-full px-3 py-1 text-xs font-bold ${
+                                                    enableAi
+                                                        ? 'bg-emerald-600 text-white'
+                                                        : 'bg-parchment-card-bg text-parchment-light-text border border-parchment-card-border/30'
+                                                }`}
+                                            >
+                                                {enableAi ? t('createRoom.enabled') : t('createRoom.disabled')}
+                                            </span>
                                         </button>
 
                                         {enableAi && (
-                                            <div className="rounded-[6px] border border-parchment-card-border/20 bg-parchment-base-bg/25 px-4 py-3">
-                                                <div className="mb-1 text-sm font-bold text-parchment-base-text">
-                                                    {t('createRoom.occupiedSeats')}
-                                                </div>
-                                                <div className="mb-3 text-xs text-parchment-light-text">
-                                                    {t('createRoom.occupiedSeatsHint')}
-                                                </div>
-                                                <div className="flex flex-wrap gap-2">
+                                            <>
+                                                {gameManifest.ai?.localAi && (
+                                                    <div className="flex flex-wrap items-center gap-2">
+                                                        <span className="text-xs font-bold text-parchment-base-text">
+                                                            {t('ai.difficulty')}
+                                                        </span>
+                                                        {LOCAL_AI_DIFFICULTY_OPTIONS.map((difficulty) => {
+                                                            const active = aiDifficulty === difficulty;
+                                                            return (
+                                                                <button
+                                                                    key={difficulty}
+                                                                    type="button"
+                                                                    onClick={() => handleDifficultyChange(difficulty)}
+                                                                    aria-pressed={active}
+                                                                    className={`rounded-[4px] border px-3 py-1.5 text-xs font-bold transition-all ${
+                                                                        active
+                                                                            ? 'cursor-pointer border-emerald-600 bg-emerald-600 text-white shadow-sm'
+                                                                            : 'cursor-pointer border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text hover:bg-parchment-base-bg'
+                                                                    }`}
+                                                                >
+                                                                    {t(`ai.difficulties.${difficulty}`)}
+                                                                </button>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="text-xs font-bold text-parchment-base-text">
+                                                        {t('createRoom.occupiedSeats')}
+                                                    </span>
                                                     {Array.from({ length: numPlayers }, (_, index) => {
                                                         const playerId = String(index);
                                                         const isOwnerSeat = playerId === OWNER_PLAYER_ID;
@@ -394,7 +458,7 @@ export const CreateRoomModal = ({
                                                                 onClick={() => handleToggleAiSeat(playerId)}
                                                                 disabled={isOwnerSeat}
                                                                 aria-pressed={isOwnerSeat ? false : isAiSeat}
-                                                                className={`rounded-[4px] border px-4 py-2 text-sm font-bold transition-all ${
+                                                                className={`rounded-[4px] border px-3 py-1.5 text-xs font-bold transition-all ${
                                                                     isOwnerSeat
                                                                         ? 'cursor-not-allowed border-parchment-card-border/25 bg-parchment-base-bg/55 text-parchment-light-text/80'
                                                                         : isAiSeat
@@ -407,13 +471,13 @@ export const CreateRoomModal = ({
                                                         );
                                                     })}
                                                 </div>
-                                            </div>
+                                            </>
                                         )}
                                     </div>
                                 )}
                             </div>
 
-                            <div className="p-6 pt-4 flex gap-3">
+                            <div className="shrink-0 border-t border-parchment-card-border/15 bg-parchment-card-bg/95 p-6 pt-4 flex gap-3">
                                 <button
                                     type="button"
                                     onClick={onClose}

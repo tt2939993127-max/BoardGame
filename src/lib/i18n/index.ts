@@ -9,30 +9,7 @@ const LANGUAGE_PREFERENCE_STORAGE_KEY = 'bg_locale_preference';
 const LEGACY_LANGUAGE_STORAGE_KEY = 'i18nextLng';
 
 const getInitialLanguage = () => {
-    if (typeof window === 'undefined') return DEFAULT_LANGUAGE;
-    try {
-        const preferred = window.localStorage.getItem(LANGUAGE_PREFERENCE_STORAGE_KEY);
-        if (preferred) {
-            return normalizeI18nLanguage(preferred);
-        }
-
-        const legacy = window.localStorage.getItem(LEGACY_LANGUAGE_STORAGE_KEY);
-        const isE2E = Boolean((window as Window & { __E2E_TEST_MODE__?: boolean }).__E2E_TEST_MODE__);
-        if (isE2E && legacy) {
-            return normalizeI18nLanguage(legacy);
-        }
-
-        if (legacy) {
-            const normalizedLegacy = normalizeI18nLanguage(legacy);
-            if (normalizedLegacy === DEFAULT_LANGUAGE) {
-                window.localStorage.setItem(LANGUAGE_PREFERENCE_STORAGE_KEY, DEFAULT_LANGUAGE);
-                return DEFAULT_LANGUAGE;
-            }
-        }
-    } catch {
-        return DEFAULT_LANGUAGE;
-    }
-
+    // 全站默认锁定 zh-CN：忽略历史偏好/浏览器语言
     return DEFAULT_LANGUAGE;
 };
 

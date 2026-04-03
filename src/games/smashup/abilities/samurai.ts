@@ -94,14 +94,14 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
     if (!source) return { events: [] };
     const ownMinions = ctx.state.bases[source.baseIndex]?.minions.filter(minion => minion.controller === ctx.playerId) ?? [];
     if (ownMinions.length !== 1) return { events: [] };
-    const interaction = createSimpleChoice(
+    const roninInteraction = createSimpleChoice(
         `samurai_ronin_${ctx.now}`,
         ctx.playerId,
-        '浪人：你可以在此随从上放置两个 +1 力量指示物',
+        '浪人：你可以在此随从上放置一个 +1 力量指示物',
         [
             {
                 id: 'yes',
-                label: '放置两个指示物',
+                label: '放置一个指示物',
                 value: { apply: true },
                 displayMode: 'button' as const,
             },
@@ -114,11 +114,11 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
         ],
         { sourceId: 'samurai_ronin', targetType: 'button' },
     );
-    (interaction.data as any).continuationContext = {
+    (roninInteraction.data as any).continuationContext = {
         minionUid: source.minion.uid,
         baseIndex: source.baseIndex,
     } satisfies RoninContinuation;
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return { events: [], matchState: queueInteraction(ctx.matchState, roninInteraction) };
 }
 
 function samuraiYokaiAttackOnPlay(ctx: AbilityContext): AbilityResult {
@@ -224,7 +224,7 @@ function samuraiWayOfTheWarriorOnPlay(ctx: AbilityContext): AbilityResult {
                     minionUid: target.uid,
                     baseIndex: ctx.baseIndex,
                     metadataUpdate: {
-                        samuraiWayOfTheWarriorDrawUntilTurnNumber: ctx.state.turnNumber ?? 0,
+                        samuraiWayOfTheWarriorDrawUntilTurnNumber: (ctx.state.turnNumber ?? 0) + 1,
                         samuraiWayOfTheWarriorDrawPlayerId: ctx.playerId,
                     },
                     reason: 'samurai_way_of_the_warrior',
@@ -309,7 +309,13 @@ function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
     const drawPlayerId = typeof metadata.samuraiWayOfTheWarriorDrawPlayerId === 'string'
         ? metadata.samuraiWayOfTheWarriorDrawPlayerId as PlayerId
         : undefined;
-    if (!drawPlayerId || drawUntilTurnNumber !== (ctx.state.turnNumber ?? 0)) return [];
+    if (!drawPlayerId || typeof drawUntilTurnNumber !== 'number') return [];
+
+    const currentTurnNumber = ctx.state.turnNumber ?? 0;
+    const currentPlayerId = ctx.state.currentPlayerId ?? ctx.state.turnOrder?.[ctx.state.currentPlayerIndex ?? 0];
+    const isWindowActive = currentTurnNumber < drawUntilTurnNumber
+        || (currentTurnNumber === drawUntilTurnNumber && currentPlayerId !== drawPlayerId);
+    if (!isWindowActive) return [];
 
     if (ctx.timing === 'onMinionDestroyed' && ctx.baseIndex !== undefined) {
         const base = ctx.state.bases[ctx.baseIndex];
@@ -320,7 +326,7 @@ function samuraiWayOfTheWarriorTrigger(ctx: TriggerContext): SmashUpEvent[] {
         if (base?.defId === 'base_tar_pits' && destroyedAtBaseThisTurnCount === 0) return [];
     }
 
-    return buildStandardDrawEvents(ctx.state, drawPlayerId, 1, ctx.random, ctx.now);
+    return buildStandardDrawEvents(ctx.state, drawPlayerId, 2, ctx.random, ctx.now);
 }
 
 function samuraiSakuraGardenTrigger(ctx: TriggerContext): SmashUpEvent[] {
@@ -362,7 +368,6 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
     return {
         state,
         events: [
-            addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
             addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
         ],
     };

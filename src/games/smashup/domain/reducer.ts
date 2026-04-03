@@ -1360,6 +1360,20 @@ export function processReturnToHandTriggers(
                 now,
             });
             if (queued) extraEvents.push(queued);
+            continue;
+        }
+
+        if (event.type === SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND) {
+            const payload = event.payload as { playerId: PlayerId; source: string };
+            const queued = collectTriggers(core, 'onCardReturnedToHand', {
+                state: core,
+                matchState: ms ?? state,
+                playerId: payload.playerId,
+                reason: payload.source,
+                random,
+                now,
+            });
+            if (queued) extraEvents.push(queued);
         }
     }
 

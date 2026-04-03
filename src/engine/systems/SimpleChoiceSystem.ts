@@ -184,18 +184,62 @@ function handleSimpleChoiceRespond<TCore>(
         selectedOptions = [selectedOption];
     }
 
-    const newState = resolveInteraction(state);
-    const resolvedValue = payload.mergedValue !== undefined
-        ? payload.mergedValue
-        : isMulti
+    let resolvedValue: unknown;
+    if (payload.mergedValue !== undefined) {
+        if (isMulti || !data.slider) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedOptionValue = selectedOptions[0]?.value;
+        if (!selectedOptionValue || typeof selectedOptionValue !== 'object' || Array.isArray(selectedOptionValue)) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const mergedValue = payload.mergedValue;
+        if (!mergedValue || typeof mergedValue !== 'object' || Array.isArray(mergedValue)) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedNumericValue = (selectedOptionValue as { value?: unknown }).value;
+        const mergedNumericValue = (mergedValue as { value?: unknown }).value;
+        if (
+            typeof selectedNumericValue !== 'number'
+            || !Number.isFinite(selectedNumericValue)
+            || typeof mergedNumericValue !== 'number'
+            || !Number.isFinite(mergedNumericValue)
+            || !Number.isInteger(mergedNumericValue)
+            || mergedNumericValue < 1
+            || mergedNumericValue > selectedNumericValue
+        ) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedOptionRecord = selectedOptionValue as Record<string, unknown>;
+        const resolvedSliderValue: Record<string, unknown> = {
+            ...selectedOptionRecord,
+            value: mergedNumericValue,
+        };
+        if (typeof selectedOptionRecord.amount === 'number' && Number.isFinite(selectedOptionRecord.amount)) {
+            resolvedSliderValue.amount = mergedNumericValue;
+        }
+        resolvedValue = resolvedSliderValue;
+    } else {
+        resolvedValue = isMulti
             ? selectedOptions.map((option) => option.value)
             : selectedOptions[0]?.value;
+    }
+
+    const newState = resolveInteraction(state);
     const interactionDataForEvent = responseValidationMode === 'live'
         ? { ...current.data, options: availableOptions }
         : current.data;
+    const isEmergencySkip = !isMulti
+        && resolvedValue
+        && typeof resolvedValue === 'object'
+        && (resolvedValue as { __emergency_skip__?: boolean }).__emergency_skip__ === true;
 
     const event: GameEvent = {
-        type: INTERACTION_EVENTS.RESOLVED,
+        type: isEmergencySkip ? INTERACTION_EVENTS.CANCELLED : INTERACTION_EVENTS.RESOLVED,
         payload: {
             interactionId: current.id,
             playerId,
@@ -204,6 +248,7 @@ function handleSimpleChoiceRespond<TCore>(
             value: resolvedValue,
             sourceId: data.sourceId,
             interactionData: stripNonSerializableFromData(interactionDataForEvent),
+            ...(isEmergencySkip ? { reason: 'empty-options' } : {}),
         },
         timestamp,
     };

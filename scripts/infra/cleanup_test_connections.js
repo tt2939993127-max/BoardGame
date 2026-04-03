@@ -15,6 +15,8 @@ import {
   removeRuntimeById,
   stopRuntime,
 } from './e2e-runtime-registry.js';
+import { formatGlobalHeavyBudgetEntry, listGlobalHeavyBudgetEntries, pruneGlobalHeavyBudget } from './global-heavy-budget.mjs';
+import { formatTaskGuardSummary, listTaskGuards, pruneTaskGuards } from './heavy-task-guard.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -41,6 +43,8 @@ export async function cleanupTestConnections(args = process.argv.slice(2)) {
 
   console.log('🧹 清理端口占用...\n');
 
+  pruneTaskGuards({ logger: console });
+  await pruneGlobalHeavyBudget({ logger: console });
   const { stale } = pruneStaleRuntimes(process.cwd(), { killOrphans: true, logger: console });
   if (stale.length > 0) {
     console.log(`已回收 ${stale.length} 个失联/stale E2E runtime。\n`);
@@ -100,6 +104,22 @@ export async function cleanupTestConnections(args = process.argv.slice(2)) {
     console.log('\n当前仍在运行的 E2E runtime:');
     for (const runtime of activeRuntimes) {
       console.log(`  - ${formatRuntimeSummary(runtime)}`);
+    }
+  }
+
+  const activeHeavyTasks = listTaskGuards();
+  if (activeHeavyTasks.length > 0) {
+    console.log('\n当前仍在运行的重任务:');
+    for (const task of activeHeavyTasks) {
+      console.log(`  - ${formatTaskGuardSummary(task)}`);
+    }
+  }
+
+  const activeBudgetEntries = await listGlobalHeavyBudgetEntries();
+  if (activeBudgetEntries.length > 0) {
+    console.log('\n当前仍在占用全局预算的任务:');
+    for (const entry of activeBudgetEntries) {
+      console.log(`  - ${formatGlobalHeavyBudgetEntry(entry)}`);
     }
   }
 

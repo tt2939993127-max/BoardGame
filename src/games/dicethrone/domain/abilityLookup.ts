@@ -136,7 +136,14 @@ function hasEffectDamage(effects: AbilityEffect[]): boolean {
 }
 
 function effectNeedsSingleOpponentTarget(action: EffectAction): boolean {
-    return action.target === 'opponent' || action.target === 'select';
+    if (action.target === 'opponent' || action.target === 'select') {
+        return true;
+    }
+    if (action.type === 'custom' && action.customActionId) {
+        const meta = getCustomActionMeta(action.customActionId);
+        return meta?.requiresSelectedDefender ?? false;
+    }
+    return false;
 }
 
 /**

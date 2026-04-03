@@ -567,9 +567,11 @@ export function registerGunslingerCustomActions(): void {
     });
     registerCustomActionHandler('gunslinger-card-wild-west', handleWildWest, {
         categories: ['card', 'dice'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('gunslinger-card-eat-my-lead', handleEatMyLead, {
         categories: ['card', 'dice', 'status'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('gunslinger-card-pistol-whip', handlePistolWhip, {
         categories: ['card', 'status', 'damage'],

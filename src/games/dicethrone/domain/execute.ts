@@ -26,10 +26,12 @@ import type {
 } from './types';
 import {
     getRollerId,
+    getCombatOpponentId,
     getDefaultOpponentId,
     getContextualOpponentId,
     getNextPlayerId,
     getResponderQueue,
+    hasOpponentTargetEffect,
     getTokenStackLimit,
     getSeatingOrder,
     isTeamMode,
@@ -48,6 +50,7 @@ import { buildDrawEvents } from './deckEvents';
 import { RESOURCE_IDS } from './resources';
 import { getCustomActionHandler } from './effects';
 import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
+import { findHeroCard } from '../heroes';
 
 // ============================================================================
 // 辅助函数
@@ -275,8 +278,15 @@ export function execute(
             // 关键：必须用 ROLL_CONFIRMED 事件应用后的状态来检查响应窗口
             // 否则 rollConfirmed 仍为 false，requireRollConfirmed 的卡牌（如抬一手）会被过滤掉
             const stateAfterConfirm = applyEvents(state, [event] as DiceThroneEvent[], reduce);
-            const opponentId = getContextualOpponentId(stateAfterConfirm, rollerId) ?? rollerId;
-            const responderQueue = getResponderQueue(stateAfterConfirm, 'afterRollConfirmed', opponentId, undefined, rollerId, phase);
+            const responseTriggerId = getCombatOpponentId(stateAfterConfirm, rollerId) ?? rollerId;
+            const responderQueue = getResponderQueue(
+                stateAfterConfirm,
+                'afterRollConfirmed',
+                responseTriggerId,
+                undefined,
+                rollerId,
+                phase,
+            );
             if (responderQueue.length > 0 && getAutoResponseEnabled()) {
                 const windowId = `afterRollConfirmed-${timestamp}`;
                 const responseWindowEvent: ResponseWindowOpenedEvent = {
@@ -728,6 +738,41 @@ export function execute(
                         timestamp: timestamp + playerIndex * 100 + 50 + tokenIndex,
                     } as DiceThroneEvent);
                 });
+            }
+
+            if (
+                resolveCustomActionId === 'resolve-card-effects-on-selected-opponent'
+                && !matchState.sys?.responseWindow?.current
+                && resolvedPlayerIds.length === 1
+                && interaction.sourceCardId
+            ) {
+                const card = findHeroCard(interaction.sourceCardId);
+                const selectedTargetId = resolvedPlayerIds[0];
+                if (card && hasOpponentTargetEffect(card)) {
+                    const stateAfterCardResolution = applyEvents(state, events, reduce);
+                    const responderQueue = getResponderQueue(
+                        stateAfterCardResolution,
+                        'afterCardPlayed',
+                        selectedTargetId,
+                        card.id,
+                        interaction.playerId,
+                        phase,
+                    );
+                    if (responderQueue.length > 0 && getAutoResponseEnabled()) {
+                        const responseWindowEvent: ResponseWindowOpenedEvent = {
+                            type: 'RESPONSE_WINDOW_OPENED',
+                            payload: {
+                                windowId: `afterCard-${card.id}-${timestamp}`,
+                                responderQueue,
+                                windowType: 'afterCardPlayed',
+                                sourceId: card.id,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp,
+                        };
+                        events.push(responseWindowEvent);
+                    }
+                }
             }
             break;
         }

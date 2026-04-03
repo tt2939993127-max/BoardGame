@@ -10,6 +10,7 @@ export * from './lookahead';
 export * from './seatControllers';
 export * from './localMatchPreferences';
 export * from './providers';
+export * from './noise';
 
 import { registerDefaultRemoteAiProviders } from './providers';
 

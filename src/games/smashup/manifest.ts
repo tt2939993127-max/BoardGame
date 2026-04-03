@@ -35,7 +35,13 @@ const entry: GameManifestEntry = {
     mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
     mobileLayoutPreset: 'board-shell',
-    shellTargets: ['pwa'],
+    shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'smashup',
+        assetPackId: 'smashup',
+    },
 };
 
 export const SMASH_UP_MANIFEST: GameManifestEntry = entry;

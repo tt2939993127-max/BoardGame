@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LoadingScreen } from '../../system/LoadingScreen';
 import {
     areAllCriticalImagesCached,
@@ -80,8 +81,9 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         && (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ === true;
     const effectiveEnabled = enabled && !skipGate;
 
+    const { t } = useTranslation('lobby');
     const [ready, setReady] = useState(!effectiveEnabled);
-    const [loadingProgress, setLoadingProgress] = useState<string | undefined>(undefined);
+    const [loadingProgress, setLoadingProgress] = useState<{ loaded: number; total: number } | undefined>(undefined);
 
     const gameStateRef = useRef(gameState);
     const inFlightRef = useRef(false);
@@ -185,6 +187,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         pendingRunKeyRef.current = null;
         inFlightRef.current = true;
         setReady(false);
+        setLoadingProgress(undefined);
 
         const resolved = resolveCriticalImages(gameId, currentState, locale, playerID);
         const hasCriticalImages = (resolved.critical?.length ?? 0) > 0;
@@ -207,7 +210,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             locale,
             playerID,
             (loaded, total) => {
-                setLoadingProgress(`${loaded}/${total}`);
+                setLoadingProgress({ loaded, total });
             },
         );
         const epoch = getCriticalImagesEpoch();
@@ -254,10 +257,10 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         effectiveNeedsPreload || (!ready && lastReadyKeyRef.current !== runKey)
     );
     if (shouldBlock) {
-        const desc = loadingProgress
-            ? (loadingDescription ? `${loadingDescription}（${loadingProgress}）` : `加载资源 ${loadingProgress}`)
-            : loadingDescription;
-        return <LoadingScreen anchor="container" description={desc} />;
+        const progressText = loadingProgress
+            ? t('matchRoom.loadingProgress.loadingAssets', { loaded: loadingProgress.loaded, total: loadingProgress.total })
+            : undefined;
+        return <LoadingScreen anchor="container" description={loadingDescription} progressText={progressText} />;
     }
 
     return <>{children}</>;

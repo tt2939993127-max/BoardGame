@@ -105,6 +105,55 @@ function hasPendingScoreBasesSpecialActivation(state: MatchState<SmashUpCore>): 
     return false;
 }
 
+function getPlayersWithPlayableAfterScoringResponses(state: MatchState<SmashUpCore>, now: number): PlayerId[] {
+    const eligibleBaseIndices = getScoringEligibleBaseIndices(state.core);
+    const playablePlayers: PlayerId[] = [];
+
+    for (const playerId of Object.keys(state.core.players) as PlayerId[]) {
+        const player = state.core.players[playerId];
+        if (!player) continue;
+
+        const probeState: MatchState<SmashUpCore> = {
+            ...state,
+            sys: {
+                ...state.sys,
+                responseWindow: {
+                    ...state.sys.responseWindow,
+                    current: {
+                        id: `afterScoring_probe_${playerId}_${now}`,
+                        windowType: 'afterScoring',
+                        sourceId: 'scoreBases',
+                        responderQueue: [playerId],
+                        currentResponderIndex: 0,
+                        passedPlayers: [],
+                    },
+                },
+            },
+        };
+
+        const hasPlayableResponse = player.hand.some(card => {
+            const baseCandidates = [undefined, ...eligibleBaseIndices];
+            return baseCandidates.some(targetBaseIndex => {
+                const result = validate(probeState, {
+                    type: SU_COMMANDS.PLAY_ACTION,
+                    playerId,
+                    payload: {
+                        cardUid: card.uid,
+                        ...(targetBaseIndex !== undefined ? { targetBaseIndex } : {}),
+                    },
+                });
+                return result.valid;
+            });
+        });
+
+        if (hasPlayableResponse) {
+            playablePlayers.push(playerId);
+        }
+    }
+
+    return playablePlayers;
+}
+
 function buildBaseRankings(
     baseDef: { vpAwards: number[] },
     playerPowers: Map<PlayerId, number>,
@@ -416,17 +465,9 @@ export function scoreOneBase(
     // 鍘熷洜锛氬熀鍦拌兘鍔涘垱寤轰氦浜掞紙濡傛捣鐩楁咕绉诲姩闅忎粠锛夊拰鍝嶅簲绐楀彛锛堣鐜╁鎵撳嚭 afterScoring 鍗＄墝锛?
     // 鏄袱涓嫭绔嬬殑鏈哄埗锛屽簲璇ュ悓鏃跺瓨鍦?
     // 妫€鏌ユ槸鍚︽湁鐜╁鎵嬬墝涓湁 afterScoring 鍗＄墝
-    const playersWithAfterScoringCards: PlayerId[] = [];
-    for (const [playerId, player] of Object.entries(afterScoringCore.players)) {
-        const hasAfterScoringCard = player.hand.some(c => {
-            if (c.type !== 'action') return false;
-            const def = getCardDef(c.defId) as ActionCardDef | undefined;
-            return def?.subtype === 'special' && def.specialTiming === 'afterScoring';
-        });
-        if (hasAfterScoringCard) {
-            playersWithAfterScoringCards.push(playerId);
-        }
-    }
+    const playersWithAfterScoringCards = ms
+        ? getPlayersWithPlayableAfterScoringResponses({ ...ms, core: afterScoringCore }, now)
+        : [];
 
     // 濡傛灉鏈夌帺瀹舵湁 afterScoring 鍗＄墝锛屾墦寮€ afterScoring 鍝嶅簲绐楀彛
     if (playersWithAfterScoringCards.length > 0) {
@@ -841,6 +882,12 @@ function processImmediateStartTurnMinionTriggers(
         if (event.type === SU_EVENTS.MINION_RETURNED) {
             const returnedEvent = event as MinionReturnedEvent;
             processedPlayedUids.delete(returnedEvent.payload.minionUid);
+            continue;
+        }
+
+        if (event.type === SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND) {
+            const returnedEvent = event as { payload: { cardUid: string } };
+            processedPlayedUids.delete(returnedEvent.payload.cardUid);
             continue;
         }
 
@@ -1658,6 +1705,20 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
         }
 
+        if (to === 'playCards' && from === 'startTurn' && (state.sys as any)._smashupStartTurnWindowActive) {
+            return {
+                events,
+                updatedState: {
+                    ...state,
+                    sys: {
+                        ...state.sys,
+                        _smashupStartTurnWindowActive: undefined,
+                        _waitForStartTurnInteractionReduce: undefined,
+                    } as any,
+                },
+            } as PhaseEnterResult;
+        }
+
         return events;
     },
 
@@ -1686,6 +1747,9 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 
         // startTurn 鑷姩鎺ㄨ繘鍒?playCards
         if (phase === 'startTurn') {
+            if ((state.sys as any)._waitForStartTurnInteractionReduce) {
+                return undefined;
+            }
             return { autoContinue: true, playerId: pid };
         }
 
@@ -1864,17 +1928,11 @@ function domainInterceptEvent(
     return event; // 鏃犳嫤鎴櫒鍖归厤锛岃繑鍥炲師浜嬩欢
 }
 
-function resolveTitanClashEvents(
+function resolveTitanClashEventsOnBase(
     state: SmashUpCore,
-    event: SmashUpEvent,
+    baseIndex: number,
+    now: number,
 ): SmashUpEvent[] {
-    if (event.type !== SU_EVENT_TYPES.TITAN_PLAYED && event.type !== SU_EVENT_TYPES.TITAN_MOVED) {
-        return [];
-    }
-
-    const baseIndex = event.type === SU_EVENT_TYPES.TITAN_PLAYED
-        ? event.payload.baseIndex
-        : event.payload.toBaseIndex;
     const base = state.bases[baseIndex];
     const baseDef = base ? getBaseDef(base.defId) : undefined;
     if (!base || baseDef?.allowMultipleTitans) return [];
@@ -1898,7 +1956,86 @@ function resolveTitanClashEvents(
 
     return ranked
         .slice(1)
-        .map(({ titan }) => removeTitanFromPlay(titan, 'titan_clash', event.timestamp ?? 0));
+        .map(({ titan }) => removeTitanFromPlay(titan, 'titan_clash', now));
+}
+
+function shouldDeferTitanClashForEvent(
+    state: SmashUpCore,
+    event: SmashUpEvent,
+    baseIndex: number,
+): boolean {
+    if (!state.activeDuel || state.activeDuel.baseIndex !== baseIndex) return false;
+    if (event.type !== SU_EVENT_TYPES.TITAN_PLAYED && event.type !== SU_EVENT_TYPES.TITAN_MOVED) return false;
+
+    const titan = getTitanByUid(state, event.payload.titanUid);
+    return titan?.defId === 'pecos_bill'
+        && titan.location.zone === 'base'
+        && titan.location.baseIndex === baseIndex
+        && titan.metadata?.deferClashUntilDuelEnds === true;
+}
+
+function resolveTitanClashEvents(
+    state: SmashUpCore,
+    event: SmashUpEvent,
+): SmashUpEvent[] {
+    if (event.type !== SU_EVENT_TYPES.TITAN_PLAYED && event.type !== SU_EVENT_TYPES.TITAN_MOVED) {
+        return [];
+    }
+
+    const baseIndex = event.type === SU_EVENT_TYPES.TITAN_PLAYED
+        ? event.payload.baseIndex
+        : event.payload.toBaseIndex;
+    if (shouldDeferTitanClashForEvent(state, event, baseIndex)) {
+        return [];
+    }
+
+    return resolveTitanClashEventsOnBase(state, baseIndex, event.timestamp ?? 0);
+}
+
+function resolveDeferredPecosBillClashEvents(
+    state: SmashUpCore,
+    now: number,
+): SmashUpEvent[] {
+    if (state.activeDuel) return [];
+
+    const events: SmashUpEvent[] = [];
+    let workingState = state;
+    const processedBases = new Set<number>();
+    const deferredTitans = (state.titans ?? []).filter((titan) =>
+        titan.defId === 'pecos_bill'
+        && titan.location.zone === 'base'
+        && titan.metadata?.deferClashUntilDuelEnds === true,
+    );
+
+    for (const titan of deferredTitans) {
+        if (titan.location.zone !== 'base' || processedBases.has(titan.location.baseIndex)) continue;
+        processedBases.add(titan.location.baseIndex);
+
+        const clashEvents = resolveTitanClashEventsOnBase(workingState, titan.location.baseIndex, now);
+        if (clashEvents.length > 0) {
+            events.push(...clashEvents);
+            for (const clashEvent of clashEvents) {
+                workingState = reduce(workingState, clashEvent);
+            }
+        }
+
+        const pecosAfterClash = getTitanByUid(workingState, titan.uid);
+        if (pecosAfterClash?.location.zone === 'base' && pecosAfterClash.metadata?.deferClashUntilDuelEnds === true) {
+            const clearedEvent: SmashUpEvent = {
+                type: SU_EVENTS.TITAN_METADATA_UPDATED,
+                payload: {
+                    titanUid: pecosAfterClash.uid,
+                    metadataUpdate: { deferClashUntilDuelEnds: false },
+                    reason: 'pecos_bill_duel_end',
+                },
+                timestamp: now,
+            };
+            events.push(clearedEvent);
+            workingState = reduce(workingState, clearedEvent);
+        }
+    }
+
+    return events;
 }
 
 // ============================================================================
@@ -1975,6 +2112,11 @@ function postProcessSystemEvents(
         if (event.type === SU_EVENTS.MINION_RETURNED) {
             const returnedEvt = event as { type: string; payload: { minionUid: string; fromBaseIndex: number } };
             const eventKey = `MINION:${returnedEvt.payload.minionUid}@${returnedEvt.payload.fromBaseIndex}`;
+            processedSet.delete(eventKey);
+        }
+        if (event.type === SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND) {
+            const returnedEvt = event as { type: string; payload: { cardUid: string; baseIndex: number } };
+            const eventKey = `MINION:${returnedEvt.payload.cardUid}@${returnedEvt.payload.baseIndex}`;
             processedSet.delete(eventKey);
         }
     }
@@ -2131,6 +2273,14 @@ function postProcessSystemEvents(
                     titanCore = reduce(titanCore, queuedTitanMove);
                 }
             }
+        }
+    }
+
+    const deferredClashEvents = resolveDeferredPecosBillClashEvents(titanCore, now);
+    if (deferredClashEvents.length > 0) {
+        titanDerived.push(...deferredClashEvents);
+        for (const deferredEvent of deferredClashEvents) {
+            titanCore = reduce(titanCore, deferredEvent);
         }
     }
 

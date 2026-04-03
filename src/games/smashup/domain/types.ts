@@ -507,6 +507,7 @@ export interface MinionLkiSnapshot {
     powerModifier: number;
     tempPowerModifier: number;
     attachedActionDefIds?: string[];
+    metadata?: Record<string, unknown>;
 }
 
 export interface BaseLkiSnapshot {
@@ -1052,6 +1053,17 @@ export interface BuriedCardUncoveredEvent extends GameEvent<typeof SU_EVENTS.BUR
     };
 }
 
+export interface BuriedCardReturnedToHandEvent extends GameEvent<typeof SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND> {
+    payload: {
+        playerId: PlayerId;
+        cardUid: string;
+        defId: string;
+        baseIndex: number;
+        baseDefId: string;
+        source: 'sphinx-start-turn' | 'sphinx-after-scoring';
+    };
+}
+
 /** 基地离场时丢弃其上的所有埋葬卡（翻开弃置，不触发能力） */
 export interface BuriedCardsDiscardedWithBaseEvent extends GameEvent<typeof SU_EVENTS.BURIED_CARDS_DISCARDED_WITH_BASE> {
     payload: { baseIndex: number; reason: string };
@@ -1224,6 +1236,7 @@ export type SmashUpEvent =
     | TitanOngoingSuppressedEvent
     | CardBuriedEvent
     | BuriedCardUncoveredEvent
+    | BuriedCardReturnedToHandEvent
     | BuriedCardsDiscardedWithBaseEvent
     | BaseScoredEvent
     | VpAwardedEvent

@@ -65,6 +65,9 @@
     "minion_count": "{{count}} Minions",
     "action_count": "{{count}} Actions",
     "selected": "Selected",
+    "click_to_cancel_selection": "Tap to cancel selection",
+    "faction_selected_hint": "Selected, tap to cancel",
+    "faction_selected_label": "Selected",
     "taken_by_other": "Taken by another player",
     "faction_full": "Already selected 2 factions",
     "confirm_selection": "Confirm Selection",
@@ -73,6 +76,8 @@
     "preview_cards": "Included Card Preview",
     "faction_titan_preview": "Titan Preview",
     "faction_titan_missing": "This faction's titan is not available yet",
+    "faction_variant_base": "Base",
+    "faction_variant_pod": "POD",
     "minion": "Minion",
     "action": "Action",
     "discard_badge": "Discard",
@@ -406,6 +411,10 @@
       "name": "Ancient Egyptians",
       "description": "Bury cards, recycle them, and convert hidden value into tempo."
     },
+    "ancient_egyptians_pod": {
+      "name": "Ancient Egyptians",
+      "description": "Bury cards, recycle them, and convert hidden value into tempo."
+    },
     "cowboys": {
       "name": "Cowboys",
       "description": "Duel enemies, play from low hand, and cash in buried cards."
@@ -414,7 +423,19 @@
       "name": "Samurai",
       "description": "Honor, duels, and sacrifice-driven tempo around destruction."
     },
+    "samurai_pod": {
+      "name": "Samurai",
+      "description": "Honor, duels, and sacrifice-driven tempo around destruction."
+    },
     "vikings": {
+      "name": "Vikings",
+      "description": "Force discards and burials, then turn them into extra payoff."
+    },
+    "cowboys_pod": {
+      "name": "Cowboys",
+      "description": "Duel enemies, play from low hand, and cash in buried cards."
+    },
+    "vikings_pod": {
       "name": "Vikings",
       "description": "Force discards and burials, then turn them into extra payoff."
     }
@@ -1248,6 +1269,10 @@
     "time_travelers_time_box": {
       "name": "Time Box",
       "effectText": "Special: At the start of your turn or when a card goes to your hand from play or the discard pile, place a counter on this titan if it is not in play. After you place the fifth or higher counter on it, you may remove all the counters and play this titan. Talent: Play an extra minion here of power 2 or less, and/or play an extra action."
+    },
+    "sphinx": {
+      "name": "Sphinx",
+      "effectText": "Special: At the start of your turn, you may return one of your buried cards to your hand to play this titan on its base. Special: After a base scores while this titan is in play, you may return one of your buried cards there to your hand. Talent: Bury a card from your hand here."
     },
     "bear_cavalry_major_ursa": {
       "name": "Major Ursa"
@@ -2877,21 +2902,69 @@
       "name": "Ancient Curse",
       "effectText": "Play on a minion. You may remove a +1 power counter from it. Ongoing: This minion has -2 power."
     },
+    "ancient_egyptians_mummy_pod": {
+      "name": "Mummy",
+      "abilityText": "Special: After this base scores, you may bury this minion on another base."
+    },
+    "ancient_egyptians_pyramid_engineer_pod": {
+      "name": "Pyramid Engineer",
+      "abilityText": "You may uncover one of your buried cards here. Talent: Bury a card from your hand here."
+    },
+    "ancient_egyptians_priest_of_anubis_pod": {
+      "name": "Priest of Anubis",
+      "abilityText": "Ongoing: This minion has +2 power if you have a card buried here."
+    },
+    "ancient_egyptians_pharaoh_pod": {
+      "name": "Pharaoh",
+      "abilityText": "Ongoing: After another buried card is uncovered, draw a card. Special: Before this base scores, you may uncover one of your buried cards here."
+    },
+    "ancient_egyptians_lost_knowledge_pod": {
+      "name": "Lost Knowledge",
+      "effectText": "Bury a card from your hand OR uncover one of your buried cards. Special: You may play this card before a base scores."
+    },
+    "ancient_egyptians_you_can_take_it_with_you_pod": {
+      "name": "You Can Take It With You",
+      "effectText": "Bury this card. Special: When this card is uncovered, draw three cards."
+    },
+    "ancient_egyptians_plague_of_locusts_pod": {
+      "name": "Plague of Locusts",
+      "effectText": "Choose a base. All other players’ minions there get -1 power until the end of the turn. Special: You may play this before a base scores."
+    },
+    "ancient_egyptians_mummy_strength_pod": {
+      "name": "Mummy Strength",
+      "effectText": "Choose one of your minions. If there is a card buried on its base, it gains +4 power until the end of the turn, otherwise it gains +2 power until the end of the turn."
+    },
+    "ancient_egyptians_tomb_trap_pod": {
+      "name": "Tomb Trap",
+      "effectText": "Bury this card. Special: When this card is uncovered, you may destroy a minion of power 4 or less here."
+    },
+    "ancient_egyptians_ancient_curse_pod": {
+      "name": "Ancient Curse",
+      "effectText": "Play on a minion. You may remove a +1 power counter from it. Ongoing: This minion has -2 power."
+    },
+    "ancient_egyptians_blessing_of_anubis_pod": {
+      "name": "Blessing of Anubis",
+      "effectText": "Bury this card. Special: When this card is uncovered, your minions here each gain +2 power until the end of the turn."
+    },
+    "ancient_egyptians_seal_the_tomb_pod": {
+      "name": "Seal the Tomb",
+      "effectText": "Bury up to two cards from your hand on the same base OR uncover up to two of your buried cards on the same base."
+    },
     "cowboys_deputy": {
       "name": "Deputy",
-      "abilityText": "Special: On your turn, or during a duel involving your minion, you may discard this card from your hand to give a minion +2 power until the end of the turn."
+      "abilityText": "Special: On your turn or during a duel involving your minion, you may discard this card from your hand to give a minion +2 power until the end of the turn."
     },
     "cowboys_gunfighter": {
       "name": "Gunfighter",
-      "abilityText": "You may have this minion duel another player's minion here. Destroy the loser's minion."
+      "abilityText": "This minion may duel another player's minion here. Destroy the losing minion."
     },
     "cowboys_pinkerton": {
       "name": "Pinkerton",
-      "abilityText": "Ongoing: Once per duel, when one of your minions is in a duel, you may place a +1 power counter on it before dueling cards are placed."
+      "abilityText": "Ongoing: Once per duel, when one of your minions is in a duel, you may place a +1 power counter on it."
     },
     "cowboys_sheriff": {
       "name": "Sheriff",
-      "abilityText": "Special: Before a base scores, you may have this minion duel another player's minion here. Destroy the loser's minion."
+      "abilityText": "Special: Before this base scores, this minion may duel another player's minion here. Destroy the losing minion."
     },
     "cowboys_stagecoach": {
       "name": "Stagecoach",
@@ -2915,15 +2988,15 @@
     },
     "cowboys_gold_in_them_thar_hills": {
       "name": "Gold in Them Thar Hills",
-      "effectText": "Reveal the top 3 cards of your deck. Draw one of them. You may play it as an extra card. Return the rest in any order."
+      "effectText": "Look at the top three cards of your deck. Reveal and draw one of them; you may play it as an extra card. Return the rest in any order."
     },
     "cowboys_form_a_posse": {
       "name": "Form a Posse",
-      "effectText": "Each of your minions has +1 power until the end of the turn and cannot be destroyed, moved, or returned to hand."
+      "effectText": "Each of your minions gains +1 power and cannot be destroyed, moved, or returned to the hand until the end of the turn."
     },
     "cowboys_dynamite_surprise": {
       "name": "Dynamite Surprise",
-      "effectText": "Special: Before a base where you have a minion and are not winning scores, destroy a minion of power 4 or less there. Special: If another player's card reveals or looks at a card in your hand or deck, destroy one of that player's minions of power 4 or less."
+      "effectText": "Special: Before a base scores where you have a minion and are not winning, destroy a minion of power 4 or less there. Special: If another player's card reveals or looks at a card in your hand or deck, destroy one of their minions of power 4 or less."
     },
     "samurai_samurai_chan": {
       "name": "Samurai-Chan",
@@ -2973,17 +3046,65 @@
       "name": "Code of Bushido",
       "effectText": "Place three total +1 power counters on your minions."
     },
+    "samurai_samurai_chan_pod": {
+      "name": "Samurai-Chan",
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play, draw a card."
+    },
+    "samurai_ronin_pod": {
+      "name": "Ronin",
+      "abilityText": "If this is your only minion on this base, you may place two +1 power counters on it."
+    },
+    "samurai_bushi_pod": {
+      "name": "Bushi",
+      "abilityText": "Ongoing: After this minion goes to the discard pile from play while it has 5 or more power, gain 1 VP."
+    },
+    "samurai_shogun_pod": {
+      "name": "Shogun",
+      "abilityText": "Ongoing: After another of your minions goes to the discard pile from play, place a +1 power counter on this minion."
+    },
+    "samurai_yokai_attack_pod": {
+      "name": "Yokai Attack!",
+      "effectText": "Destroy one of your minions to play an extra minion and an extra action."
+    },
+    "samurai_way_of_the_warrior_pod": {
+      "name": "Way of the Warrior",
+      "effectText": "Until the end of the turn, one of your minions gains +3 power, and if it goes to the discard pile from play, draw a card."
+    },
+    "samurai_honorable_combat_pod": {
+      "name": "Honorable Combat",
+      "effectText": "Choose a base where another player has more power than you. One of your minions there duels one of that player's minions there. The controller of the winning minion gains 1 VP."
+    },
+    "samurai_honor_the_fallen_pod": {
+      "name": "Honor the Fallen",
+      "effectText": "Play on a base. Ongoing: After one of your minions here goes to the discard pile, draw a card."
+    },
+    "samurai_honor_the_ancestors_pod": {
+      "name": "Honor the Ancestors",
+      "effectText": "Place a +1 power counter on one of your minions. For each other player in the game, you may shuffle a minion from your discard pile back into your deck."
+    },
+    "samurai_heart_of_the_battle_pod": {
+      "name": "Heart of the Battle",
+      "effectText": "Special: Play before a base scores. One of your minions there duels another player's minion there. Destroy the losing minion."
+    },
+    "samurai_final_haiku_pod": {
+      "name": "Final Haiku",
+      "effectText": "Play on one of your minions. Ongoing: After this minion goes to the discard pile from play, your minions each gain +2 power until the end of the turn."
+    },
+    "samurai_code_of_bushido_pod": {
+      "name": "Code of Bushido",
+      "effectText": "Place three total +1 power counters on your minions."
+    },
     "vikings_huscarl": {
       "name": "Huscarl",
       "abilityText": "Talent: Place a card from your hand on top of your deck to give this minion +2 power until the end of the turn."
     },
     "vikings_shield_maiden": {
       "name": "Shield Maiden",
-      "abilityText": "Reveal the top card of another player's deck. If it is an action or a minion of power 3 or less, place it into your hand."
+      "abilityText": "Reveal the top card of another player's deck. If it is an action, or a minion of power 3 or less, place it into your hand. Otherwise, return it."
     },
     "vikings_raider": {
       "name": "Raider",
-      "abilityText": "Talent: Place up to 3 cards from your hand on top of your deck to give this minion +1 power for each card until the end of the turn."
+      "abilityText": "Talent: Place up to three cards from your hand on top of your deck. This minion gains +1 power for each one until the end of the turn."
     },
     "vikings_valkyrie": {
       "name": "Valkyrie",
@@ -2999,11 +3120,11 @@
     },
     "vikings_ransack": {
       "name": "Ransack",
-      "effectText": "Place an action played on a minion, an action played on a base, or a buried card into your hand."
+      "effectText": "Place an action on a minion, an action on a base, or a buried card into your hand."
     },
     "vikings_raiding_party": {
       "name": "Raiding Party",
-      "effectText": "Reveal the top 3 cards of another player's deck. You may play one action or one minion of power 4 or less from among them as an extra card. Place the rest back on top of that deck in any order."
+      "effectText": "Reveal the top three cards of another player's deck. You may play a revealed action, or minion of power 4 or less, as an extra card. Return the rest in any order."
     },
     "vikings_pillage": {
       "name": "Pillage",
@@ -3037,21 +3158,153 @@
       "name": "Star Portal",
       "abilityText": "After a card is buried here or an action is played on this base, its controller draws a card."
     },
+    "base_pyramids_pod": {
+      "name": "Pyramids",
+      "abilityText": "On your turn, you may bury a card from your hand here."
+    },
+    "base_star_portal_pod": {
+      "name": "Star Portal",
+      "abilityText": "After a card is buried here or an action is played on this base, its controller draws a card."
+    },
     "base_shoguns_palace": {
       "name": "Shogun's Palace",
-      "abilityText": "Once per turn, after you play a minion here, it may duel another player's minion here. The winning minion's controller draws two cards."
+      "abilityText": "Once per turn, after you play a minion here, it may duel another player's minion here. The controller of the winning minion draws two cards."
     },
     "base_sakura_garden": {
       "name": "Sakura Garden",
-      "abilityText": "The first time one of your minions is moved to the discard pile here each turn, draw a card."
+      "abilityText": "Each turn, the first time one of your minions here goes to the discard pile, draw a card."
+    },
+    "base_shoguns_palace_pod": {
+      "name": "Shogun's Palace",
+      "abilityText": "Once per turn, after you play a minion here, it may duel another player's minion here. The controller of the winning minion draws two cards."
+    },
+    "base_sakura_garden_pod": {
+      "name": "Sakura Garden",
+      "abilityText": "Each turn, the first time one of your minions here goes to the discard pile, draw a card."
     },
     "base_drakkar": {
       "name": "Drakkar",
-      "abilityText": "The first time a minion is played here each turn, reveal the top card of another player's deck. If it is an action or a minion of power 3 or less, place it into its owner's hand."
+      "abilityText": "After the first time you play a minion here each turn, you may reveal the top card of another player's deck. If it is an action or a minion of power 3 or less, you may draw it. Otherwise, return it."
     },
     "base_longhouse": {
       "name": "Longhouse",
       "abilityText": "On your turn, you may place a card from your hand on top of your deck to give one of your minions here +2 power until the end of the turn."
+    },
+    "cowboys_deputy_pod": {
+      "name": "Deputy",
+      "abilityText": "Special: On your turn or during a duel involving your minion, you may discard this card from your hand to give a minion +2 power until the end of the turn."
+    },
+    "cowboys_gunfighter_pod": {
+      "name": "Gunfighter",
+      "abilityText": "This minion may duel another player's minion here. Destroy the losing minion."
+    },
+    "cowboys_pinkerton_pod": {
+      "name": "Pinkerton",
+      "abilityText": "Ongoing: Once per duel, when one of your minions is in a duel, you may place a +1 power counter on it."
+    },
+    "cowboys_sheriff_pod": {
+      "name": "Sheriff",
+      "abilityText": "Special: Before this base scores, this minion may duel another player's minion here. Destroy the losing minion."
+    },
+    "cowboys_form_a_posse_pod": {
+      "name": "Form a Posse",
+      "effectText": "Each of your minions gains +1 power and cannot be destroyed, moved, or returned to the hand until the end of the turn."
+    },
+    "cowboys_quick_draw_pod": {
+      "name": "Quick Draw",
+      "effectText": "Choose one of your minions. If it is in a duel, it gains +4 power until the end of the turn, otherwise it gains +2 power until the end of the turn."
+    },
+    "cowboys_gold_in_them_thar_hills_pod": {
+      "name": "Gold in Them Thar Hills",
+      "effectText": "Look at the top three cards of your deck. Reveal and draw one of them; you may play it as an extra card. Return the rest in any order."
+    },
+    "cowboys_stagecoach_pod": {
+      "name": "Stagecoach",
+      "effectText": "Move or transfer up to two of your cards on the same base to another base."
+    },
+    "cowboys_run_em_off_pod": {
+      "name": "Run 'Em Off",
+      "effectText": "One of your minions duels another player's minion at the same base. The winning minion gains +3 power until the end of the turn, and its controller moves the losing minion to another base."
+    },
+    "cowboys_high_noon_pod": {
+      "name": "High Noon",
+      "effectText": "One of your minions duels another player's minion at the same base. Destroy the losing minion. If your minion wins, you may play an extra minion there."
+    },
+    "cowboys_dynamite_surprise_pod": {
+      "name": "Dynamite Surprise",
+      "effectText": "Special: Before a base scores where you have a minion and are not winning, destroy a minion of power 4 or less there. Special: If another player's card reveals or looks at a card in your hand or deck, destroy one of their minions of power 4 or less."
+    },
+    "cowboys_gold_strike_pod": {
+      "name": "Gold Strike",
+      "effectText": "Play on a base. Ongoing: After you play a minion here, draw a card."
+    },
+    "base_saloon_pod": {
+      "name": "Saloon",
+      "abilityText": "After a minion here is destroyed, each player with a minion here may draw a card."
+    },
+    "base_so_so_corral_pod": {
+      "name": "So-So Corral",
+      "abilityText": "After you play a minion here, it may duel another player's minion here. Destroy the losing minion."
+    },
+    "vikings_huscarl_pod": {
+      "name": "Huscarl",
+      "abilityText": "Talent: Place a card from your hand on top of your deck to give this minion +2 power until the end of the turn."
+    },
+    "vikings_shield_maiden_pod": {
+      "name": "Shield Maiden",
+      "abilityText": "Reveal the top card of another player's deck. If it is an action, or a minion of power 3 or less, place it into your hand. Otherwise, return it."
+    },
+    "vikings_raider_pod": {
+      "name": "Raider",
+      "abilityText": "Talent: Place up to three cards from your hand on top of your deck. This minion gains +1 power for each one until the end of the turn."
+    },
+    "vikings_valkyrie_pod": {
+      "name": "Valkyrie",
+      "abilityText": "Place a minion from another player's discard pile into your hand."
+    },
+    "vikings_berserk_pod": {
+      "name": "Berserk",
+      "effectText": "Place a card from your hand on top of your deck to give one of your minions +4 power until the end of the turn."
+    },
+    "vikings_cast_the_runes_pod": {
+      "name": "Cast the Runes",
+      "effectText": "Look at another player's hand. Look at the top two cards of their deck and return them in any order. Play an extra action."
+    },
+    "vikings_combat_training_pod": {
+      "name": "Combat Training",
+      "effectText": "Each of your minions gains +1 power until the end of the turn."
+    },
+    "vikings_pillage_pod": {
+      "name": "Pillage",
+      "effectText": "Take a random card from another player's hand and place it in yours."
+    },
+    "vikings_raiding_party_pod": {
+      "name": "Raiding Party",
+      "effectText": "Reveal the top three cards of another player's deck. You may play a revealed action, or minion of power 4 or less, as an extra card. Return the rest in any order."
+    },
+    "vikings_ransack_pod": {
+      "name": "Ransack",
+      "effectText": "Place an action on a minion, an action on a base, or a buried card into your hand."
+    },
+    "vikings_tribute_pod": {
+      "name": "Tribute",
+      "effectText": "Draw three cards."
+    },
+    "vikings_viking_funeral_pod": {
+      "name": "Viking Funeral",
+      "effectText": "Play on one of your minions of power 5 or more. Ongoing: After this minion goes to the discard pile, gain 1 VP. If you own it, put it back in the box."
+    },
+    "base_drakkar_pod": {
+      "name": "Drakkar",
+      "abilityText": "After the first time you play a minion here each turn, you may reveal the top card of another player's deck. If it is an action or a minion of power 3 or less, you may draw it. Otherwise, return it."
+    },
+    "base_longhouse_pod": {
+      "name": "Longhouse",
+      "abilityText": "On your turn, you may place a card from your hand on top of your deck to give one of your minions here +2 power until the end of the turn."
+    },
+    "pecos_bill": {
+      "name": "Pecos Bill",
+      "effectText": "Special: When you become the challenger in a duel, you may discard a card to play this titan there. Do not resolve any titan clashes until after the end of the duel. Ongoing: During duels here, other players may not move minions from here or return them to a player's hand. Ongoing: After you win a duel, draw a card."
     }
   },
   "endgame": {

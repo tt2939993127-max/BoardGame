@@ -11,15 +11,15 @@
 ## 执行命令
 
 ```bash
-node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完成"
-node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Cowboys 决斗交互应按官方链路完成 Pinkerton/决斗牌/Deputy/结算"
-node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行动额度"
+$env:BG_HEAVY_MEMORY_MIN_FREE_GB='1'; node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完成"
+$env:BG_HEAVY_MEMORY_MIN_FREE_GB='1'; node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Cowboys 决斗交互应按官方链路完成 Pinkerton/决斗牌/Deputy/结算"
+$env:BG_HEAVY_MEMORY_MIN_FREE_GB='1'; node scripts/infra/run-e2e-single.mjs ci e2e/smashup-phase-transition-simple.e2e.ts "Oops Samurai 额外出牌效果应在浏览器中兑现额外随从与行动额度"
 ```
 
 ## 结果
 
 - 状态：通过
-- 日期：`2026-03-30`
+- 日期：`2026-03-31`
 
 ## 本轮环境修复
 
@@ -49,9 +49,9 @@ npm install @alloc/quick-lru@5.2.0 --no-save
 
 观察结论：
 
-- 翻开前，`Pyramids` 基地左侧清楚显示一张埋葬条带，手牌区只有 `Seal the Tomb`，弃牌区为 `0`。
-- 翻开后，埋葬条带消失，说明被埋的 `You Can Take It With You` 已经离开基地。
-- 翻开后手牌区变成 `4` 张，弃牌区出现 `You Can Take It With You`，符合“翻开结算后进弃牌堆”的链路。
+- 翻开前，`Pyramids` 基地下方清楚显示一张埋葬条带，右下弃牌区为 `0`，说明 `You Can Take It With You` 已经通过正式出牌链进入埋葬区而不是直接进弃牌。
+- 翻开后，`Pyramids` 下方的埋葬条带消失，说明被埋的牌已经真正离开基地。
+- 翻开后右下弃牌区计数变成 `2`，顶部可见 `You Can Take It With You`，与 `Seal the Tomb` 一起进入弃牌堆，符合“从手牌打出 -> 埋葬 -> 翻开 -> 结算后弃置”的 full-chain。
 
 ### 2. Cowboys：官方决斗链路
 
@@ -97,21 +97,20 @@ npm install @alloc/quick-lru@5.2.0 --no-save
 
 观察结论：
 
-- 选择前，页面顶部明确提示 `妖怪来袭：选择你要消灭的一个随从`，场上只有 `Samurai-Chan` 作为可点目标。
-- 点击后，这条链会先进入“同时触发排序”，说明当前浏览器真实反映了 `Samurai-Chan` 与 `Yokai Attack!` 的同批触发关系。
-- 结算后，场上己方随从已清空，`Yokai Attack!` 和 `Samurai-Chan` 都进入弃牌区。
+- 选择前，页面顶部明确提示 `妖怪来袭！：你可以消灭一个自己的随从，以额外打出一个随从和一个行动`，场上只有 `Ronin` 作为可点目标；右下弃牌区已显示 `Yokai Attack!`，说明这张行动卡已经先从手牌正式打出。
+- 结算后，左侧基地上的 `Ronin` 已离场，右下弃牌区计数变成 `2`，顶部卡面是 `Ronin`，其下仍能看到 `Yokai Attack!`，说明“打出行动卡 + 消灭己方随从”的链路都已落到真实弃牌区。
 - 结算后页面顶部同时出现 `获得1次额外行动机会` 和 `获得1次额外随从机会` 两条提示，说明额外额度在浏览器里已经兑现。
 
 ## 覆盖口径与限制
 
 - 这三条 E2E 的目标是证明“新增交互类型在浏览器里可走通”，不是声明四派系所有正式出牌链都已用浏览器完整覆盖。
 - `Cowboys` 这条是完整浏览器交互：真实打出 `Gunfighter`，并在浏览器里走完 `Pinkerton -> 决斗牌 -> Deputy -> 结算`。
-- `Ancient Egyptians` 与 `Samurai` 这两条是“注入当前交互后完成浏览器点击”的证据：
-  - `Ancient Egyptians` 直接注入 `ancient_egyptians_seal_the_tomb_uncover`
-  - `Samurai` 直接注入 `samurai_yokai_attack`
-- 因此这两条证明的是“埋葬翻开 UI / 目标点击 UI / 额度兑现 UI 已可工作”，不是“从手牌正常打出整张牌直到最终结算的 full-chain E2E”。
+- `Ancient Egyptians` 与 `Samurai` 现在也都是 full-chain 浏览器证据：
+  - `Ancient Egyptians`：从手牌打出 `Seal the Tomb`，再在浏览器里完成翻开与弃置
+  - `Samurai`：从手牌打出 `Yokai Attack!`，再在浏览器里选择己方随从并兑现额外额度
+- 因此当前文档中的三条主证据都已经覆盖“正式出牌 -> 浏览器交互 -> 最终可见状态”的完整链路。
 
 ## 当前残留风险
 
-- `Ancient Egyptians / Samurai` 若要证明完整正式出牌链，后续仍可补 full-chain E2E，而不是只注入当前交互。
-- 本轮已经确认新增交互类型在浏览器层可操作，因此这项风险不再阻塞当前四派系审计收口。
+- 当前证据覆盖的是三类代表性交互，不代表 Oops 四派系所有卡牌与所有组合场景都已在浏览器层逐张穷举。
+- 但阻塞审计收口的“新交互类型是否能在真实浏览器链路中完成”已经解除，本轮四派系审计可以按完成态汇报。

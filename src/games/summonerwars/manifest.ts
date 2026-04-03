@@ -24,7 +24,13 @@ const entry: GameManifestEntry = {
     mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
     mobileLayoutPreset: 'board-shell',
-    shellTargets: ['pwa'],
+    shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'summonerwars',
+        assetPackId: 'summonerwars',
+    },
 };
 
 export const SUMMONER_WARS_MANIFEST: GameManifestEntry = entry;

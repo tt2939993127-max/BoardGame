@@ -33,6 +33,7 @@ interface SpriteState {
 const dice3DLogger = createScopedLogger('dicethrone:dice3d');
 const spriteProbeStatusCache = new Map<string, 'ready' | 'error'>();
 const spriteProbePromiseCache = new Map<string, Promise<'ready' | 'error'>>();
+const DIRECT_IMAGE_URL_RE = /^(?:data:|blob:)/i;
 const DICE3D_STYLE_ELEMENT_ID = 'dicethrone-dice3d-styles';
 const DICE3D_STYLE_TEXT = `
 .dice3d-perspective { perspective: 1000px; }
@@ -50,19 +51,24 @@ const DICE3D_STYLE_TEXT = `
 .animate-dice3d-bonus-tumble { animation: dice3d-bonus-tumble 0.8s linear infinite; }
 `;
 
+const isRemoteUrl = (url: string) => {
+    if (!/^https?:\/\//i.test(url)) return false;
+    if (typeof window === 'undefined' || !window.location?.origin) return true;
+    try {
+        return new URL(url, window.location.href).origin !== window.location.origin;
+    } catch {
+        return true;
+    }
+};
+
+const shouldLoadViaBlob = (candidateUrl: string) => (
+    !DIRECT_IMAGE_URL_RE.test(candidateUrl) && !isRemoteUrl(candidateUrl)
+);
+
 const probeSpriteUrl = (candidateUrl: string) => {
     const cachedStatus = spriteProbeStatusCache.get(candidateUrl);
     if (cachedStatus) {
         return Promise.resolve(cachedStatus);
-    }
-
-    // 对 DiceThrone 本地语言化资源直接放行：
-    // 已验证同页环境下 /assets/i18n/... 的 fetch 与 Image.onload 都正常，
-    // 但组件内的额外探测链在局内存在时序问题，导致状态长期卡在 loading。
-    // 这里先对这类稳定本地资源直接判 ready，避免把局内骰图继续卡空。
-    if (/^\/assets\/i18n\//i.test(candidateUrl)) {
-        spriteProbeStatusCache.set(candidateUrl, 'ready');
-        return Promise.resolve('ready');
     }
 
     const existingPromise = spriteProbePromiseCache.get(candidateUrl);
@@ -70,26 +76,56 @@ const probeSpriteUrl = (candidateUrl: string) => {
         return existingPromise;
     }
 
-    const probePromise = (async (): Promise<'ready' | 'error'> => {
-        try {
-            const response = await fetch(candidateUrl, {
-                method: 'GET',
-                credentials: 'same-origin',
-            });
-            const contentType = response.headers.get('content-type') ?? '';
-            const result = response.ok && /^image\//i.test(contentType) ? 'ready' : 'error';
+    const probePromise = new Promise<'ready' | 'error'>((resolve) => {
+        const finalize = (result: 'ready' | 'error') => {
             spriteProbeStatusCache.set(candidateUrl, result);
-            return result;
-        } catch {
-            spriteProbeStatusCache.set(candidateUrl, 'error');
-            return 'error';
-        } finally {
             spriteProbePromiseCache.delete(candidateUrl);
+            resolve(result);
+        };
+
+        try {
+            const image = new Image();
+            image.decoding = 'async';
+            image.onload = () => finalize('ready');
+            image.onerror = () => finalize('error');
+            image.src = candidateUrl;
+
+            if (image.complete) {
+                queueMicrotask(() => finalize(image.naturalWidth > 0 ? 'ready' : 'error'));
+            }
+        } catch {
+            finalize('error');
         }
-    })();
+    });
 
     spriteProbePromiseCache.set(candidateUrl, probePromise);
     return probePromise;
+};
+
+const loadLocalSpriteBlobUrl = async (candidateUrl: string) => {
+    if (typeof fetch === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
+        return { status: 'error' as const };
+    }
+
+    try {
+        const response = await fetch(candidateUrl, { credentials: 'same-origin' });
+        if (!response.ok) {
+            return { status: 'error' as const };
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
+        const probeResult = await probeSpriteUrl(objectUrl);
+        if (probeResult !== 'ready') {
+            URL.revokeObjectURL(objectUrl);
+            return { status: 'error' as const };
+        }
+        return {
+            status: 'ready' as const,
+            url: objectUrl,
+        };
+    } catch {
+        return { status: 'error' as const };
+    }
 };
 
 /** 3D 骰子组件 */
@@ -104,6 +140,7 @@ export const Dice3D = ({
     definitionId,
 }: Dice3DProps) => {
     const translateZ = `calc(${size} / 2)`;
+    const localObjectUrlRef = React.useRef<string | null>(null);
 
     const faces = [
         { id: 1, trans: `translateZ(${translateZ})` },
@@ -132,6 +169,13 @@ export const Dice3D = ({
             url: initialUrl,
         };
     });
+
+    const clearLocalObjectUrl = React.useCallback(() => {
+        if (localObjectUrlRef.current) {
+            URL.revokeObjectURL(localObjectUrlRef.current);
+            localObjectUrlRef.current = null;
+        }
+    }, []);
 
     React.useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -169,16 +213,19 @@ export const Dice3D = ({
                 locale: locale ?? null,
                 selectedUrl: spriteUrls[0],
             });
+            clearLocalObjectUrl();
             setSpriteState({ status: 'ready', url: spriteUrls[0] });
             return undefined;
         }
 
-        const firstCachedUrl = spriteUrls.find((url) => spriteProbeStatusCache.get(url) === 'ready');
+        const firstCachedUrl = spriteUrls.find((url) => !shouldLoadViaBlob(url) && spriteProbeStatusCache.get(url) === 'ready');
         if (firstCachedUrl) {
+            clearLocalObjectUrl();
             setSpriteState({ status: 'ready', url: firstCachedUrl });
             return undefined;
         }
 
+        clearLocalObjectUrl();
         setSpriteState({ status: 'loading', url: undefined });
         let cancelled = false;
 
@@ -199,17 +246,25 @@ export const Dice3D = ({
             dice3DLogger.debug('sprite-probe-start', {
                 index,
                 candidateUrl,
+                viaBlob: shouldLoadViaBlob(candidateUrl),
             });
 
-            const result = await probeSpriteUrl(candidateUrl);
+            const loaded = shouldLoadViaBlob(candidateUrl)
+                ? await loadLocalSpriteBlobUrl(candidateUrl)
+                : { status: await probeSpriteUrl(candidateUrl), url: candidateUrl };
             if (cancelled) return;
 
-            if (result === 'ready') {
+            if (loaded.status === 'ready' && loaded.url) {
                 dice3DLogger.info('sprite-probe-success', {
                     index,
                     candidateUrl,
+                    resolvedUrl: loaded.url,
                 });
-                setSpriteState({ status: 'ready', url: candidateUrl });
+                clearLocalObjectUrl();
+                if (shouldLoadViaBlob(candidateUrl)) {
+                    localObjectUrlRef.current = loaded.url;
+                }
+                setSpriteState({ status: 'ready', url: loaded.url });
                 return;
             }
 
@@ -223,8 +278,9 @@ export const Dice3D = ({
 
         return () => {
             cancelled = true;
+            clearLocalObjectUrl();
         };
-    }, [characterId, definitionId, locale, spriteUrls]);
+    }, [characterId, clearLocalObjectUrl, definitionId, locale, spriteUrls]);
 
     React.useEffect(() => {
         dice3DLogger.debug('sprite-render-state', {

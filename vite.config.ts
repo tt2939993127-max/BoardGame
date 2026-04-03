@@ -1,5 +1,6 @@
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
+import fs from 'node:fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import ts from 'typescript'
@@ -18,6 +19,11 @@ const MANUAL_CHUNK_PATTERNS: Array<[string, string[]]> = [
   ['vendor-i18n', ['/node_modules/i18next/', '/node_modules/react-i18next/', '/node_modules/i18next-http-backend/', '/node_modules/i18next-browser-languagedetector/']],
   ['vendor-query', ['/node_modules/@tanstack/react-query/']],
   ['vendor-howler', ['/node_modules/howler/']],
+]
+const ANDROID_BUILD_PRUNE_PATHS = [
+  'assets/atlas-configs/smashup/2833984701.json',
+  'assets/common/audio/registry.json',
+  'assets/common/audio/phrase-mappings.zh-CN.json',
 ]
 
 const readCliFlag = (flagName: string): string | undefined => {
@@ -92,6 +98,21 @@ const createInlineTypeScriptFallbackPlugin = (enabled: boolean) => ({
   },
 })
 
+const createAndroidDistPrunePlugin = (mode: string) => ({
+  name: 'android-dist-prune',
+  apply: 'build' as const,
+  closeBundle() {
+    if (mode !== 'android') return
+
+    const distDir = path.resolve(configDir, 'dist')
+    for (const relativePath of ANDROID_BUILD_PRUNE_PATHS) {
+      const targetPath = path.join(distDir, relativePath)
+      if (!fs.existsSync(targetPath)) continue
+      fs.rmSync(targetPath, { force: true })
+    }
+  },
+})
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -157,6 +178,7 @@ export default defineConfig(({ mode }) => {
       publicFileHashPlugin(),
       readyCheckPlugin(),
       createAndroidBuildMetaPlugin(mode, backendUrl),
+      createAndroidDistPrunePlugin(mode),
     ],
     esbuild: forceInlineVite ? false : undefined,
     build: {

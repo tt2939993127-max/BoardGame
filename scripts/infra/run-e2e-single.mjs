@@ -87,4 +87,5 @@ console.log(`[test:e2e:${mode}:file] 目标文件: ${file}${testCase ? ` | 用�
 await runE2ECommand({
     mode,
     extraArgs: forwardArgs,
+    entrypoint: 'run-e2e-single',
 });

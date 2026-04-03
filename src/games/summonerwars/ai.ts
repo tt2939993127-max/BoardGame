@@ -1,5 +1,10 @@
 import type { Command, MatchState, PlayerId } from '../../engine/types';
-import { createAiLegalActionId, createActionKindScorer, createScoredLocalAiPolicy } from '../../engine/ai';
+import {
+    buildDeterministicAiNoise,
+    createAiLegalActionId,
+    createActionKindScorer,
+    createScoredLocalAiPolicy,
+} from '../../engine/ai';
 import type { AiDecisionContext, AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
 import type { InteractionDescriptor as EngineInteractionDescriptor, PromptMultiConfig } from '../../engine/systems/InteractionSystem';
 import { SummonerWarsDomain } from './domain';
@@ -145,6 +150,51 @@ const cloneCoreWithMovedUnit = (
     };
 };
 
+const estimateSummonerThreat = (
+    core: SummonerWarsCore,
+    playerId: PlayerId,
+): {
+    remainingLife: number;
+    directThreatDamage: number;
+    nearbyEnemyPressure: number;
+    threateningEnemyIds: string[];
+} => {
+    const summoner = getSummoner(core, playerId);
+    if (!summoner) {
+        return {
+            remainingLife: 0,
+            directThreatDamage: 0,
+            nearbyEnemyPressure: 0,
+            threateningEnemyIds: [],
+        };
+    }
+
+    const enemyUnits = getPlayerUnits(core, getEnemyPlayerId(playerId));
+    let directThreatDamage = 0;
+    let nearbyEnemyPressure = 0;
+    const threateningEnemyIds: string[] = [];
+
+    for (const enemyUnit of enemyUnits) {
+        const canHitSummonerNow = getValidAttackTargetsEnhanced(core, enemyUnit.position).some((target) => {
+            return target.row === summoner.position.row && target.col === summoner.position.col;
+        });
+        if (canHitSummonerNow) {
+            directThreatDamage += enemyUnit.card.strength;
+            threateningEnemyIds.push(enemyUnit.instanceId);
+        }
+
+        const distance = manhattanDistance(enemyUnit.position, summoner.position);
+        nearbyEnemyPressure += Math.max(0, 5 - distance) * Math.max(1, enemyUnit.card.strength);
+    }
+
+    return {
+        remainingLife: Math.max(0, summoner.card.life - summoner.damage),
+        directThreatDamage,
+        nearbyEnemyPressure,
+        threateningEnemyIds,
+    };
+};
+
 const buildInteractionActions = (
     state: SummonerWarsState,
     playerId: PlayerId,
@@ -220,7 +270,16 @@ const buildSetupActions = (
     const isReady = state.core.readyPlayers[playerId];
 
     if (!selectedFaction || selectedFaction === 'unselected') {
-        for (const factionId of FACTION_PRIORITY) {
+        const takenFactions = new Set<FactionId>();
+        for (const value of Object.values(state.core.selectedFactions)) {
+            if (value && value !== 'unselected') {
+                takenFactions.add(value as FactionId);
+            }
+        }
+        const candidates = FACTION_PRIORITY.filter((factionId) => !takenFactions.has(factionId));
+        const availableFactions = candidates.length > 0 ? candidates : FACTION_PRIORITY;
+
+        for (const factionId of availableFactions) {
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('setup', 'select-faction', factionId),
                 kind: 'setup-select-faction',
@@ -313,6 +372,8 @@ const buildSummonActions = (
     const player = state.core.players[playerId];
     const summonPositions = getValidSummonPositions(state.core, playerId);
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
+    const ownSummoner = getSummoner(state.core, playerId);
+    const threat = estimateSummonerThreat(state.core, playerId);
 
     for (const card of player.hand) {
         if (card.cardType !== 'unit') continue;
@@ -337,6 +398,10 @@ const buildSummonActions = (
                     position,
                     centerScore: getCenterScore(position),
                     distanceToEnemySummoner: enemySummoner ? manhattanDistance(position, enemySummoner.position) : 99,
+                    distanceToOwnSummoner: ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99,
+                    remainingLife: threat.remainingLife,
+                    directThreatDamage: threat.directThreatDamage,
+                    nearbyEnemyPressure: threat.nearbyEnemyPressure,
                 },
             });
         }
@@ -351,12 +416,15 @@ const buildMoveActions = (
 ): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
     const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
+    const ownSummoner = getSummoner(state.core, playerId);
+    const threatBefore = estimateSummonerThreat(state.core, playerId);
 
     for (const unit of getPlayerUnits(state.core, playerId)) {
         const targets = getValidMoveTargetsEnhanced(state.core, unit.position);
         for (const to of targets) {
             const movedCore = cloneCoreWithMovedUnit(state.core, unit.position, to);
             const attackTargetsAfterMove = movedCore ? getValidAttackTargetsEnhanced(movedCore, to).length : 0;
+            const threatAfter = movedCore ? estimateSummonerThreat(movedCore, playerId) : threatBefore;
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('move-unit', unit.instanceId, to.row, to.col),
                 kind: 'move-unit',
@@ -377,6 +445,17 @@ const buildMoveActions = (
                     distanceToEnemySummonerAfter: enemySummoner ? manhattanDistance(to, enemySummoner.position) : 99,
                     centerScore: getCenterScore(to),
                     attackType: unit.card.attackType,
+                    sourceUnitClass: unit.card.unitClass,
+                    sourceIsSummoner: unit.card.unitClass === 'summoner',
+                    distanceToOwnSummonerBefore: ownSummoner ? manhattanDistance(unit.position, ownSummoner.position) : 99,
+                    distanceToOwnSummonerAfter: ownSummoner
+                        ? (unit.card.unitClass === 'summoner' ? 0 : manhattanDistance(to, ownSummoner.position))
+                        : 99,
+                    remainingLifeBefore: threatBefore.remainingLife,
+                    directThreatDamageBefore: threatBefore.directThreatDamage,
+                    nearbyEnemyPressureBefore: threatBefore.nearbyEnemyPressure,
+                    directThreatDamageAfter: threatAfter.directThreatDamage,
+                    nearbyEnemyPressureAfter: threatAfter.nearbyEnemyPressure,
                 },
             });
         }
@@ -392,6 +471,8 @@ const buildStructureActions = (
     const actions: AiLegalAction[] = [];
     const player = state.core.players[playerId];
     const buildPositions = getValidBuildPositions(state.core, playerId);
+    const ownSummoner = getSummoner(state.core, playerId);
+    const threat = estimateSummonerThreat(state.core, playerId);
 
     for (const card of player.hand) {
         if (card.cardType !== 'structure') continue;
@@ -413,6 +494,10 @@ const buildStructureActions = (
                     life: card.life,
                     position,
                     centerScore: getCenterScore(position),
+                    distanceToOwnSummoner: ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99,
+                    remainingLife: threat.remainingLife,
+                    directThreatDamage: threat.directThreatDamage,
+                    nearbyEnemyPressure: threat.nearbyEnemyPressure,
                 },
             });
         }
@@ -426,6 +511,8 @@ const buildAttackActions = (
     playerId: PlayerId,
 ): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
+    const threat = estimateSummonerThreat(state.core, playerId);
+    const threateningEnemyIds = new Set(threat.threateningEnemyIds);
 
     for (const unit of getPlayerUnits(state.core, playerId)) {
         const targets = getValidAttackTargetsEnhanced(state.core, unit.position);
@@ -462,6 +549,10 @@ const buildAttackActions = (
                     targetLifeRemaining,
                     lethalLikely: unit.card.strength >= targetLifeRemaining,
                     targetOwner: targetUnit?.owner ?? targetStructure?.owner,
+                    targetIsThreateningSummoner: targetUnit ? threateningEnemyIds.has(targetUnit.instanceId) : false,
+                    remainingLife: threat.remainingLife,
+                    directThreatDamage: threat.directThreatDamage,
+                    nearbyEnemyPressure: threat.nearbyEnemyPressure,
                 },
             });
         }
@@ -622,6 +713,18 @@ const setupScorer: LocalAiActionScorer = {
     },
 };
 
+const setupRandomScorer: LocalAiActionScorer = {
+    id: 'setup-random',
+    score(context, action) {
+        if (action.kind !== 'setup-select-faction') return null;
+        const noise = buildDeterministicAiNoise(context, action, 'setup');
+        return {
+            score: Number((noise * 10).toFixed(3)),
+            reason: '阵营选择随机扰动',
+        };
+    },
+};
+
 const summonScorer: LocalAiActionScorer = {
     id: 'summon-tempo',
     score(_context, action) {
@@ -695,6 +798,95 @@ const attackScorer: LocalAiActionScorer = {
     },
 };
 
+const summonerSafetyScorer: LocalAiActionScorer = {
+    id: 'summoner-safety',
+    score(_context, action) {
+        const remainingLife = typeof action.metadata?.remainingLife === 'number'
+            ? action.metadata.remainingLife
+            : 0;
+        const directThreatDamage = typeof action.metadata?.directThreatDamage === 'number'
+            ? action.metadata.directThreatDamage
+            : 0;
+        const nearbyEnemyPressure = typeof action.metadata?.nearbyEnemyPressure === 'number'
+            ? action.metadata.nearbyEnemyPressure
+            : 0;
+        const lethalPressure = remainingLife > 0 && directThreatDamage >= remainingLife;
+        const underPressure = lethalPressure || nearbyEnemyPressure >= 12;
+
+        if (!underPressure) return null;
+
+        if (action.kind === 'move-unit') {
+            const directThreatDamageBefore = typeof action.metadata?.directThreatDamageBefore === 'number'
+                ? action.metadata.directThreatDamageBefore
+                : directThreatDamage;
+            const directThreatDamageAfter = typeof action.metadata?.directThreatDamageAfter === 'number'
+                ? action.metadata.directThreatDamageAfter
+                : directThreatDamage;
+            const nearbyEnemyPressureBefore = typeof action.metadata?.nearbyEnemyPressureBefore === 'number'
+                ? action.metadata.nearbyEnemyPressureBefore
+                : nearbyEnemyPressure;
+            const nearbyEnemyPressureAfter = typeof action.metadata?.nearbyEnemyPressureAfter === 'number'
+                ? action.metadata.nearbyEnemyPressureAfter
+                : nearbyEnemyPressure;
+            const sourceIsSummoner = action.metadata?.sourceIsSummoner === true;
+            const distanceToOwnSummonerBefore = typeof action.metadata?.distanceToOwnSummonerBefore === 'number'
+                ? action.metadata.distanceToOwnSummonerBefore
+                : 99;
+            const distanceToOwnSummonerAfter = typeof action.metadata?.distanceToOwnSummonerAfter === 'number'
+                ? action.metadata.distanceToOwnSummonerAfter
+                : 99;
+
+            let score = 0;
+            if (directThreatDamageAfter < directThreatDamageBefore) {
+                score += 120 + (directThreatDamageBefore - directThreatDamageAfter) * 24;
+            }
+            if (nearbyEnemyPressureAfter < nearbyEnemyPressureBefore) {
+                score += 40 + (nearbyEnemyPressureBefore - nearbyEnemyPressureAfter) * 3;
+            }
+            if (!sourceIsSummoner && distanceToOwnSummonerAfter < distanceToOwnSummonerBefore) {
+                score += 24;
+            }
+            if (sourceIsSummoner && directThreatDamageAfter <= directThreatDamageBefore) {
+                score += 45;
+            }
+            if (score === 0) return null;
+
+            return {
+                score,
+                reason: lethalPressure
+                    ? '召唤师有被击杀风险，先移动减压或补防线'
+                    : '召唤师承压时优先回防而不是继续前压',
+            };
+        }
+
+        if (action.kind === 'summon-unit' || action.kind === 'build-structure') {
+            const distanceToOwnSummoner = typeof action.metadata?.distanceToOwnSummoner === 'number'
+                ? action.metadata.distanceToOwnSummoner
+                : 99;
+            const score = distanceToOwnSummoner <= 1
+                ? 95 - distanceToOwnSummoner * 12
+                : distanceToOwnSummoner === 2
+                    ? 38
+                    : -18;
+            return {
+                score,
+                reason: lethalPressure
+                    ? '召唤师危险时优先在身边补单位或建筑挡刀'
+                    : '压力较大时优先把资源投到召唤师附近',
+            };
+        }
+
+        if (action.kind === 'declare-attack' && action.metadata?.targetIsThreateningSummoner === true) {
+            return {
+                score: action.metadata?.lethalLikely === true ? 150 : 95,
+                reason: '优先清掉正在威胁己方召唤师的敌军',
+            };
+        }
+
+        return null;
+    },
+};
+
 const buildScorer: LocalAiActionScorer = {
     id: 'build-structure',
     score(_context, action) {
@@ -753,9 +945,11 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
         actionKindScorer,
         interactionScorer,
         setupScorer,
+        setupRandomScorer,
         summonScorer,
         moveScorer,
         attackScorer,
+        summonerSafetyScorer,
         buildScorer,
         discardScorer,
         abilityScorer,

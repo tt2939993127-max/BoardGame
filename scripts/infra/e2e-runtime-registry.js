@@ -9,6 +9,9 @@ const SHARED_RUNTIME_REGISTRY = 'runtime-registry.json';
 const REGISTRY_WRITE_RETRYABLE_CODES = new Set(['EBUSY', 'EPERM']);
 const REGISTRY_WRITE_RETRY_COUNT = 6;
 const REGISTRY_WRITE_RETRY_DELAY_MS = 50;
+const REGISTRY_LOCK_RETRY_COUNT = 120;
+const REGISTRY_LOCK_RETRY_DELAY_MS = 50;
+const REGISTRY_LOCK_STALE_MS = 30000;
 
 function nowIso() {
   return new Date().toISOString();
@@ -239,6 +242,10 @@ export function getSharedRegistryFilePath(cwd = process.cwd()) {
   return path.join(getSharedRuntimeDir(cwd), SHARED_RUNTIME_REGISTRY);
 }
 
+function getSharedRegistryLockPath(cwd = process.cwd()) {
+  return path.join(getSharedRuntimeDir(cwd), `${SHARED_RUNTIME_REGISTRY}.lock`);
+}
+
 function getRuntimeId(scope, cwd = process.cwd(), worktreeRoot = getWorktreeRoot(cwd)) {
   return `${worktreeRoot}::${normalizeScope(scope)}`;
 }
@@ -294,6 +301,18 @@ function normalizeRuntimeRecord(record, cwd = process.cwd(), existing = null) {
   const ports = normalizePorts(record.ports ?? existing?.ports ?? {});
   const runtimeId = record.runtimeId ?? existing?.runtimeId ?? getRuntimeId(scope, cwd, worktreeRoot);
   const bootstrapLogFiles = uniqueStrings(record.bootstrapLogFiles ?? existing?.bootstrapLogFiles ?? record.logFile ?? existing?.logFile ?? []);
+  const sessionId = typeof (record.sessionId ?? existing?.sessionId) === 'string'
+    ? (record.sessionId ?? existing?.sessionId).trim()
+    : '';
+  const entrypoint = typeof (record.entrypoint ?? existing?.entrypoint) === 'string'
+    ? (record.entrypoint ?? existing?.entrypoint).trim()
+    : '';
+  const commandSource = typeof (record.commandSource ?? existing?.commandSource) === 'string'
+    ? (record.commandSource ?? existing?.commandSource).trim()
+    : '';
+  const targetLabel = typeof (record.targetLabel ?? existing?.targetLabel) === 'string'
+    ? (record.targetLabel ?? existing?.targetLabel).trim()
+    : '';
 
   return {
     ...existing,
@@ -309,6 +328,10 @@ function normalizeRuntimeRecord(record, cwd = process.cwd(), existing = null) {
     ports,
     health: normalizeRuntimeHealth(record.health ?? existing?.health),
     bootstrapLogFiles,
+    sessionId,
+    entrypoint,
+    commandSource,
+    targetLabel,
     active: record.active ?? existing?.active ?? true,
     createdAt,
     updatedAt: nowIso(),
@@ -348,11 +371,86 @@ function writeSharedRegistry(runtimes, cwd = process.cwd()) {
   writeRegistryFile(getSharedRegistryFilePath(cwd), runtimes);
 }
 
-function syncLocalRegistry(cwd = process.cwd()) {
+function syncLocalRegistryFromSharedRuntimes(sharedRuntimes, cwd = process.cwd()) {
   const worktreeRoot = getWorktreeRoot(cwd);
-  const registry = readSharedRegistry(cwd);
-  const runtimes = Array.isArray(registry.runtimes) ? registry.runtimes.filter(runtime => runtime.worktreeRoot === worktreeRoot) : [];
+  const runtimes = Array.isArray(sharedRuntimes)
+    ? sharedRuntimes.filter(runtime => runtime.worktreeRoot === worktreeRoot)
+    : [];
   writeRegistryFile(getRegistryFilePath(cwd), runtimes);
+}
+
+function syncLocalRegistry(cwd = process.cwd()) {
+  const registry = readSharedRegistry(cwd);
+  syncLocalRegistryFromSharedRuntimes(Array.isArray(registry.runtimes) ? registry.runtimes : [], cwd);
+}
+
+function tryRemoveStaleRegistryLock(lockPath) {
+  const lock = readJson(lockPath, null);
+  const lockPid = Number(lock?.pid);
+  const createdAt = typeof lock?.createdAt === 'string' ? Date.parse(lock.createdAt) : NaN;
+  const expired = Number.isFinite(createdAt) ? (Date.now() - createdAt) > REGISTRY_LOCK_STALE_MS : true;
+  const ownerDead = !Number.isInteger(lockPid) || lockPid <= 0 || !isPidAlive(lockPid);
+
+  if (!expired && !ownerDead) {
+    return false;
+  }
+
+  try {
+    fs.unlinkSync(lockPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function acquireSharedRegistryLock(cwd = process.cwd()) {
+  const lockPath = getSharedRegistryLockPath(cwd);
+  ensureDir(lockPath);
+
+  for (let attempt = 0; attempt < REGISTRY_LOCK_RETRY_COUNT; attempt += 1) {
+    try {
+      const fd = fs.openSync(lockPath, 'wx');
+      fs.writeFileSync(fd, JSON.stringify({
+        pid: process.pid,
+        createdAt: nowIso(),
+      }, null, 2));
+      return () => {
+        try {
+          fs.closeSync(fd);
+        } catch {
+          // ignore close failure
+        }
+        try {
+          fs.unlinkSync(lockPath);
+        } catch {
+          // ignore unlink failure
+        }
+      };
+    } catch (error) {
+      if (error?.code !== 'EEXIST') {
+        throw error;
+      }
+
+      tryRemoveStaleRegistryLock(lockPath);
+      sleepSync(REGISTRY_LOCK_RETRY_DELAY_MS * (attempt + 1));
+    }
+  }
+
+  throw new Error(`获取 E2E runtime registry 锁超时: ${lockPath}`);
+}
+
+function withSharedRegistryMutation(cwd, mutate) {
+  const release = acquireSharedRegistryLock(cwd);
+  try {
+    const registry = readSharedRegistry(cwd);
+    const runtimes = Array.isArray(registry.runtimes) ? registry.runtimes : [];
+    const nextRuntimes = mutate(runtimes);
+    writeSharedRegistry(nextRuntimes, cwd);
+    syncLocalRegistryFromSharedRuntimes(nextRuntimes, cwd);
+    return nextRuntimes;
+  } finally {
+    release();
+  }
 }
 
 export function readRuntimeRegistry(cwd = process.cwd()) {
@@ -365,14 +463,14 @@ export function readSharedRuntimeRegistry(cwd = process.cwd()) {
 
 export function upsertRuntime(record, cwd = process.cwd()) {
   const runtimeId = getRuntimeId(record.scope, cwd, record.worktreeRoot ? path.resolve(record.worktreeRoot) : undefined);
-  const registry = readSharedRegistry(cwd);
-  const runtimes = Array.isArray(registry.runtimes) ? registry.runtimes : [];
-  const existing = stripInspectionFields(runtimes.find(runtime => runtime.runtimeId === runtimeId) ?? null);
-  const nextRecord = normalizeRuntimeRecord({ ...record, runtimeId }, cwd, existing);
-  const next = runtimes.filter(runtime => runtime.runtimeId !== runtimeId);
-  next.push(nextRecord);
-  writeSharedRegistry(next, cwd);
-  syncLocalRegistry(cwd);
+  let nextRecord = null;
+  withSharedRegistryMutation(cwd, (runtimes) => {
+    const existing = stripInspectionFields(runtimes.find(runtime => runtime.runtimeId === runtimeId) ?? null);
+    nextRecord = normalizeRuntimeRecord({ ...record, runtimeId }, cwd, existing);
+    const next = runtimes.filter(runtime => runtime.runtimeId !== runtimeId);
+    next.push(nextRecord);
+    return next;
+  });
   return nextRecord;
 }
 
@@ -385,10 +483,9 @@ export function removeRuntime(scope, cwd = process.cwd()) {
 }
 
 export function removeRuntimeById(runtimeId, cwd = process.cwd()) {
-  const registry = readSharedRegistry(cwd);
-  const runtimes = Array.isArray(registry.runtimes) ? registry.runtimes.filter(runtime => runtime.runtimeId !== runtimeId) : [];
-  writeSharedRegistry(runtimes, cwd);
-  syncLocalRegistry(cwd);
+  withSharedRegistryMutation(cwd, runtimes => (
+    Array.isArray(runtimes) ? runtimes.filter(runtime => runtime.runtimeId !== runtimeId) : []
+  ));
 }
 
 export function listRuntimes(cwd = process.cwd(), options = {}) {
@@ -453,19 +550,23 @@ export function stopRuntime(runtime, options = {}) {
 export function pruneStaleRuntimes(cwd = process.cwd(), options = {}) {
   const logger = options.logger ?? null;
   const killOrphans = options.killOrphans === true;
-  const runtimes = listRuntimes(cwd, { includeStopped: true });
-  const stale = runtimes.filter(runtime => runtime.stale);
-  const active = runtimes.filter(runtime => !runtime.stale);
+  let stale = [];
+  let active = [];
+  withSharedRegistryMutation(cwd, (records) => {
+    const runtimes = records
+      .map(runtime => ({ ...runtime, ...inspectRuntime(runtime) }));
+    stale = runtimes.filter(runtime => runtime.stale);
+    active = runtimes.filter(runtime => !runtime.stale);
 
-  if (killOrphans) {
-    for (const runtime of stale.filter(entry => entry.status === 'orphaned')) {
-      logger?.log?.(`🧹 清理失联 E2E runtime: ${formatRuntimeSummary(runtime)}`);
-      stopRuntime(runtime, { logger: logger ?? console });
+    if (killOrphans) {
+      for (const runtime of stale.filter(entry => entry.status === 'orphaned')) {
+        logger?.log?.(`🧹 清理失联 E2E runtime: ${formatRuntimeSummary(runtime)}`);
+        stopRuntime(runtime, { logger: logger ?? console });
+      }
     }
-  }
 
-  writeSharedRegistry(active.map(runtime => stripInspectionFields(runtime)), cwd);
-  syncLocalRegistry(cwd);
+    return active.map(runtime => stripInspectionFields(runtime));
+  });
 
   return {
     stale,
@@ -474,7 +575,11 @@ export function pruneStaleRuntimes(cwd = process.cwd(), options = {}) {
 }
 
 export function startRuntimeHeartbeat(scope, getPatch, cwd = process.cwd()) {
+  let stopped = false;
   const run = () => {
+    if (stopped) {
+      return;
+    }
     const patch = typeof getPatch === 'function' ? getPatch() : getPatch;
     touchRuntime(scope, patch ?? {}, cwd);
   };
@@ -490,7 +595,10 @@ export function startRuntimeHeartbeat(scope, getPatch, cwd = process.cwd()) {
   }, HEARTBEAT_INTERVAL_MS);
 
   timer.unref?.();
-  return () => clearInterval(timer);
+  return () => {
+    stopped = true;
+    clearInterval(timer);
+  };
 }
 
 export function formatRuntimeSummary(runtime) {
@@ -498,14 +606,16 @@ export function formatRuntimeSummary(runtime) {
     ? runtime.ports.join(', ')
     : Object.entries(runtime.ports ?? {}).map(([name, port]) => `${name}=${port}`).join(', ');
   const target = runtime.target?.trim() || '<unknown>';
-  return [
-    `[${runtime.worktreeName ?? path.basename(runtime.worktreeRoot ?? '<unknown>')}]`,
-    `status=${runtime.status ?? 'unknown'}`,
-    `scope=${runtime.scope ?? 'default'}`,
-    `ownerPid=${runtime.ownerPid ?? 'n/a'}`,
-    `target=${target}`,
-    ports ? `ports=${ports}` : '',
-    runtime.createdAt ? `createdAt=${runtime.createdAt}` : '',
+    return [
+        `[${runtime.worktreeName ?? path.basename(runtime.worktreeRoot ?? '<unknown>')}]`,
+        `status=${runtime.status ?? 'unknown'}`,
+        `scope=${runtime.scope ?? 'default'}`,
+        `ownerPid=${runtime.ownerPid ?? 'n/a'}`,
+        runtime.sessionId ? `session=${runtime.sessionId}` : '',
+        runtime.entrypoint ? `entry=${runtime.entrypoint}` : '',
+        `target=${target}`,
+        ports ? `ports=${ports}` : '',
+        runtime.createdAt ? `createdAt=${runtime.createdAt}` : '',
   ].filter(Boolean).join(' ');
 }
 

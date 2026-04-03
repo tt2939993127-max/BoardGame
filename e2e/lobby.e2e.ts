@@ -48,6 +48,60 @@ async function ensureLobbyReady(page: Page): Promise<void> {
 
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
+const ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME = '首页活跃房间浮层在桌面端居中且移动端不溢出';
+
+async function createTicTacToeRoom(page: Page): Promise<string> {
+    const gameServerBaseURL = getGameServerBaseURL();
+    const guestId = `home-banner-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const createResponse = await page.request.post(`${gameServerBaseURL}/games/tictactoe/create`, {
+        data: {
+            numPlayers: 2,
+            setupData: { guestId },
+        },
+    });
+    if (!createResponse.ok()) {
+        throw new Error(`井字棋建房失败: ${createResponse.status()}`);
+    }
+    const createData = await createResponse.json() as { matchID?: string };
+    const matchId = createData.matchID;
+    if (!matchId) throw new Error('建房响应缺少 matchID');
+
+    const joinResponse = await page.request.post(`${gameServerBaseURL}/games/tictactoe/${matchId}/join`, {
+        data: {
+            playerID: '0',
+            playerName: `Banner_${guestId.slice(-4)}`,
+            data: { guestId },
+        },
+    });
+    if (!joinResponse.ok()) {
+        throw new Error(`井字棋加入失败: ${joinResponse.status()}`);
+    }
+    const joinData = await joinResponse.json() as { playerCredentials?: string };
+    if (!joinData.playerCredentials) {
+        throw new Error('加入房间后未返回 playerCredentials');
+    }
+
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(({ mid, creds, guestId }) => {
+        localStorage.setItem('guest_id', guestId);
+        try {
+            sessionStorage.setItem('guest_id', guestId);
+        } catch {
+            // ignore
+        }
+        document.cookie = `bg_guest_id=${encodeURIComponent(guestId)}; path=/; SameSite=Lax`;
+        localStorage.setItem(`match_creds_${mid}`, JSON.stringify({
+            matchID: mid,
+            playerID: '0',
+            credentials: creds,
+            gameName: 'tictactoe',
+            updatedAt: Date.now(),
+        }));
+        window.dispatchEvent(new Event('match-credentials-changed'));
+    }, { mid: matchId, creds: joinData.playerCredentials, guestId });
+
+    return matchId;
+}
 
 test.describe('Lobby E2E', () => {
     test.describe.configure({ timeout: 90000 });
@@ -177,15 +231,19 @@ test.describe('Lobby E2E', () => {
         await page.getByTestId('setup-option-toggle-expansions-titans').click();
         await page.getByRole('button', { name: /加入 AI/ }).click();
         await expect(page.getByRole('button', { name: /加入 AI/ })).toContainText('已开启');
+        await expect(page.getByRole('button', { name: '普通' })).toHaveAttribute('aria-pressed', 'true');
+
+        await game.screenshot('lobby-smashup-create-room-ai-config-default-normal', testInfo);
+
+        await page.getByRole('button', { name: '困难' }).click();
         await expect(page.getByRole('button', { name: '1 号位（房主）' })).toBeDisabled();
         await page.getByRole('button', { name: '3 号位' }).click();
 
-        await game.screenshot('lobby-smashup-create-room-ai-config-modal', testInfo);
+        await game.screenshot('lobby-smashup-create-room-ai-config-hard-and-seats', testInfo);
 
         await page.getByRole('button', { name: '确认创建' }).click();
 
         await expect(page).toHaveURL(/\/play\/smashup\/match\//);
-        await expect(page.getByRole('heading', { name: '选择你的派系' })).toBeVisible({ timeout: 15000 });
 
         const matchId = page.url().match(/\/play\/smashup\/match\/([^?]+)/)?.[1];
         expect(matchId).toBeTruthy();
@@ -199,7 +257,7 @@ test.describe('Lobby E2E', () => {
             setupData?: {
                 enableAi?: boolean;
                 setupSelections?: { expansions?: string[] };
-                seatControllers?: Record<string, { type?: string }>;
+                seatControllers?: Record<string, { type?: string; difficulty?: string }>;
             };
         };
 
@@ -207,6 +265,8 @@ test.describe('Lobby E2E', () => {
         expect(payload.setupData?.setupSelections?.expansions ?? []).toEqual([]);
         expect(payload.setupData?.seatControllers?.['1']?.type).toBe('local-ai');
         expect(payload.setupData?.seatControllers?.['2']?.type).toBe('local-ai');
+        expect(payload.setupData?.seatControllers?.['1']?.difficulty).toBe('hard');
+        expect(payload.setupData?.seatControllers?.['2']?.difficulty).toBe('hard');
 
         const storedPreferences = await page.evaluate(() => {
             const raw = localStorage.getItem('local_ai_match_preferences:smashup');
@@ -217,6 +277,8 @@ test.describe('Lobby E2E', () => {
         expect(storedPreferences?.setupSelections?.expansions ?? []).toEqual([]);
         expect(storedPreferences?.seatControllers?.['1']?.type).toBe('local-ai');
         expect(storedPreferences?.seatControllers?.['2']?.type).toBe('local-ai');
+        expect(storedPreferences?.seatControllers?.['1']?.difficulty).toBe('hard');
+        expect(storedPreferences?.seatControllers?.['2']?.difficulty).toBe('hard');
 
         const aiSeatCredentials = await page.evaluate(() => {
             const key = Object.keys(localStorage).find((item) => item.startsWith('match_ai_creds_'));
@@ -226,8 +288,75 @@ test.describe('Lobby E2E', () => {
         });
         expect(aiSeatCredentials?.['1']).toBeTruthy();
         expect(aiSeatCredentials?.['2']).toBeTruthy();
+    });
 
-        await game.screenshot('lobby-smashup-create-room-ai-config-result', testInfo);
+    test(ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME, async ({ page, game }, testInfo) => {
+        const matchId = await createTicTacToeRoom(page);
+        const roomCode = matchId.slice(0, 4);
+
+        await ensureLobbyReady(page);
+
+        const banner = page.getByTestId('home-active-match-banner');
+        const card = page.getByTestId('home-active-match-card');
+        const actions = page.getByTestId('home-active-match-actions');
+
+        await expect(banner).toBeVisible({ timeout: 15000 });
+        await expect(card.getByText(new RegExp(roomCode, 'i'))).toBeVisible();
+        await expect(actions.getByRole('button').last()).toBeVisible();
+
+        const desktopViewport = page.viewportSize();
+        const desktopCardBox = await card.boundingBox();
+        expect(desktopViewport).not.toBeNull();
+        expect(desktopCardBox).not.toBeNull();
+
+        if (!desktopViewport || !desktopCardBox) {
+            throw new Error('首页活跃房间浮层未正确渲染，无法校验桌面端居中');
+        }
+
+        const desktopCenterX = desktopCardBox.x + desktopCardBox.width / 2;
+        expect(Math.abs(desktopCenterX - desktopViewport.width / 2)).toBeLessThan(4);
+
+        await game.screenshot('lobby-home-active-match-desktop-centered', testInfo);
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(card).toBeVisible();
+
+        const mobileCardBox = await card.boundingBox();
+        expect(mobileCardBox).not.toBeNull();
+        if (!mobileCardBox) {
+            throw new Error('首页活跃房间浮层未正确渲染，无法校验移动端布局');
+        }
+
+        expect(mobileCardBox.x).toBeGreaterThanOrEqual(8);
+        expect(mobileCardBox.x + mobileCardBox.width).toBeLessThanOrEqual(390 - 8);
+
+        const actionButtons = actions.getByRole('button');
+        await expect(actionButtons).toHaveCount(2);
+        const firstButtonBox = await actionButtons.nth(0).boundingBox();
+        const secondButtonBox = await actionButtons.nth(1).boundingBox();
+        expect(firstButtonBox).not.toBeNull();
+        expect(secondButtonBox).not.toBeNull();
+
+        if (!firstButtonBox || !secondButtonBox) {
+            throw new Error('首页活跃房间操作按钮未正确渲染，无法校验移动端堆叠');
+        }
+
+        const isSingleRowCompact = Math.abs(secondButtonBox.y - firstButtonBox.y) < 6 && secondButtonBox.x > firstButtonBox.x;
+        const isWrappedStack = secondButtonBox.y > firstButtonBox.y + 2;
+        expect(isSingleRowCompact || isWrappedStack).toBeTruthy();
+
+        const hasHorizontalOverflow = await page.evaluate(() => {
+            const maxScrollWidth = Math.max(
+                document.documentElement.scrollWidth,
+                document.body.scrollWidth,
+                document.documentElement.clientWidth,
+                document.body.clientWidth,
+            );
+            return maxScrollWidth > window.innerWidth + 1;
+        });
+        expect(hasHorizontalOverflow).toBeFalsy();
+
+        await game.screenshot('lobby-home-active-match-mobile-safe', testInfo);
     });
 
     test(MOBILE_AUTHOR_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {
@@ -338,7 +467,7 @@ test.describe('Lobby E2E', () => {
 
         await game.screenshot('lobby-mobile-package-entry-progress-card', testInfo);
 
-        await expect(page.getByText(/The real downloader is not wired in yet/i)).toBeVisible({ timeout: 5000 });
+        await expect(page.getByText(/does not support downloading game packages yet/i)).toBeVisible({ timeout: 5000 });
         await expect(page.getByRole('button', { name: /Retry/i })).toBeVisible();
         await expect(page.getByTestId('game-details-mobile-package-card')).toHaveAttribute('data-status', 'failed');
 

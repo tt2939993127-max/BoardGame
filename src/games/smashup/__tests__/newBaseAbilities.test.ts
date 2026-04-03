@@ -19,7 +19,8 @@ import {
     triggerBaseAbility,
     triggerExtendedBaseAbility,
 } from '../domain/baseAbilities';
-import { fireTriggers } from '../domain/ongoingEffects';
+import { collectTriggers, fireTriggers } from '../domain/ongoingEffects';
+import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { processDestroyTriggers } from '../domain/reducer';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import type { MatchState, RandomFn } from '../../../engine/types';
@@ -35,6 +36,7 @@ import {
     findInteractionOption,
     resolveInteractionChain,
 } from './helpers';
+import { buildBuryCardEvents } from '../domain/bury';
 import { reduce } from '../domain/reduce';
 import { runCommand, defaultTestRandom } from './testRunner';
 
@@ -452,6 +454,121 @@ describe('Oops Ancient Egyptians bases', () => {
         expect(drawEvent).toBeDefined();
         expect((drawEvent as any).payload.playerId).toBe('0');
         expect((drawEvent as any).payload.count).toBe(1);
+    });
+
+    it('base_pyramids_pod 在出牌阶段可主动使用并埋葬手牌', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_pyramids_pod',
+                minions: [],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': {
+                    id: '0',
+                    vp: 0,
+                    hand: [{ uid: 'h1', defId: 'ancient_egyptians_tomb_trap_pod', type: 'action', owner: '0' }],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1',
+                    vp: 0,
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.PIRATES],
+                },
+            } as any,
+        });
+
+        const activated = runCommand(makeMatchState(core), {
+            type: SU_COMMANDS.USE_BASE_ABILITY,
+            playerId: '0',
+            payload: { baseIndex: 0 },
+        } as any, defaultTestRandom);
+        expect(activated.success).toBe(true);
+
+        const prompt = activated.finalState.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('base_pyramids');
+
+        const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'h1');
+        const buried = runCommand(activated.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: option.id },
+        } as any, defaultTestRandom);
+
+        expect(buried.success).toBe(true);
+        expect(buried.events.some(event => event.type === SU_EVENTS.CARD_BURIED)).toBe(true);
+        expect(buried.finalState.core.bases[0].buriedCards?.some(card => card.uid === 'h1')).toBe(true);
+    });
+
+    it('base_star_portal_pod 在有牌被埋葬到这里时让埋葬者抽一张牌', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_star_portal_pod',
+                minions: [],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': {
+                    id: '0',
+                    vp: 0,
+                    hand: [{ uid: 'bury-me', defId: 'robot_warbot', type: 'minion', owner: '0' }],
+                    deck: [{ uid: 'draw-1', defId: 'robot_microbot_alpha', type: 'minion', owner: '0' }],
+                    discard: [],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                },
+            } as any,
+        });
+
+        const events = buildBuryCardEvents({
+            core,
+            playerId: '0',
+            cardUid: 'bury-me',
+            defId: 'robot_warbot',
+            baseIndex: 0,
+            trueOwnerId: '0',
+            buriedFrom: 'hand',
+            reason: 'test_star_portal_pod',
+            random: defaultTestRandom,
+            now: 1002,
+        });
+
+        expect(events.some(event => event.type === SU_EVENTS.CARD_BURIED)).toBe(true);
+        expect(events.some(event => event.type === SU_EVENTS.TRIGGER_QUEUED)).toBe(true);
+
+        const buriedCore = events.reduce((acc, event) => reduce(acc, event), core);
+        const triggered = fireTriggers(buriedCore, 'onCardBuried', {
+            state: buriedCore,
+            playerId: '0',
+            baseIndex: 0,
+            buriedCardUid: 'bury-me',
+            buriedCardDefId: 'robot_warbot',
+            buriedCardControllerId: '0',
+            buriedFrom: 'hand',
+            random: defaultTestRandom,
+            now: 1002,
+        });
+
+        const drawEvent = triggered.events.find(event => event.type === SU_EVENTS.CARDS_DRAWN) as any;
+        expect(drawEvent).toBeDefined();
+        expect(drawEvent.payload.playerId).toBe('0');
+        expect(drawEvent.payload.count).toBe(1);
     });
 });
 
@@ -1297,6 +1414,54 @@ describe('Oops Vikings bases', () => {
         expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
     });
 
+    it('base_drakkar 会在目标牌库为空时先洗回弃牌堆再把揭示到的合格低力量随从拿到发动者手里', () => {
+        const result = triggerBaseAbilityWithMS('base_drakkar', 'onMinionPlayed', {
+            state: makeState({
+                bases: [{
+                    defId: 'base_drakkar',
+                    minions: [makeMinion('m1', '0', 3)],
+                    ongoingActions: [],
+                }],
+                players: {
+                    '0': {
+                        id: '0', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 1, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        minionsPlayedPerBase: { 0: 1 },
+                        factions: [SMASHUP_FACTION_IDS.VIKINGS, SMASHUP_FACTION_IDS.ALIENS],
+                    },
+                    '1': {
+                        id: '1',
+                        vp: 0,
+                        hand: [],
+                        deck: [],
+                        discard: [{ uid: 'd2', defId: 'robot_microbot_alpha', type: 'minion', owner: '1' }],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.PIRATES],
+                    },
+                } as any,
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_drakkar',
+            playerId: '0',
+            minionUid: 'm1',
+            minionDefId: 'test_minion',
+            minionPower: 3,
+            now: 1000,
+        });
+
+        const prompt = getInteractionsFromResult(result)[0] as any;
+        const option = prompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const resolved = runCommand(
+            result.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'd2')).toBe(true);
+        expect(resolved.finalState.core.players['1'].discard).toHaveLength(0);
+        expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
+    });
+
     it('base_longhouse 改为主动基地能力：使用后会把手牌置于牌库顶并给此基地己方随从 +2 力量', () => {
         const core = makeState({
             bases: [{
@@ -1602,6 +1767,84 @@ describe('Oops Samurai bases', () => {
         expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
     });
 
+    it('base_sakura_garden 与 samurai_honor_the_fallen 同时触发时两者都会结算抓牌', () => {
+        const core = makeState({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            players: {
+                '0': {
+                    id: '0', vp: 0, hand: [],
+                    deck: [
+                        makeCard('draw-1', '0', 'robot_microbot_alpha'),
+                        makeCard('draw-2', '0', 'robot_microbot_alpha'),
+                    ],
+                    discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.SAMURAI, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1', vp: 0, hand: [], deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                },
+            } as any,
+            bases: [{
+                defId: 'base_sakura_garden',
+                minions: [makeMinion('dead-1', '0', 3, 'samurai_ronin')],
+                ongoingActions: [{ uid: 'hof-1', defId: 'samurai_honor_the_fallen', ownerId: '0' } as any],
+            }],
+        });
+
+        const queued = collectTriggers(core, 'onMinionDestroyed', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: core.bases[0].minions[0],
+            triggerMinionUid: 'dead-1',
+            triggerMinionDefId: 'samurai_ronin',
+            destroyerId: '1',
+            random: dummyRandom,
+            now: 1000,
+        });
+
+        expect(queued).toBeDefined();
+        const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+        const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1000);
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+
+        const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+        const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
+            const trigger = firstQueueById.get(option.value.triggerId) as any;
+            return trigger?.sourceDefId === 'samurai_honor_the_fallen';
+        }) ?? (firstPrompt!.state.sys.interaction.current as any).data.options[0];
+        const firstResolved = runCommand(
+            firstPrompt!.state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: firstOption.id } } as any,
+            dummyRandom,
+        );
+
+        const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
+        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+            ? (() => {
+                const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+                const secondOption = secondPrompt.data.options.find((option: any) => {
+                    const trigger = secondQueueById.get(option.value.triggerId) as any;
+                    return trigger?.sourceDefId === 'base_sakura_garden';
+                }) ?? secondPrompt.data.options[0];
+                return runCommand(
+                    firstResolved.finalState,
+                    { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: secondOption.id } } as any,
+                    dummyRandom,
+                );
+            })()
+            : { events: [], finalState: firstResolved.finalState };
+
+        const drawEvents = [...firstResolved.events, ...secondResolved.events].filter(event => event.type === SU_EVENTS.CARDS_DRAWN) as any[];
+        expect(drawEvents).toHaveLength(2);
+        expect(drawEvents.every(event => event.payload.playerId === '0' && event.payload.count === 1)).toBe(true);
+    });
+
     it('base_sakura_garden 同回合第二次有同一玩家的随从被消灭时不应再次抽牌', () => {
         const state = makeState({
             bases: [{
@@ -1656,5 +1899,304 @@ describe('Oops Samurai bases', () => {
         });
 
         expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(false);
+    });
+
+    it('base_shoguns_palace_pod reuses the duel-and-draw base ability', () => {
+        const result = triggerBaseAbilityWithMS('base_shoguns_palace_pod', 'onMinionPlayed', {
+            state: makeState({
+                bases: [{
+                    defId: 'base_shoguns_palace_pod',
+                    minions: [
+                        makeMinion('ally-pod-1', '0', 4, 'samurai_ronin_pod'),
+                        makeMinion('enemy-pod-1', '1', 2, 'robot_microbot_alpha'),
+                    ],
+                    ongoingActions: [],
+                }],
+                players: {
+                    '0': {
+                        id: '0', vp: 0, hand: [],
+                        deck: [makeCard('d1', '0', 'robot_microbot_alpha'), makeCard('d2', '0', 'robot_microbot_beta')],
+                        discard: [],
+                        minionsPlayed: 1, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        minionsPlayedPerBase: { 0: 1 },
+                        factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                    },
+                    '1': {
+                        id: '1', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                    },
+                } as any,
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_shoguns_palace_pod',
+            playerId: '0',
+            minionUid: 'ally-pod-1',
+            minionDefId: 'samurai_ronin_pod',
+            minionPower: 4,
+            now: 1003,
+        });
+
+        const prompt = getInteractionsFromResult(result)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('base_shoguns_palace');
+
+        const option = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-pod-1');
+        const resolved = runCommand(
+            result.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        const duelResolved = resolveDuelChain(resolved.finalState);
+        const drawEvent = duelResolved.events.find(event => event.type === SU_EVENTS.CARDS_DRAWN) as any;
+        expect(drawEvent).toBeDefined();
+        expect(drawEvent.payload.playerId).toBe('0');
+        expect(drawEvent.payload.count).toBe(2);
+    });
+
+    it('base_sakura_garden_pod reuses the first discard draw trigger', () => {
+        const state = makeState({
+            bases: [{
+                defId: 'base_sakura_garden_pod',
+                minions: [],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': {
+                    id: '0', vp: 0, hand: [],
+                    deck: [makeCard('draw-pod-1', '0', 'robot_microbot_alpha')],
+                    discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1', vp: 0, hand: [], deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                },
+            } as any,
+        });
+
+        const result = fireTriggers(state, 'onMinionDiscardedFromBase', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: {
+                uid: 'dead-pod-1',
+                defId: 'samurai_ronin_pod',
+                controller: '0',
+                owner: '0',
+                basePower: 3,
+                powerCounters: 0,
+                powerModifier: 0,
+                tempPowerModifier: 0,
+                talentUsed: false,
+                attachedActions: [],
+            },
+            triggerMinionUid: 'dead-pod-1',
+            triggerMinionDefId: 'samurai_ronin_pod',
+            random: dummyRandom,
+            now: 1004,
+        });
+
+        expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
+    });
+
+    it('base_saloon_pod reuses the destroyed-minion draw trigger', () => {
+        const ctx: BaseAbilityContext = {
+            state: makeState({
+                bases: [{
+                    defId: 'base_saloon_pod',
+                    minions: [
+                        makeMinion('m1', '0', 3, 'cowboys_gunfighter_pod'),
+                        makeMinion('m2', '1', 4, 'robot_microbot_alpha'),
+                    ],
+                    ongoingActions: [],
+                }],
+                players: {
+                    '0': {
+                        id: '0', vp: 0,
+                        hand: [],
+                        deck: [makeCard('d0', '0', 'robot_microbot_alpha')],
+                        discard: [],
+                        minionsPlayed: 0, minionLimit: 1,
+                        actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                    },
+                    '1': {
+                        id: '1', vp: 0,
+                        hand: [],
+                        deck: [makeCard('d1', '1', 'robot_microbot_beta')],
+                        discard: [],
+                        minionsPlayed: 0, minionLimit: 1,
+                        actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                    },
+                } as any,
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_saloon_pod',
+            playerId: '0',
+            minionUid: 'victim',
+            destroyerId: '1',
+            now: 1005,
+        };
+
+        const { events } = triggerExtendedBaseAbility('base_saloon_pod', 'onMinionDestroyed', ctx);
+        const drawEvents = events.filter(event => event.type === SU_EVENTS.CARDS_DRAWN);
+        expect(drawEvents).toHaveLength(2);
+        expect(drawEvents.some(event => (event as any).payload.playerId === '0')).toBe(true);
+        expect(drawEvents.some(event => (event as any).payload.playerId === '1')).toBe(true);
+    });
+
+    it('base_so_so_corral_pod reuses the duel-and-destroy base ability', () => {
+        const result = triggerBaseAbilityWithMS('base_so_so_corral_pod', 'onMinionPlayed', {
+            state: makeState({
+                bases: [{
+                    defId: 'base_so_so_corral_pod',
+                    minions: [
+                        makeMinion('ally-pod-1', '0', 4, 'cowboys_gunfighter_pod'),
+                        makeMinion('enemy-pod-1', '1', 2, 'robot_microbot_alpha'),
+                    ],
+                    ongoingActions: [],
+                }],
+                players: {
+                    '0': {
+                        id: '0', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 1, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        minionsPlayedPerBase: { 0: 1 },
+                        factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                    },
+                    '1': {
+                        id: '1', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                    },
+                } as any,
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_so_so_corral_pod',
+            playerId: '0',
+            minionUid: 'ally-pod-1',
+            minionDefId: 'cowboys_gunfighter_pod',
+            minionPower: 4,
+            now: 1006,
+        });
+
+        const prompt = getInteractionsFromResult(result)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('base_so_so_corral');
+
+        const option = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-pod-1');
+        const resolved = runCommand(
+            result.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        const duelResolved = resolveDuelChain(resolved.finalState);
+        expect(duelResolved.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+        expect(duelResolved.finalState.core.bases[0].minions.some(minion => minion.uid === 'enemy-pod-1')).toBe(false);
+    });
+
+    it('base_drakkar_pod reuses the first-minion reveal-and-draw ability', () => {
+        const result = triggerBaseAbilityWithMS('base_drakkar_pod', 'onMinionPlayed', {
+            state: makeState({
+                bases: [{
+                    defId: 'base_drakkar_pod',
+                    minions: [makeMinion('m1', '0', 3, 'vikings_shield_maiden_pod')],
+                    ongoingActions: [],
+                }],
+                players: {
+                    '0': {
+                        id: '0', vp: 0, hand: [], deck: [], discard: [],
+                        minionsPlayed: 1, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                        minionsPlayedPerBase: { 0: 1 },
+                        factions: [SMASHUP_FACTION_IDS.VIKINGS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                    },
+                    '1': {
+                        id: '1',
+                        vp: 0,
+                        hand: [],
+                        deck: [{ uid: 'd1', defId: 'wizard_summon', type: 'action', owner: '1' }],
+                        discard: [],
+                        minionsPlayed: 0,
+                        minionLimit: 1,
+                        actionsPlayed: 0,
+                        actionLimit: 1,
+                        factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                    },
+                } as any,
+            }),
+            baseIndex: 0,
+            baseDefId: 'base_drakkar_pod',
+            playerId: '0',
+            minionUid: 'm1',
+            minionDefId: 'vikings_shield_maiden_pod',
+            minionPower: 3,
+            now: 1007,
+        });
+
+        const prompt = getInteractionsFromResult(result)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('base_drakkar');
+
+        const option = prompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const resolved = runCommand(
+            result.matchState!,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: option.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'd1')).toBe(true);
+        expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
+    });
+
+    it('base_longhouse_pod reuses the active base ability to topdeck and buff', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_longhouse_pod',
+                minions: [makeMinion('m1', '0', 4, 'vikings_huscarl_pod')],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': {
+                    id: '0', vp: 0,
+                    hand: [makeCard('h1', '0', 'robot_microbot_alpha')],
+                    deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.VIKINGS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                },
+            } as any,
+        });
+
+        const started = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.USE_BASE_ABILITY, playerId: '0', payload: { baseIndex: 0 } } as any,
+            defaultTestRandom,
+        );
+        expect(started.success).toBe(true);
+
+        const cardPrompt = started.finalState.sys.interaction.current as any;
+        expect(cardPrompt?.data?.sourceId).toBe('base_longhouse_card');
+
+        const chooseCard = cardPrompt.data.options.find((entry: any) => entry.value?.cardUid === 'h1');
+        const afterCard = runCommand(
+            started.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseCard.id } } as any,
+            defaultTestRandom,
+        );
+
+        const minionPrompt = afterCard.finalState.sys.interaction.current as any;
+        expect(minionPrompt?.data?.sourceId).toBe('base_longhouse_minion');
+
+        const chooseMinion = minionPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'm1');
+        const resolved = runCommand(
+            afterCard.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseMinion.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].deck[0]?.uid).toBe('h1');
+        expect(resolved.finalState.core.bases[0].minions[0].tempPowerModifier).toBe(2);
     });
 });

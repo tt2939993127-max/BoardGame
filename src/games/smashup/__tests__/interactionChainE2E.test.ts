@@ -1658,6 +1658,50 @@ describe('P2: miskatonic_those_meddling_kids（多管闲事的小鬼）点击式
         // ongoing2 仍然存在（跳过了）
         expect(r4.finalState.core.bases[0].ongoingActions.find(o => o.uid === 'ongoing2')).toBeDefined();
     });
+
+    it('基地上有 3 张行动卡时，应允许连续点到最后一张而不是第二张后断链', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('tmk1', 'miskatonic_those_meddling_kids', '0', 'action')],
+                    factions: ['miskatonic', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [], [
+                    { uid: 'ongoing1', defId: 'test_ongoing', ownerId: '1' },
+                    { uid: 'ongoing2', defId: 'test_ongoing2', ownerId: '1' },
+                    { uid: 'ongoing3', defId: 'test_ongoing3', ownerId: '1' },
+                ]),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tmk1' },
+        }, 'meddling_kids 3-step-1');
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const baseOpt = findOption(choice1, (o: any) => o.value?.baseIndex === 0);
+
+        const r2 = respond(r1.finalState, '0', baseOpt, 'meddling_kids 3-step-2');
+        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        const firstOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'ongoing1');
+
+        const r3 = respond(r2.finalState, '0', firstOpt, 'meddling_kids 3-step-3');
+        const choice3 = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        const secondOpt = findOption(choice3, (o: any) => o.value?.cardUid === 'ongoing2');
+
+        const r4 = respond(r3.finalState, '0', secondOpt, 'meddling_kids 3-step-4');
+        const choice4 = asSimpleChoice(r4.finalState.sys.interaction.current)!;
+        const remainingIds = choice4.options
+            .filter((o: any) => !o.value?.skip)
+            .map((o: any) => o.value?.cardUid)
+            .sort();
+
+        expect(remainingIds).toEqual(['ongoing3']);
+    });
 });
 
 // ============================================================================
@@ -1720,6 +1764,61 @@ describe('P1: ghost_the_dead_rise（亡者崛起）3步链', () => {
             expect(choice2.sourceId).toBe('ghost_the_dead_rise_play');
         }
         // 无论是否有后续交互，测试弃牌步骤成功即可
+    });
+
+    it('弃牌堆直点基地时应立即打出对应随从', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('tdr1', 'ghost_the_dead_rise', '0', 'action'),
+                        makeCard('dc1', 'pirate_cannon', '0', 'action'),
+                        makeCard('dc2', 'pirate_broadside', '0', 'action'),
+                    ],
+                    discard: [
+                        makeCard('disc-m1', 'giant_ant_worker', '0', 'minion'),
+                    ],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                    factions: ['ghosts', 'giant_ants'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1'),
+                makeBase('test_base_2'),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tdr1' },
+        }, 'dead_rise merged-base step1');
+
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const discardOpt = findOption(choice1, (o: any) => o.value?.cardUid === 'dc1');
+        const r2 = respond(r1.finalState, '0', discardOpt, 'dead_rise merged-base step2');
+
+        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        expect(choice2.sourceId).toBe('ghost_the_dead_rise_play');
+        expect(choice2.targetType).toBe('discard_minion');
+        expect((r2.finalState.sys.interaction.current as any)?.data?.allowedBaseIndices).toEqual([0, 1]);
+
+        const minionOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'disc-m1');
+        const r3 = respondWithMergedValue(
+            r2.finalState,
+            '0',
+            minionOpt,
+            { baseIndex: 1 },
+            'dead_rise merged-base step3',
+        );
+
+        expect(r3.steps[0]?.success).toBe(true);
+        expect(r3.finalState.sys.interaction.current).toBeUndefined();
+        expect(r3.finalState.core.bases[1].minions.some(m => m.uid === 'disc-m1')).toBe(true);
+        expect(r3.finalState.core.players['0'].discard.some(c => c.uid === 'disc-m1')).toBe(false);
+        expect(r3.finalState.core.players['0'].minionsPlayed).toBe(1);
     });
 
     it('从弃牌堆额外打出时应直接落场，不额外发放随从额度', () => {

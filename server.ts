@@ -139,6 +139,17 @@ const RAW_WEB_ORIGINS = (process.env.WEB_ORIGINS || '')
     .map((s) => s.trim())
     .filter(Boolean);
 
+const DEFAULT_APP_WEB_ORIGINS = [
+    'http://localhost',
+    'https://localhost',
+    'capacitor://localhost',
+] as const;
+
+const RAW_APP_WEB_ORIGINS = (process.env.APP_WEB_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
 const DEV_CORS_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:5173',
@@ -148,7 +159,13 @@ const DEV_CORS_ORIGINS = [
     'http://127.0.0.1:5174',
 ];
 
-const CORS_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS;
+const APP_CORS_ORIGINS = RAW_APP_WEB_ORIGINS.length > 0
+    ? RAW_APP_WEB_ORIGINS
+    : [...DEFAULT_APP_WEB_ORIGINS];
+const CORS_ORIGINS = Array.from(new Set([
+    ...(RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS),
+    ...APP_CORS_ORIGINS,
+]));
 const isDevLoopbackOrigin = (origin?: string) => !isProd && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/i.test(origin ?? '');
 const isAllowedCorsOrigin = (origin?: string) => {
     if (!origin) return true;

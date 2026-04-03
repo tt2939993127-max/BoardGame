@@ -66,6 +66,7 @@
   },
   "accept": "Accept",
   "reject": "Reject",
+  "close": "Close",
   "back": "Back",
   "loading": "Loading",
   "unknownUser": "Unknown User",

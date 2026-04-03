@@ -5,5 +5,6 @@ export {
     getSocketIoTransports,
     isSocketCompatibilityModeEnabled,
     setSocketCompatibilityModeEnabled,
+    shouldTryAllSocketTransports,
     type SocketIoTransport,
 } from '../lib/socketConnectionConfig';

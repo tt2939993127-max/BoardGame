@@ -924,6 +924,21 @@ describe('印斯茅斯 ongoing 能力', () => {
 
             expect(isMinionProtected(state, oppMinion, 0, '0', 'affect')).toBe(false);
         });
+
+        test('力量≤2的己方随从不会被对手的藤蔓缠绕禁止移动', () => {
+            const protectedMinion = makeMinion({ defId: 'inn_a', uid: 'ia-1', controller: '0', basePower: 2 });
+            const entangledOwnerMinion = makeMinion({ defId: 'kp_a', uid: 'kp-1', controller: '1', basePower: 3 });
+            const base = makeBase({
+                minions: [protectedMinion, entangledOwnerMinion],
+                ongoingActions: [
+                    { uid: 'ips-1', defId: 'innsmouth_in_plain_sight', ownerId: '0' },
+                    { uid: 'ent-1', defId: 'killer_plant_entangled', ownerId: '1' },
+                ],
+            });
+            const state = makeState([base]);
+
+            expect(isMinionProtected(state, protectedMinion, 0, '0', 'move')).toBe(false);
+        });
     });
 
     describe('innsmouth_return_to_the_sea: 回归大海', () => {
@@ -1406,10 +1421,15 @@ describe('米斯卡塔尼克 新增能力', () => {
                 now: 1006,
             });
 
+            const limitModified = events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED) as any;
+            expect(limitModified).toBeDefined();
+            expect(limitModified.payload?.limitType).toBe('action');
+            expect(limitModified.payload?.delta).toBe(1);
+
             const actionPlayed = events.find(e => e.type === SU_EVENTS.ACTION_PLAYED) as any;
             expect(actionPlayed).toBeDefined();
             expect(actionPlayed.payload?.defId).toBe(MADNESS_CARD_DEF_ID);
-            expect(actionPlayed.payload?.isExtraAction).toBe(true);
+            expect(actionPlayed.payload?.isExtraAction).toBeUndefined();
         });
     });
 });

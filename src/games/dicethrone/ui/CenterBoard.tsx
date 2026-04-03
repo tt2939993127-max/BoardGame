@@ -6,7 +6,6 @@ import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
 import { getPlayerBoardAspectRatio, getPlayerBoardUiTuning } from './abilitySlotLayout';
-import { getInlineBoardAsset } from './inlineBoardAssets';
 
 export interface CenterBoardProps {
     coreAreaHighlighted: boolean;
@@ -77,14 +76,8 @@ export const CenterBoard = ({
 
     const playerBoardPath = ASSETS.PLAYER_BOARD(characterId);
     const tipBoardPath = ASSETS.TIP_BOARD(characterId);
-    const playerBoardInlineAsset = getInlineBoardAsset(characterId, 'player-board', locale);
-    const tipBoardInlineAsset = getInlineBoardAsset(characterId, 'tip', locale);
-    const playerBoardBackground = playerBoardInlineAsset
-        ? `url("${playerBoardInlineAsset}")`
-        : buildLocalizedImageSet(playerBoardPath, locale);
-    const tipBoardBackground = tipBoardInlineAsset
-        ? `url("${tipBoardInlineAsset}")`
-        : buildLocalizedImageSet(tipBoardPath, locale);
+    const playerBoardBackground = buildLocalizedImageSet(playerBoardPath, locale);
+    const tipBoardBackground = buildLocalizedImageSet(tipBoardPath, locale);
 
     return (
         <div

@@ -9,7 +9,7 @@ import msgpackParser from 'socket.io-msgpack-parser';
 import { getGameServerUrl } from '../config/server';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
-import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports } from '../lib/socketConnectionConfig';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports, shouldTryAllSocketTransports } from '../lib/socketConnectionConfig';
 import i18n from '../lib/i18n';
 
 const normalizeGameName = (name?: unknown) => {
@@ -208,6 +208,7 @@ class LobbySocketService {
             parser: msgpackParser,
             path: '/lobby-socket',
             transports: getSocketIoTransports(),
+            tryAllTransports: shouldTryAllSocketTransports(),
             reconnection: true,
             reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,

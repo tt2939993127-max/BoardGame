@@ -853,7 +853,9 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(page.getByText('获得1次额外随从机会')).toBeVisible({ timeout: 5000 });
 
         await expect(monster).toHaveAttribute('data-activation-armed', 'false');
-        await game.screenshot('13-monster-with-counter-grants-extra-minion', testInfo);
+        await expect(monster.getByText('已用', { exact: true })).toBeVisible();
+        await page.waitForTimeout(250);
+        await game.screenshot('13-monster-with-counter-grants-extra-minion-and-shows-used-state', testInfo);
     });
 });
 
@@ -954,12 +956,23 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const detailPanel = page.getByTestId('faction-detail-panel');
         const cancelButton = page.getByTestId('faction-cancel-button');
         const confirmButton = page.getByTestId('faction-confirm-button');
+        const baseVariantButton = page.getByTestId('faction-variant-base');
+        const podVariantButton = page.getByTestId('faction-variant-pod');
 
         await expect(piratesCard).toBeVisible({ timeout: 10000 });
         await piratesCard.click();
 
         await expect(detailPanel).toBeVisible({ timeout: 10000 });
         await expect(cancelButton).toBeVisible({ timeout: 10000 });
+        await expect(baseVariantButton).toBeVisible({ timeout: 10000 });
+        await expect(podVariantButton).toBeVisible({ timeout: 10000 });
+        await game.screenshot('16-desktop-faction-variant-base', testInfo);
+
+        await podVariantButton.click();
+        await expect(podVariantButton).toHaveAttribute('data-testid', 'faction-variant-pod');
+        await game.screenshot('17-desktop-faction-variant-pod', testInfo);
+
+        await baseVariantButton.click();
         await game.screenshot('18-desktop-faction-cancel-before', testInfo);
 
         await cancelButton.click();

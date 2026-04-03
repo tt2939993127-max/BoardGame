@@ -715,6 +715,37 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND: {
+            const { playerId, cardUid, baseIndex } = event.payload as any;
+            const base = state.bases[baseIndex];
+            const buried = (base?.buriedCards ?? []).find((card) => card.uid === cardUid);
+            if (!base || !buried) return state;
+            const owner = state.players[playerId];
+            if (!owner) return state;
+
+            const returned: CardInstance = {
+                uid: buried.uid,
+                defId: buried.defId,
+                type: (getCardDef(buried.defId)?.type === 'minion' ? 'minion' : 'action') as CardType,
+                owner: buried.trueOwnerId,
+            };
+
+            return {
+                ...state,
+                players: {
+                    ...state.players,
+                    [playerId]: {
+                        ...owner,
+                        hand: [...owner.hand, returned],
+                    },
+                },
+                bases: state.bases.map((entry, index) => index !== baseIndex ? entry : ({
+                    ...entry,
+                    buriedCards: (entry.buriedCards ?? []).filter((card) => card.uid !== cardUid),
+                })),
+            };
+        }
+
         case SU_EVENTS.BURIED_CARDS_DISCARDED_WITH_BASE: {
             const { baseIndex } = event.payload as any;
             const base = state.bases[baseIndex];
@@ -1364,6 +1395,19 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
             const newBases = [...state.bases];
             newBases.splice(baseIndex, 0, newBase);
+            const adjustedTitans = (state.titans ?? []).map(titan => {
+                if (titan.location.zone !== 'base') return titan;
+                if (titan.location.baseIndex >= baseIndex) {
+                    return {
+                        ...titan,
+                        location: {
+                            ...titan.location,
+                            baseIndex: titan.location.baseIndex + 1,
+                        },
+                    };
+                }
+                return titan;
+            });
             // 插入基地后，eligible 列表中 >= baseIndex 的索引需要 +1（数组扩张）
             const prevEligible = state.scoringEligibleBaseIndices;
             const adjustedEligible = prevEligible
@@ -1372,6 +1416,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return {
                 ...state,
                 bases: newBases,
+                titans: adjustedTitans,
                 baseDeck: newBaseDeck,
                 beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
                 afterScoringTriggeredBases: cleanedAfterScoring.length > 0 ? cleanedAfterScoring : undefined,
