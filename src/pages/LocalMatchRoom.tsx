@@ -25,6 +25,7 @@ import {
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 import { createLocalMatchSeed, ensureLocalMatchSeedSearchParams } from '../engine/transport/localSession';
+import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 
 // 教程系统正常拦截，不弹 toast
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
@@ -160,42 +161,44 @@ export const LocalMatchRoom = () => {
 
     return (
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
-            <GameHUD mode="local" localModeLabel={hasAiSeat ? t('actions.playAi') : t('actions.singleDevice')} />
-            <MobileBoardShell>
-                <div
-                    className="w-full h-full"
-                    style={{
-                        '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
-                    } as React.CSSProperties}
-                >
-                    <GameModeProvider mode="local">
-                        <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
-                            {engineConfig && WrappedBoard ? (
-                                <LocalGameProvider
-                                    key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
-                                    config={engineConfig}
-                                    numPlayers={localPlayerCount}
-                                    seed={gameSeed}
-                                    setupData={localSetupData}
-                                    onCommandRejected={handleCommandRejected}
-                                    seatControllers={seatControllers}
-                                    followCurrentTurnPlayer
-                                    persistSession
-                                >
-                                    <BoardBridge
-                                        board={WrappedBoard}
-                                        loading={<LoadingScreen anchor="container" title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
-                                    />
-                                </LocalGameProvider>
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-white/50">
-                                    {t('matchRoom.noClient')}
-                                </div>
-                            )}
-                        </GameCursorProvider>
-                    </GameModeProvider>
-                </div>
-            </MobileBoardShell>
+            <SmashUpOverlayProvider>
+                <GameHUD mode="local" gameId={gameId} localModeLabel={hasAiSeat ? t('actions.playAi') : t('actions.singleDevice')} />
+                <MobileBoardShell>
+                    <div
+                        className="w-full h-full"
+                        style={{
+                            '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
+                        } as React.CSSProperties}
+                    >
+                        <GameModeProvider mode="local">
+                            <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
+                                {engineConfig && WrappedBoard ? (
+                                    <LocalGameProvider
+                                        key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
+                                        config={engineConfig}
+                                        numPlayers={localPlayerCount}
+                                        seed={gameSeed}
+                                        setupData={localSetupData}
+                                        onCommandRejected={handleCommandRejected}
+                                        seatControllers={seatControllers}
+                                        followCurrentTurnPlayer
+                                        persistSession
+                                    >
+                                        <BoardBridge
+                                            board={WrappedBoard}
+                                            loading={<LoadingScreen anchor="container" title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
+                                        />
+                                    </LocalGameProvider>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-white/50">
+                                        {t('matchRoom.noClient')}
+                                    </div>
+                                )}
+                            </GameCursorProvider>
+                        </GameModeProvider>
+                    </div>
+                </MobileBoardShell>
+            </SmashUpOverlayProvider>
         </div>
     );
 };

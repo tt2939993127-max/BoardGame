@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { CardInstance } from '../domain/types';
@@ -11,11 +11,27 @@ import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture
 // ============================================================================
 // Layout Constants
 // ============================================================================
+export type HandAreaDropTarget = {
+    baseIndex: number;
+    minionUid?: string;
+};
+
+export type HandAreaDragPreview = {
+    cardUid: string;
+    originX: number;
+    originY: number;
+    clientX: number;
+    clientY: number;
+    dropTarget: HandAreaDropTarget | null;
+};
+
 const CARD_ASPECT_RATIO = 0.714;
 const DESKTOP_CARD_WIDTH_VW = 8.5;
 const MOBILE_CARD_WIDTH_VW = 10.5;
 const DESKTOP_SELECTED_Y_LIFT_VW = 5;
 const MOBILE_SELECTED_Y_LIFT_VW = 3.8;
+const DRAG_START_DISTANCE_PX = 12;
+const DRAG_DROP_SHADOW = '0 0 30px rgba(34, 211, 238, 0.45)';
 type Props = {
     hand: CardInstance[];
     selectedCardUid: string | null;
@@ -27,8 +43,11 @@ type Props = {
     disableInteraction?: boolean;
     /** 被禁用的卡牌 uid 集合（置灰 + 摇头） */
     disabledCardUids?: Set<string>;
-    /** 是否显示为对手视角（显示牌背） */
     isOpponentView?: boolean;
+    interactionMode?: 'click' | 'drag';
+    onResolveDropTarget?: (card: CardInstance, clientX: number, clientY: number) => HandAreaDropTarget | null;
+    onCardDragPlay?: (card: CardInstance, dropTarget: HandAreaDropTarget) => void;
+    onDragStateChange?: (preview: HandAreaDragPreview | null) => void;
 };
 
 // New prop for viewing details
@@ -54,6 +73,10 @@ type HandCardProps = {
     onPointerMove?: (event: React.PointerEvent, card: CardInstance) => void;
     onPointerEnd?: (card: CardInstance) => void;
     shouldBlockClick?: (card: CardInstance) => boolean;
+    interactionMode: 'click' | 'drag';
+    onResolveDropTarget?: (card: CardInstance, clientX: number, clientY: number) => HandAreaDropTarget | null;
+    onCardDragPlay?: (card: CardInstance, dropTarget: HandAreaDropTarget) => void;
+    onDragStateChange?: (preview: HandAreaDragPreview | null) => void;
 };
 
 
@@ -69,18 +92,133 @@ const HandCard: React.FC<HandCardProps> = ({
     isOpponentView,
     compactLayout,
     showTouchInspectButton,
+    interactionMode,
     onSelect,
     onViewDetail,
     onPointerDown,
     onPointerMove,
     onPointerEnd,
     shouldBlockClick,
+    onResolveDropTarget,
+    onCardDragPlay,
+    onDragStateChange,
 }) => {
     const { t } = useTranslation('game-smashup');
     const [isHovered, setIsHovered] = useState(false);
     const [isShaking, setIsShaking] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+    const [isDragPlayable, setIsDragPlayable] = useState(false);
+    const dragOriginRef = useRef({ x: 0, y: 0 });
+    const suppressClickRef = useRef(false);
+    const dragStateRef = useRef<{
+        pointerId: number | null;
+        startX: number;
+        startY: number;
+        hasMoved: boolean;
+    }>({
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        hasMoved: false,
+    });
 
-    // Lookup Data
+    const handleDragFinish = useCallback((event?: React.PointerEvent) => {
+        const dragState = dragStateRef.current;
+        if (interactionMode !== 'drag' || dragState.pointerId == null) return;
+        const didDrag = dragState.hasMoved;
+
+        if (event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(dragState.pointerId)) {
+            event.currentTarget.releasePointerCapture(dragState.pointerId);
+        }
+
+        const dropTarget = didDrag && event ? onResolveDropTarget?.(card, event.clientX, event.clientY) ?? null : null;
+        if (dropTarget) {
+            onCardDragPlay?.(card, dropTarget);
+        }
+        onDragStateChange?.(null);
+        suppressClickRef.current = didDrag;
+
+        dragStateRef.current = {
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            hasMoved: false,
+        };
+        setIsDragging(false);
+        setIsDragPlayable(false);
+    }, [card, interactionMode, onCardDragPlay, onDragStateChange, onResolveDropTarget]);
+
+    const handleDragCancel = useCallback((event?: React.PointerEvent) => {
+        const dragState = dragStateRef.current;
+        if (interactionMode !== 'drag' || dragState.pointerId == null) return;
+        suppressClickRef.current = dragState.hasMoved;
+        if (event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(dragState.pointerId)) {
+            event.currentTarget.releasePointerCapture(dragState.pointerId);
+        }
+        dragStateRef.current = {
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            hasMoved: false,
+        };
+        setIsDragging(false);
+        setIsDragPlayable(false);
+        onDragStateChange?.(null);
+    }, [interactionMode, onDragStateChange]);
+
+    const handlePointerDownInternal = useCallback((event: React.PointerEvent) => {
+        onPointerDown?.(event, card);
+        if (interactionMode !== 'drag' || isOpponentView || disableInteraction || isDisabled) return;
+        suppressClickRef.current = false;
+        dragStateRef.current = {
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+            hasMoved: false,
+        };
+        const rect = event.currentTarget.getBoundingClientRect();
+        dragOriginRef.current = {
+            x: rect.left + rect.width / 2,
+            y: rect.top + rect.height * 0.34,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onDragStateChange, onPointerDown]);
+
+    const handlePointerMoveInternal = useCallback((event: React.PointerEvent) => {
+        onPointerMove?.(event, card);
+        const dragState = dragStateRef.current;
+        if (interactionMode !== 'drag' || dragState.pointerId !== event.pointerId) return;
+
+        const offsetX = event.clientX - dragState.startX;
+        const offsetY = event.clientY - dragState.startY;
+        const distance = Math.hypot(offsetX, offsetY);
+        const hasMoved = dragState.hasMoved || distance >= DRAG_START_DISTANCE_PX;
+        dragState.hasMoved = hasMoved;
+        if (!hasMoved) return;
+
+        setIsDragging(true);
+        const dropTarget = onResolveDropTarget?.(card, event.clientX, event.clientY) ?? null;
+        setIsDragPlayable(Boolean(dropTarget));
+        onDragStateChange?.({
+            cardUid: card.uid,
+            originX: dragOriginRef.current.x,
+            originY: dragOriginRef.current.y,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            dropTarget,
+        });
+    }, [card, interactionMode, onDragStateChange, onPointerMove, onResolveDropTarget]);
+
+    const handlePointerUpInternal = useCallback((event: React.PointerEvent) => {
+        onPointerEnd?.(card);
+        handleDragFinish(event);
+    }, [card, handleDragFinish, onPointerEnd]);
+
+    const handlePointerCancelInternal = useCallback((event: React.PointerEvent) => {
+        onPointerEnd?.(card);
+        handleDragCancel(event);
+    }, [card, handleDragCancel, onPointerEnd]);
+
     const def = lookupCardDef(card.defId);
     const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
     const resolvedText = resolveCardText(def, t);
@@ -114,18 +252,21 @@ const HandCard: React.FC<HandCardProps> = ({
             className={`
                 relative flex-shrink-0 origin-bottom pointer-events-auto
                 hover:!z-50
-                ${isOpponentView ? 'cursor-default' : 'cursor-pointer'}
+                ${isOpponentView ? 'cursor-default' : interactionMode === 'drag' ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}
             `}
             style={{
                 width: `${cardWidthVw}vw`,
                 aspectRatio: `${CARD_ASPECT_RATIO}`,
                 marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
-                zIndex: baseZIndex
+                zIndex: isDragging ? 200 : baseZIndex,
+                boxShadow: isDragging && isDragPlayable ? DRAG_DROP_SHADOW : undefined,
+                touchAction: interactionMode === 'drag' ? 'none' : undefined,
             }}
             // 对手视角时完全不使用动画
             initial={isOpponentView ? { opacity: 1, y: 0, scale: 1, rotate: rotationSeed } : { y: 200, opacity: 0, scale: 0.8 }}
             animate={{
                 // 弃牌选中时小幅上移（2vw），普通选中时大幅上移（5vw）
+                x: 0,
                 y: isSelected && !isDiscardSelected ? `-${selectedLiftVw}vw` : isDiscardSelected ? '-2vw' : '0',
                 scale: (isSelected && !isDiscardSelected) ? 1.15 : 1,
                 rotate: isShaking ? [0, -6, 6, -4, 4, 0] : ((isSelected && !isDiscardSelected) ? 0 : rotationSeed),
@@ -135,11 +276,15 @@ const HandCard: React.FC<HandCardProps> = ({
             transition={isOpponentView ? { duration: 0 } : { type: 'spring', stiffness: 400, damping: 28 }}
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
-            onPointerDown={(event) => onPointerDown?.(event, card)}
-            onPointerMove={(event) => onPointerMove?.(event, card)}
-            onPointerUp={() => onPointerEnd?.(card)}
-            onPointerCancel={() => onPointerEnd?.(card)}
+            onPointerDown={handlePointerDownInternal}
+            onPointerMove={handlePointerMoveInternal}
+            onPointerUp={handlePointerUpInternal}
+            onPointerCancel={handlePointerCancelInternal}
             onClick={() => {
+                if (suppressClickRef.current) {
+                    suppressClickRef.current = false;
+                    return;
+                }
                 if (shouldBlockClick?.(card)) return;
                 if (isOpponentView) return; // 对手视角不可点击
                 if (disableInteraction || isDisabled) {
@@ -148,6 +293,7 @@ const HandCard: React.FC<HandCardProps> = ({
                     setTimeout(() => setIsShaking(false), 400);
                     return;
                 }
+                if (interactionMode === 'drag' && dragStateRef.current.hasMoved) return;
                 onSelect();
             }}
         >
@@ -216,6 +362,10 @@ export const HandArea: React.FC<Props> = ({
     disableInteraction = false,
     disabledCardUids,
     isOpponentView = false,
+    interactionMode = 'click',
+    onResolveDropTarget,
+    onCardDragPlay,
+    onDragStateChange,
 }) => {
     // Basic mount animation
     const [isLoaded, setIsLoaded] = useState(false);
@@ -224,7 +374,7 @@ export const HandArea: React.FC<Props> = ({
         getTouchInspectProps,
         shouldBlockInspectClick,
     } = useTouchInspectGesture<string, CardInstance>({
-        enabled: Boolean(onCardView) && !isOpponentView && !isDiscardMode,
+        enabled: Boolean(onCardView) && !isOpponentView && !isDiscardMode && interactionMode !== 'drag',
         onInspect: (_cardUid, card) => {
             onCardView?.(card);
         },
@@ -270,8 +420,11 @@ export const HandArea: React.FC<Props> = ({
                             isOpponentView={true}
                             compactLayout={compactLayout}
                             showTouchInspectButton={false}
+                            interactionMode={interactionMode}
+                            onResolveDropTarget={onResolveDropTarget}
+                            onCardDragPlay={onCardDragPlay}
+                            onDragStateChange={onDragStateChange}
                             onSelect={() => {}}
-                            onViewDetail={() => {}}
                         />
                     ))
                 ) : (
@@ -290,6 +443,10 @@ export const HandArea: React.FC<Props> = ({
                                 isOpponentView={false}
                                 compactLayout={compactLayout}
                                 showTouchInspectButton={isCoarsePointer && !isDiscardMode}
+                                interactionMode={interactionMode}
+                                onResolveDropTarget={onResolveDropTarget}
+                                onCardDragPlay={onCardDragPlay}
+                                onDragStateChange={onDragStateChange}
                                 onSelect={() => onCardSelect(card)}
                                 onViewDetail={() => onCardView?.(card)}
                                 onPointerDown={(event, pressedCard) => getTouchInspectProps(pressedCard.uid, pressedCard).onPointerDown(event)}

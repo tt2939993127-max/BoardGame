@@ -24,10 +24,6 @@ function isSamePlayerId(a: unknown, b: unknown): boolean {
     return String(a) === String(b);
 }
 
-function isObjectLike(value: unknown): value is Record<string, unknown> {
-    return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
 export interface SimpleChoiceSystemConfig {
     defaultTimeout?: number;
 }
@@ -190,59 +186,43 @@ function handleSimpleChoiceRespond<TCore>(
 
     let resolvedValue: unknown;
     if (payload.mergedValue !== undefined) {
-        const mergedValue = payload.mergedValue;
-
-        if (data.slider) {
-            if (isMulti) {
-                return { halt: true, error: '非法的选择值' };
-            }
-
-            const selectedOptionValue = selectedOptions[0]?.value;
-            if (!isObjectLike(selectedOptionValue) || !isObjectLike(mergedValue)) {
-                return { halt: true, error: '非法的选择值' };
-            }
-
-            const selectedNumericValue = selectedOptionValue.value;
-            const mergedNumericValue = mergedValue.value;
-            if (
-                typeof selectedNumericValue !== 'number'
-                || !Number.isFinite(selectedNumericValue)
-                || typeof mergedNumericValue !== 'number'
-                || !Number.isFinite(mergedNumericValue)
-                || !Number.isInteger(mergedNumericValue)
-                || mergedNumericValue < 1
-                || mergedNumericValue > selectedNumericValue
-            ) {
-                return { halt: true, error: '非法的选择值' };
-            }
-
-            const resolvedSliderValue: Record<string, unknown> = {
-                ...selectedOptionValue,
-                value: mergedNumericValue,
-            };
-            if (typeof selectedOptionValue.amount === 'number' && Number.isFinite(selectedOptionValue.amount)) {
-                resolvedSliderValue.amount = mergedNumericValue;
-            }
-            resolvedValue = resolvedSliderValue;
-        } else if (isMulti) {
-            resolvedValue = mergedValue;
-        } else {
-            const selectedOptionValue = selectedOptions[0]?.value;
-            if (!isObjectLike(selectedOptionValue) || !isObjectLike(mergedValue)) {
-                return { halt: true, error: '非法的选择值' };
-            }
-
-            for (const [key, nextValue] of Object.entries(mergedValue)) {
-                if (key in selectedOptionValue && !Object.is(selectedOptionValue[key], nextValue)) {
-                    return { halt: true, error: '非法的选择值' };
-                }
-            }
-
-            resolvedValue = {
-                ...selectedOptionValue,
-                ...mergedValue,
-            };
+        if (isMulti || !data.slider) {
+            return { halt: true, error: '非法的选择值' };
         }
+
+        const selectedOptionValue = selectedOptions[0]?.value;
+        if (!selectedOptionValue || typeof selectedOptionValue !== 'object' || Array.isArray(selectedOptionValue)) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const mergedValue = payload.mergedValue;
+        if (!mergedValue || typeof mergedValue !== 'object' || Array.isArray(mergedValue)) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedNumericValue = (selectedOptionValue as { value?: unknown }).value;
+        const mergedNumericValue = (mergedValue as { value?: unknown }).value;
+        if (
+            typeof selectedNumericValue !== 'number'
+            || !Number.isFinite(selectedNumericValue)
+            || typeof mergedNumericValue !== 'number'
+            || !Number.isFinite(mergedNumericValue)
+            || !Number.isInteger(mergedNumericValue)
+            || mergedNumericValue < 1
+            || mergedNumericValue > selectedNumericValue
+        ) {
+            return { halt: true, error: '非法的选择值' };
+        }
+
+        const selectedOptionRecord = selectedOptionValue as Record<string, unknown>;
+        const resolvedSliderValue: Record<string, unknown> = {
+            ...selectedOptionRecord,
+            value: mergedNumericValue,
+        };
+        if (typeof selectedOptionRecord.amount === 'number' && Number.isFinite(selectedOptionRecord.amount)) {
+            resolvedSliderValue.amount = mergedNumericValue;
+        }
+        resolvedValue = resolvedSliderValue;
     } else {
         resolvedValue = isMulti
             ? selectedOptions.map((option) => option.value)

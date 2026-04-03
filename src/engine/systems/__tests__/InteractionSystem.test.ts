@@ -122,71 +122,9 @@ describe('InteractionSystem', () => {
         expect(viewForOther?.interaction?.isBlocked).toBe(true);
     });
 
-    it('非 slider simple-choice 允许追加 mergedValue 字段，但不允许覆盖原字段', () => {
+    it('非 slider simple-choice 不允许自定义 mergedValue', () => {
         const system = createSimpleChoiceSystem<TestCore>();
-        const current = createSimpleChoice(
-            'interaction-merge',
-            '0',
-            '合并扩展值',
-            [{ id: 'a', label: 'A', value: { cardUid: 'card-1', defId: 'safe-choice' } }],
-        );
-        const state: MatchState<TestCore> = {
-            core: { value: 0 },
-            sys: {
-                interaction: {
-                    current,
-                    queue: [],
-                },
-            },
-        } as unknown as MatchState<TestCore>;
-        const command: Command = {
-            type: INTERACTION_COMMANDS.RESPOND,
-            playerId: '0',
-            payload: {
-                optionId: 'a',
-                mergedValue: { baseIndex: 2 },
-            },
-            timestamp: 100,
-        };
-
-        const result = system.beforeCommand?.({
-            state,
-            command,
-            events: [],
-            random: mockRandom,
-            playerIds: ['0', '1'],
-        });
-
-        expect(result?.halt).toBe(false);
-        expect(result?.events?.[0]).toMatchObject({
-            type: 'SYS_INTERACTION_RESOLVED',
-            payload: {
-                value: {
-                    cardUid: 'card-1',
-                    defId: 'safe-choice',
-                    baseIndex: 2,
-                },
-            },
-        });
-    });
-
-    it('非 slider simple-choice 不允许通过 mergedValue 覆盖原字段', () => {
-        const system = createSimpleChoiceSystem<TestCore>();
-        const current = createSimpleChoice(
-            'interaction-merge-protected',
-            '0',
-            '覆盖保护',
-            [{ id: 'a', label: 'A', value: { customId: 'safe-choice', value: 3 } }],
-        );
-        const state: MatchState<TestCore> = {
-            core: { value: 0 },
-            sys: {
-                interaction: {
-                    current,
-                    queue: [],
-                },
-            },
-        } as unknown as MatchState<TestCore>;
+        const state = createTestState();
         const command: Command = {
             type: INTERACTION_COMMANDS.RESPOND,
             playerId: '0',

@@ -5,7 +5,6 @@ import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import {
     addTempPower,
-    buildActionMinionTargetOptions,
     buildAbilityFeedback,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
@@ -18,7 +17,7 @@ import {
     moveTitan,
 } from '../domain/abilityHelpers';
 import { registerBaseAbility, registerExtended } from '../domain/baseAbilities';
-import { isMinionProtected, registerTrigger } from '../domain/ongoingEffects';
+import { registerTrigger } from '../domain/ongoingEffects';
 import type { TriggerContext } from '../domain/ongoingEffects';
 import { canStartDuel, isMinionInActiveDuel, startDuel } from '../domain/duel';
 import { validateActionPlaySemantics, validateDeckTopRegularMinionPlaySemantics } from '../domain/playLegality';
@@ -143,7 +142,7 @@ function cowboysQuickDrawOnPlay(ctx: AbilityContext): AbilityResult {
         `cowboys_quick_draw_${ctx.now}`,
         ctx.playerId,
         '拔枪术：选择你的一个随从获得力量加成',
-        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
+        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
         { sourceId: 'cowboys_quick_draw', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -151,7 +150,7 @@ function cowboysQuickDrawOnPlay(ctx: AbilityContext): AbilityResult {
 
 function cowboysHighNoonOnPlay(ctx: AbilityContext): AbilityResult {
     if (!canStartDuel(ctx.state) || ctx.duel) return { events: [] };
-    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId, { respectActionProtection: true });
+    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId);
     if (options.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
@@ -159,7 +158,7 @@ function cowboysHighNoonOnPlay(ctx: AbilityContext): AbilityResult {
         `cowboys_high_noon_friendly_${ctx.now}`,
         ctx.playerId,
         '正午决斗：选择你的一个随从开始决斗',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
         { sourceId: 'cowboys_high_noon_friendly', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -167,7 +166,7 @@ function cowboysHighNoonOnPlay(ctx: AbilityContext): AbilityResult {
 
 function cowboysRunEmOffOnPlay(ctx: AbilityContext): AbilityResult {
     if (!canStartDuel(ctx.state) || ctx.duel) return { events: [] };
-    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId, { respectActionProtection: true });
+    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId);
     if (options.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
@@ -175,7 +174,7 @@ function cowboysRunEmOffOnPlay(ctx: AbilityContext): AbilityResult {
         `cowboys_run_em_off_friendly_${ctx.now}`,
         ctx.playerId,
         '赶走他们：选择你的一个随从开始决斗',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
         { sourceId: 'cowboys_run_em_off_friendly', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -266,19 +265,11 @@ function cowboysDynamiteSurpriseSpecial(ctx: AbilityContext): AbilityResult {
     if (targets.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
-    const targetOptions = buildActionMinionTargetOptions(targets, {
-        state: ctx.state,
-        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
-        effectType: 'destroy',
-    });
-    if (targetOptions.length === 0) {
-        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
-    }
     const interaction = createSimpleChoice(
         `cowboys_dynamite_surprise_${ctx.now}`,
         ctx.playerId,
         '炸药惊喜：选择一个力量4或以下的随从消灭',
-        targetOptions as any[],
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }) as any[],
         { sourceId: 'cowboys_dynamite_surprise', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -314,7 +305,7 @@ function cowboysDynamiteSurpriseSeenTrigger(ctx: TriggerContext): AbilityResult 
         `cowboys_dynamite_surprise_seen_${ctx.now}_${exposedCard.uid}`,
         ownerPlayerId,
         '炸药惊喜：你可以打出这张牌，消灭其中一个力量 4 或以下的随从',
-        [createSkipOption('跳过（不打出）'), ...buildActionMinionTargetOptions(targets, {
+        [createSkipOption('跳过（不打出）'), ...buildMinionTargetOptions(targets, {
             state: ctx.state,
             sourcePlayerId: ownerPlayerId,
             effectType: 'destroy',
@@ -446,7 +437,7 @@ const handleQuickDraw = (state: MatchState<SmashUpCore>, _playerId: string, valu
 const handleHighNoonFriendly = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, _data: any, _random: RandomFn, now: number) => {
     const selected = value as FriendlyChoice | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
-    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId, { respectActionProtection: true });
+    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId);
     if (options.length === 0) return { state, events: [] };
     const interaction = createSimpleChoice(
         `cowboys_high_noon_enemy_${now}`,
@@ -483,7 +474,7 @@ const handleHighNoonEnemy = (state: MatchState<SmashUpCore>, _playerId: string, 
 const handleRunEmOffFriendly = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, _data: any, _random: RandomFn, now: number) => {
     const selected = value as FriendlyChoice | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
-    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId, { respectActionProtection: true });
+    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId);
     if (options.length === 0) return { state, events: [] };
     const interaction = createSimpleChoice(
         `cowboys_run_em_off_enemy_${now}`,
@@ -810,14 +801,8 @@ function collectOwnMinions(state: SmashUpCore, playerId: PlayerId): Array<{ uid:
     return results;
 }
 
-function collectFriendlyDuelStarters(
-    state: SmashUpCore,
-    playerId: PlayerId,
-    options?: { respectActionProtection?: boolean },
-): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
-    return collectOwnMinions(state, playerId).filter(({ baseIndex }) => (
-        buildEnemyMinionOptions(state, baseIndex, playerId, options).length > 0
-    ));
+function collectFriendlyDuelStarters(state: SmashUpCore, playerId: PlayerId): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
+    return collectOwnMinions(state, playerId).filter(({ baseIndex }) => buildEnemyMinionOptions(state, baseIndex, playerId).length > 0);
 }
 
 function collectStagecoachSourceBases(state: SmashUpCore, playerId: PlayerId): Array<{ baseIndex: number; label: string }> {
@@ -943,19 +928,12 @@ function collectDynamiteSeenTargets(
     return results;
 }
 
-function buildEnemyMinionOptions(
-    state: SmashUpCore,
-    baseIndex: number,
-    sourcePlayerId: PlayerId,
-    options?: { respectActionProtection?: boolean },
-): any[] {
+function buildEnemyMinionOptions(state: SmashUpCore, baseIndex: number, sourcePlayerId: PlayerId): any[] {
     const base = state.bases[baseIndex];
     if (!base) return [];
-    const respectActionProtection = options?.respectActionProtection ?? false;
     return buildMinionTargetOptions(
         base.minions
             .filter(minion => minion.controller !== sourcePlayerId)
-            .filter(minion => !respectActionProtection || !isMinionProtected(state, minion, baseIndex, sourcePlayerId, 'action'))
             .map(minion => ({
                 uid: minion.uid,
                 defId: minion.defId,
@@ -1047,7 +1025,6 @@ function queueGoldPlayTargetPrompt(
     if (actionLikeNeedsPlayMinion(actionDef)) {
         const minionOptions = state.core.bases.flatMap((base, baseIndex) => (
             base.minions
-                .filter(minion => !isMinionProtected(state.core, minion, baseIndex, playerId, 'action'))
                 .filter(minion => validateActionPlaySemantics(state.core, playerId, {
                     defId: chosenCard.defId,
                     targetBaseIndex: baseIndex,
@@ -1067,7 +1044,7 @@ function queueGoldPlayTargetPrompt(
             `cowboys_gold_in_them_thar_hills_action_minion_${now}`,
             playerId,
             '那山里有金子：选择这张额外行动的目标随从',
-            buildMinionTargetOptions(minionOptions, { state: state.core, sourcePlayerId: playerId, sourceDefId: chosenCard.defId }) as any[],
+            buildMinionTargetOptions(minionOptions, { state: state.core, sourcePlayerId: playerId }) as any[],
             { sourceId: 'cowboys_gold_in_them_thar_hills_action_minion', targetType: 'minion' },
         );
         (interaction.data as any).continuationContext = { chosenCard, remainingCards } satisfies GoldPromptContext;
@@ -1212,8 +1189,8 @@ function playGoldCard(
         }
         return event;
     });
-    const currentInteractionId = state.sys.interaction?.current?.id;
-    const nextInteractionId = simulatedState.sys.interaction?.current?.id;
+    const currentInteractionId = state.sys.interaction?.current?.interactionId;
+    const nextInteractionId = simulatedState.sys.interaction?.current?.interactionId;
     const hasNewInteraction = (
         !!nextInteractionId && nextInteractionId !== currentInteractionId
     ) || ((simulatedState.sys.interaction?.queue?.length ?? 0) > (state.sys.interaction?.queue?.length ?? 0));

@@ -67,7 +67,7 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
         '选择要消灭的随从（力量低于己方随从数量）',
         buildMinionTargetOptions(options, {
             state: ctx.state,
-            sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+            sourcePlayerId: ctx.playerId,
             effectType: 'destroy',
         }),
         { sourceId: 'robot_microbot_guard', targetType: 'minion' },
