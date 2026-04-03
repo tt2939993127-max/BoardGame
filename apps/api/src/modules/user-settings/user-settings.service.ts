@@ -91,6 +91,37 @@ export class UserSettingsService {
             { upsert: true }
         );
     }
+
+    async getSmashUpPreference(userId: string): Promise<{
+        overlayEnabled: boolean;
+        interactionMode: 'click' | 'drag';
+    } | null> {
+        const doc = await this.uiSettingsModel.findOne({ userId });
+        if (!doc || doc.smashupPreferenceInitialized !== true) return null;
+        return {
+            overlayEnabled: doc.smashupOverlayEnabled !== false,
+            interactionMode: doc.smashupInteractionMode === 'drag' ? 'drag' : 'click',
+        };
+    }
+
+    async upsertSmashUpPreference(
+        userId: string,
+        overlayEnabled: boolean,
+        interactionMode: 'click' | 'drag',
+    ): Promise<void> {
+        await this.uiSettingsModel.findOneAndUpdate(
+            { userId },
+            {
+                $set: {
+                    smashupPreferenceInitialized: true,
+                    smashupOverlayEnabled: overlayEnabled,
+                    smashupInteractionMode: interactionMode,
+                },
+                $setOnInsert: { userId },
+            },
+            { upsert: true }
+        );
+    }
 }
 
 function normalizeBgmSelections(

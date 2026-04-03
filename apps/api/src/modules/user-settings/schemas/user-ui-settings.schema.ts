@@ -28,6 +28,18 @@ export class UserUISettings {
     @Prop({ type: Object, default: {} })
     cursorGameVariants!: Record<string, string>;
 
+    /** 大杀四方偏好是否已初始化（用于首登本地迁移） */
+    @Prop({ type: Boolean, default: false })
+    smashupPreferenceInitialized!: boolean;
+
+    /** 大杀四方英文卡图中文覆盖层 */
+    @Prop({ type: Boolean, default: true })
+    smashupOverlayEnabled!: boolean;
+
+    /** 大杀四方交互模式 */
+    @Prop({ type: String, enum: ['click', 'drag'], default: 'click' })
+    smashupInteractionMode!: 'click' | 'drag';
+
     createdAt!: Date;
     updatedAt!: Date;
 }

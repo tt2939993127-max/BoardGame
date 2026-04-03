@@ -9,7 +9,7 @@
  * - Font: Thick, bold, informal.
  */
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
 import type { GameBoardProps } from '../../engine/transport/protocol';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -32,7 +32,7 @@ initSmashUpAtlases();
 import { SMASH_UP_MANIFEST } from './manifest';
 import { getLayoutConfig } from './ui/layoutConfig';
 import './cursor';
-import { HandArea } from './ui/HandArea';
+import { HandArea, type HandAreaDragPreview, type HandAreaDropTarget } from './ui/HandArea';
 import { useGameEvents } from './ui/useGameEvents';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { smashUpFxRegistry } from './ui/fxSetup';
@@ -71,10 +71,109 @@ import { useCardSpotlightQueue, CardSpotlightQueue } from '../../components/game
 import type { SpotlightItem } from '../../components/game/framework';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { RevealOverlay } from './ui/RevealOverlay';
-import { SmashUpOverlayProvider, useSmashUpOverlay } from './ui/SmashUpOverlayContext';
+import { useSmashUpOverlay } from './ui/SmashUpOverlayContext';
 import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 
 type Props = GameBoardProps<SmashUpCore>;
+
+type DragGuidePoint = { x: number; y: number };
+
+function cubicBezierPoint(t: number, p0: DragGuidePoint, p1: DragGuidePoint, p2: DragGuidePoint, p3: DragGuidePoint): DragGuidePoint {
+    const oneMinusT = 1 - t;
+    return {
+        x: (oneMinusT ** 3) * p0.x + 3 * (oneMinusT ** 2) * t * p1.x + 3 * oneMinusT * (t ** 2) * p2.x + (t ** 3) * p3.x,
+        y: (oneMinusT ** 3) * p0.y + 3 * (oneMinusT ** 2) * t * p1.y + 3 * oneMinusT * (t ** 2) * p2.y + (t ** 3) * p3.y,
+    };
+}
+
+function cubicBezierTangent(t: number, p0: DragGuidePoint, p1: DragGuidePoint, p2: DragGuidePoint, p3: DragGuidePoint): DragGuidePoint {
+    const oneMinusT = 1 - t;
+    return {
+        x: 3 * (oneMinusT ** 2) * (p1.x - p0.x) + 6 * oneMinusT * t * (p2.x - p1.x) + 3 * (t ** 2) * (p3.x - p2.x),
+        y: 3 * (oneMinusT ** 2) * (p1.y - p0.y) + 6 * oneMinusT * t * (p2.y - p1.y) + 3 * (t ** 2) * (p3.y - p2.y),
+    };
+}
+
+function splitCubicBezier(
+    t: number,
+    p0: DragGuidePoint,
+    p1: DragGuidePoint,
+    p2: DragGuidePoint,
+    p3: DragGuidePoint,
+): { left: [DragGuidePoint, DragGuidePoint, DragGuidePoint, DragGuidePoint]; right: [DragGuidePoint, DragGuidePoint, DragGuidePoint, DragGuidePoint] } {
+    const p01 = { x: p0.x + (p1.x - p0.x) * t, y: p0.y + (p1.y - p0.y) * t };
+    const p12 = { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t };
+    const p23 = { x: p2.x + (p3.x - p2.x) * t, y: p2.y + (p3.y - p2.y) * t };
+    const p012 = { x: p01.x + (p12.x - p01.x) * t, y: p01.y + (p12.y - p01.y) * t };
+    const p123 = { x: p12.x + (p23.x - p12.x) * t, y: p12.y + (p23.y - p12.y) * t };
+    const p0123 = { x: p012.x + (p123.x - p012.x) * t, y: p012.y + (p123.y - p012.y) * t };
+    return {
+        left: [p0, p01, p012, p0123],
+        right: [p0123, p123, p23, p3],
+    };
+}
+
+function buildArrowHeadPath(
+    center: DragGuidePoint,
+    tangent: DragGuidePoint,
+    length: number,
+    width: number,
+): string {
+    const tangentLength = Math.hypot(tangent.x, tangent.y) || 1;
+    const unitX = tangent.x / tangentLength;
+    const unitY = tangent.y / tangentLength;
+    const normalX = -unitY;
+    const normalY = unitX;
+    const tip = { x: center.x + unitX * (length * 0.78), y: center.y + unitY * (length * 0.78) };
+    const leftShoulder = {
+        x: center.x + normalX * width + unitX * (length * 0.08),
+        y: center.y + normalY * width + unitY * (length * 0.08),
+    };
+    const rightShoulder = {
+        x: center.x - normalX * width + unitX * (length * 0.08),
+        y: center.y - normalY * width + unitY * (length * 0.08),
+    };
+    const leftTail = {
+        x: center.x + normalX * (width * 0.36) - unitX * (length * 0.46),
+        y: center.y + normalY * (width * 0.36) - unitY * (length * 0.46),
+    };
+    const rightTail = {
+        x: center.x - normalX * (width * 0.36) - unitX * (length * 0.46),
+        y: center.y - normalY * (width * 0.36) - unitY * (length * 0.46),
+    };
+    const tail = {
+        x: center.x - unitX * (length * 0.5),
+        y: center.y - unitY * (length * 0.5),
+    };
+    return [
+        `M ${leftTail.x} ${leftTail.y}`,
+        `Q ${leftShoulder.x} ${leftShoulder.y} ${tip.x} ${tip.y}`,
+        `Q ${rightShoulder.x} ${rightShoulder.y} ${rightTail.x} ${rightTail.y}`,
+        `Q ${tail.x} ${tail.y} ${leftTail.x} ${leftTail.y}`,
+        'Z',
+    ].join(' ');
+}
+
+function buildDragArrowGuide(
+    start: DragGuidePoint,
+    control1: DragGuidePoint,
+    control2: DragGuidePoint,
+    end: DragGuidePoint,
+): { linePath: string; headPath: string; hintPoint: DragGuidePoint; hintTangent: DragGuidePoint } {
+    const { left } = splitCubicBezier(0.915, start, control1, control2, end);
+    const [, lineControl1, lineControl2, lineEnd] = left;
+    const headCenter = cubicBezierPoint(0.952, start, control1, control2, end);
+    const headTangent = cubicBezierTangent(0.986, start, control1, control2, end);
+    const hintPoint = cubicBezierPoint(0.56, start, control1, control2, end);
+    const hintTangent = cubicBezierTangent(0.56, start, control1, control2, end);
+
+    return {
+        linePath: `M ${start.x} ${start.y} C ${lineControl1.x} ${lineControl1.y} ${lineControl2.x} ${lineControl2.y} ${lineEnd.x} ${lineEnd.y}`,
+        headPath: buildArrowHeadPath(headCenter, headTangent, 18, 6.8),
+        hintPoint,
+        hintTangent,
+    };
+}
 
 /** UI 层打出约束检查（与 commands.ts 的 checkPlayConstraint 对齐） */
 function checkPlayConstraintUI(
@@ -96,19 +195,10 @@ function checkPlayConstraintUI(
 
 const getPhaseNameKey = (phase: string) => `phases.${phase}`;
 
-const SmashUpBoard: React.FC<Props> = (props) => {
-    // 外层包裹 Provider
-    return (
-        <SmashUpOverlayProvider>
-            <SmashUpBoardInner {...props} />
-        </SmashUpOverlayProvider>
-    );
-};
-
-const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, matchData, isMultiplayer }) => {
+const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, matchData, isMultiplayer }) => {
     const { t } = useTranslation('game-smashup');
-    const { setSelectedFactions } = useSmashUpOverlay();
-    
+    const { setSelectedFactions, interactionMode } = useSmashUpOverlay();
+
     const core = G?.core;
     const phase = G?.sys.phase;
     const currentPid = core ? getCurrentPlayerId(core) : '0';
@@ -200,6 +290,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
     const [meFirstPendingCard, setMeFirstPendingCard] = useState<MeFirstPendingCard | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [handDragPreview, setHandDragPreview] = useState<HandAreaDragPreview | null>(null);
 
     // 弃牌判断：抽牌阶段 + 是我的回合 + 手牌超限
     // 使用 useMemo 确保使用最新的依赖值（避免时序问题）
@@ -586,13 +677,18 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         return new Set(getScoringEligibleBaseIndices(core));
     }, [meFirstPendingCard, core]);
 
-    // 手牌选中卡牌的有效部署基地集合（排除被 ongoing 限制的基地）
-    // deployBlockReason: 当所有基地都不可选时的原因（用于 toast 提示）
-    const { deployableBaseIndices, deployBlockReason } = useMemo<{ deployableBaseIndices: Set<number>; deployBlockReason: string | null }>(() => {
-        if (!selectedCardUid || !playerID) return { deployableBaseIndices: new Set(), deployBlockReason: null };
+    const resolvePlayableCardMode = useCallback((card: CardInstance): 'minion' | 'ongoing' | 'ongoing-minion' | null => {
+        if (card.uid === selectedCardUid && selectedCardMode) return selectedCardMode;
+        if (card.type === 'minion') return 'minion';
+        if (card.type !== 'action') return null;
+        const actionDef = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
+        if (actionDef?.subtype !== 'ongoing') return null;
+        return actionDef.ongoingTarget === 'minion' ? 'ongoing-minion' : 'ongoing';
+    }, [selectedCardMode, selectedCardUid]);
+
+    const getDeployableBaseStateForCard = useCallback((card: CardInstance, cardMode: 'minion' | 'ongoing' | 'ongoing-minion' | null): { deployableBaseIndices: Set<number>; deployBlockReason: string | null } => {
         const indices = new Set<number>();
-        const card = myPlayer?.hand.find(c => c.uid === selectedCardUid);
-        if (!card) return { deployableBaseIndices: indices, deployBlockReason: null };
+        if (!playerID || !cardMode) return { deployableBaseIndices: indices, deployBlockReason: null };
 
         // Me First! 窗口中 beforeScoringPlayable 随从：只允许即将计分的基地
         if (isMeFirstResponse && card.type === 'minion') {
@@ -609,14 +705,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
 
         const player = core.players[playerID];
+        if (!player) return { deployableBaseIndices: indices, deployBlockReason: null };
 
         // 同名额度检查：全局额度用完且只剩同名额度时，defId 必须匹配
-        if (selectedCardMode === 'minion' && player) {
+        if (cardMode === 'minion') {
             const globalRemaining = player.minionLimit - player.minionsPlayed;
             const sameNameRemaining = player.sameNameMinionRemaining ?? 0;
             const baseQuotaTotal = Object.values(player.baseLimitedMinionQuota ?? {}).reduce((s, v) => s + v, 0);
             if (globalRemaining <= 0 && sameNameRemaining > 0 && baseQuotaTotal <= 0) {
-                // 已锁定 defId 且不匹配时阻止
                 if (player.sameNameMinionDefId !== null && player.sameNameMinionDefId !== undefined && card.defId !== player.sameNameMinionDefId) {
                     return {
                         deployableBaseIndices: indices,
@@ -629,8 +725,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
 
         for (let i = 0; i < core.bases.length; i++) {
-            if (selectedCardMode === 'minion') {
-                // 打出随从：检查 play_minion 限制
+            if (cardMode === 'minion') {
                 const minionDef = getMinionDef(card.defId);
                 const basePower = minionDef?.power ?? 0;
                 const onlyBaseQuota = mustUseBaseLimitedMinionQuota(core, player, i, card.defId, basePower);
@@ -644,16 +739,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     basePower,
                     usesBaseLimitedMinionQuota: onlyBaseQuota,
                 })) {
-                    // 基地限定同名约束：只剩基地限定额度时，检查该基地是否有额度且满足同名约束
                     if (onlyBaseQuota) {
-                        const bQuota = player?.baseLimitedMinionQuota?.[i] ?? 0;
-                        if (bQuota <= 0) continue; // 该基地无额度
-                        if (player?.baseLimitedSameNameRequired?.[i]) {
+                        const bQuota = player.baseLimitedMinionQuota?.[i] ?? 0;
+                        if (bQuota <= 0) continue;
+                        if (player.baseLimitedSameNameRequired?.[i]) {
                             const baseDefIds = new Set(core.bases[i].minions.map(m => m.defId));
-                            if (!baseDefIds.has(card.defId)) continue; // 不满足同名约束
+                            if (!baseDefIds.has(card.defId)) continue;
                         }
                     }
-                    // 随从打出约束（数据驱动）
                     if (minionDef?.playConstraint) {
                         if (checkPlayConstraintUI(minionDef.playConstraint, core, i, playerID)) {
                             indices.add(i);
@@ -662,14 +755,20 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                         indices.add(i);
                     }
                 }
-            } else if (selectedCardMode === 'ongoing' || selectedCardMode === 'ongoing-minion') {
-                // ongoing-minion 模式：行动卡附着到随从上，不受基地 play_action 限制
-                if (selectedCardMode === 'ongoing-minion') {
-                    // 只检查基地上是否有随从
-                    if (core.bases[i].minions.length === 0) {
-                        continue; // 没有随从，跳过该基地
+            } else if (cardMode === 'ongoing-minion') {
+                if (core.bases[i].minions.length === 0) {
+                    continue;
+                }
+                const actionDef = getCardDef(card.defId) as ActionCardDef | undefined;
+                if (actionDef?.playConstraint) {
+                    if (checkPlayConstraintUI(actionDef.playConstraint, core, i, playerID)) {
+                        indices.add(i);
                     }
-                    // playConstraint 数据驱动约束（如果有）
+                } else {
+                    indices.add(i);
+                }
+            } else if (cardMode === 'ongoing') {
+                if (!isOperationRestricted(core, i, playerID, 'play_action')) {
                     const actionDef = getCardDef(card.defId) as ActionCardDef | undefined;
                     if (actionDef?.playConstraint) {
                         if (checkPlayConstraintUI(actionDef.playConstraint, core, i, playerID)) {
@@ -678,24 +777,20 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     } else {
                         indices.add(i);
                     }
-                } else {
-                    // ongoing 模式：打出行动卡到基地，检查 play_action 限制
-                    if (!isOperationRestricted(core, i, playerID, 'play_action')) {
-                        // playConstraint 数据驱动约束
-                        const actionDef = getCardDef(card.defId) as ActionCardDef | undefined;
-                        if (actionDef?.playConstraint) {
-                            if (checkPlayConstraintUI(actionDef.playConstraint, core, i, playerID)) {
-                                indices.add(i);
-                            }
-                        } else {
-                            indices.add(i);
-                        }
-                    }
                 }
             }
         }
         return { deployableBaseIndices: indices, deployBlockReason: null };
-    }, [selectedCardUid, selectedCardMode, playerID, myPlayer?.hand, core, t, isMeFirstResponse]);
+    }, [core, isMeFirstResponse, playerID, t]);
+
+    // 手牌选中卡牌的有效部署基地集合（排除被 ongoing 限制的基地）
+    // deployBlockReason: 当所有基地都不可选时的原因（用于 toast 提示）
+    const { deployableBaseIndices, deployBlockReason } = useMemo<{ deployableBaseIndices: Set<number>; deployBlockReason: string | null }>(() => {
+        if (!selectedCardUid || !myPlayer) return { deployableBaseIndices: new Set(), deployBlockReason: null };
+        const card = myPlayer.hand.find(c => c.uid === selectedCardUid);
+        if (!card) return { deployableBaseIndices: new Set(), deployBlockReason: null };
+        return getDeployableBaseStateForCard(card, selectedCardMode);
+    }, [getDeployableBaseStateForCard, myPlayer, selectedCardMode, selectedCardUid]);
 
     // ongoing-minion 模式下的有效随从 UID 集合（只包含未被限制基地上的随从）
     const ongoingMinionTargetUids = useMemo<Set<string>>(() => {
@@ -709,6 +804,33 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         }
         return uids;
     }, [selectedCardMode, playerID, core, deployableBaseIndices]);
+
+    const draggedCard = useMemo(() => {
+        if (!handDragPreview || !myPlayer) return null;
+        return myPlayer.hand.find((card) => card.uid === handDragPreview.cardUid) ?? null;
+    }, [handDragPreview, myPlayer]);
+
+    const draggedCardMode = useMemo(() => {
+        if (!draggedCard) return null;
+        return resolvePlayableCardMode(draggedCard);
+    }, [draggedCard, resolvePlayableCardMode]);
+
+    const dragDeployableBaseIndices = useMemo<Set<number>>(() => {
+        if (!draggedCard) return new Set();
+        return getDeployableBaseStateForCard(draggedCard, draggedCardMode).deployableBaseIndices;
+    }, [draggedCard, draggedCardMode, getDeployableBaseStateForCard]);
+
+    const dragOngoingMinionTargetUids = useMemo<Set<string>>(() => {
+        if (draggedCardMode !== 'ongoing-minion') return new Set();
+        const uids = new Set<string>();
+        for (let i = 0; i < core.bases.length; i++) {
+            if (!dragDeployableBaseIndices.has(i)) continue;
+            for (const minion of core.bases[i].minions) {
+                uids.add(minion.uid);
+            }
+        }
+        return uids;
+    }, [core.bases, dragDeployableBaseIndices, draggedCardMode]);
 
     // 基地 DOM 引用（用于 FX 特效定位）
     const baseRefsMap = useRef<Map<number, HTMLElement>>(new Map());
@@ -862,7 +984,14 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         setMeFirstPendingCard(null);
         setIsSubmitting(false);
         setIsEndTurnUiHidden(false);
+        setHandDragPreview(null);
     }, [phase, currentPid]);
+
+    useEffect(() => {
+        if (interactionMode !== 'drag' || viewMode === 'opponent') {
+            setHandDragPreview(null);
+        }
+    }, [interactionMode, viewMode]);
 
     // 卡牌和基地图集已在模块顶层 initSmashUpAtlases() 同步注册，无需异步加载
 
@@ -1242,9 +1371,192 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
         setViewingCard(nextTarget);
     }, []);
 
+
+    const resolveHandDropTarget = useCallback((card: CardInstance, clientX: number, clientY: number): HandAreaDropTarget | null => {
+        const cardMode = resolvePlayableCardMode(card);
+        if (!cardMode) return null;
+        const { deployableBaseIndices: dragDeployableBaseIndices } = getDeployableBaseStateForCard(card, cardMode);
+        const elements = typeof document !== 'undefined' ? document.elementsFromPoint(clientX, clientY) : [];
+        let hoveredBaseIndex: number | null = null;
+
+        for (const element of elements) {
+            if (!(element instanceof HTMLElement)) continue;
+
+            const baseIndexText = element.dataset.baseIndex;
+            if (baseIndexText != null && hoveredBaseIndex == null) {
+                const baseIndex = Number(baseIndexText);
+                if (Number.isFinite(baseIndex)) {
+                    hoveredBaseIndex = baseIndex;
+                }
+            }
+
+            if (cardMode === 'ongoing-minion') {
+                const minionUid = element.dataset.minionUid;
+                if (!minionUid) continue;
+                if (hoveredBaseIndex == null || !dragDeployableBaseIndices.has(hoveredBaseIndex)) return null;
+                if (!core.bases[hoveredBaseIndex]?.minions.some((minion) => minion.uid === minionUid)) return null;
+                return { baseIndex: hoveredBaseIndex, minionUid };
+            }
+
+            if (hoveredBaseIndex != null) {
+                if (!dragDeployableBaseIndices.has(hoveredBaseIndex)) return null;
+                return { baseIndex: hoveredBaseIndex };
+            }
+        }
+        return null;
+    }, [core.bases, getDeployableBaseStateForCard, resolvePlayableCardMode]);
+
+    const handleCardDragPlay = useCallback((card: CardInstance, dropTarget: HandAreaDropTarget) => {
+        if (interactionMode !== 'drag') return;
+        if (isHandDiscardPrompt || needDiscard || isBaseSelectPrompt || isMinionSelectPrompt || isOngoingSelectPrompt || isDiscardMinionPrompt) return;
+
+        const cardMode = resolvePlayableCardMode(card);
+        if (!cardMode) {
+            playDeniedSound();
+            return;
+        }
+
+        if (!isMyTurn || phase !== 'playCards') {
+            playDeniedSound();
+            return;
+        }
+
+        const commandType = cardMode === 'minion' ? SU_COMMANDS.PLAY_MINION : SU_COMMANDS.PLAY_ACTION;
+        if (!isTutorialCommandAllowed(commandType) || !isTutorialTargetAllowed(card.uid)) {
+            playDeniedSound();
+            return;
+        }
+
+        const { deployableBaseIndices: dragDeployableBaseIndices, deployBlockReason: dragDeployBlockReason } = getDeployableBaseStateForCard(card, cardMode);
+        if (!dragDeployableBaseIndices.has(dropTarget.baseIndex)) {
+            if (dragDeployBlockReason) {
+                toast(dragDeployBlockReason);
+            } else {
+                playDeniedSound();
+            }
+            return;
+        }
+
+        if (cardMode === 'ongoing-minion') {
+            if (!dropTarget.minionUid) {
+                playDeniedSound();
+                return;
+            }
+            handlePlayOngoingToMinion(card.uid, dropTarget.baseIndex, dropTarget.minionUid);
+            return;
+        }
+
+        if (cardMode === 'ongoing') {
+            handlePlayOngoingAction(card.uid, dropTarget.baseIndex);
+            return;
+        }
+
+        handlePlayMinion(card.uid, dropTarget.baseIndex);
+    }, [getDeployableBaseStateForCard, handlePlayMinion, handlePlayOngoingAction, handlePlayOngoingToMinion, interactionMode, isBaseSelectPrompt, isDiscardMinionPrompt, isHandDiscardPrompt, isMinionSelectPrompt, isMyTurn, isOngoingSelectPrompt, isTutorialCommandAllowed, isTutorialTargetAllowed, needDiscard, phase, resolvePlayableCardMode]);
+
+
+
     const handleViewAction = useCallback((defId: string) => {
         setViewingCard({ defId, type: 'action' });
     }, []);
+
+    const dragGuideTarget = useMemo(() => {
+        if (!handDragPreview?.dropTarget || typeof document === 'undefined') return null;
+        const { dropTarget } = handDragPreview;
+        if (dropTarget.minionUid) {
+            const minionElement = Array.from(document.querySelectorAll<HTMLElement>('[data-minion-uid]'))
+                .find((element) => element.dataset.minionUid === dropTarget.minionUid);
+            if (minionElement) {
+                const rect = minionElement.getBoundingClientRect();
+                return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            }
+        }
+        const baseElement = baseRefsMap.current.get(dropTarget.baseIndex);
+        if (!baseElement) return null;
+        const rect = baseElement.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, [handDragPreview]);
+
+    const dragGuideEnd = useMemo(() => {
+        if (!handDragPreview) return null;
+        if (!dragGuideTarget) {
+            return { x: handDragPreview.clientX, y: handDragPreview.clientY };
+        }
+        const dx = dragGuideTarget.x - handDragPreview.originX;
+        const dy = dragGuideTarget.y - handDragPreview.originY;
+        const distance = Math.hypot(dx, dy) || 1;
+        const unitX = dx / distance;
+        const unitY = dy / distance;
+        const endOffset = handDragPreview.dropTarget?.minionUid ? 28 : 40;
+        return {
+            x: dragGuideTarget.x - unitX * endOffset,
+            y: dragGuideTarget.y - unitY * endOffset,
+        };
+    }, [dragGuideTarget, handDragPreview]);
+
+    const dragGuideGeometry = useMemo(() => {
+        if (!handDragPreview || !dragGuideEnd) return null;
+        const startX = handDragPreview.originX;
+        const startY = handDragPreview.originY;
+        const endX = dragGuideEnd.x;
+        const endY = dragGuideEnd.y;
+        const deltaX = endX - startX;
+        const deltaY = endY - startY;
+        const distance = Math.hypot(deltaX, deltaY) || 1;
+        const unitX = deltaX / distance;
+        const unitY = deltaY / distance;
+        let normalX = -unitY;
+        let normalY = unitX;
+        if (normalY > 0) {
+            normalX *= -1;
+            normalY *= -1;
+        }
+        const curveLift = Math.min(184, Math.max(92, distance * 0.22));
+        const startInset = 18;
+        const visibleStartX = startX + unitX * startInset;
+        const visibleStartY = startY + unitY * startInset;
+        const control1X = visibleStartX + deltaX * 0.12 + normalX * curveLift;
+        const control1Y = visibleStartY + deltaY * 0.04 + normalY * curveLift;
+        const endTangent = Math.min(104, Math.max(56, distance * 0.2));
+        const control2X = endX - unitX * endTangent;
+        const control2Y = endY - unitY * endTangent;
+        return {
+            startX: visibleStartX,
+            startY: visibleStartY,
+            endX,
+            endY,
+            control1X,
+            control1Y,
+            control2X,
+            control2Y,
+            path: `M ${visibleStartX} ${visibleStartY} C ${control1X} ${control1Y} ${control2X} ${control2Y} ${endX} ${endY}`,
+        };
+    }, [dragGuideEnd, handDragPreview]);
+
+    const dragGuidePaths = useMemo(() => {
+        if (!dragGuideGeometry) return null;
+        return buildDragArrowGuide(
+            { x: dragGuideGeometry.startX, y: dragGuideGeometry.startY },
+            { x: dragGuideGeometry.control1X, y: dragGuideGeometry.control1Y },
+            { x: dragGuideGeometry.control2X, y: dragGuideGeometry.control2Y },
+            { x: dragGuideGeometry.endX, y: dragGuideGeometry.endY },
+        );
+    }, [dragGuideGeometry]);
+
+    const dragGuideHint = useMemo(() => {
+        if (!dragGuidePaths) return null;
+        const tangentLength = Math.hypot(dragGuidePaths.hintTangent.x, dragGuidePaths.hintTangent.y) || 1;
+        let normalX = -dragGuidePaths.hintTangent.y / tangentLength;
+        let normalY = dragGuidePaths.hintTangent.x / tangentLength;
+        if (normalY > 0) {
+            normalX *= -1;
+            normalY *= -1;
+        }
+        return {
+            x: dragGuidePaths.hintPoint.x + normalX * 18,
+            y: dragGuidePaths.hintPoint.y + normalY * 18,
+        };
+    }, [dragGuidePaths]);
 
     // 等待状态就绪
     if (!G || !core) {
@@ -1821,9 +2133,22 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 isMobileViewport={isMobileViewport}
                                 isDeployMode={
                                     (!!selectedCardUid && deployableBaseIndices.has(idx)) || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
+                                    || (!!handDragPreview && dragDeployableBaseIndices.has(idx))
                                 }
-                                isMinionSelectMode={!isOngoingSelectPrompt && ((selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0) || (isMinionSelectPrompt && selectableMinionUids.size > 0))}
-                                selectableMinionUids={isMinionSelectPrompt ? selectableMinionUids : selectedCardMode === 'ongoing-minion' ? ongoingMinionTargetUids : undefined}
+                                isMinionSelectMode={!isOngoingSelectPrompt && (
+                                    (selectedCardMode === 'ongoing-minion' && ongoingMinionTargetUids.size > 0)
+                                    || (isMinionSelectPrompt && selectableMinionUids.size > 0)
+                                    || (!!handDragPreview && draggedCardMode === 'ongoing-minion' && dragOngoingMinionTargetUids.size > 0)
+                                )}
+                                selectableMinionUids={
+                                    isMinionSelectPrompt
+                                        ? selectableMinionUids
+                                        : selectedCardMode === 'ongoing-minion'
+                                            ? ongoingMinionTargetUids
+                                            : !!handDragPreview && draggedCardMode === 'ongoing-minion'
+                                                ? dragOngoingMinionTargetUids
+                                                : undefined
+                                }
                                 multiSelectedMinionUids={isMultiMinionSelect ? multiSelectedMinionUids : undefined}
                                 isSelectable={(isBaseSelectPrompt && selectableBaseIndices.has(idx)) || (discardStripSelectedUid != null && discardStripAllowedBases.has(idx))}
                                 isDimmed={
@@ -1831,6 +2156,7 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                     || (discardStripSelectedUid != null && !discardStripAllowedBases.has(idx))
                                     || (!!selectedCardUid && selectedCardMode !== 'ongoing-minion' && !deployableBaseIndices.has(idx))
                                     || (!!meFirstPendingCard && !meFirstEligibleBaseIndices.has(idx))
+                                    || (!!handDragPreview && draggedCardMode !== 'ongoing-minion' && !dragDeployableBaseIndices.has(idx))
                                 }
                                 isMyTurn={isMyTurn}
                                 myPlayerId={playerID}
@@ -1873,6 +2199,47 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                     </motion.div>
                 )}
 
+                {interactionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && (
+                    <div className="fixed inset-0 z-[58] pointer-events-none">
+                        <svg className="absolute inset-0 w-full h-full overflow-visible">
+                            {dragGuidePaths && (
+                                <g data-testid="su-drag-arrow">
+                                    <path
+                                        d={dragGuidePaths.linePath}
+                                        fill="none"
+                                        stroke={dragGuideTarget ? '#d97706' : '#dc6b5f'}
+                                        strokeWidth="8"
+                                        strokeLinecap="round"
+                                        strokeLinejoin="round"
+                                    />
+                                    <path
+                                        d={dragGuidePaths.headPath}
+                                        fill={dragGuideTarget ? '#d97706' : '#dc6b5f'}
+                                    />
+                                </g>
+                            )}
+                        </svg>
+                        {dragGuideHint && (
+                            <div
+                                className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#f3e1bc]/95 px-3 py-[5px] text-[11px] font-bold tracking-[0.04em] text-[#6d4c2f] shadow-[0_8px_18px_rgba(62,39,24,0.18)]"
+                                style={{
+                                    left: `${dragGuideHint.x}px`,
+                                    top: `${dragGuideHint.y}px`,
+                                }}
+                            >
+                                {dragGuideTarget
+                                    ? t(
+                                        handDragPreview.dropTarget?.minionUid ? 'ui.drag_release_to_minion' : 'ui.drag_release_to_base',
+                                        {
+                                            defaultValue: handDragPreview.dropTarget?.minionUid ? '松手附着到该随从' : '松手打到该基地',
+                                        },
+                                    )
+                                    : t('ui.drag_no_target', { defaultValue: '拖到发光目标上' })}
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 {/* 手牌区：z-60，在弃牌遮罩之上 */}
                 {
                     myPlayer && (
@@ -1897,6 +2264,10 @@ const SmashUpBoardInner: React.FC<Props> = ({ G, dispatch, playerID: rawPlayerID
                                 disabledCardUids={meFirstDisabledUids ?? handPromptDisabledUids ?? tutorialDisabledUids}
                                 onCardView={handleViewCardDetail}
                                 isOpponentView={viewMode === 'opponent'}
+                                interactionMode={interactionMode}
+                                onResolveDropTarget={resolveHandDropTarget}
+                                onCardDragPlay={handleCardDragPlay}
+                                onDragStateChange={setHandDragPreview}
                             />
 
                             {/* Fusion card playAs selector */}

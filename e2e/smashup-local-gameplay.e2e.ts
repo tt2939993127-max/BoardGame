@@ -5,12 +5,16 @@
  * 通过调试面板注入状态来跳过派系选择，直接验证游戏核心流程。
  */
 
-import { test, expect, type Page } from '@playwright/test';
+import { mkdir } from 'node:fs/promises';
+import { dirname } from 'node:path';
+import { test, expect, type Locator, type Page } from '@playwright/test';
 import {
     initContext,
     blockAudioRequests,
     dismissViteOverlay,
 } from './helpers/common';
+import { GameTestContext } from './framework/GameTestContext';
+import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
 // ============================================================================
 // 本地模式入口
@@ -44,16 +48,26 @@ const completeFactionSelectionLocal = async (page: Page) => {
     if (!await factionHeading.isVisible().catch(() => false)) return; // 已经跳过了
 
     // 保持原本派系归属：P0 = Pirates + Aliens，P1 = Ninjas + Dinosaurs。
-    const factionNames = ['Pirates', 'Ninjas', 'Dinosaurs', 'Aliens'];
+    const factionNames = [
+        ['Pirates', '海盗'],
+        ['Ninjas', '忍者'],
+        ['Dinosaurs', '恐龙'],
+        ['Aliens', '外星人'],
+    ];
 
     for (let i = 0; i < factionNames.length; i++) {
-        const name = factionNames[i];
+        if (await page.getByTestId('su-hand-area').isVisible().catch(() => false)) {
+            return;
+        }
+
+        const aliases = factionNames[i];
 
         // 等待派系网格可见且没有弹窗遮挡
         await page.waitForTimeout(600);
 
         // 通过派系名称文本找到对应卡片的父级可点击容器
-        const factionCard = page.locator('h3').filter({ hasText: new RegExp(`^${name}$`, 'i') }).first()
+        const factionPattern = new RegExp(`^(?:${aliases.join('|')})(?:\\s*\\((?:POD|POD版)\\))?$`, 'i');
+        const factionCard = page.locator('h3').filter({ hasText: factionPattern }).first()
             .locator('xpath=ancestor::div[contains(@class,"group")]').first();
         await expect(factionCard).toBeVisible({ timeout: 5000 });
         await factionCard.click({ force: true });
@@ -76,6 +90,32 @@ const waitForHandArea = async (page: Page, timeout = 30000) => {
     const handArea = page.getByTestId('su-hand-area');
     await expect(handArea).toBeVisible({ timeout });
     return handArea;
+};
+
+const saveEvidenceLocatorScreenshot = async (
+    locator: Locator,
+    name: string,
+    testInfo: Parameters<GameTestContext['screenshot']>[1],
+) => {
+    const path = getEvidenceScreenshotPath(testInfo, name, {
+        filename: `${name}.png`,
+    });
+    await mkdir(dirname(path), { recursive: true });
+    await locator.screenshot({ path });
+};
+
+const openFabSettingsPanel = async (page: Page) => {
+    const mainFabButton = page.locator('[data-fab-id="exit"]');
+    await expect(mainFabButton).toBeVisible({ timeout: 10000 });
+    await mainFabButton.click();
+
+    const settingsButton = page.locator('[data-fab-id="settings"]');
+    await expect(settingsButton).toBeVisible({ timeout: 5000 });
+    await settingsButton.click();
+
+    const settingsPanel = page.getByTestId('fab-panel-settings');
+    await expect(settingsPanel).toBeVisible({ timeout: 5000 });
+    return settingsPanel;
 };
 
 // ============================================================================
@@ -220,5 +260,124 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 5000 });
 
         await page.screenshot({ path: testInfo.outputPath('after-3-rounds.png') });
+    });
+
+    test('本地模式：拖拽出牌会显示拖拽命中 UI，并在松手后真正落到基地', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'drag');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'pirates,aliens',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'drag-minion-1', defId: 'pirate_first_mate', type: 'minion' },
+                ],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_the_homeworld' },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        await game.waitForPhase('playCards');
+        await game.waitForCurrentPlayer('0');
+        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 10000 });
+        await expect.poll(async () => {
+            return await page.evaluate(() => localStorage.getItem('smashup_interaction_mode'));
+        }).toBe('drag');
+
+        const card = page.locator('[data-card-uid="drag-minion-1"]');
+        const base = page.locator('[data-base-index="0"]').first();
+        await expect(card).toBeVisible({ timeout: 5000 });
+        await expect(base).toBeVisible({ timeout: 5000 });
+
+        const cardBox = await card.boundingBox();
+        const baseBox = await base.boundingBox();
+        expect(cardBox).not.toBeNull();
+        expect(baseBox).not.toBeNull();
+        if (!cardBox || !baseBox) {
+            throw new Error('无法获取拖拽起点或基地落点的坐标');
+        }
+
+        const startX = cardBox.x + cardBox.width / 2;
+        const startY = cardBox.y + cardBox.height / 2;
+        const targetX = baseBox.x + baseBox.width / 2;
+        const targetY = baseBox.y + Math.min(baseBox.height * 0.35, 120);
+
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(targetX, targetY, { steps: 18 });
+
+        await expect(page.getByTestId('su-drag-arrow')).toBeVisible({ timeout: 5000 });
+        await game.screenshot('smashup-drag-selection-ui', testInfo);
+
+        await page.mouse.up();
+
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return state.core.bases[0].minions.some((minion: { uid: string }) => minion.uid === 'drag-minion-1');
+            });
+        }, { timeout: 5000 }).toBe(true);
+        await expect(page.locator('[data-card-uid="drag-minion-1"]')).toHaveCount(0, { timeout: 5000 });
+
+        await game.screenshot('smashup-drag-play-resolved-ui', testInfo);
+    });
+
+    test('本地模式：悬浮球设置面板显示 Smash Up 偏好设置', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'drag');
+            localStorage.setItem('smashup_overlay_zh_enabled', 'true');
+            localStorage.setItem('hud_fab_position', JSON.stringify({
+                leftPercent: 0.82,
+                topPercent: 0.66,
+            }));
+        });
+
+        await gotoLocalSmashUp(page);
+        await completeFactionSelectionLocal(page);
+        await waitForHandArea(page);
+
+        const settingsPanel = await openFabSettingsPanel(page);
+        await expect(settingsPanel.getByText(/大杀四方|Smash Up/i)).toBeVisible({ timeout: 5000 });
+        await expect(settingsPanel.getByText(/交互模式|Interaction mode/i)).toBeVisible();
+        await expect(settingsPanel.getByRole('button', { name: /点击|Click/i })).toBeVisible();
+        await expect(settingsPanel.getByRole('button', { name: /拖拽|Drag/i })).toBeVisible();
+        await expect(settingsPanel.getByText(/中文覆盖层|Chinese overlay/i)).toBeVisible();
+        await expect(settingsPanel.getByText(/^(已开启|On)$/i)).toBeVisible();
+        await expect.poll(async () => {
+            return await page.evaluate(() => localStorage.getItem('smashup_interaction_mode'));
+        }).toBe('drag');
+
+        await game.screenshot('smashup-settings-panel-open', testInfo);
+        await saveEvidenceLocatorScreenshot(settingsPanel, 'smashup-settings-preference-detail', testInfo);
     });
 });

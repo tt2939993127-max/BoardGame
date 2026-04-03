@@ -164,6 +164,17 @@
     "toggle": {
       "collapse": "收起菜单",
       "expand": "展开菜单"
+    },
+    "smashup": {
+      "title": "大杀四方",
+      "interaction": "交互模式",
+      "interactionHint": "点击与拖拽可随时切换，默认使用点击。",
+      "modeClick": "点击",
+      "modeDrag": "拖拽",
+      "overlay": "中文覆盖层",
+      "overlayHint": "英文卡图上显示中文名称与效果说明。",
+      "enabled": "已开启",
+      "disabled": "已关闭"
     }
   },
   "audio": {

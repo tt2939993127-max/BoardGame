@@ -2,6 +2,7 @@ import { AUTH_API_URL } from '../config/server';
 import i18n from '../lib/i18n';
 
 export type BgmSelections = Record<string, Record<string, string>>;
+export type SmashUpInteractionMode = 'click' | 'drag';
 
 export type AudioSettings = {
     muted: boolean;
@@ -14,6 +15,16 @@ export type AudioSettings = {
 export type AudioSettingsResponse = {
     empty: boolean;
     settings: AudioSettings | null;
+};
+
+export type SmashUpPreference = {
+    overlayEnabled: boolean;
+    interactionMode: SmashUpInteractionMode;
+};
+
+export type SmashUpPreferenceResponse = {
+    empty: boolean;
+    settings: SmashUpPreference | null;
 };
 
 const buildAuthHeaders = (token: string) => ({
@@ -49,6 +60,36 @@ export const updateAudioSettings = async (token: string, settings: AudioSettings
     }
 
     const payload = await response.json() as { settings: AudioSettings };
+    return payload.settings;
+};
+
+export const getSmashUpPreference = async (token: string): Promise<SmashUpPreferenceResponse> => {
+    const response = await fetch(`${AUTH_API_URL}/user-settings/smashup`, {
+        method: 'GET',
+        headers: buildAuthHeaders(token),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: '获取大杀四方设置失败' }));
+        throw new Error(error.error || '获取大杀四方设置失败');
+    }
+
+    return response.json();
+};
+
+export const updateSmashUpPreference = async (token: string, settings: SmashUpPreference): Promise<SmashUpPreference> => {
+    const response = await fetch(`${AUTH_API_URL}/user-settings/smashup`, {
+        method: 'PUT',
+        headers: buildAuthHeaders(token),
+        body: JSON.stringify(settings),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ error: '更新大杀四方设置失败' }));
+        throw new Error(error.error || '更新大杀四方设置失败');
+    }
+
+    const payload = await response.json() as { settings: SmashUpPreference };
     return payload.settings;
 };
 

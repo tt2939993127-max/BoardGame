@@ -37,9 +37,10 @@ import { getCardPreviewGetter, getCardPreviewMaxDim } from '../../registry/cardP
 import { generateId, copyToClipboard } from '../../../../lib/utils';
 import { OpponentOfflineBanner } from './OpponentOfflineBanner';
 import { logger } from '../../../../lib/logger';
+import { useSmashUpOverlay } from '../../../../games/smashup/ui/SmashUpOverlayContext';
 
 interface GameHUDProps {
-    mode: 'local' | 'online' | 'tutorial';
+    mode: 'local' | 'online' | 'tutorial' | 'test';
     matchId?: string;
     gameId?: string;
     localModeLabel?: string;
@@ -111,6 +112,7 @@ export const GameHUD = ({
     const { t, i18n } = useTranslation('game');
     const toast = useToast();
     const { user } = useAuth();
+    const { overlayEnabled, interactionMode, toggleOverlay, setInteractionMode } = useSmashUpOverlay();
 
     // 从注册表获取游戏特定的卡牌预览函数
     const getCardPreviewRef = useMemo(() => {
@@ -134,6 +136,7 @@ export const GameHUD = ({
     const isOnline = mode === 'online';
     const isLocal = mode === 'local';
     const isTutorial = mode === 'tutorial';
+    const isSmashUp = _gameId === 'smashup';
     const isSpectator = isOnline && (myPlayerId === null || myPlayerId === undefined);
 
     // 聊天逻辑
@@ -589,6 +592,55 @@ export const GameHUD = ({
                     </div>
                 )}
 
+                {isSmashUp && (
+                    <div className="mt-4 space-y-3 rounded-lg border border-violet-400/20 bg-violet-500/10 p-3">
+                        <div>
+                            <div className="text-xs font-bold uppercase tracking-wider text-violet-200">{t('hud.smashup.title')}</div>
+                            <div className="mt-1 text-[11px] text-white/55">{t('hud.smashup.interactionHint')}</div>
+                        </div>
+                        <div className="space-y-2">
+                            <div className="text-[10px] font-bold uppercase text-white/45">{t('hud.smashup.interaction')}</div>
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setInteractionMode('click')}
+                                    className={`rounded-md border px-3 py-2 text-xs font-bold transition-colors ${interactionMode === 'click'
+                                        ? 'border-violet-300 bg-violet-300/25 text-white'
+                                        : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'}`}
+                                >
+                                    {t('hud.smashup.modeClick')}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setInteractionMode('drag')}
+                                    className={`rounded-md border px-3 py-2 text-xs font-bold transition-colors ${interactionMode === 'drag'
+                                        ? 'border-violet-300 bg-violet-300/25 text-white'
+                                        : 'border-white/10 bg-white/5 text-white/70 hover:bg-white/10'}`}
+                                >
+                                    {t('hud.smashup.modeDrag')}
+                                </button>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={toggleOverlay}
+                            className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left transition-colors hover:bg-white/10"
+                        >
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <div className="text-xs font-bold text-white">{t('hud.smashup.overlay')}</div>
+                                    <div className="mt-1 text-[11px] text-white/55">{t('hud.smashup.overlayHint')}</div>
+                                </div>
+                                <div className={`rounded-full px-2 py-1 text-[10px] font-bold ${overlayEnabled
+                                    ? 'bg-emerald-400/20 text-emerald-200'
+                                    : 'bg-white/10 text-white/60'}`}>
+                                    {overlayEnabled ? t('hud.smashup.enabled') : t('hud.smashup.disabled')}
+                                </div>
+                            </div>
+                        </button>
+                    </div>
+                )}
+
                 <AudioControlSection isDark={true} />
             </div>
         )
@@ -857,7 +909,7 @@ export const GameHUD = ({
                 <FeedbackModal
                     onClose={() => setShowFeedback(false)}
                     runtimeContext={{
-                        mode,
+                        mode: mode === 'test' ? 'local' : mode,
                         matchId,
                         playerId: myPlayerId,
                         gameId: _gameId,
