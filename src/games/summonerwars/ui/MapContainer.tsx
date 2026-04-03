@@ -55,7 +55,7 @@ interface SystemBackGestureReservationInput {
   edgeInsetPx?: number;
 }
 
-export const shouldReserveSystemBackGesture = ({
+const shouldReserveSystemBackGesture = ({
   enabled,
   clientX,
   viewportWidth,

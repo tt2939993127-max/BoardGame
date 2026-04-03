@@ -41,6 +41,10 @@ import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 import { versionedPublicFileUrl } from '../lib/publicFileUrl';
+import {
+    readAndroidLiveUpdateSnapshot,
+    type AndroidLiveUpdateSnapshot,
+} from '../lib/mobile/androidLiveUpdates';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
@@ -98,6 +102,7 @@ export const Home = () => {
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [missingMatchConfirmRetryTick, setMissingMatchConfirmRetryTick] = useState(0);
     const [guestId, setGuestId] = useState<string | null>(null);
+    const [otaSnapshot, setOtaSnapshot] = useState<AndroidLiveUpdateSnapshot | null>(null);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -120,13 +125,19 @@ export const Home = () => {
         }
         return t;
     }, [i18n, t]);
-    const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
+    const filteredGames = useMemo(() => {
+        void registryVersion;
+        return getGamesByCategory(activeCategory);
+    }, [activeCategory, registryVersion]);
     useEffect(() => {
         if (user?.id) return;
         setGuestId((current) => current ?? getOrCreateGuestId());
     }, [user?.id]);
 
-    const ownerActive = useMemo(() => getOwnerActiveMatch(), [localStorageTick]);
+    const ownerActive = useMemo(() => {
+        void localStorageTick;
+        return getOwnerActiveMatch();
+    }, [localStorageTick]);
     const ownerKey = useMemo(() => {
         if (user?.id) return resolveOwnerKey(user.id);
         if (!guestId) return null;
@@ -135,14 +146,36 @@ export const Home = () => {
     const suppressedOwnerMatchId = useMemo(() => {
         if (!ownerActive?.matchID) return null;
         return isOwnerActiveMatchSuppressed(ownerActive.matchID) ? ownerActive.matchID : null;
-    }, [ownerActive?.matchID, localStorageTick]);
+    }, [ownerActive?.matchID]);
 
     useEffect(() => {
         if (!suppressedOwnerMatchId) return;
         clearOwnerActiveMatch(suppressedOwnerMatchId);
     }, [suppressedOwnerMatchId]);
 
+    useEffect(() => {
+        if (!isAndroidShellBuild) {
+            return;
+        }
+
+        let cancelled = false;
+        void readAndroidLiveUpdateSnapshot()
+            .then((snapshot) => {
+                if (!cancelled) {
+                    setOtaSnapshot(snapshot);
+                }
+            })
+            .catch((error) => {
+                console.warn('[Home] 读取 OTA 快照失败', error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
     const storedLocalMatchRole = useMemo(() => {
+        void localStorageTick;
         const latestCreds = getLatestStoredMatchCredentials();
         if (latestCreds?.matchID) {
             const gameName = latestCreds.gameName || 'tictactoe';
@@ -179,18 +212,22 @@ export const Home = () => {
     }, [ownerActive, ownerKey, storedLocalMatchRole, suppressedOwnerMatchId]);
     const localMatchRole = storedLocalMatchRole ?? ownerLocalMatchRole;
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
+    const activeOtaBundleVersion = useMemo(() => {
+        const bundleVersion = otaSnapshot?.currentBundleVersion?.trim();
+        if (!bundleVersion || !bundleVersion.includes('-ota-')) {
+            return null;
+        }
+        return bundleVersion;
+    }, [otaSnapshot?.currentBundleVersion]);
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
     const missingMatchConfirmRef = useRef<string | null>(null);
     const missingMatchConfirmRetryTimerRef = useRef<number | null>(null);
     const initialUrlModalCheckDoneRef = useRef(false);
+    const gameModalNavigateAwayBridgeRef = useRef<() => void>(() => {});
 
-    const {
-        paramValue: activeGameModalId,
-        isOpen: isGameModalOpen,
-        navigateAwayRef: gameModalNavigateAwayRef,
-    } = useUrlModal({
+    const gameUrlModal = useUrlModal({
         paramKey: 'game',
         reopenNonce: gameModalReopenNonce,
         getModalConfig: useCallback((gameId: string) => {
@@ -201,7 +238,7 @@ export const Home = () => {
                     <HomeModalErrorBoundary
                         onError={() => {
                             close();
-                            gameModalNavigateAwayRef.current();
+                            gameModalNavigateAwayBridgeRef.current();
                         }}
                     >
                         <Suspense fallback={null}>
@@ -213,7 +250,7 @@ export const Home = () => {
                                 descriptionKey={game.descriptionKey}
                                 thumbnail={game.thumbnail}
                                 closeOnBackdrop={closeOnBackdrop}
-                                onNavigate={() => gameModalNavigateAwayRef.current()}
+                                onNavigate={() => gameModalNavigateAwayBridgeRef.current()}
                             />
                         </Suspense>
                     </HomeModalErrorBoundary>
@@ -221,6 +258,10 @@ export const Home = () => {
             };
         }, []),
     });
+    const activeGameModalId = gameUrlModal.paramValue;
+    gameModalNavigateAwayBridgeRef.current = () => {
+        gameUrlModal.navigateAwayRef.current();
+    };
 
     useEffect(() => {
         const unsubscribe = subscribeGameRegistry(() => {
@@ -713,7 +754,7 @@ export const Home = () => {
             closeModal(confirmModalIdRef.current);
             confirmModalIdRef.current = null;
         }
-    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
+    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction, t]);
 
     return (
         <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
@@ -784,10 +825,11 @@ export const Home = () => {
 
             {/* 活跃对局指示器 */}
             <div
-                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 pointer-events-none select-none text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
-                aria-label={`Current version ${APP_VERSION_LABEL}`}
+                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 pointer-events-none select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
+                aria-label={activeOtaBundleVersion ? `Current version ${APP_VERSION_LABEL}, OTA bundle ${activeOtaBundleVersion}` : `Current version ${APP_VERSION_LABEL}`}
+                title={activeOtaBundleVersion ? `原生版本 ${APP_VERSION_LABEL}\n当前 OTA Bundle ${activeOtaBundleVersion}` : `原生版本 ${APP_VERSION_LABEL}`}
             >
-                {APP_VERSION_LABEL}
+                <span className="block">{APP_VERSION_LABEL}</span>
             </div>
 
             {activeMatch && (

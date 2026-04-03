@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useCallback, useRef } from 'react';
+import { useMemo, useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getGameImplementation } from '../games/registry';
@@ -58,12 +58,12 @@ export const LocalMatchRoom = () => {
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
     const seedFromUrl = searchParams.get('seed');
-    const fallbackSeedRef = useRef(seedFromUrl || createLocalMatchSeed());
-    const gameSeed = seedFromUrl || fallbackSeedRef.current;
+    const [fallbackSeed] = useState(() => seedFromUrl || createLocalMatchSeed());
+    const gameSeed = seedFromUrl || fallbackSeed;
 
     useEffect(() => {
         if (seedFromUrl) return;
-        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeedRef.current);
+        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeed);
         navigate(
             {
                 pathname: gameId ? `/play/${gameId}/local` : undefined,
@@ -71,7 +71,7 @@ export const LocalMatchRoom = () => {
             },
             { replace: true },
         );
-    }, [gameId, navigate, searchParams, seedFromUrl]);
+    }, [fallbackSeed, gameId, navigate, searchParams, seedFromUrl]);
 
     const localPlayerCount = resolveLocalMatchPlayerCount(searchParams.get('players'), gameConfig?.playerOptions);
     const seatControllers = useMemo(
