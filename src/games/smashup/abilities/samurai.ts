@@ -132,7 +132,7 @@ function samuraiYokaiAttackOnPlay(ctx: AbilityContext): AbilityResult {
         '妖怪来袭！：你可以消灭一个自己的随从，以额外打出一个随从和一个行动',
         [
             createSkipOption('跳过（不消灭随从）') as any,
-            ...buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+            ...buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
         ],
         { sourceId: 'samurai_yokai_attack', targetType: 'minion' },
     );
@@ -201,7 +201,7 @@ function samuraiHonorTheAncestorsOnPlay(ctx: AbilityContext): AbilityResult {
         `samurai_honor_the_ancestors_${ctx.now}`,
         ctx.playerId,
         '致敬先祖：选择一个你的随从放置 +1 力量指示物',
-        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
         { sourceId: 'samurai_honor_the_ancestors', targetType: 'minion' },
     );
     (interaction.data as any).continuationContext = { maxShuffle } satisfies HonorAncestorsContinuation;
@@ -419,7 +419,14 @@ const handleSamuraiCombatFriendly: InteractionHandler = (state, playerId, value,
     const selected = value as MinionChoice | undefined;
     const ctx = data?.continuationContext as CombatContinuation | undefined;
     if (!ctx || !selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
-    const enemyOptions = buildCombatEnemyOptions(state.core, ctx.baseIndex, playerId, ctx.sourceId === 'samurai_honorable_combat');
+    const respectActionProtection = ctx.sourceId === 'samurai_honorable_combat' || ctx.sourceId === 'samurai_heart_of_the_battle';
+    const enemyOptions = buildCombatEnemyOptions(
+        state.core,
+        ctx.baseIndex,
+        playerId,
+        ctx.sourceId === 'samurai_honorable_combat',
+        respectActionProtection,
+    );
     if (enemyOptions.length === 0) return { state, events: [] };
     const nextSourceId = ctx.sourceId === 'samurai_heart_of_the_battle'
         ? 'samurai_heart_of_the_battle_enemy'
@@ -626,6 +633,7 @@ function collectHonorableCombatBases(
                     .reduce((sum, minion) => sum + getMinionPower(state, minion, baseIndex), 0) > ownPower
             ));
         if (!hasValidOpponent) return [];
+        if (buildCombatEnemyOptions(state, baseIndex, playerId, true, true).length === 0) return [];
         return [{
             baseIndex,
             label: getBaseDef(base.defId)?.name ?? base.defId,
@@ -642,6 +650,7 @@ function buildCombatEnemyOptions(
     baseIndex: number,
     sourcePlayerId: PlayerId,
     requireMorePowerController: boolean,
+    respectActionProtection: boolean = false,
 ): any[] {
     const base = state.bases[baseIndex];
     if (!base) return [];
@@ -661,6 +670,7 @@ function buildCombatEnemyOptions(
     return buildMinionTargetOptions(
         base.minions
             .filter(minion => minion.controller !== sourcePlayerId && validControllers.has(minion.controller))
+            .filter(minion => !respectActionProtection || !isMinionProtected(state, minion, baseIndex, sourcePlayerId, 'action'))
             .map(minion => ({
                 uid: minion.uid,
                 defId: minion.defId,

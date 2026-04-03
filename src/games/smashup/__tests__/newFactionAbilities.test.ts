@@ -20,11 +20,11 @@ import type {
     OngoingActionOnBase,
 } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
-import { clearRegistry } from '../domain/abilityRegistry';
+import { clearRegistry, resolveSpecial } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { startDuel } from '../domain/duel';
-import { collectTriggers, fireTriggers, isMinionProtected } from '../domain/ongoingEffects';
+import { clearOngoingEffectRegistry, collectTriggers, fireTriggers, isMinionProtected } from '../domain/ongoingEffects';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { reduce } from '../domain/reduce';
 import { execute, processDestroyTriggers } from '../domain/reducer';
@@ -46,6 +46,7 @@ import { refreshInteractionOptions } from '../../../engine/systems/InteractionSy
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
+    clearOngoingEffectRegistry();
     resetAbilityInit();
     clearInteractionHandlers();
     initAllAbilities();
@@ -636,6 +637,190 @@ describe('Cowboys abilities', () => {
         expect(duelResolved.finalState.core.players['0'].baseLimitedMinionQuota?.[0]).toBe(1);
     });
 
+    it('cowboys_high_noon 不会把挂有烟雾弹的对手随从列为决斗目标', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('noon-1', 'cowboys_high_noon', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('ally-1', 'cowboys_gunfighter', '0', 3),
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 4, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                    makeMinion('enemy-plain', 'robot_microbot_alpha', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'noon-1' } },
+            defaultTestRandom,
+        );
+        const friendlyPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const friendlyOption = friendlyPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-1');
+        const afterFriendly = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: friendlyOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const enemyPrompt = getInteractionsFromMS(afterFriendly.finalState)[0] as any;
+        const optionValues = enemyPrompt.data.options.map((entry: any) => entry.value?.minionUid);
+        expect(optionValues).toContain('enemy-plain');
+        expect(optionValues).not.toContain('enemy-smoke');
+    });
+
+    it('cthulhu_corruption 不会把挂有烟雾弹的对手随从列为消灭目标', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('corruption-1', 'cthulhu_corruption', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 4, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                    makeMinion('enemy-plain', 'robot_microbot_alpha', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'corruption-1' } },
+            defaultTestRandom,
+        );
+
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('cthulhu_corruption');
+        const optionValues = prompt.data.options.map((entry: any) => entry.value?.minionUid);
+        expect(optionValues).toContain('enemy-plain');
+        expect(optionValues).not.toContain('enemy-smoke');
+    });
+
+    it('pirate_shanghai 不会把挂有烟雾弹的对手随从列为移动目标', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('shanghai-1', 'pirate_shanghai', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 4, {
+                            attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                        }),
+                        makeMinion('enemy-plain', 'robot_microbot_alpha', '1', 2),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'shanghai-1' } },
+            defaultTestRandom,
+        );
+
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('pirate_shanghai_choose_minion');
+        const optionValues = prompt.data.options.map((entry: any) => entry.value?.minionUid);
+        expect(optionValues).toContain('enemy-plain');
+        expect(optionValues).not.toContain('enemy-smoke');
+    });
+
+    it('werewolf_chew_toy 的第二段消灭目标不会列出挂有烟雾弹的对手随从', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('chew-1', 'werewolf_chew_toy', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('ally-1', 'werewolf_howler', '0', 5),
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 3, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                    makeMinion('enemy-plain', 'robot_microbot_alpha', '1', 2),
+                    makeMinion('enemy-plain-2', 'robot_microbot_beta', '1', 1),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'chew-1' } },
+            defaultTestRandom,
+        );
+        const targetPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(targetPrompt?.data?.sourceId).toBe('werewolf_chew_toy_target');
+        const optionValues = targetPrompt.data.options.map((entry: any) => entry.value?.minionUid);
+        expect(optionValues).toContain('enemy-plain');
+        expect(optionValues).toContain('enemy-plain-2');
+        expect(optionValues).not.toContain('enemy-smoke');
+    });
+
+    it('miskatonic_thing_on_the_doorstep 面对唯一最高的烟雾弹目标时不会直接消灭', () => {
+        const executor = resolveSpecial('miskatonic_thing_on_the_doorstep');
+        expect(executor).toBeDefined();
+
+        const core = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 5, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                    makeMinion('ally-1', 'robot_microbot_alpha', '0', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const result = executor!({
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            cardUid: 'special-1',
+            defId: 'miskatonic_thing_on_the_doorstep',
+            baseIndex: 0,
+            random: defaultTestRandom,
+            now: 123,
+        });
+
+        expect(result.events.some(event => event.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        expect(result.events.some(event => event.type === SU_EVENTS.ABILITY_FEEDBACK)).toBe(true);
+    });
+
     it('cowboys_pinkerton 会在决斗牌步骤前给己方决斗随从放置 +1 指示物', () => {
         const core = makeState({
             players: {
@@ -900,6 +1085,68 @@ describe('Cowboys abilities', () => {
 
         expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-b')).toBe(true);
         expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).toEqual(['top-c', 'top-a', 'rest-1']);
+    });
+
+    it('cowboys_gold_in_them_thar_hills 额外打出的行动卡不会把挂有烟雾弹的对手随从列为目标', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('gold-1', 'cowboys_gold_in_them_thar_hills', 'action', '0')],
+                    deck: [
+                        makeCard('top-action', 'cthulhu_corruption', 'action', '0'),
+                        makeCard('top-b', 'robot_microbot_alpha', 'minion', '0'),
+                        makeCard('top-c', 'robot_microbot_beta', 'minion', '0'),
+                        makeCard('rest-1', 'robot_microbot_gamma', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 4, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                    makeMinion('enemy-plain', 'robot_microbot_alpha', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'gold-1' } },
+            defaultTestRandom,
+        );
+        const choicePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const chooseAction = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-action');
+        const afterChoice = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseAction.id } } as any,
+            defaultTestRandom,
+        );
+
+        const orderPrompt = getInteractionsFromMS(afterChoice.finalState)[0] as any;
+        const chooseTopB = orderPrompt.data.options.find((entry: any) => entry.value?.topCardUid === 'top-b');
+        const afterOrder = runCommand(
+            afterChoice.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopB.id } } as any,
+            defaultTestRandom,
+        );
+
+        const modePrompt = getInteractionsFromMS(afterOrder.finalState)[0] as any;
+        const extraPlayOption = modePrompt.data.options.find((entry: any) => entry.value?.mode === 'play');
+        const afterMode = runCommand(
+            afterOrder.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: extraPlayOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        const targetPrompt = getInteractionsFromMS(afterMode.finalState)[0] as any;
+        expect(targetPrompt?.data?.sourceId).toBe('cthulhu_corruption');
+        const optionValues = targetPrompt.data.options.map((entry: any) => entry.value?.minionUid);
+        expect(optionValues).toContain('enemy-plain');
+        expect(optionValues).not.toContain('enemy-smoke');
     });
 
     it('cowboys_gold_in_them_thar_hills 选择额外随从时会先选基地再直接打出', () => {
@@ -1592,6 +1839,36 @@ describe('Samurai abilities', () => {
         expect(duelResolved.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
         expect(duelResolved.finalState.core.bases[0].minions).toHaveLength(2);
         expect(duelResolved.finalState.core.players['1'].vp).toBe(1);
+    });
+
+    it('samurai_honorable_combat 面对仅有烟雾弹目标时不会启动决斗交互', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('combat-1', 'samurai_honorable_combat', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('ally-1', 'samurai_ronin', '0', 3),
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 4, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'combat-1' } },
+            defaultTestRandom,
+        );
+
+        expect(getInteractionsFromMS(play.finalState)).toHaveLength(0);
+        expect(play.events.some(event => event.type === SU_EVENTS.ABILITY_FEEDBACK)).toBe(true);
     });
 
     it('samurai_honorable_combat 平局时双方各得 1VP', () => {
