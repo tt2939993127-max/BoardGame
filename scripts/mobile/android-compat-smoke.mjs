@@ -586,6 +586,27 @@ const looksLikeTransientLoadingState = (text) => {
     return webViewCdpLoadingHints.some((hint) => normalized.includes(hint.toLowerCase()));
 };
 
+const hideSmokeBlockingOverlays = async (client) => {
+    await client.send('Runtime.evaluate', {
+        expression: `(() => {
+            const styleId = 'bg-android-compat-smoke-hide-overlays';
+            let style = document.getElementById(styleId);
+            if (!style) {
+                style = document.createElement('style');
+                style.id = styleId;
+                document.head.appendChild(style);
+            }
+            style.textContent = [
+                '[data-testid="game-page-rescue-gate"] { display: none !important; }',
+                '[data-bg-rescue-gate="true"] { display: none !important; }'
+            ].join('\\n');
+            return true;
+        })()`,
+        returnByValue: true,
+        awaitPromise: true,
+    });
+};
+
 const driveRouteInWebView = async (adbPath, serial, appId, route, outputDir, waitMs) => {
     const targetPath = resolveCompatSmokeRoutePath(route);
     const navigationUrl = buildCompatNavigationUrl(route);
@@ -633,6 +654,9 @@ const driveRouteInWebView = async (adbPath, serial, appId, route, outputDir, wai
                 break;
             }
         }
+
+        await hideSmokeBlockingOverlays(client);
+        await sleep(300);
 
         const cdpScreenshot = await client.send('Page.captureScreenshot', {
             format: 'png',

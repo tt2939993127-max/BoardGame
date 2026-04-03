@@ -32,6 +32,7 @@ import {
 import { resolveInAppUrlPath } from '../../../lib/mobile/appUrlRouting';
 import { isTextEntryElement } from '../../../lib/textEntry';
 import {
+    applyRuntimeViewportCssVars,
     resolveRuntimeKeyboardInsetBottom,
 } from '../../../hooks/ui/useRuntimeViewport';
 
@@ -158,6 +159,32 @@ describe('GamePageRescueGate helpers', () => {
             contentRect: null,
             meaningfulContentCount: 0,
         })).toBeNull();
+    });
+});
+
+describe('Runtime viewport css vars', () => {
+    it('board-shell 游戏页会把缩放变量写成旧 WebView 可消费的纯数字', () => {
+        document.documentElement.setAttribute('data-game-page', 'true');
+        document.documentElement.setAttribute('data-mobile-layout-preset', 'board-shell');
+        document.documentElement.setAttribute('data-mobile-profile', 'landscape-adapted');
+        document.documentElement.setAttribute('data-game-id', 'dicethrone');
+
+        applyRuntimeViewportCssVars({
+            width: 802,
+            height: 393,
+            safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+            keyboardInsetBottom: 0,
+        });
+
+        const rootStyle = document.documentElement.style;
+        expect(rootStyle.getPropertyValue('--mobile-board-shell-design-width')).toBe('940px');
+        expect(rootStyle.getPropertyValue('--mobile-board-shell-scale')).toBe('0.853191');
+        expect(rootStyle.getPropertyValue('--mobile-board-shell-inverse-scale')).toBe('1.172070');
+
+        document.documentElement.removeAttribute('data-game-page');
+        document.documentElement.removeAttribute('data-mobile-layout-preset');
+        document.documentElement.removeAttribute('data-mobile-profile');
+        document.documentElement.removeAttribute('data-game-id');
     });
 });
 
