@@ -140,7 +140,26 @@ const handleSeatingMoved: EventHandler<Extract<DiceThroneEvent, { type: 'SEATING
 ) => ({
     ...state,
     seatingOrder: event.payload.seatingOrder,
+    seatSwapRequest: undefined,
     teamIdByPlayerId: buildTeamIdByPlayerIdFromSeatingOrder(event.payload.seatingOrder),
+});
+
+const handleSeatSwapRequested: EventHandler<Extract<DiceThroneEvent, { type: 'SEAT_SWAP_REQUESTED' }>> = (
+    state,
+    event,
+) => ({
+    ...state,
+    seatSwapRequest: {
+        requesterId: event.payload.requesterId,
+        targetPlayerId: event.payload.targetPlayerId,
+    },
+});
+
+const handleSeatSwapCleared: EventHandler<
+    Extract<DiceThroneEvent, { type: 'SEAT_SWAP_REJECTED' | 'SEAT_SWAP_CANCELLED' }>
+> = (state) => ({
+    ...state,
+    seatSwapRequest: undefined,
 });
 
 /**
@@ -907,6 +926,11 @@ export const reduce = (
             return handleHostStarted(state, event);
         case 'SEATING_MOVED':
             return handleSeatingMoved(state, event);
+        case 'SEAT_SWAP_REQUESTED':
+            return handleSeatSwapRequested(state, event);
+        case 'SEAT_SWAP_REJECTED':
+        case 'SEAT_SWAP_CANCELLED':
+            return handleSeatSwapCleared(state, event);
         case 'PLAYER_READY':
             return handlePlayerReady(state, event);
         case 'PLAYER_UNREADY':

@@ -1,6 +1,7 @@
 import { GAME_CLIENT_MANIFEST } from './manifest.client';
 import type { GameImplementation } from '../core/types';
 import type { GameClientRuntimeModule } from './manifest.client.types';
+import { logMobileRuntime, logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 
 // 重新导出类型供外部使用
 export type { GameImplementation } from '../core/types';
@@ -12,6 +13,30 @@ const loadingPromises = new Map<string, Promise<GameClientRuntimeModule>>();
 
 /** 游戏 ID → loadRuntime 函数的映射 */
 const loaderMap = new Map<string, () => Promise<GameClientRuntimeModule>>();
+
+export const GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 4000;
+
+const createGameImplementationTimeoutMessage = (gameId: string) => (
+    `游戏客户端加载超时：${gameId}（${GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS}ms）`
+);
+
+const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise<T>((_, reject) => {
+                timeoutId = setTimeout(() => {
+                    reject(new Error(timeoutMessage));
+                }, timeoutMs);
+            }),
+        ]);
+    } finally {
+        if (timeoutId !== undefined) {
+            clearTimeout(timeoutId);
+        }
+    }
+};
 
 // 构建 loader 映射（同步，不触发实际加载）
 for (const entry of GAME_CLIENT_MANIFEST) {
@@ -27,25 +52,63 @@ for (const entry of GAME_CLIENT_MANIFEST) {
 export const loadGameImplementation = async (gameId: string): Promise<GameImplementation | null> => {
     // 1. 缓存命中
     const cached = runtimeCache.get(gameId);
-    if (cached) return cached;
+    if (cached) {
+        logMobileRuntime('GameRuntime', 'load-cache-hit', { gameId });
+        return cached;
+    }
 
     // 2. 正在加载中，复用 Promise
     const existing = loadingPromises.get(gameId);
-    if (existing) return existing;
+    if (existing) {
+        logMobileRuntime('GameRuntime', 'load-reuse-inflight', { gameId });
+        return existing;
+    }
 
     // 3. 查找 loader
     const loader = loaderMap.get(gameId);
-    if (!loader) return null;
+    if (!loader) {
+        logMobileRuntime('GameRuntime', 'load-missing-loader', { gameId }, 'warn');
+        return null;
+    }
 
     // 4. 发起加载
-    const promise = loader().then((runtime) => {
+    const startedAt = Date.now();
+    const timeoutMessage = createGameImplementationTimeoutMessage(gameId);
+    logMobileRuntime('GameRuntime', 'load-start', { gameId });
+
+    const rawPromise = loader().then((runtime) => {
         runtimeCache.set(gameId, runtime);
-        loadingPromises.delete(gameId);
+        logMobileRuntime('GameRuntime', 'load-success', {
+            gameId,
+            durationMs: Date.now() - startedAt,
+        });
         return runtime;
-    }).catch((err) => {
-        loadingPromises.delete(gameId);
-        throw err;
     });
+
+    const promise = withTimeout(rawPromise, GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS, timeoutMessage)
+        .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : String(error);
+            const isTimeout = message === timeoutMessage;
+            const payload = {
+                gameId,
+                error: message,
+                durationMs: Date.now() - startedAt,
+            };
+
+            logMobileRuntime(
+                'GameRuntime',
+                isTimeout ? 'load-timeout' : 'load-failed',
+                payload,
+                isTimeout ? 'warn' : 'error',
+            );
+            logMobileRuntimeCritical('GameRuntime', isTimeout ? 'load-timeout' : 'load-failed', payload);
+            throw error;
+        })
+        .finally(() => {
+            if (loadingPromises.get(gameId) === promise) {
+                loadingPromises.delete(gameId);
+            }
+        });
 
     loadingPromises.set(gameId, promise);
     return promise;

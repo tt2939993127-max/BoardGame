@@ -257,6 +257,8 @@
     "creatingRoom": "Creating room and entering match...",
     "namespaceLoadFailed": "Failed to load game translations",
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
+    "clientLoadFailed": "Failed to load game client",
+    "clientLoadFailedDesc": "The current game's client code or resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
     "loadingProgress": {
       "step": "{{current}}/{{total}}",
@@ -283,6 +285,26 @@
       "description": "Unable to connect to the game server. Please check your network or server status.",
       "retry": "Retry",
       "backToLobby": "Back to Lobby"
+    },
+    "rescue": {
+      "eyebrow": "Game Page Guard",
+      "title": "The page did not render correctly",
+      "description": "The current game page did not render normally. To avoid staying on a black screen, the app switched to this recovery prompt first.",
+      "reload": "Reload",
+      "backToLobby": "Back to Lobby",
+      "copyDiagnostics": "Copy Diagnostics",
+      "copied": "Copied",
+      "reason": {
+        "game-viewport-missing": "The game viewport container never appeared, so the page is likely stuck during startup.",
+        "game-shell-collapsed": "The game canvas size is abnormal and the main content area has collapsed.",
+        "game-content-missing": "The game container exists, but no visible main content was rendered for too long."
+      }
+    },
+    "routeLoadingTimeout": {
+      "eyebrow": "Load Timeout",
+      "title": "Game page loading timed out",
+      "description": "This device took too long to finish loading the game page. Instead of keeping a black screen, the app switched to an actionable prompt first.",
+      "reason": "This usually means the game module, WebView compatibility, or startup-time resource initialization got stuck. Try reloading first, then return to the lobby if it keeps happening."
     },
     "connectionError": {
       "unauthorizedTitle": "Failed to enter room",

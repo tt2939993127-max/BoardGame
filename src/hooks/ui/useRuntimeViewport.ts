@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useLayoutEffect, useState } from 'react';
 import {
     resolveStableViewportSize,
     type RuntimeViewportSize,
@@ -80,7 +80,7 @@ export const useRuntimeViewport = (
     const { syncCssVars = true } = options;
     const [viewport, setViewport] = useState<RuntimeViewportMetrics>(() => readRuntimeViewportMetrics());
 
-    useEffect(() => {
+    useLayoutEffect(() => {
         if (typeof window === 'undefined') {
             return undefined;
         }

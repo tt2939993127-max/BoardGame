@@ -8,6 +8,13 @@ import { notifyAndroidBundleReady } from './lib/mobile/androidLiveUpdates';
 import { isStaleChunkError, reloadForStaleChunkOnce } from './lib/staleChunkReloadGuard';
 import { hydrateInstalledNativeGamePackages } from './features/mobile-packages/packageManagerService';
 
+const STALE_CHUNK_BOOTSTRAP_WINDOW_MS = 8000;
+const bootstrapStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
+const shouldAutoReloadStaleChunk = () => {
+  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
+  return now - bootstrapStartedAt <= STALE_CHUNK_BOOTSTRAP_WINDOW_MS;
+};
+
 const captureParams = typeof window !== 'undefined'
   ? new URLSearchParams(window.location.search)
   : null;
@@ -61,15 +68,23 @@ if (import.meta.env.DEV) {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('vite:preloadError', (event) => {
-    event.preventDefault()
-    reloadForStaleChunkOnce('vite:preloadError')
-  })
+    const reloaded = reloadForStaleChunkOnce('vite:preloadError', window, {
+      shouldReload: shouldAutoReloadStaleChunk,
+    });
+    if (reloaded) {
+      event.preventDefault();
+    }
+  });
 
   window.addEventListener('unhandledrejection', (event) => {
-    if (!isStaleChunkError(event.reason)) return
-    event.preventDefault()
-    reloadForStaleChunkOnce('unhandledrejection')
-  })
+    if (!isStaleChunkError(event.reason)) return;
+    const reloaded = reloadForStaleChunkOnce('unhandledrejection', window, {
+      shouldReload: shouldAutoReloadStaleChunk,
+    });
+    if (reloaded) {
+      event.preventDefault();
+    }
+  });
 }
 
 if (SENTRY_DSN) {

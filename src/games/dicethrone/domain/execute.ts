@@ -21,6 +21,9 @@ import type {
     CharacterSelectedEvent,
     HostStartedEvent,
     SeatingMovedEvent,
+    SeatSwapRequestedEvent,
+    SeatSwapRejectedEvent,
+    SeatSwapCancelledEvent,
     PlayerReadyEvent,
     PlayerUnreadyEvent,
 } from './types';
@@ -70,6 +73,30 @@ const resolveStatusNewTotal = (
     const def = state.tokenDefinitions.find(entry => entry.id === statusId);
     const maxStacks = def?.stackLimit || 99;
     return Math.min(currentStacks + amount, maxStacks);
+};
+
+const buildSwappedSeatingOrder = (
+    seatingOrder: PlayerId[],
+    requesterId: PlayerId,
+    targetPlayerId: PlayerId,
+) => {
+    const sourceSeatIndex = seatingOrder.indexOf(requesterId);
+    const targetSeatIndex = seatingOrder.indexOf(targetPlayerId);
+    if (sourceSeatIndex === -1 || targetSeatIndex === -1 || sourceSeatIndex === targetSeatIndex) {
+        return null;
+    }
+
+    const nextSeatingOrder = [...seatingOrder];
+    [nextSeatingOrder[sourceSeatIndex], nextSeatingOrder[targetSeatIndex]] = [
+        nextSeatingOrder[targetSeatIndex],
+        nextSeatingOrder[sourceSeatIndex],
+    ];
+
+    return {
+        sourceSeatIndex,
+        targetSeatIndex,
+        nextSeatingOrder,
+    };
 };
 
 /**
@@ -215,6 +242,105 @@ export function execute(
                 timestamp,
             };
             events.push(seatingMovedEvent);
+            break;
+        }
+
+        case 'REQUEST_SEAT_SWAP': {
+            const requesterId = command.playerId;
+            const { targetPlayerId } = command.payload as { targetPlayerId: PlayerId };
+            const seatingOrder = getSeatingOrder(state);
+            const controller = state.seatControllers?.[targetPlayerId] ?? 'human';
+
+            if (controller === 'ai') {
+                const swapResult = buildSwappedSeatingOrder(seatingOrder, requesterId, targetPlayerId);
+                if (!swapResult) {
+                    break;
+                }
+
+                const seatingMovedEvent: SeatingMovedEvent = {
+                    type: 'SEATING_MOVED',
+                    payload: {
+                        playerId: requesterId,
+                        sourceSeatIndex: swapResult.sourceSeatIndex,
+                        targetSeatIndex: swapResult.targetSeatIndex,
+                        seatingOrder: swapResult.nextSeatingOrder,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                };
+                events.push(seatingMovedEvent);
+                break;
+            }
+
+            const seatSwapRequestedEvent: SeatSwapRequestedEvent = {
+                type: 'SEAT_SWAP_REQUESTED',
+                payload: {
+                    requesterId,
+                    targetPlayerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatSwapRequestedEvent);
+            break;
+        }
+
+        case 'RESPOND_SEAT_SWAP': {
+            const pendingRequest = state.seatSwapRequest;
+            if (!pendingRequest) {
+                break;
+            }
+
+            const { approve } = command.payload as { approve: boolean };
+            if (!approve) {
+                const seatSwapRejectedEvent: SeatSwapRejectedEvent = {
+                    type: 'SEAT_SWAP_REJECTED',
+                    payload: pendingRequest,
+                    sourceCommandType: command.type,
+                    timestamp,
+                };
+                events.push(seatSwapRejectedEvent);
+                break;
+            }
+
+            const seatingOrder = getSeatingOrder(state);
+            const swapResult = buildSwappedSeatingOrder(
+                seatingOrder,
+                pendingRequest.requesterId,
+                pendingRequest.targetPlayerId,
+            );
+            if (!swapResult) {
+                break;
+            }
+
+            const seatingMovedEvent: SeatingMovedEvent = {
+                type: 'SEATING_MOVED',
+                payload: {
+                    playerId: pendingRequest.requesterId,
+                    sourceSeatIndex: swapResult.sourceSeatIndex,
+                    targetSeatIndex: swapResult.targetSeatIndex,
+                    seatingOrder: swapResult.nextSeatingOrder,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatingMovedEvent);
+            break;
+        }
+
+        case 'CANCEL_SEAT_SWAP': {
+            const pendingRequest = state.seatSwapRequest;
+            if (!pendingRequest) {
+                break;
+            }
+
+            const seatSwapCancelledEvent: SeatSwapCancelledEvent = {
+                type: 'SEAT_SWAP_CANCELLED',
+                payload: pendingRequest,
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatSwapCancelledEvent);
             break;
         }
 

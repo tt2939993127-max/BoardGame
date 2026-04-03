@@ -3,12 +3,21 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { GlobalErrorBoundary } from '../GlobalErrorBoundary';
+import {
+    GAME_PAGE_RESCUE_GRACE_MS,
+    detectGamePageRescueSignal,
+} from '../GamePageRescueGate';
 import { ViewportDebugProbe } from '../ViewportDebugProbe';
 import {
     BOARD_ERROR_BOUNDARY_MAX_RETRIES,
     isBoardRenderErrorRecoverable,
     shouldShowBoardRenderFallback,
 } from '../../../engine/transport/react';
+import {
+    PLAY_ROUTE_LOADING_TIMEOUT_MS,
+    resolvePlayRouteFallbackLobbyPath,
+    shouldShowPlayRouteLoadingPrompt,
+} from '../../../lib/gameRouteFallback';
 
 // Mock Dependencies
 vi.mock('react', async () => {
@@ -94,5 +103,58 @@ describe('BoardErrorBoundary helpers', () => {
             retryCount: 0,
             fallback,
         })).toBe(false);
+    });
+});
+
+describe('GamePageRescueGate helpers', () => {
+    it('在宽限期后检测到画布塌缩时切换到友好提示', () => {
+        expect(detectGamePageRescueSignal({
+            pathname: '/play/smashup/local',
+            elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
+            hasFriendlyScreen: false,
+            hasLoadingScreen: false,
+            viewportRect: { width: 960, height: 540 },
+            shellRect: { width: 960, height: 540 },
+            contentRect: { width: 0, height: 0 },
+            meaningfulContentCount: 0,
+        })).toBe('game-shell-collapsed');
+    });
+
+    it('已有 loading 或友好页时不重复触发救援提示', () => {
+        expect(detectGamePageRescueSignal({
+            pathname: '/play/smashup/local',
+            elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
+            hasFriendlyScreen: false,
+            hasLoadingScreen: true,
+            viewportRect: null,
+            shellRect: null,
+            contentRect: null,
+            meaningfulContentCount: 0,
+        })).toBeNull();
+
+        expect(detectGamePageRescueSignal({
+            pathname: '/play/smashup/local',
+            elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
+            hasFriendlyScreen: true,
+            hasLoadingScreen: false,
+            viewportRect: null,
+            shellRect: null,
+            contentRect: null,
+            meaningfulContentCount: 0,
+        })).toBeNull();
+    });
+});
+
+describe('Play route loading fallback helpers', () => {
+    it('仅在对局路由超时后切换到友好提示', () => {
+        expect(shouldShowPlayRouteLoadingPrompt('/play/smashup/local', PLAY_ROUTE_LOADING_TIMEOUT_MS - 1)).toBe(false);
+        expect(shouldShowPlayRouteLoadingPrompt('/play/smashup/local', PLAY_ROUTE_LOADING_TIMEOUT_MS)).toBe(true);
+        expect(shouldShowPlayRouteLoadingPrompt('/dev/audio', PLAY_ROUTE_LOADING_TIMEOUT_MS + 1)).toBe(false);
+    });
+
+    it('返回大厅路径优先带上当前 gameId', () => {
+        expect(resolvePlayRouteFallbackLobbyPath('/play/smashup/local')).toBe('/?game=smashup');
+        expect(resolvePlayRouteFallbackLobbyPath('/play/dicethrone/match/123')).toBe('/?game=dicethrone');
+        expect(resolvePlayRouteFallbackLobbyPath('/maintenance')).toBe('/');
     });
 });

@@ -168,12 +168,20 @@ export function useGameEvents({ G, myPlayerId, fxBus, baseRefs }: UseGameEventsP
             payload.powerMax === undefined &&
             !payload.sameNameOnly &&
             payload.sameNameDefId === undefined;
+          const isWaitingForOwnInteraction =
+            G.sys.interaction?.current?.playerId === payload.playerId;
 
           if (payload.delta > 0 && payload.playerId === myPlayerId && isUnrestricted) {
             setFeedbacks(prev => [...prev, {
               id: `fb-${uidCounter++}`,
               playerId: payload.playerId,
-              messageKey: payload.limitType === 'minion' ? 'ui.extra_minion_granted' : 'ui.extra_action_granted',
+              messageKey: payload.limitType === 'minion'
+                ? isWaitingForOwnInteraction
+                  ? 'ui.extra_minion_granted_after_interaction'
+                  : 'ui.extra_minion_granted'
+                : isWaitingForOwnInteraction
+                  ? 'ui.extra_action_granted_after_interaction'
+                  : 'ui.extra_action_granted',
               messageParams: { count: payload.delta },
               tone: 'info',
             }]);

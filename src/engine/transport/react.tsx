@@ -320,6 +320,10 @@ export function GameProvider({
                     finalState = newState as MatchState<unknown>;
                 }
 
+                // reconcile 结果可能与原始服务端包不同（回滚过滤、保留乐观态、可疑确认兜底）。
+                // 回写传输层 patch 基线，避免后续 state:patch 基于错误快照继续叠错。
+                client.updateLatestState(finalState);
+
                 // 实时刷新交互选项（如果策略是 realtime）
                 const refreshedState = refreshInteractionOptions(finalState);
 
@@ -1211,7 +1215,7 @@ class BoardErrorBoundary extends React.Component<
             }
 
             return (
-                <div className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
+                <div data-bg-friendly-screen="true" className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
                     <div className="text-center">
                         <div className="mb-2">游戏加载失败</div>
                         <div className="text-xs text-white/50 mb-2">

@@ -2740,6 +2740,8 @@ test.describe('Smash Up - Alien Terraform', () => {
         await page.getByRole('button', { name: '天赋' }).click({ force: true });
 
         await game.waitForInteraction('titan_penguins_emperor_penguin_talent');
+        await expect(page.locator('[data-testid^="prompt-card-"]')).toHaveCount(1);
+        await expect(page.locator('[data-testid^="prompt-card-"]').first()).toBeVisible();
         await game.screenshot('emperor-penguin-talent-choice', testInfo);
         await selectInteractionOptionBy(
             game,
