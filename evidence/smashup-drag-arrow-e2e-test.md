@@ -10,14 +10,14 @@ npm run test:e2e:ci:file -- e2e/smashup-local-gameplay.e2e.ts "本地模式：�
 ```
 
 ## 环境说明
-- 本次截图来自 worktree：`D:\gongzuo\webgame\BoardGame\.claude\worktrees\smashup-input-mode-preferences`
+- 本次截图来自 worktree：`D:\gongzuo\webgame\BoardGame-wt-main-push-smashup-20260403`
 - 测试环境里部分牌面/基地美术未稳定加载，因此截图中仍有白色占位卡面。
 - 本轮验收重点放在拖拽表现、箭头起点、基地高亮和松手后的落点结果。
 
 ## 截图与观察
 
 ### 1. 拖拽选择态
-- 截图：`D:\gongzuo\webgame\BoardGame\.claude\worktrees\smashup-input-mode-preferences\test-results\evidence-screenshots\smashup-local-gameplay.e2e\本地模式：拖拽出牌会显示拖拽命中-UI，并在松手后真正落到基地\smashup-drag-selection-ui.png`
+- 截图：`D:\gongzuo\webgame\BoardGame-wt-main-push-smashup-20260403\test-results\evidence-screenshots\smashup-local-gameplay.e2e\本地模式：拖拽出牌会显示拖拽命中-UI，并在松手后真正落到基地\smashup-drag-selection-ui.png`
 - 人工观察：
   - `First Mate` 仍停留在底部手牌位，没有被整张拖到棋盘中央。
   - 拖拽引导已经换成平滑的 SVG 曲线箭头，不再有前几版那种虚线/箭节感；箭体是一整条暖橙纯色曲线，末端是一个小箭头头。
@@ -27,7 +27,7 @@ npm run test:e2e:ci:file -- e2e/smashup-local-gameplay.e2e.ts "本地模式：�
   - 左侧基地边框继续发绿，提示与箭头都没有挡住基地本身，目标识别仍然清楚。
 
 ### 2. 松手后的运行态
-- 截图：`D:\gongzuo\webgame\BoardGame\.claude\worktrees\smashup-input-mode-preferences\test-results\evidence-screenshots\smashup-local-gameplay.e2e\本地模式：拖拽出牌会显示拖拽命中-UI，并在松手后真正落到基地\smashup-drag-play-resolved-ui.png`
+- 截图：`D:\gongzuo\webgame\BoardGame-wt-main-push-smashup-20260403\test-results\evidence-screenshots\smashup-local-gameplay.e2e\本地模式：拖拽出牌会显示拖拽命中-UI，并在松手后真正落到基地\smashup-drag-play-resolved-ui.png`
 - 人工观察：
   - 左侧基地下方已经出现一张斜放的随从卡，不是只有高亮或临时残影。
   - 该基地的战力徽记从 `0` 变为 `2`，说明落子已经进入真实运行结果。
