@@ -358,7 +358,7 @@ describe('忍者派系能力', () => {
 // ============================================================================
 
 describe('恐龙派系能力', () => {
-    it('dino_rampage: 选择基地降低爆破点', () => {
+    it('dino_rampage: 多个基地时先创建基地选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -376,6 +376,33 @@ describe('恐龙派系能力', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('dino_rampage');
+    });
+
+    it('dino_rampage: 单基地多个己方随从时应创建随从选择', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_rampage', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1',
+                    minions: [
+                        makeMinion('m0', 'test', '0', 3),
+                        makeMinion('m1', 'test', '0', 2, { powerModifier: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_rampage_choose_minion');
+        expect(current?.data?.options).toHaveLength(2);
     });
 
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {

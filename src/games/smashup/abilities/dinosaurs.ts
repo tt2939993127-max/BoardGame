@@ -292,29 +292,78 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
-/** 狂暴 onPlay：将一个基地的爆破点降低等同于你在该基地的随从总力量（直到回合结束） */
+type DinoRampageMinionCandidate = { uid: string; defId: string; baseIndex: number; power: number; label: string };
+
+function collectDinoRampageMinions(state: SmashUpCore, playerId: string, baseIndex: number): DinoRampageMinionCandidate[] {
+    const base = state.bases[baseIndex];
+    if (!base) return [];
+
+    const baseDef = getBaseDef(base.defId);
+    const baseName = baseDef?.name ?? `基地 ${baseIndex + 1}`;
+
+    return base.minions
+        .filter(m => m.controller === playerId)
+        .map(m => {
+            const power = getMinionPower(state, m, baseIndex);
+            const minionDef = getCardDef(m.defId) as MinionCardDef | undefined;
+            const minionName = minionDef?.name ?? m.defId;
+            return {
+                uid: m.uid,
+                defId: m.defId,
+                baseIndex,
+                power,
+                label: `${minionName} @ ${baseName} (力量 ${power})`,
+            };
+        })
+        .filter(candidate => candidate.power > 0);
+}
+
+function queueDinoRampageMinionChoice(
+    matchState: MatchState<SmashUpCore>,
+    state: SmashUpCore,
+    playerId: string,
+    candidates: DinoRampageMinionCandidate[],
+    now: number,
+): MatchState<SmashUpCore> {
+    const interaction = createSimpleChoice(
+        `dino_rampage_choose_minion_${now}`,
+        playerId,
+        '选择用于降低爆破点的随从',
+        buildMinionTargetOptions(candidates, { state, sourcePlayerId: playerId }),
+        { sourceId: 'dino_rampage_choose_minion', targetType: 'minion' },
+    );
+    return queueInteraction(matchState, interaction);
+}
+
+/** 狂暴 onPlay：将一个基地的爆破点降低等同于你在该基地一个己方随从的力量（直到回合结束） */
 function dinoRampage(ctx: AbilityContext): AbilityResult {
-    // 选择一个有己方随从的基地
-    const baseCandidates: { baseIndex: number; myPower: number; label: string }[] = [];
+    const baseCandidates: { baseIndex: number; label: string }[] = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
-        const myPower = ctx.state.bases[i].minions
-            .filter(m => m.controller === ctx.playerId)
-            .reduce((sum, m) => sum + getMinionPower(ctx.state, m, i), 0);
-        if (myPower > 0) {
-            const baseDef = getBaseDef(ctx.state.bases[i].defId);
-            const baseName = baseDef?.name ?? `基地 ${i + 1}`;
-            baseCandidates.push({ baseIndex: i, myPower, label: `${baseName} (降低 ${myPower} 爆破点)` });
-        }
+        const minionCandidates = collectDinoRampageMinions(ctx.state, ctx.playerId, i);
+        if (minionCandidates.length === 0) continue;
+        const baseDef = getBaseDef(ctx.state.bases[i].defId);
+        const baseName = baseDef?.name ?? `基地 ${i + 1}`;
+        const label = minionCandidates.length === 1
+            ? `${baseName} (降低 ${minionCandidates[0].power} 爆破点)`
+            : `${baseName} (选择一个己方随从的力量)`;
+        baseCandidates.push({ baseIndex: i, label });
     }
-    // 数据驱动：强制效果，单候选自动执行
+
     return resolveOrPrompt(ctx, buildBaseTargetOptions(baseCandidates, ctx.state), {
         id: 'dino_rampage',
         title: '选择要降低爆破点的基地',
         sourceId: 'dino_rampage',
         targetType: 'base',
     }, (value) => {
-        const target = baseCandidates.find(c => c.baseIndex === value.baseIndex)!;
-        return { events: [modifyBreakpoint(target.baseIndex, -target.myPower, 'dino_rampage', ctx.now)] };
+        const minionCandidates = collectDinoRampageMinions(ctx.state, ctx.playerId, value.baseIndex);
+        if (minionCandidates.length === 0) return { events: [] };
+        if (minionCandidates.length === 1) {
+            return { events: [modifyBreakpoint(value.baseIndex, -minionCandidates[0].power, 'dino_rampage', ctx.now)] };
+        }
+        return {
+            events: [],
+            matchState: queueDinoRampageMinionChoice(ctx.matchState, ctx.state, ctx.playerId, minionCandidates, ctx.now),
+        };
     });
 }
 
@@ -421,16 +470,29 @@ export function registerDinosaurInteractionHandlers(): void {
         return { state, events };
     });
 
-    // 狂暴：选择基地后降低爆破点
+    // 狂暴：先选基地，若该基地有多个己方随从则继续选随从
     registerInteractionHandler('dino_rampage', (state, playerId, value, _iData, _random, timestamp) => {
         const { baseIndex } = value as { baseIndex: number };
+        const minionCandidates = collectDinoRampageMinions(state.core, playerId, baseIndex);
+        if (minionCandidates.length === 0) return { state, events: [] };
+        if (minionCandidates.length === 1) {
+            return { state, events: [modifyBreakpoint(baseIndex, -minionCandidates[0].power, 'dino_rampage', timestamp)] };
+        }
+        return {
+            state: queueDinoRampageMinionChoice(state, state.core, playerId, minionCandidates, timestamp),
+            events: [],
+        };
+    });
+
+    registerInteractionHandler('dino_rampage_choose_minion', (state, playerId, value, _iData, _random, timestamp) => {
+        const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
-        const myPower = base.minions
-            .filter(m => m.controller === playerId)
-            .reduce((sum, m) => sum + getMinionPower(state.core, m, baseIndex), 0);
-        if (myPower <= 0) return { state, events: [] };
-        return { state, events: [modifyBreakpoint(baseIndex, -myPower, 'dino_rampage', timestamp)] };
+        const minion = base.minions.find(m => m.uid === minionUid && m.controller === playerId);
+        if (!minion) return undefined;
+        const power = getMinionPower(state.core, minion, baseIndex);
+        if (power <= 0) return { state, events: [] };
+        return { state, events: [modifyBreakpoint(baseIndex, -power, 'dino_rampage', timestamp)] };
     });
 }
 
