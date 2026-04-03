@@ -97,11 +97,11 @@ function samuraiRoninOnPlay(ctx: AbilityContext): AbilityResult {
     const roninInteraction = createSimpleChoice(
         `samurai_ronin_${ctx.now}`,
         ctx.playerId,
-        '浪人：你可以在此随从上放置两个 +1 力量指示物',
+        '浪人：你可以在此随从上放置一个 +1 力量指示物',
         [
             {
                 id: 'yes',
-                label: '放置两个指示物',
+                label: '放置一个指示物',
                 value: { apply: true },
                 displayMode: 'button' as const,
             },
@@ -368,7 +368,6 @@ const handleSamuraiRonin: InteractionHandler = (state, _playerId, value, data, _
     return {
         state,
         events: [
-            addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
             addPowerCounter(ctx.minionUid, ctx.baseIndex, 1, 'samurai_ronin', now),
         ],
     };

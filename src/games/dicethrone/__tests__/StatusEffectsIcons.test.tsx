@@ -12,6 +12,7 @@ import {
     getDiceSpriteAssetPath,
     getDiceSpritePosition,
     getDiceSpriteUrls,
+    resolveSpriteAssetUrls,
 } from '../ui/assets';
 import { getStatusEffectIconNode, loadStatusAtlases, type StatusIconAtlasConfig } from '../ui/statusEffects';
 import { getAssetsBaseUrl, setAssetsBaseUrl } from '../../../core';
@@ -51,6 +52,11 @@ describe('StatusEffectsIcons', () => {
 
     it('会把 game-data 骰图路径折算成 dice-sprite 资源 key', () => {
         expect(getDiceSpriteAssetPath('moon_elf-dice', 'moon_elf')).toBe('dicethrone/images/moon_elf/dice');
+    });
+
+    it('game-data 骰图直链应保留为最终回退候选，避免压缩资源缺失时整块空白', () => {
+        const urls = resolveSpriteAssetUrls('/game-data/dicethrone/monk/dice-sprite.png', 'zh-CN');
+        expect(urls.at(-1)).toBe('/game-data/dicethrone/monk/dice-sprite.png');
     });
 
     it('渲染骰图背景时应指向 dice-sprite 的压缩资源', () => {

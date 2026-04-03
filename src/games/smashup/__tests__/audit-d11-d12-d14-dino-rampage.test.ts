@@ -9,7 +9,7 @@
  * "Reduce the breakpoint of a base by the power of one of your minions on that base until the end of the turn."
  * 
  * 中文描述：
- * "将一个基地的爆破点降低等同于你在该基地的随从总力量（直到回合结束）"
+ * "将一个基地的爆破点降低等同于你在该基地的一个随从的力量数直到回合结束。"
  * 
  * 实现方式：
  * - 写入路径：`modifyBreakpoint(baseIndex, -myPower, 'dino_rampage', timestamp)` 发射 `BREAKPOINT_MODIFIED` 事件
@@ -92,7 +92,6 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
                     defId: 'test_base_1',
                     minions: [
                         { uid: 'm1', defId: 'test_minion', controller: '0', owner: '0', basePower: 3, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0 , talentUsed: false },
-                        { uid: 'm2', defId: 'test_minion', controller: '0', owner: '0', basePower: 2, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0 , talentUsed: false },
                     ],
                     ongoingActions: [],
                 },
@@ -101,20 +100,59 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
             currentPlayerIndex: 0,
         }));
 
-        // 打出狂暴，选择基地0
-        // 注意：只有一个基地时，resolveOrPrompt 会自动执行，不创建交互
+        // 只有一个基地且只有一个己方随从时，允许自动执行
         runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a1', targetBaseIndex: 0 });
 
         const state = runner.getState();
-        // 验证临时爆破点修正写入正确（己方随从总力量 = 3 + 2 = 5）
-        expect(state.core.tempBreakpointModifiers?.[0]).toBe(-5);
+        expect(state.core.tempBreakpointModifiers?.[0]).toBe(-3);
         
         // 验证查询路径正确（getEffectiveBreakpoint 读取 tempBreakpointModifiers）
         const effectiveBreakpoint = getEffectiveBreakpoint(state.core, 0);
         const baseDef = { breakpoint: 20 }; // 假设基地爆破点为20
-        // 有效爆破点 = 基础爆破点 + 临时修正 = 20 + (-5) = 15
-        // 注意：getEffectiveBreakpoint 需要基地定义，这里简化测试
-        expect(state.core.tempBreakpointModifiers?.[0]).toBe(-5);
+        // 有效爆破点 = 基础爆破点 + 临时修正 = 20 + (-3) = 17
+        expect(effectiveBreakpoint).toBeDefined();
+        expect(baseDef.breakpoint + (state.core.tempBreakpointModifiers?.[0] ?? 0)).toBe(17);
+    });
+
+    it('D11/D12: 单基地多个己方随从时必须先选随从，不能按总力量自动结算', () => {
+        const runner = createRunner();
+
+        runner.setState(wrapState({
+            players: {
+                '0': { id: '0', vp: 0, hand: [{ uid: 'a1', defId: 'dino_rampage', type: 'action', subtype: 'standard', owner: '0' }], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['dinosaurs'] },
+                '1': { id: '1', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: [] },
+            },
+            bases: [
+                {
+                    defId: 'test_base_1',
+                    minions: [
+                        { uid: 'm1', defId: 'test_minion', controller: '0', owner: '0', basePower: 3, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false },
+                        { uid: 'm2', defId: 'test_minion', controller: '0', owner: '0', basePower: 2, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false },
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        }));
+
+        runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a1', targetBaseIndex: 0 });
+
+        let state = runner.getState();
+        let interaction = state.sys.interaction.current;
+        expect(interaction).toBeDefined();
+        expect(interaction?.kind).toBe('simple-choice');
+        expect((interaction?.data as any)?.sourceId).toBe('dino_rampage_choose_minion');
+        expect(state.core.tempBreakpointModifiers ?? {}).toEqual({});
+
+        const data = interaction!.data as any;
+        const option = data.options.find((opt: any) => opt.value.minionUid === 'm2');
+        expect(option).toBeDefined();
+
+        runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: option.id });
+
+        state = runner.getState();
+        expect(state.core.tempBreakpointModifiers?.[0]).toBe(-2);
     });
 
     it('D14: 回合清理完整性 — 回合结束时临时修正清零', () => {

@@ -333,4 +333,124 @@ describe('scoreBases 阶段自动推进', () => {
         expect(emptySelection).toBeDefined();
         expect(emptySelection?.label).toContain('不选择');
     });
+
+    it('required 动态交互在刷新后无合法选项时，AI 仍应拿到紧急跳过动作', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore(),
+            sys: {
+                phase: 'playCards',
+                flowHalted: false,
+                interaction: {
+                    current: {
+                        id: 'required-empty-live',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'alien_probe',
+                            options: [
+                                { id: 'stale-card', label: '过期手牌', value: { cardUid: 'stale-card', defId: 'pirate_first_mate' } },
+                            ],
+                            autoRefresh: 'hand',
+                            responseValidationMode: 'live',
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        const emergencyAction = legalActions.find((action) =>
+            action.kind === 'interaction-choice'
+            && (action.commands[0] as any)?.payload?.optionId === '__emergency_skip__',
+        );
+
+        expect(emergencyAction).toBeDefined();
+    });
+
+    it('AI 对 exact-multi 交互应枚举所有合法组合，而不是总拿前两个', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore(),
+            sys: {
+                phase: 'playCards',
+                flowHalted: false,
+                interaction: {
+                    current: {
+                        id: 'elder-thing-pod-destroy',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'elder_thing_elder_thing_pod_destroy',
+                            options: [
+                                { id: 'm1', label: '随从 1', value: { minionUid: 'm1' } },
+                                { id: 'm2', label: '随从 2', value: { minionUid: 'm2' } },
+                                { id: 'm3', label: '随从 3', value: { minionUid: 'm3' } },
+                            ],
+                            multi: { min: 2, max: 2 },
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        const comboPayloads = legalActions
+            .filter((action) => action.kind === 'interaction-choice')
+            .map((action) => ((action.commands[0] as any)?.payload?.optionIds ?? []).join(','))
+            .sort();
+
+        expect(comboPayloads).toEqual(['m1,m2', 'm1,m3', 'm2,m3']);
+    });
+
+    it('AI 在计分阶段仅存在可激活的泰坦 special 时也不应暴露 advance-phase', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                bases: [makeBase('base_pirate_cove', [
+                    makeMinion('0', 'robot_hoverbot', 4),
+                    makeMinion('0', 'robot_microbot_alpha', 2),
+                    makeMinion('0', 'robot_microbot_beta', 2),
+                    makeMinion('1', 'pirate_first_mate', 3),
+                ])],
+                scoringEligibleBaseIndices: [0],
+                titans: [{
+                    uid: 't-megabot-setaside',
+                    defId: 'mega_troopers_megabot',
+                    faction: 'mega_troopers',
+                    ownerId: '0',
+                    controllerId: '0',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'setaside' },
+                }] as any,
+            }),
+            sys: {
+                phase: 'scoreBases',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions.some(action =>
+            action.kind === 'activate-special'
+            && (action.metadata as any)?.titanUid === 't-megabot-setaside',
+        )).toBe(true);
+        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
+    });
 });

@@ -1658,6 +1658,50 @@ describe('P2: miskatonic_those_meddling_kids（多管闲事的小鬼）点击式
         // ongoing2 仍然存在（跳过了）
         expect(r4.finalState.core.bases[0].ongoingActions.find(o => o.uid === 'ongoing2')).toBeDefined();
     });
+
+    it('基地上有 3 张行动卡时，应允许连续点到最后一张而不是第二张后断链', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('tmk1', 'miskatonic_those_meddling_kids', '0', 'action')],
+                    factions: ['miskatonic', 'pirates'] as [string, string],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('test_base_1', [], [
+                    { uid: 'ongoing1', defId: 'test_ongoing', ownerId: '1' },
+                    { uid: 'ongoing2', defId: 'test_ongoing2', ownerId: '1' },
+                    { uid: 'ongoing3', defId: 'test_ongoing3', ownerId: '1' },
+                ]),
+            ],
+        });
+
+        const state = makeFullMatchState(core);
+        const r1 = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION, playerId: '0',
+            payload: { cardUid: 'tmk1' },
+        }, 'meddling_kids 3-step-1');
+        const choice1 = asSimpleChoice(r1.finalState.sys.interaction.current)!;
+        const baseOpt = findOption(choice1, (o: any) => o.value?.baseIndex === 0);
+
+        const r2 = respond(r1.finalState, '0', baseOpt, 'meddling_kids 3-step-2');
+        const choice2 = asSimpleChoice(r2.finalState.sys.interaction.current)!;
+        const firstOpt = findOption(choice2, (o: any) => o.value?.cardUid === 'ongoing1');
+
+        const r3 = respond(r2.finalState, '0', firstOpt, 'meddling_kids 3-step-3');
+        const choice3 = asSimpleChoice(r3.finalState.sys.interaction.current)!;
+        const secondOpt = findOption(choice3, (o: any) => o.value?.cardUid === 'ongoing2');
+
+        const r4 = respond(r3.finalState, '0', secondOpt, 'meddling_kids 3-step-4');
+        const choice4 = asSimpleChoice(r4.finalState.sys.interaction.current)!;
+        const remainingIds = choice4.options
+            .filter((o: any) => !o.value?.skip)
+            .map((o: any) => o.value?.cardUid)
+            .sort();
+
+        expect(remainingIds).toEqual(['ongoing3']);
+    });
 });
 
 // ============================================================================

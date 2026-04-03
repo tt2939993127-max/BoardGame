@@ -321,4 +321,90 @@ describe('Temple of Goju + First Mate 时序测试', () => {
         expect(interaction).toBeDefined();
         expect((interaction?.data as any)?.sourceId).toBe('pirate_first_mate_choose_base');
     });
+
+    it('场景6: 木乃伊先结算埋葬后，大副的计分后移动不会被吃掉', () => {
+        const core = makeState({
+            currentPlayerIndex: 0,
+            turnOrder: ['0', '1'],
+            bases: [
+                makeBase('base_castle_blood', [
+                    makeMinion('mummy_1', 'ancient_egyptians_mummy', '0', 2),
+                    makeMinion('first_mate_1', 'pirate_first_mate', '0', 2),
+                    makeMinion('count_1', 'vampire_the_count', '1', 6),
+                ]),
+                makeBase('base_pyramids', []),
+                makeBase('base_pirate_cove', []),
+            ],
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState = makeMatchState(core);
+        matchState.sys.phase = 'scoreBases';
+
+        const queued = collectTriggers(core, 'afterScoring', {
+            state: core,
+            matchState,
+            playerId: '0',
+            baseIndex: 0,
+            rankings: [
+                { playerId: '0', power: 4, vp: 3 },
+                { playerId: '1', power: 6, vp: 4 },
+            ],
+            random: defaultTestRandom,
+            now: 3000,
+        });
+        expect(queued).toBeDefined();
+
+        const coreWithQueue = reduce(core, queued as any);
+        expect(coreWithQueue.triggerQueue).toHaveLength(2);
+
+        const queuedState = maybeResolveReactionQueue(makeMatchState(coreWithQueue), defaultTestRandom, 3000);
+        expect(queuedState).toBeDefined();
+
+        const resolveCurrentChoice = (currentState: MatchState<SmashUpCore>, optionId: string, playerId: string) => {
+            const result = runCommand(currentState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId,
+                payload: { optionId },
+            } as any, defaultTestRandom);
+            expect(result.success).toBe(true);
+            return result.finalState;
+        };
+
+        let state = queuedState!.state;
+        let currentChoice = asSimpleChoice(state.sys.interaction?.current);
+        expect(currentChoice?.sourceId).toBe('reaction_queue_choose_next');
+
+        const mummyChoice = currentChoice!.options.find(option => String(option.label).includes('ancient_egyptians_mummy'));
+        expect(mummyChoice).toBeDefined();
+        state = resolveCurrentChoice(state, mummyChoice!.id, currentChoice!.playerId);
+
+        currentChoice = asSimpleChoice(state.sys.interaction?.current);
+        expect(currentChoice?.sourceId).toBe('ancient_egyptians_mummy_after_scoring');
+        const buryToPyramids = currentChoice!.options.find(option => (option as any).value?.baseIndex === 1);
+        expect(buryToPyramids).toBeDefined();
+        state = resolveCurrentChoice(state, buryToPyramids!.id, currentChoice!.playerId);
+
+        currentChoice = asSimpleChoice(state.sys.interaction?.current);
+        if (currentChoice?.sourceId === 'reaction_queue_choose_next') {
+            const mateChoice = currentChoice.options.find(option => String(option.label).includes('pirate_first_mate'));
+            expect(mateChoice).toBeDefined();
+            state = resolveCurrentChoice(state, mateChoice!.id, currentChoice.playerId);
+            currentChoice = asSimpleChoice(state.sys.interaction?.current);
+        }
+
+        expect(currentChoice?.sourceId).toBe('pirate_first_mate_choose_base');
+        const moveToPirateCove = currentChoice!.options.find(option => (option as any).value?.baseIndex === 2);
+        expect(moveToPirateCove).toBeDefined();
+        state = resolveCurrentChoice(state, moveToPirateCove!.id, currentChoice!.playerId);
+
+        expect(state.sys.interaction?.current).toBeFalsy();
+        expect(state.sys.interaction?.queue ?? []).toHaveLength(0);
+        expect(state.core.triggerQueue ?? []).toHaveLength(0);
+        expect(state.core.bases[0].minions.map(minion => minion.uid)).toEqual(['count_1']);
+        expect(state.core.bases[1].buriedCards?.map(card => card.uid)).toEqual(['mummy_1']);
+        expect(state.core.bases[2].minions.map(minion => minion.uid)).toEqual(['first_mate_1']);
+    });
 });
