@@ -464,6 +464,7 @@ export const Home = () => {
 
     const handleReconnect = () => {
         if (!activeMatch || !myMatchRole) return;
+        setIsMobileNavOpen(false);
 
         // 优先使用 myMatchRole 中保存的游戏名，否则回退到 activeMatch 中的游戏名，最后默认 tictactoe
         const gameId = myMatchRole.gameName || activeMatch.gameName || 'tictactoe';
