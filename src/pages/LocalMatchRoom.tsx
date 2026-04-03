@@ -52,15 +52,15 @@ export const LocalMatchRoom = () => {
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
     // 异步加载游戏实现
-    const [gameImplReady, setGameImplReady] = useState(false);
+    const [loadedGameId, setLoadedGameId] = useState<string | null>(null);
+    const gameImplReady = !gameId || loadedGameId === gameId;
     useEffect(() => {
         if (!gameId) return;
         let cancelled = false;
-        setGameImplReady(false);
         loadGameImplementation(gameId).then(() => {
-            if (!cancelled) setGameImplReady(true);
+            if (!cancelled) setLoadedGameId(gameId);
         }).catch(() => {
-            if (!cancelled) setGameImplReady(true);
+            if (!cancelled) setLoadedGameId(gameId);
         });
         return () => { cancelled = true; };
     }, [gameId]);
