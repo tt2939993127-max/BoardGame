@@ -27,7 +27,7 @@ import { CardPreview } from '../../components/common/media/CardPreview';
 import { AnimatePresence, motion } from 'framer-motion';
 import { initSmashUpAtlases } from './ui/cardAtlas';
 
-// 同步注册所有图集（cards1-4 + base1-4，懒解析模式），确保首次渲染时 atlas 注册已就绪
+// 同步注册所有图集（cards1-4 + base1-4，懒解析模式），确保首次渲染�?atlas 注册已就�?
 initSmashUpAtlases();
 import { SMASH_UP_MANIFEST } from './manifest';
 import { getLayoutConfig } from './ui/layoutConfig';
@@ -179,7 +179,7 @@ function buildDragArrowGuide(
     };
 }
 
-/** UI 层打出约束检查（与 commands.ts 的 checkPlayConstraint 对齐） */
+/** UI 层打出约束检查（�?commands.ts �?checkPlayConstraint 对齐�?*/
 function checkPlayConstraintUI(
     constraint: PlayConstraint,
     core: SmashUpCore,
@@ -209,7 +209,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const playerID = rawPlayerID;
     const isMyTurn = playerID === currentPid;
     const rootPid = playerID || '0';
-    // 观战模式下默认显示玩家 0 的视角
+    // 观战模式下默认显示玩�?0 的视�?
     const myPlayer = core ? core.players[rootPid] : undefined;
     const isGameOver = G?.sys.gameover;
     const activeDuelBanner = useMemo(() => {
@@ -221,7 +221,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const challengedName = challenged ? resolveCardName(getCardDef(challenged.defId), t) ?? challenged.defId : t('ui.card_placeholder');
         return {
             title: `${challengerName} VS ${challengedName}`,
-            subtitle: t('ui.duel_in_progress', { defaultValue: '决斗进行中：先处理 Pinkerton / 决斗牌 / Deputy，再结算胜负' }),
+            subtitle: t('ui.duel_in_progress', { defaultValue: '决斗进行中：先处�?Pinkerton / 决斗�?/ Deputy，再结算胜负' }),
         };
     }, [core, t]);
     const isWinner = !!isGameOver && isGameOver.winner === rootPid;
@@ -278,7 +278,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return resolveI18nKeys(opt.label, t);
     }, [t]);
     
-    // 更新选择的派系到 Context（游戏开始后）
+    // 更新选择的派系到 Context（游戏开始后�?
     useEffect(() => {
         if (phase !== 'factionSelect') {
             const allFactions: string[] = [];
@@ -291,7 +291,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
     }, [phase, core.players, setSelectedFactions]);
     
-    // 对手视角切换状态（必须在使用前声明，避免 TDZ 错误）
+    // 对手视角切换状态（必须在使用前声明，避�?TDZ 错误�?
     const [viewMode, setViewMode] = useState<'self' | 'opponent'>('self');
     const toggleViewMode = useCallback(() => {
         setViewMode(prev => prev === 'self' ? 'opponent' : 'self');
@@ -301,8 +301,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const opponentPid = core.turnOrder.find(pid => pid !== rootPid) || '1';
     const opponentPlayer = core.players[opponentPid];
     
-    // 根据视角模式选择显示的玩家数据
-    // 重赛系统（通用 hook）
+    // 根据视角模式选择显示的玩家数�?
+    // 重赛系统（通用 hook�?
     const { overlayProps: endgameProps } = useEndgame({
         result: isGameOver || undefined,
         playerID,
@@ -320,16 +320,16 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [handDragPreview, setHandDragPreview] = useState<HandAreaDragPreview | null>(null);
 
-    // 弃牌判断：抽牌阶段 + 是我的回合 + 手牌超限
-    // 使用 useMemo 确保使用最新的依赖值（避免时序问题）
+    // 弃牌判断：抽牌阶�?+ 是我的回�?+ 手牌超限
+    // 使用 useMemo 确保使用最新的依赖值（避免时序问题�?
     const needDiscard = useMemo(() => {
         return phase === 'draw' && isMyTurn && !!myPlayer && myPlayer.hand.length > HAND_LIMIT;
     }, [phase, isMyTurn, myPlayer]);
 
     const discardCount = needDiscard && myPlayer ? myPlayer.hand.length - HAND_LIMIT : 0;
 
-    // 弃牌堆可打出卡牌选项（仅在出牌阶段且是自己回合时计算）
-    // 随从额度已满时，过滤掉消耗正常额度的选项（不消耗额度的额外打出仍然可用）
+    // 弃牌堆可打出卡牌选项（仅在出牌阶段且是自己回合时计算�?
+    // 随从额度已满时，过滤掉消耗正常额度的选项（不消耗额度的额外打出仍然可用�?
     // 但需要考虑基地限定额度和同名额度：如果有额度，则保留可以打到对应基地的选项
     const discardPlayOptions = useMemo(() => {
         if (!isMyTurn || phase !== 'playCards' || !playerID) return [];
@@ -347,9 +347,9 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return all.filter(opt => {
             // 不消耗正常额度的选项（额外打出）始终保留
             if (!opt.consumesNormalLimit) return true;
-            // 同名额度可用时，检查 defId 是否匹配
+            // 同名额度可用时，检�?defId 是否匹配
             if (sameNameRemaining > 0) {
-                // 尚未锁定 defId 或 defId 匹配时可用
+                // 尚未锁定 defId �?defId 匹配时可�?
                 if (sameNameDefId === null || sameNameDefId === undefined || opt.defId === sameNameDefId) {
                     return true;
                 }
@@ -357,11 +357,11 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             // 消耗正常额度的选项：只有当有基地限定额度且可以打到对应基地时才保留
             if (!hasBaseQuota) return false;
             if (opt.allowedBaseIndices === 'all') {
-                // 可以打到任意基地，检查是否有任何基地有额度
+                // 可以打到任意基地，检查是否有任何基地有额�?
                 return Object.keys(baseQuota).some(baseIdx => {
                     const idx = Number(baseIdx);
                     if (baseQuota[idx] <= 0) return false;
-                    // 检查同名约束
+                    // 检查同名约�?
                     if (baseSameNameRequired[idx]) {
                         // 必须与该基地上已有随从同名（运行时检查）
                         return true;
@@ -372,7 +372,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             // 只能打到特定基地，检查这些基地是否有额度
             return opt.allowedBaseIndices.some(baseIdx => {
                 if ((baseQuota[baseIdx] ?? 0) <= 0) return false;
-                // 检查同名约束
+                // 检查同名约�?
                 if (baseSameNameRequired[baseIdx]) {
                     // 必须与该基地上已有随从同名（运行时检查）
                     return true;
@@ -400,7 +400,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const handPromptDisabledUids = useMemo<Set<string> | undefined>(() => {
         if (!isHandDiscardPrompt || !currentPrompt || !myPlayer) return undefined;
 
-        // 只标记选项中明确禁用的卡牌（opt.disabled === true）
+        // 只标记选项中明确禁用的卡牌（opt.disabled === true�?
         const disabled = new Set<string>();
         for (const opt of currentPrompt.options) {
             if (opt.disabled) {
@@ -422,13 +422,13 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return titanUids;
     }, [isHandDiscardPrompt, currentPrompt]);
 
-    // 手牌选择中的非手牌选项（如"跳过"/"完成"），需要作为浮动按钮显示
+    // 手牌选择中的非手牌选项（如"跳过"/"完成"），需要作为浮动按钮显�?
     const handSelectExtraOptions = useMemo(() => {
         if (!isHandDiscardPrompt || !currentPrompt) return [];
         return currentPrompt.options.filter(opt => {
             const val = opt.value as Record<string, unknown> | undefined;
             if (!val) return false;
-            // 非手牌选项：没有 cardUid 字段的选项（如 skip/done/confirm）
+            // 非手牌选项：没�?cardUid 字段的选项（如 skip/done/confirm�?
             return !val.cardUid && !val.titanUid;
         }).map(opt => ({
             ...opt,
@@ -439,7 +439,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     // 基地选择交互检测：当前 interaction 的选项包含有效 baseIndex 时，用基地区直接点击选择
     const isBaseSelectPrompt = useMemo(() => {
         if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
-        // 多选交互不走棋盘点击模式，交给 PromptOverlay 卡牌多选面板处理
+        // 多选交互不走棋盘点击模式，交给 PromptOverlay 卡牌多选面板处�?
         if (currentPrompt.multi) return false;
         const data = currentInteraction?.data as Record<string, unknown> | undefined;
         return data?.targetType === 'base';
@@ -447,7 +447,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
     const _baseSelectPromptTitle = isBaseSelectPrompt && currentPrompt ? currentPrompt.title : '';
 
-    // 可选基地索引集合（只高亮候选基地，baseIndex≥0）
+    // 可选基地索引集合（只高亮候选基地，baseIndex�?�?
     const selectableBaseIndices = useMemo<Set<number>>(() => {
         if (!isBaseSelectPrompt || !currentPrompt) return new Set();
         const indices = new Set<number>();
@@ -460,7 +460,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return indices;
     }, [isBaseSelectPrompt, currentPrompt]);
 
-    // 基地选择中的非基地选项（如"完成"/"跳过"），需要作为浮动按钮显示
+    // 基地选择中的非基地选项（如"完成"/"跳过"），需要作为浮动按钮显�?
     const baseSelectExtraOptions = useMemo(() => {
         if (!isBaseSelectPrompt || !currentPrompt) return [];
         return currentPrompt.options.filter(opt => {
@@ -483,20 +483,20 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return data?.targetType === 'minion';
     }, [currentPrompt, playerID, currentInteraction]);
 
-    // 可选随从 UID 集合（只高亮候选随从，排除跳过选项）
+    // 可选随�?UID 集合（只高亮候选随从，排除跳过选项�?
     const selectableMinionUids = useMemo<Set<string>>(() => {
         if (!isMinionSelectPrompt || !currentPrompt) return new Set();
         const uids = new Set<string>();
         for (const opt of currentPrompt.options) {
             const val = opt.value as { minionUid?: string; skip?: boolean } | undefined;
-            // 排除跳过选项（不高亮）
+            // 排除跳过选项（不高亮�?
             if (val?.skip === true) continue;
             if (val?.minionUid) uids.add(val.minionUid);
         }
         return uids;
     }, [isMinionSelectPrompt, currentPrompt]);
 
-    // 随从选择中的非随从选项（如"跳过"/"完成"），需要作为浮动按钮显示
+    // 随从选择中的非随从选项（如"跳过"/"完成"），需要作为浮动按钮显�?
     const minionSelectExtraOptions = useMemo(() => {
         if (!isMinionSelectPrompt || !currentPrompt) return [];
         return currentPrompt.options.filter(opt => {
@@ -512,12 +512,12 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }));
     }, [isMinionSelectPrompt, currentPrompt, resolvePromptOptionLabel]);
 
-    // 多选随从模式检测
+    // 多选随从模式检�?
     const isMultiMinionSelect = useMemo(() => {
         return isMinionSelectPrompt && !!currentPrompt?.multi;
     }, [isMinionSelectPrompt, currentPrompt]);
 
-    // 多选随从模式：已选中的 optionId 集合
+    // 多选随从模式：已选中�?optionId 集合
     const [multiSelectedOptionIds, setMultiSelectedOptionIds] = useState<Set<string>>(new Set());
 
     // 多选随从模式：约束
@@ -527,7 +527,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return { min: multi.min ?? 0, max: multi.max ?? Infinity };
     }, [isMultiMinionSelect, currentPrompt]);
 
-    // 多选随从已选中的 UID 集合（用于 BaseZone 高亮已选随从）
+    // 多选随从已选中�?UID 集合（用�?BaseZone 高亮已选随从）
     const multiSelectedMinionUids = useMemo<Set<string>>(() => {
         if (!isMultiMinionSelect) return new Set();
         const uids = new Set<string>();
@@ -546,7 +546,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return data?.targetType === 'ongoing';
     }, [currentPrompt, playerID, currentInteraction]);
 
-    // 可选持续行动卡 UID 集合（高亮候选行动卡）
+    // 可选持续行动卡 UID 集合（高亮候选行动卡�?
     const selectableOngoingUids = useMemo<Set<string>>(() => {
         if (!isOngoingSelectPrompt || !currentPrompt) return new Set();
         const uids = new Set<string>();
@@ -558,7 +558,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return uids;
     }, [isOngoingSelectPrompt, currentPrompt]);
 
-    // 持续行动卡选择中的非行动卡选项（如"跳过"），需要作为浮动按钮显示
+    // 持续行动卡选择中的非行动卡选项（如"跳过"），需要作为浮动按钮显�?
     const ongoingSelectExtraOptions = useMemo(() => {
         if (!isOngoingSelectPrompt || !currentPrompt) return [];
         return currentPrompt.options.filter(opt => {
@@ -571,7 +571,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         });
     }, [isOngoingSelectPrompt, currentPrompt]);
 
-    // 交互驱动的选择提示标题（基地/随从/手牌/行动卡选择统一）
+    // 交互驱动的选择提示标题（基�?随从/手牌/行动卡选择统一�?
     const interactionSelectTitle = useMemo(() => {
         let raw = '';
         if (isBaseSelectPrompt && currentPrompt) raw = currentPrompt.title;
@@ -590,7 +590,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
 
 
-    // 弃牌堆随从选择：可选基地索引（从 interaction data 中读取）
+    // 弃牌堆随从选择：可选基地索引（�?interaction data 中读取）
     const discardMinionAllowedBases = useMemo<Set<number>>(() => {
         if (!isDiscardMinionPrompt) return new Set();
         const data = currentInteraction?.data as Record<string, unknown> | undefined;
@@ -601,9 +601,9 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     // 弃牌堆出牌横排选中的卡 uid（统一状态）
     const [discardStripSelectedUid, setDiscardStripSelectedUid] = useState<string | null>(null);
 
-    // interaction 切换时重置手牌/弃牌区选中状态。
-    // 这里必须监听 currentPrompt 对象引用，而不是 currentPrompt?.id，
-    // 否则同 id 的新交互复用时会残留上一轮移动端选中态。
+    // interaction 切换时重置手�?弃牌区选中状态�?
+    // 这里必须监听 currentPrompt 对象引用，而不�?currentPrompt?.id�?
+    // 否则�?id 的新交互复用时会残留上一轮移动端选中态�?
     useEffect(() => {
         if (currentPrompt) {
             setSelectedCardUid(null);
@@ -614,9 +614,9 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setMultiSelectedOptionIds(new Set());
     }, [currentPrompt]);
 
-    // 统一弃牌堆出牌：合并正常弃牌堆出牌 + interaction 驱动的弃牌堆随从选择
+    // 统一弃牌堆出牌：合并正常弃牌堆出�?+ interaction 驱动的弃牌堆随从选择
     const discardStripCards = useMemo<{ uid: string; defId: string; label: string; optionId?: string; optionValue?: unknown }[]>(() => {
-        // interaction 驱动模式优先（僵尸领主等）
+        // interaction 驱动模式优先（僵尸领主等�?
         if (isDiscardMinionPrompt && currentPrompt) {
             return currentPrompt.options
                 .filter(opt => !(opt.value as Record<string, unknown>)?.done)
@@ -625,7 +625,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     return { uid: val.cardUid, defId: val.defId, label: opt.label, optionId: opt.id, optionValue: opt.value };
                 });
         }
-        // 正常弃牌堆出牌模式
+        // 正常弃牌堆出牌模�?
         if (discardPlayOptions.length > 0) {
             return discardPlayOptions.map(opt => ({
                 uid: opt.card.uid, defId: opt.defId, label: opt.name,
@@ -634,23 +634,23 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return [];
     }, [isDiscardMinionPrompt, currentPrompt, discardPlayOptions]);
 
-    // 弃牌堆出牌横排的"完成"选项（interaction 模式下的 done 选项）
+    // 弃牌堆出牌横排的"完成"选项（interaction 模式下的 done 选项�?
     const discardStripDoneOption = useMemo(() => {
         if (!isDiscardMinionPrompt || !currentPrompt) return null;
         return currentPrompt.options.find(opt => (opt.value as Record<string, unknown>)?.done) ?? null;
     }, [isDiscardMinionPrompt, currentPrompt]);
 
-    // 横排消失时重置
+    // 横排消失时重�?
     useEffect(() => {
         if (discardStripCards.length === 0) setDiscardStripSelectedUid(null);
     }, [discardStripCards.length]);
 
-    // 弃牌堆出牌横排可选基地集合
+    // 弃牌堆出牌横排可选基地集�?
     const discardStripAllowedBases = useMemo<Set<number>>(() => {
         if (!discardStripSelectedUid) return new Set();
         // interaction 模式：从 interaction data 读取
         if (isDiscardMinionPrompt) return discardMinionAllowedBases;
-        // 正常弃牌堆出牌：从 discardPlayOptions 读取
+        // 正常弃牌堆出牌：�?discardPlayOptions 读取
         const opt = discardPlayOptions.find(o => o.card.uid === discardStripSelectedUid);
         if (!opt) return new Set();
         if (opt.allowedBaseIndices === 'all') {
@@ -660,7 +660,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [discardStripSelectedUid, isDiscardMinionPrompt, discardMinionAllowedBases, discardPlayOptions, core.bases]);
 
 
-    // 响应窗口状态判断（meFirst 或 afterScoring）
+    // 响应窗口状态判断（meFirst �?afterScoring�?
     const responseWindow = G.sys.responseWindow?.current;
     const isMeFirstResponse = useMemo(() => {
         if (!responseWindow || responseWindow.windowType !== 'meFirst') return false;
@@ -675,12 +675,12 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [responseWindow, playerID]);
 
     // 响应窗口期间禁用不匹配的卡牌（置灰）
-    // 但当有手牌选择交互时（isHandDiscardPrompt），不禁用手牌（交互会自己处理可选项）
+    // 但当有手牌选择交互时（isHandDiscardPrompt），不禁用手牌（交互会自己处理可选项�?
     const meFirstDisabledUids = useMemo<Set<string> | undefined>(() => {
-        // 只在响应窗口期间且轮到我时生效
+        // 只在响应窗口期间且轮到我时生�?
         const isMyResponseTurn = isMeFirstResponse || isAfterScoringResponse;
         if (!isMyResponseTurn || !myPlayer) return undefined;
-        // 有手牌选择交互时，不应用响应窗口禁用规则（交互自己控制可选项）
+        // 有手牌选择交互时，不应用响应窗口禁用规则（交互自己控制可选项�?
         if (isHandDiscardPrompt) return undefined;
         
         const disabled = new Set<string>();
@@ -695,7 +695,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                         disabled.add(card.uid);
                     }
                 } else {
-                    // afterScoring 窗口禁用所有随从
+                    // afterScoring 窗口禁用所有随�?
                     disabled.add(card.uid);
                 }
                 continue;
@@ -716,8 +716,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return disabled.size > 0 ? disabled : undefined;
     }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isHandDiscardPrompt, responseWindow?.windowType]);
 
-    // Me First! 可选基地集合（达到临界点的基地索引）
-    // 使用统一查询函数：优先使用进入 scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4）
+    // Me First! 可选基地集合（达到临界点的基地索引�?
+    // 使用统一查询函数：优先使用进�?scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4�?
     const meFirstEligibleBaseIndices = useMemo<Set<number>>(() => {
         if (!meFirstPendingCard) return new Set();
         return new Set(getScoringEligibleBaseIndices(core));
@@ -830,10 +830,6 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedSetAsideTitanUid(null);
     }, [selectedSetAsideTitanUid, selectedTitanDeployableBaseIndices]);
 
-    // 手牌选中卡牌的有效部署基地集合（排除被 ongoing 限制的基地）
-    // deployBlockReason: 当所有基地都不可选时的原因（用于 toast 提示）
-    const { deployableBaseIndices, deployBlockReason } = useMemo<{ deployableBaseIndices: Set<number>; deployBlockReason: string | null }>(() => {
-        if (!selectedCardUid || !playerID) return { deployableBaseIndices: new Set(), deployBlockReason: null };
     const resolvePlayableCardMode = useCallback((card: CardInstance): 'minion' | 'ongoing' | 'ongoing-minion' | 'action-minion' | null => {
         if (card.uid === selectedCardUid && selectedCardMode) return selectedCardMode;
         if (card.type === 'minion') return 'minion';
@@ -852,7 +848,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const indices = new Set<number>();
         if (!playerID || !cardMode) return { deployableBaseIndices: indices, deployBlockReason: null };
 
-        // Me First! 窗口中 beforeScoringPlayable 随从：只允许即将计分的基地
+        // Me First! 窗口�?beforeScoringPlayable 随从：只允许即将计分的基�?
         if (isMeFirstResponse && card.type === 'minion') {
             const mDef = getMinionDef(card.defId);
             if (mDef?.beforeScoringPlayable) {
@@ -945,8 +941,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return { deployableBaseIndices: indices, deployBlockReason: null };
     }, [core, isMeFirstResponse, playerID, t]);
 
-    // 手牌选中卡牌的有效部署基地集合（排除被 ongoing 限制的基地）
-    // deployBlockReason: 当所有基地都不可选时的原因（用于 toast 提示）
+    // 手牌选中卡牌的有效部署基地集合（排除�?ongoing 限制的基地）
+    // deployBlockReason: 当所有基地都不可选时的原因（用于 toast 提示�?
     const { deployableBaseIndices, deployBlockReason } = useMemo<{ deployableBaseIndices: Set<number>; deployBlockReason: string | null }>(() => {
         if (!selectedCardUid || !myPlayer) return { deployableBaseIndices: new Set(), deployBlockReason: null };
         const card = myPlayer.hand.find(c => c.uid === selectedCardUid);
@@ -954,7 +950,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return getDeployableBaseStateForCard(card, selectedCardMode);
     }, [getDeployableBaseStateForCard, myPlayer, selectedCardMode, selectedCardUid]);
 
-    // ongoing-minion 模式下的有效随从 UID 集合（只包含未被限制基地上的随从）
+    // ongoing-minion 模式下的有效随从 UID 集合（只包含未被限制基地上的随从�?
     const ongoingMinionTargetUids = useMemo<Set<string>>(() => {
         if ((selectedCardMode !== 'ongoing-minion' && selectedCardMode !== 'action-minion') || !playerID) return new Set();
         const uids = new Set<string>();
@@ -1021,19 +1017,19 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return uids;
     }, [core.bases, dragDeployableBaseIndices, draggedCardMode]);
 
-    // 基地 DOM 引用（用于 FX 特效定位）
+    // 基地 DOM 引用（用�?FX 特效定位�?
     const baseRefsMap = useRef<Map<number, HTMLElement>>(new Map());
 
     // FX 系统
     const fxBus = useFxBus(smashUpFxRegistry, { playSound });
 
-    // 事件流消费 → FX 特效驱动
+    // 事件流消�?�?FX 特效驱动
     const myPid = playerID || '0';
     const gameEvents = useGameEvents({ G, myPlayerId: myPid, fxBus, baseRefs: baseRefsMap });
 
     // 行动卡特写队列：
     // - 在线模式：只显示对手打出的行动卡
-    // - 本地/测试模式：显示双方行动卡；测试页会固定注入 playerID='0'，因此不能仅靠 playerID 是否为空来区分
+    // - 本地/测试模式：显示双方行动卡；测试页会固定注�?playerID='0'，因此不能仅�?playerID 是否为空来区�?
     const extractActionCard = useCallback((event: { type: string; payload: unknown }) => {
         const p = event.payload as { playerId: string; defId: string };
         if (!p?.playerId || !p?.defId) return null;
@@ -1049,14 +1045,14 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const { queue: spotlightQueue, dismiss: dismissSpotlight } = useCardSpotlightQueue<{ defId: string }>({
         entries: eventStreamEntries,
         currentPlayerId: spotlightViewerId,
-        // 联机时对手页依赖服务端确认事件驱动特写，不能在 reconcile 时静默吞掉。
+        // 联机时对手页依赖服务端确认事件驱动特写，不能�?reconcile 时静默吞掉�?
         consumeOnReconcile: true,
         triggerEventTypes: SPOTLIGHT_TRIGGER_EVENTS,
         extractCard: extractActionCard,
         maxQueue: 5,
     });
 
-    // 行动卡特写渲染
+    // 行动卡特写渲�?
     const renderSpotlightCard = useCallback((item: SpotlightItem<{ defId: string }>) => {
         const def = getCardDef(item.cardData.defId);
         const resolvedName = resolveCardName(def, t) || item.cardData.defId;
@@ -1085,7 +1081,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         );
     }, [t]);
 
-    // 能力反馈 toast：失败提示，以及成功获得额外出牌额度的明确反馈。
+    // 能力反馈 toast：失败提示，以及成功获得额外出牌额度的明确反馈�?
     useEffect(() => {
         if (gameEvents.feedbacks.length === 0) return;
         for (const fb of gameEvents.feedbacks) {
@@ -1094,7 +1090,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     ? '获得{{count}}次额外随从机会'
                     : fb.messageKey === 'ui.extra_action_granted'
                     ? '获得{{count}}次额外行动机会'
-                    : '牌库中未找到符合条件的卡牌，已重洗牌库';
+                    : '牌库中未找到符合条件的卡牌，已重洗牌';
                 toast(t(fb.messageKey, { defaultValue: defaultMessage, ...fb.messageParams }));
             }
             gameEvents.removeFeedback(fb.id);
@@ -1122,26 +1118,26 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const { isActive: isTutorialActive, currentStep: tutorialStep } = useTutorial();
     const isTutorialMode = isTutorialActive;
 
-    // 教学模式下的命令权限检查
+    // 教学模式下的命令权限检�?
     const isTutorialCommandAllowed = useCallback((commandType: string): boolean => {
         if (!isTutorialActive || !tutorialStep) return true;
         // 系统命令不受限制
         if (commandType.startsWith('SYS_')) return true;
-        // 有 allowedCommands 白名单时，只允许白名单内的命令
+        // �?allowedCommands 白名单时，只允许白名单内的命�?
         if (tutorialStep.allowedCommands && tutorialStep.allowedCommands.length > 0) {
             return tutorialStep.allowedCommands.includes(commandType);
         }
         return true;
     }, [isTutorialActive, tutorialStep]);
 
-    // 教学模式下的目标级门控（卡牌/单位粒度）
+    // 教学模式下的目标级门控（卡牌/单位粒度�?
     const isTutorialTargetAllowed = useCallback((targetId: string): boolean => {
         if (!isTutorialActive || !tutorialStep) return true;
         if (!tutorialStep.allowedTargets || tutorialStep.allowedTargets.length === 0) return true;
         return tutorialStep.allowedTargets.includes(targetId);
     }, [isTutorialActive, tutorialStep]);
 
-    // 教学模式下被禁用的手牌 uid 集合
+    // 教学模式下被禁用的手�?uid 集合
     const tutorialDisabledUids = useMemo<Set<string> | undefined>(() => {
         if (!isTutorialActive || !tutorialStep?.allowedTargets?.length) return undefined;
         const allowed = tutorialStep.allowedTargets;
@@ -1182,7 +1178,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
     }, [interactionMode, viewMode]);
 
-    // 卡牌和基地图集已在模块顶层 initSmashUpAtlases() 同步注册，无需异步加载
+    // 卡牌和基地图集已在模块顶�?initSmashUpAtlases() 同步注册，无需异步加载
 
     // --- Handlers ---
     const handlePlayMinion = useCallback((cardUid: string, baseIndex: number) => {
@@ -1200,7 +1196,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             playDeniedSound();
             return;
         }
-        // 二次防御：行动额度检查（正常流程在 handleCardClick 已拦截）
+        // 二次防御：行动额度检查（正常流程�?handleCardClick 已拦截）
         if (myPlayer && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
             playDeniedSound();
             toast(t('ui.action_limit_reached', { defaultValue: '本回合行动额度已用完' }));
@@ -1213,13 +1209,13 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedCardMode(null);
     }, [dispatch, isTutorialCommandAllowed, myPlayer, t]);
 
-    /** 持续行动卡附着到随从：点击随从时触发 */
+    /** 持续行动卡附着到随从：点击随从时触�?*/
     const handlePlayOngoingToMinion = useCallback((cardUid: string, baseIndex: number, minionUid: string) => {
         if (!isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)) {
             playDeniedSound();
             return;
         }
-        // 二次防御：行动额度检查
+        // 二次防御：行动额度检�?
         if (myPlayer && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
             playDeniedSound();
             toast(t('ui.action_limit_reached', { defaultValue: '本回合行动额度已用完' }));
@@ -1236,7 +1232,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const [viewingCard, setViewingCard] = useState<CardMagnifyTarget | null>(null);
 
     const handleBaseClick = useCallback((index: number) => {
-        // Me First! 基地选择模式：打出需要基地目标的 Special 卡
+        // Me First! 基地选择模式：打出需要基地目标的 Special �?
         if (meFirstPendingCard) {
             if (!meFirstEligibleBaseIndices.has(index)) {
                 toast(t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
@@ -1261,7 +1257,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 setDiscardStripSelectedUid(null);
                 return;
             }
-            // 正常弃牌堆出牌模式
+            // 正常弃牌堆出牌模�?
             dispatch(SU_COMMANDS.PLAY_MINION, { cardUid: discardStripSelectedUid, baseIndex: index, fromDiscard: true });
             setDiscardStripSelectedUid(null);
             return;
@@ -1275,7 +1271,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             setSelectedSetAsideTitanUid(null);
             return;
         }
-        // 基地选择交互模式：直接响应 interaction
+        // 基地选择交互模式：直接响�?interaction
         if (isBaseSelectPrompt && currentPrompt) {
             if (!selectableBaseIndices.has(index)) {
                 toast(t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
@@ -1291,18 +1287,18 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
         if (selectedCardUid) {
             if (selectedCardMode === 'ongoing-minion') {
-                // 需要选择随从，点击基地无效
+                // 需要选择随从，点击基地无�?
                 toast(t('ui.select_minion_hint', { defaultValue: '请选择一个随从' }));
                 return;
             }
             
-            // Me First! 响应窗口期间打出 beforeScoringPlayable 随从：检查响应窗口状态
+            // Me First! 响应窗口期间打出 beforeScoringPlayable 随从：检查响应窗口状�?
             if (responseWindow && responseWindow.windowType === 'meFirst') {
                 const card = myPlayer?.hand.find(c => c.uid === selectedCardUid);
                 if (card?.type === 'minion') {
                     const mDef = getMinionDef(card.defId);
                     if (mDef?.beforeScoringPlayable) {
-                        // 检查是否还是当前响应者
+                        // 检查是否还是当前响应�?
                         const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
                         if (playerID !== currentResponderId) {
                             toast(t('ui.wait_for_your_turn', { defaultValue: '等待你的响应回合' }));
@@ -1370,7 +1366,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         if (selectedSetAsideTitanUid) {
             setSelectedSetAsideTitanUid(null);
         }
-        // 手牌弃牌交互优先：直接响应 interaction
+        // 手牌弃牌交互优先：直接响�?interaction
         if (isHandDiscardPrompt && currentPrompt) {
             const option = currentPrompt.options.find(
                 opt => (opt.value as { cardUid?: string })?.cardUid === card.uid
@@ -1385,7 +1381,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return;
         }
 
-        // 手牌超限弃牌模式：toggle 选中状态
+        // 手牌超限弃牌模式：toggle 选中状�?
         if (needDiscard) {
             setDiscardSelection(prev => {
                 const next = new Set(prev);
@@ -1400,7 +1396,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
 
         // Validation for play phase / turn
-        // 响应窗口期间：允许点击手牌中的 special 卡或 beforeScoringPlayable 随从
+        // 响应窗口期间：允许点击手牌中�?special 卡或 beforeScoringPlayable 随从
         const isInResponseWindow = isMeFirstResponse || isAfterScoringResponse;
         if (isInResponseWindow) {
             const windowType = responseWindow?.windowType;
@@ -1456,7 +1452,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return;
         }
 
-        // 教学模式下检查命令权限
+        // 教学模式下检查命令权�?
         const commandType = isCardActionLike(card) ? SU_COMMANDS.PLAY_ACTION : SU_COMMANDS.PLAY_MINION;
         if (!isTutorialCommandAllowed(commandType)) {
             playDeniedSound();
@@ -1485,7 +1481,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
 
         if (card.type === 'action') {
-            // 行动额度检查（special 卡不消耗额度，在 Me First! 窗口打出）
+            // 行动额度检查（special 卡不消耗额度，�?Me First! 窗口打出�?
             const cardDef = getCardDef(card.defId) as ActionCardDef | undefined;
             if (cardDef?.subtype !== 'special' && myPlayer && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
                 playDeniedSound();
@@ -1494,7 +1490,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             // ongoing 行动卡需要选择目标
             if (cardDef?.subtype === 'ongoing') {
-                // 进入/退出部署模式
+                // 进入/退出部署模�?
                 if (selectedCardUid === card.uid) {
                     setSelectedCardUid(null);
                     setSelectedCardMode(null);
@@ -1590,7 +1586,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             );
             if (!option) return;
 
-            // 多选模式：toggle 选中状态
+            // 多选模式：toggle 选中状�?
             if (isMultiMinionSelect) {
                 setMultiSelectedOptionIds(prev => {
                     const next = new Set(prev);
@@ -1609,7 +1605,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
             return;
         }
-        // 需要随从目标的行动卡：点击随从后直接打出
+        // 需要随从目标的行动卡：点击随从后直接打�?
         if (selectedCardUid && (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion')) {
             if (!ongoingMinionTargetUids.has(minionUid)) return;
             handlePlayOngoingToMinion(selectedCardUid, baseIndex, minionUid);
@@ -1826,18 +1822,18 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         };
     }, [dragGuidePaths]);
 
-    // 等待状态就绪
+    // 等待状态就�?
     if (!G || !core) {
-        return <LoadingScreen anchor="container" title={t('ui.loading', { defaultValue: '加载中...' })} />;
+        return <LoadingScreen anchor="container" title={t('ui.loading', { defaultValue: '加载�?..' })} />;
     }
 
-    // 防御性检查：HMR 或 client 重建时 core 可能不完整
+    // 防御性检查：HMR �?client 重建�?core 可能不完�?
     if (!core.turnOrder || !core.bases) {
         return (
             <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: false }}>
                 <LoadingScreen
                     anchor="container"
-                    description={t('ui.loading', { defaultValue: '加载中...' })}
+                    description={t('ui.loading', { defaultValue: '加载�?..' })}
                     className="bg-[#3e2723]"
                 />
             </UndoProvider>
@@ -1955,7 +1951,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                             }}
                                         >
                                             {core.players[pid]?.vp ?? 0}
-                                            {/* 对手区域悬浮时显示眼睛图标（无背景，直接叠加在圆球上） */}
+                                            {/* 对手区域悬浮时显示眼睛图标（无背景，直接叠加在圆球上�?*/}
                                             {isOpponent && (
                                                 <svg 
                                                     viewBox="0 0 24 24" 
@@ -1977,7 +1973,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                                 );
                                             })}
                                         </div>
-                                        {/* 自己的牌库/弃牌信息已移至下方 DeckDiscardZone */}
+                                        {/* 自己的牌�?弃牌信息已移至下�?DeckDiscardZone */}
                                     </motion.div>
                                 );
                             })}
@@ -1985,7 +1981,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     </div>
                 </div>
 
-                {/* 对手视角指示器 */}
+                {/* 对手视角指示�?*/}
                 <AnimatePresence>
                     {viewMode === 'opponent' && (
                         <motion.div
@@ -2038,7 +2034,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                         }
                                         setIsSubmitting(true);
                                         dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
-                                        // 超时兜底：3秒后强制重置（防止命令失败导致按钮永久禁用）
+                                        // 超时兜底�?秒后强制重置（防止命令失败导致按钮永久禁用）
                                         setTimeout(() => setIsSubmitting(false), 3000);
                                     }}
                                     disabled={!!G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting}
@@ -2071,13 +2067,13 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                     <div className="absolute -inset-1 bg-white/5 blur-xl group-hover:bg-white/10 transition-colors" />
                                 </button>
 
-                                {/* 剩余出牌额度指示器 - 绝对定位在按钮右侧 */}
+                                {/* 剩余出牌额度指示�?- 绝对定位在按钮右�?*/}
                                 {myPlayer && (
                                     <div
                                         className="absolute left-full top-1/2 -translate-y-1/2 ml-3 flex flex-col gap-2"
                                         data-testid="su-end-turn-hints"
                                     >
-                                        {/* 随从额度（含基地限定额度 + 力量限制 tooltip） */}
+                                        {/* 随从额度（含基地限定额度 + 力量限制 tooltip�?*/}
                                         {(() => {
                                             const baseQuota = myPlayer.baseLimitedMinionQuota ?? {};
                                             const baseQuotaTotal = Object.values(baseQuota).reduce((s, v) => s + v, 0);
@@ -2114,7 +2110,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                                                 const bDef = getBaseDef(core.bases[Number(baseIdx)]?.defId);
                                                                 const bName = bDef?.name ? t(`cards.${bDef.id}.name`, { defaultValue: bDef.name }) : `#${Number(baseIdx) + 1}`;
                                                                 return (
-                                                                    <div key={baseIdx} className="text-amber-300">+{count} → {bName}</div>
+                                                                    <div key={baseIdx} className="text-amber-300">+{count} �?{bName}</div>
                                                                 );
                                                             })}
                                                             {myPlayer.extraMinionPowerMax !== undefined && (
@@ -2136,7 +2132,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                                 </div>
                                             );
                                         })()}
-                                        {/* 行动额度（含 tooltip） */}
+                                        {/* 行动额度（含 tooltip�?*/}
                                         {(() => {
                                             const actionRemaining = Math.max(0, myPlayer.actionLimit - myPlayer.actionsPlayed);
                                             const hasExtraAction = myPlayer.actionLimit > 1;
@@ -2157,7 +2153,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                                             </svg>
                                                         )}
                                                     </div>
-                                                    {/* Tooltip：紧凑纯文本，与随从额度 tooltip 风格一致 */}
+                                                    {/* Tooltip：紧凑纯文本，与随从额度 tooltip 风格一�?*/}
                                                     <div className="absolute right-0 bottom-full mb-2 hidden group-hover/action:block z-50 pointer-events-none">
                                                         <div className="bg-slate-900/95 backdrop-blur-sm text-white text-[11px] leading-tight rounded border border-slate-600 shadow-xl px-2 py-1.5 whitespace-nowrap space-y-0.5">
                                                             <div className="flex justify-between gap-3">
@@ -2165,7 +2161,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                                                 <span className="font-bold">{actionRemaining}/{myPlayer.actionLimit}</span>
                                                             </div>
                                                             {hasExtraAction && (
-                                                                <div className="text-amber-300">{t('ui.action_extra_hint', { defaultValue: '含额外行动额度 +{{extra}}', extra: myPlayer.actionLimit - 1 })}</div>
+                                                                <div className="text-amber-300">{t('ui.action_extra_hint', { defaultValue: '含额外行动额�?+{{extra}}', extra: myPlayer.actionLimit - 1 })}</div>
                                                             )}
                                                         </div>
                                                         <div className="absolute right-3 top-full w-0 h-0 border-l-[5px] border-l-transparent border-r-[5px] border-r-transparent border-t-[5px] border-t-slate-600" />
@@ -2186,13 +2182,13 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                     onClick={() => setIsEndTurnUiHidden(prev => !prev)}
                                     className={`absolute right-0 bottom-0 z-10 flex items-center justify-center rounded-full border-solid border-2 border-white/95 ring-1 ring-slate-950/15 bg-slate-900/95 text-white shadow-[0_6px_14px_rgba(0,0,0,0.45)] transition-all hover:scale-105 active:scale-95 ${isMobileViewport ? 'h-7 w-7 translate-x-[30%] translate-y-[30%] text-[11px]' : 'h-8 w-8 translate-x-[35%] translate-y-[35%] text-xs'}`}
                                 >
-                                    <span className="font-black leading-none">{isEndTurnUiHidden ? '显' : '隐'}</span>
+                                    <span className="font-black leading-none">{isEndTurnUiHidden ? '+' : '−'}</span>
                                 </button>
                             </motion.div>
                         )}
                     </AnimatePresence>
 
-                    {/* 弃牌模式：继续按钮（复用结束回合按钮位置） */}
+                    {/* 弃牌模式：继续按钮（复用结束回合按钮位置�?*/}
                     <AnimatePresence>
                         {needDiscard && (
                             <motion.div
@@ -2226,7 +2222,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     </AnimatePresence>
                 </div>
 
-                {/* --- 交互选择提示横幅（基地/随从/手牌选择） --- */}
+                {/* --- 交互选择提示横幅（基�?随从/手牌选择�?--- */}
                 <AnimatePresence>
                     {(isBaseSelectPrompt || isMinionSelectPrompt || isHandDiscardPrompt || isOngoingSelectPrompt) && (
                         <motion.div
@@ -2246,7 +2242,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     )}
                 </AnimatePresence>
 
-                {/* --- 基地选择浮动操作栏（完成/跳过按钮） --- */}
+                {/* --- 基地选择浮动操作栏（完成/跳过按钮�?--- */}
                 <AnimatePresence>
                     {isBaseSelectPrompt && baseSelectExtraOptions.length > 0 && (
                         <motion.div
@@ -2272,7 +2268,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     )}
                 </AnimatePresence>
 
-                {/* --- 随从选择浮动操作栏（多选确认 + 跳过按钮） --- */}
+                {/* --- 随从选择浮动操作栏（多选确�?+ 跳过按钮�?--- */}
                 <AnimatePresence>
                     {isMinionSelectPrompt && (isMultiMinionSelect || minionSelectExtraOptions.length > 0) && (
                         <motion.div
@@ -2287,7 +2283,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                     <>
                                         <div className="bg-slate-900/90 backdrop-blur-sm text-white px-4 py-2 rounded border border-slate-600 shadow-lg">
                                             <span className="font-bold text-sm">
-                                                已选 {multiSelectedOptionIds.size}
+                                                已�?{multiSelectedOptionIds.size}
                                                 {multiMinionConstraints.max !== Infinity && ` / ${multiMinionConstraints.max}`}
                                             </span>
                                         </div>
@@ -2322,7 +2318,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     )}
                 </AnimatePresence>
 
-                {/* --- 手牌选择浮动操作栏（跳过按钮） --- */}
+                {/* --- 手牌选择浮动操作栏（跳过按钮�?--- */}
                 <AnimatePresence>
                     {isHandDiscardPrompt && handSelectExtraOptions.length > 0 && (
                         <motion.div
@@ -2348,7 +2344,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     )}
                 </AnimatePresence>
 
-                {/* --- 持续行动卡选择浮动操作栏（跳过按钮） --- */}
+                {/* --- 持续行动卡选择浮动操作栏（跳过按钮�?--- */}
                 <AnimatePresence>
                     {isOngoingSelectPrompt && ongoingSelectExtraOptions.length > 0 && (
                         <motion.div
@@ -2468,7 +2464,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     >
                         <div className="bg-red-900/90 backdrop-blur-sm text-white px-6 py-2 rounded border border-red-500 shadow-lg">
                             <span className="font-black text-base uppercase tracking-tight">
-                                {t('ui.discard_desc', { count: discardCount })}（{discardSelection.size}/{discardCount}）
+                                {t('ui.discard_desc', { count: discardCount })}（{discardSelection.size}/{discardCount}�?
                             </span>
                         </div>
                     </motion.div>
@@ -2525,7 +2521,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                             defaultValue: handDragPreview.dropTarget?.minionUid ? '松手附着到该随从' : '松手打到该基地',
                                         },
                                     )
-                                    : t('ui.drag_no_target', { defaultValue: '拖到发光目标上' })}
+                                    : t('ui.drag_no_target', { defaultValue: '拖到发光目标' })}
                             </div>
                         )}
                     </div>
@@ -2642,7 +2638,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     )
                 }
 
-                {/* FX 特效层 */}
+                {/* FX 特效�?*/}
                 <FxLayer
                     bus={fxBus}
                     getCellPosition={() => ({ left: 0, top: 0, width: 0, height: 0 })}
@@ -2678,7 +2674,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     <SmashUpDebugConfig G={G} dispatch={dispatch} />
                 </GameDebugPanel>
 
-                {/* 行动卡特写队列（在线只看对手，本地模式显示双方，点击关闭） */}
+                {/* 行动卡特写队列（在线只看对手，本地模式显示双方，点击关闭�?*/}
                 <CardSpotlightQueue
                     queue={spotlightQueue}
                     onDismiss={dismissSpotlight}
@@ -2694,7 +2690,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 {/* PREVIEW OVERLAY */}
                 <CardMagnifyOverlay target={viewingCard} onClose={() => setViewingCard(null)} />
 
-                {/* PROMPT OVERLAY（手牌弃牌/基地选择/随从选择/行动卡选择/弃牌堆出牌交互时隐藏，由对应区域直接处理） */}
+                {/* PROMPT OVERLAY（手牌弃�?基地选择/随从选择/行动卡选择/弃牌堆出牌交互时隐藏，由对应区域直接处理�?*/}
                 {(() => {
                     const shouldRender = !isHandDiscardPrompt && !isBaseSelectPrompt && !isMinionSelectPrompt && !isOngoingSelectPrompt && !isDiscardMinionPrompt;
                     return shouldRender ? (
