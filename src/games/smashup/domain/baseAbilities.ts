@@ -1161,8 +1161,14 @@ export function registerBaseAbilities(): void {
     // base_ninja_dojo: 忍者道场
     // "在这个基地计分后，冠军可以消灭任意一个随从"（全局范围）
     registerBaseAbility('base_ninja_dojo', 'afterScoring', (ctx) => {
-        if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
-        const winnerId = ctx.rankings[0].playerId;
+        if (!ctx.rankings || ctx.rankings.length === 0 || !ctx.matchState) return { events: [] };
+
+        const championPower = ctx.rankings[0]?.power;
+        const championIds = ctx.rankings
+            .filter(ranking => ranking.power === championPower)
+            .map(ranking => ranking.playerId);
+        if (championIds.length === 0) return { events: [] };
+
         // 收集所有基地上的所有随从（全局范围）
         const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; controller: string; label: string }[] = [];
         for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -1177,6 +1183,7 @@ export function registerBaseAbilities(): void {
             }
         }
         if (allMinions.length === 0) return { events: [] };
+
         const minionOptions = allMinions.map((m, i) => ({
             id: `minion-${i}`,
             label: m.label,
@@ -1188,13 +1195,20 @@ export function registerBaseAbilities(): void {
             { id: 'skip', label: '不消灭', value: { skip: true }, displayMode: 'button' as const },
             ...minionOptions,
         ];
-        if (!ctx.matchState) return { events: [] };
-        const interaction = createSimpleChoice(
-            `base_ninja_dojo_${ctx.now}`, winnerId,
-            '忍者道场：选择消灭的随从', options,
-            { sourceId: 'base_ninja_dojo', targetType: 'minion' },
-        );
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+
+        let nextMatchState = ctx.matchState;
+        championIds.forEach((winnerId, index) => {
+            const interaction = createSimpleChoice(
+                `base_ninja_dojo_${ctx.now}_${index}`,
+                winnerId,
+                '忍者道场：选择消灭的随从',
+                options,
+                { sourceId: 'base_ninja_dojo', targetType: 'minion' },
+            );
+            nextMatchState = queueInteraction(nextMatchState, interaction);
+        });
+
+        return { events: [], matchState: nextMatchState };
     }, { mandatory: false });
 
     // base_ninja_dojo_pod: POD 勘误为无基地能力。
