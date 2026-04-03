@@ -201,8 +201,10 @@ test.describe('SmashUp 本地模式 E2E', () => {
     });
 
     test('本地模式：游戏状态正确初始化', async ({ page }, testInfo) => {
-        await gotoLocalSmashUp(page);
-        await completeFactionSelectionLocal(page);
+        await page.goto('/play/smashup?p0=pirates,aliens&p1=ninjas,dinosaurs&seed=24680', {
+            waitUntil: 'domcontentloaded',
+        });
+        await dismissViteOverlay(page);
         await waitForHandArea(page);
 
         // 验证游戏界面核心元素
