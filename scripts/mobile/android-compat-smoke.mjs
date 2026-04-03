@@ -373,6 +373,32 @@ const dumpUiHierarchy = async (adbPath, serial, outputDir) => {
     return readSafe(localPath);
 };
 
+const dismissImmersiveClingIfPresent = async (adbPath, serial, outputDir) => {
+    const uiDumpText = await dumpUiHierarchy(adbPath, serial, outputDir);
+    if (!uiDumpText.includes('android:id/ok') || !uiDumpText.includes('Viewing full screen')) {
+        return false;
+    }
+
+    const match = uiDumpText.match(/resource-id="android:id\/ok"[\s\S]*?bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"/u);
+    if (!match) {
+        return false;
+    }
+
+    const left = Number.parseInt(match[1], 10);
+    const top = Number.parseInt(match[2], 10);
+    const right = Number.parseInt(match[3], 10);
+    const bottom = Number.parseInt(match[4], 10);
+    if (![left, top, right, bottom].every(Number.isFinite)) {
+        return false;
+    }
+
+    const centerX = Math.round((left + right) / 2);
+    const centerY = Math.round((top + bottom) / 2);
+    await runAdbAllowFailure(adbPath, serial, ['shell', 'input', 'tap', String(centerX), String(centerY)]);
+    await sleep(1200);
+    return true;
+};
+
 const readSafe = (filePath) => {
     try {
         return readFileSync(filePath, 'utf8');
@@ -810,6 +836,7 @@ const main = async () => {
     if (cdpNavigation.attempted && cdpNavigation.succeeded) {
         await sleep(2000);
     }
+    await dismissImmersiveClingIfPresent(adbPath, serial, outputDir);
 
     const screenshotPath = path.join(outputDir, 'screen.png');
     await captureScreenshot(adbPath, serial, screenshotPath);
