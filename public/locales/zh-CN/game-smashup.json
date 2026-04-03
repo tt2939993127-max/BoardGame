@@ -1986,7 +1986,7 @@
     },
     "elder_thing_the_price_of_power_pod": {
       "name": "力量的代价",
-      "effectText": "每位其他玩家展示其手牌。每展示出一张疯狂卡，在你的一个随从上放置一个+1战斗力指示物。特殊：在一个基地计分前打出。改为展示所有在那里的有随从的其他玩家的手牌。"
+      "effectText": "每位其他玩家展示其手牌。每展示出一张疯狂卡，在你的一个随从上放置一个+1战斗力指示物。特殊：你可以在一个基地计分前打出此牌。改为展示所有在那里的有随从的其他玩家的手牌。"
     },
     "elder_thing_unfathomable_goals_pod": {
       "name": "深不可测的目的",
@@ -2907,7 +2907,7 @@
     },
     "ancient_egyptians_plague_of_locusts": {
       "name": "蝗灾",
-      "effectText": "特殊：在一个基地计分前打出。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
     },
     "ancient_egyptians_mummy_strength": {
       "name": "木乃伊之力",
@@ -2915,7 +2915,7 @@
     },
     "ancient_egyptians_lost_knowledge": {
       "name": "失落知识",
-      "effectText": "特殊：在一个基地计分前打出。埋葬一张手牌，或者翻开你的一张埋葬牌。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。埋葬一张手牌，或者翻开你的一张埋葬牌。"
     },
     "ancient_egyptians_blessing_of_anubis": {
       "name": "阿努比斯的祝福",
@@ -3059,7 +3059,7 @@
     },
     "samurai_heart_of_the_battle": {
       "name": "战斗之心",
-      "effectText": "特殊：在一个基地计分前打出。你在那里一个随从与另一位玩家在那里一个随从决斗。消灭失败的随从。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。你在那里一个随从与另一位玩家在那里一个随从决斗。消灭失败的随从。"
     },
     "samurai_final_haiku": {
       "name": "终曲俳句",
@@ -3107,7 +3107,7 @@
     },
     "samurai_heart_of_the_battle_pod": {
       "name": "战斗之心",
-      "effectText": "特殊：在一个基地计分前打出。你在那里一个随从与另一位玩家在那里一个随从决斗。消灭失败的随从。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。你在那里一个随从与另一位玩家在那里一个随从决斗。消灭失败的随从。"
     },
     "samurai_final_haiku_pod": {
       "name": "终曲俳句",

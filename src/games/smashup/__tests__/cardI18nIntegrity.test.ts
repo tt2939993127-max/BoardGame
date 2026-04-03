@@ -82,6 +82,33 @@ describe('SmashUp 卡牌 i18n 完整性', () => {
     expect(missing, `zh-CN 缺少行动牌 effectText: ${missing.join(', ')}`).toEqual([]);
   });
 
+  it('英文含 "Special: Play before a base scores." 的行动牌在 zh-CN 中必须保留可选打出语义', () => {
+    const violations: string[] = [];
+
+    for (const def of allCards) {
+      if (def.type !== 'action') continue;
+
+      const enText = en.cards?.[def.id]?.effectText;
+      const zhText = zhCN.cards?.[def.id]?.effectText;
+      if (typeof enText !== 'string' || !enText.includes('Special: Play before a base scores.')) continue;
+
+      if (typeof zhText !== 'string') {
+        violations.push(`[${def.id}] zh-CN effectText 缺失`);
+        continue;
+      }
+
+      const preservesOptionalPlay = /特殊：你可以在.*基地计分前打出(?:此牌|该卡牌)/.test(zhText);
+      if (!preservesOptionalPlay) {
+        violations.push(`[${def.id}] 中文未保留“你可以在基地计分前打出此牌”的可选语义: ${zhText}`);
+      }
+    }
+
+    expect(
+      violations,
+      '以下行动牌把 "Special: Play before a base scores." 译丢了可选打出语义',
+    ).toEqual([]);
+  });
+
   it('所有泰坦牌在 zh-CN 中都有 effectText', () => {
     const missing: string[] = [];
     for (const def of allCards) {
