@@ -57,6 +57,7 @@ import {
     type AiSeatController,
 } from '../ai';
 import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
+import { onAppVisible } from '../../lib/mobile/appVisibility';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -374,8 +375,7 @@ export function GameProvider({
     // 2. state:update 消息到达 WebSocket 缓冲区但 JS 回调未执行
     // 恢复可见时主动 resync 确保状态最新
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.hidden) return;
+        return onAppVisible(() => {
             const client = clientRef.current;
             if (!client) return;
             // 重置乐观引擎：后台期间可能错过了多次状态更新，pending 队列已过时
@@ -389,11 +389,7 @@ export function GameProvider({
                 }));
             }
             client.resync();
-        };
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
+        });
     }, []);
 
     const dispatch = useCallback((type: string, payload: unknown) => {

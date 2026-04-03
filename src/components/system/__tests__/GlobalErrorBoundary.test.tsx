@@ -18,6 +18,22 @@ import {
     resolvePlayRouteFallbackLobbyPath,
     shouldShowPlayRouteLoadingPrompt,
 } from '../../../lib/gameRouteFallback';
+import {
+    readAndroidBackNavigationDepth,
+    resolveAndroidBackNavigationAction,
+} from '../../../lib/mobile/androidBackNavigation';
+import {
+    __resetAppVisibilityForTests,
+    BG_SHELL_APP_HIDDEN_EVENT,
+    BG_SHELL_APP_VISIBLE_EVENT,
+    dispatchAppVisibilityChange,
+    onAppVisible,
+} from '../../../lib/mobile/appVisibility';
+import { resolveInAppUrlPath } from '../../../lib/mobile/appUrlRouting';
+import { isTextEntryElement } from '../../../lib/textEntry';
+import {
+    resolveRuntimeKeyboardInsetBottom,
+} from '../../../hooks/ui/useRuntimeViewport';
 
 // Mock Dependencies
 vi.mock('react', async () => {
@@ -156,5 +172,188 @@ describe('Play route loading fallback helpers', () => {
         expect(resolvePlayRouteFallbackLobbyPath('/play/smashup/local')).toBe('/?game=smashup');
         expect(resolvePlayRouteFallbackLobbyPath('/play/dicethrone/match/123')).toBe('/?game=dicethrone');
         expect(resolvePlayRouteFallbackLobbyPath('/maintenance')).toBe('/');
+    });
+});
+
+describe('AndroidBackNavigation helpers', () => {
+    it('优先读取 React Router 写入的 history idx', () => {
+        expect(readAndroidBackNavigationDepth({
+            historyState: { idx: 3 },
+            historyLength: 1,
+        })).toBe(3);
+    });
+
+    it('缺少 idx 时回退到浏览器 history.length', () => {
+        expect(readAndroidBackNavigationDepth({
+            historyState: null,
+            historyLength: 4,
+        })).toBe(3);
+    });
+
+    it('有历史栈时执行 history.back', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/play/smashup/match/room-1',
+            search: '?playerID=0',
+            historyState: { idx: 1 },
+            historyLength: 2,
+            modalStackDepth: 0,
+        })).toEqual({ type: 'history-back' });
+    });
+
+    it('有可关闭弹窗时优先关闭弹窗，而不是退路由', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/play/smashup/match/room-1',
+            search: '?playerID=0',
+            historyState: { idx: 3 },
+            historyLength: 4,
+            modalStackDepth: 1,
+            isTopModalClosable: true,
+        })).toEqual({ type: 'close-modal' });
+    });
+
+    it('有不可关闭弹窗时阻断返回穿透', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/play/smashup/tutorial',
+            historyState: { idx: 2 },
+            historyLength: 3,
+            modalStackDepth: 1,
+            isTopModalClosable: false,
+        })).toEqual({ type: 'blocked' });
+    });
+
+    it('输入法激活时优先收起文本输入，而不是继续退路由', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/play/smashup/match/room-1',
+            search: '?playerID=0',
+            historyState: { idx: 3 },
+            historyLength: 4,
+            modalStackDepth: 1,
+            isTopModalClosable: true,
+            hasFocusedTextEntry: true,
+        })).toEqual({ type: 'dismiss-text-entry' });
+    });
+
+    it('没有历史栈但仍在对局页时回到对应大厅', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/play/dicethrone/match/room-1',
+            search: '?playerID=0',
+            historyState: { idx: 0 },
+            historyLength: 1,
+            modalStackDepth: 0,
+        })).toEqual({ type: 'fallback-route', path: '/?game=dicethrone' });
+    });
+
+    it('首页 query 弹窗没有历史栈时回退到纯首页', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/',
+            search: '?game=smashup',
+            historyState: { idx: 0 },
+            historyLength: 1,
+            modalStackDepth: 0,
+        })).toEqual({ type: 'fallback-route', path: '/' });
+    });
+
+    it('根页且没有历史栈时允许退出 App', () => {
+        expect(resolveAndroidBackNavigationAction({
+            pathname: '/',
+            search: '',
+            historyState: { idx: 0 },
+            historyLength: 1,
+            modalStackDepth: 0,
+        })).toEqual({ type: 'exit-app' });
+    });
+});
+
+describe('App visibility helpers', () => {
+    it('App 恢复可见事件只触发一次回调', () => {
+        __resetAppVisibilityForTests();
+        const onVisible = vi.fn();
+        const cleanup = onAppVisible(onVisible);
+
+        dispatchAppVisibilityChange(false);
+        dispatchAppVisibilityChange(true);
+        dispatchAppVisibilityChange(true);
+
+        expect(onVisible).toHaveBeenCalledTimes(1);
+        cleanup();
+    });
+
+    it('多个订阅者都能收到同一次前台恢复事件', () => {
+        __resetAppVisibilityForTests();
+        const onVisibleA = vi.fn();
+        const onVisibleB = vi.fn();
+        const cleanupA = onAppVisible(onVisibleA);
+        const cleanupB = onAppVisible(onVisibleB);
+
+        dispatchAppVisibilityChange(false);
+        dispatchAppVisibilityChange(true);
+
+        expect(onVisibleA).toHaveBeenCalledTimes(1);
+        expect(onVisibleB).toHaveBeenCalledTimes(1);
+        cleanupA();
+        cleanupB();
+    });
+
+    it('外部派发的壳层可见事件也能唤醒回调', () => {
+        __resetAppVisibilityForTests();
+        const onVisible = vi.fn();
+        const cleanup = onAppVisible(onVisible);
+
+        window.dispatchEvent(new CustomEvent(BG_SHELL_APP_HIDDEN_EVENT));
+        window.dispatchEvent(new CustomEvent(BG_SHELL_APP_VISIBLE_EVENT));
+
+        expect(onVisible).toHaveBeenCalledTimes(1);
+        cleanup();
+    });
+});
+
+describe('Runtime viewport helpers', () => {
+    it('仅在文本输入获得焦点时计算键盘底部 inset', () => {
+        expect(resolveRuntimeKeyboardInsetBottom({
+            visualViewportHeight: 520,
+            visualViewportOffsetTop: 0,
+            innerHeight: 800,
+            documentClientHeight: 800,
+            hasFocusedTextEntry: true,
+        })).toBe(280);
+
+        expect(resolveRuntimeKeyboardInsetBottom({
+            visualViewportHeight: 520,
+            visualViewportOffsetTop: 0,
+            innerHeight: 800,
+            documentClientHeight: 800,
+            hasFocusedTextEntry: false,
+        })).toBe(0);
+    });
+
+    it('过滤非文本控件，只识别真实输入目标', () => {
+        const input = document.createElement('input');
+        input.type = 'email';
+        const rangeInput = document.createElement('input');
+        rangeInput.type = 'range';
+        const textarea = document.createElement('textarea');
+        const editable = document.createElement('div');
+        editable.setAttribute('contenteditable', 'true');
+
+        expect(isTextEntryElement(input)).toBe(true);
+        expect(isTextEntryElement(textarea)).toBe(true);
+        expect(isTextEntryElement(editable)).toBe(true);
+        expect(isTextEntryElement(rangeInput)).toBe(false);
+        expect(isTextEntryElement(document.createElement('button'))).toBe(false);
+    });
+});
+
+describe('App URL routing helpers', () => {
+    it('支持自定义 scheme 深链到应用内路由', () => {
+        expect(resolveInAppUrlPath('top.easyboardgame.app://play/smashup/match/123?playerID=0')).toBe('/play/smashup/match/123?playerID=0');
+    });
+
+    it('支持 https App Link 直接映射 pathname', () => {
+        expect(resolveInAppUrlPath('https://easyboardgame.top/play/dicethrone/local?seed=abc')).toBe('/play/dicethrone/local?seed=abc');
+    });
+
+    it('根路径或非法 URL 不生成应用内跳转', () => {
+        expect(resolveInAppUrlPath('top.easyboardgame.app://')).toBeNull();
+        expect(resolveInAppUrlPath('not a url')).toBeNull();
     });
 });

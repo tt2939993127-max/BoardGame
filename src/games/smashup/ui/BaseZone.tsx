@@ -39,6 +39,8 @@ export const BaseZone: React.FC<{
     selectableMinionUids?: Set<string>;
     /** 多选随从模式：已选中的随从 UID 集合 */
     multiSelectedMinionUids?: Set<string>;
+    /** 当前正在决斗的随从 UID 集合 */
+    duelParticipantMinionUids?: Set<string>;
     /** 埋葬牌选择模式：场上的埋葬牌直接进入可点交互 */
     isBuriedSelectMode?: boolean;
     /** 埋葬牌选择模式：只有这些 UID 的埋葬牌可被选中 */
@@ -69,7 +71,7 @@ export const BaseZone: React.FC<{
     usableTitanOngoingUids?: Set<string>;
     canUseBaseAbility?: boolean;
     tokenRef?: (el: HTMLDivElement | null) => void;
-}> = ({ base, baseIndex, core, turnOrder, isMobileViewport = false, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, isBuriedSelectMode, selectableBuriedCardUids, multiSelectedBuriedCardUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onBuriedCardSelect, onViewMinion, onViewAction, onViewBase, onViewTitan, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, usableTitanTalentUids, usableTitanOngoingUids, canUseBaseAbility = false, tokenRef }) => {
+}> = ({ base, baseIndex, core, turnOrder, isMobileViewport = false, isDeployMode, isMinionSelectMode, selectableMinionUids, multiSelectedMinionUids, duelParticipantMinionUids, isBuriedSelectMode, selectableBuriedCardUids, multiSelectedBuriedCardUids, isSelectable, isDimmed, selectableOngoingUids, isMyTurn, myPlayerId, dispatch, onClick, onMinionSelect, onOngoingSelect, onBuriedCardSelect, onViewMinion, onViewAction, onViewBase, onViewTitan, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, usableTitanTalentUids, usableTitanOngoingUids, canUseBaseAbility = false, tokenRef }) => {
     const { t } = useTranslation('game-smashup');
     const [expandedMinionUid, setExpandedMinionUid] = React.useState<string | null>(null);
     
@@ -751,6 +753,7 @@ export const BaseZone: React.FC<{
                                             dispatch={dispatch}
                                             isMinionSelectMode={isMinionSelectMode && (!selectableMinionUids || selectableMinionUids.has(m.uid))}
                                             isMultiSelected={!!multiSelectedMinionUids?.has(m.uid)}
+                                            isDuelParticipant={!!duelParticipantMinionUids?.has(m.uid)}
                                             isDimmed={!!isMinionSelectMode && !!selectableMinionUids && !selectableMinionUids.has(m.uid)}
                                             onMinionSelect={onMinionSelect}
                                             onView={() => onViewMinion(m.defId)}
@@ -766,6 +769,7 @@ export const BaseZone: React.FC<{
                                             isActivationArmed={isActivationArmed}
                                             clearArmedActivation={clearArmedActivation}
                                             armOrActivate={armOrActivate}
+                                            isMobileViewport={isMobileViewport}
                                             layout={layout}
                                             turnOrder={turnOrder}
                                             isCoarsePointer={isCoarsePointer}
@@ -860,6 +864,8 @@ const MinionCard: React.FC<{
     isMinionSelectMode?: boolean;
     /** 多选随从模式下已选中 */
     isMultiSelected?: boolean;
+    /** 当前随从处于决斗中 */
+    isDuelParticipant?: boolean;
     /** 随从选择模式下该随从不可选（置灰） */
     isDimmed?: boolean;
     onMinionSelect?: (minionUid: string, baseIndex: number) => void;
@@ -877,12 +883,13 @@ const MinionCard: React.FC<{
     isActivationArmed: (activationKey: string) => boolean;
     clearArmedActivation: () => void;
     armOrActivate: (activationKey: string, callbacks: { onArm?: () => void; onActivate: () => void }) => boolean;
+    isMobileViewport?: boolean;
     /** 响应式布局配置 */
     layout: ReturnType<typeof getLayoutConfig>;
     /** 玩家回合顺序（用于判断是否是最右边玩家） */
     turnOrder: string[];
     isCoarsePointer: boolean;
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, dispatch, isMinionSelectMode, isMultiSelected, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, layout, turnOrder, isCoarsePointer }) => {
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, dispatch, isMinionSelectMode, isMultiSelected, isDuelParticipant = false, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isMobileViewport = false, layout, turnOrder, isCoarsePointer }) => {
     const { t } = useTranslation('game-smashup');
     // 兼容融合卡：Wolf Pact 这类作为随从打出时仍使用融合卡定义的图与文案
     const minionDef = getMinionDef(minion.defId);
@@ -995,6 +1002,7 @@ const MinionCard: React.FC<{
         <motion.div
             data-minion-uid={minion.uid}
             data-minion-def-id={minion.defId}
+            data-duel-participant={isDuelParticipant ? 'true' : 'false'}
             data-expanded={isExpanded ? 'true' : 'false'}
             data-attached-actions-visible={hasAttachedActions ? (shouldShowAttachedActions ? 'true' : 'false') : 'none'}
             data-activation-armed={isMinionActivationArmed ? 'true' : 'false'}
@@ -1034,7 +1042,29 @@ const MinionCard: React.FC<{
             }
             transition={{ type: 'spring', stiffness: 350, damping: 20, delay: index * 0.05 }}
         >
-                <div className="w-full h-full bg-slate-100 relative overflow-hidden">
+            {isDuelParticipant && (
+                <>
+                    <motion.div
+                        className="absolute pointer-events-none z-30 rounded-[0.32vw]"
+                        style={{
+                            inset: '-0.12vw',
+                            boxShadow: '0 0 0.45vw rgba(120, 53, 15, 0.55), 0 0 1vw rgba(245, 158, 11, 0.55), 0 0 1.6vw rgba(251, 191, 36, 0.42)',
+                        }}
+                        animate={{
+                            boxShadow: [
+                                '0 0 0.35vw rgba(120, 53, 15, 0.45), 0 0 0.8vw rgba(245, 158, 11, 0.45), 0 0 1.2vw rgba(251, 191, 36, 0.3)',
+                                '0 0 0.55vw rgba(120, 53, 15, 0.72), 0 0 1.2vw rgba(245, 158, 11, 0.72), 0 0 1.9vw rgba(251, 191, 36, 0.52)',
+                                '0 0 0.35vw rgba(120, 53, 15, 0.45), 0 0 0.8vw rgba(245, 158, 11, 0.45), 0 0 1.2vw rgba(251, 191, 36, 0.3)',
+                            ],
+                        }}
+                        transition={{ duration: 1.15, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                    <div className="absolute left-1/2 top-[0.18vw] z-40 -translate-x-1/2 rounded-sm border border-amber-100 bg-amber-950/88 px-[0.34vw] py-[0.05vw] text-[0.42vw] font-black tracking-[0.04em] text-amber-100 shadow-[0_2px_6px_rgba(120,53,15,0.35)] pointer-events-none whitespace-nowrap">
+                        决斗中
+                    </div>
+                </>
+            )}
+            <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                     <CardPreview
                         previewRef={genericDef?.previewRef
                             ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId, cardUid: minion.uid } }

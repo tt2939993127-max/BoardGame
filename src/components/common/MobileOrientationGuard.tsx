@@ -2,6 +2,8 @@ import { startTransition, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
 import type { GameManifestEntry } from '../../games/manifest';
+import { onAppVisible } from '../../lib/mobile/appVisibility';
+import { isTextEntryElement } from '../../lib/textEntry';
 import {
     extractGameIdFromPlayPath,
     getGameMobileBannerKind,
@@ -235,6 +237,29 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     }, [bannerKey]);
 
     useEffect(() => {
+        if (viewport.keyboardInsetBottom <= 0) {
+            return undefined;
+        }
+
+        const activeElement = document.activeElement;
+        if (!isTextEntryElement(activeElement)) {
+            return undefined;
+        }
+
+        const frameId = window.requestAnimationFrame(() => {
+            activeElement.scrollIntoView({
+                block: 'center',
+                inline: 'nearest',
+                behavior: 'smooth',
+            });
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, [viewport.keyboardInsetBottom]);
+
+    useEffect(() => {
         if (!nativeAppShell) return;
 
         let disposed = false;
@@ -253,11 +278,6 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             timeoutIds.push(id);
         }
 
-        const handleVisibilityChange = () => {
-            if (document.hidden) return;
-            lockNow();
-        };
-
         const handleFocus = () => {
             lockNow();
         };
@@ -266,7 +286,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             lockNow();
         };
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        const cleanupAppVisible = onAppVisible(lockNow);
         window.addEventListener('focus', handleFocus);
         window.addEventListener('orientationchange', handleOrientationChange);
 
@@ -275,7 +295,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             for (const timeoutId of timeoutIds) {
                 window.clearTimeout(timeoutId);
             }
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            cleanupAppVisible();
             window.removeEventListener('focus', handleFocus);
             window.removeEventListener('orientationchange', handleOrientationChange);
         };

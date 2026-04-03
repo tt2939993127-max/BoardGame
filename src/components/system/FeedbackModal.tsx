@@ -199,14 +199,21 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
         <div
             ref={backdropRef}
             onClick={handleBackdropClick}
-            className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
-            style={{ zIndex: UI_Z_INDEX.modalContent }}
+            className="modal-base-container fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
+            style={{
+                zIndex: UI_Z_INDEX.modalContent,
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-parchment-base-bg rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border-2 border-parchment-brown/30"
+                className="bg-parchment-base-bg rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border-2 border-parchment-brown/30"
+                style={{ maxHeight: 'var(--runtime-modal-max-height)' }}
             >
                 {/* Header */}
                 <div className="bg-parchment-brown px-6 py-4 flex items-center justify-between shrink-0 border-b border-parchment-gold/20">

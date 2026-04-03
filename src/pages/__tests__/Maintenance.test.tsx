@@ -8,7 +8,10 @@ import {
     readBrowserCompatibilityBypass,
     writeBrowserCompatibilityBypass,
 } from '../../lib/browserCompatibility';
-import { MapContainer } from '../../games/summonerwars/ui/MapContainer';
+import {
+    MapContainer,
+    shouldReserveSystemBackGesture,
+} from '../../games/summonerwars/ui/MapContainer';
 
 const mockLoggerError = vi.fn();
 const mockNavigate = vi.fn();
@@ -463,6 +466,32 @@ describe('browser compatibility detection', () => {
             configurable: true,
             value: originalResizeObserver,
         });
+    });
+
+    it('reserves the left and right screen edges for the Android system back gesture', () => {
+        expect(shouldReserveSystemBackGesture({
+            enabled: true,
+            clientX: 12,
+            viewportWidth: 360,
+        })).toBe(true);
+
+        expect(shouldReserveSystemBackGesture({
+            enabled: true,
+            clientX: 348,
+            viewportWidth: 360,
+        })).toBe(true);
+
+        expect(shouldReserveSystemBackGesture({
+            enabled: true,
+            clientX: 180,
+            viewportWidth: 360,
+        })).toBe(false);
+
+        expect(shouldReserveSystemBackGesture({
+            enabled: false,
+            clientX: 12,
+            viewportWidth: 360,
+        })).toBe(false);
     });
 
     it('supports bypassing the compatibility gate for the current session', () => {

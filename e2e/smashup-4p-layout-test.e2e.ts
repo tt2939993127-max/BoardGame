@@ -1,5 +1,28 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { test, expect } from './framework';
+import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import { setChineseLocale } from './helpers/common';
+
+async function saveEvidenceLocatorScreenshot(page: any, locator: any, testInfo: any, subdir: string, filename: string) {
+    const path = getEvidenceScreenshotPath(testInfo, filename, { subdir, filename });
+    mkdirSync(dirname(path), { recursive: true });
+    await expect(locator).toBeVisible({ timeout: 15000 });
+    const box = await locator.boundingBox();
+    expect(box, `未获取到截图目标 ${filename} 的边界`).not.toBeNull();
+    const padding = 10;
+    await page.screenshot({
+        path,
+        animations: 'disabled',
+        scale: 'device',
+        clip: {
+            x: Math.max((box?.x ?? 0) - padding, 0),
+            y: Math.max((box?.y ?? 0) - padding, 0),
+            width: (box?.width ?? 0) + padding * 2,
+            height: (box?.height ?? 0) + padding * 2,
+        },
+    });
+}
 
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
@@ -894,7 +917,20 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(monster).toBeVisible({ timeout: 15000 });
         await expect(monster).toContainText('+1');
         await expect(monster).toHaveAttribute('data-activation-armed', 'false');
+        await expect
+            .poll(async () => await monster.getAttribute('class'))
+            .toContain('ring-2 ring-amber-400');
+        await expect
+            .poll(async () => await monster.evaluate((element) => getComputedStyle(element as HTMLElement).borderColor))
+            .toContain('250, 188, 0');
         await game.screenshot('12-monster-with-counter-before-activation', testInfo);
+        await saveEvidenceLocatorScreenshot(
+            page,
+            monster,
+            testInfo,
+            'smashup-4p-layout-test.e2e/移动端有+1力量指示物的怪物发动天赋后会移除指示物并提示额外随从机会',
+            '12a-monster-with-counter-card-before-activation.png',
+        );
 
         await clickCenter(monster, page);
         await expect(monster).toHaveAttribute('data-expanded', 'true');

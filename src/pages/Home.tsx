@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Component, type ErrorInfo, type ReactNode, lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import packageJson from '../../package.json';
@@ -46,6 +46,43 @@ const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
 const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
 const isAndroidShellBuild = import.meta.env.MODE === 'android';
+
+type HomeModalErrorBoundaryProps = {
+    children: ReactNode;
+    onError: () => void;
+};
+
+type HomeModalErrorBoundaryState = {
+    hasError: boolean;
+};
+
+class HomeModalErrorBoundary extends Component<HomeModalErrorBoundaryProps, HomeModalErrorBoundaryState> {
+    public state: HomeModalErrorBoundaryState = {
+        hasError: false,
+    };
+
+    public static getDerivedStateFromError(): HomeModalErrorBoundaryState {
+        return { hasError: true };
+    }
+
+    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('[Home] 游戏详情弹窗渲染失败，已回退到首页', error, errorInfo);
+        this.props.onError();
+    }
+
+    public componentDidUpdate(prevProps: HomeModalErrorBoundaryProps) {
+        if (prevProps.children !== this.props.children && this.state.hasError) {
+            this.setState({ hasError: false });
+        }
+    }
+
+    public render() {
+        if (this.state.hasError) {
+            return null;
+        }
+        return this.props.children;
+    }
+}
 
 export const Home = () => {
     useGlobalCursor();
@@ -161,18 +198,25 @@ export const Home = () => {
             if (!game) return null;
             return {
                 render: ({ close, closeOnBackdrop }: { close: () => void; closeOnBackdrop: boolean }) => (
-                    <Suspense fallback={null}>
-                        <LazyGameDetailsModal
-                            isOpen
-                            onClose={close}
-                            gameId={game.id}
-                            titleKey={game.titleKey}
-                            descriptionKey={game.descriptionKey}
-                            thumbnail={game.thumbnail}
-                            closeOnBackdrop={closeOnBackdrop}
-                            onNavigate={() => gameModalNavigateAwayRef.current()}
-                        />
-                    </Suspense>
+                    <HomeModalErrorBoundary
+                        onError={() => {
+                            close();
+                            gameModalNavigateAwayRef.current();
+                        }}
+                    >
+                        <Suspense fallback={null}>
+                            <LazyGameDetailsModal
+                                isOpen
+                                onClose={close}
+                                gameId={game.id}
+                                titleKey={game.titleKey}
+                                descriptionKey={game.descriptionKey}
+                                thumbnail={game.thumbnail}
+                                closeOnBackdrop={closeOnBackdrop}
+                                onNavigate={() => gameModalNavigateAwayRef.current()}
+                            />
+                        </Suspense>
+                    </HomeModalErrorBoundary>
                 ),
             };
         }, []),
@@ -242,7 +286,9 @@ export const Home = () => {
         if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
             return;
         }
-        void import('../components/lobby/GameDetailsModal');
+        void import('../components/lobby/GameDetailsModal').catch((error) => {
+            console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
+        });
     }, []);
 
     const handleLogout = () => {

@@ -19,6 +19,7 @@
 - `npm run mobile:android:sync`
 - `npm run mobile:android:ota:publish -- --channel stable`
 - `npm run mobile:android:packages:publish -- --channel stable`
+- `npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
 - `npm run mobile:android:build:debug`
 - `npm run mobile:android:build:release`
 - `npm run mobile:android:build:bundle`
@@ -111,6 +112,47 @@ VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS=15000
 ```bash
 npm run mobile:android:doctor
 ```
+
+## 本地兼容性 Smoke
+
+- 命令：`npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
+- 目标：用于本地偶发性的 Android 功能兼容验证，不是长期 E2E 框架
+- 默认行为：
+  - 连接已存在的 adb 设备；如果没有，则自动启动一个本地 AVD
+  - 安装现有 APK（默认优先 `android/app/build/outputs/apk/debug/easyboardgame-debug.apk`）
+  - 启动 App，等待首屏稳定
+  - 采集截图、UI dump、`logcat`、WebView/Chrome 版本信息
+  - 自动判断是否疑似纯黑屏，以及是否低于兼容基线
+- 当前兼容基线：`WebView/Chrome 主版本 >= 88`
+- 默认输出目录：`test-results/android-compat-smoke/<时间戳>/`
+
+推荐最小流程：
+
+```bash
+npm run mobile:android:build:debug
+npm run mobile:android:compat:smoke -- --avd Pixel_3a_API_24
+```
+
+如果已经有设备连着，也可直接指定 serial：
+
+```bash
+npm run mobile:android:compat:smoke -- --serial emulator-5554
+```
+
+常用参数：
+
+- `--apk <path>`：安装指定 APK
+- `--skip-install`：跳过安装，只复用设备上的现有 App
+- `--min-webview-major <n>`：覆盖默认 WebView 基线，默认 `88`
+- `--launch-delay-ms <ms>`：启动后等待多久再抓证据
+- `--keep-emulator`：脚本启动的模拟器结束后不自动关闭
+
+产物说明：
+
+- `screen.png`：设备截图
+- `window_dump.xml`：`uiautomator dump` 导出的界面层级
+- `logcat.txt`：本次启动后的日志快照
+- `summary.json` / `summary.txt`：结构化结论，包含 Android 版本、WebView 版本、黑屏分析与产物路径
 
 ## 游戏包下载主线
 

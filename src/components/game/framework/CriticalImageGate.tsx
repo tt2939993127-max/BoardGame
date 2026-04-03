@@ -10,6 +10,7 @@ import {
     signalCriticalImagesReady,
 } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
+import { isAppCurrentlyActive, onAppVisibilityChange } from '../../../lib/mobile/appVisibility';
 import { warmPreloadScheduler } from './warmPreloadScheduler';
 
 const criticalImageGateWindow = typeof window !== 'undefined'
@@ -62,18 +63,16 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     children,
 }) => {
     useEffect(() => {
-        if (typeof document === 'undefined') return;
-        const onVisibilityChange = () => {
-            if (document.visibilityState === 'hidden') {
+        const applyVisibilityState = (isActive: boolean) => {
+            if (!isActive) {
                 warmPreloadScheduler.pause();
             } else {
                 warmPreloadScheduler.resume();
             }
         };
 
-        document.addEventListener('visibilitychange', onVisibilityChange);
-        onVisibilityChange();
-        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+        applyVisibilityState(isAppCurrentlyActive());
+        return onAppVisibilityChange(applyVisibilityState);
     }, []);
 
     // E2E 测试可通过 window.__E2E_SKIP_IMAGE_GATE__ 跳过图片预加载门禁

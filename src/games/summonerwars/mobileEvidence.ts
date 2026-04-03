@@ -6,6 +6,7 @@ import { SW_SELECTION_EVENTS } from './domain/types';
 import type { FactionId, PlayerId, SummonerWarsCore } from './domain/types';
 
 type TestHarness = Window['__BG_TEST_HARNESS__'];
+export const SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT = 30;
 
 interface MobileEvidenceOptions {
     faction0?: FactionId;
@@ -83,7 +84,7 @@ function createInitializedCore(
 }
 
 export function createSummonerWarsMobileEvidenceActionLogEntries(timestamp = Date.now()) {
-    const messages = [
+    const baseMessages = [
         '在城门旁召唤近战单位并额外消耗魔力，先把中路前线顶稳。',
         '冠军从右翼斜切到外侧通道，给下一轮长程反击留出发力角度。',
         '后排弓手后撤半格，同时保持对中线桥头的连续压制。',
@@ -97,6 +98,11 @@ export function createSummonerWarsMobileEvidenceActionLogEntries(timestamp = Dat
         '后场护卫横移半步把召唤师护住，避免被对面的突袭牌直接穿进中线。',
         '中间据点虽然暂时失守，但换来了两翼包夹角度，下一轮可以反吃回来。',
     ];
+    const messages = Array.from({ length: SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT }, (_, index) => {
+        const base = baseMessages[index % baseMessages.length];
+        const wave = Math.floor(index / baseMessages.length) + 1;
+        return `第${wave}轮长日志压力回放：${base} 这条记录额外保留完整战况描述，用来验证 FAB 日志面板在极端长列表下仍会通过内部滚动承载，而不是把展开框直接顶出屏幕。`;
+    });
 
     return messages.map((text, index) => ({
         id: `mobile-log-entry-${index + 1}`,

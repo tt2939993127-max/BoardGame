@@ -2,6 +2,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 import { AlertTriangle, RefreshCw, Home } from "lucide-react";
 import { setLastErrorContext } from "../../lib/feedback/errorContext";
+import { logMobileRuntimeCritical } from "../../lib/mobile/mobileRuntimeDebug";
 
 interface Props {
     children: ReactNode;
@@ -25,11 +26,16 @@ export class GlobalErrorBoundary extends Component<Props, State> {
     }
 
     public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        setLastErrorContext({
+        const context = {
             message: error.message || 'React render error',
             name: error.name,
             stack: [error.stack ?? '', errorInfo.componentStack ?? ''].filter(Boolean).join('\n'),
             source: 'react.error_boundary',
+        };
+        setLastErrorContext(context);
+        logMobileRuntimeCritical('GlobalErrorBoundary', 'component-did-catch', {
+            ...context,
+            componentStack: errorInfo.componentStack ?? '',
         });
         console.error("Uncaught error:", error, errorInfo);
         // Here you would log to Sentry

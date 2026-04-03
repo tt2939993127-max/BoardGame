@@ -19,6 +19,7 @@ import { Toaster } from 'react-hot-toast';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
 import { BrowserCompatibilityGate } from './components/system/BrowserCompatibilityGate';
 import { AndroidLiveUpdateManager } from './components/system/AndroidLiveUpdateManager';
+import { AndroidBackNavigationBridge } from './components/system/AndroidBackNavigationBridge';
 import { GamePageRescueGate } from './components/system/GamePageRescueGate';
 import { InteractionGuardProvider } from './components/game/framework/InteractionGuard';
 import AdminGuard from './components/auth/AdminGuard';
@@ -318,6 +319,7 @@ const AppContent = () => {
                         <DevMobileEvidenceCaptureAgent />
                       </React.Suspense>
                     ) : null}
+                    <AndroidBackNavigationBridge />
                     <ViewportDebugProbe />
                     <React.Suspense fallback={null}>
                       <LazyGlobalHUD />

@@ -28,7 +28,15 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+            className="modal-base-container fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
+        >
             {/* 遮罩层 */}
             <motion.div
                 initial={{ opacity: 0 }}
@@ -44,7 +52,8 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
+                className="relative bg-parchment-card-bg w-full max-w-4xl rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
+                style={{ height: 'min(600px, var(--runtime-modal-max-height))' }}
             >
                 {/* 关闭按钮 */}
                 <button
