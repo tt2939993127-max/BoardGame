@@ -168,6 +168,14 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 7. ❌ **禁止**直接写 `<img src="/assets/xxx.png" />`
 8. ❌ **禁止**硬编码 `compressed/` 路径
 
+### R2 / CDN 资源排查规则（强制）
+
+1. **先查对应任务 worktree，不查错工作区**：如果问题来自某个任务分支 / 独立 `git worktree`，必须先到该 worktree 下核对 `public/assets/`、`assets-manifest.json` 与相关代码引用，禁止只在当前根工作区下判断“文件是否存在”。
+2. **先核对运行时真实请求路径**：图片运行时会自动补 `i18n/<locale>/` 与 `compressed/`，排查 404 时必须以最终请求 URL 为准，而不是只看源码里的相对路径。
+3. **裁切图也必须满足 `compressed/` 约定**：凡是运行时通过 `OptimizedImage` / `CardPreview` / `getOptimizedImageUrls()` 加载的裁切图，实际可访问文件必须位于对应目录的 `compressed/` 子目录；仅有 `crops/foo.webp` 而没有 `crops/compressed/foo.webp`，视为资源不完整。
+4. **上传前先重建清单**：资源目录有新增/移动后，先执行 `npm run assets:manifest` 或定向执行 `node scripts/assets/generate_asset_manifests.js --root public/assets/i18n/zh-CN --id <gameId>`，再上传到 R2。
+5. **上传脚本环境变量位置**：`scripts/assets/upload-to-r2.js` 会优先读取仓库根目录 `.env`；如果不存在 `.env`，会自动回退读取 `.env.example`。排查“为什么本机能传/不能传”时，必须先确认当前 worktree 根目录这两个文件的实际情况。
+
 ---
 
 ## 🚀 关键图片预加载规范（criticalImageResolver）
