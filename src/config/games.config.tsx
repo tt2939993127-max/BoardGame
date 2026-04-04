@@ -13,8 +13,6 @@ import type {
     UgcPackageSummary,
 } from '../ugc/client/types';
 
-const isNativeAndroidAppRuntime = isNativeAndroidRuntime();
-
 export interface GameConfig extends GameManifestEntry {
     thumbnail: ReactNode;
     isUgc?: boolean;
@@ -30,6 +28,7 @@ const ugcGameIds = new Set<string>();
 let ugcLoadingPromise: Promise<void> | null = null;
 
 const buildGameRegistry = () => {
+    const isNativeAndroidAppRuntime = isNativeAndroidRuntime();
     const registry: Record<string, GameConfig> = {};
     for (const entry of GAME_CLIENT_MANIFEST) {
         const { manifest, thumbnail } = entry;
