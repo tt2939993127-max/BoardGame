@@ -118,6 +118,7 @@ export const GlobalHUD = () => {
         requestAndroidLiveUpdateCheck({
             interactive: true,
             applyMode: 'immediate',
+            initialImmediatePhase: 'checking',
         });
     };
 

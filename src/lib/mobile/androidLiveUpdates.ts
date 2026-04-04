@@ -162,6 +162,7 @@ export interface AndroidLiveUpdateStartOptions {
     onForceStateChange?: (state: AndroidForceUpdateState) => void;
     envOverride?: Record<string, string | boolean | undefined>;
     applyMode?: AndroidLiveUpdateApplyMode;
+    initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
 }
 
 const DEFAULT_OTA_CHANNEL = 'stable';
@@ -182,6 +183,7 @@ let listenerRegistrationPromise: Promise<PluginListenerHandle[] | null> | null =
 const liveUpdateRequestListeners = new Set<(request: {
     interactive?: boolean;
     applyMode?: AndroidLiveUpdateApplyMode;
+    initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
 }) => void>();
 const liveUpdateActivityListeners = new Set<(state: AndroidLiveUpdateActivityState) => void>();
 let liveUpdateActivityState: AndroidLiveUpdateActivityState = IDLE_LIVE_UPDATE_ACTIVITY_STATE;
@@ -705,9 +707,10 @@ export const registerAndroidLiveUpdateListeners = async () => {
 export const requestAndroidLiveUpdateCheck = (request: {
     interactive?: boolean;
     applyMode?: AndroidLiveUpdateApplyMode;
+    initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
 } = {}) => {
     if ((request.applyMode ?? 'immediate') === 'immediate') {
-        setImmediateActivityPhase('checking');
+        setImmediateActivityPhase(request.initialImmediatePhase ?? 'checking');
     }
     for (const listener of liveUpdateRequestListeners) {
         listener(request);
@@ -730,6 +733,7 @@ export const subscribeAndroidLiveUpdateRequests = (
     listener: (request: {
         interactive?: boolean;
         applyMode?: AndroidLiveUpdateApplyMode;
+        initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
     }) => void,
 ) => {
     liveUpdateRequestListeners.add(listener);
@@ -750,13 +754,16 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
             const { onForceStateChange } = options;
             const applyMode = options.applyMode ?? 'background';
             if (applyMode === 'immediate') {
+                const initialImmediatePhase = options.initialImmediatePhase ?? 'checking';
                 emitForceState(onForceStateChange, {
-                    phase: 'checking',
+                    phase: initialImmediatePhase,
                     blocking: true,
-                    title: '正在检查更新',
-                    message: '正在检查并准备应用新版本，请稍候。',
+                    title: initialImmediatePhase === 'downloading' ? '正在下载更新' : '正在检查更新',
+                    message: initialImmediatePhase === 'downloading'
+                        ? '正在下载并准备应用新版本，请稍候。'
+                        : '正在检查并准备应用新版本，请稍候。',
                 });
-                setImmediateActivityPhase('checking');
+                setImmediateActivityPhase(initialImmediatePhase);
             } else {
                 emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
             }

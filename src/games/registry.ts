@@ -2,6 +2,7 @@ import { GAME_CLIENT_MANIFEST } from './manifest.client';
 import type { GameImplementation } from '../core/types';
 import type { GameClientRuntimeModule } from './manifest.client.types';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
+import { isStaleChunkError, reloadForStaleChunkOnce } from '../lib/staleChunkReloadGuard';
 
 // 重新导出类型供外部使用
 export type { GameImplementation } from '../core/types';
@@ -102,6 +103,9 @@ export const loadGameImplementation = async (gameId: string): Promise<GameImplem
                 isTimeout ? 'warn' : 'error',
             );
             logMobileRuntimeCritical('GameRuntime', isTimeout ? 'load-timeout' : 'load-failed', payload);
+            if (typeof window !== 'undefined' && isStaleChunkError(error)) {
+                reloadForStaleChunkOnce(`game-runtime-load-failed:${gameId}`, window);
+            }
             throw error;
         })
         .finally(() => {

@@ -341,6 +341,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     // render 阶段计算出的待推送步骤（effect 中消费）
     const pendingPushRef = useRef<AnimStep[] | null>(null);
 
+    const releaseBufferedStep = useCallback((step: AnimStep) => {
+        if (!step.bufferKey) return;
+        damageBuffer.release([step.bufferKey]);
+    }, [damageBuffer]);
+
     /** 推入队列中的下一步，返回是否成功 */
     const pushNextStep = useCallback(() => {
         const next = pendingStepsRef.current.shift();
@@ -353,10 +358,11 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             fxImpactMapRef.current.set(fxId, { bufferKey: next.bufferKey, damage: next.damage });
             activeFxIdRef.current = fxId;
         } else {
-            // cue 未注册或被跳过，继续推进
+            // cue 未注册或被跳过：立即释放冻结，避免旧 HP 卡住。
+            releaseBufferedStep(next);
             pushNextStep();
         }
-    }, [fxBus]);
+    }, [fxBus, releaseBufferedStep]);
 
     /**
      * Board 层在 onEffectComplete 中调用：当前步骤动画完成后推进下一步。
@@ -442,12 +448,14 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             fxImpactMapRef.current.set(fxId, { bufferKey: first.bufferKey, damage: first.damage });
             activeFxIdRef.current = fxId;
         } else {
+            releaseBufferedStep(first);
             pushNextStep();
         }
     }, [
         eventStreamEntries,
         fxBus,
         pushNextStep,
+        releaseBufferedStep,
         damageBuffer,
     ]);
 

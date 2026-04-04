@@ -57,6 +57,7 @@ import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 import { useGameImplementationReady } from '../hooks/useGameImplementationReady';
 import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
+import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
     type AiResolution,
@@ -214,6 +215,9 @@ const OnlineAiSeatBridge = ({
                 matchID: matchId,
                 playerID: playerId,
                 credentials: seatCredentials[playerId],
+                onStateUpdate: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
                 onConnectionChange: () => {
                     setConnectionVersion((version) => version + 1);
                 },
@@ -399,6 +403,62 @@ const OnlineRoomConnectionLoading = ({
             gameId={gameId}
             activityKey={activityKey}
             suppressTimeout={Boolean(state)}
+        />
+    );
+};
+
+const OnlineGameHudBridge = ({
+    matchId,
+    gameId,
+    isHost,
+    credentials,
+    myPlayerId,
+    fallbackPlayers,
+    fallbackOpponentName,
+    onLeave,
+    onDestroy,
+    onForceExit,
+    isLoading,
+    seatControllers,
+}: {
+    matchId?: string;
+    gameId?: string;
+    isHost: boolean;
+    credentials?: string;
+    myPlayerId?: string | null;
+    fallbackPlayers: Array<{ id: number; name?: string; isConnected?: boolean }>;
+    fallbackOpponentName?: string | null;
+    onLeave?: () => void;
+    onDestroy?: () => void;
+    onForceExit?: () => void;
+    isLoading?: boolean;
+    seatControllers: Record<string, AiSeatController>;
+}) => {
+    const { matchPlayers, isConnected } = useGameClient();
+    const hudPresence = useMemo(() => resolveOnlineHudPresence({
+        fallbackPlayers,
+        transportPlayers: matchPlayers,
+        transportReady: isConnected && matchPlayers.length > 0,
+        myPlayerId,
+        seatControllers,
+    }), [fallbackPlayers, isConnected, matchPlayers, myPlayerId, seatControllers]);
+
+    return (
+        <GameHUD
+            mode="online"
+            matchId={matchId}
+            gameId={gameId}
+            isHost={isHost}
+            credentials={credentials}
+            myPlayerId={myPlayerId}
+            opponentName={hudPresence.opponentName ?? fallbackOpponentName ?? null}
+            opponentConnected={hudPresence.opponentConnected}
+            presenceReady={hudPresence.presenceReady}
+            players={hudPresence.players}
+            onLeave={onLeave}
+            onDestroy={onDestroy}
+            onForceExit={onForceExit}
+            isLoading={isLoading}
         />
     );
 };
@@ -1351,22 +1411,23 @@ export const MatchRoom = () => {
                 noIndex
             />
             <SmashUpOverlayProvider>
-                {/* 统一的游戏 HUD */}
-                <GameHUD
-                    mode={isTutorialRoute ? 'tutorial' : 'online'}
-                    matchId={matchId}
-                    gameId={gameId}
-                    isHost={matchStatus.isHost}
-                    credentials={credentials}
-                    myPlayerId={effectivePlayerID}
-                    opponentName={matchStatus.opponentName}
-                    opponentConnected={matchStatus.opponentConnected}
-                    players={matchStatus.players}
-                    onLeave={handleLeaveRoom}
-                    onDestroy={handleDestroyRoom}
-                    onForceExit={handleForceExitLocal}
-                    isLoading={isLeaving}
-                />
+                {isTutorialRoute && (
+                    <GameHUD
+                        mode="tutorial"
+                        matchId={matchId}
+                        gameId={gameId}
+                        isHost={matchStatus.isHost}
+                        credentials={credentials}
+                        myPlayerId={effectivePlayerID}
+                        opponentName={matchStatus.opponentName}
+                        opponentConnected={matchStatus.opponentConnected}
+                        players={matchStatus.players}
+                        onLeave={handleLeaveRoom}
+                        onDestroy={handleDestroyRoom}
+                        onForceExit={handleForceExitLocal}
+                        isLoading={isLeaving}
+                    />
+                )}
                 {isSpectatorRoute && !isTutorialRoute && (
                     <div
                         className="absolute inset-0 bg-transparent pointer-events-auto"
@@ -1428,6 +1489,20 @@ export const MatchRoom = () => {
                                                     }
                                                 }}
                                             >
+                                                <OnlineGameHudBridge
+                                                    matchId={matchId}
+                                                    gameId={gameId}
+                                                    isHost={matchStatus.isHost}
+                                                    credentials={credentials}
+                                                    myPlayerId={effectivePlayerID}
+                                                    fallbackPlayers={matchStatus.players}
+                                                    fallbackOpponentName={matchStatus.opponentName}
+                                                    onLeave={handleLeaveRoom}
+                                                    onDestroy={handleDestroyRoom}
+                                                    onForceExit={handleForceExitLocal}
+                                                    isLoading={isLeaving}
+                                                    seatControllers={onlineAiSeatControllers}
+                                                />
                                                 {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
                                                     <OnlineAiSeatBridge
                                                         server={getGameServerUrl()}

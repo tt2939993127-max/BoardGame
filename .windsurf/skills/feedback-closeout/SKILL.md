@@ -1,6 +1,6 @@
 ---
 name: feedback-closeout
-description: 用于 BoardGame 项目中批量处理后台反馈、开放反馈接口收口、重复反馈排重、真假 bug 分诊、并行修复与状态回写。用户提到“处理反馈”“收口反馈”“拉未关闭反馈”“批量 triage 反馈”“根据反馈修 bug”“关闭误报/重复反馈”“多 agent 并行处理反馈”时使用。
+description: 用于 BoardGame 项目中批量处理线上真实反馈、开放反馈接口收口、重复反馈排重、真假 bug 分诊、并行修复与状态回写。用户提到“处理反馈”“收口反馈”“拉未关闭反馈”“批量 triage 反馈”“根据反馈修 bug”“关闭误报/重复反馈”“多 agent 并行处理反馈”时使用。默认只处理线上真实反馈；本地开发库、本地导出快照、临时 JSON、网页壳接口返回的 HTML 只能作为诊断材料，不能默认当成正式回写目标。
 ---
 
 # 反馈收口
@@ -10,6 +10,24 @@ description: 用于 BoardGame 项目中批量处理后台反馈、开放反馈�
 这个 skill 负责把“看反馈”收敛成一条固定流水线：先从开放接口抓取未收口反馈，再排重、分类、挑出可并行的非冲突候选，最后由多个子 agent 分别判断真假 bug、修复代码并回写状态。
 
 优先使用本 skill 自带脚本，不要手工拼 URL、手工拷贝 JSON、手工维护重复组。
+
+## 默认目标
+
+- 默认目标必须是线上真实反馈。
+- 本地开发 API、本地 Mongo、本地导出目录、`feedbacks.repaired.json`、`temp/*.json`、网页域名上返回的 SPA HTML，都只能用于辅助诊断、证据整理和人审，不得默认视为“已经改到真实反馈状态”。
+- 只要要执行 `in_progress / resolved / closed` 这类正式状态回写，必须先确认当前连接的就是线上真实反馈源。
+- 如果当前拿到的是本地开发库、测试库、历史导出快照，必须明确标成“本地/离线视图”，禁止对外宣称“已回写”。
+
+### 回写前强制核对
+
+在第一次读或写状态前，必须先核对下面四件事：
+
+1. 当前目标是线上真实反馈，而不是本地开发库。
+2. 当前接口返回的是反馈 JSON，而不是前端 SPA fallback HTML。
+3. 当前样本数量或目标反馈 ID 与用户给的导出/列表能对上。
+4. 如果发现 HTTP 接口并不指向真实线上数据，才允许切换到用户已批准的其他真实写入口，例如生产机上的 Mongo 直连脚本。
+
+如果上面任一项不能确认，就先停在分诊和证据阶段，不要写状态。
 
 ## 先读
 
@@ -22,17 +40,19 @@ description: 用于 BoardGame 项目中批量处理后台反馈、开放反馈�
 
 ### 1. 拉取并排重
 
-先运行：
+先确认 `--base-url` 真的是线上真实反馈接口，再运行：
 
 ```bash
-node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-url http://127.0.0.1:3000 --slots 4
+node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-url <真实反馈接口基址> --slots 4
 ```
 
 如果要把挑出的并行候选立即认领成 `in_progress`：
 
 ```bash
-node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-url http://127.0.0.1:3000 --slots 4 --mark-in-progress
+node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-url <真实反馈接口基址> --slots 4 --mark-in-progress
 ```
+
+禁止把 `http://127.0.0.1:*` 当成默认正式目标，除非用户明确说这次就是要处理本地测试反馈。
 
 脚本会：
 
@@ -100,19 +120,27 @@ node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-
 使用：
 
 ```bash
-node .windsurf/skills/feedback-closeout/scripts/update-feedback-status.mjs <feedbackId> <status> --base-url http://127.0.0.1:3000
+node .windsurf/skills/feedback-closeout/scripts/update-feedback-status.mjs <feedbackId> <status> --base-url <真实反馈接口基址>
 ```
 
 收口代表项并顺带关闭重复项：
 
 ```bash
-node .windsurf/skills/feedback-closeout/scripts/finalize-feedback-group.mjs temp/feedback-closeout/<timestamp>/summary.json <feedbackId> resolved --base-url http://127.0.0.1:3000
+node .windsurf/skills/feedback-closeout/scripts/finalize-feedback-group.mjs temp/feedback-closeout/<timestamp>/summary.json <feedbackId> resolved --base-url <真实反馈接口基址>
 ```
+
+补充规则：
+
+- 如果开放反馈接口实际上指向本地开发库或空库，禁止因为“脚本能通”就把本地结果当成线上已回写。
+- 如果线上 HTTP 接口不可用，但用户已经允许使用生产机直连数据库作为真实写入口，可以改走生产机脚本；此时必须在交付里明确写明“本轮不是通过 HTTP 接口，而是通过生产机真实数据源回写”。
+- 未经用户明确允许，不要擅自使用生产 SSH、生产数据库直连或其他越过业务接口的写路径。
 
 ### 5. 交付口径
 
 最终汇报必须明确：
 
+- 这次处理的是不是线上真实反馈
+- 实际回写走的是 HTTP 真实接口，还是其他经确认的真实写入口
 - 总共抓到了多少条未收口反馈
 - 归并成多少个代表项
 - 哪些被判定为重复并关闭

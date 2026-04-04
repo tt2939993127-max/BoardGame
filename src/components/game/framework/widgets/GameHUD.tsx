@@ -49,6 +49,7 @@ interface GameHUDProps {
     myPlayerId?: string | null;
     opponentName?: string | null;
     opponentConnected?: boolean;
+    presenceReady?: boolean;
     players?: Array<{
         id: number;
         name?: string;
@@ -102,6 +103,7 @@ export const GameHUD = ({
     myPlayerId,
     opponentName,
     opponentConnected,
+    presenceReady = true,
     players,
     onLeave,
     onDestroy,
@@ -469,7 +471,13 @@ export const GameHUD = ({
                                         return (
                                             <div key={p.id} className="flex items-center gap-1.5">
                                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                                    isEmpty ? 'bg-white/20' : p.isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'
+                                                    isEmpty
+                                                        ? 'bg-white/20'
+                                                        : p.isConnected === undefined
+                                                            ? 'bg-white/30'
+                                                            : p.isConnected
+                                                                ? 'bg-green-500'
+                                                                : 'bg-red-500 animate-pulse'
                                                 }`} />
                                                 <span className={`truncate ${isSelf ? 'text-white/80' : 'text-white/60'}`}>
                                                     {isEmpty
@@ -578,7 +586,13 @@ export const GameHUD = ({
                                     {players.map(p => (
                                         <div key={p.id} className="flex items-center justify-between bg-black/40 px-3 py-2 rounded border border-white/5">
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${p.isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
+                                                <div className={`w-2 h-2 rounded-full ${
+                                                    p.isConnected === undefined
+                                                        ? 'bg-white/30'
+                                                        : p.isConnected
+                                                            ? 'bg-green-500'
+                                                            : 'bg-red-500 animate-pulse'
+                                                }`} />
                                                 <span className="text-sm font-medium">{p.name || t('hud.status.player', { id: p.id })}</span>
                                             </div>
                                             {String(p.id) === String(myPlayerId) && (
@@ -901,7 +915,7 @@ export const GameHUD = ({
     return (
         <>
             {/* 对手状态提示（仅联机模式，加载完成后） */}
-            {isOnline && !isSpectator && opponentConnected !== undefined && (
+            {isOnline && presenceReady && !isSpectator && opponentConnected !== undefined && (
                 <OpponentOfflineBanner
                     connected={opponentConnected}
                     name={opponentName}

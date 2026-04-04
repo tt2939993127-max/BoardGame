@@ -166,14 +166,32 @@
   - `wizard_portal_order` 风格链式选择中，第二步即使保留旧 `options`，AI 也会通过 `optionsGenerator + continuationContext.remaining` 刷新到 `deck-a2/deck-a3`，不再重复选 `deck-a1`。
   - `responseWindow` 打开时，AI 在 `reaction_queue_choose_next -> wizard_portal_order -> wizard_portal_order -> reaction_queue_choose_next` 的三段主动选择链里，会持续优先消费当前交互，而不是退回窗口动作。
 
+### 10. DiceThrone 在线 AI 隐藏 `multistep-choice` 缺少“多命令 batch”真实房间证据
+
+- 旧结论：`未修复`
+- 新结论：`已修复`
+- 回归：
+  - `e2e/dicethrone-simple-start.e2e.ts:1170`
+- 证据文档：
+  - `evidence/dicethrone-online-ai-hidden-multistep-e2e-test.md`
+- 证据截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-AI-持有隐藏-multistep-choice-时应-batch-提交多条-MODIFY_DIE-并完成私有结算\13-online-ai-hidden-multistep-before-resolve.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-AI-持有隐藏-multistep-choice-时应-batch-提交多条-MODIFY_DIE-并完成私有结算\14-online-ai-hidden-after.png`
+- 人工观察：
+  - `before-resolve` 图里房主视角已经进入 `强掷攻击阶段`，右侧骰列是混合结果，但界面上没有任何属于房主的选择面板或确认层，符合“隐藏交互只属于 AI seat”。
+  - `after` 图里房主界面仍没有被弹出交互，但右侧骰列已经整体切换为统一结果，说明 AI 的多条 `MODIFY_DIE` 已通过在线 batch 实际落到权威状态。
+  - 同一条 E2E 还直接断言了服务端原始状态：注入后交互属于 `playerId='1'` 且 `selectCount=2`，处理后 `sys.interaction.current` 清空、前两颗骰子值变成 `[6, 6]`，不是单纯 UI 自己收口。
+
 ## 仍然保留的风险
 
 ### 风险 1
 
-- 旧表述失效：`SmashUp` 的“AI seat 持有隐藏 simple-choice 后自动 batch 响应并推进状态”现已由 `e2e/smashup-phase-transition-simple.e2e.ts:998` 覆盖。
+- 旧表述失效：
+  - `SmashUp` 的“AI seat 持有隐藏 simple-choice 后自动 batch 响应并推进状态”现已由 `e2e/smashup-phase-transition-simple.e2e.ts:998` 覆盖。
+  - `DiceThrone` 的“AI seat 持有隐藏 multistep-choice 后 batch 提交多条命令”现已由 `e2e/dicethrone-simple-start.e2e.ts:1170` 覆盖。
 - 新风险：
-  - 目前还没有单独的在线 E2E 去覆盖“一个 AI 动作包含 2 条以上命令”的真实 batch 场景。
   - `batch:rejected` 与 retry 分支目前仍主要依赖页面/transport 层回归，没有真实在线房间的拒绝链路证据。
+  - 目前也还没有单独的真实联机用例覆盖“第一轮 batch 被拒后，AI 自动解锁并在第二轮 retry 成功”的整条线上链。
 
 ### 风险 2
 
@@ -209,6 +227,8 @@
   - 结果：`15 passed`
 - `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 npm run test:e2e:ci:file -- e2e/smashup-phase-transition-simple.e2e.ts "在线 AI 持有隐藏交互时应自动 batch 响应并推进状态"`
   - 结果：`1 passed`
+- `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online AI 持有隐藏 multistep-choice 时应 batch 提交多条 MODIFY_DIE 并完成私有结算"`
+  - 结果：`1 passed`
 - `npm run typecheck`
   - 结果：通过
 
@@ -221,3 +241,4 @@
 - 2026-04-04 修订：补齐 `SmashUp` 在线 AI 隐藏交互的真实房间 E2E，并用截图确认“人类不可见、AI 自动处理、基地状态已推进”。
 - 2026-04-04 修订：补齐 `SmashUp` 链式 `simple-choice` 的 remaining 刷新回归，以及 `responseWindow` 穿插三段主动选择链的 AI 决策回归。
 - 2026-04-04 修订：补齐 `LocalGameProvider` 的本地 AI 自动重试集成回归，确认命令被领域拒绝后仍会在 30ms 解锁后自动再跑一轮。
+- 2026-04-04 修订：补齐 `DiceThrone` 在线 AI 隐藏 `multistep-choice` 的真实房间 E2E，确认私有多步交互会通过 batch 提交两条 `MODIFY_DIE` 并在房主视角无泄漏地完成结算。

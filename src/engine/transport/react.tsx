@@ -128,7 +128,7 @@ export function shouldRetryLocalAiAttemptAfterDispatch(args: {
     nextState: MatchState<unknown>;
 }): boolean {
     if (args.cancelled) return false;
-    if (args.activeAttemptKey !== args.resolutionAttemptKey) return false;
+    if (args.activeAttemptKey !== null && args.activeAttemptKey !== args.resolutionAttemptKey) return false;
     return buildAiProgressMarker(args.nextState) === args.markerBeforeDispatch;
 }
 

@@ -156,39 +156,26 @@ export const CreateRoomModal = ({
                     Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
                 ),
             );
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (cancelled) return;
-            setRoomName('');
-            setNumPlayers(nextPreferences.numPlayers);
-            setTtlSeconds(0);
-            setPassword('');
-            setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
-            setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
-            setSeatControllers(nextSeatControllers);
-            setSetupSelections(nextPreferences.setupSelections);
-        });
-        return () => {
-            cancelled = true;
-        };
+
+        setRoomName('');
+        setNumPlayers(nextPreferences.numPlayers);
+        setTtlSeconds(0);
+        setPassword('');
+        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
+        setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
+        setSeatControllers(nextSeatControllers);
+        setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
 
     useEffect(() => {
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (cancelled) return;
-            setSeatControllers((current) => {
-                const normalized = normalizeLocalMatchPreferences(gameManifest, {
-                    numPlayers,
-                    seatControllers: current,
-                    setupSelections,
-                }).seatControllers;
-                return forceHumanOwnerSeat(normalized);
-            });
+        setSeatControllers((current) => {
+            const normalized = normalizeLocalMatchPreferences(gameManifest, {
+                numPlayers,
+                seatControllers: current,
+                setupSelections,
+            }).seatControllers;
+            return forceHumanOwnerSeat(normalized);
         });
-        return () => {
-            cancelled = true;
-        };
     }, [gameManifest, numPlayers, setupSelections]);
 
     const handleToggleAiEnabled = () => {
