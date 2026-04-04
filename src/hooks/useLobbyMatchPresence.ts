@@ -34,9 +34,7 @@ export const useLobbyMatchPresence = ({
         const next = matchId ?? null;
         matchIdRef.current = next;
         if (previous !== next) {
-            queueMicrotask(() => {
-                setHasSeen(false);
-            });
+            setHasSeen(false);
         }
         prevMatchIdRef.current = next;
         if (!next) {
