@@ -50,6 +50,7 @@ import {
 } from '../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import { RefreshCw } from 'lucide-react';
+import { AudioManager } from '../lib/audio/AudioManager';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
@@ -183,6 +184,10 @@ export const Home = () => {
     }, [suppressedOwnerMatchId]);
 
     useEffect(() => {
+        AudioManager.stopBgm();
+    }, []);
+
+    useEffect(() => {
         if (!isNativeAndroid) {
             return;
         }
@@ -271,6 +276,7 @@ export const Home = () => {
             requestAndroidLiveUpdateCheck({
                 interactive: true,
                 applyMode: 'immediate',
+                initialImmediatePhase: otaVersionMismatch ? 'downloading' : 'checking',
             });
             return;
         }
