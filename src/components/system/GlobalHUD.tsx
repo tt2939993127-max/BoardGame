@@ -5,8 +5,10 @@ import { useModalStack } from '../../contexts/ModalStackContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { FabMenu, type FabAction } from './FabMenu';
-import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize, Download } from 'lucide-react';
+import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize, Download, RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { requestAndroidNativeUpdateCheck } from '../../lib/mobile/androidNativeUpdates';
+import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 const HUD_MODAL_NS = 'hud';
 const LazyAudioProvider = lazy(() => import('../../contexts/AudioContext').then(m => ({ default: m.AudioProvider })));
@@ -20,7 +22,7 @@ const WEB_APP_DOWNLOAD_URL = typeof import.meta.env.VITE_ANDROID_APP_DOWNLOAD_UR
     : '';
 
 export const GlobalHUD = () => {
-    const isAndroidShellBuild = import.meta.env.MODE === 'android';
+    const isNativeAndroid = isNativeAndroidRuntime();
     const { t } = useTranslation('game');
     const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const { openModal, closeModal, closeByNamespace } = useModalStack();
@@ -90,6 +92,10 @@ export const GlobalHUD = () => {
         }
     };
 
+    const handleCheckAppUpdate = () => {
+        requestAndroidNativeUpdateCheck({ interactive: true });
+    };
+
     useEffect(() => {
         if (isGamePage) {
             return;
@@ -138,12 +144,19 @@ export const GlobalHUD = () => {
     });
 
     // 2. 网页端下载 App
-    if (!isAndroidShellBuild) {
+    if (!isNativeAndroid) {
         items.push({
             id: 'download-app',
             icon: <Download size={20} />,
             label: t('hud.actions.downloadApp'),
             onClick: handleOpenAppDownload,
+        });
+    } else {
+        items.push({
+            id: 'check-update',
+            icon: <RefreshCw size={20} />,
+            label: t('hud.actions.checkUpdate'),
+            onClick: handleCheckAppUpdate,
         });
     }
 

@@ -45,11 +45,12 @@ import {
     readAndroidLiveUpdateSnapshot,
     type AndroidLiveUpdateSnapshot,
 } from '../lib/mobile/androidLiveUpdates';
+import { isAndroidShellBuildMode, isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
 const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
-const isAndroidShellBuild = import.meta.env.MODE === 'android';
+const isAndroidShellBuild = isAndroidShellBuildMode();
 
 type HomeModalErrorBoundaryProps = {
     children: ReactNode;
@@ -154,7 +155,7 @@ export const Home = () => {
     }, [suppressedOwnerMatchId]);
 
     useEffect(() => {
-        if (!isAndroidShellBuild) {
+        if (!isNativeAndroidRuntime()) {
             return;
         }
 

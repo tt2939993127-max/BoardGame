@@ -19,6 +19,7 @@ import { Toaster } from 'react-hot-toast';
 import { GlobalErrorBoundary } from './components/system/GlobalErrorBoundary';
 import { BrowserCompatibilityGate } from './components/system/BrowserCompatibilityGate';
 import { AndroidLiveUpdateManager } from './components/system/AndroidLiveUpdateManager';
+import { AndroidNativeUpdateManager } from './components/system/AndroidNativeUpdateManager';
 import { AndroidBackNavigationBridge } from './components/system/AndroidBackNavigationBridge';
 import { GamePageRescueGate } from './components/system/GamePageRescueGate';
 import { InteractionGuardProvider } from './components/game/framework/InteractionGuard';
@@ -30,11 +31,12 @@ import {
   resolvePlayRouteFallbackLobbyPath,
   shouldShowPlayRouteLoadingPrompt,
 } from './lib/gameRouteFallback';
+import { isAndroidShellBuildMode, isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
 
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
 
-const isAndroidShellBuild = import.meta.env.MODE === 'android';
+const isAndroidShellBuild = isAndroidShellBuildMode();
 
 // 页面级懒加载：首页不需要加载 MatchRoom 的引擎/传输层/教程系统代码
 const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
@@ -176,6 +178,7 @@ const RouteLoadingFallback = ({ title }: { title?: string }) => {
 const AppContent = () => {
   const { t } = useTranslation('lobby');
   const { user } = useAuth();
+  const isNativeAndroid = isNativeAndroidRuntime();
   
   // Token 自动刷新
   useTokenRefresh();
@@ -319,7 +322,7 @@ const AppContent = () => {
                         <DevMobileEvidenceCaptureAgent />
                       </React.Suspense>
                     ) : null}
-                    <AndroidBackNavigationBridge />
+                    {isNativeAndroid ? <AndroidBackNavigationBridge /> : null}
                     <ViewportDebugProbe />
                     <React.Suspense fallback={null}>
                       <LazyGlobalHUD />
@@ -331,7 +334,8 @@ const AppContent = () => {
                       <LazyToastViewport />
                     </React.Suspense>
                     <Toaster />
-                    <AndroidLiveUpdateManager />
+                    {isNativeAndroid ? <AndroidNativeUpdateManager /> : null}
+                    {isNativeAndroid ? <AndroidLiveUpdateManager /> : null}
                     <EngineNotificationListener />
                     <SocketCompatibilityToastListener />
                     <GamePageRescueGate />

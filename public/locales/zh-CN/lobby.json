@@ -171,6 +171,38 @@
       "retryAction": "重新检查"
     }
   },
+  "nativeUpdate": {
+    "gate": {
+      "eyebrow": "安装新版 App",
+      "checkingTitle": "正在准备安装包",
+      "checkingDescription": "正在检查并准备新的 App 安装包，请稍候。",
+      "downloadingTitle": "正在下载安装包",
+      "downloadingDescription": "正在下载新的 App 安装包，完成后会自动拉起系统安装界面。",
+      "verifyingTitle": "正在校验安装包",
+      "verifyingDescription": "安装包已下载完成，正在校验完整性。",
+      "permissionTitle": "需要安装授权",
+      "permissionDescription": "请先允许当前 App 安装未知应用，返回后再继续安装。",
+      "installingTitle": "正在打开系统安装器",
+      "installingDescription": "系统安装界面已经准备就绪，请按系统提示完成覆盖安装。",
+      "errorTitle": "安装包更新失败",
+      "errorDescription": "下载安装包或启动安装失败，请重试。",
+      "targetVersion": "目标 App 版本",
+      "progressLabel": "下载进度",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "准备中",
+      "openSettingsAction": "打开授权页",
+      "continueInstallAction": "继续安装",
+      "retryAction": "重新下载"
+    },
+    "toast": {
+      "disabled": "当前 Android 壳未启用原生更新配置。",
+      "upToDate": "当前已经是最新 App 版本。",
+      "available": "发现新的 App 版本 {{version}}，可直接开始安装。",
+      "installerOpened": "系统安装界面已打开，请按提示完成更新。",
+      "openSettingsFailed": "打开安装授权页失败，请稍后重试。",
+      "missingPreparedUpdate": "没有可继续安装的已下载更新包，请重新下载。"
+    }
+  },
   "gameDetails": {
     "description": "经典策略游戏。连成3个符号即可获胜。"
   },

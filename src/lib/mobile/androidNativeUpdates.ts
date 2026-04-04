@@ -1,0 +1,367 @@
+import { Capacitor, registerPlugin } from '@capacitor/core';
+import { compareVersion } from './androidLiveUpdates';
+import { logMobileRuntime, logMobileRuntimeCritical } from './mobileRuntimeDebug';
+import { isNativeAndroidRuntime } from './androidRuntime';
+
+type PluginListenerHandle = {
+    remove(): Promise<void>;
+};
+
+type NativeAppUpdatePlugin = {
+    getAppInfo(): Promise<{
+        packageName?: string;
+        versionName?: string;
+        versionCode?: number;
+        canRequestPackageInstalls?: boolean;
+    }>;
+    prepareUpdateInstall(options: {
+        version: string;
+        url: string;
+        checksum?: string;
+    }): Promise<{
+        status?: 'permission-required' | 'installer-launched';
+        version?: string;
+        apkFilePath?: string;
+    }>;
+    installPreparedUpdate(options: {
+        version: string;
+    }): Promise<{
+        status?: 'permission-required' | 'installer-launched';
+        version?: string;
+        apkFilePath?: string;
+    }>;
+    openUnknownSourcesSettings(): Promise<void>;
+    addListener(
+        eventName: 'updateStateChanged',
+        listenerFunc: (event: {
+            version?: string;
+            status?: 'queued' | 'downloading' | 'verifying' | 'permission-required' | 'installing' | 'error';
+            progressPercent?: number;
+            progressMode?: 'determinate' | 'indeterminate';
+            errorMessage?: string;
+            apkFilePath?: string;
+        }) => void,
+    ): Promise<PluginListenerHandle>;
+};
+
+export interface AndroidNativeUpdateConfig {
+    enabled: boolean;
+    manifestUrl: string;
+    channel: string;
+}
+
+export interface AndroidNativeUpdateManifest {
+    version: string;
+    versionCode?: number;
+    url: string;
+    checksum?: string;
+    channel?: string;
+    notes?: string;
+    publishedAt?: string;
+    forceUpdate?: boolean;
+    forceUpdateTitle?: string;
+    forceUpdateMessage?: string;
+}
+
+export interface AndroidAppInfo {
+    packageName?: string;
+    versionName: string;
+    versionCode?: number;
+    canRequestPackageInstalls: boolean;
+}
+
+export interface AndroidNativeUpdateAvailability {
+    available: boolean;
+    reason?: 'disabled' | 'not-native' | 'manifest-missing' | 'up-to-date';
+    manifest?: AndroidNativeUpdateManifest;
+    appInfo?: AndroidAppInfo;
+}
+
+export type AndroidNativeUpdatePhase =
+    | 'hidden'
+    | 'checking'
+    | 'downloading'
+    | 'verifying'
+    | 'permission-required'
+    | 'installing'
+    | 'error';
+
+export interface AndroidNativeUpdateState {
+    phase: AndroidNativeUpdatePhase;
+    blocking: boolean;
+    version?: string;
+    progressPercent?: number;
+    title?: string;
+    message?: string;
+    reason?: string;
+}
+
+type NativeUpdateRequest = {
+    interactive?: boolean;
+};
+
+const DEFAULT_NATIVE_UPDATE_CHANNEL = 'stable';
+const nativeUpdateRequestListeners = new Set<(request: NativeUpdateRequest) => void>();
+const nativePlugin = registerPlugin<NativeAppUpdatePlugin>('AppUpdate');
+let nativePluginLoader: NativeAppUpdatePlugin | null | undefined;
+
+export const HIDDEN_ANDROID_NATIVE_UPDATE_STATE: AndroidNativeUpdateState = {
+    phase: 'hidden',
+    blocking: false,
+};
+
+const clampPercent = (value: number | undefined) => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return undefined;
+    }
+    return Math.max(0, Math.min(100, Math.round(value)));
+};
+
+const parseBooleanEnv = (value: string | boolean | undefined) => {
+    if (typeof value === 'boolean') return value;
+    return /^(1|true|yes|on)$/i.test((value || '').trim());
+};
+
+const isAbsoluteHttpUrl = (value: string) => /^https?:\/\//i.test(value);
+
+const getNativePlugin = (): NativeAppUpdatePlugin | null => {
+    if (nativePluginLoader !== undefined) {
+        return nativePluginLoader;
+    }
+
+    if (!isNativeAndroidRuntime()) {
+        nativePluginLoader = null;
+        return nativePluginLoader;
+    }
+
+    nativePluginLoader = nativePlugin;
+    return nativePluginLoader;
+};
+
+export const readAndroidNativeUpdateConfig = (env: Partial<ImportMetaEnv> = import.meta.env): AndroidNativeUpdateConfig => {
+    const manifestUrl = typeof env.VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL === 'string'
+        ? env.VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL.trim()
+        : '';
+
+    return {
+        enabled: parseBooleanEnv(env.VITE_ANDROID_NATIVE_UPDATE_ENABLED) && isAbsoluteHttpUrl(manifestUrl),
+        manifestUrl,
+        channel: typeof env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL === 'string' && env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL.trim()
+            ? env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL.trim()
+            : DEFAULT_NATIVE_UPDATE_CHANNEL,
+    };
+};
+
+export const readAndroidAppInfo = async (): Promise<AndroidAppInfo | null> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return null;
+    }
+
+    try {
+        const result = await plugin.getAppInfo();
+        return {
+            packageName: typeof result.packageName === 'string' && result.packageName.trim()
+                ? result.packageName.trim()
+                : undefined,
+            versionName: typeof result.versionName === 'string' && result.versionName.trim()
+                ? result.versionName.trim()
+                : '0.0.0',
+            versionCode: typeof result.versionCode === 'number' && Number.isFinite(result.versionCode)
+                ? result.versionCode
+                : undefined,
+            canRequestPackageInstalls: result.canRequestPackageInstalls === true,
+        };
+    } catch (error) {
+        logMobileRuntimeCritical('NativeUpdate', 'app-info-read-failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
+export const fetchAndroidNativeUpdateManifest = async (
+    manifestUrl: string,
+): Promise<AndroidNativeUpdateManifest | null> => {
+    if (!isAbsoluteHttpUrl(manifestUrl)) {
+        return null;
+    }
+
+    try {
+        const response = await fetch(manifestUrl, {
+            method: 'GET',
+            cache: 'no-store',
+            headers: {
+                Accept: 'application/json',
+            },
+        });
+
+        if (response.status === 404) {
+            logMobileRuntime('NativeUpdate', 'manifest-missing', { manifestUrl }, 'warn');
+            return null;
+        }
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+
+        const data = await response.json() as Record<string, unknown>;
+        const version = typeof data.version === 'string' ? data.version.trim() : '';
+        const url = typeof data.url === 'string' ? data.url.trim() : '';
+        if (!version || !isAbsoluteHttpUrl(url)) {
+            return null;
+        }
+
+        return {
+            version,
+            url,
+            versionCode: typeof data.versionCode === 'number' && Number.isFinite(data.versionCode)
+                ? data.versionCode
+                : undefined,
+            checksum: typeof data.checksum === 'string' && data.checksum.trim() ? data.checksum.trim() : undefined,
+            channel: typeof data.channel === 'string' && data.channel.trim() ? data.channel.trim() : undefined,
+            notes: typeof data.notes === 'string' && data.notes.trim() ? data.notes.trim() : undefined,
+            publishedAt: typeof data.publishedAt === 'string' && data.publishedAt.trim() ? data.publishedAt.trim() : undefined,
+            forceUpdate: data.forceUpdate === true,
+            forceUpdateTitle: typeof data.forceUpdateTitle === 'string' && data.forceUpdateTitle.trim()
+                ? data.forceUpdateTitle.trim()
+                : undefined,
+            forceUpdateMessage: typeof data.forceUpdateMessage === 'string' && data.forceUpdateMessage.trim()
+                ? data.forceUpdateMessage.trim()
+                : undefined,
+        };
+    } catch (error) {
+        logMobileRuntimeCritical('NativeUpdate', 'manifest-read-failed', {
+            manifestUrl,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
+export const isAndroidNativeUpdateAvailable = (
+    manifest: AndroidNativeUpdateManifest,
+    appInfo: AndroidAppInfo,
+) => {
+    if (typeof manifest.versionCode === 'number' && typeof appInfo.versionCode === 'number') {
+        return manifest.versionCode > appInfo.versionCode;
+    }
+    return compareVersion(manifest.version, appInfo.versionName) > 0;
+};
+
+export const checkAndroidNativeUpdateAvailability = async (): Promise<AndroidNativeUpdateAvailability> => {
+    const config = readAndroidNativeUpdateConfig();
+    if (!config.enabled) {
+        return { available: false, reason: 'disabled' };
+    }
+
+    const appInfo = await readAndroidAppInfo();
+    if (!appInfo) {
+        return { available: false, reason: 'not-native' };
+    }
+
+    const manifest = await fetchAndroidNativeUpdateManifest(config.manifestUrl);
+    if (!manifest) {
+        return { available: false, reason: 'manifest-missing', appInfo };
+    }
+
+    if (!isAndroidNativeUpdateAvailable(manifest, appInfo)) {
+        return { available: false, reason: 'up-to-date', manifest, appInfo };
+    }
+
+    return {
+        available: true,
+        manifest,
+        appInfo,
+    };
+};
+
+export const prepareAndroidNativeUpdateInstall = async (manifest: AndroidNativeUpdateManifest) => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        throw new Error('当前环境不支持原生更新安装');
+    }
+    return plugin.prepareUpdateInstall({
+        version: manifest.version,
+        url: manifest.url,
+        checksum: manifest.checksum,
+    });
+};
+
+export const continueAndroidNativeUpdateInstall = async (version: string) => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        throw new Error('当前环境不支持原生更新安装');
+    }
+    return plugin.installPreparedUpdate({ version });
+};
+
+export const openAndroidUnknownSourcesSettings = async () => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        throw new Error('当前环境不支持原生更新安装');
+    }
+    return plugin.openUnknownSourcesSettings();
+};
+
+export const subscribeAndroidNativeUpdateState = async (
+    listener: (event: {
+        version?: string;
+        status?: 'queued' | 'downloading' | 'verifying' | 'permission-required' | 'installing' | 'error';
+        progressPercent?: number;
+        progressMode?: 'determinate' | 'indeterminate';
+        errorMessage?: string;
+        apkFilePath?: string;
+    }) => void,
+): Promise<PluginListenerHandle | null> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return null;
+    }
+    return plugin.addListener('updateStateChanged', listener);
+};
+
+export const mapNativeUpdateEventToState = (
+    event: {
+        version?: string;
+        status?: 'queued' | 'downloading' | 'verifying' | 'permission-required' | 'installing' | 'error';
+        progressPercent?: number;
+        errorMessage?: string;
+    },
+    options: {
+        blocking: boolean;
+        title?: string;
+        message?: string;
+    },
+): AndroidNativeUpdateState => {
+    const phaseMap: Record<string, AndroidNativeUpdatePhase> = {
+        queued: 'checking',
+        downloading: 'downloading',
+        verifying: 'verifying',
+        'permission-required': 'permission-required',
+        installing: 'installing',
+        error: 'error',
+    };
+
+    return {
+        phase: phaseMap[event.status || ''] || 'hidden',
+        blocking: options.blocking,
+        version: event.version,
+        progressPercent: clampPercent(event.progressPercent),
+        title: options.title,
+        message: options.message,
+        reason: event.errorMessage,
+    };
+};
+
+export const requestAndroidNativeUpdateCheck = (request: NativeUpdateRequest = {}) => {
+    for (const listener of nativeUpdateRequestListeners) {
+        listener(request);
+    }
+};
+
+export const subscribeAndroidNativeUpdateRequests = (listener: (request: NativeUpdateRequest) => void) => {
+    nativeUpdateRequestListeners.add(listener);
+    return () => {
+        nativeUpdateRequestListeners.delete(listener);
+    };
+};

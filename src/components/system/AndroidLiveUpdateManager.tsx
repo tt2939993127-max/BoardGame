@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { AndroidForceUpdateGate } from './AndroidForceUpdateGate';
+import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import {
     type AndroidForceUpdateState,
     registerAndroidLiveUpdateListeners,
@@ -9,12 +10,17 @@ import {
 
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
+    const isNativeAndroid = isNativeAndroidRuntime();
     const [forceUpdateState, setForceUpdateState] = useState<AndroidForceUpdateState>({
         phase: 'hidden',
         blocking: false,
     });
 
     useEffect(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
         let disposed = false;
 
         void registerAndroidLiveUpdateListeners();
@@ -55,7 +61,11 @@ export const AndroidLiveUpdateManager = () => {
         return () => {
             disposed = true;
         };
-    }, [toast]);
+    }, [isNativeAndroid, toast]);
+
+    if (!isNativeAndroid) {
+        return null;
+    }
 
     return (
         <AndroidForceUpdateGate

@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { useRef, useState, useEffect, useMemo, useCallback, useEffectEvent, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -240,10 +240,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const [showAuthorInfoModal, setShowAuthorInfoModal] = useState(false);
     const [matchEntryLoadingPhase, setMatchEntryLoadingPhase] = useState<MatchEntryLoadingPhase | null>(null);
 
-    const getGuestId = () => getOrCreateGuestId();
-    const getGuestName = () => resolveGuestName(t, getGuestId());
-    const getOwnerKey = () => resolveOwnerKey(user?.id, getGuestId());
-    const getOwnerType = () => resolveOwnerType(user?.id);
+    const getGuestId = useCallback(() => getOrCreateGuestId(), []);
+    const getGuestName = useCallback(() => resolveGuestName(t, getGuestId()), [getGuestId, t]);
+    const getOwnerKey = useCallback(() => resolveOwnerKey(user?.id, getGuestId()), [getGuestId, user?.id]);
+    const getOwnerType = useCallback(() => resolveOwnerType(user?.id), [user?.id]);
     const matchEntryLoadingTitle = matchEntryLoadingPhase === 'creating'
         ? t('matchRoom.title.creating')
         : t('matchRoom.title.joining');
@@ -415,7 +415,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             return ownerActive.matchID;
         }
         return null;
-    }, [localStorageTick, user]);
+    }, [localStorageTick, getOwnerKey]);
 
     // 同步房主激活对局与房间列表（避免状态滞后或丢失）
     useEffect(() => {
@@ -443,7 +443,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         if (ownerActive?.matchID && ownerActive.ownerKey === ownerKey) {
             clearOwnerActiveMatch(ownerActive.matchID);
         }
-    }, [rooms, user, gameId]);
+    }, [rooms, gameId, getOwnerKey, getOwnerType]);
 
 
     const handleOpenMobilePackageInstall = useCallback(() => {
@@ -469,6 +469,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         gameId,
         isAppUpdateRequiredForMobileGame,
         isPackageManagedMobileGame,
+        pendingPackageInstall,
         packageInstallCardState.status,
         requestGamePackageInstall,
     ]);
@@ -987,7 +988,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         void handleJoinRoom(matchID, overrideGameName);
     };
 
-    const handleConfirmJoin = async () => {
+    const handleConfirmJoin = useEffectEvent(async () => {
         if (!pendingJoin) return;
         const nextJoin = pendingJoin;
         const activeMatchID = myActiveRoomMatchID;
@@ -1023,11 +1024,11 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         setPendingJoin(null);
         void handleJoinRoom(nextJoin.matchID, nextJoin.gameName);
-    };
+    });
 
-    const handleCancelJoin = () => {
+    const handleCancelJoin = useEffectEvent(() => {
         setPendingJoin(null);
-    };
+    });
 
     const handleForceExitLocal = (matchID: string) => {
         suppressOwnerActiveMatch(matchID);
@@ -1177,7 +1178,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             closeModal(confirmModalIdRef.current);
             confirmModalIdRef.current = null;
         }
-    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction, isConfirmingAction]);
+    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction, isConfirmingAction, t]);
 
     useEffect(() => {
         if (pendingJoin && !confirmJoinModalIdRef.current) {
@@ -1208,7 +1209,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             closeModal(confirmJoinModalIdRef.current);
             confirmJoinModalIdRef.current = null;
         }
-    }, [closeModal, handleCancelJoin, handleConfirmJoin, openModal, pendingJoin, t]);
+    }, [closeModal, openModal, pendingJoin, t]);
 
     useEffect(() => {
         return () => {
@@ -1228,7 +1229,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         if (rooms.length === 0) return [];
 
         // 预先获取缓存凭据索引，避免在映射中反复查询本地存储
-        const credsMap = new Map<string, any>();
+        const credsMap = new Map<string, ReturnType<typeof listStoredMatchCredentials>[number]>();
         listStoredMatchCredentials().forEach((item) => {
             if (item.matchID) {
                 credsMap.set(item.matchID, item);
@@ -1272,7 +1273,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 gameKey: normalizeGameName(room.gameName)
             };
         });
-    }, [rooms, myActiveRoomMatchID, user, localStorageTick]);
+    }, [rooms, myActiveRoomMatchID, localStorageTick, getOwnerKey]);
 
     const roomItems = useMemo(() => {
         return allRoomItems.filter(room => room.gameKey === normalizedGameId);
@@ -1314,7 +1315,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             };
         }
         return null;
-    }, [localStorageTick, normalizedGameId, rooms, user]);
+    }, [localStorageTick, normalizedGameId, rooms, getOwnerKey]);
 
     useEffect(() => {
         if (!isOpen) return;
@@ -1336,7 +1337,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 }
                 activeMatchCheckRef.current = null;
             });
-    }, [activeMatch, isOpen]);
+    }, [activeMatch, isOpen, toast]);
 
     return (
         <>

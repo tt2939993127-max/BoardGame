@@ -61,6 +61,74 @@ ANDROID_REMOTE_WEB_URL=https://your-domain.com
 - 仍然需要重新发包的内容包括：原生插件、Java/Kotlin/Swift/Objective-C 代码、权限、Manifest、原生启动逻辑、图标与启动图等二进制侧变更。
 - 结论：文档和实现都应以 `embedded` 为默认，以 OTA/Live Update 作为热更新主线；`remote` 仅保留为兼容/调试路径，不再作为产品默认推荐。
 
+## 原生 APK 自更新
+
+- 适用场景：原生插件、权限、Manifest、Java/Kotlin 代码、包体结构等需要重新发 APK 的变更。
+- 当前实现口径：
+  - App 启动后可检查 `native-app-updates/android/<channel>/latest.json`
+  - 若发现更高版本 APK，则下载到本地缓存
+  - 下载完成后拉起系统安装器，按系统提示覆盖安装
+- 这条链路不是静默更新；普通 Android 应用仍需用户在系统安装界面确认。
+- Android 8+ 若设备尚未允许“安装未知应用”，会先提示打开对应授权页，再返回继续安装。
+
+### 当前环境变量
+
+```env
+VITE_ANDROID_NATIVE_UPDATE_ENABLED=true
+VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL=https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json
+VITE_ANDROID_NATIVE_UPDATE_CHANNEL=stable
+```
+
+### 发布原生更新包
+
+先完成 release APK 构建：
+
+```bash
+npm run mobile:android:build:release
+```
+
+预演上传：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable --dry-run
+```
+
+正式发布：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable
+```
+
+如果只想先上传 APK 和版本 manifest，不切 `latest.json`：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable --skip-latest
+```
+
+当前默认发布路径：
+
+- `official/native-app-updates/android/<channel>/packages/<version>.apk`
+- `official/native-app-updates/android/<channel>/manifests/<version>.json`
+- `official/native-app-updates/android/<channel>/latest.json`
+
+`latest.json` 结构示例：
+
+```json
+{
+  "version": "0.5.0",
+  "versionCode": 500,
+  "url": "https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.0.apk",
+  "checksum": "sha256-hex",
+  "channel": "stable",
+  "forceUpdate": true,
+  "forceUpdateTitle": "需要安装新版 App",
+  "forceUpdateMessage": "正在准备新的安装包，请按系统提示完成更新。",
+  "publishedAt": "2026-04-04T00:00:00.000Z",
+  "size": 123456789,
+  "notes": "Android native APK update"
+}
+```
+
 ## 当前 OTA 实现
 
 - 运行时插件：`@capgo/capacitor-updater`
