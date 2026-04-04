@@ -86,6 +86,7 @@ public/assets/
 - **必须优先复用统一资源工具**：运行时图片路径解析、语言回退、压缩路径选择、缓存与版本参数，统一走 `AssetLoader`、`OptimizedImage`、`CardPreview`、`getLocalizedImageUrls`、`getOptimizedImageUrls`、`buildLocalizedImageSet`。
 - **特殊渲染只能包裹统一链路，不能绕开统一链路**：例如 3D 骰子、Canvas 纹理、Sprite Atlas、CSS background-position 裁切，如果最终仍然要展示同一张运行时图片，那么只能在统一链路产出的 URL 或图片对象之上做渲染，不能自己重新决定资源候选、回退顺序或本地/远端判断。
 - **同模块已有正确实现时，禁止重发明**：如果同一游戏中已有图片显示稳定的实现（如 `HandArea`/`CardPreview`），其他图片组件必须先对照并沿用该用法；不能因为当前组件表现异常，就在旁边新增一套“只对这个组件生效”的 workaround。
+- **素材位置异常先修统一布局，不准用局部位移补素材**：当移动端/窄屏出现“棋盘、提示板、角色板、atlas 卡面整体右漂/左漂/不居中”时，先检查 `mobileLayoutPreset`、`board-shell`、runtime viewport、容器 bounds 与统一缩放链路；禁止在具体素材组件上追加 `translateX/translateY`、magic number `margin`、局部 `scale` 去“把素材摆正”。素材链路正确时，位置问题默认属于布局问题，不属于素材接线问题。
 - **修回归先查接线是否偏离统一链路**：当图片出现“之前正常、后来空白/错图/偶发失败”时，优先检查是否绕过了 `AssetLoader`、是否引入组件内特判、是否手动拼接了与统一规则不一致的路径；禁止直接继续堆特例。
 - **如确实需要补充共享能力，应下沉到公共层**：如果统一链路不能满足某类图片展示需求，应补到 `AssetLoader` 或通用媒体组件，而不是在单个游戏/单个组件里偷偷复制一份资源加载逻辑。
 
