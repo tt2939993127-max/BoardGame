@@ -20,6 +20,7 @@ const WEB_APP_DOWNLOAD_URL = typeof import.meta.env.VITE_ANDROID_APP_DOWNLOAD_UR
     : '';
 
 export const GlobalHUD = () => {
+    const isAndroidShellBuild = import.meta.env.MODE === 'android';
     const { t } = useTranslation('game');
     const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const { openModal, closeModal, closeByNamespace } = useModalStack();

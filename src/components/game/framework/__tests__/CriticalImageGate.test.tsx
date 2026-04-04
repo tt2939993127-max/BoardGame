@@ -115,6 +115,11 @@ describe('CriticalImageGate', () => {
     });
 
     it('enabled=true 且需要加载时显示加载屏', () => {
+        vi.mocked(resolveCriticalImages).mockReturnValue({
+            critical: ['smashup/images/card-back'],
+            warm: [],
+            phaseKey: 'opening-hand',
+        });
         const html = renderToStaticMarkup(
             <CriticalImageGate
                 enabled={true}
@@ -131,6 +136,11 @@ describe('CriticalImageGate', () => {
     });
 
     it('阻塞渲染时应使用容器锚定的加载层', () => {
+        vi.mocked(resolveCriticalImages).mockReturnValue({
+            critical: ['smashup/images/card-back'],
+            warm: [],
+            phaseKey: 'opening-hand',
+        });
         const html = renderToStaticMarkup(
             <CriticalImageGate
                 enabled={true}
