@@ -4,18 +4,31 @@ export function useDelayedBackdropBlur(active: boolean, delayMs = 320): boolean 
     const [enabled, setEnabled] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+
         if (!active) {
-            setEnabled(false);
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setEnabled(false);
+                }
+            });
             return;
         }
 
-        setEnabled(false);
+        queueMicrotask(() => {
+            if (!cancelled) {
+                setEnabled(false);
+            }
+        });
         const timer = window.setTimeout(() => {
             setEnabled(true);
         }, delayMs);
 
-        return () => window.clearTimeout(timer);
+        return () => {
+            cancelled = true;
+            window.clearTimeout(timer);
+        };
     }, [active, delayMs]);
 
-    return enabled;
+    return active ? enabled : false;
 }

@@ -93,3 +93,30 @@
 - 本轮同时补了两类测试稳定性修正：
   - `e2e/character-selection.e2e.ts` 先重置残留对局存储，避免首页被“返回当前对局”弹窗劫持；同时把选角放大层改成按 overlay 开关态断言，而不是错误地期待 DOM 卸载。
   - `e2e/dicethrone-watch-out-spotlight.e2e.ts` 改成中文 locale，并把放大断言从脆弱的 `img[alt="Preview"]` 依赖切到真实放大内容容器，避免图片节点瞬态导致误报。
+
+## 2026-04-04 桌面回归复核
+
+- 背景：
+  - 用户反馈 `gunslinger` / `samurai` 在**游戏内桌面主界面**里的玩家板“显示过大，超出范围”。
+  - 本次按回归问题流程，先回看最后正常证据，再对照当前代码补桌面视口验证。
+- 最后正常证据：
+  - 文档：本文档本身
+  - 历史截图：
+    - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\10-mobile-main-board-state.png`
+    - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\11-mobile-player-board-surface-magnify-open.png`
+- 本轮新增桌面回归用例：
+  - 文件：`e2e/dicethrone-watch-out-spotlight.e2e.ts`
+  - 用例：`desktop v2 player board should stay within normal gameplay width`
+  - 命令：
+    - `$env:CODEX_MANAGED_BY_NPM='0'; $env:BG_BYPASS_GLOBAL_HEAVY_BUDGET='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.ts "desktop v2 player board should stay within normal gameplay width"`
+  - 结果：通过
+- 本轮桌面截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\desktop-v2-player-board-should-stay-within-normal-gameplay-width\15-desktop-v2-board-layout.png`
+- 人工观察：
+  - 武士玩家板和右侧提示板之间存在稳定可见的间隙，没有再像 `2026-03-29` 的 `dicethrone-hand-final/samurai-full.png` 那样几乎顶满中间区域。
+  - 右侧提示板、骰列和主操作按钮都完整留在视口内，没有因为第二版宽板被继续挤出或压扁。
+  - 手牌顶部虽然仍与中央玩家板有正常重叠，但玩家板底边没有再继续向右侧提示板或视口边界扩张，整体占比已经回到可接受范围。
+- 自动断言：
+  - 桌面视口 `1365x768` 下，玩家板与提示板都必须完全留在视口内。
+  - 玩家板宽度占视口比例必须 `<= 0.48`。
+  - 玩家板右边缘必须停在提示板左边缘之前，禁止再次出现“第二版宽板顶到提示板”的回归。

@@ -208,7 +208,10 @@ export const SummonEffect: React.FC<SummonEffectProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const isStrong = intensity === 'strong';
 
@@ -232,7 +235,6 @@ export const SummonEffect: React.FC<SummonEffectProps> = ({
 
     const c = resolveColors(color, customColors);
     const [mr, mg, mb] = c.main;
-    const [sr, sg, sb] = c.sub;
     const [br, bg, bb] = c.bright;
 
     // 原点：由 originY prop 控制（默认底部居中偏上）

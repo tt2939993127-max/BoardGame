@@ -4,7 +4,6 @@
  * 用于单位沿路径移动的动画（支持践踏等技能）
  */
 
-import { useEffect, useRef } from 'react';
 import type { CellCoord } from '../domain/types';
 import type { GridConfig } from '../../../core/ui/board-layout.types';
 import { cellToNormalizedBounds } from '../../../core/ui/board-hit-test';
@@ -30,27 +29,13 @@ interface PathAnimationOptions {
  * - 长距离（≥3格）：检查是否有路径信息，有则使用路径动画
  */
 export function usePathAnimation(options: PathAnimationOptions) {
-  const { currentPosition, unitId } = options;
-  const prevPositionRef = useRef<CellCoord>(currentPosition);
-  const prevUnitIdRef = useRef<string>(unitId);
-
-  if (prevUnitIdRef.current !== unitId) {
-    prevPositionRef.current = currentPosition;
-    prevUnitIdRef.current = unitId;
-  }
-
-  const prevPosition = prevPositionRef.current;
-
-  useEffect(() => {
-    prevPositionRef.current = currentPosition;
-    prevUnitIdRef.current = unitId;
-  }, [currentPosition, unitId]);
+  const { currentPosition } = options;
   
   // 当前版本：始终使用 layout 动画
   // 未来可以在这里添加路径动画逻辑
   return {
     needsPathAnimation: false,
-    prevPosition,
+    prevPosition: currentPosition,
   };
 }
 
