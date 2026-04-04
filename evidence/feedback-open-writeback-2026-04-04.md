@@ -46,14 +46,14 @@
 - `69c8f2f432bd47a7b57a66f8` `resolved`
 - `69c93d9832bd47a7b57a6978` `resolved`
 
-## 最终结果
+## 第一轮结果（历史记录）
 
 - 这批原始 `21` 条导出时的 `open`，在 2026-04-04 本轮收口后，生产现态为：
   - `resolved: 12`
   - `closed: 4`
   - `open: 5`
 
-## 当前仍为 `open` 的条目
+## 第一轮结束时仍为 `open` 的条目（历史记录）
 
 - `69ce62f3094b1acda250f7a5`
 - `69c9436732bd47a7b57a6a10`
@@ -61,7 +61,54 @@
 - `69cca643c3e278ba205eb08d`
 - `69ce7358094b1acda250f8ab`
 
-## 结论
+## 第一轮结论（历史记录）
 
 - 本轮已经把“可直接收口”的项真正写回到生产反馈库，不再停留在仓库内文档阶段。
-- 后续只需要继续处理剩余 `5` 条仍为 `open` 的证据不足项。
+- 上述 `5` 条已在下文“第二轮补证与写回”中继续完成收口，本段仅保留第一轮执行时的历史状态。
+
+## 2026-04-04 第二轮补证与写回
+
+### `open -> resolved`
+
+- `69ce62f3094b1acda250f7a5`
+  - 依据：
+    - `src/games/cardia/domain/execute.ts` 已在平局时应用 `winTies`
+    - `src/games/cardia/__tests__/flow-system-auto-advance.test.ts` 新增 `审判官赢得平局时，仍应跳过 ability 阶段并把平局改判为己方获胜`
+  - 结论：实现存在且已补直接回归，反馈可判为已修复
+- `69c9436732bd47a7b57a6a10`
+  - 依据：
+    - `src/games/smashup/__tests__/newFactionAbilities.test.ts` 的 `关门放狗：预算应跨多次选择递减并支持连续消灭`
+    - `src/games/smashup/__tests__/newFactionAbilities.test.ts` 的 `关门放狗：预算允许时应支持第三次连续选择并消灭剩余目标`
+    - 同文件的 `关门放狗：第一次消灭后应按剩余预算过滤目标`
+  - 结论：这条“只能消灭两个，不能继续选择剩下的”现已由直接三段链式回归支撑
+- `69cc8633c3e278ba205eb020`
+  - 依据：
+    - `evidence/ai-interaction-audit-2026-04-04.md`
+    - 其中已覆盖在线 AI 私有视角、`isBlocked`、batch 提交、attemptKey 回退和真实 Smash Up 在线 E2E
+  - 结论：该反馈描述与已修复的在线 AI 卡住链路一致，可按已修复收口
+
+### `open -> closed`
+
+- `69cca643c3e278ba205eb08d`
+  - 依据：
+    - 导出截图 `images/smashup/69cca643c3e278ba205eb08d/01-Screenshot.jpg`
+    - `src/games/smashup/__tests__/smashup.smoke.test.ts` 的 `大衮在基地上只为你成组同名的随从提供力量`
+  - 结论：截图和现有测试都说明加成已生效，更像对总战力显示的误读
+- `69ce7358094b1acda250f8ab`
+  - 依据：
+    - 生产 `actionLog` 与状态快照显示两次弃牌、`Gunfighter tempPowerModifier: 4`
+    - `src/games/smashup/__tests__/newFactionAbilities.test.ts` 的 `cowboys_deputy 可在决斗中弃牌给任意随从 +2 力量并改变胜负`
+    - `src/games/smashup/domain/duel.ts` 中 `Deputy` 每次固定加 `+2`
+  - 结论：这是两次 `Deputy` 叠加，不是单张异常给了 `+4`
+
+## 第二轮写回后结果
+
+- 这批原始 `21` 条导出时的 `open`，在 2026-04-04 第二轮补证并写回后，生产现态为：
+  - `resolved: 15`
+  - `closed: 6`
+  - `open: 0`
+
+## 最终结论
+
+- 本批次 `21` 条原始 `open` 反馈已全部完成线上真实收口。
+- 两轮状态更新都不是走本地库，也不是走网页 fallback，而是通过生产机 `mongosh` 直连 `feedbacks` 集合完成真实回写。
