@@ -684,7 +684,7 @@
     },
     "elder_thing_byakhee": {
       "name": "Byakhee",
-      "abilityText": "Each other player with a minion on this base draws a Madness card."
+      "abilityText": "If another player has a minion on this base, draw a Madness card."
     },
     "elder_thing_power_of_madness": {
       "name": "Power of Madness",

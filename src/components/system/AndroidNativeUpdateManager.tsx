@@ -18,6 +18,8 @@ import {
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import { AndroidNativeUpdateGate } from './AndroidNativeUpdateGate';
 
+const autoPromptedNativeUpdateVersions = new Set<string>();
+
 export const AndroidNativeUpdateManager = () => {
     const toast = useToast();
     const { t } = useTranslation('lobby');
@@ -67,14 +69,17 @@ export const AndroidNativeUpdateManager = () => {
 
             if (!interactive && availability.manifest.forceUpdate !== true) {
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
-                toast.info(
-                    t('nativeUpdate.toast.available', { version: availability.manifest.version }),
-                    '应用更新',
-                    {
-                        dedupeKey: `android-native-update:available:${availability.manifest.version}`,
-                        ttlMs: 6000,
-                    },
-                );
+                if (!autoPromptedNativeUpdateVersions.has(availability.manifest.version)) {
+                    autoPromptedNativeUpdateVersions.add(availability.manifest.version);
+                    toast.info(
+                        t('nativeUpdate.toast.available', { version: availability.manifest.version }),
+                        '应用更新',
+                        {
+                            dedupeKey: `android-native-update:available:${availability.manifest.version}`,
+                            ttlMs: 6000,
+                        },
+                    );
+                }
                 return;
             }
 

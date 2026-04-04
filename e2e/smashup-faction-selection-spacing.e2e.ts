@@ -144,6 +144,8 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     await waitForFactionSelectionReady(page);
 
     const mobileMetrics = await readFactionSelectionMetrics(page);
+    await page.screenshot({ path: join(evidenceDir, 'mobile-landscape-800x450.png'), fullPage: false });
+    await page.screenshot({ path: testInfo.outputPath('mobile-landscape-800x450.png'), fullPage: false });
     expect(mobileMetrics.docScrollWidth, '移动端不应横向溢出').toBeLessThanOrEqual(mobileMetrics.innerWidth + 1);
     expect(mobileMetrics.firstWidth, '移动端派系卡应成功渲染').toBeGreaterThan(0);
     expect(mobileMetrics.row1Aligned, '移动端首行前五张卡应保持同一行').toBe(true);
@@ -157,9 +159,6 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     expect(mobileMetrics.playerCardBottom, '移动端玩家卡片底边最多只允许保留变换带来的 5px 内尾差').toBeLessThanOrEqual(mobileMetrics.innerHeight + 5);
     expect(mobileMetrics.visibleRowCount, '移动端应至少保留与桌面一致的三行派系构图').toBeGreaterThanOrEqual(3);
     expect(mobileMetrics.thirdRowVisible, '移动端第三行派系卡不应被底部 rail 或视口裁掉').toBe(true);
-
-    await page.screenshot({ path: join(evidenceDir, 'mobile-landscape-800x450.png'), fullPage: false });
-    await page.screenshot({ path: testInfo.outputPath('mobile-landscape-800x450.png'), fullPage: false });
 
     await page.setViewportSize(DESKTOP_VIEWPORT);
     await game.openTestGame('smashup', { skipInitialization: true }, 20000);

@@ -30,11 +30,6 @@ const atlasPreview = (index: number): CardPreviewRef => ({
     index,
 });
 
-const imagePreview = (src: string): CardPreviewRef => ({
-    type: 'image',
-    src,
-});
-
 const replaceAbility = (
     targetAbilityId: string,
     newAbilityDef: AbilityDef,
@@ -105,7 +100,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-solemnity-2', 'description'),
-        previewRef: imagePreview('dicethrone/images/samurai/crops/ability-cards/upgrade-solemnity-2'),
+        previewRef: atlasPreview(22),
         effects: [replaceAbility('solemnity', SOLEMNITY_2, 2, '升级肃穆之仪至 II 级。')],
     },
     {
@@ -125,7 +120,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-masamune-2', 'description'),
-        previewRef: imagePreview('dicethrone/images/samurai/crops/ability-cards/upgrade-masamune-2'),
+        previewRef: atlasPreview(24),
         effects: [replaceAbility('masamune', MASAMUNE_2, 2, '升级正宗至 II 级。')],
     },
     {
@@ -135,7 +130,7 @@ export const SAMURAI_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-slot-06-2', 'description'),
-        previewRef: imagePreview('dicethrone/images/samurai/crops/ability-cards/upgrade-slot-06-2'),
+        previewRef: atlasPreview(25),
         effects: [replaceAbility('samurai-slot-06', SAMURAI_SLOT_06_2, 2, '升级叶隐之心至 II 级。')],
     },
     {

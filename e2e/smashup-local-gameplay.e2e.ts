@@ -791,6 +791,84 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await game.screenshot('smashup-click-minion-select-then-deploy', testInfo);
     });
 
+    test('本地模式：手机横屏保留常驻放大按钮，点击按钮只放大不触发出牌', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.setViewportSize({ width: 812, height: 375 });
+        await page.addInitScript(() => {
+            (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+            localStorage.setItem('smashup_interaction_mode', 'click');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'pirates,aliens',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'mobile-inspect-card', defId: 'pirate_first_mate', type: 'minion' },
+                ],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_the_homeworld' },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        const card = page.locator('[data-card-uid="mobile-inspect-card"]');
+        const inspectButton = page.locator('[data-testid="su-hand-card-inspect-mobile-inspect-card"]');
+        const magnifyOverlay = page.getByTestId('su-card-magnify-overlay');
+
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                return (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ === true;
+            });
+        }).toBe(true);
+        await expect(inspectButton).toBeVisible({ timeout: 5000 });
+        await expect(inspectButton).toHaveCSS('opacity', '1');
+
+        await inspectButton.click();
+        await expect(magnifyOverlay).toBeVisible({ timeout: 5000 });
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return {
+                    baseMinionCount: state.core.bases[0].minions.length,
+                    minionsPlayed: state.core.players['0'].minionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'mobile-inspect-card'),
+                };
+            });
+        }).toEqual({
+            baseMinionCount: 0,
+            minionsPlayed: 0,
+            stillInHand: true,
+        });
+
+        await game.screenshot('smashup-mobile-inspect-button-preview', testInfo);
+    });
+
     test('本地模式：拖拽模式下无目标行动卡拖到场上才会释放', async ({ page }, testInfo) => {
         const game = new GameTestContext(page);
 
@@ -988,5 +1066,80 @@ test.describe('SmashUp 本地模式 E2E', () => {
         });
 
         await game.screenshot('smashup-click-action-double-confirm', testInfo);
+    });
+
+    test('本地模式：无有效目标的无目标行动卡第一次点击就提示并且不会选中使用', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'click');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'pirates,aliens',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'no-target-toast-action-card', defId: 'dino_howl', type: 'action' },
+                ],
+                factions: ['dinosaurs', 'pirates'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    minions: [
+                        { uid: 'enemy-1', defId: 'robot_microbot_alpha', owner: '1', controller: '1' },
+                    ],
+                },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        const card = page.locator('[data-card-uid="no-target-toast-action-card"]');
+        const cardFrame = card.locator('> div').first();
+        const toastMessage = page.getByText('场上没有符合条件的目标').last();
+
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await clickHandCard(page, card);
+
+        await expect(toastMessage).toBeVisible({ timeout: 5000 });
+        await expect(cardFrame).not.toHaveClass(/ring-cyan-400/);
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return {
+                    actionsPlayed: state.core.players['0'].actionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'no-target-toast-action-card'),
+                    enemyTempPowerModifier: state.core.bases[0].minions.find((minion: { uid: string }) => minion.uid === 'enemy-1')?.tempPowerModifier ?? 0,
+                };
+            });
+        }, { timeout: 5000 }).toEqual({
+            actionsPlayed: 0,
+            stillInHand: true,
+            enemyTempPowerModifier: 0,
+        });
+
+        await game.screenshot('smashup-click-action-no-target-toast', testInfo);
     });
 });

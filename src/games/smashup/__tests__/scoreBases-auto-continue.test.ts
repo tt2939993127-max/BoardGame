@@ -68,6 +68,25 @@ function makeMinion(owner: string, defId: string, power: number): MinionOnBase {
     };
 }
 
+function buildPortalOrderOptions(cards: Array<{ uid: string; defId: string }>) {
+    return cards.map((card, index) => ({
+        id: `card-${index}`,
+        label: card.defId,
+        value: { cardUid: card.uid, defId: card.defId },
+        displayMode: 'card',
+        _source: 'static',
+    }));
+}
+
+function buildTriggerChoiceOptions(triggerIds: string[]) {
+    return triggerIds.map((triggerId, index) => ({
+        id: `trigger-${index}`,
+        label: `先结算 ${triggerId}`,
+        displayMode: 'button',
+        value: { triggerId },
+    }));
+}
+
 const smashUpAiEngineConfig = {
     gameId: 'smashup',
     domain: {} as never,
@@ -619,6 +638,327 @@ describe('scoreBases 阶段自动推进', () => {
         expect(['trigger-a', 'trigger-b']).toContain(
             (resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId,
         );
+    });
+
+    it('链式 simple-choice 在前一步改变 remaining 后，AI 应基于刷新后的候选继续选择，而不是重复选过期项', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const orderedCards = [
+            { uid: 'deck-a1', defId: 'test_action_1' },
+            { uid: 'deck-a2', defId: 'test_action_2' },
+            { uid: 'deck-a3', defId: 'test_action_3' },
+        ];
+
+        const staleOptions = buildPortalOrderOptions(orderedCards);
+        const stateStep1: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                        deck: orderedCards.map((card) => ({
+                            uid: card.uid,
+                            defId: card.defId,
+                            type: 'action',
+                            owner: '0',
+                        })),
+                        factions: ['wizards', 'pirates'] as any,
+                    } as any,
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                    } as any,
+                } as any,
+            }),
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'wizard-portal-order-step-1',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'wizard_portal_order',
+                            options: staleOptions,
+                            continuationContext: {
+                                remaining: orderedCards,
+                                ordered: [],
+                            },
+                            optionsGenerator: (_nextState: MatchState<SmashUpCore>, data: any) =>
+                                buildPortalOrderOptions(data?.continuationContext?.remaining ?? []),
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const firstResolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: stateStep1,
+            matchId: 'smashup-portal-ai-chain-step1',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(firstResolution?.playerId).toBe('0');
+        expect(firstResolution?.action.kind).toBe('interaction-choice');
+        const firstPayload = firstResolution?.action.commands[0]?.payload as {
+            optionId?: string;
+            mergedValue?: { cardUid?: string; defId?: string };
+        } | undefined;
+        expect(firstPayload?.mergedValue?.cardUid).toBe('deck-a1');
+
+        const stateStep2: MatchState<SmashUpCore> = {
+            ...stateStep1,
+            sys: {
+                ...stateStep1.sys,
+                interaction: {
+                    current: {
+                        id: 'wizard-portal-order-step-2',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'wizard_portal_order',
+                            options: staleOptions,
+                            continuationContext: {
+                                remaining: orderedCards.slice(1),
+                                ordered: [orderedCards[0]],
+                            },
+                            optionsGenerator: (_nextState: MatchState<SmashUpCore>, data: any) =>
+                                buildPortalOrderOptions(data?.continuationContext?.remaining ?? []),
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const secondLegalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateStep2,
+        });
+        const secondActionTargets = secondLegalActions.map((action) => {
+            const payload = action.commands[0]?.payload as { mergedValue?: { cardUid?: string } } | undefined;
+            return payload?.mergedValue?.cardUid;
+        });
+        expect(secondActionTargets).toEqual(['deck-a2', 'deck-a3']);
+
+        const secondResolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: stateStep2,
+            matchId: 'smashup-portal-ai-chain-step2',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        const secondPayload = secondResolution?.action.commands[0]?.payload as {
+            optionId?: string;
+            mergedValue?: { cardUid?: string; defId?: string };
+        } | undefined;
+        expect(secondResolution?.playerId).toBe('0');
+        expect(secondResolution?.action.kind).toBe('interaction-choice');
+        expect(secondPayload?.mergedValue?.cardUid).toBe('deck-a2');
+        expect(secondPayload?.mergedValue?.cardUid).not.toBe('deck-a1');
+    });
+
+    it('responseWindow 穿插三段主动选择链时，AI 应持续消费当前交互，并在 remaining 刷新后继续推进', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const orderedCards = [
+            { uid: 'deck-a1', defId: 'test_action_1' },
+            { uid: 'deck-a2', defId: 'test_action_2' },
+            { uid: 'deck-a3', defId: 'test_action_3' },
+        ];
+
+        const staleOptions = buildPortalOrderOptions(orderedCards);
+        const responseWindow = {
+            current: {
+                id: 'afterscoring-window',
+                windowType: 'afterScoring',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+            history: [],
+        };
+        const baseCore = makeMinimalCore({
+            currentPlayerIndex: 0,
+            players: {
+                '0': {
+                    ...makeMinimalCore().players['0'],
+                    deck: orderedCards.map((card) => ({
+                        uid: card.uid,
+                        defId: card.defId,
+                        type: 'action',
+                        owner: '0',
+                    })),
+                    factions: ['wizards', 'pirates'] as any,
+                } as any,
+                '1': {
+                    ...makeMinimalCore().players['1'],
+                } as any,
+            } as any,
+        });
+
+        const step0State: MatchState<SmashUpCore> = {
+            core: baseCore,
+            sys: {
+                phase: 'scoreBases',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'reaction-order-step-0',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'reaction_queue_choose_next',
+                            options: buildTriggerChoiceOptions([
+                                'wizard_portal_order',
+                                'base_tortuga',
+                            ]),
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow,
+            } as any,
+        };
+
+        const step0Resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: step0State,
+            matchId: 'smashup-mixed-chain-step0',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+        expect(step0Resolution?.playerId).toBe('0');
+        expect(step0Resolution?.action.kind).toBe('interaction-choice');
+        expect((step0Resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId).toBe('trigger-0');
+
+        const step1State: MatchState<SmashUpCore> = {
+            core: baseCore,
+            sys: {
+                phase: 'scoreBases',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'wizard-portal-order-step-1',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'wizard_portal_order',
+                            options: staleOptions,
+                            continuationContext: {
+                                remaining: orderedCards,
+                                ordered: [],
+                            },
+                            optionsGenerator: (_nextState: MatchState<SmashUpCore>, data: any) =>
+                                buildPortalOrderOptions(data?.continuationContext?.remaining ?? []),
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow,
+            } as any,
+        };
+
+        const step1Resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: step1State,
+            matchId: 'smashup-mixed-chain-step1',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+        expect(step1Resolution?.playerId).toBe('0');
+        expect(step1Resolution?.action.kind).toBe('interaction-choice');
+        expect(
+            ((step1Resolution?.action.commands[0]?.payload as {
+                mergedValue?: { cardUid?: string };
+            } | undefined)?.mergedValue?.cardUid),
+        ).toBe('deck-a1');
+
+        const step2State: MatchState<SmashUpCore> = {
+            core: baseCore,
+            sys: {
+                phase: 'scoreBases',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'wizard-portal-order-step-2',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'wizard_portal_order',
+                            options: staleOptions,
+                            continuationContext: {
+                                remaining: orderedCards.slice(1),
+                                ordered: [orderedCards[0]],
+                            },
+                            optionsGenerator: (_nextState: MatchState<SmashUpCore>, data: any) =>
+                                buildPortalOrderOptions(data?.continuationContext?.remaining ?? []),
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow,
+            } as any,
+        };
+
+        const step2LegalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: step2State,
+        });
+        expect(step2LegalActions.every((action) => action.kind === 'interaction-choice')).toBe(true);
+        expect(step2LegalActions.map((action) => {
+            const payload = action.commands[0]?.payload as { mergedValue?: { cardUid?: string } } | undefined;
+            return payload?.mergedValue?.cardUid;
+        })).toEqual(['deck-a2', 'deck-a3']);
+
+        const step2Resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: step2State,
+            matchId: 'smashup-mixed-chain-step2',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+        expect(step2Resolution?.playerId).toBe('0');
+        expect(step2Resolution?.action.kind).toBe('interaction-choice');
+        expect(
+            ((step2Resolution?.action.commands[0]?.payload as {
+                mergedValue?: { cardUid?: string };
+            } | undefined)?.mergedValue?.cardUid),
+        ).toBe('deck-a2');
+
+        const step3State: MatchState<SmashUpCore> = {
+            core: baseCore,
+            sys: {
+                phase: 'scoreBases',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'reaction-order-step-3',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'reaction_queue_choose_next',
+                            options: buildTriggerChoiceOptions([
+                                'pirate_first_mate_choose_base',
+                                'base_tortuga',
+                            ]),
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow,
+            } as any,
+        };
+
+        const step3Resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: step3State,
+            matchId: 'smashup-mixed-chain-step3',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+        expect(step3Resolution?.playerId).toBe('0');
+        expect(step3Resolution?.action.kind).toBe('interaction-choice');
+        expect((step3Resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId).toBe('trigger-0');
     });
 
     it('AI 在计分阶段仅存在可激活的泰坦 special 时也不应暴露 advance-phase', () => {

@@ -1,7 +1,10 @@
 import {
     compareVersion,
     isManifestCompatibleWithNativeVersion,
+    readAndroidLiveUpdateActivityState,
     readAndroidLiveUpdateConfig,
+    requestAndroidLiveUpdateCheck,
+    subscribeAndroidLiveUpdateActivityState,
 } from '../mobile/androidLiveUpdates';
 import {
     getSocketIoTransports,
@@ -115,6 +118,26 @@ describe('androidLiveUpdates', () => {
             forceUpdateTitle: '',
             forceUpdateMessage: '',
         });
+    });
+
+    it('即时 OTA 请求一发出就会同步切换到 checking 活动态', () => {
+        const states: string[] = [];
+        const unsubscribe = subscribeAndroidLiveUpdateActivityState((state) => {
+            states.push(`${state.active}:${state.phase}`);
+        });
+
+        requestAndroidLiveUpdateCheck({
+            interactive: true,
+            applyMode: 'immediate',
+        });
+
+        unsubscribe();
+
+        expect(readAndroidLiveUpdateActivityState()).toMatchObject({
+            active: true,
+            phase: 'checking',
+        });
+        expect(states).toContain('true:checking');
     });
 
     it('强制 OTA manifest 若当前 bundle 已是最新版，不应先闪出 blocking gate', async () => {

@@ -42,10 +42,14 @@ import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 import { versionedPublicFileUrl } from '../lib/publicFileUrl';
 import {
+    readAndroidLiveUpdateActivityState,
     readAndroidLiveUpdateSnapshot,
+    requestAndroidLiveUpdateCheck,
+    subscribeAndroidLiveUpdateActivityState,
     type AndroidLiveUpdateSnapshot,
 } from '../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
+import { RefreshCw } from 'lucide-react';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
@@ -106,12 +110,34 @@ export const Home = () => {
     const [guestId, setGuestId] = useState<string | null>(null);
     const [otaSnapshot, setOtaSnapshot] = useState<AndroidLiveUpdateSnapshot | null>(null);
     const [isVersionExpanded, setIsVersionExpanded] = useState(false);
+    const [otaActivityState, setOtaActivityState] = useState(() => readAndroidLiveUpdateActivityState());
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
         credentials: string;
         isHost: boolean;
     } | null>(null);
+
+    const refreshOtaSnapshot = useCallback(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
+        let cancelled = false;
+        void readAndroidLiveUpdateSnapshot()
+            .then((snapshot) => {
+                if (!cancelled) {
+                    setOtaSnapshot(snapshot);
+                }
+            })
+            .catch((error) => {
+                console.warn('[Home] 读取 OTA 快照失败', error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isNativeAndroid]);
 
     // Monitoring & Stats
     const { mostPopularGameId } = useLobbyStats();
@@ -161,20 +187,17 @@ export const Home = () => {
             return;
         }
 
-        let cancelled = false;
-        void readAndroidLiveUpdateSnapshot()
-            .then((snapshot) => {
-                if (!cancelled) {
-                    setOtaSnapshot(snapshot);
-                }
-            })
-            .catch((error) => {
-                console.warn('[Home] 读取 OTA 快照失败', error);
-            });
+        return refreshOtaSnapshot();
+    }, [isNativeAndroid, refreshOtaSnapshot]);
 
-        return () => {
-            cancelled = true;
-        };
+    useEffect(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
+        return subscribeAndroidLiveUpdateActivityState((state) => {
+            setOtaActivityState(state);
+        });
     }, [isNativeAndroid]);
 
     const storedLocalMatchRole = useMemo(() => {
@@ -239,6 +262,21 @@ export const Home = () => {
     const otaVersionMismatch = shouldShowNativeAppVersion
         && Boolean(latestManifestVersion)
         && latestManifestVersion !== activeBundleVersion;
+    const isImmediateOtaActive = shouldShowNativeAppVersion && otaActivityState.active;
+    const handleVersionFooterClick = () => {
+        if (shouldShowNativeAppVersion) {
+            if (otaActivityState.active) {
+                return;
+            }
+            requestAndroidLiveUpdateCheck({
+                interactive: true,
+                applyMode: 'immediate',
+            });
+            return;
+        }
+
+        setIsVersionExpanded((expanded) => !expanded);
+    };
     const nativeVersionTitle = useMemo(() => {
         if (!shouldShowNativeAppVersion) {
             return `当前版本 ${activeBundleVersion.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`;
@@ -251,13 +289,11 @@ export const Home = () => {
         if (latestManifestVersion) {
             lines.push(`最新 OTA ${latestManifestVersion.replace(/^v/i, '')}`);
         }
-        if (otaVersionMismatch) {
-            lines.push('状态：当前 Bundle 与最新 OTA 不一致');
-        }
-        lines.push(`点击${isVersionExpanded ? '收起' : '展开'}完整版本号`);
+        lines.push(isImmediateOtaActive ? '状态：正在检查并应用 OTA 更新' : otaVersionMismatch ? '状态：当前 Bundle 与最新 OTA 不一致，点击立即更新' : '状态：点击立即检查 OTA 更新');
         return lines.join('\n');
     }, [
         activeBundleVersion,
+        isImmediateOtaActive,
         isVersionExpanded,
         latestManifestVersion,
         nativeAppVersion,
@@ -840,7 +876,7 @@ export const Home = () => {
             {/* 活跃对局指示器 */}
             <button
                 type="button"
-                onClick={() => setIsVersionExpanded((expanded) => !expanded)}
+                onClick={handleVersionFooterClick}
                 className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 max-w-[min(72vw,20rem)] select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80 cursor-pointer"
                 aria-label={shouldShowNativeAppVersion
                     ? otaVersionMismatch
@@ -849,8 +885,11 @@ export const Home = () => {
                     : `Current version ${homeVersionLabel}`}
                 title={nativeVersionTitle}
             >
-                <span className="block break-all">
-                    {shouldShowNativeAppVersion ? `Bundle ${homeVersionLabel}` : homeVersionLabel}
+                <span className="inline-flex max-w-full items-center justify-end gap-1 break-all">
+                    {shouldShowNativeAppVersion && (
+                        <RefreshCw size={11} className={`shrink-0 ${isImmediateOtaActive ? 'animate-spin text-amber-700' : otaVersionMismatch ? 'text-red-700' : 'text-parchment-light-text/60'}`} />
+                    )}
+                    <span>{shouldShowNativeAppVersion ? `Bundle ${homeVersionLabel}` : homeVersionLabel}</span>
                 </span>
                 {shouldShowNativeAppVersion && (
                     <span className="mt-1 block text-[0.58rem] tracking-[0.04em] text-parchment-light-text/60 md:text-[0.64rem]">
@@ -863,8 +902,13 @@ export const Home = () => {
                     </span>
                 )}
                 {otaVersionMismatch && (
-                    <span className="mt-1 block text-[0.58rem] font-bold tracking-[0.04em] text-red-800 md:text-[0.64rem]">
-                        OTA 未对齐
+                    <span className={`mt-1 block text-[0.58rem] font-bold tracking-[0.04em] md:text-[0.64rem] ${isImmediateOtaActive ? 'text-amber-800' : 'text-red-800'}`}>
+                        {isImmediateOtaActive ? '正在立即更新' : 'OTA 未对齐，点击立即更新'}
+                    </span>
+                )}
+                {!otaVersionMismatch && shouldShowNativeAppVersion && (
+                    <span className={`mt-1 block text-[0.58rem] font-bold tracking-[0.04em] md:text-[0.64rem] ${isImmediateOtaActive ? 'text-amber-800' : 'text-parchment-light-text/55'}`}>
+                        {isImmediateOtaActive ? '正在检查更新' : '点击检查更新'}
                     </span>
                 )}
             </button>

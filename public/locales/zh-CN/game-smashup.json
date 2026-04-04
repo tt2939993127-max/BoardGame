@@ -684,7 +684,7 @@
     },
     "elder_thing_byakhee": {
       "name": "拜亚基",
-      "abilityText": "每位在这个基地有随从的其他玩家各抽一张疯狂卡。"
+      "abilityText": "如果其他玩家有随从在这个基地抽一张疯狂卡。"
     },
     "elder_thing_power_of_madness": {
       "name": "疯狂之力",

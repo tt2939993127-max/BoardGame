@@ -88,7 +88,7 @@ interface GameClientContextValue {
 
 const GameClientContext = createContext<GameClientContextValue | null>(null);
 
-function buildAiProgressMarker(state: MatchState<unknown>): string {
+export function buildAiProgressMarker(state: MatchState<unknown>): string {
     const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : '';
     const phase = typeof state.sys?.phase === 'string' ? state.sys.phase : '';
     const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
@@ -118,6 +118,18 @@ function buildAiProgressMarker(state: MatchState<unknown>): string {
         responderIndex,
         currentPlayerId,
     ].join('|');
+}
+
+export function shouldRetryLocalAiAttemptAfterDispatch(args: {
+    cancelled: boolean;
+    activeAttemptKey: string | null;
+    resolutionAttemptKey: string;
+    markerBeforeDispatch: string;
+    nextState: MatchState<unknown>;
+}): boolean {
+    if (args.cancelled) return false;
+    if (args.activeAttemptKey !== args.resolutionAttemptKey) return false;
+    return buildAiProgressMarker(args.nextState) === args.markerBeforeDispatch;
 }
 
 // ============================================================================
@@ -1003,10 +1015,15 @@ export function LocalGameProvider({
             }
 
             setTimeout(() => {
-                if (cancelled) return;
-                if (lastAiAttemptKeyRef.current !== resolution.attemptKey) return;
-                const progressed = buildAiProgressMarker(stateRef.current) !== progressMarkerBeforeDispatch;
-                if (progressed) return;
+                if (!shouldRetryLocalAiAttemptAfterDispatch({
+                    cancelled,
+                    activeAttemptKey: lastAiAttemptKeyRef.current,
+                    resolutionAttemptKey: resolution.attemptKey,
+                    markerBeforeDispatch: progressMarkerBeforeDispatch,
+                    nextState: stateRef.current,
+                })) {
+                    return;
+                }
                 lastAiAttemptKeyRef.current = null;
                 setAiRetryVersion((version) => version + 1);
             }, 30);

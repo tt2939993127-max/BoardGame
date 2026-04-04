@@ -1520,9 +1520,26 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedCardMode(null);
     }, [dispatch, isTutorialCommandAllowed, myPlayer, t]);
 
+    const validateImmediateActionPlay = useCallback((card: CardInstance) => {
+        return validate(G, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: rootPid,
+            payload: { cardUid: card.uid },
+        });
+    }, [G, rootPid]);
+
     const handlePlayActionWithoutTarget = useCallback((card: CardInstance) => {
         if (!isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION) || !isTutorialTargetAllowed(card.uid)) {
             playDeniedSound();
+            return false;
+        }
+
+        const validation = validateImmediateActionPlay(card);
+        if (!validation.valid) {
+            playDeniedSound();
+            toast(validation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
             return false;
         }
 
@@ -1542,7 +1559,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedCardUid(null);
         setSelectedCardMode(null);
         return true;
-    }, [dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, t]);
+    }, [dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, t, validateImmediateActionPlay]);
 
     const enterActionTargetSelection = useCallback((card: CardInstance, cardMode: 'action' | 'ongoing' | 'ongoing-minion' | 'action-minion') => {
         if (cardMode !== 'action') {
@@ -1803,6 +1820,14 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             if (selectedCardUid === card.uid && selectedCardMode === 'action') {
                 handlePlayActionWithoutTarget(card);
             } else {
+                const actionValidation = validateImmediateActionPlay(card);
+                if (!actionValidation.valid) {
+                    playDeniedSound();
+                    toast(actionValidation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+                    setSelectedCardUid(null);
+                    setSelectedCardMode(null);
+                    return;
+                }
                 setSelectedCardUid(card.uid);
                 setSelectedCardMode('action');
                 setPendingFusionChoiceUid(null);
@@ -1881,6 +1906,14 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             if (selectedCardUid === card.uid && selectedCardMode === 'action') {
                 handlePlayActionWithoutTarget(card);
             } else {
+                const actionValidation = validateImmediateActionPlay(card);
+                if (!actionValidation.valid) {
+                    playDeniedSound();
+                    toast(actionValidation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+                    setSelectedCardUid(null);
+                    setSelectedCardMode(null);
+                    return;
+                }
                 setSelectedCardUid(card.uid);
                 setSelectedCardMode('action');
             }
@@ -1894,7 +1927,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             setSelectedCardUid(card.uid);
             setSelectedCardMode('minion');
         }
-    }, [activeSelectedSetAsideTitanUid, core, currentPrompt, discardCount, dispatch, enterActionTargetSelection, handlePlayActionWithoutTarget, isAfterScoringResponse, isHandDiscardPrompt, isMeFirstResponse, isMyTurn, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, needDiscard, pendingFusionChoiceUid, phase, responseWindow, selectedCardMode, selectedCardUid, t]);
+    }, [activeSelectedSetAsideTitanUid, core, currentPrompt, discardCount, dispatch, enterActionTargetSelection, handlePlayActionWithoutTarget, isAfterScoringResponse, isHandDiscardPrompt, isMeFirstResponse, isMyTurn, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, needDiscard, pendingFusionChoiceUid, phase, responseWindow, selectedCardMode, selectedCardUid, t, validateImmediateActionPlay]);
 
     const confirmFusionPlayAs = useCallback((playAs: 'minion' | 'action') => {
         if (!pendingFusionChoiceUid || !myPlayer) return;

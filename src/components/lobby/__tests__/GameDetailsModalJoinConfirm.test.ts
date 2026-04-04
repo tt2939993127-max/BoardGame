@@ -565,7 +565,8 @@ describe('GameDetailsMobilePackageCard', () => {
             gameName: 'Tic-Tac-Toe',
             state: {
                 status: 'not-installed',
-                manifestSource: 'remote',
+                previewResolved: true,
+                manifestSource: 'fallback',
                 modulePackId: 'tictactoe',
                 assetPackId: 'tictactoe',
             },
@@ -575,6 +576,22 @@ describe('GameDetailsMobilePackageCard', () => {
         expect(screen.getByText('packageManager.packageUnpublished')).toBeInTheDocument();
         expect(screen.queryByText('packageManager.sizeUnknown')).toBeNull();
         expect(screen.queryByText('packageManager.installAction')).toBeNull();
+    });
+
+    it('未安装且远端清单仍在同步时显示同步中并保留安装按钮', () => {
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'not-installed',
+                modulePackId: 'tictactoe',
+                assetPackId: 'tictactoe',
+            },
+            onInstall: vi.fn(),
+        }));
+
+        expect(screen.getByText('packageManager.packageSyncing')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.packageUnpublished')).toBeNull();
+        expect(screen.getByText('packageManager.installAction')).toBeInTheDocument();
     });
 
     it('失败状态显示重试按钮和错误文案', () => {
