@@ -70,9 +70,27 @@ function getWindowsNetstatLines() {
   }
 }
 
+function getWindowsTcpConnectionPids(port) {
+  try {
+    const command = [
+      'powershell',
+      '-NoProfile',
+      '-Command',
+      `Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique`,
+    ].join(' ');
+    const result = execSync(command, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return result
+      .split(/\r?\n/)
+      .map(line => line.trim())
+      .filter(line => /^\d+$/.test(line) && line !== '0');
+  } catch {
+    return [];
+  }
+}
+
 function parseWindowsPortPids(port) {
-  const portPattern = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+LISTENING\\s+(\\d+)\\s*$`, 'i');
-  const pids = new Set();
+  const pids = new Set(getWindowsTcpConnectionPids(port));
+  const portPattern = new RegExp(`^\\s*TCP\\s+\\S+:${port}\\s+\\S+\\s+\\S+\\s+(\\d+)\\s*$`, 'i');
 
   for (const line of getWindowsNetstatLines()) {
     const match = line.match(portPattern);
@@ -321,14 +339,20 @@ export async function findAvailablePort(startPort, options = {}) {
   throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${maxRange}`);
 }
 
-export async function allocateAvailablePorts(workerId, options = {}) {
-  const preferred = allocatePorts(workerId);
+export async function allocateAvailablePortSet(preferredPorts, options = {}) {
+  const values = normalizePortsInput(preferredPorts);
+  const [frontend, gameServer, apiServer] = values;
   const reservedPorts = getReservedPortSet(process.cwd(), options);
   return {
-    frontend: await findAvailablePort(preferred.frontend, { reservedPorts }),
-    gameServer: await findAvailablePort(preferred.gameServer, { reservedPorts }),
-    apiServer: await findAvailablePort(preferred.apiServer, { reservedPorts }),
+    frontend: await findAvailablePort(Number(frontend), { reservedPorts }),
+    gameServer: await findAvailablePort(Number(gameServer), { reservedPorts }),
+    apiServer: await findAvailablePort(Number(apiServer), { reservedPorts }),
   };
+}
+
+export async function allocateAvailablePorts(workerId, options = {}) {
+  const preferred = allocatePorts(workerId);
+  return allocateAvailablePortSet(preferred, options);
 }
 
 export async function reservePorts(workerId, ports, options = {}) {

@@ -56,13 +56,13 @@ interface FrameworkFixtures {
  * 获取当前 worker 的端口信息
  */
 function getWorkerPorts(parallelIndex: number): WorkerPorts {
-    // 多 worker 模式：从文件读取动态分配的端口
-    const ports = loadWorkerPorts(parallelIndex);
+    // 优先使用 runtime 记录的端口；单 worker fallback 到 worker 0
+    const ports = loadWorkerPorts(parallelIndex) ?? loadWorkerPorts(0);
     if (ports) {
         return ports;
     }
     
-    // 单 worker 模式：使用固定端口
+    // 最后兜底到固定默认端口
     return {
         frontend: E2E_SINGLE_WORKER_PORTS.frontend,
         gameServer: E2E_SINGLE_WORKER_PORTS.gameServer,

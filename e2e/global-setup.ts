@@ -5,6 +5,7 @@ import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS, toPortArray } from '../scrip
 import { withWindowsHide } from '../scripts/infra/windows-hide.js';
 import {
     cleanupAllWorkerPortFiles,
+    loadWorkerPorts,
     reserveAvailablePorts,
     reservePorts,
     saveWorkerPorts,
@@ -39,7 +40,7 @@ const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
 const forceStartServers = process.env.PW_START_SERVERS === 'true';
 const shouldStartServers = forceStartServers || !useDevServers;
 const shouldReuseExistingServers = process.env.PW_REUSE_EXISTING_SERVERS === 'true';
-const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+const defaultSingleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
 const runtimeNode = process.env.PW_NODE_BINARY || process.execPath;
 const isStandardEntry = process.env.PW_E2E_STANDARD_ENTRY === 'true';
 const bootstrapMode = process.env.PW_E2E_BOOTSTRAP_MODE?.trim() || '';
@@ -147,7 +148,12 @@ async function waitForUrl(runtime: RuntimeRecord, url: string, timeoutMs = SERVI
     );
 }
 
+function getSingleWorkerPorts() {
+    return loadWorkerPorts(0) ?? defaultSingleWorkerPorts;
+}
+
 async function cleanupSingleWorkerPorts(): Promise<void> {
+    const singleWorkerPorts = getSingleWorkerPorts();
     const conflicts = findRuntimesByPorts(singleWorkerPorts);
     if (conflicts.length > 0) {
         throw new Error(describeRuntimeConflict(conflicts));
@@ -165,7 +171,7 @@ async function cleanupSingleWorkerPorts(): Promise<void> {
     }
 }
 
-function spawnDetachedServer(script: string, args: string[] = [], portsOverride = singleWorkerPorts): RuntimeRecord {
+function spawnDetachedServer(script: string, args: string[] = [], portsOverride = getSingleWorkerPorts()): RuntimeRecord {
     const workerId = args[0] ? Number.parseInt(args[0], 10) : 0;
     const logFile = getBootstrapLogFile(workerId);
     fs.mkdirSync(path.dirname(logFile), { recursive: true });
@@ -325,6 +331,7 @@ export default async function globalSetup() {
     pruneStaleRuntimes(process.cwd(), { killOrphans: true, logger: console });
 
     if (workers <= 1) {
+        const singleWorkerPorts = getSingleWorkerPorts();
         const urls = [
             `http://127.0.0.1:${singleWorkerPorts.gameServer}/games`,
             `http://127.0.0.1:${singleWorkerPorts.apiServer}/health`,

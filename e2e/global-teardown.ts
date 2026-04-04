@@ -54,7 +54,7 @@ export default async function globalTeardown() {
     const useDevServers = process.env.PW_USE_DEV_SERVERS === 'true';
     const forceStartServers = process.env.PW_START_SERVERS === 'true';
     const shouldStartServers = forceStartServers || !useDevServers;
-    const singleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
+    const defaultSingleWorkerPorts = useDevServers ? DEV_SERVER_PORTS : E2E_SINGLE_WORKER_PORTS;
     const managedRuntimeId = process.env.PW_MANAGED_RUNTIME_ID?.trim() || '';
     const managedRuntimeMode = process.env.PW_RUNTIME_MODE?.trim() || '';
     const shouldSkipBootstrap = process.env.PW_SKIP_RUNTIME_BOOTSTRAP === 'true';
@@ -102,7 +102,7 @@ export default async function globalTeardown() {
     }
 
     if (workers <= 1) {
-        const ownedSingleWorkerPorts = runtimes[0]?.ports ?? singleWorkerPorts;
+        const ownedSingleWorkerPorts = runtimes[0]?.ports ?? loadWorkerPorts(0) ?? defaultSingleWorkerPorts;
         if (!reusedExistingServers) {
             cleanupPorts(ownedSingleWorkerPorts, 'Single Worker');
             await waitForPortsFree(toPortArray(ownedSingleWorkerPorts), PORT_CLEANUP_TIMEOUT_MS);
