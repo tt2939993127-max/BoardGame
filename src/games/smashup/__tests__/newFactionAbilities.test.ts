@@ -4462,6 +4462,66 @@ describe('狼人派系能力', () => {
         expect(getInteractionsFromMS(step2.finalState).length).toBe(0);
     });
 
+    it('关门放狗：预算允许时应支持第三次连续选择并消灭剩余目标', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'werewolf_let_the_dog_out', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('w1', 'werewolf_howler', '0', 4, { powerModifier: 0 }),
+                        makeMinion('e1', 'enemy_a', '1', 1, { powerModifier: 0 }),
+                        makeMinion('e2', 'enemy_b', '1', 1, { powerModifier: 0 }),
+                        makeMinion('e3', 'enemy_c', '1', 2, { powerModifier: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const playResult = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
+            defaultTestRandom,
+        );
+
+        const prompt1 = getInteractionsFromMS(playResult.finalState)[0];
+        const target1 = prompt1.data.options.find((o: any) => o?.value?.minionUid === 'e1');
+        const step1 = runCommand(
+            playResult.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: target1.id } } as any,
+            defaultTestRandom,
+        );
+        expect(step1.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+
+        const prompt2 = getInteractionsFromMS(step1.finalState)[0];
+        const target2 = prompt2.data.options.find((o: any) => o?.value?.minionUid === 'e2');
+        const step2 = runCommand(
+            step1.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: target2.id } } as any,
+            defaultTestRandom,
+        );
+        expect(step2.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+
+        const prompt3 = getInteractionsFromMS(step2.finalState)[0];
+        const target3 = prompt3.data.options.find((o: any) => o?.value?.minionUid === 'e3');
+        expect(target3).toBeDefined();
+
+        const step3 = runCommand(
+            step2.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: target3.id } } as any,
+            defaultTestRandom,
+        );
+        expect(step3.events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED)).toHaveLength(1);
+        expect(getInteractionsFromMS(step3.finalState).length).toBe(0);
+        expect(step3.finalState.core.bases[0].minions.map(m => m.uid)).toEqual(['w1']);
+    });
+
     it('关门放狗：第一次消灭后应按剩余预算过滤目标', () => {
         const core = makeState({
             players: {
