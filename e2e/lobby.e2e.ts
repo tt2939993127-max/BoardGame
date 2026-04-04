@@ -49,6 +49,7 @@ async function ensureLobbyReady(page: Page): Promise<void> {
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
 const ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME = '首页活跃房间浮层在桌面端居中且移动端不溢出';
+const MOBILE_HOME_V2_DRAFT_TEST_NAME = 'Home v2 草稿在移动横屏下显示全屏背景与逐帧书本壳';
 
 async function createTicTacToeRoom(page: Page): Promise<string> {
     const gameServerBaseURL = getGameServerBaseURL();
@@ -108,7 +109,11 @@ test.describe('Lobby E2E', () => {
 
     test.beforeEach(async ({ page }, testInfo) => {
         await setChineseLocale(page);
-        if (testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME) {
+        if (
+            testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME
+            || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME
+            || testInfo.title === MOBILE_HOME_V2_DRAFT_TEST_NAME
+        ) {
             return;
         }
         await ensureLobbyReady(page);
@@ -424,6 +429,30 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByTestId('game-details-mobile-package-card')).toHaveAttribute('data-status', 'failed');
 
         await game.screenshot('lobby-mobile-package-entry-failed-retry', testInfo);
+    });
+
+    test(MOBILE_HOME_V2_DRAFT_TEST_NAME, async ({ page, game }, testInfo) => {
+        await page.setViewportSize({ width: 936, height: 432 });
+        await page.goto('/?homeV2Draft=1', { waitUntil: 'domcontentloaded' });
+
+        await expect(page.getByTestId('home-v2-draft-root')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('home-v2-opening')).toBeVisible();
+        await expect(page.getByTestId('home-v2-opening')).toHaveCount(0, { timeout: 6000 });
+        await expect(page.getByTestId('home-v2-shell-ready')).toBeVisible({ timeout: 6000 });
+        await expect(page.getByTestId('home-v2-book-stage')).toBeVisible();
+
+        const hasHorizontalOverflow = await page.evaluate(() => {
+            const maxScrollWidth = Math.max(
+                document.documentElement.scrollWidth,
+                document.body.scrollWidth,
+                document.documentElement.clientWidth,
+                document.body.clientWidth,
+            );
+            return maxScrollWidth > window.innerWidth + 1;
+        });
+        expect(hasHorizontalOverflow).toBeFalsy();
+
+        await game.screenshot('lobby-home-v2-draft-shell-mobile', testInfo);
     });
 
     test('Dice Throne 更新日志 tab 会请求公开接口并结束 loading', async ({ page }) => {

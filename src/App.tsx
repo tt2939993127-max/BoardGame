@@ -36,7 +36,7 @@ import { MaintenancePage } from './pages/Maintenance';
 const isAndroidShellBuild = import.meta.env.MODE === 'android';
 
 // 页面级懒加载：首页不需要加载 MatchRoom 的引擎/传输层/教程系统代码
-const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
+const Home = React.lazy(() => import('./pages/HomeEntry').then(m => ({ default: m.HomeEntry })));
 const MatchRoom = React.lazy(() => import('./pages/MatchRoomWithAudio'));
 const LocalMatchRoom = React.lazy(() => import('./pages/LocalMatchRoomWithAudio'));
 const TestMatchRoom = React.lazy(() => import('./pages/TestMatchRoomWithAudio'));
