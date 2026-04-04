@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { zipSync, strToU8 } from 'fflate';
+import { zipSync } from 'fflate';
 import {
     resolveOtaForceUpdateOptions,
 } from './ota-publish-config.mjs';
@@ -18,6 +18,35 @@ for (const file of ['.env', '.env.android', '.env.android.local', '.env.example'
 
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const args = process.argv.slice(2);
+const helpText = `
+Android OTA 发布脚本
+
+默认策略：
+- 默认不会写入 targetNativeVersion / minNativeVersion / maxNativeVersion
+- 也就是说，只要新 bundle 不依赖新的原生壳能力，旧 APK 会继续收到 OTA
+- 只有你显式传兼容参数时，才会生成原生版本门禁
+
+常见用法：
+- node scripts/mobile/publish-android-ota.mjs --channel stable
+- node scripts/mobile/publish-android-ota.mjs --channel edge --dry-run
+- node scripts/mobile/publish-android-ota.mjs --channel stable --target-native-version 0.5.1
+- node scripts/mobile/publish-android-ota.mjs --channel stable --min-native-version 0.5.0 --max-native-version 0.5.2
+
+参数：
+- --channel <name>
+- --version <bundleVersion>
+- --native-version <version>
+- --target-native-version <version[,version]>
+- --min-native-version <version>
+- --max-native-version <version>
+- --force-update / --no-force-update
+- --force-update-title <text>
+- --force-update-message <text>
+- --notes <text>
+- --dry-run
+- --skip-latest
+- --help
+`.trim();
 const readArgValue = (name, fallback = '') => {
     const prefix = `--${name}=`;
     const direct = args.find((arg) => arg.startsWith(prefix));
@@ -31,6 +60,10 @@ const readArgValue = (name, fallback = '') => {
     return fallback;
 };
 const hasFlag = (name) => args.includes(`--${name}`);
+if (hasFlag('help') || args.includes('-h')) {
+    console.log(helpText);
+    process.exit(0);
+}
 
 const channel = readArgValue('channel', process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || 'stable');
 const nativeVersion = readArgValue('native-version', packageJson.version);
@@ -121,10 +154,9 @@ const normalizedTargetNativeVersion = explicitTargetNativeVersion
         .map((value) => value.trim())
         .filter(Boolean)
     : [];
-const shouldUseDefaultTargetNativeVersion = !explicitTargetNativeVersion && !minNativeVersion && !maxNativeVersion;
-const resolvedTargetNativeVersion = shouldUseDefaultTargetNativeVersion
-    ? [nativeVersion]
-    : normalizedTargetNativeVersion;
+// 默认不加原生门禁，避免把 OTA 默认焊死到当前壳版本。
+// 只有显式传兼容参数时，才让 manifest 带上 target/min/max。
+const resolvedTargetNativeVersion = normalizedTargetNativeVersion;
 const manifest = {
     version: bundleVersion,
     url: bundleUrl,

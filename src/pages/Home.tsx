@@ -51,6 +51,7 @@ const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
 const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
 const isAndroidShellBuild = isAndroidShellBuildMode();
+const toShortVersionLabel = (version: string) => version.replace(/^v/i, '').split('-')[0] || version.replace(/^v/i, '');
 
 type HomeModalErrorBoundaryProps = {
     children: ReactNode;
@@ -104,6 +105,7 @@ export const Home = () => {
     const [missingMatchConfirmRetryTick, setMissingMatchConfirmRetryTick] = useState(0);
     const [guestId, setGuestId] = useState<string | null>(null);
     const [otaSnapshot, setOtaSnapshot] = useState<AndroidLiveUpdateSnapshot | null>(null);
+    const [isVersionExpanded, setIsVersionExpanded] = useState(false);
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -218,7 +220,14 @@ export const Home = () => {
         return bundleVersion || packageJson.version;
     }, [otaSnapshot?.currentBundleVersion]);
     const isUsingOtaBundle = activeBundleVersion.includes('-ota-');
-    const homeVersionLabel = useMemo(() => `v${activeBundleVersion}`, [activeBundleVersion]);
+    const homeVersionLabel = useMemo(
+        () => isVersionExpanded ? activeBundleVersion.replace(/^v/i, '') : toShortVersionLabel(activeBundleVersion),
+        [activeBundleVersion, isVersionExpanded],
+    );
+    const appVersionLabel = useMemo(
+        () => isVersionExpanded ? APP_VERSION_LABEL.replace(/^v/i, '') : toShortVersionLabel(APP_VERSION_LABEL),
+        [isVersionExpanded],
+    );
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
@@ -824,22 +833,24 @@ export const Home = () => {
             </main>
 
             {/* 活跃对局指示器 */}
-            <div
-                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 max-w-[min(72vw,20rem)] pointer-events-none select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
+            <button
+                type="button"
+                onClick={() => setIsVersionExpanded((expanded) => !expanded)}
+                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 max-w-[min(72vw,20rem)] select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80 cursor-pointer"
                 aria-label={isUsingOtaBundle
-                    ? `Current home version ${homeVersionLabel}, app version ${APP_VERSION_LABEL}`
+                    ? `Current home version ${homeVersionLabel}, app version ${appVersionLabel}`
                     : `Current version ${homeVersionLabel}`}
                 title={isUsingOtaBundle
-                    ? `首页当前版本 ${homeVersionLabel}\nApp 壳版本 ${APP_VERSION_LABEL}`
-                    : `当前版本 ${homeVersionLabel}`}
+                    ? `首页当前版本 ${activeBundleVersion.replace(/^v/i, '')}\nApp 壳版本 ${APP_VERSION_LABEL.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`
+                    : `当前版本 ${activeBundleVersion.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`}
             >
                 <span className="block break-all">{homeVersionLabel}</span>
                 {isUsingOtaBundle && (
                     <span className="mt-1 block text-[0.58rem] tracking-[0.04em] text-parchment-light-text/60 md:text-[0.64rem]">
-                        App {APP_VERSION_LABEL}
+                        App {appVersionLabel}
                     </span>
                 )}
-            </div>
+            </button>
 
             {activeMatch && (
                 <div
