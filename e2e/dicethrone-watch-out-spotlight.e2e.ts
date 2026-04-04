@@ -54,6 +54,17 @@ async function expectElementInsideViewport(
     expect(box!.y + box!.height, `${label} bottom edge`).toBeLessThanOrEqual(viewportHeight + 1);
 }
 
+async function expectMaxViewportWidthRatio(
+    locator: Locator,
+    label: string,
+    viewportWidth: number,
+    maxRatio: number,
+): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box, `${label} should have bounding box`).not.toBeNull();
+    expect(box!.width / viewportWidth, `${label} width ratio`).toBeLessThanOrEqual(maxRatio);
+}
+
 async function expectNoHorizontalOverflow(page: Page): Promise<void> {
     const metrics = await page.evaluate(() => {
         const root = document.getElementById('root');
@@ -2073,6 +2084,79 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     const discardPreviewFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
     await expect(discardPreviewFrame).toBeVisible({ timeout: 5000 });
     await game.screenshot('14-mobile-discard-pile-inspect-open', testInfo);
+});
+
+test('desktop v2 player board should stay within normal gameplay width', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await setChineseLocale(page.context());
+    await page.setViewportSize({ width: 1365, height: 768 });
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            resources: { CP: 3, HP: 50 },
+            discard: ['card-play-six'],
+        },
+        player1: {
+            resources: { HP: 50 },
+        },
+        currentPlayer: '0',
+        phase: 'offensiveRoll',
+        extra: {
+            selectedCharacters: { '0': 'samurai', '1': 'gunslinger' },
+            hostStarted: true,
+            rollCount: 1,
+            rollConfirmed: false,
+            dice: [
+                { id: 0, value: 1, isKept: false },
+                { id: 1, value: 2, isKept: false },
+                { id: 2, value: 3, isKept: false },
+                { id: 3, value: 4, isKept: false },
+                { id: 4, value: 5, isKept: false },
+            ],
+        },
+    });
+
+    await page.waitForFunction(
+        () => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 1365
+                && state?.sys?.phase === 'offensiveRoll'
+                && state?.core?.selectedCharacters?.['0'] === 'samurai'
+                && state?.core?.selectedCharacters?.['1'] === 'gunslinger'
+                && (state?.core?.players?.['0']?.discard?.length ?? 0) === 1;
+        },
+        { timeout: 10000, polling: 200 },
+    );
+    await ensureDebugPanelClosed(page);
+    await disableFabMenu(page);
+
+    const playerBoardSurface = page.locator('[data-testid="player-board-surface"]');
+    const tipBoardSurface = page.locator('[data-testid="tip-board-surface"]');
+    const playerBoardMagnifyButton = page.locator('[data-testid="player-board-magnify-button"]');
+    const viewport = page.viewportSize();
+
+    expect(viewport).not.toBeNull();
+    await expect(playerBoardSurface).toBeVisible({ timeout: 5000 });
+    await expect(tipBoardSurface).toBeVisible({ timeout: 5000 });
+    await expect(playerBoardMagnifyButton).toBeVisible({ timeout: 5000 });
+    await expectNoHorizontalOverflow(page);
+    await expectElementInsideViewport(playerBoardSurface, 'desktop player board surface', viewport!.width, viewport!.height);
+    await expectElementInsideViewport(tipBoardSurface, 'desktop tip board surface', viewport!.width, viewport!.height);
+    await expectMaxViewportWidthRatio(playerBoardSurface, 'desktop samurai player board surface', viewport!.width, 0.48);
+
+    const [playerBoardBox, tipBoardBox] = await Promise.all([
+        playerBoardSurface.boundingBox(),
+        tipBoardSurface.boundingBox(),
+    ]);
+    expect(playerBoardBox, 'desktop player board should expose bounding box').not.toBeNull();
+    expect(tipBoardBox, 'desktop tip board should expose bounding box').not.toBeNull();
+    expect(playerBoardBox!.x + playerBoardBox!.width, 'desktop player board should stop before tip board')
+        .toBeLessThanOrEqual(tipBoardBox!.x + 1);
+
+    await game.screenshot('15-desktop-v2-board-layout', testInfo);
 });
 
 test('mobile long press hand card should open magnify without playing card', async ({ page, game }, testInfo) => {

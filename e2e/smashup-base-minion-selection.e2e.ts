@@ -14,7 +14,13 @@ import { dirname } from 'node:path';
 import type { Page, TestInfo } from '@playwright/test';
 import { test, expect } from './fixtures';
 import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
-import { dismissViteOverlay, waitForTestHarness } from './helpers/common';
+import {
+    blockAudioRequests,
+    blockCdnRequests,
+    dismissViteOverlay,
+    initContext,
+    waitForTestHarness,
+} from './helpers/common';
 
 const saveEvidenceScreenshot = async (page: Page, name: string, testInfo: TestInfo) => {
     const path = getEvidenceScreenshotPath(testInfo, name, {
@@ -27,12 +33,43 @@ const saveEvidenceScreenshot = async (page: Page, name: string, testInfo: TestIn
 test.describe('SmashUp Base/Minion Selection', () => {
     test.describe.configure({ timeout: 120_000 });
 
+    test.beforeEach(async ({ context }) => {
+        await initContext(context, { storageKey: '__smashup_outline_reset' });
+        await blockAudioRequests(context);
+        await blockCdnRequests(context);
+    });
+
     test('描边高亮只作用于卡框，不连带基地记分和随从外置徽记', async ({ page }, testInfo) => {
+        page.on('pageerror', (error) => {
+            console.log('[smashup-outline][pageerror]', error.stack ?? error.message);
+        });
+        page.on('console', (message) => {
+            if (message.type() === 'error' || message.text().includes('Error')) {
+                console.log(`[smashup-outline][console:${message.type()}] ${message.text()}`);
+            }
+        });
+
         await page.goto('/play/smashup?p0=aliens,pirates&p1=ninjas,dinosaurs&seed=24680', {
             waitUntil: 'domcontentloaded',
         });
         await dismissViteOverlay(page);
-        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 30_000 });
+        const gameReady = await page.waitForFunction(
+            () => {
+                if (document.querySelector('[data-testid="su-hand-area"]')) return 'hand';
+                if (document.querySelector('[data-base-index="0"]')) return 'base';
+                if (document.querySelector('[data-testid="debug-toggle"]')) return 'debug';
+                if (document.querySelector('[data-testid="game-page-rescue-gate"]')) return 'rescue';
+                return false;
+            },
+            { timeout: 30_000 },
+        );
+        const gameReadyState = await gameReady.jsonValue();
+        console.log('[smashup-outline] ready-state:', gameReadyState);
+        if (gameReadyState === 'rescue') {
+            const rescueText = await page.locator('[data-testid="game-page-rescue-gate"]').innerText();
+            console.log('[smashup-outline] rescue-screen:', rescueText);
+        }
+        expect(gameReadyState).not.toBe('rescue');
 
         await waitForTestHarness(page, 10000);
 

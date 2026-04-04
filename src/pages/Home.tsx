@@ -92,6 +92,7 @@ class HomeModalErrorBoundary extends Component<HomeModalErrorBoundaryProps, Home
 
 export const Home = () => {
     useGlobalCursor();
+    const isNativeAndroid = isNativeAndroidRuntime();
     const [activeCategory, setActiveCategory] = useState<Category>('All');
     const [, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -157,7 +158,7 @@ export const Home = () => {
     }, [suppressedOwnerMatchId]);
 
     useEffect(() => {
-        if (!isNativeAndroidRuntime()) {
+        if (!isNativeAndroid) {
             return;
         }
 
@@ -175,7 +176,7 @@ export const Home = () => {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [isNativeAndroid]);
 
     const storedLocalMatchRole = useMemo(() => {
         void localStorageTick;
@@ -219,15 +220,51 @@ export const Home = () => {
         const bundleVersion = otaSnapshot?.currentBundleVersion?.trim();
         return bundleVersion || packageJson.version;
     }, [otaSnapshot?.currentBundleVersion]);
-    const isUsingOtaBundle = activeBundleVersion.includes('-ota-');
+    const shouldShowNativeAppVersion = isNativeAndroid;
     const homeVersionLabel = useMemo(
         () => isVersionExpanded ? activeBundleVersion.replace(/^v/i, '') : toShortVersionLabel(activeBundleVersion),
         [activeBundleVersion, isVersionExpanded],
     );
+    const nativeAppVersion = otaSnapshot?.nativeVersion?.trim() || packageJson.version;
     const appVersionLabel = useMemo(
-        () => isVersionExpanded ? APP_VERSION_LABEL.replace(/^v/i, '') : toShortVersionLabel(APP_VERSION_LABEL),
-        [isVersionExpanded],
+        () => isVersionExpanded ? nativeAppVersion.replace(/^v/i, '') : toShortVersionLabel(nativeAppVersion),
+        [isVersionExpanded, nativeAppVersion],
     );
+    const latestManifestVersion = otaSnapshot?.manifestVersion?.trim() || null;
+    const latestManifestVersionLabel = useMemo(
+        () => latestManifestVersion
+            ? (isVersionExpanded ? latestManifestVersion.replace(/^v/i, '') : toShortVersionLabel(latestManifestVersion))
+            : null,
+        [isVersionExpanded, latestManifestVersion],
+    );
+    const otaVersionMismatch = shouldShowNativeAppVersion
+        && Boolean(latestManifestVersion)
+        && latestManifestVersion !== activeBundleVersion;
+    const nativeVersionTitle = useMemo(() => {
+        if (!shouldShowNativeAppVersion) {
+            return `当前版本 ${activeBundleVersion.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`;
+        }
+
+        const lines = [
+            `当前 Bundle ${activeBundleVersion.replace(/^v/i, '')}`,
+            `App 壳版本 ${nativeAppVersion.replace(/^v/i, '')}`,
+        ];
+        if (latestManifestVersion) {
+            lines.push(`最新 OTA ${latestManifestVersion.replace(/^v/i, '')}`);
+        }
+        if (otaVersionMismatch) {
+            lines.push('状态：当前 Bundle 与最新 OTA 不一致');
+        }
+        lines.push(`点击${isVersionExpanded ? '收起' : '展开'}完整版本号`);
+        return lines.join('\n');
+    }, [
+        activeBundleVersion,
+        isVersionExpanded,
+        latestManifestVersion,
+        nativeAppVersion,
+        otaVersionMismatch,
+        shouldShowNativeAppVersion,
+    ]);
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
@@ -837,17 +874,29 @@ export const Home = () => {
                 type="button"
                 onClick={() => setIsVersionExpanded((expanded) => !expanded)}
                 className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 max-w-[min(72vw,20rem)] select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80 cursor-pointer"
-                aria-label={isUsingOtaBundle
-                    ? `Current home version ${homeVersionLabel}, app version ${appVersionLabel}`
+                aria-label={shouldShowNativeAppVersion
+                    ? otaVersionMismatch
+                        ? `Current bundle version ${homeVersionLabel}, app version ${appVersionLabel}, latest ota version ${latestManifestVersionLabel ?? 'unknown'}, versions are not aligned`
+                        : `Current bundle version ${homeVersionLabel}, app version ${appVersionLabel}`
                     : `Current version ${homeVersionLabel}`}
-                title={isUsingOtaBundle
-                    ? `首页当前版本 ${activeBundleVersion.replace(/^v/i, '')}\nApp 壳版本 ${APP_VERSION_LABEL.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`
-                    : `当前版本 ${activeBundleVersion.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`}
+                title={nativeVersionTitle}
             >
-                <span className="block break-all">{homeVersionLabel}</span>
-                {isUsingOtaBundle && (
+                <span className="block break-all">
+                    {shouldShowNativeAppVersion ? `Bundle ${homeVersionLabel}` : homeVersionLabel}
+                </span>
+                {shouldShowNativeAppVersion && (
                     <span className="mt-1 block text-[0.58rem] tracking-[0.04em] text-parchment-light-text/60 md:text-[0.64rem]">
                         App {appVersionLabel}
+                    </span>
+                )}
+                {shouldShowNativeAppVersion && latestManifestVersionLabel && (
+                    <span className={`mt-1 block text-[0.58rem] tracking-[0.04em] md:text-[0.64rem] ${otaVersionMismatch ? 'text-red-700/90' : 'text-parchment-light-text/55'}`}>
+                        Latest {latestManifestVersionLabel}
+                    </span>
+                )}
+                {otaVersionMismatch && (
+                    <span className="mt-1 block text-[0.58rem] font-bold tracking-[0.04em] text-red-800 md:text-[0.64rem]">
+                        OTA 未对齐
                     </span>
                 )}
             </button>

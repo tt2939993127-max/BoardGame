@@ -214,7 +214,10 @@ export const VortexEffect: React.FC<VortexEffectProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rafRef = useRef(0);
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   const isStrong = intensity === 'strong';
 

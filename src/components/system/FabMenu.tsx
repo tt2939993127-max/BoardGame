@@ -49,14 +49,12 @@ export const resolveFabSatellitesToRender = <T,>(items: T[]) => [...items].rever
 export const shouldTrackFabButtonRect = ({
     showTooltip,
     showPreview,
-    isActive,
-    hasContent,
 }: {
     showTooltip: boolean;
     showPreview: boolean;
     isActive: boolean;
     hasContent: boolean;
-}) => showTooltip || showPreview || (isActive && hasContent);
+}) => showTooltip || showPreview;
 
 export const FabMenu = ({
     items,
