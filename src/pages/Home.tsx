@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import packageJson from '../../package.json';
 import { CategoryPills, type Category } from '../components/layout/CategoryPills';
 import { GameList } from '../components/lobby/GameList';
-import { getGamesByCategory, getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
+import { getGamesByCategory, getGameById, subscribeGameRegistry } from '../config/games.config';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { useNavigate } from 'react-router-dom';
@@ -45,12 +45,11 @@ import {
     readAndroidLiveUpdateSnapshot,
     type AndroidLiveUpdateSnapshot,
 } from '../lib/mobile/androidLiveUpdates';
-import { isAndroidShellBuildMode, isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
+import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
 const APP_VERSION_LABEL = `v${packageJson.version}`;
 const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
-const isAndroidShellBuild = isAndroidShellBuildMode();
 const toShortVersionLabel = (version: string) => version.replace(/^v/i, '').split('-')[0] || version.replace(/^v/i, '');
 
 type HomeModalErrorBoundaryProps = {
@@ -313,7 +312,6 @@ export const Home = () => {
         const unsubscribe = subscribeGameRegistry(() => {
             setRegistryVersion((version) => version + 1);
         });
-        void refreshUgcGames();
         return () => {
             unsubscribe();
         };
@@ -330,30 +328,6 @@ export const Home = () => {
     }, [activeGameModalId]);
 
     const handleGameClick = (id: string) => {
-        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
-            return;
-        }
-        if (id === 'assetslicer') {
-            navigate('/dev/slicer');
-            return;
-        }
-        if (id === 'fxpreview') {
-            navigate('/dev/fx');
-            return;
-        }
-        if (id === 'audiobrowser') {
-            navigate('/dev/audio');
-            return;
-        }
-        if (id === 'ugcbuilder') {
-            navigate('/dev/ugc');
-            return;
-        }
-        if (id === 'archview') {
-            navigate('/dev/arch');
-            return;
-        }
-
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
             return;
@@ -367,12 +341,6 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
-        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
-            return;
-        }
-        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
-            return;
-        }
         void import('../components/lobby/GameDetailsModal').catch((error) => {
             console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
         });

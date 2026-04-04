@@ -34,14 +34,12 @@ import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
 import { getGameServerUrl } from '../config/server';
-import { getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
+import { getGameById } from '../config/games.config';
 import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { SEO } from '../components/common/SEO';
-import { createUgcClientGame } from '../ugc/client/game';
-import { createUgcRemoteHostBoard } from '../ugc/client/board';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingScreen';
 import { GameNamespaceLoadError } from '../components/system/GameNamespaceLoadError';
@@ -52,6 +50,7 @@ import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
+import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
@@ -366,7 +365,7 @@ export const MatchRoom = () => {
     const renderLogKeyRef = useRef<string | null>(null);
 
     const renderLogKey = `${gameId ?? 'unknown'}:${matchId ?? 'unknown'}:${searchParams.get('playerID') ?? 'no-player'}`;
-    if (renderLogKeyRef.current !== renderLogKey) {
+    if (isNativeAndroidRuntime() && renderLogKeyRef.current !== renderLogKey) {
         renderLogKeyRef.current = renderLogKey;
         logMobileRuntimeCritical('MatchRoom', 'render-enter', {
             gameId,
@@ -385,8 +384,7 @@ export const MatchRoom = () => {
         () => getGamePageDataAttributes(gameId, gameConfig),
         [gameConfig, gameId],
     );
-    const isUgcGame = Boolean(gameConfig?.isUgc);
-    const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
+    const requiresGameNamespace = Boolean(gameConfig);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
     useEffect(() => {
@@ -432,7 +430,7 @@ export const MatchRoom = () => {
         isGameImplementationReady,
         gameImplementationError,
         retryGameImplementationLoad,
-    } = useGameImplementationReady(gameId, { enabled: !isUgcGame });
+    } = useGameImplementationReady(gameId, { enabled: Boolean(gameId) });
     const gameImplReady = isGameImplementationReady;
 
     // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
@@ -450,7 +448,7 @@ export const MatchRoom = () => {
                 gameState={props?.G}
                 locale={i18n.language}
                 playerID={props?.playerID}
-                enabled={!isUgcGame}
+                enabled={true}
                 blockRendering={shouldBlockBoardOnImagePreload}
                 loadingDescription={tRef.current('matchRoom.loadingResources')}
                 onReady={() => {
@@ -469,7 +467,6 @@ export const MatchRoom = () => {
         gameImplReady,
         i18n.language,
         isTutorialRoute,
-        isUgcGame,
         shouldBlockBoardOnImagePreload,
     ]);
 
@@ -486,70 +483,7 @@ export const MatchRoom = () => {
     }, [gameId, gameImplReady]);
 
     // 在线模式是否就绪
-    const hasOnlineBoard = Boolean(WrappedBoard && gameId && !isUgcGame);
-
-    const [ugcEngineConfig, setUgcEngineConfig] = useState<GameEngineConfig | null>(null);
-    const [ugcBoard, setUgcBoard] = useState<ComponentType<GameBoardProps> | null>(null);
-    const [ugcLoading, setUgcLoading] = useState(false);
-    const [ugcError, setUgcError] = useState<string | null>(null);
-    const [, setRegistryVersion] = useState(0);
-
-    useEffect(() => {
-        if (!gameId) return;
-        const unsubscribe = subscribeGameRegistry(() => {
-            setRegistryVersion((version) => version + 1);
-        });
-        const current = getGameById(gameId);
-        if (!current || current.isUgc) {
-            void refreshUgcGames();
-        }
-        return () => {
-            unsubscribe();
-        };
-    }, [gameId]);
-
-    useEffect(() => {
-        if (!gameId || !isUgcGame || isTutorialRoute) {
-            setUgcEngineConfig(null);
-            setUgcBoard(null);
-            setUgcLoading(false);
-            setUgcError(null);
-            return;
-        }
-
-        let cancelled = false;
-        setUgcLoading(true);
-        setUgcError(null);
-
-        createUgcClientGame(gameId)
-            .then(({ engineConfig, config }) => {
-                if (cancelled) return;
-                const BaseBoard = createUgcRemoteHostBoard({
-                    packageId: gameId,
-                    viewUrl: config.viewUrl,
-                });
-                // UGC Board 现在直接接受 GameBoardProps
-                const UgcWrapped: ComponentType<GameBoardProps> = BaseBoard as ComponentType<GameBoardProps>;
-                UgcWrapped.displayName = 'WrappedUgcBoard';
-                setUgcEngineConfig(engineConfig);
-                setUgcBoard(() => UgcWrapped);
-            })
-            .catch((error) => {
-                if (cancelled) return;
-                const message = error instanceof Error ? error.message : t('matchRoom.ugc.loadFailedShort');
-                setUgcError(message);
-                setUgcEngineConfig(null);
-                setUgcBoard(null);
-            })
-            .finally(() => {
-                if (cancelled) return;
-                setUgcLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [gameId, isUgcGame, isTutorialRoute, t]);
+    const hasOnlineBoard = Boolean(WrappedBoard && gameId);
 
     // 教程模式是否就绪
     const hasTutorialBoard = Boolean(WrappedBoard && engineConfig && gameId);
@@ -574,7 +508,7 @@ export const MatchRoom = () => {
     // 使用 preloadWarmImages（requestIdleCallback）不阻塞主线程。
     const lobbyPreloadStartedRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!gameId || !isGameNamespaceReady || isTutorialRoute || isUgcGame) return;
+        if (!gameId || !isGameNamespaceReady || isTutorialRoute) return;
         if (lobbyPreloadStartedRef.current === gameId) return;
         lobbyPreloadStartedRef.current = gameId;
         // resolver 无状态降级：返回该游戏在大厅里也值得抢先预热的基础资源列表
@@ -583,7 +517,7 @@ export const MatchRoom = () => {
         if (criticalPaths.length > 0) {
             preloadWarmImages(criticalPaths, i18n.language, gameId);
         }
-    }, [gameId, isGameNamespaceReady, isTutorialRoute, isUgcGame, i18n.language]);
+    }, [gameId, isGameNamespaceReady, isTutorialRoute, i18n.language]);
 
 
     // 从地址查询参数中获取 playerID
@@ -1304,7 +1238,7 @@ export const MatchRoom = () => {
         );
     }
 
-    if (!isUgcGame && !gameImplReady) {
+    if (!gameImplReady) {
         return (
             <LoadingScreen
                 description={t('matchRoom.loadingResources')}
@@ -1391,7 +1325,7 @@ export const MatchRoom = () => {
                 {/* 游戏棋盘 - 全屏 */}
                 <MobileBoardShell>
                     <div
-                        className={`w-full h-full ${isUgcGame ? 'ugc-preview-container' : ''}`}
+                        className="w-full h-full"
                         style={{
                             '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
                         } as React.CSSProperties}
@@ -1420,48 +1354,7 @@ export const MatchRoom = () => {
                                         </div>
                                     )}
                                 </GameModeProvider>
-                            ) : (
-                                isUgcGame && ugcLoading ? (
-                                    <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />
-                                ) : isUgcGame && ugcError ? (
-                                    <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
-                                        {t('matchRoom.ugc.loadFailed', { error: ugcError })}
-                                    </div>
-                                ) : isUgcGame && ugcBoard && ugcEngineConfig && matchId ? (
-                                    <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                        <RematchProvider
-                                            matchId={matchId}
-                                            playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                            credentials={credentials}
-                                            onError={handleGameError}
-                                            onConnectionChange={(connected) => {
-                                                if (connected) {
-                                                    setOnlineTransportError(null);
-                                                }
-                                            }}
-                                        >
-                                            <GameProvider
-                                                server={getGameServerUrl()}
-                                                matchId={matchId}
-                                                playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                                credentials={credentials}
-                                                onError={handleGameError}
-                                            >
-                                                <BoardBridge
-                                                    board={ugcBoard}
-                                                    loading={(
-                                                        <OnlineRoomConnectionLoading
-                                                            title={t('matchRoom.title.joining')}
-                                                            description={t('matchRoom.joiningRoom')}
-                                                            gameId={gameId}
-                                                            transportError={onlineTransportError}
-                                                        />
-                                                    )}
-                                                />
-                                            </GameProvider>
-                                        </RematchProvider>
-                                    </GameModeProvider>
-                                ) : hasOnlineBoard && WrappedBoard && matchId ? (
+                            ) : hasOnlineBoard && WrappedBoard && matchId ? (
                                     <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
                                         <RematchProvider
                                             matchId={matchId}
@@ -1510,7 +1403,7 @@ export const MatchRoom = () => {
                                         {t('matchRoom.noClient')}
                                     </div>
                                 )
-                            )}
+                            }
                         </GameCursorProvider>
                     </div>
                 </MobileBoardShell>

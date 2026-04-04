@@ -3,6 +3,12 @@
     "title": "Yi Board Game",
     "subtitle": "Platform for Tutorials, Online Play, and Prototyping",
     "logoAlt": "Board Game Platform Logo",
+    "routeLoading": {
+      "eyebrow": "Home",
+      "title": "Loading home...",
+      "description": "Preparing the lobby, game list, and recent match entry points.",
+      "progress": "Loading home module..."
+    },
     "audio": {
       "mute": "Mute",
       "unmute": "Unmute"

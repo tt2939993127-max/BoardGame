@@ -46,10 +46,10 @@ export const getNativeAndroidRuntimeDiagnostics = (options?: {
     const windowCapacitorPlatform = safeInvoke(() => runtimeWindow?.Capacitor?.getPlatform?.());
     const windowCapacitorNative = safeInvoke(() => runtimeWindow?.Capacitor?.isNativePlatform?.());
     const hasAndroidBridge = Boolean(runtimeWindow?.androidBridge);
-    const nativeAndroid = Boolean(
-        (importCapacitorNative && importCapacitorPlatform === 'android')
-        || (windowCapacitorNative && windowCapacitorPlatform === 'android'),
-    );
+    const hasImportRuntimeSignal = typeof importCapacitorNative === 'boolean' || typeof importCapacitorPlatform === 'string';
+    const nativeAndroid = hasImportRuntimeSignal
+        ? Boolean(importCapacitorNative && importCapacitorPlatform === 'android')
+        : Boolean(windowCapacitorNative && windowCapacitorPlatform === 'android');
 
     return {
         nativeAndroid,

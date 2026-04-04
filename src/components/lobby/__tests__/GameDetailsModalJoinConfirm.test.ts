@@ -2,6 +2,7 @@
 import { createElement, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Capacitor } from '@capacitor/core';
 import {
     buildLocalMatchSearchParams,
     normalizeSeatController,
@@ -131,7 +132,15 @@ const markGamePackageQueued = (gameId = 'dicethrone') => {
     }));
 };
 
+const setImportedCapacitorRuntime = (native: boolean, platform: string) => {
+    Object.assign(Capacitor, {
+        isNativePlatform: () => native,
+        getPlatform: () => platform,
+    });
+};
+
 const setNativeAndroidRuntime = () => {
+    setImportedCapacitorRuntime(true, 'android');
     Object.defineProperty(window, 'Capacitor', {
         configurable: true,
         writable: true,
@@ -143,6 +152,7 @@ const setNativeAndroidRuntime = () => {
 };
 
 const setWebRuntime = () => {
+    setImportedCapacitorRuntime(false, 'web');
     Object.defineProperty(window, 'Capacitor', {
         configurable: true,
         writable: true,
@@ -492,8 +502,8 @@ describe('AI seat controller helpers', () => {
 
     it('AI controller 默认使用统一最小时长，并支持自定义覆盖', () => {
         expect(resolveAiMinimumActionDelayMs({ type: 'human' })).toBe(0);
-        expect(resolveAiMinimumActionDelayMs({ type: 'local-ai' })).toBe(600);
-        expect(resolveAiMinimumActionDelayMs({ type: 'remote-ai', providerId: 'astrbot' })).toBe(600);
+        expect(resolveAiMinimumActionDelayMs({ type: 'local-ai' })).toBe(200);
+        expect(resolveAiMinimumActionDelayMs({ type: 'remote-ai', providerId: 'astrbot' })).toBe(200);
         expect(resolveAiMinimumActionDelayMs({ type: 'local-ai', minimumActionDelayMs: 950 })).toBe(950);
     });
 
