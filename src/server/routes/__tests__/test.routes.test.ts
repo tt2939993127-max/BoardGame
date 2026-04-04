@@ -23,6 +23,63 @@ import type { GameEngineConfig } from '../../../engine/transport/server';
 import { createTestRoutes, getConfiguredTestApiToken, isTestRoutesEnabledEnv } from '../test';
 import { ensureSharedTestApiToken, resolveSharedTestApiToken } from '../../testApiToken';
 
+const FETCH_BLOCKED_PORTS = new Set([
+    1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
+    87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
+    139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532,
+    540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723,
+    2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679,
+    6697, 10080,
+]);
+
+const closeHttpServer = async (server: ReturnType<typeof createServer>) => {
+    await new Promise<void>((resolve, reject) => {
+        server.close((error) => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve();
+        });
+    });
+};
+
+const listenHttpServer = async (server: ReturnType<typeof createServer>) => {
+    const port = await new Promise<number>((resolve, reject) => {
+        const handleError = (error: Error) => {
+            server.off('listening', handleListening);
+            reject(error);
+        };
+        const handleListening = () => {
+            server.off('error', handleError);
+            const addr = server.address();
+            if (!addr || typeof addr === 'string') {
+                reject(new Error(`Unexpected server address: ${String(addr)}`));
+                return;
+            }
+            resolve(addr.port);
+        };
+
+        server.once('error', handleError);
+        server.once('listening', handleListening);
+        server.listen(0, '127.0.0.1');
+    });
+
+    return port;
+};
+
+const listenHttpServerOnFetchSafePort = async (server: ReturnType<typeof createServer>) => {
+    for (let attempt = 1; attempt <= 20; attempt += 1) {
+        const port = await listenHttpServer(server);
+        if (!FETCH_BLOCKED_PORTS.has(port)) {
+            return `http://127.0.0.1:${port}`;
+        }
+        await closeHttpServer(server);
+    }
+
+    throw new Error('Failed to bind test server to a fetch-safe port');
+};
+
 // Mock storage
 const createMockStorage = (): MatchStorage => {
     const states = new Map<string, StoredMatchState>();
@@ -453,14 +510,7 @@ describe('Test Routes Integration', () => {
         app.use(testRouter.allowedMethods());
 
         // 启动服务器
-        await new Promise<void>((resolve) => {
-            httpServer.listen(0, () => {
-                const addr = httpServer.address();
-                const port = typeof addr === 'object' && addr ? addr.port : 0;
-                baseURL = `http://localhost:${port}`;
-                resolve();
-            });
-        });
+        baseURL = await listenHttpServerOnFetchSafePort(httpServer);
     });
 
     afterAll(async () => {
