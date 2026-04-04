@@ -16,6 +16,14 @@ const NINJA_DIRECT_CLICK_QUERY = {
     seed: 67890,
 };
 
+const WEREWOLF_STANDING_STONES_QUERY = {
+    p0: 'werewolves,ghosts',
+    p1: 'aliens,pirates',
+    skipFactionSelect: true,
+    skipInitialization: false,
+    seed: 24680,
+};
+
 test.describe('SmashUp - 核心流程与交互稳定性', () => {
     test('主流程：打出随从到基地后结束回合，应切到对手的出牌阶段', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
@@ -147,5 +155,113 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
         expect(finalState.core.players['0'].minionsPlayed).toBe(0);
 
         await game.screenshot('ninja-acolyte-after-direct-click', testInfo);
+    });
+
+    test('巨石阵应允许己方随从上的附着天赋第2次发动，并占用基地双才能名额', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await game.openTestGame('smashup', WEREWOLF_STANDING_STONES_QUERY, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                factions: ['werewolves', 'ghosts'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                factions: ['aliens', 'pirates'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                {
+                    defId: 'base_standing_stones',
+                    minions: [
+                        {
+                            uid: 'wolf-host',
+                            defId: 'werewolf_pack_alpha',
+                            owner: '0',
+                            controller: '0',
+                            attachedActions: [
+                                { uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true },
+                            ],
+                        },
+                        {
+                            uid: 'enemy-minion',
+                            defId: 'ghosts_spectre',
+                            owner: '1',
+                            controller: '1',
+                        },
+                    ],
+                    ongoingActions: [],
+                },
+                { defId: 'base_the_mothership', minions: [], ongoingActions: [] },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+            extra: {
+                core: {
+                    standingStonesDoubleTalentMinionUid: undefined,
+                },
+            },
+        });
+
+        await game.waitForPhase('playCards');
+        await game.waitForCurrentPlayer('0');
+
+        const hostMinion = page.locator('[data-minion-uid="wolf-host"]');
+        const attachedAction = page.locator('[data-attached-action-uid="oa1"]');
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state.core.bases[0].minions.some((minion: any) => minion.uid === 'wolf-host');
+        }, { timeout: 5000 }).toBe(true);
+
+        await page.waitForFunction(
+            (uid) => !!document.querySelector(`[data-minion-uid="${uid}"]`),
+            'wolf-host',
+            { timeout: 10000, polling: 200 },
+        );
+        await expect(hostMinion).toBeVisible({ timeout: 5000 });
+        await hostMinion.hover();
+        await expect(attachedAction).toBeVisible({ timeout: 5000 });
+
+        const beforeState = await game.getState();
+        const beforeHost = beforeState.core.bases[0].minions.find((minion: any) => minion.uid === 'wolf-host');
+        expect(beforeHost?.attachedActions?.find((action: any) => action.uid === 'oa1')?.talentUsed).toBe(true);
+        expect(beforeState.core.standingStonesDoubleTalentMinionUid).toBeUndefined();
+        expect(beforeState.core.players['0'].extraTalentUsesConsumed).toBeUndefined();
+        expect(beforeState.core.players['0'].actionLimit).toBe(1);
+
+        await game.screenshot('werewolf-standing-stones-before-second-talent', testInfo);
+
+        await attachedAction.click({ force: true });
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            const player0 = state.core.players['0'];
+            const host = state.core.bases[0].minions.find((minion: any) => minion.uid === 'wolf-host');
+            const attached = host?.attachedActions?.find((action: any) => action.uid === 'oa1');
+            return {
+                actionLimit: player0.actionLimit,
+                extraTalentUsesConsumed: player0.extraTalentUsesConsumed ?? null,
+                standingStonesDoubleTalentMinionUid: state.core.standingStonesDoubleTalentMinionUid ?? null,
+                attachedTalentUsed: attached?.talentUsed ?? false,
+            };
+        }, { timeout: 5000 }).toEqual({
+            actionLimit: 2,
+            extraTalentUsesConsumed: null,
+            standingStonesDoubleTalentMinionUid: 'wolf-host',
+            attachedTalentUsed: true,
+        });
+
+        await hostMinion.hover();
+        await expect(attachedAction).toBeVisible({ timeout: 5000 });
+        await game.screenshot('werewolf-standing-stones-after-second-talent', testInfo);
     });
 });

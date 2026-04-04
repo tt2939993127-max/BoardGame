@@ -22,20 +22,31 @@ interface BuildAiDecisionContextArgs {
     seatController?: AiSeatController;
 }
 
+function shouldBlockHiddenInteractionActions(
+    visibleState: MatchState<unknown>,
+    interaction: ReturnType<typeof extractAiInteractionSnapshot>,
+): boolean {
+    return visibleState.sys?.interaction?.isBlocked === true && !interaction;
+}
+
 export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDecisionContext {
     const runtime = getGameAiRuntime(args.gameId);
-    const legalActions = runtime?.buildLegalActions({
-        playerId: args.playerId,
-        state: args.visibleState,
-    }) ?? [];
+    const interaction = extractAiInteractionSnapshot(args.visibleState);
+    const responseWindow = extractAiResponseWindowSnapshot(args.visibleState);
+    const legalActions = shouldBlockHiddenInteractionActions(args.visibleState, interaction)
+        ? []
+        : (runtime?.buildLegalActions({
+            playerId: args.playerId,
+            state: args.visibleState,
+        }) ?? []);
 
     return {
         gameId: args.gameId,
         matchId: args.matchId,
         playerId: args.playerId,
         visibleState: args.visibleState,
-        interaction: extractAiInteractionSnapshot(args.visibleState),
-        responseWindow: extractAiResponseWindowSnapshot(args.visibleState),
+        interaction,
+        responseWindow,
         legalActions,
         rulesVersion: args.rulesVersion,
         decisionBudgetMs: args.decisionBudgetMs,

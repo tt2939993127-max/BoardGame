@@ -428,6 +428,30 @@ describe('恐龙派系能力', () => {
         expect(current?.data?.options).toHaveLength(2);
     });
 
+    it('dino_rampage: 单基地单个己方随从时也应显式创建随从选择', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_rampage', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1',
+                    minions: [makeMinion('m0', 'test', '0', 3)],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_rampage_choose_minion');
+        expect(current?.data?.options).toHaveLength(1);
+    });
+
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {

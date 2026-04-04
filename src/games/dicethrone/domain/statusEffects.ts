@@ -10,6 +10,7 @@ export type StatusEffectMeta = {
     color?: string;
     frameId?: string;
     atlasId?: string;
+    iconPath?: string;
 };
 
 /**
@@ -29,6 +30,7 @@ function buildVisualMeta(): {
             frameId: def.frameId,
             atlasId: def.atlasId,
             color: def.colorTheme,
+            iconPath: def.iconPath,
         };
 
         if (def.category === 'debuff') {
@@ -48,3 +50,11 @@ export const STATUS_EFFECT_META: Record<string, StatusEffectMeta> = _statusMeta;
 
 /** Token 元数据（自动从 TokenDef 构建） */
 export const TOKEN_META: Record<string, StatusEffectMeta> = _tokenMeta;
+
+/**
+ * 按“当前展示实体 ID”解析视觉元数据。
+ * 某些 debuff 仍存放在 players.tokens 中，因此 token UI 需要允许回退到 STATUS_EFFECT_META。
+ */
+export const getVisualMetaById = (id: string): StatusEffectMeta | undefined => (
+    TOKEN_META[id] ?? STATUS_EFFECT_META[id]
+);

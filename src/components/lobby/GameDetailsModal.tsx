@@ -1674,8 +1674,11 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 <GamePackageInstallConfirmModal
                     gameName={pendingPackageInstall.gameName}
                     state={packageInstallCardState}
+                    manifestSource={pendingPackageInstall.source}
                     modulePackId={pendingPackageInstall.modulePackId}
                     assetPackId={pendingPackageInstall.assetPackId}
+                    modulePackUrl={pendingPackageInstall.modulePackUrl}
+                    assetPackUrl={pendingPackageInstall.assetPackUrl}
                     modulePackBytes={pendingPackageInstall.modulePackBytes}
                     assetPackBytes={pendingPackageInstall.assetPackBytes}
                     isLoading={isConfirmingPackageInstall}

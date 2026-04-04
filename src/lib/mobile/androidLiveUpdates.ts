@@ -123,6 +123,8 @@ export type AndroidLiveUpdateResult =
     | { status: 'queued'; version: string; source: 'downloaded' | 'cached'; mode: 'background' | 'immediate' }
     | { status: 'error'; reason: string };
 
+export type AndroidLiveUpdateApplyMode = 'background' | 'immediate';
+
 export type AndroidForceUpdatePhase =
     | 'hidden'
     | 'checking'
@@ -145,6 +147,8 @@ export interface AndroidForceUpdateState {
 export interface AndroidLiveUpdateStartOptions {
     force?: boolean;
     onForceStateChange?: (state: AndroidForceUpdateState) => void;
+    envOverride?: Record<string, string | boolean | undefined>;
+    applyMode?: AndroidLiveUpdateApplyMode;
 }
 
 const DEFAULT_OTA_CHANNEL = 'stable';
@@ -158,6 +162,10 @@ let updaterLoader: Promise<CapacitorUpdaterModule | null> | null = null;
 let notifyAppReadyPromise: Promise<void> | null = null;
 let backgroundUpdatePromise: Promise<AndroidLiveUpdateResult> | null = null;
 let listenerRegistrationPromise: Promise<PluginListenerHandle[] | null> | null = null;
+const liveUpdateRequestListeners = new Set<(request: {
+    interactive?: boolean;
+    applyMode?: AndroidLiveUpdateApplyMode;
+}) => void>();
 
 const parseBooleanEnv = (value: string | boolean | undefined) => {
     if (typeof value === 'boolean') return value;
@@ -184,13 +192,6 @@ const parseVersionParts = (value: string) => normalizeComparableVersion(value)
         const parsed = Number.parseInt(part, 10);
         return Number.isFinite(parsed) ? parsed : 0;
     });
-
-const clampPercent = (value: number | undefined) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return undefined;
-    }
-    return Math.max(0, Math.min(100, Math.round(value)));
-};
 
 const emitForceState = (
     onForceStateChange: AndroidLiveUpdateStartOptions['onForceStateChange'],
@@ -352,8 +353,8 @@ const loadUpdater = async () => {
 
 const toNativeDebugPatch = (_diagnostics: NativeAndroidRuntimeDiagnostics) => ({});
 
-const getConfigFromMetaEnv = () => {
-    const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
+const getConfigFromMetaEnv = (envOverride?: Record<string, string | boolean | undefined>) => {
+    const metaEnv = envOverride ?? ((import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {});
     return readAndroidLiveUpdateConfig(metaEnv);
 };
 
@@ -512,6 +513,14 @@ const queueDownloadedBundle = async (
     });
 };
 
+const applyBundleImmediately = async (
+    updater: CapacitorUpdaterModule['CapacitorUpdater'],
+    bundleId: string,
+) => {
+    await updater.set({ id: bundleId });
+    await updater.reload();
+};
+
 const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
     if (!handle) return;
     try {
@@ -519,13 +528,6 @@ const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
     } catch {
         // 忽略监听器清理失败，避免覆盖主错误。
     }
-};
-
-const applyBundleImmediately = async (
-    updater: CapacitorUpdaterModule['CapacitorUpdater'],
-    bundleId: string,
-) => {
-    await updater.set({ id: bundleId });
 };
 
 export const notifyAndroidBundleReady = async () => {
@@ -637,6 +639,27 @@ export const registerAndroidLiveUpdateListeners = async () => {
     return listenerRegistrationPromise;
 };
 
+export const requestAndroidLiveUpdateCheck = (request: {
+    interactive?: boolean;
+    applyMode?: AndroidLiveUpdateApplyMode;
+} = {}) => {
+    for (const listener of liveUpdateRequestListeners) {
+        listener(request);
+    }
+};
+
+export const subscribeAndroidLiveUpdateRequests = (
+    listener: (request: {
+        interactive?: boolean;
+        applyMode?: AndroidLiveUpdateApplyMode;
+    }) => void,
+) => {
+    liveUpdateRequestListeners.add(listener);
+    return () => {
+        liveUpdateRequestListeners.delete(listener);
+    };
+};
+
 export const startAndroidLiveUpdateBackgroundCheck = async (
     options: AndroidLiveUpdateStartOptions = {},
 ): Promise<AndroidLiveUpdateResult> => {
@@ -647,9 +670,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
     if (!backgroundUpdatePromise) {
         backgroundUpdatePromise = (async () => {
             const { onForceStateChange } = options;
+            const applyMode = options.applyMode ?? 'background';
             emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
 
-            const config = getConfigFromMetaEnv();
+            const config = getConfigFromMetaEnv(options.envOverride);
             emitCriticalOtaLog('background-check-start', {
                 force: options.force === true,
                 enabled: config.enabled,
@@ -723,15 +747,6 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
             }
 
             const isForceUpdate = manifest.forceUpdate === true;
-            if (isForceUpdate) {
-                emitForceState(onForceStateChange, {
-                    phase: 'checking',
-                    blocking: true,
-                    version: manifest.version,
-                    title: buildForceUpdateTitle(manifest, '正在准备更新'),
-                    message: buildForceUpdateMessage(manifest, '正在检查并准备新版本，请稍候。'),
-                });
-            }
 
             try {
                 const { CapacitorUpdater } = updaterModule;
@@ -830,6 +845,16 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     return { status: 'up-to-date' } as const;
                 }
 
+                if (applyMode === 'immediate') {
+                    emitForceState(onForceStateChange, {
+                        phase: 'checking',
+                        blocking: true,
+                        version: manifest.version,
+                        title: '正在准备更新',
+                        message: '正在检查并应用新版本，请稍候。',
+                    });
+                }
+
                 const bundleList = await withTimeout(
                     CapacitorUpdater.list(),
                     nativeOperationTimeoutMs,
@@ -852,14 +877,14 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     logMobileRuntime('OTA', 'cached-bundle-hit', {
                         cachedBundle,
                     });
-                    if (isForceUpdate) {
+                    if (applyMode === 'immediate') {
                         emitForceState(onForceStateChange, {
                             phase: 'applying',
                             blocking: true,
                             version: manifest.version,
                             progressPercent: 100,
-                            title: buildForceUpdateTitle(manifest, '正在切换新版本'),
-                            message: buildForceUpdateMessage(manifest, '更新包已准备完成，正在重启并切换到新版本。'),
+                            title: '正在重启应用',
+                            message: '更新包已准备完成，正在重启并切换到新版本。',
                         });
                         await applyBundleImmediately(CapacitorUpdater, cachedBundle.id);
                         emitCriticalOtaLog('cached-bundle-applied-immediately', {
@@ -900,32 +925,23 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                         status: 'queued',
                         version: manifest.version,
                         source: 'cached',
-                        mode: isForceUpdate ? 'immediate' : 'background',
+                        mode: 'background',
                     } as const;
                 }
 
-                let downloadHandle: PluginListenerHandle | null = null;
-                if (isForceUpdate) {
-                    emitForceState(onForceStateChange, {
-                        phase: 'downloading',
-                        blocking: true,
-                        version: manifest.version,
-                        title: buildForceUpdateTitle(manifest, '正在下载更新'),
-                        message: buildForceUpdateMessage(manifest, '正在下载必要更新，完成后会自动切换。'),
-                    });
-                    downloadHandle = await CapacitorUpdater.addListener('download', (event) => {
+                const downloadHandle: PluginListenerHandle | null = null;
+
+                try {
+                    if (applyMode === 'immediate') {
                         emitForceState(onForceStateChange, {
                             phase: 'downloading',
                             blocking: true,
                             version: manifest.version,
-                            progressPercent: clampPercent(event.percent),
-                            title: buildForceUpdateTitle(manifest, '正在下载更新'),
-                            message: buildForceUpdateMessage(manifest, '正在下载必要更新，完成后会自动切换。'),
+                            title: '正在下载更新',
+                            message: '正在下载并准备重启应用，请稍候。',
                         });
-                    });
-                }
+                    }
 
-                try {
                     logMobileRuntime('OTA', 'download-start', {
                         manifestVersion: manifest.version,
                         bundleUrl: normalizeUrl(manifest.url),
@@ -962,14 +978,14 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
 
                     await removeListenerSafely(downloadHandle);
 
-                    if (isForceUpdate) {
+                    if (applyMode === 'immediate') {
                         emitForceState(onForceStateChange, {
                             phase: 'applying',
                             blocking: true,
                             version: manifest.version,
                             progressPercent: 100,
-                            title: buildForceUpdateTitle(manifest, '正在切换新版本'),
-                            message: buildForceUpdateMessage(manifest, '更新已下载完成，正在重启并切换到新版本。'),
+                            title: '正在重启应用',
+                            message: '更新已下载完成，正在重启并切换到新版本。',
                         });
                         await applyBundleImmediately(CapacitorUpdater, downloadedBundle.id);
                         emitCriticalOtaLog('downloaded-bundle-applied-immediately', {
@@ -1014,7 +1030,7 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                         status: 'queued',
                         version: manifest.version,
                         source: 'downloaded',
-                        mode: isForceUpdate ? 'immediate' : 'background',
+                        mode: applyMode,
                     } as const;
                 } catch (error) {
                     await removeListenerSafely(downloadHandle);

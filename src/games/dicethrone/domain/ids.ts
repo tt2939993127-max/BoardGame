@@ -242,11 +242,6 @@ export const DICETHRONE_CARD_ATLAS_IDS = {
     SAMURAI: 'dicethrone:samurai-cards',
 } as const;
 
-export const DICETHRONE_HAND_CARD_ATLAS_IDS = {
-    GUNSLINGER: 'dicethrone:gunslinger-hand-cards',
-    SAMURAI: 'dicethrone:samurai-hand-cards',
-} as const;
-
 export const DICETHRONE_STATUS_ATLAS_IDS = {
     MONK: 'dicethrone:monk-status',
     BARBARIAN: 'dicethrone:barbarian-status',

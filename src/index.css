@@ -467,6 +467,18 @@ html[data-keyboard-visible="true"] .modal-base-container {
         -webkit-user-select: text;
         user-select: text;
     }
+
+    input:not([type="button"]):not([type="checkbox"]):not([type="color"]):not([type="file"]):not([type="hidden"]):not([type="image"]):not([type="radio"]):not([type="range"]):not([type="reset"]):not([type="submit"]),
+    textarea,
+    select,
+    [contenteditable=""],
+    [contenteditable="true"],
+    [contenteditable="plaintext-only"] {
+        font-size: 16px !important;
+        line-height: 1.4;
+        scroll-margin-block: max(6rem, calc(var(--keyboard-inset-height) + 1rem));
+        -webkit-text-size-adjust: 100%;
+    }
     
     /* 仅对显式 opt-in 的交互补命中区，避免把所有按钮一起做胖 */
     .touch-target-min {

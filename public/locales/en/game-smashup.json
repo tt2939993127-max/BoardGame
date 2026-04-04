@@ -157,6 +157,7 @@
     "wait_for_your_turn": "Wait for your response turn",
     "drag_release_to_base": "Release to play onto this base",
     "drag_release_to_minion": "Release to attach to this minion",
+    "drag_release_to_board": "Release to play this card",
     "drag_no_target": "Drag onto a highlighted target",
     "fusion_choose_playas": "Choose how to play",
     "fusion_choose_playas_desc": "Fusion cards can be played as a Minion or an Action. Choose the type for this play.",
@@ -456,8 +457,8 @@
       "turnTracker": "This shows the current turn number and game phase.\n\nEach turn follows: Play Cards → Score Bases → Draw.",
       "endTurnBtn": "This is the End Phase button. After you're done with each phase, click it to move on.",
       "playCardsExplain": "It's the Play Cards phase!\n\nEach turn you may play 1 minion and 1 action (one of each).\n\nMinions go on bases to add power; actions trigger special effects.",
-      "playMinion": "Try playing a minion!\n\nSwipe up on the \"Librarian\" in your hand, then choose a base to place it on.\n\nThis power-4 minion has a Talent ability — once it's on the base, you can activate it!",
-      "playAction": "Nice! Now play an action card.\n\nThe \"Howl\" action gives all your minions +1 power. Swipe up on the action card in your hand to use it.",
+      "playMinion": "Try playing a minion!\n\nClick the \"Librarian\" in your hand to select it, then choose a base to place it on.\n\nThis power-4 minion has a Talent ability — once it's on the base, you can activate it!",
+      "playAction": "Nice! Now play an action card.\n\nThe \"Howl\" action gives all your minions +1 power. Click the action card in your hand to select it, then click it again to use it.",
       "useTalent": "Notice the glowing golden \"Librarian\" on the base!\n\nSome minions have Talent abilities that can be activated once per turn.\n\nClick the glowing \"Librarian\" to use its Talent — discard a Madness card and draw a card!",
       "endPlayCards": "Done playing cards! Click the End Phase button to proceed.",
       "baseScoring": "Base Scoring: when the total power of all minions on a base reaches or exceeds its breakpoint, that base scores.\n\nAfter scoring, minions on the base are discarded and a new base is revealed.",
@@ -683,7 +684,7 @@
     },
     "elder_thing_byakhee": {
       "name": "Byakhee",
-      "abilityText": "If another player has a minion on this base, draw a Madness card."
+      "abilityText": "Each other player with a minion on this base draws a Madness card."
     },
     "elder_thing_power_of_madness": {
       "name": "Power of Madness",

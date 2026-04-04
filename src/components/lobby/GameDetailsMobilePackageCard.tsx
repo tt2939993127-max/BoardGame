@@ -5,7 +5,7 @@ import {
     type GamePackageCardState,
     type GamePackageInstallStatus,
 } from '../../features/mobile-packages/types';
-import { formatPackageBytes } from './packageManagerFormat';
+import { formatPackageBytes, hasKnownPackageBytes } from './packageManagerFormat';
 
 export type GamePackageCardStatus = GamePackageInstallStatus;
 export type { GamePackageCardState };
@@ -163,10 +163,17 @@ export const GameDetailsMobilePackageCard = ({
             ? total + value
             : total
     ), 0);
-    const totalBytes = [state.modulePackBytes, state.assetPackBytes].some((value) => typeof value === 'number' && Number.isFinite(value))
+    const hasAnyKnownBytes = [state.modulePackBytes, state.assetPackBytes].some((value) => hasKnownPackageBytes(value));
+    const totalBytes = hasAnyKnownBytes
         ? knownTotalBytes
         : undefined;
-    const sizeLabel = formatPackageBytes(totalBytes, t('packageManager.sizeUnknown'));
+    const isUnpublishedPreview = state.status === 'not-installed'
+        && state.manifestSource === 'remote'
+        && !state.assetPackUrl;
+    const sizeFallbackLabel = isUnpublishedPreview
+        ? t('packageManager.packageUnpublished')
+        : t('packageManager.sizeUnknown');
+    const sizeLabel = formatPackageBytes(totalBytes, sizeFallbackLabel);
     const actionHandler = state.status === 'failed' ? (onRetry ?? onInstall) : onInstall;
     const badgeLabel = presentation === 'update-required'
         ? t('packageManager.updateRequiredBadge')
@@ -257,7 +264,7 @@ export const GameDetailsMobilePackageCard = ({
                         </div>
                     )}
 
-                    {statusMeta.actionLabel && (
+                    {statusMeta.actionLabel && !isUnpublishedPreview && (
                         <div className="mt-3">
                             <button
                                 type="button"

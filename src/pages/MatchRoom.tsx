@@ -59,6 +59,7 @@ import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContex
 import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
+    type AiResolution,
     resolveAiMinimumActionDelayMs,
     resolveNextAiAction,
     type AiSeatController,
@@ -69,6 +70,47 @@ const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout'
 const ONLINE_TRANSPORT_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout']);
 // 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
+
+function buildAiBatchId(playerId: string, attemptKey: string): string {
+    const normalizedAttemptKey = attemptKey.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 120);
+    return `ai-${playerId}-${normalizedAttemptKey}`;
+}
+
+export function submitOnlineAiResolution(args: {
+    client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState'>;
+    resolution: AiResolution;
+    lastAiAttemptKeyRef: { current: string | null };
+    scheduleRetry: () => void;
+}): void {
+    const {
+        client,
+        resolution,
+        lastAiAttemptKeyRef,
+        scheduleRetry,
+    } = args;
+
+    lastAiAttemptKeyRef.current = resolution.attemptKey;
+    client.sendBatch(
+        buildAiBatchId(resolution.playerId, resolution.attemptKey),
+        resolution.action.commands.map((command) => ({
+            type: command.type,
+            payload: command.payload,
+        })),
+        (authoritativeState) => {
+            if (authoritativeState && typeof authoritativeState === 'object') {
+                client.updateLatestState(authoritativeState);
+            }
+        },
+        (reason) => {
+            if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+                lastAiAttemptKeyRef.current = null;
+            }
+            if (reason !== 'unauthorized') {
+                scheduleRetry();
+            }
+        },
+    );
+}
 
 /**
  * 教程 dispatch 桥接组件
@@ -145,6 +187,7 @@ const OnlineAiSeatBridge = ({
     const { state } = useGameClient();
     const clientsRef = useRef<Record<string, GameTransportClient>>({});
     const [connectionVersion, setConnectionVersion] = useState(0);
+    const [aiRetryVersion, setAiRetryVersion] = useState(0);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
 
     useEffect(() => {
@@ -204,6 +247,13 @@ const OnlineAiSeatBridge = ({
                 state,
                 matchId,
                 seatControllers,
+                visibleStateResolver: (playerId) => {
+                    const seatState = clientsRef.current[playerId]?.latestState;
+                    if (!seatState || typeof seatState !== 'object') {
+                        return null;
+                    }
+                    return seatState as MatchState<unknown>;
+                },
             });
 
             if (cancelled) return;
@@ -223,8 +273,6 @@ const OnlineAiSeatBridge = ({
                 return;
             }
 
-            lastAiAttemptKeyRef.current = resolution.attemptKey;
-
             const remainingDelayMs = Math.max(
                 0,
                 resolveAiMinimumActionDelayMs(controller) - (Date.now() - startedAt),
@@ -243,9 +291,14 @@ const OnlineAiSeatBridge = ({
                 return;
             }
 
-            for (const command of resolution.action.commands) {
-                client.sendCommand(command.type, command.payload);
-            }
+            submitOnlineAiResolution({
+                client,
+                resolution,
+                lastAiAttemptKeyRef,
+                scheduleRetry: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
+            });
         };
 
         void runAiTurn();
@@ -256,7 +309,7 @@ const OnlineAiSeatBridge = ({
                 clearTimeout(delayTimer);
             }
         };
-    }, [connectionVersion, engineConfig, matchId, seatControllers, state]);
+    }, [aiRetryVersion, connectionVersion, engineConfig, matchId, seatControllers, state]);
 
     return null;
 };

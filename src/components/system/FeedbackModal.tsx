@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { X, MessageSquareWarning, Send, Loader2, AlertTriangle, Lightbulb, HelpCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { cn } from '../../lib/utils';
@@ -63,6 +64,10 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
     const { success, error } = useToast();
     const location = useLocation();
     const backdropRef = useRef<HTMLDivElement>(null);
+    const portalRoot = useMemo(() => {
+        if (typeof document === 'undefined') return null;
+        return document.getElementById('modal-root') ?? document.body;
+    }, []);
 
     const [content, setContent] = useState('');
     const [type, setType] = useState<FeedbackType>(FeedbackType.BUG);
@@ -195,11 +200,12 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
         }
     };
 
-    return (
+    const modal = (
         <div
             ref={backdropRef}
             onClick={handleBackdropClick}
             className="modal-base-container fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
+            data-testid="feedback-modal"
             style={{
                 zIndex: UI_Z_INDEX.modalContent,
                 paddingTop: 'max(1rem, var(--safe-area-top))',
@@ -207,6 +213,8 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                 paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
                 paddingLeft: 'max(1rem, var(--safe-area-left))',
             }}
+            role="dialog"
+            aria-modal="true"
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
@@ -400,6 +408,8 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
             </motion.div>
         </div>
     );
+
+    return portalRoot ? createPortal(modal, portalRoot) : modal;
 };
 
 

@@ -1,5 +1,25 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect } from './framework';
 import type { Page } from '@playwright/test';
+
+type HandDiagCard = {
+  cardId: string | null;
+  hasExpectedAsset: boolean;
+  observedAsset: string | null;
+};
+
+type HandDiag = {
+  missing: boolean;
+  shimmerCount?: number;
+  cards?: HandDiagCard[];
+};
+
+type TestGameController = {
+  openTestGame: (gameId: string) => Promise<void>;
+  setupScene: (scene: Record<string, unknown>) => Promise<void>;
+  waitForPhase: (phase: string, timeoutMs?: number) => Promise<void>;
+};
 
 async function waitForHandReady(page: Page, expectedCount: number): Promise<void> {
   await page.waitForFunction((count) => {
@@ -12,19 +32,42 @@ async function waitForHandReady(page: Page, expectedCount: number): Promise<void
   }, expectedCount, { timeout: 15000, polling: 100 });
 }
 
-async function collectHandDiag(page: Page) {
-  return await page.evaluate(() => {
+async function collectHandDiag(page: Page, expectedAssets: Record<string, string>): Promise<HandDiag> {
+  return await page.evaluate((assetMap) => {
     const handArea = document.querySelector('[data-testid="hand-area"]');
     if (!handArea) return { missing: true };
     const cards = Array.from(handArea.querySelectorAll('[data-card-id]')).map((card) => {
-      const atlasDiv = Array.from(card.querySelectorAll('div')).find((node) => {
-        const bg = window.getComputedStyle(node as HTMLElement).backgroundImage;
-        return bg.includes('ability-cards.webp');
-      }) as HTMLElement | undefined;
+      const cardId = card.getAttribute('data-card-id');
+      const expectedAsset = cardId ? assetMap[cardId] : null;
+      const targetNode = Array.from(card.querySelectorAll('*')).find((node) => {
+        if (!expectedAsset) return false;
+        if (node instanceof HTMLImageElement) {
+          const candidates = [
+            node.currentSrc,
+            node.getAttribute('src'),
+            node.getAttribute('data-debug-current-src'),
+            node.getAttribute('data-debug-rendered-src'),
+          ].filter(Boolean);
+          return candidates.some((candidate) => candidate?.includes(expectedAsset));
+        }
+        if (node instanceof HTMLElement) {
+          const bg = window.getComputedStyle(node).backgroundImage;
+          return Boolean(bg) && bg.includes(expectedAsset);
+        }
+        return false;
+      });
+      const observedAsset = targetNode instanceof HTMLImageElement
+        ? targetNode.getAttribute('data-debug-current-src')
+          || targetNode.getAttribute('data-debug-rendered-src')
+          || targetNode.getAttribute('src')
+          || targetNode.currentSrc
+        : targetNode instanceof HTMLElement
+          ? window.getComputedStyle(targetNode).backgroundImage
+          : null;
       return {
-        cardId: card.getAttribute('data-card-id'),
-        hasAbilityAtlas: Boolean(atlasDiv),
-        atlasBackgroundImage: atlasDiv ? window.getComputedStyle(atlasDiv).backgroundImage : null,
+        cardId,
+        hasExpectedAsset: Boolean(targetNode),
+        observedAsset,
       };
     });
     return {
@@ -32,10 +75,15 @@ async function collectHandDiag(page: Page) {
       shimmerCount: handArea.querySelectorAll('.atlas-shimmer').length,
       cards,
     };
-  });
+  }, expectedAssets);
 }
 
-async function setupHeroScene(page: Page, game: any, heroId: 'samurai' | 'gunslinger', hand: string[]) {
+async function setupHeroScene(
+  page: Page,
+  game: TestGameController,
+  heroId: 'samurai' | 'gunslinger',
+  hand: string[],
+) {
   await game.setupScene({
     gameId: 'dicethrone',
     player0: {
@@ -57,33 +105,43 @@ async function setupHeroScene(page: Page, game: any, heroId: 'samurai' | 'gunsli
   await waitForHandReady(page, hand.length);
 }
 
-test.describe('DiceThrone ability atlas regression', () => {
-  test('samurai and gunslinger hands should render from ability atlas without shimmer', async ({ page, game }, testInfo) => {
+test.describe('DiceThrone hand card preview regression', () => {
+  test('samurai and gunslinger hand cards should use ability atlas or single-card crops without shimmer', async ({ page, game }) => {
     test.setTimeout(120000);
     await game.openTestGame('dicethrone');
+    const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'dicethrone-hand-preview-regression');
+    mkdirSync(evidenceDir, { recursive: true });
 
     await setupHeroScene(page, game, 'samurai', [
       'upgrade-solemnity-2',
+      'upgrade-budo-2',
       'upgrade-masamune-2',
-      'upgrade-slot-06-2',
     ]);
 
-    const samuraiDiag = await collectHandDiag(page);
-    console.log('samurai-ability-atlas-diag:', JSON.stringify(samuraiDiag));
+    const samuraiDiag = await collectHandDiag(page, {
+      'upgrade-solemnity-2': 'upgrade-solemnity-2.webp',
+      'upgrade-budo-2': 'ability-cards.webp',
+      'upgrade-masamune-2': 'upgrade-masamune-2.webp',
+    });
+    console.log('samurai-hand-preview-diag:', JSON.stringify(samuraiDiag));
     expect(samuraiDiag).toMatchObject({ missing: false, shimmerCount: 0 });
-    expect(samuraiDiag.cards.every((card: any) => card.hasAbilityAtlas)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath('samurai-ability-atlas.png'), fullPage: true });
+    expect(samuraiDiag.cards?.every((card) => card.hasExpectedAsset)).toBe(true);
+    await page.screenshot({ path: join(evidenceDir, 'samurai-hand-preview.png'), fullPage: true });
 
     await setupHeroScene(page, game, 'gunslinger', [
       'upgrade-fan-the-hammer-2',
       'card-pistol-whip',
-      'upgrade-slot-05-2',
+      'upgrade-duel-2',
     ]);
 
-    const gunslingerDiag = await collectHandDiag(page);
-    console.log('gunslinger-ability-atlas-diag:', JSON.stringify(gunslingerDiag));
+    const gunslingerDiag = await collectHandDiag(page, {
+      'upgrade-fan-the-hammer-2': 'fan-the-hammer-2.webp',
+      'card-pistol-whip': 'pistol-whip.webp',
+      'upgrade-duel-2': 'ability-cards.webp',
+    });
+    console.log('gunslinger-hand-preview-diag:', JSON.stringify(gunslingerDiag));
     expect(gunslingerDiag).toMatchObject({ missing: false, shimmerCount: 0 });
-    expect(gunslingerDiag.cards.every((card: any) => card.hasAbilityAtlas)).toBe(true);
-    await page.screenshot({ path: testInfo.outputPath('gunslinger-ability-atlas.png'), fullPage: true });
+    expect(gunslingerDiag.cards?.every((card) => card.hasExpectedAsset)).toBe(true);
+    await page.screenshot({ path: join(evidenceDir, 'gunslinger-hand-preview.png'), fullPage: true });
   });
 });

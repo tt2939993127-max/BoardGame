@@ -1,20 +1,24 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { AndroidForceUpdateGate } from './AndroidForceUpdateGate';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import {
     type AndroidForceUpdateState,
     registerAndroidLiveUpdateListeners,
+    subscribeAndroidLiveUpdateRequests,
     startAndroidLiveUpdateBackgroundCheck,
 } from '../../lib/mobile/androidLiveUpdates';
 
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
     const isNativeAndroid = isNativeAndroidRuntime();
+    const location = useLocation();
     const [forceUpdateState, setForceUpdateState] = useState<AndroidForceUpdateState>({
         phase: 'hidden',
         blocking: false,
     });
+    const isGamePage = location.pathname.startsWith('/play/');
 
     useEffect(() => {
         if (!isNativeAndroid) {
@@ -25,43 +29,78 @@ export const AndroidLiveUpdateManager = () => {
 
         void registerAndroidLiveUpdateListeners();
 
-        void startAndroidLiveUpdateBackgroundCheck({
-            onForceStateChange: (state) => {
-                if (disposed) return;
-                setForceUpdateState(state);
-            },
-        }).then((result) => {
+        const handleResult = (
+            result: Awaited<ReturnType<typeof startAndroidLiveUpdateBackgroundCheck>>,
+            options?: { interactive?: boolean; suppressReadyToast?: boolean },
+        ) => {
             if (disposed) return;
 
             if (result.status === 'queued') {
                 if (result.mode === 'immediate') {
                     return;
                 }
-                toast.info(
-                    `新版本 ${result.version} 已在后台准备完成，切到后台或重启 App 后生效。`,
-                    '应用更新',
-                    {
-                        dedupeKey: `android-ota-ready:${result.version}`,
-                        ttlMs: 6000,
-                    },
-                );
+                if (!options?.suppressReadyToast) {
+                    toast.info(
+                        `新版本 ${result.version} 已在后台下载完成，将在下次启动 App 时生效。`,
+                        '应用更新',
+                        {
+                            dedupeKey: `android-ota-ready:${result.version}`,
+                            ttlMs: 6000,
+                        },
+                    );
+                }
+                return;
+            }
+
+            if (result.status === 'up-to-date' && options?.interactive) {
+                toast.success('当前已经是最新版本。', '应用更新', {
+                    dedupeKey: 'android-ota-up-to-date',
+                    ttlMs: 3000,
+                });
                 return;
             }
 
             if (result.status === 'error') {
                 console.warn('[OTA] 后台检查失败', result.reason);
+                if (options?.interactive) {
+                    toast.error(result.reason, '应用更新');
+                }
                 return;
             }
 
             if (result.status === 'incompatible') {
                 console.info('[OTA] 检测到不兼容更新，已跳过', result.reason);
             }
+        };
+
+        void startAndroidLiveUpdateBackgroundCheck({
+            onForceStateChange: (state) => {
+                if (disposed) return;
+                setForceUpdateState(state);
+            },
+            applyMode: 'background',
+        }).then((result) => {
+            handleResult(result, { suppressReadyToast: isGamePage });
+        });
+
+        const unsubscribeRequest = subscribeAndroidLiveUpdateRequests((request) => {
+            void startAndroidLiveUpdateBackgroundCheck({
+                force: true,
+                applyMode: request.applyMode ?? 'immediate',
+                onForceStateChange: (state) => {
+                    if (disposed) return;
+                    setForceUpdateState(state);
+                },
+            }).then((result) => {
+                handleResult(result, { interactive: request.interactive, suppressReadyToast: false });
+            });
         });
 
         return () => {
             disposed = true;
+            unsubscribeRequest();
         };
-    }, [isNativeAndroid, toast]);
+    }, [isGamePage, isNativeAndroid, toast]);
 
     if (!isNativeAndroid) {
         return null;
@@ -73,6 +112,7 @@ export const AndroidLiveUpdateManager = () => {
             onRetry={() => {
                 void startAndroidLiveUpdateBackgroundCheck({
                     force: true,
+                    applyMode: 'immediate',
                     onForceStateChange: (state) => {
                         setForceUpdateState(state);
                     },

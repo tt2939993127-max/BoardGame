@@ -19,6 +19,7 @@ function parseArgs(argv) {
         limit: 100,
         slots: 4,
         outDir: '',
+        markInProgress: false,
     };
 
     for (let index = 0; index < argv.length; index += 1) {
@@ -44,6 +45,10 @@ function parseArgs(argv) {
             options.outDir = argv[++index] || '';
             continue;
         }
+        if (arg === '--mark-in-progress') {
+            options.markInProgress = true;
+            continue;
+        }
         throw new Error(`未知参数: ${arg}`);
     }
 
@@ -66,6 +71,23 @@ function parseArgs(argv) {
 
 function normalizeBaseUrl(baseUrl) {
     return baseUrl.replace(/\/+$/, '');
+}
+
+async function updateFeedbackStatus(baseUrl, id, status) {
+    const response = await fetch(`${baseUrl}/feedback/open/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status }),
+    });
+
+    if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`更新状态失败 ${response.status} ${response.statusText}: ${id} -> ${status}; ${text}`);
+    }
+
+    return response.json();
 }
 
 async function fetchList(baseUrl, status, limit) {
@@ -97,6 +119,71 @@ function extractText(content) {
         return '';
     }
     return content.replace(EMBEDDED_IMG_RE, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function extractEmbeddedImages(content) {
+    if (typeof content !== 'string') {
+        return [];
+    }
+
+    return Array.from(content.matchAll(EMBEDDED_IMG_RE), (match, index) => ({
+        index,
+        src: match[1],
+    }));
+}
+
+function imageExtensionFromMime(mimeType) {
+    const normalized = String(mimeType || '').toLowerCase();
+    if (normalized.includes('png')) return 'png';
+    if (normalized.includes('jpeg') || normalized.includes('jpg')) return 'jpg';
+    if (normalized.includes('webp')) return 'webp';
+    if (normalized.includes('gif')) return 'gif';
+    if (normalized.includes('bmp')) return 'bmp';
+    return 'bin';
+}
+
+async function materializeImages(item, outDir) {
+    const images = extractEmbeddedImages(item?.content);
+    if (images.length === 0) {
+        return [];
+    }
+
+    const imageDir = path.join(outDir, 'images');
+    await fs.mkdir(imageDir, { recursive: true });
+    const saved = [];
+
+    for (const image of images) {
+        const dataUrlMatch = image.src.match(/^data:(image\/[^;]+);base64,(.+)$/);
+        let buffer = null;
+        let extension = 'bin';
+
+        if (dataUrlMatch) {
+            extension = imageExtensionFromMime(dataUrlMatch[1]);
+            buffer = Buffer.from(dataUrlMatch[2], 'base64');
+        } else if (/^https?:\/\//i.test(image.src)) {
+            const response = await fetch(image.src);
+            if (!response.ok) {
+                throw new Error(`下载图片失败 ${response.status} ${response.statusText}: ${image.src}`);
+            }
+            extension = imageExtensionFromMime(response.headers.get('content-type'));
+            buffer = Buffer.from(await response.arrayBuffer());
+        }
+
+        if (!buffer) {
+            continue;
+        }
+
+        const filename = `${item._id}-${String(image.index + 1).padStart(2, '0')}.${extension}`;
+        const targetPath = path.join(imageDir, filename);
+        await fs.writeFile(targetPath, buffer);
+        saved.push({
+            index: image.index + 1,
+            path: targetPath,
+            source: image.src.startsWith('data:') ? 'embedded' : 'remote',
+        });
+    }
+
+    return saved;
 }
 
 function normalizeInline(value) {
@@ -205,6 +292,7 @@ function buildPacket(group) {
     const item = group.primary;
     const text = extractText(item.content) || '(空)';
     const duplicateIds = group.members.slice(1).map((entry) => entry._id);
+    const screenshots = Array.isArray(group.screenshotPaths) ? group.screenshotPaths : [];
     const actionLog = typeof item.actionLog === 'string' && item.actionLog.trim()
         ? item.actionLog.trim()
         : '(未附带)';
@@ -228,9 +316,17 @@ function buildPacket(group) {
         `- severity: ${item.severity || '-'}`,
         `- status: ${item.status || '-'}`,
         `- createdAt: ${item.createdAt || '-'}`,
+        `- screenshots: ${screenshots.length}`,
         '',
         '## 用户反馈',
         text,
+        ...(screenshots.length > 0
+            ? [
+                '',
+                '## 本地截图',
+                ...screenshots.map((image) => `- screenshot${image.index}: ${image.path}`),
+            ]
+            : []),
         '',
         '## 错误上下文',
         `- source: ${item?.errorContext?.source || '-'}`,
@@ -284,6 +380,7 @@ function pickParallelCandidates(groups, slots) {
             severity: group.primary.severity,
             type: group.primary.type,
             packetPath: group.packetPath,
+            screenshotPaths: group.screenshotPaths,
         });
         usedKeys.add(group.conflictKey);
         if (picked.length >= slots) {
@@ -322,17 +419,30 @@ async function main() {
             primary: item,
             members: [item],
             packetPath: '',
+            screenshotPaths: [],
         });
     }
 
     const groups = sortGroups([...dedupeMap.values()]);
     for (const group of groups) {
+        group.screenshotPaths = await materializeImages(group.primary, outDir);
         const packetName = `${group.primary._id}.md`;
         group.packetPath = path.join(outDir, packetName);
         await fs.writeFile(group.packetPath, buildPacket(group), 'utf8');
     }
 
     const parallelCandidates = pickParallelCandidates(groups, options.slots);
+    const claimedCandidates = [];
+    if (options.markInProgress) {
+        for (const candidate of parallelCandidates) {
+            const updated = await updateFeedbackStatus(baseUrl, candidate.feedbackId, 'in_progress');
+            candidate.status = updated.status;
+            claimedCandidates.push({
+                feedbackId: candidate.feedbackId,
+                status: updated.status,
+            });
+        }
+    }
     const summary = {
         baseUrl,
         fetchedByStatus,
@@ -340,6 +450,8 @@ async function main() {
         uniqueGroups: groups.length,
         generatedAt: new Date().toISOString(),
         outDir,
+        markInProgress: options.markInProgress,
+        claimedCandidates,
         parallelCandidates,
         groups: groups.map((group) => ({
             dedupeKey: group.dedupeKey,
@@ -355,6 +467,7 @@ async function main() {
             createdAt: group.primary.createdAt,
             summary: extractText(group.primary.content).slice(0, 140),
             packetPath: group.packetPath,
+            screenshotPaths: group.screenshotPaths,
         })),
     };
 

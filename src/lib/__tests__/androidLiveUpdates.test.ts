@@ -4,16 +4,24 @@ import {
     readAndroidLiveUpdateConfig,
 } from '../mobile/androidLiveUpdates';
 import {
+    getSocketIoTransports,
+    shouldTryAllSocketTransports,
+} from '../socketConnectionConfig';
+import {
     isAndroidNativeUpdateAvailable,
     readAndroidNativeUpdateConfig,
     type AndroidAppInfo,
 } from '../mobile/androidNativeUpdates';
 import { detectNativeAndroidRuntime } from '../mobile/androidRuntime';
 import {
-    DEFAULT_FORCE_UPDATE_MESSAGE,
-    DEFAULT_FORCE_UPDATE_TITLE,
     resolveOtaForceUpdateOptions,
 } from '../../../scripts/mobile/ota-publish-config.mjs';
+
+afterEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+});
 
 describe('androidLiveUpdates', () => {
     it('读取 OTA 配置时，只有启用且 manifest URL 合法才算开启', () => {
@@ -77,15 +85,27 @@ describe('androidLiveUpdates', () => {
         }, '0.5.3').compatible).toBe(false);
     });
 
-    it('OTA 发布默认走强制更新并补齐默认文案', () => {
+    it('OTA 发布默认不再写强制更新字段', () => {
         expect(resolveOtaForceUpdateOptions()).toEqual({
-            forceUpdate: true,
-            forceUpdateTitle: DEFAULT_FORCE_UPDATE_TITLE,
-            forceUpdateMessage: DEFAULT_FORCE_UPDATE_MESSAGE,
+            forceUpdate: false,
+            forceUpdateTitle: '',
+            forceUpdateMessage: '',
         });
     });
 
-    it('显式关闭强制更新时不再写入强更文案', () => {
+    it('显式开启强制更新时才写入强更文案', () => {
+        expect(resolveOtaForceUpdateOptions({
+            forceUpdateFlag: true,
+            forceUpdateTitle: '自定义标题',
+            forceUpdateMessage: '自定义正文',
+        })).toEqual({
+            forceUpdate: true,
+            forceUpdateTitle: '自定义标题',
+            forceUpdateMessage: '自定义正文',
+        });
+    });
+
+    it('显式关闭强制更新时保持后台生效语义', () => {
         expect(resolveOtaForceUpdateOptions({
             noForceUpdateFlag: true,
             forceUpdateTitle: '自定义标题',
@@ -95,6 +115,273 @@ describe('androidLiveUpdates', () => {
             forceUpdateTitle: '',
             forceUpdateMessage: '',
         });
+    });
+
+    it('强制 OTA manifest 若当前 bundle 已是最新版，不应先闪出 blocking gate', async () => {
+        vi.resetModules();
+        vi.stubEnv('VITE_ANDROID_OTA_ENABLED', 'true');
+        vi.stubEnv('VITE_ANDROID_OTA_MANIFEST_URL', 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json');
+        vi.stubEnv('VITE_ANDROID_OTA_CHANNEL', 'stable');
+        vi.stubEnv('VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS', '15000');
+
+        vi.doMock('@capacitor/core', () => ({
+            Capacitor: {
+                isNativePlatform: () => true,
+                getPlatform: () => 'android',
+            },
+            registerPlugin: vi.fn(() => ({})),
+        }));
+
+        const currentMock = vi.fn().mockResolvedValue({
+            native: '0.5.1',
+            bundle: {
+                id: 'bundle-current',
+                version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+                downloaded: '2026-04-04T03:40:00.000Z',
+                checksum: 'abc',
+                status: 'success',
+            },
+        });
+
+        vi.doMock('@capgo/capacitor-updater', () => ({
+            CapacitorUpdater: {
+                notifyAppReady: vi.fn(),
+                current: currentMock,
+                list: vi.fn(),
+                download: vi.fn(),
+                next: vi.fn(),
+                set: vi.fn(),
+                reload: vi.fn(),
+                setMultiDelay: vi.fn(),
+                addListener: vi.fn(async () => ({ remove: async () => undefined })),
+            },
+        }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            status: 200,
+            ok: true,
+            headers: {
+                get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+            },
+            json: async () => ({
+                version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+                url: 'https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.1-ota-2026-04-04T03-34-46-472Z.zip',
+                checksum: 'abc',
+                channel: 'stable',
+                forceUpdate: true,
+                forceUpdateTitle: '正在更新',
+                forceUpdateMessage: '正在下载必要更新，请稍候',
+            }),
+        }));
+
+        const { startAndroidLiveUpdateBackgroundCheck } = await import('../mobile/androidLiveUpdates');
+        const states: Array<{ phase: string; blocking: boolean }> = [];
+
+        const result = await startAndroidLiveUpdateBackgroundCheck({
+            force: true,
+            envOverride: {
+                VITE_ANDROID_OTA_ENABLED: 'true',
+                VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+                VITE_ANDROID_OTA_CHANNEL: 'stable',
+                VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS: '15000',
+            },
+            onForceStateChange: (state) => {
+                states.push({ phase: state.phase, blocking: state.blocking });
+            },
+        });
+
+        expect(result).toEqual({ status: 'up-to-date' });
+        expect(currentMock).toHaveBeenCalledTimes(1);
+        expect(states.some((state) => state.blocking)).toBe(false);
+    });
+
+    it('强制 OTA manifest 若发现新版本，也只后台排队等待重进 App 生效', async () => {
+        vi.resetModules();
+
+        vi.doMock('@capacitor/core', () => ({
+            Capacitor: {
+                isNativePlatform: () => true,
+                getPlatform: () => 'android',
+            },
+            registerPlugin: vi.fn(() => ({})),
+        }));
+
+        const currentMock = vi.fn().mockResolvedValue({
+            native: '0.5.1',
+            bundle: {
+                id: 'bundle-current',
+                version: '0.5.1-ota-2026-04-04T03-00-00-000Z',
+                downloaded: '2026-04-04T03:10:00.000Z',
+                checksum: 'old',
+                status: 'success',
+            },
+        });
+        const listMock = vi.fn().mockResolvedValue({ bundles: [] });
+        const downloadMock = vi.fn().mockResolvedValue({
+            id: 'bundle-next',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            downloaded: '2026-04-04T03:45:00.000Z',
+            checksum: 'new',
+            status: 'success',
+        });
+        const setMultiDelayMock = vi.fn().mockResolvedValue(undefined);
+        const nextMock = vi.fn().mockResolvedValue(undefined);
+        const setMock = vi.fn().mockResolvedValue(undefined);
+
+        vi.doMock('@capgo/capacitor-updater', () => ({
+            CapacitorUpdater: {
+                notifyAppReady: vi.fn(),
+                current: currentMock,
+                list: listMock,
+                download: downloadMock,
+                next: nextMock,
+                set: setMock,
+                reload: vi.fn(),
+                setMultiDelay: setMultiDelayMock,
+                addListener: vi.fn(async () => ({ remove: async () => undefined })),
+            },
+        }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            status: 200,
+            ok: true,
+            headers: {
+                get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+            },
+            json: async () => ({
+                version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+                url: 'https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.1-ota-2026-04-04T03-34-46-472Z.zip',
+                checksum: 'new',
+                channel: 'stable',
+                forceUpdate: true,
+                forceUpdateTitle: '正在更新',
+                forceUpdateMessage: '正在下载必要更新，请稍候',
+            }),
+        }));
+
+        const { startAndroidLiveUpdateBackgroundCheck } = await import('../mobile/androidLiveUpdates');
+        const states: Array<{ phase: string; blocking: boolean }> = [];
+
+        const result = await startAndroidLiveUpdateBackgroundCheck({
+            force: true,
+            envOverride: {
+                VITE_ANDROID_OTA_ENABLED: 'true',
+                VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+                VITE_ANDROID_OTA_CHANNEL: 'stable',
+                VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS: '15000',
+            },
+            onForceStateChange: (state) => {
+                states.push({ phase: state.phase, blocking: state.blocking });
+            },
+        });
+
+        expect(result).toEqual({
+            status: 'queued',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            source: 'downloaded',
+            mode: 'background',
+        });
+        expect(downloadMock).toHaveBeenCalledTimes(1);
+        expect(nextMock).toHaveBeenCalledWith({ id: 'bundle-next' });
+        expect(setMultiDelayMock).toHaveBeenCalledWith({
+            delayConditions: [{ kind: 'background', value: '0' }],
+        });
+        expect(setMock).not.toHaveBeenCalled();
+        expect(states.some((state) => state.blocking)).toBe(false);
+    });
+
+    it('手动按钮触发 OTA 时应立即应用并自动重启', async () => {
+        vi.resetModules();
+
+        vi.doMock('@capacitor/core', () => ({
+            Capacitor: {
+                isNativePlatform: () => true,
+                getPlatform: () => 'android',
+            },
+            registerPlugin: vi.fn(() => ({})),
+        }));
+
+        const currentMock = vi.fn().mockResolvedValue({
+            native: '0.5.1',
+            bundle: {
+                id: 'bundle-current',
+                version: '0.5.1-ota-2026-04-04T03-00-00-000Z',
+                downloaded: '2026-04-04T03:10:00.000Z',
+                checksum: 'old',
+                status: 'success',
+            },
+        });
+        const listMock = vi.fn().mockResolvedValue({ bundles: [] });
+        const downloadMock = vi.fn().mockResolvedValue({
+            id: 'bundle-next',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            downloaded: '2026-04-04T03:45:00.000Z',
+            checksum: 'new',
+            status: 'success',
+        });
+        const nextMock = vi.fn().mockResolvedValue(undefined);
+        const setMultiDelayMock = vi.fn().mockResolvedValue(undefined);
+        const setMock = vi.fn().mockResolvedValue(undefined);
+        const reloadMock = vi.fn().mockResolvedValue(undefined);
+
+        vi.doMock('@capgo/capacitor-updater', () => ({
+            CapacitorUpdater: {
+                notifyAppReady: vi.fn(),
+                current: currentMock,
+                list: listMock,
+                download: downloadMock,
+                next: nextMock,
+                set: setMock,
+                reload: reloadMock,
+                setMultiDelay: setMultiDelayMock,
+                addListener: vi.fn(async () => ({ remove: async () => undefined })),
+            },
+        }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            status: 200,
+            ok: true,
+            headers: {
+                get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+            },
+            json: async () => ({
+                version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+                url: 'https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.1-ota-2026-04-04T03-34-46-472Z.zip',
+                checksum: 'new',
+                channel: 'stable',
+                forceUpdate: false,
+            }),
+        }));
+
+        const { startAndroidLiveUpdateBackgroundCheck } = await import('../mobile/androidLiveUpdates');
+        const states: Array<{ phase: string; blocking: boolean }> = [];
+
+        const result = await startAndroidLiveUpdateBackgroundCheck({
+            force: true,
+            applyMode: 'immediate',
+            envOverride: {
+                VITE_ANDROID_OTA_ENABLED: 'true',
+                VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+                VITE_ANDROID_OTA_CHANNEL: 'stable',
+                VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS: '15000',
+            },
+            onForceStateChange: (state) => {
+                states.push({ phase: state.phase, blocking: state.blocking });
+            },
+        });
+
+        expect(result).toEqual({
+            status: 'queued',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            source: 'downloaded',
+            mode: 'immediate',
+        });
+        expect(downloadMock).toHaveBeenCalledTimes(1);
+        expect(setMock).toHaveBeenCalledWith({ id: 'bundle-next' });
+        expect(reloadMock).toHaveBeenCalledTimes(1);
+        expect(nextMock).not.toHaveBeenCalled();
+        expect(setMultiDelayMock).not.toHaveBeenCalled();
+        expect(states.some((state) => state.blocking)).toBe(true);
     });
 
     it('读取原生 APK 自更新配置时，只有启用且 manifest URL 合法才算开启', () => {
@@ -189,5 +476,12 @@ describe('androidLiveUpdates', () => {
                 },
             },
         })).toBe(true);
+    });
+});
+
+describe('socketConnectionConfig', () => {
+    it('允许 polling 回退时仍然优先 websocket', () => {
+        expect(getSocketIoTransports()).toEqual(['websocket', 'polling']);
+        expect(shouldTryAllSocketTransports()).toBe(true);
     });
 });

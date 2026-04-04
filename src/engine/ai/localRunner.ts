@@ -26,6 +26,13 @@ interface ResolveNextAiActionArgs {
     seatControllers: Record<string, AiSeatController>;
     rulesVersion?: string | null;
     decisionBudgetMs?: number;
+    /**
+     * 在线房间里，每个 AI seat 都有自己的 transport client 和 playerView。
+     * 如果继续基于“当前主玩家”的过滤状态再套一层 playerView，
+     * AI 会看不到只对自己可见的交互，导致 simple-choice 永远不响应。
+     * 返回 null 表示“该 seat 的专属视角尚未就绪，本轮跳过，不要回退到共享视角”。
+     */
+    visibleStateResolver?: (playerId: string) => MatchState<unknown> | null | undefined;
 }
 
 function shouldUseRemoteDecision(args: {
@@ -181,7 +188,13 @@ export async function resolveNextAiAction(
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
         if (seatController.type === 'human') continue;
 
-        const visibleState = applyPlayerViewToState(args.engineConfig, args.state, playerId);
+        const resolvedSeatState = args.visibleStateResolver?.(playerId);
+        if (resolvedSeatState === null) {
+            continue;
+        }
+
+        const visibleState = resolvedSeatState
+            ?? applyPlayerViewToState(args.engineConfig, args.state, playerId);
         const context = buildAiDecisionContext({
             gameId: args.engineConfig.gameId,
             matchId: args.matchId,

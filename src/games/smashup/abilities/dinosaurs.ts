@@ -330,7 +330,11 @@ function queueDinoRampageMinionChoice(
         playerId,
         '选择用于降低爆破点的随从',
         buildMinionTargetOptions(candidates, { state, sourcePlayerId: playerId }),
-        { sourceId: 'dino_rampage_choose_minion', targetType: 'minion' },
+        {
+            sourceId: 'dino_rampage_choose_minion',
+            targetType: 'minion',
+            autoResolveIfSingle: false,
+        },
     );
     return queueInteraction(matchState, interaction);
 }
@@ -347,6 +351,15 @@ function dinoRampage(ctx: AbilityContext): AbilityResult {
             ? `${baseName} (降低 ${minionCandidates[0].power} 爆破点)`
             : `${baseName} (选择一个己方随从的力量)`;
         baseCandidates.push({ baseIndex: i, label });
+    }
+
+    if (baseCandidates.length === 1) {
+        const minionCandidates = collectDinoRampageMinions(ctx.state, ctx.playerId, baseCandidates[0].baseIndex);
+        if (minionCandidates.length === 0) return { events: [] };
+        return {
+            events: [],
+            matchState: queueDinoRampageMinionChoice(ctx.matchState, ctx.state, ctx.playerId, minionCandidates, ctx.now),
+        };
     }
 
     return resolveOrPrompt(ctx, buildBaseTargetOptions(baseCandidates, ctx.state), {
@@ -476,9 +489,6 @@ export function registerDinosaurInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const minionCandidates = collectDinoRampageMinions(state.core, playerId, baseIndex);
         if (minionCandidates.length === 0) return { state, events: [] };
-        if (minionCandidates.length === 1) {
-            return { state, events: [modifyBreakpoint(baseIndex, -minionCandidates[0].power, 'dino_rampage', timestamp)] };
-        }
         return {
             state: queueDinoRampageMinionChoice(state, state.core, playerId, minionCandidates, timestamp),
             events: [],

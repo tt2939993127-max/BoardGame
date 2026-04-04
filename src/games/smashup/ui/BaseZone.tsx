@@ -571,7 +571,7 @@ export const BaseZone: React.FC<{
                 {showDesktopInspectButton && (
                     <button
                         onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
-                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
+                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg z-30 cursor-zoom-in"
                     >
                         <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -675,6 +675,8 @@ export const BaseZone: React.FC<{
                         <motion.div
                             key={pid}
                             layout
+                            data-testid={`su-base-player-column-${baseIndex}-${pid}`}
+                            data-player-id={pid}
                             className="flex flex-col items-center relative"
                             style={{ minWidth: `${layout.minionCardWidth}vw` }}
                             transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}
@@ -683,6 +685,7 @@ export const BaseZone: React.FC<{
                             {/* --- MINIONS + BURIED CARDS --- */}
                             <motion.div
                                 layout
+                                data-testid={`su-base-stack-${baseIndex}-${pid}`}
                                 className="flex flex-col items-center isolate z-10 hover:z-[100]"
                                 transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}
                             >
@@ -798,6 +801,7 @@ export const BaseZone: React.FC<{
                                 ) : (
                                     /* Empty Placeholder for Layout Stability */
                                     <div
+                                        data-testid={`su-base-empty-slot-${baseIndex}-${pid}`}
                                         className={`h-[2vw] rounded-sm border md-2 border-dashed border-slate-300/30 ${isDeployMode && isMyTurn ? 'animate-pulse bg-white/5' : ''}`}
                                         style={{ width: `${layout.minionCardWidth}vw` }}
                                     >
@@ -811,6 +815,7 @@ export const BaseZone: React.FC<{
                             {/* --- SCORE (POWER) --- */}
                             <motion.div
                                 layout="position"
+                                data-testid={`su-base-score-${baseIndex}-${pid}`}
                                 className="mt-2 flex items-center justify-center gap-1 z-10 bg-slate-900/40 rounded-full px-2 py-0.5 backdrop-blur-sm"
                                 transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}
                             >
@@ -1122,7 +1127,7 @@ const MinionCard: React.FC<{
             {showDesktopInspectButton && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onView(); }}
-                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-40 cursor-zoom-in"
+                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg z-40 cursor-zoom-in"
                 >
                     <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />

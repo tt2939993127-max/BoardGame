@@ -30,7 +30,7 @@ import {
     onAppVisible,
 } from '../../../lib/mobile/appVisibility';
 import { resolveInAppUrlPath } from '../../../lib/mobile/appUrlRouting';
-import { isTextEntryElement } from '../../../lib/textEntry';
+import { isTextEntryElement, scrollTextEntryIntoView } from '../../../lib/textEntry';
 import {
     applyRuntimeViewportCssVars,
     resolveRuntimeKeyboardInsetBottom,
@@ -379,6 +379,24 @@ describe('Runtime viewport helpers', () => {
         expect(isTextEntryElement(editable)).toBe(true);
         expect(isTextEntryElement(rangeInput)).toBe(false);
         expect(isTextEntryElement(document.createElement('button'))).toBe(false);
+    });
+
+    it('仅对真实文本输入执行 scrollIntoView', () => {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.scrollIntoView = vi.fn();
+        const button = document.createElement('button');
+        button.scrollIntoView = vi.fn();
+
+        expect(scrollTextEntryIntoView(input, 'auto')).toBe(true);
+        expect(input.scrollIntoView).toHaveBeenCalledWith({
+            block: 'center',
+            inline: 'nearest',
+            behavior: 'auto',
+        });
+
+        expect(scrollTextEntryIntoView(button, 'smooth')).toBe(false);
+        expect(button.scrollIntoView).not.toHaveBeenCalled();
     });
 });
 

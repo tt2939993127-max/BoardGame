@@ -124,21 +124,98 @@ const openFabSettingsPanel = async (page: Page) => {
     return settingsPanel;
 };
 
-const swipeUpHandCard = async (page: Page, locator: Locator) => {
-    await expect(locator).toBeVisible({ timeout: 5000 });
-    const box = await locator.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) {
-        throw new Error('无法获取手牌坐标');
-    }
-    const startX = box.x + box.width / 2;
-    const startY = box.y + box.height * 0.72;
-    const endY = Math.max(box.y + box.height * 0.18, startY - Math.min(120, box.height * 0.55));
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX, endY, { steps: 10 });
-    await page.mouse.up();
+const clickHandCard = async (page: Page, locator: Locator) => {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    await locator.click({ force: true });
     await page.waitForTimeout(300);
+};
+
+const captureLayoutMotionDuringMinionPlay = async (
+    page: Page,
+    options: {
+        selector: string;
+        cardUid: string;
+        baseIndex: number;
+        durationMs?: number;
+        dispatchDelayMs?: number;
+    },
+) => {
+    return await page.evaluate(
+        ({ selector, cardUid, baseIndex, durationMs, dispatchDelayMs }) =>
+            new Promise<{
+                found: boolean;
+                dispatched: boolean;
+                dispatchError: string | null;
+                samples: Array<{ t: number; top: number }>;
+            }>((resolve) => {
+                const target = document.querySelector(selector) as HTMLElement | null;
+                const harness = (window as Window & {
+                    __BG_TEST_HARNESS__?: {
+                        state?: { get?: () => any };
+                        command?: { dispatch?: (command: unknown) => void };
+                    };
+                }).__BG_TEST_HARNESS__;
+
+                if (!target || !harness?.state?.get || !harness?.command?.dispatch) {
+                    resolve({
+                        found: Boolean(target),
+                        dispatched: false,
+                        dispatchError: !target ? 'target-not-found' : 'harness-command-unavailable',
+                        samples: [],
+                    });
+                    return;
+                }
+
+                const samples: Array<{ t: number; top: number }> = [];
+                const startedAt = performance.now();
+                let dispatched = false;
+                let dispatchError: string | null = null;
+
+                const tick = () => {
+                    const now = performance.now();
+                    samples.push({
+                        t: now - startedAt,
+                        top: target.getBoundingClientRect().top,
+                    });
+
+                    if (!dispatched && now - startedAt >= dispatchDelayMs) {
+                        dispatched = true;
+                        try {
+                            const state = harness.state?.get?.();
+                            const playerId = state?.core?.turnOrder?.[state?.core?.currentPlayerIndex ?? 0] ?? '0';
+                            harness.command?.dispatch?.({
+                                type: 'su:play_minion',
+                                playerId,
+                                payload: { cardUid, baseIndex },
+                            });
+                        } catch (error) {
+                            dispatchError = error instanceof Error ? error.message : String(error);
+                        }
+                    }
+
+                    if (now - startedAt < durationMs) {
+                        requestAnimationFrame(tick);
+                        return;
+                    }
+
+                    resolve({
+                        found: true,
+                        dispatched,
+                        dispatchError,
+                        samples,
+                    });
+                };
+
+                requestAnimationFrame(tick);
+            }),
+        {
+            selector: options.selector,
+            cardUid: options.cardUid,
+            baseIndex: options.baseIndex,
+            durationMs: options.durationMs ?? 700,
+            dispatchDelayMs: options.dispatchDelayMs ?? 50,
+        },
+    );
 };
 
 // ============================================================================
@@ -189,7 +266,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         // P0 出第一张牌到第一个基地
         const handArea = page.getByTestId('su-hand-area');
         const firstCard = handArea.locator('> div > div').first();
-        await swipeUpHandCard(page, firstCard);
+        await clickHandCard(page, firstCard);
         await page.waitForTimeout(600);
 
         // 点击第一个基地
@@ -515,7 +592,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         const settingsPanel = await openFabSettingsPanel(page);
         await expect(settingsPanel.getByText(/大杀四方|Smash Up/i)).toBeVisible({ timeout: 5000 });
         await expect(settingsPanel.getByText(/交互模式|Interaction mode/i)).toBeVisible();
-        await expect(settingsPanel.getByRole('button', { name: /上滑|Swipe Up/i })).toBeVisible();
+        await expect(settingsPanel.getByRole('button', { name: /点击|Click/i })).toBeVisible();
         await expect(settingsPanel.getByRole('button', { name: /拖拽|Drag/i })).toBeVisible();
         await expect(settingsPanel.getByText(/中文覆盖层|Chinese overlay/i)).toBeVisible();
         const overlayButton = settingsPanel.locator('button').filter({ hasText: /中文覆盖层|Chinese overlay/i }).first();
@@ -542,7 +619,95 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await saveEvidenceLocatorScreenshot(settingsPanel, 'smashup-settings-preference-detail', testInfo);
     });
 
-    test('本地模式：默认模式下点击手牌只放大，不会进入打出选择', async ({ page }, testInfo) => {
+    test('本地模式：首个随从进入基地时分数条应平滑下移而不是单帧跳变', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await game.openTestGame('smashup', {
+            p0: 'pirates,aliens',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'first-minion-motion-card', defId: 'pirate_first_mate', type: 'minion' },
+                ],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_the_homeworld' },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        const playerColumn = page.getByTestId('su-base-player-column-0-0');
+        const emptySlot = page.getByTestId('su-base-empty-slot-0-0');
+        const scoreBadge = page.getByTestId('su-base-score-0-0');
+        await expect(playerColumn).toBeVisible({ timeout: 10000 });
+        await expect(scoreBadge).toBeVisible({ timeout: 10000 });
+        await expect(emptySlot).toBeVisible({ timeout: 10000 });
+        await saveEvidenceLocatorScreenshot(playerColumn, 'smashup-first-minion-layout-before', testInfo);
+
+        const motion = await captureLayoutMotionDuringMinionPlay(page, {
+            selector: '[data-testid="su-base-score-0-0"]',
+            cardUid: 'first-minion-motion-card',
+            baseIndex: 0,
+        });
+
+        expect(motion.found, '未找到首列分数条观测点').toBe(true);
+        expect(motion.dispatched, '未成功触发首个随从打出命令').toBe(true);
+        expect(motion.dispatchError, `首个随从打出命令执行失败: ${motion.dispatchError}`).toBeNull();
+
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return state.core.bases[0].minions.some((minion: { uid: string }) => minion.uid === 'first-minion-motion-card');
+            });
+        }, { timeout: 5000 }).toBe(true);
+
+        await expect(page.locator('[data-minion-uid="first-minion-motion-card"]')).toBeVisible({ timeout: 5000 });
+        await expect(emptySlot).toHaveCount(0);
+
+        const sampledTops = motion.samples.map((sample) => Math.round(sample.top * 10) / 10);
+        const distinctTops = Array.from(new Set(sampledTops));
+        const intermediateTops = distinctTops.slice(1, -1);
+        const totalTravel = Math.abs(distinctTops[distinctTops.length - 1] - distinctTops[0]);
+
+        expect(motion.samples.length, '分数条采样帧数过少，无法判断是否发生平滑动画').toBeGreaterThanOrEqual(8);
+        expect(totalTravel, '首个随从进入后分数条应发生可见位移').toBeGreaterThan(4);
+        expect(
+            intermediateTops.length,
+            `期望分数条出现至少两个中间位置，实际采样序列: ${distinctTops.join(', ')}`,
+        ).toBeGreaterThanOrEqual(2);
+
+        console.log('[smashup-first-minion-layout-motion]', JSON.stringify({
+            sampleCount: motion.samples.length,
+            distinctTops,
+            totalTravel,
+        }));
+
+        await saveEvidenceLocatorScreenshot(playerColumn, 'smashup-first-minion-layout-after', testInfo);
+    });
+
+    test('本地模式：默认模式下点击随从会进入部署选择，点击基地后才真正打出', async ({ page }, testInfo) => {
         const game = new GameTestContext(page);
 
         await page.addInitScript(() => {
@@ -586,31 +751,157 @@ test.describe('SmashUp 本地模式 E2E', () => {
         });
 
         const card = page.locator('[data-card-uid="click-preview-card"]');
+        const cardFrame = card.locator('> div').first();
         const firstBase = page.locator('[data-base-index="0"]').first();
         await expect(card).toBeVisible({ timeout: 10000 });
-        await card.click({ force: true });
+        await clickHandCard(page, card);
 
-        await expect(page.getByTestId('su-card-magnify-overlay')).toBeVisible({ timeout: 5000 });
+        await expect(cardFrame).toHaveClass(/ring-cyan-400/);
         await expect.poll(async () => {
             return await page.evaluate(() => {
                 const state = window.__BG_TEST_HARNESS__!.state.get();
-                return state.core.bases[0].minions.length;
+                return {
+                    baseMinionCount: state.core.bases[0].minions.length,
+                    minionsPlayed: state.core.players['0'].minionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'click-preview-card'),
+                };
             });
-        }).toBe(0);
+        }).toEqual({
+            baseMinionCount: 0,
+            minionsPlayed: 0,
+            stillInHand: true,
+        });
 
-        await page.getByTestId('su-card-magnify-overlay').click({ force: true });
         await firstBase.click({ force: true });
         await expect.poll(async () => {
             return await page.evaluate(() => {
                 const state = window.__BG_TEST_HARNESS__!.state.get();
-                return state.core.bases[0].minions.length;
+                return {
+                    playedToBase: state.core.bases[0].minions.some((minion: { uid: string }) => minion.uid === 'click-preview-card'),
+                    minionsPlayed: state.core.players['0'].minionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'click-preview-card'),
+                };
             });
-        }).toBe(0);
+        }).toEqual({
+            playedToBase: true,
+            minionsPlayed: 1,
+            stillInHand: false,
+        });
 
-        await game.screenshot('smashup-click-preview-only', testInfo);
+        await game.screenshot('smashup-click-minion-select-then-deploy', testInfo);
     });
 
-    test('本地模式：默认模式下上滑手牌后才能进入打出选择', async ({ page }, testInfo) => {
+    test('本地模式：拖拽模式下无目标行动卡拖到场上才会释放', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'drag');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'dinosaurs,pirates',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'drag-action-card', defId: 'dino_howl', type: 'action' },
+                ],
+                factions: ['dinosaurs', 'pirates'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                {
+                    defId: 'base_the_homeworld',
+                    minions: [
+                        { uid: 'ally-1', defId: 'pirate_first_mate', owner: '0', controller: '0' },
+                    ],
+                },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        await game.waitForPhase('playCards');
+        await game.waitForCurrentPlayer('0');
+        await expect.poll(async () => {
+            return await page.evaluate(() => localStorage.getItem('smashup_interaction_mode'));
+        }).toBe('drag');
+
+        const card = page.locator('[data-card-uid="drag-action-card"]');
+        const handArea = page.getByTestId('su-hand-area');
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await expect(handArea).toBeVisible({ timeout: 10000 });
+
+        const cardBox = await card.boundingBox();
+        const handAreaBox = await handArea.boundingBox();
+        expect(cardBox).not.toBeNull();
+        expect(handAreaBox).not.toBeNull();
+        if (!cardBox || !handAreaBox) {
+            throw new Error('无法获取行动卡或手牌区坐标');
+        }
+
+        const startX = cardBox.x + cardBox.width / 2;
+        const startY = cardBox.y + cardBox.height / 2;
+        const targetY = Math.max(40, handAreaBox.y - 120);
+
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(startX, targetY, { steps: 18 });
+
+        await expect(page.getByTestId('su-drag-arrow')).toBeVisible({ timeout: 5000 });
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return {
+                    actionsPlayed: state.core.players['0'].actionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'drag-action-card'),
+                };
+            });
+        }).toEqual({
+            actionsPlayed: 0,
+            stillInHand: true,
+        });
+
+        await page.mouse.up();
+
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                const ally = state.core.bases[0].minions.find((minion: { uid: string }) => minion.uid === 'ally-1');
+                return {
+                    actionsPlayed: state.core.players['0'].actionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'drag-action-card'),
+                    allyTempPowerModifier: ally?.tempPowerModifier ?? 0,
+                };
+            });
+        }).toEqual({
+            actionsPlayed: 1,
+            stillInHand: false,
+            allyTempPowerModifier: 1,
+        });
+
+        await game.screenshot('smashup-drag-action-release-to-board', testInfo);
+    });
+
+    test('本地模式：默认模式下无目标行动卡需要二次点击确认', async ({ page }, testInfo) => {
         const game = new GameTestContext(page);
 
         await page.addInitScript(() => {
@@ -629,9 +920,9 @@ test.describe('SmashUp 本地模式 E2E', () => {
             gameId: 'smashup',
             player0: {
                 hand: [
-                    { uid: 'swipe-play-card', defId: 'pirate_first_mate', type: 'minion' },
+                    { uid: 'double-click-action-card', defId: 'dino_howl', type: 'action' },
                 ],
-                factions: ['pirates', 'aliens'],
+                factions: ['dinosaurs', 'pirates'],
                 minionsPlayed: 0,
                 minionLimit: 1,
                 actionsPlayed: 0,
@@ -646,25 +937,56 @@ test.describe('SmashUp 本地模式 E2E', () => {
                 actionLimit: 1,
             },
             bases: [
-                { defId: 'base_the_homeworld' },
+                {
+                    defId: 'base_the_homeworld',
+                    minions: [
+                        { uid: 'ally-1', defId: 'pirate_first_mate', owner: '0', controller: '0' },
+                    ],
+                },
                 { defId: 'base_the_mothership' },
             ],
             currentPlayer: '0',
             phase: 'playCards',
         });
 
-        const card = page.locator('[data-card-uid="swipe-play-card"]');
-        const firstBase = page.locator('[data-base-index="0"]').first();
-        await swipeUpHandCard(page, card);
-        await firstBase.click({ force: true });
+        const card = page.locator('[data-card-uid="double-click-action-card"]');
+        const cardFrame = card.locator('> div').first();
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await clickHandCard(page, card);
+
+        await expect(cardFrame).toHaveClass(/ring-cyan-400/);
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return {
+                    actionsPlayed: state.core.players['0'].actionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'double-click-action-card'),
+                    allyTempPowerModifier: state.core.bases[0].minions.find((minion: { uid: string }) => minion.uid === 'ally-1')?.tempPowerModifier ?? 0,
+                };
+            });
+        }, { timeout: 5000 }).toEqual({
+            actionsPlayed: 0,
+            stillInHand: true,
+            allyTempPowerModifier: 0,
+        });
+
+        await clickHandCard(page, card);
 
         await expect.poll(async () => {
             return await page.evaluate(() => {
                 const state = window.__BG_TEST_HARNESS__!.state.get();
-                return state.core.bases[0].minions.some((minion: { uid: string }) => minion.uid === 'swipe-play-card');
+                return {
+                    actionsPlayed: state.core.players['0'].actionsPlayed,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'double-click-action-card'),
+                    allyTempPowerModifier: state.core.bases[0].minions.find((minion: { uid: string }) => minion.uid === 'ally-1')?.tempPowerModifier ?? 0,
+                };
             });
-        }, { timeout: 5000 }).toBe(true);
+        }, { timeout: 5000 }).toEqual({
+            actionsPlayed: 1,
+            stillInHand: false,
+            allyTempPowerModifier: 1,
+        });
 
-        await game.screenshot('smashup-swipe-play-resolved', testInfo);
+        await game.screenshot('smashup-click-action-double-confirm', testInfo);
     });
 });

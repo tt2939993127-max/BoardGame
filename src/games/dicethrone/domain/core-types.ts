@@ -195,6 +195,8 @@ export interface PendingAttack {
     resolvedDamage?: number;
     /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
     attackDiceFaceCounts?: Record<string, number>;
+    /** 攻击方原始点数计数快照（用于“4个相同数字 / 3个相同数字”判定） */
+    attackDiceValueCounts?: Record<number, number>;
     /** 攻击掷骰阶段结束时的 Token 选择是否已完成（暴击/精准） */
     offensiveRollEndTokenResolved?: boolean;
     /** 奖励骰是否已通过 BONUS_DICE_SETTLED 结算（避免 autoContinue 重入时重复执行 resolveAttack） */

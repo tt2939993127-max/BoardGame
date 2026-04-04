@@ -177,6 +177,66 @@ test.describe('Lobby E2E', () => {
         await game.screenshot('lobby-about-modal-support-qr-visible', testInfo);
     });
 
+    test('移动端反馈弹窗应覆盖悬浮球面板，且输入区使用可编辑字号', async ({ browser }, testInfo) => {
+        const context = await browser.newContext({
+            viewport: { width: 393, height: 852 },
+            isMobile: true,
+            hasTouch: true,
+        });
+
+        try {
+            await setChineseLocale(context);
+            const page = await context.newPage();
+            await ensureLobbyReady(page);
+
+            await page.locator('[data-fab-id="settings"]').click();
+            await expect(page.locator('[data-fab-id="feedback"]')).toBeVisible({ timeout: 10000 });
+            await page.locator('[data-fab-id="feedback"]').click();
+
+            const feedbackModal = page.getByTestId('feedback-modal');
+            const feedbackTextarea = feedbackModal.getByPlaceholder(/描述/i);
+            await expect(feedbackModal).toBeVisible({ timeout: 10000 });
+            await expect(feedbackTextarea).toBeVisible();
+
+            const layerMetrics = await page.evaluate(() => {
+                const modal = document.querySelector('[data-testid="feedback-modal"]') as HTMLElement | null;
+                const fabPanel = document.querySelector('[data-testid="fab-panel-settings"]') as HTMLElement | null;
+                const fabSheet = document.querySelector('[data-testid="fab-sheet-settings"]') as HTMLElement | null;
+                const fabMenu = document.querySelector('[data-testid="fab-menu"]') as HTMLElement | null;
+                const activeFabLayer = fabSheet ?? fabPanel ?? fabMenu;
+                const textarea = modal?.querySelector('textarea') as HTMLTextAreaElement | null;
+                const resolveZIndex = (element: HTMLElement | null) => {
+                    if (!element) return 0;
+                    const parsed = Number.parseInt(window.getComputedStyle(element).zIndex || '0', 10);
+                    return Number.isFinite(parsed) ? parsed : 0;
+                };
+                const modalZIndex = resolveZIndex(modal);
+                const fabLayerZIndex = resolveZIndex(activeFabLayer);
+                const textareaFontSize = textarea ? Number.parseFloat(window.getComputedStyle(textarea).fontSize || '0') : 0;
+
+                return {
+                    modalZIndex,
+                    fabLayerZIndex,
+                    textareaFontSize,
+                };
+            });
+
+            expect(layerMetrics.modalZIndex, '反馈弹窗层级应高于 FAB 展开层').toBeGreaterThan(layerMetrics.fabLayerZIndex);
+            expect(layerMetrics.textareaFontSize, '移动端反馈输入区至少应为 16px，避免输入时看不清').toBeGreaterThanOrEqual(16);
+
+            await feedbackTextarea.click();
+            await feedbackTextarea.fill('移动端反馈输入可见性校验');
+            await expect(feedbackTextarea).toHaveValue('移动端反馈输入可见性校验');
+
+            await page.screenshot({
+                path: 'test-results/evidence-screenshots/lobby-feedback-modal-mobile.png',
+                fullPage: false,
+            });
+        } finally {
+            await context.close();
+        }
+    });
+
     test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {
         let delayedOnce = false;
         await page.route('**/games/tictactoe/create', async (route) => {

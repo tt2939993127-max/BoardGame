@@ -128,6 +128,7 @@
     "assetPack": "素材包",
     "packIdUnknown": "包标识待同步",
     "sizeUnknown": "大小待同步",
+    "packageUnpublished": "下载包未发布",
     "runtimeUnsupported": "当前运行环境暂不支持下载游戏包，请在 Android App 内重试。",
     "failedTitle": "下载失败",
     "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",

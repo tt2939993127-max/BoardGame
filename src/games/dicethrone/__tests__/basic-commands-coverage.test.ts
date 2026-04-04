@@ -504,6 +504,43 @@ describe('AI legal actions', () => {
         }));
     });
 
+    it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.sys.interaction = {
+            ...state.sys.interaction,
+            current: {
+                id: 'ai-simple-choice-multi',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    sourceId: 'test_multi_simple_choice',
+                    options: [
+                        { id: 'opt-a', label: '选项 A' },
+                        { id: 'opt-b', label: '选项 B' },
+                        { id: 'opt-c', label: '选项 C' },
+                    ],
+                    multi: { min: 2, max: 2 },
+                },
+            } as any,
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const payloads = actions
+            .filter((action) => action.kind === 'interaction-choice')
+            .map((action) => ((action.commands[0]?.payload as { optionIds?: string[] } | undefined)?.optionIds ?? []).join(','))
+            .sort();
+
+        expect(payloads).toEqual([
+            'opt-a,opt-b',
+            'opt-a,opt-c',
+            'opt-b,opt-c',
+        ]);
+    });
+
     it('本地 AI runner 应在 setup 阶段选择角色', async () => {
         const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
         const state: MatchState<DiceThroneCore> = {

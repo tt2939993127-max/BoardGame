@@ -97,6 +97,18 @@ function getRemainingExtraTalentUses(core: SmashUpCore, playerId: string): numbe
     return Math.max(0, allowance - (player.extraTalentUsesConsumed ?? 0));
 }
 
+function findAttachedTalentHostMinion(
+    core: SmashUpCore,
+    baseIndex: number,
+    ongoingCardUid: string,
+) {
+    const base = core.bases[baseIndex];
+    if (!base) return undefined;
+    return base.minions.find(minion =>
+        minion.attachedActions.some(attached => attached.uid === ongoingCardUid),
+    );
+}
+
 export function validate(
     state: MatchState<SmashUpCore>,
     command: SmashUpCommand
@@ -655,7 +667,12 @@ export function validate(
                     return { valid: false, error: '只能使用自己的持续行动卡天赋' };
                 }
                 if (ongoing.talentUsed) {
-                    if (getRemainingExtraTalentUses(core, command.playerId) <= 0) {
+                    const hostMinion = findAttachedTalentHostMinion(core, baseIndex, ongoingCardUid);
+                    const canUseStandingStonesDoubleTalent =
+                        targetBase.defId === 'base_standing_stones'
+                        && hostMinion?.controller === command.playerId
+                        && !core.standingStonesDoubleTalentMinionUid;
+                    if (!canUseStandingStonesDoubleTalent && getRemainingExtraTalentUses(core, command.playerId) <= 0) {
                         return { valid: false, error: '本回合天赋已使用' };
                     }
                 }

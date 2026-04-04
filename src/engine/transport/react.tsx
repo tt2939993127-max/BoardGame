@@ -88,6 +88,38 @@ interface GameClientContextValue {
 
 const GameClientContext = createContext<GameClientContextValue | null>(null);
 
+function buildAiProgressMarker(state: MatchState<unknown>): string {
+    const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : '';
+    const phase = typeof state.sys?.phase === 'string' ? state.sys.phase : '';
+    const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
+        ? state.sys.eventStream.nextId
+        : '';
+    const interactionId = typeof state.sys?.interaction?.current?.id === 'string'
+        ? state.sys.interaction.current.id
+        : '';
+    const responderIndex = typeof state.sys?.responseWindow?.current?.currentResponderIndex === 'number'
+        ? state.sys.responseWindow.current.currentResponderIndex
+        : '';
+    const currentPlayerId = (() => {
+        const core = state.core as Record<string, unknown>;
+        if (typeof core.activePlayerId === 'string') return core.activePlayerId;
+        if (typeof core.currentPlayer === 'string') return core.currentPlayer;
+        if (Array.isArray(core.turnOrder) && typeof core.currentPlayerIndex === 'number') {
+            return (core.turnOrder as string[])[core.currentPlayerIndex as number] ?? '';
+        }
+        return '';
+    })();
+
+    return [
+        turnNumber,
+        phase,
+        eventStreamNextId,
+        interactionId,
+        responderIndex,
+        currentPlayerId,
+    ].join('|');
+}
+
 // ============================================================================
 // useGameClient Hook
 // ============================================================================
@@ -626,6 +658,7 @@ export function LocalGameProvider({
     const randomRef = useRef<LocalProviderRandom>(initialRandom);
     const onCommandRejectedRef = useRef(onCommandRejected);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
+    const [aiRetryVersion, setAiRetryVersion] = useState(0);
 
     useEffect(() => {
         onCommandRejectedRef.current = onCommandRejected;
@@ -782,6 +815,11 @@ export function LocalGameProvider({
         });
         return { sys, core };
     });
+    const stateRef = useRef(state);
+
+    useEffect(() => {
+        stateRef.current = state;
+    }, [state]);
 
     const localPregameControlledPlayerId = useMemo(
         () => resolveLocalPregameControlledPlayerId({
@@ -911,6 +949,7 @@ export function LocalGameProvider({
 
         const runAiTurn = async () => {
             const startedAt = Date.now();
+            const progressMarkerBeforeDispatch = buildAiProgressMarker(state);
             const resolution = await resolveNextAiAction({
                 engineConfig: config,
                 state,
@@ -962,6 +1001,15 @@ export function LocalGameProvider({
                     __tutorialAiCommand: true,
                 });
             }
+
+            setTimeout(() => {
+                if (cancelled) return;
+                if (lastAiAttemptKeyRef.current !== resolution.attemptKey) return;
+                const progressed = buildAiProgressMarker(stateRef.current) !== progressMarkerBeforeDispatch;
+                if (progressed) return;
+                lastAiAttemptKeyRef.current = null;
+                setAiRetryVersion((version) => version + 1);
+            }, 30);
         };
 
         void runAiTurn();
@@ -973,7 +1021,7 @@ export function LocalGameProvider({
                 delayTimer = null;
             }
         };
-    }, [config, dispatch, localPregameControlledPlayerId, seatControllers, seed, state]);
+    }, [aiRetryVersion, config, dispatch, localPregameControlledPlayerId, seatControllers, seed, state]);
 
     const reset = useCallback(() => {
         randomRef.current = createLocalProviderRandom(seed);

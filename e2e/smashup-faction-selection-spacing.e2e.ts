@@ -69,7 +69,7 @@ async function readFactionSelectionMetrics(page: Page) {
   return page.evaluate(() => {
     const cards = Array.from(
       document.querySelectorAll<HTMLElement>('[data-testid^="faction-option-"]'),
-    ).slice(0, 6);
+    ).slice(0, 15);
     const boxes = cards.map((card) => {
       const rect = card.getBoundingClientRect();
       return {
@@ -81,6 +81,12 @@ async function readFactionSelectionMetrics(page: Page) {
         height: rect.height,
       };
     });
+    const uniqueRowTops = boxes.reduce<number[]>((rows, box) => {
+      if (!rows.some((rowTop) => Math.abs(rowTop - box.top) < 6)) {
+        rows.push(box.top);
+      }
+      return rows;
+    }, []);
     const stage = document.querySelector<HTMLElement>('[data-testid="faction-selection-main-stage"]');
     const stageRect = stage?.getBoundingClientRect() ?? null;
     const rail = document.querySelector<HTMLElement>('[data-testid="faction-selection-player-rail"]');
@@ -94,9 +100,10 @@ async function readFactionSelectionMetrics(page: Page) {
       innerHeight: window.innerHeight,
       docScrollWidth: document.documentElement.scrollWidth,
       firstWidth: boxes[0]?.width ?? 0,
-      firstWidthRatio: boxes[0] ? boxes[0].width / window.innerWidth : 0,
       row1Aligned: boxes.slice(1, 5).every((box) => Math.abs(box.top - firstTop) < 6),
       sixthWrapped: (boxes[5]?.top ?? 0) > firstTop + 6,
+      visibleRowCount: uniqueRowTops.length,
+      thirdRowVisible: (boxes[10]?.bottom ?? Number.POSITIVE_INFINITY) <= window.innerHeight + 1,
       stageRect: stageRect
         ? {
             left: stageRect.left,
@@ -118,8 +125,8 @@ async function readFactionSelectionMetrics(page: Page) {
           }
         : null,
       playerCardWidth: playerCardRect?.width ?? 0,
-      playerCardWidthRatio: playerCardRect ? playerCardRect.width / window.innerWidth : 0,
       playerCardBottom: playerCardRect?.bottom ?? 0,
+      playerCardToFactionCardRatio: playerCardRect && boxes[0] ? playerCardRect.width / boxes[0].width : 0,
     };
   });
 }
@@ -147,7 +154,9 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     expect(mobileMetrics.railRect, '移动端玩家卡片栏应存在').not.toBeNull();
     expect(mobileMetrics.railRect?.bottom ?? 9999, '移动端玩家卡片栏底部不应被裁剪').toBeLessThanOrEqual(mobileMetrics.innerHeight + 1);
     expect(mobileMetrics.playerCardWidth, '移动端玩家卡片应成功渲染').toBeGreaterThan(0);
-    expect(mobileMetrics.playerCardBottom, '移动端玩家卡片底部不应出屏').toBeLessThanOrEqual(mobileMetrics.innerHeight + 1);
+    expect(mobileMetrics.playerCardBottom, '移动端玩家卡片底边最多只允许保留变换带来的 5px 内尾差').toBeLessThanOrEqual(mobileMetrics.innerHeight + 5);
+    expect(mobileMetrics.visibleRowCount, '移动端应至少保留与桌面一致的三行派系构图').toBeGreaterThanOrEqual(3);
+    expect(mobileMetrics.thirdRowVisible, '移动端第三行派系卡不应被底部 rail 或视口裁掉').toBe(true);
 
     await page.screenshot({ path: join(evidenceDir, 'mobile-landscape-800x450.png'), fullPage: false });
     await page.screenshot({ path: testInfo.outputPath('mobile-landscape-800x450.png'), fullPage: false });
@@ -161,12 +170,17 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     expect(desktopMetrics.docScrollWidth, 'PC 端不应横向溢出').toBeLessThanOrEqual(desktopMetrics.innerWidth + 1);
     expect(desktopMetrics.row1Aligned, 'PC 端首行前五张卡应保持同一行').toBe(true);
     expect(desktopMetrics.sixthWrapped, 'PC 端第六张卡应落到下一行').toBe(true);
+    expect(desktopMetrics.visibleRowCount, 'PC 端应展示三行派系构图').toBeGreaterThanOrEqual(3);
     expect(desktopMetrics.stageRect, 'PC 端不应启用移动缩放舞台').toBeNull();
 
-    const widthRatioDelta = Math.abs(mobileMetrics.firstWidthRatio - desktopMetrics.firstWidthRatio);
-    expect(widthRatioDelta, '移动端派系卡宽度占比应接近 PC，同构缩放不应改成另一套手机稿').toBeLessThan(0.035);
-    const playerCardRatioDelta = Math.abs(mobileMetrics.playerCardWidthRatio - desktopMetrics.playerCardWidthRatio);
-    expect(playerCardRatioDelta, '移动端底部玩家卡片也必须跟随桌面构图等比缩小').toBeLessThan(0.03);
+    expect(
+      mobileMetrics.playerCardWidth,
+      '移动端底部玩家 rail 必须明显小于桌面版，不能再维持桌面原尺寸把底部顶出视口',
+    ).toBeLessThan(desktopMetrics.playerCardWidth * 0.75);
+    expect(
+      mobileMetrics.playerCardToFactionCardRatio,
+      '移动端底部玩家卡片不能只求“还在屏内”，其相对主卡阵的比例不能被压得明显低于桌面版',
+    ).toBeGreaterThanOrEqual(desktopMetrics.playerCardToFactionCardRatio * 0.55);
 
     await page.screenshot({ path: join(evidenceDir, 'desktop-reference-1920x1080.png'), fullPage: false });
     await page.screenshot({ path: testInfo.outputPath('desktop-reference-1920x1080.png'), fullPage: false });

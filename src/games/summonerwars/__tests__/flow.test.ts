@@ -6,6 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
 import { resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildSummonerWarsAiLegalActions } from '../ai';
 
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -819,6 +820,43 @@ describe('召唤师战争本地 AI', () => {
         const validPositions = getValidSummonPositions(core, '0');
         expect(summonPosition).toBeTruthy();
         expect(validPositions).toContainEqual(summonPosition);
+    });
+
+    it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+        sys.interaction = {
+            ...sys.interaction,
+            current: {
+                id: 'sw-ai-simple-choice-multi',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    options: [
+                        { id: 'opt-a', label: '选项 A' },
+                        { id: 'opt-b', label: '选项 B' },
+                        { id: 'opt-c', label: '选项 C' },
+                    ],
+                    multi: { min: 2, max: 2 },
+                },
+            } as any,
+        };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const payloads = actions
+            .filter((action) => action.kind === 'interaction-choice')
+            .map((action) => ((action.commands[0]?.payload as { optionIds?: string[] } | undefined)?.optionIds ?? []).join(','))
+            .sort();
+
+        expect(payloads).toEqual([
+            'opt-a,opt-b',
+            'opt-a,opt-c',
+            'opt-b,opt-c',
+        ]);
     });
 
     it('召唤师受致命威胁时应优先攻击威胁单位，而不是追击其他目标', async () => {

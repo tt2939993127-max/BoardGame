@@ -23,6 +23,7 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => (
 describe('FeedbackModal', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        document.body.innerHTML = '<div id="modal-root"></div>';
         (global.fetch as any).mockResolvedValue({
             ok: true,
             json: async () => ({ success: true })
@@ -38,6 +39,17 @@ describe('FeedbackModal', () => {
 
         // 使用更具体的选择器，避免匹配多个元素
         expect(screen.getByRole('heading', { name: /反馈/ })).toBeInTheDocument();
+    });
+
+    it('应该优先渲染到 modal-root，避免被页面层级遮挡', () => {
+        render(
+            <TestWrapper>
+                <FeedbackModal onClose={mockOnClose} />
+            </TestWrapper>
+        );
+
+        const modalRoot = document.getElementById('modal-root');
+        expect(modalRoot?.textContent).toContain('反馈');
     });
 
     it('应该在有 actionLogText 时显示"附带操作日志"选项', () => {

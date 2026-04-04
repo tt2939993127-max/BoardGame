@@ -11,6 +11,7 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         description: tokenText(TOKEN_IDS.HONOR, 'description') as unknown as string[],
         stackLimit: 0,
         category: 'buff',
+        iconPath: 'dicethrone/images/samurai/icons/荣誉',
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
@@ -34,6 +35,7 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         description: tokenText(TOKEN_IDS.SHAME, 'description') as unknown as string[],
         stackLimit: 0,
         category: 'debuff',
+        iconPath: 'dicethrone/images/samurai/icons/耻辱',
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
@@ -52,6 +54,7 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         description: tokenText(TOKEN_IDS.SAMURAI_RETRIBUTION, 'description') as unknown as string[],
         stackLimit: 0,
         category: 'buff',
+        iconPath: 'dicethrone/images/samurai/icons/反击',
         activeUse: {
             timing: ['beforeDamageReceived'],
             consumeAmount: 1,

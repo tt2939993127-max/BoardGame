@@ -24,7 +24,7 @@ import { PALADIN_CARDS } from '../heroes/paladin/cards';
 import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
 import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 import { COMMON_CARDS } from '../domain/commonCards';
-import { DICETHRONE_CARD_ATLAS_IDS, DICETHRONE_HAND_CARD_ATLAS_IDS } from '../domain/ids';
+import { DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
 
 // i18n
 import zhCN from '../../../../public/locales/zh-CN/game-dicethrone.json';
@@ -238,35 +238,46 @@ describe('卡牌效果 target 合理性', () => {
 });
 
 describe('枪手 / 武士卡图接线一致性', () => {
-    it('枪手专属卡应使用 hand atlas 顺序，通用卡应使用角色原图真实索引', () => {
-        const gunslingerSpecificCardIds = [
-            'upgrade-revolver-2',
-            'upgrade-bounty-hunter-2',
-            'upgrade-showdown-2',
-            'upgrade-showdown-3',
-            'upgrade-fan-the-hammer-2',
-            'card-pistol-whip',
-            'upgrade-take-cover-2',
-            'card-mark-the-target',
-            'upgrade-deadeye-2',
-            'card-the-law',
-            'upgrade-duel-2',
-            'upgrade-quick-draw',
-            'card-wanted',
-            'card-spin-the-chamber',
-            'card-high-noon',
-            'card-wild-west',
-            'card-eat-my-lead',
-        ] as const;
+    it('枪手专属卡应直接使用 ability-cards 索引或裁切图，不能再走 hand atlas', () => {
+        const gunslingerAtlasCards: Record<string, number> = {
+            'upgrade-revolver-2': 18,
+            'upgrade-bounty-hunter-2': 19,
+            'upgrade-showdown-2': 20,
+            'upgrade-showdown-3': 21,
+            'upgrade-duel-2': 25,
+            'upgrade-quick-draw': 26,
+            'card-wanted': 27,
+            'card-spin-the-chamber': 28,
+            'card-high-noon': 29,
+            'card-wild-west': 30,
+            'card-eat-my-lead': 31,
+        };
 
-        gunslingerSpecificCardIds.forEach((cardId, index) => {
+        for (const [cardId, index] of Object.entries(gunslingerAtlasCards)) {
             const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
             expect(card?.previewRef).toEqual({
                 type: 'atlas',
-                atlasId: DICETHRONE_HAND_CARD_ATLAS_IDS.GUNSLINGER,
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER,
                 index,
             });
-        });
+        }
+
+        const gunslingerCropCards: Record<string, string> = {
+            'upgrade-fan-the-hammer-2': 'dicethrone/images/gunslinger/crops/ability-cards/fan-the-hammer-2',
+            'card-pistol-whip': 'dicethrone/images/gunslinger/crops/ability-cards/pistol-whip',
+            'upgrade-take-cover-2': 'dicethrone/images/gunslinger/crops/ability-cards/take-cover-2',
+            'card-mark-the-target': 'dicethrone/images/gunslinger/crops/ability-cards/mark-the-target',
+            'upgrade-deadeye-2': 'dicethrone/images/gunslinger/crops/ability-cards/deadeye-2',
+            'card-the-law': 'dicethrone/images/gunslinger/crops/ability-cards/the-law',
+        };
+
+        for (const [cardId, src] of Object.entries(gunslingerCropCards)) {
+            const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'image',
+                src,
+            });
+        }
 
         const gunslingerCommonAtlasIndex: Record<string, number> = {
             'card-play-six': 17,
@@ -299,32 +310,43 @@ describe('枪手 / 武士卡图接线一致性', () => {
         }
     });
 
-    it('武士专属卡应使用 hand atlas 顺序，通用卡应使用前两行真实索引', () => {
-        const samuraiSpecificCardIds = [
-            'upgrade-katana-slice-2',
-            'upgrade-katana-slice-3',
-            'upgrade-wakizashi-2',
-            'upgrade-wakizashi-3',
-            'upgrade-solemnity-2',
-            'upgrade-budo-2',
-            'upgrade-masamune-2',
-            'upgrade-slot-06-2',
-            'upgrade-stand-tall-2',
-            'card-samurai-honor',
-            'card-you-should-be-ashamed',
-            'card-no-retreat',
-            'card-righteousness',
-            'card-zanshin',
-        ] as const;
+    it('武士专属卡应直接使用 ability-cards 索引或裁切图，不能再走 hand atlas', () => {
+        const samuraiAtlasCards: Record<string, number> = {
+            'upgrade-katana-slice-2': 18,
+            'upgrade-katana-slice-3': 19,
+            'upgrade-wakizashi-2': 20,
+            'upgrade-wakizashi-3': 21,
+            'upgrade-budo-2': 23,
+            'upgrade-stand-tall-2': 26,
+            'card-samurai-honor': 27,
+            'card-you-should-be-ashamed': 28,
+            'card-no-retreat': 29,
+            'card-righteousness': 30,
+            'card-zanshin': 31,
+        };
 
-        samuraiSpecificCardIds.forEach((cardId, index) => {
+        for (const [cardId, index] of Object.entries(samuraiAtlasCards)) {
             const card = SAMURAI_CARDS.find((item) => item.id === cardId);
             expect(card?.previewRef).toEqual({
                 type: 'atlas',
-                atlasId: DICETHRONE_HAND_CARD_ATLAS_IDS.SAMURAI,
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.SAMURAI,
                 index,
             });
-        });
+        }
+
+        const samuraiCropCards: Record<string, string> = {
+            'upgrade-solemnity-2': 'dicethrone/images/samurai/crops/ability-cards/upgrade-solemnity-2',
+            'upgrade-masamune-2': 'dicethrone/images/samurai/crops/ability-cards/upgrade-masamune-2',
+            'upgrade-slot-06-2': 'dicethrone/images/samurai/crops/ability-cards/upgrade-slot-06-2',
+        };
+
+        for (const [cardId, src] of Object.entries(samuraiCropCards)) {
+            const card = SAMURAI_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'image',
+                src,
+            });
+        }
 
         const samuraiCommonCardIds = [
             'card-play-six',

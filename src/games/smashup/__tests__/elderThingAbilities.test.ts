@@ -128,8 +128,8 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 // ============================================================================
 
 describe('远古之物派系能力', () => {
-    describe('elder_thing_byakhee（拜亚基：有对手随从时抽疯狂卡）', () => {
-        it('基地有对手随从时抽一张疯狂卡', () => {
+    describe('elder_thing_byakhee（拜亚基：每位在此基地有随从的其他玩家各抽一张疯狂卡）', () => {
+        it('基地有对手随从时，由该对手抽一张疯狂卡', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -147,8 +147,35 @@ describe('远古之物派系能力', () => {
             const events = execPlayMinion(state, '0', 'm1', 0);
             const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
-            expect((madnessEvents[0] as any).payload.playerId).toBe('0');
+            expect((madnessEvents[0] as any).payload.playerId).toBe('1');
             expect((madnessEvents[0] as any).payload.count).toBe(1);
+        });
+
+        it('多个其他玩家都在该基地有随从时，各自都抽一张疯狂卡，拜亚基本人不抽', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_byakhee', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                    '2': makePlayer('2'),
+                },
+                turnOrder: ['0', '1', '2'],
+                bases: [{
+                    defId: 'b1',
+                    minions: [
+                        makeMinion('opp1', 'test', '1', 3),
+                        makeMinion('opp2', 'test', '2', 4),
+                    ],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(2);
+            expect(madnessEvents.map(e => (e as any).payload.playerId)).toEqual(['1', '2']);
+            expect(madnessEvents.every(e => (e as any).payload.playerId !== '0')).toBe(true);
         });
 
         it('基地无对手随从时不抽疯狂卡', () => {
@@ -167,7 +194,7 @@ describe('远古之物派系能力', () => {
             expect(madnessEvents.length).toBe(0);
         });
 
-        it('疯狂牌库为空时不抽', () => {
+        it('疯狂牌库为空时无人抽牌', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {

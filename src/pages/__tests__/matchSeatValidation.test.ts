@@ -6,6 +6,9 @@ import * as matchApi from '../../services/matchApi';
 import { isMatchNotFoundError, useMatchStatus, validateStoredMatchSeat, type StoredMatchCredentials } from '../../hooks/match/useMatchStatus';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAiSeats';
 import type { GameManifestEntry } from '../../games/manifest.types';
+import type { MatchState } from '../../engine/types';
+import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
+import { submitOnlineAiResolution } from '../MatchRoom';
 
 type Player = { id: number; name?: string | null };
 
@@ -174,6 +177,483 @@ describe('onlineAiSeats', () => {
         expect(haveAiSeatCredentialsChanged({}, {})).toBe(false);
         expect(haveAiSeatCredentialsChanged({ '1': 'same' }, { '1': 'same' })).toBe(false);
         expect(haveAiSeatCredentialsChanged({ '1': 'old' }, { '1': 'new' })).toBe(true);
+    });
+});
+
+describe('resolveNextAiAction 在线视角', () => {
+    it('在线 AI 应优先使用 seat 自己同步到的状态，才能看到隐藏交互', async () => {
+        const gameId = '__test_online_ai_hidden_interaction__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { id?: string; playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (!interaction || interaction.playerId !== playerId || interaction.id !== 'ai-choice') {
+                    return [];
+                }
+                return [{
+                    actionId: 'respond-ai-choice',
+                    kind: 'interaction-choice',
+                    label: '响应交互',
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-1' } }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const filteredHumanState = {
+            core: {},
+            sys: {
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const aiSeatState = {
+            core: {},
+            sys: {
+                interaction: {
+                    current: {
+                        id: 'ai-choice',
+                        kind: 'simple-choice',
+                        playerId: '1',
+                        data: {
+                            sourceId: 'wizard_sacrifice',
+                            options: [{ id: 'pick-1', label: '选择唯一目标', value: { minionUid: 'm1' } }],
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const engineConfig = {
+            gameId,
+            domain: {} as never,
+            systems: [],
+        };
+
+        const withoutSeatState = await resolveNextAiAction({
+            engineConfig,
+            state: filteredHumanState,
+            matchId: 'match-online-ai-hidden',
+            seatControllers: { '1': { type: 'local-ai' } },
+        });
+        expect(withoutSeatState).toBeNull();
+
+        const withSeatState = await resolveNextAiAction({
+            engineConfig,
+            state: filteredHumanState,
+            matchId: 'match-online-ai-hidden',
+            seatControllers: { '1': { type: 'local-ai' } },
+            visibleStateResolver: (playerId) => (playerId === '1' ? aiSeatState : undefined),
+        });
+        expect(withSeatState?.playerId).toBe('1');
+        expect(withSeatState?.action.kind).toBe('interaction-choice');
+        expect(withSeatState?.action.commands).toEqual([
+            { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-1' } },
+        ]);
+    });
+
+    it('多个 AI seat 并存时，应由持有隐藏交互的那个 seat 响应', async () => {
+        const gameId = '__test_online_ai_hidden_interaction_multi_seat__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { id?: string; playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (!interaction || interaction.playerId !== playerId) {
+                    return [];
+                }
+                return [{
+                    actionId: `respond-${playerId}`,
+                    kind: 'interaction-choice',
+                    label: `由 ${playerId} 响应`,
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: `pick-${playerId}` } }],
+                }];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedFilteredState = {
+            core: {},
+            sys: {
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const seatOneState = {
+            core: {},
+            sys: {
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const seatTwoState = {
+            core: {},
+            sys: {
+                interaction: {
+                    current: {
+                        id: 'seat-2-choice',
+                        kind: 'simple-choice',
+                        playerId: '2',
+                        data: {
+                            sourceId: 'shared_hidden_prompt',
+                            options: [{ id: 'pick-2', label: '仅 2 号位可见', value: { chosenBy: '2' } }],
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedFilteredState,
+            matchId: 'match-online-ai-hidden-multi-seat',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+                '2': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => {
+                if (playerId === '1') return seatOneState;
+                if (playerId === '2') return seatTwoState;
+                return undefined;
+            },
+        });
+
+        expect(resolution?.playerId).toBe('2');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-2' } },
+        ]);
+    });
+
+    it('其他 seat 仅看到 isBlocked=true 时，不应继续生成普通动作抢跑', async () => {
+        const gameId = '__test_online_ai_hidden_interaction_blocked_guard__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { id?: string; playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (interaction?.playerId === playerId) {
+                    return [{
+                        actionId: `respond-${playerId}`,
+                        kind: 'interaction-choice',
+                        label: `由 ${playerId} 响应`,
+                        commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: `pick-${playerId}` } }],
+                    }];
+                }
+
+                const currentPlayerId = (state.core as { currentPlayerId?: string })?.currentPlayerId;
+                if (currentPlayerId === playerId) {
+                    return [{
+                        actionId: `advance-${playerId}`,
+                        kind: 'advance-phase',
+                        label: `由 ${playerId} 结束阶段`,
+                        commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+                    }];
+                }
+
+                return [];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedFilteredState = {
+            core: {},
+            sys: {
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const blockedSeatState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const hiddenInteractionSeatState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                interaction: {
+                    current: {
+                        id: 'seat-2-choice',
+                        kind: 'simple-choice',
+                        playerId: '2',
+                        data: {
+                            sourceId: 'shared_hidden_prompt',
+                            options: [{ id: 'pick-2', label: '仅 2 号位可见', value: { chosenBy: '2' } }],
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedFilteredState,
+            matchId: 'match-online-ai-hidden-blocked-guard',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+                '2': { type: 'local-ai' },
+            },
+            visibleStateResolver: (playerId) => {
+                if (playerId === '1') return blockedSeatState;
+                if (playerId === '2') return hiddenInteractionSeatState;
+                return undefined;
+            },
+        });
+
+        expect(resolution?.playerId).toBe('2');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect(resolution?.action.commands).toEqual([
+            { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-2' } },
+        ]);
+    });
+
+    it('seat 专属状态未同步时，应跳过该 AI，而不是回退到共享视角生成普通动作', async () => {
+        const gameId = '__test_online_ai_hidden_interaction_wait_for_seat_state__';
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId, state }) => {
+                const interaction = (state.sys as {
+                    interaction?: {
+                        current?: { playerId?: string };
+                    };
+                })?.interaction?.current;
+                if (interaction?.playerId === playerId) {
+                    return [{
+                        actionId: `respond-${playerId}`,
+                        kind: 'interaction-choice',
+                        label: `由 ${playerId} 响应`,
+                        commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: `pick-${playerId}` } }],
+                    }];
+                }
+
+                const currentPlayerId = (state.core as { currentPlayerId?: string })?.currentPlayerId;
+                if (currentPlayerId === playerId) {
+                    return [{
+                        actionId: `advance-${playerId}`,
+                        kind: 'advance-phase',
+                        label: `由 ${playerId} 结束阶段`,
+                        commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+                    }];
+                }
+
+                return [];
+            },
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: (context) => (
+                        context.legalActions[0]
+                            ? { actionId: context.legalActions[0].actionId }
+                            : null
+                    ),
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const sharedFilteredState = {
+            core: {
+                currentPlayerId: '1',
+            },
+            sys: {
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: {},
+            },
+        } as MatchState<unknown>;
+
+        const resolution = await resolveNextAiAction({
+            engineConfig: {
+                gameId,
+                domain: {} as never,
+                systems: [],
+            },
+            state: sharedFilteredState,
+            matchId: 'match-online-ai-hidden-wait-for-seat-state',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            visibleStateResolver: () => null,
+        });
+
+        expect(resolution).toBeNull();
+    });
+});
+
+describe('submitOnlineAiResolution', () => {
+    it('batch confirmed 后会回写对应 seat 的最新状态', () => {
+        const updateLatestState = vi.fn();
+        const sendBatch = vi.fn((_batchId, _commands, onConfirmed) => {
+            onConfirmed?.({ sys: { phase: 'playCards' } });
+        });
+        const lastAiAttemptKeyRef = { current: null as string | null };
+
+        submitOnlineAiResolution({
+            client: {
+                sendBatch,
+                updateLatestState,
+            },
+            resolution: {
+                playerId: '1',
+                attemptKey: 'attempt-confirmed',
+                source: 'local-ai',
+                action: {
+                    actionId: 'respond-choice',
+                    kind: 'interaction-choice',
+                    label: '响应',
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-1' } }],
+                },
+            },
+            lastAiAttemptKeyRef,
+            scheduleRetry: vi.fn(),
+        });
+
+        expect(lastAiAttemptKeyRef.current).toBe('attempt-confirmed');
+        expect(sendBatch).toHaveBeenCalledTimes(1);
+        expect(updateLatestState).toHaveBeenCalledWith({ sys: { phase: 'playCards' } });
+    });
+
+    it('batch rejected 后会清空 attemptKey 并安排重试；unauthorized 不重试', () => {
+        const retry = vi.fn();
+        const lastAiAttemptKeyRef = { current: null as string | null };
+        let rejectHandler: ((reason: string) => void) | undefined;
+        const sendBatch = vi.fn((_batchId, _commands, _onConfirmed, onRejected) => {
+            rejectHandler = onRejected;
+        });
+
+        submitOnlineAiResolution({
+            client: {
+                sendBatch,
+                updateLatestState: vi.fn(),
+            },
+            resolution: {
+                playerId: '1',
+                attemptKey: 'attempt-rejected',
+                source: 'local-ai',
+                action: {
+                    actionId: 'respond-choice',
+                    kind: 'interaction-choice',
+                    label: '响应',
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-1' } }],
+                },
+            },
+            lastAiAttemptKeyRef,
+            scheduleRetry: retry,
+        });
+
+        rejectHandler?.('command_failed');
+        expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(retry).toHaveBeenCalledTimes(1);
+
+        submitOnlineAiResolution({
+            client: {
+                sendBatch,
+                updateLatestState: vi.fn(),
+            },
+            resolution: {
+                playerId: '1',
+                attemptKey: 'attempt-unauthorized',
+                source: 'local-ai',
+                action: {
+                    actionId: 'respond-choice',
+                    kind: 'interaction-choice',
+                    label: '响应',
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'pick-1' } }],
+                },
+            },
+            lastAiAttemptKeyRef,
+            scheduleRetry: retry,
+        });
+
+        rejectHandler?.('unauthorized');
+        expect(lastAiAttemptKeyRef.current).toBeNull();
+        expect(retry).toHaveBeenCalledTimes(1);
     });
 });
 
