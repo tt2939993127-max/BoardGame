@@ -3,7 +3,7 @@
  * 使用 CardAtlas 配置精确裁切精灵图
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, getFrameAspectRatio } from './cardAtlas';
 import { isImagePreloaded } from '../../../core/AssetLoader';
@@ -37,47 +37,40 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
   const source = getSpriteAtlasSource(atlasId);
   const imageUrl = source?.image ?? '';
   const preloaded = !source || isImagePreloaded(imageUrl);
-  const [loadState, setLoadState] = useState<'loaded' | 'loading'>(preloaded ? 'loaded' : 'loading');
-  const imageUrlRef = useRef<string>(imageUrl);
-  const loaded = !source || (imageUrlRef.current === imageUrl && (preloaded || loadState === 'loaded'));
+  const [loadedImageUrl, setLoadedImageUrl] = useState(preloaded ? imageUrl : '');
+  const loaded = !source || preloaded || loadedImageUrl === imageUrl;
 
   // 预加载图片并监听加载状态
   useEffect(() => {
-    if (!source) {
-      imageUrlRef.current = '';
-      setLoadState('loaded');
+    if (!source || isImagePreloaded(imageUrl)) {
       return;
     }
-
-    imageUrlRef.current = imageUrl;
-
-    if (isImagePreloaded(imageUrl)) {
-      setLoadState('loaded');
-      return;
-    }
-
-    setLoadState('loading');
+    let cancelled = false;
 
     const img = new Image();
     img.onload = () => {
-      if (imageUrlRef.current === imageUrl) {
-        setLoadState('loaded');
+      if (!cancelled) {
+        setLoadedImageUrl(imageUrl);
       }
     };
     img.onerror = () => {
-      if (imageUrlRef.current === imageUrl) {
-        setLoadState('loaded');
+      if (!cancelled) {
+        setLoadedImageUrl(imageUrl);
       }
     };
     img.src = imageUrl;
 
     if (img.complete) {
       queueMicrotask(() => {
-        if (imageUrlRef.current === imageUrl) {
-          setLoadState('loaded');
+        if (!cancelled) {
+          setLoadedImageUrl(imageUrl);
         }
       });
     }
+
+    return () => {
+      cancelled = true;
+    };
   }, [imageUrl, source]);
 
   if (!source) {

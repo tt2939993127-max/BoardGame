@@ -1,3 +1,5 @@
+import { isNativeAndroidRuntime } from './mobile/androidRuntime';
+
 /**
  * 统一管理 socket.io 的握手策略。
  * 生产环境默认优先 websocket，避免慢链路上重连风暴。
@@ -15,9 +17,8 @@ const SOCKET_IO_TRANSPORTS_DEV_FALLBACK: SocketIoTransport[] = ['polling', 'webs
 const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 const isDev = metaEnv.DEV === true;
 const mode = typeof metaEnv.MODE === 'string' ? metaEnv.MODE : '';
-const isAndroidShellBuild = mode === 'android';
 const allowPollingOverride = metaEnv.VITE_SOCKET_ALLOW_POLLING === 'true';
-const allowPollingByEnvironment = isDev || mode === 'test' || isAndroidShellBuild || allowPollingOverride;
+const allowPollingByEnvironment = isDev || mode === 'test' || isNativeAndroidRuntime() || allowPollingOverride;
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 

@@ -3,8 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import { getAllGames, getGameById } from '../../config/games.config';
 import {
+    buildRuntimeBlockUnitValue,
+    buildRuntimeInlineUnitValue,
+    detectMobileLayoutEngineCapabilities,
     getGameMobileBannerKind,
     getGamePageDataAttributes,
+    parseChromiumMajorVersion,
+    resolveRuntimeLayoutScaleMetrics,
     resolveStableViewportSize,
     resolveGameMobileSupport,
     shouldUseBoardShellScale,
@@ -247,5 +252,51 @@ describe('mobile support helpers', () => {
                 { width: 844, height: undefined },
             ),
         ).toEqual({ width: 844, height: 390 });
+    });
+
+    it('can parse Chromium major version from user agent', () => {
+        expect(parseChromiumMajorVersion('Mozilla/5.0 Chrome/91.0.4472.114 Mobile Safari/537.36')).toBe(91);
+        expect(parseChromiumMajorVersion('Mozilla/5.0 AppleWebKit/537.36')).toBeNull();
+    });
+
+    it('detects legacy mobile layout engines from capability probe', () => {
+        expect(
+            detectMobileLayoutEngineCapabilities({
+                userAgent: 'Mozilla/5.0 Chrome/91.0.4472.114 Mobile Safari/537.36',
+                cssSupports: () => false,
+            }),
+        ).toEqual({
+            chromiumMajorVersion: 91,
+            layoutMode: 'legacy',
+            supportsCalcDivision: false,
+            supportsDynamicViewportUnits: false,
+            requiresJsScaleFallback: true,
+            requiresLegacyViewportFallback: true,
+        });
+
+        expect(
+            detectMobileLayoutEngineCapabilities({
+                userAgent: 'Mozilla/5.0 Chrome/146.0.7680.164 Mobile Safari/537.36',
+                cssSupports: () => true,
+            }).layoutMode,
+        ).toBe('modern');
+    });
+
+    it('builds stable pixel scale metrics for runtime layout fallbacks', () => {
+        expect(resolveRuntimeLayoutScaleMetrics({ width: 802, height: 393 }, 940)).toEqual({
+            designWidth: 940,
+            scale: 802 / 940,
+            inverseScale: 940 / 802,
+            logicalHeight: 393 * (940 / 802),
+            inlineUnit: 9.4,
+            blockUnit: (393 * (940 / 802)) / 100,
+        });
+    });
+
+    it('builds runtime inline and block css unit expressions', () => {
+        expect(buildRuntimeInlineUnitValue(18)).toBe('calc(var(--mobile-layout-inline-unit, 1vw) * 18)');
+        expect(buildRuntimeInlineUnitValue(0.55)).toBe('calc(var(--mobile-layout-inline-unit, 1vw) * 0.55)');
+        expect(buildRuntimeBlockUnitValue(8)).toBe('calc(var(--mobile-layout-block-unit, 1vh) * 8)');
+        expect(buildRuntimeBlockUnitValue(12.34567)).toBe('calc(var(--mobile-layout-block-unit, 1vh) * 12.3457)');
     });
 });

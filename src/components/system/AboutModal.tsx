@@ -6,7 +6,7 @@ import { createParticle, parseColorToRgb, type Particle } from '../common/animat
 import { useToast } from '../../contexts/ToastContext';
 import { SPONSOR_API_URL } from '../../config/server';
 import { UI_Z_INDEX } from '../../core';
-import { OptimizedImage } from '../common/media/OptimizedImage';
+import { versionedPublicFileUrl } from '../../lib/publicFileUrl';
 
 interface AboutModalProps {
     onClose: () => void;
@@ -44,6 +44,20 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
 
     const gitUrl = 'https://github.com/zhuanggenhua/BoardGame';
     const qqGroup = '1081373485';
+    const supportQrCodes = [
+        {
+            label: t('hud.about.wechatLabel'),
+            color: 'text-green-600',
+            src: versionedPublicFileUrl('/logos/weixin.jpg'),
+            alt: '微信支付二维码'
+        },
+        {
+            label: t('hud.about.alipayLabel'),
+            color: 'text-blue-600',
+            src: versionedPublicFileUrl('/logos/zhifubao.jpg'),
+            alt: '支付宝支付二维码'
+        }
+    ];
 
     const handleCopyQq = async () => {
         try {
@@ -303,7 +317,7 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
         element.addEventListener('scroll', handleScroll);
         handleScroll();
         return () => element.removeEventListener('scroll', handleScroll);
-    }, [containerHeight, loadMoreSponsors, sponsors.length, updateStartIndex]);
+    }, [containerHeight, loadMoreSponsors, sponsorHasMore, sponsors.length, updateStartIndex]);
 
     // 自动轮播逻辑
     useEffect(() => {
@@ -415,27 +429,13 @@ export const AboutModal = ({ onClose }: AboutModalProps) => {
                         </div>
 
                         <div className="flex justify-center gap-10">
-                            {[
-                                {
-                                    label: t('hud.about.wechatLabel'),
-                                    color: 'text-green-600',
-                                    src: 'common/logos/weixin.jpg',
-                                    alt: '微信支付二维码'
-                                },
-                                {
-                                    label: t('hud.about.alipayLabel'),
-                                    color: 'text-blue-600',
-                                    src: 'common/logos/zhifubao.jpg',
-                                    alt: '支付宝支付二维码'
-                                }
-                            ].map((qr, idx) => (
+                            {supportQrCodes.map((qr, idx) => (
                                 <div key={idx} className="flex flex-col items-center gap-1.5 pt-1">
                                     <div className="w-24 h-24 bg-zinc-100 flex items-center justify-center text-zinc-300 text-[10px] rounded-lg border border-parchment-brown/5 shadow-inner overflow-hidden">
-                                        <OptimizedImage
+                                        <img
                                             src={qr.src}
                                             alt={qr.alt}
                                             className="w-full h-full object-cover"
-                                            placeholder={false}
                                         />
                                     </div>
                                     <span className={`text-[10px] font-bold ${qr.color} opacity-80`}>{qr.label}</span>

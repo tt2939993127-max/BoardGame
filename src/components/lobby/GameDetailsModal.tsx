@@ -37,6 +37,7 @@ import {
 import { LoadingScreen } from '../system/LoadingScreen';
 import { useGamePackageState } from '../../features/mobile-packages/useGamePackageState';
 import { hasUsableInstalledGamePackageVersion } from '../../features/mobile-packages/types';
+import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 
 interface GameDetailsModalProps {
@@ -106,16 +107,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const gameAuthorLabel = t('authorInfo.button', { author: gameAuthorName });
     const gameAuthorMobileLabel = t('authorInfo.mobileButton', { author: gameAuthorName });
     const gameAuthorButtonHint = t('authorInfo.buttonHint');
-    const capacitorRuntime = typeof window !== 'undefined'
-        ? (window as Window & {
-            Capacitor?: { isNativePlatform?: () => boolean; getPlatform?: () => string };
-        }).Capacitor
-        : undefined;
-    const isNativeCapacitorRuntime = typeof capacitorRuntime?.isNativePlatform === 'function'
-        && capacitorRuntime.isNativePlatform() === true;
-    const isNativeAndroidCapacitorRuntime = isNativeCapacitorRuntime
-        && typeof capacitorRuntime?.getPlatform === 'function'
-        && capacitorRuntime.getPlatform() === 'android';
+    const isNativeAndroidCapacitorRuntime = isNativeAndroidRuntime();
     const {
         isPackageManaged: isPackageManagedMobileGame,
         cardState: packageInstallCardState,
@@ -215,7 +207,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const [rooms, setRooms] = useState<Room[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isLobbyLoading, setIsLobbyLoading] = useState(false);
-    const [localStorageTick, setLocalStorageTick] = useState(0);
+    const [_localStorageTick, setLocalStorageTick] = useState(0);
     const [pendingAction, setPendingAction] = useState<PendingRoomAction | null>(null);
     const [isConfirmingAction, setIsConfirmingAction] = useState(false);
     const [pendingJoin, setPendingJoin] = useState<{
@@ -401,9 +393,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         };
     }, [isOpen, normalizedGameId, toast]);
 
+    const storedMatchCredentials = listStoredMatchCredentials();
+    const latestStoredMatchCredentials = getLatestStoredMatchCredentials();
+
     // 检测用户当前活跃的房间（本地存有凭证的任意房间，可能跨游戏）
     const myActiveRoomMatchID = useMemo(() => {
-        const latestCreds = getLatestStoredMatchCredentials();
+        const latestCreds = latestStoredMatchCredentials;
         if (latestCreds?.matchID) return latestCreds.matchID;
         const ownerActive = getOwnerActiveMatch();
         const ownerKey = getOwnerKey();
@@ -415,7 +410,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             return ownerActive.matchID;
         }
         return null;
-    }, [localStorageTick, getOwnerKey]);
+    }, [latestStoredMatchCredentials, getOwnerKey]);
 
     // 同步房主激活对局与房间列表（避免状态滞后或丢失）
     useEffect(() => {
@@ -1077,7 +1072,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         setPendingAction({ matchID, myPlayerID, myCredentials, isHost });
     };
 
-    const handleConfirmAction = async () => {
+    const handleConfirmAction = useCallback(async () => {
         const nextPendingAction = pendingActionRef.current;
         if (!nextPendingAction || isConfirmingActionRef.current) return;
         isConfirmingActionRef.current = true;
@@ -1139,14 +1134,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             isConfirmingActionRef.current = false;
             setIsConfirmingAction(false);
         }
-    };
+    }, [gameId, getGuestId, getGuestName, normalizedGameId, toast, token, user?.id, user?.username]);
 
-    const handleCancelAction = () => {
-        if (pendingAction) {
-            console.log('[LobbyModal] 取消操作', { matchID: pendingAction.matchID });
+    const handleCancelAction = useCallback(() => {
+        const nextPendingAction = pendingActionRef.current;
+        if (nextPendingAction) {
+            console.log('[LobbyModal] 取消操作', { matchID: nextPendingAction.matchID });
         }
         setPendingAction(null);
-    };
+    }, []);
 
     useEffect(() => {
         if (pendingAction && !confirmModalIdRef.current) {
@@ -1230,7 +1226,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         // 预先获取缓存凭据索引，避免在映射中反复查询本地存储
         const credsMap = new Map<string, ReturnType<typeof listStoredMatchCredentials>[number]>();
-        listStoredMatchCredentials().forEach((item) => {
+        storedMatchCredentials.forEach((item) => {
             if (item.matchID) {
                 credsMap.set(item.matchID, item);
             }
@@ -1273,14 +1269,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 gameKey: normalizeGameName(room.gameName)
             };
         });
-    }, [rooms, myActiveRoomMatchID, localStorageTick, getOwnerKey]);
+    }, [rooms, myActiveRoomMatchID, storedMatchCredentials, getOwnerKey]);
 
     const roomItems = useMemo(() => {
         return allRoomItems.filter(room => room.gameKey === normalizedGameId);
     }, [allRoomItems, normalizedGameId]);
 
     const activeMatch = useMemo(() => {
-        const latestCreds = getLatestStoredMatchCredentials();
+        const latestCreds = latestStoredMatchCredentials;
         if (latestCreds?.matchID) {
             const listMatch = rooms.find(r => r.matchID === latestCreds.matchID);
             const gameName = normalizeGameName(latestCreds.gameName || listMatch?.gameName) || normalizedGameId || 'tictactoe';
@@ -1315,7 +1311,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             };
         }
         return null;
-    }, [localStorageTick, normalizedGameId, rooms, getOwnerKey]);
+    }, [latestStoredMatchCredentials, normalizedGameId, rooms, getOwnerKey]);
 
     useEffect(() => {
         if (!isOpen) return;

@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FC } from 'react';
+import { createPortal } from 'react-dom';
 import type { GameBoardProps } from '../../engine/transport/protocol';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -1385,6 +1386,21 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             cancelled = true;
         };
     }, [interactionMode, viewMode]);
+
+    useEffect(() => {
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
+            setPendingFusionChoiceUid(null);
+            setMeFirstPendingCard(null);
+            setSelectedSetAsideTitanUid(null);
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [interactionMode]);
 
     // 卡牌和基地图集已在模块顶层 initSmashUpAtlases() 同步注册，无需异步加载
 
@@ -2770,7 +2786,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                         </div>
                     </motion.div>
                 )}
-                {interactionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && (
+                {interactionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && typeof document !== 'undefined' && createPortal(
                     <div className="fixed inset-0 z-[58] pointer-events-none">
                         <svg className="absolute inset-0 w-full h-full overflow-visible">
                             {dragGuidePaths && (
@@ -2808,7 +2824,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                     : t('ui.drag_no_target', { defaultValue: '拖到发光目标上' })}
                             </div>
                         )}
-                    </div>
+                    </div>,
+                    document.body,
                 )}
                 {/* 手牌区：z-60，在弃牌遮罩之上 */}
                 {
@@ -2835,6 +2852,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 onCardView={handleViewCardDetail}
                                 isOpponentView={viewMode === 'opponent'}
                                 interactionMode={interactionMode}
+                                onCardSwipePlay={handleCardClick}
                                 onResolveDropTarget={resolveHandDropTarget}
                                 onCardDragPlay={handleCardDragPlay}
                                 onDragStateChange={setHandDragPreview}

@@ -625,17 +625,28 @@ export const GameHUD = ({
                             type="button"
                             onClick={toggleOverlay}
                             className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left transition-colors hover:bg-white/10"
+                            aria-pressed={overlayEnabled}
                         >
-                            <div className="flex items-center justify-between gap-3">
-                                <div>
+                            <div className="flex min-w-0 items-center justify-between gap-3">
+                                <div className="min-w-0">
                                     <div className="text-xs font-bold text-white">{t('hud.smashup.overlay')}</div>
                                     <div className="mt-1 text-[11px] text-white/55">{t('hud.smashup.overlayHint')}</div>
                                 </div>
-                                <div className={`rounded-full px-2 py-1 text-[10px] font-bold ${overlayEnabled
-                                    ? 'bg-emerald-400/20 text-emerald-200'
-                                    : 'bg-white/10 text-white/60'}`}>
-                                    {overlayEnabled ? t('hud.smashup.enabled') : t('hud.smashup.disabled')}
+                                <div
+                                    className={`flex h-6 w-11 shrink-0 items-center rounded-full border px-0.5 transition-colors ${overlayEnabled
+                                        ? 'justify-end border-emerald-300/40 bg-emerald-400/20'
+                                        : 'justify-start border-white/10 bg-white/10'}`}
+                                    aria-hidden="true"
+                                >
+                                    <div
+                                        className={`flex h-5 w-5 items-center justify-center rounded-full transition-colors ${overlayEnabled
+                                            ? 'bg-emerald-200 text-emerald-950'
+                                            : 'bg-white/25 text-transparent'}`}
+                                    >
+                                        <Check size={12} strokeWidth={3} />
+                                    </div>
                                 </div>
+                                <span className="sr-only">{overlayEnabled ? t('hud.smashup.enabled') : t('hud.smashup.disabled')}</span>
                             </div>
                         </button>
                     </div>

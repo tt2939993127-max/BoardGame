@@ -1,13 +1,11 @@
-import { Capacitor } from '@capacitor/core';
 import { logMobileRuntime, logMobileRuntimeCritical } from './mobileRuntimeDebug';
+import {
+    getNativeAndroidRuntimeDiagnostics,
+    type NativeAndroidRuntimeDiagnostics,
+} from './androidRuntime';
 
 type PluginListenerHandle = {
     remove(): Promise<void>;
-};
-
-type CapacitorRuntimeLike = {
-    getPlatform?: () => string;
-    isNativePlatform?: () => boolean;
 };
 
 type BundleStatus = 'success' | 'error' | 'pending' | 'downloading';
@@ -174,14 +172,6 @@ const parseTimeoutEnv = (value: string | boolean | undefined) => {
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
 const isAbsoluteHttpUrl = (value: string) => /^https?:\/\//i.test(value);
-
-const safeInvoke = <T,>(fn: () => T): T | undefined => {
-    try {
-        return fn();
-    } catch {
-        return undefined;
-    }
-};
 
 const normalizeComparableVersion = (value: string) => {
     const [main] = value.split('+');
@@ -360,55 +350,7 @@ const loadUpdater = async () => {
     return updaterLoader;
 };
 
-type NativeAndroidRuntimeDiagnostics = {
-    nativeAndroid: boolean;
-    importCapacitorPlatform?: string;
-    importCapacitorNative?: boolean;
-    windowCapacitorPlatform?: string;
-    windowCapacitorNative?: boolean;
-    hasAndroidBridge: boolean;
-    summary: string;
-};
-
 const toNativeDebugPatch = (_diagnostics: NativeAndroidRuntimeDiagnostics) => ({});
-
-const buildNativeRuntimeDiagnostics = (): NativeAndroidRuntimeDiagnostics => {
-    if (typeof window === 'undefined') {
-        return {
-            nativeAndroid: false,
-            hasAndroidBridge: false,
-            summary: 'window:none',
-        };
-    }
-
-    const importCapacitorPlatform = safeInvoke(() => Capacitor.getPlatform());
-    const importCapacitorNative = safeInvoke(() => Capacitor.isNativePlatform());
-    const windowCapacitor = (window as typeof window & { Capacitor?: CapacitorRuntimeLike }).Capacitor;
-    const windowCapacitorPlatform = safeInvoke(() => windowCapacitor?.getPlatform?.());
-    const windowCapacitorNative = safeInvoke(() => windowCapacitor?.isNativePlatform?.());
-    const hasAndroidBridge = Boolean((window as typeof window & { androidBridge?: unknown }).androidBridge);
-    const nativeAndroid = Boolean(
-        hasAndroidBridge
-        || (importCapacitorNative && importCapacitorPlatform === 'android')
-        || (windowCapacitorNative && windowCapacitorPlatform === 'android'),
-    );
-
-    return {
-        nativeAndroid,
-        importCapacitorPlatform,
-        importCapacitorNative,
-        windowCapacitorPlatform,
-        windowCapacitorNative,
-        hasAndroidBridge,
-        summary: `import:${String(importCapacitorNative)}/${importCapacitorPlatform ?? '?'} win:${String(windowCapacitorNative)}/${windowCapacitorPlatform ?? '?'} bridge:${hasAndroidBridge ? '1' : '0'}`,
-    };
-};
-
-const isNativeAndroidApp = async () => {
-    const diagnostics = buildNativeRuntimeDiagnostics();
-    emitCriticalOtaLog('native-runtime-check', diagnostics);
-    return diagnostics.nativeAndroid;
-};
 
 const getConfigFromMetaEnv = () => {
     const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
@@ -507,7 +449,7 @@ export const readAndroidLiveUpdateSnapshot = async (): Promise<AndroidLiveUpdate
         return baseSnapshot;
     }
 
-    const nativeDiagnostics = buildNativeRuntimeDiagnostics();
+    const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
     emitCriticalOtaLog('native-runtime-check', {
         context: 'snapshot-read',
         ...nativeDiagnostics,
@@ -589,7 +531,7 @@ const applyBundleImmediately = async (
 export const notifyAndroidBundleReady = async () => {
     if (!notifyAppReadyPromise) {
         notifyAppReadyPromise = (async () => {
-            const nativeDiagnostics = buildNativeRuntimeDiagnostics();
+            const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
             const nativeAndroid = nativeDiagnostics.nativeAndroid;
             logMobileRuntime('OTA', 'notify-app-ready-native-check', {
                 nativeAndroid,
@@ -636,7 +578,7 @@ export const notifyAndroidBundleReady = async () => {
 export const registerAndroidLiveUpdateListeners = async () => {
     if (!listenerRegistrationPromise) {
         listenerRegistrationPromise = (async () => {
-            const nativeDiagnostics = buildNativeRuntimeDiagnostics();
+            const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
             const nativeAndroid = nativeDiagnostics.nativeAndroid;
             if (!nativeAndroid) return null;
 
@@ -733,7 +675,7 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 return { status: 'disabled' } as const;
             }
 
-            const nativeDiagnostics = buildNativeRuntimeDiagnostics();
+            const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
             const nativeAndroid = nativeDiagnostics.nativeAndroid;
             logMobileRuntime('OTA', 'background-check-native-check', {
                 nativeAndroid,

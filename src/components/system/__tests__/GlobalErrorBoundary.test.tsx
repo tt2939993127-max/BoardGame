@@ -174,12 +174,24 @@ describe('Runtime viewport css vars', () => {
             height: 393,
             safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
             keyboardInsetBottom: 0,
+        }, {
+            layoutEngineCapabilities: {
+                chromiumMajorVersion: 91,
+                layoutMode: 'legacy',
+                supportsCalcDivision: false,
+                supportsDynamicViewportUnits: false,
+                requiresJsScaleFallback: true,
+                requiresLegacyViewportFallback: true,
+            },
         });
 
         const rootStyle = document.documentElement.style;
+        expect(document.documentElement.dataset.mobileLayoutEngine).toBe('legacy');
         expect(rootStyle.getPropertyValue('--mobile-board-shell-design-width')).toBe('940px');
         expect(rootStyle.getPropertyValue('--mobile-board-shell-scale')).toBe('0.853191');
         expect(rootStyle.getPropertyValue('--mobile-board-shell-inverse-scale')).toBe('1.172070');
+        expect(rootStyle.getPropertyValue('--mobile-layout-inline-unit')).toBe('9.4000px');
+        expect(rootStyle.getPropertyValue('--mobile-root-scale')).toBe('0.626563');
 
         document.documentElement.removeAttribute('data-game-page');
         document.documentElement.removeAttribute('data-mobile-layout-preset');

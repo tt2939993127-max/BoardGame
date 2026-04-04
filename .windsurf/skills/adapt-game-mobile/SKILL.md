@@ -160,6 +160,7 @@ rg -n "@media|button|min-width|min-height|padding|coarse|hover|clamp" src/index.
 - `全局样式污染`：是否由 `src/index.css`、共享按钮样式、全局媒体查询或 reset 把多个区域一起改胖 / 改瘦。
 - `命中区与视觉混淆`：是否把 touch target 要求直接写成了一整类交互元素的可见尺寸变化。
 - `根因定位`：是否已经定位到具体选择器、共享组件、媒体查询或条件判断，而不是只停留在“看起来变胖 / 变小”。
+- `缩放坐标系错配`：是否在 `transform: scale(...)` 的壳层内直接渲染 `fixed/absolute` 拖拽箭头、tooltip、hover 卡片、选区框等覆盖层，同时又直接使用 `clientX/clientY/getBoundingClientRect()` 的 viewport 坐标；这类实现很容易在手机横屏下把起点/终点漂到屏幕中部。默认应 `createPortal(..., document.body)` 到未缩放根节点，或先把坐标换算到壳层局部坐标后再绘制。
 
 每个问题必须归类为：
 
@@ -285,6 +286,7 @@ shellTargets: ['pwa']
 - 不要把“补一个长按入口”当成“可以删掉原点击入口”的理由；没有用户明确要求时，移动端适配默认只能增量补入口，不能重写既有交互语义。
 - 不要在共享触控 hook、共享 inspect 入口或 `coarse pointer` 分支里静默吞掉 `onClick` / inspect / expand 的原有兜底。
 - 不要借移动端适配顺手重做视觉风格；没有明确需求时，不改 PC 端的阴影、边框、质感、色彩和整体观感。
+- 不要在被 `transform: scale(...)` 的棋盘树里直接放吃 viewport 坐标的 `fixed` 浮层；这会让拖拽箭头、提示气泡、选区框在移动端从错误位置起飞。
 
 
 ## 2026-03 追加：横向溢出防回归（DiceThrone 试点）

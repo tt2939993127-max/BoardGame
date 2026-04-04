@@ -4,6 +4,7 @@ import { GAME_CLIENT_MANIFEST } from '../games/manifest.client';
 import type { GameCategory, GameManifestEntry } from '../games/manifest.types';
 import { resolveGameManifestEntry } from '../games/mobileSupport';
 import { UGC_API_URL } from './server';
+import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import type {
     UgcAssetManifestEntry,
     UgcAssetVariant,
@@ -12,7 +13,7 @@ import type {
     UgcPackageSummary,
 } from '../ugc/client/types';
 
-const isAndroidShellBuild = import.meta.env.MODE === 'android';
+const isNativeAndroidAppRuntime = isNativeAndroidRuntime();
 
 export interface GameConfig extends GameManifestEntry {
     thumbnail: ReactNode;
@@ -32,7 +33,7 @@ const buildGameRegistry = () => {
     const registry: Record<string, GameConfig> = {};
     for (const entry of GAME_CLIENT_MANIFEST) {
         const { manifest, thumbnail } = entry;
-        if (isAndroidShellBuild && manifest.type === 'tool') {
+        if (isNativeAndroidAppRuntime && manifest.type === 'tool') {
             continue;
         }
         if (!thumbnail) {

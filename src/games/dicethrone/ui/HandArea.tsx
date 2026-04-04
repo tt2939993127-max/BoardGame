@@ -11,13 +11,20 @@ import { ASSETS } from './assets';
 import { getAbilitySlotId } from './abilitySlotMapping';
 
 /** 飞出卡牌信息（成功使用后的动画） */
+type CardOffset = {
+    x: number;
+    y: number;
+};
+
 type FlyingOutCard = {
     card: AbilityCard;
     cardKey: string;
-    startOffset: { x: number; y: number };
+    startOffset: CardOffset;
     startIndex: number;
     targetType: 'discard' | 'abilitySlot';
     targetSlotId?: string;
+    targetPos: CardOffset;
+    targetScale: number;
 };
 
 type HandCardEntry = {
@@ -26,12 +33,56 @@ type HandCardEntry = {
     index: number;
 };
 
+type DragValues = {
+    x: MotionValue<number>;
+    y: MotionValue<number>;
+};
+
 const buildHandCardKey = (cardId: string, sequence: number) => `${cardId}-${sequence}`;
 const parseHandCardSequence = (cardKey: string, cardId: string) => {
     const prefix = `${cardId}-`;
     if (!cardKey.startsWith(prefix)) return 0;
     const sequence = Number(cardKey.slice(prefix.length));
     return Number.isFinite(sequence) ? sequence : 0;
+};
+
+const buildNextHandEntries = (hand: AbilityCard[], prevEntries: HandCardEntry[]) => {
+    const prevQueues = new Map<string, HandCardEntry[]>();
+    const sequenceMap = new Map<string, number>();
+
+    prevEntries.forEach((entry) => {
+        const queue = prevQueues.get(entry.card.id) ?? [];
+        queue.push(entry);
+        prevQueues.set(entry.card.id, queue);
+
+        const prevMax = sequenceMap.get(entry.card.id) ?? 0;
+        const sequence = parseHandCardSequence(entry.key, entry.card.id);
+        if (sequence > prevMax) {
+            sequenceMap.set(entry.card.id, sequence);
+        }
+    });
+
+    return hand.map((card, index) => {
+        const queue = prevQueues.get(card.id);
+        const reused = queue?.shift();
+        if (reused) {
+            if (reused.card === card && reused.index === index) {
+                return reused;
+            }
+            return { ...reused, card, index };
+        }
+        const nextSequence = (sequenceMap.get(card.id) ?? 0) + 1;
+        sequenceMap.set(card.id, nextSequence);
+        return { card, index, key: buildHandCardKey(card.id, nextSequence) };
+    });
+};
+
+const syncDragValueMap = (prevMap: Map<string, DragValues>, cardKeys: string[]) => {
+    const nextMap = new Map<string, DragValues>();
+    cardKeys.forEach((cardKey) => {
+        nextMap.set(cardKey, prevMap.get(cardKey) ?? { x: motionValue(0), y: motionValue(0) });
+    });
+    return nextMap;
 };
 
 // 5. Hand Area - 拖拽交互（向上拖拽打出，拖到弃牌堆售卖）
@@ -106,21 +157,18 @@ export const HandArea = ({
     } | null>(null);
     // 正在弃牌的 cardKey（用于跳过 exit 动画，避免和飞出动画重叠）
     const [discardingCardKey, setDiscardingCardKey] = React.useState<string | null>(null);
-    const handEntriesRef = React.useRef<HandCardEntry[]>([]);
-    const cardKeySequenceRef = React.useRef<Map<string, number>>(new Map());
     const pendingPlayRef = React.useRef<{
         cardKey: string;
         card: AbilityCard;
-        offset: { x: number; y: number };
+        offset: CardOffset;
         originalIndex: number;
     } | null>(null);
     const pendingPlayTimeoutRef = React.useRef<number | null>(null);
     const handKeysRef = React.useRef<string[]>([]);
     const cardBackImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARD_BG, locale), [locale]);
     const handAreaRef = React.useRef<HTMLDivElement>(null);
-    const dragValueMapRef = React.useRef(new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>());
     // 防止拖拽后触发点击：记录最近拖拽的卡牌和时间
-    const lastDragEndRef = React.useRef<{ cardKey: string; timestamp: number } | null>(null);
+    const [lastDragEnd, setLastDragEnd] = React.useState<{ cardKey: string; timestamp: number } | null>(null);
     const DRAG_CLICK_DEBOUNCE = 300; // 拖拽后 300ms 内忽略点击
     const {
         clearLongPressState,
@@ -138,58 +186,33 @@ export const HandArea = ({
         },
     });
 
-    const handEntries = React.useMemo<HandCardEntry[]>(() => {
-        const prevEntries = handEntriesRef.current;
-        const prevQueues = new Map<string, HandCardEntry[]>();
+    const [handEntries, setHandEntries] = React.useState<HandCardEntry[]>(() => buildNextHandEntries(hand, []));
 
-        prevEntries.forEach((entry) => {
-            const queue = prevQueues.get(entry.card.id) ?? [];
-            queue.push(entry);
-            prevQueues.set(entry.card.id, queue);
-
-            const prevMax = cardKeySequenceRef.current.get(entry.card.id) ?? 0;
-            const sequence = parseHandCardSequence(entry.key, entry.card.id);
-            if (sequence > prevMax) {
-                cardKeySequenceRef.current.set(entry.card.id, sequence);
-            }
-        });
-
-        return hand.map((card, index) => {
-            const queue = prevQueues.get(card.id);
-            const reused = queue?.shift();
-            if (reused) {
-                return { ...reused, card, index };
-            }
-            const nextSequence = (cardKeySequenceRef.current.get(card.id) ?? 0) + 1;
-            cardKeySequenceRef.current.set(card.id, nextSequence);
-            return { card, index, key: buildHandCardKey(card.id, nextSequence) };
-        });
+    React.useLayoutEffect(() => {
+        setHandEntries(prevEntries => buildNextHandEntries(hand, prevEntries));
     }, [hand]);
-
-    React.useEffect(() => {
-        handEntriesRef.current = handEntries;
-    }, [handEntries]);
 
     const handKeys = React.useMemo(() => handEntries.map(entry => entry.key), [handEntries]);
     const handKeyToCardId = React.useMemo(
         () => new Map(handEntries.map(entry => [entry.key, entry.card.id] as const)),
         [handEntries]
     );
+    const handEntryByKey = React.useMemo(
+        () => new Map(handEntries.map(entry => [entry.key, entry] as const)),
+        [handEntries]
+    );
+    const [dragValueMap, setDragValueMap] = React.useState<Map<string, DragValues>>(() => new Map());
 
-    const getDragValues = React.useCallback((cardKey: string) => {
-        const existing = dragValueMapRef.current.get(cardKey);
-        if (existing) return existing;
-        const next = { x: motionValue(0), y: motionValue(0) };
-        dragValueMapRef.current.set(cardKey, next);
-        return next;
-    }, []);
+    React.useLayoutEffect(() => {
+        setDragValueMap(prevMap => syncDragValueMap(prevMap, handKeys));
+    }, [handKeys]);
 
     const resetDragValues = React.useCallback((cardKey: string, _source: 'drag' | 'window') => {
-        const values = dragValueMapRef.current.get(cardKey);
+        const values = dragValueMap.get(cardKey);
         if (!values) return;
         animate(values.x, 0, { duration: 0.25, ease: 'easeOut' });
         animate(values.y, 0, { duration: 0.25, ease: 'easeOut' });
-    }, []);
+    }, [dragValueMap]);
 
     const getDeckOffset = React.useCallback(() => {
         if (!drawDeckRef?.current || !handAreaRef.current) {
@@ -244,10 +267,30 @@ export const HandArea = ({
         };
     }, []);
 
+    const createFlyingOutCard = React.useCallback((params: {
+        card: AbilityCard;
+        cardKey: string;
+        startOffset: CardOffset;
+        startIndex: number;
+        targetType: 'discard' | 'abilitySlot';
+        targetSlotId?: string;
+    }): FlyingOutCard => {
+        const targetPos = params.targetType === 'abilitySlot' && params.targetSlotId
+            ? getAbilitySlotOffset(params.targetSlotId)
+            : getDiscardPileOffset();
+
+        return {
+            ...params,
+            targetPos,
+            targetScale: params.targetType === 'abilitySlot' ? 0.4 : 0.5,
+        };
+    }, [getAbilitySlotOffset, getDiscardPileOffset]);
+
     const [visibleCardKeys, setVisibleCardKeys] = React.useState<Set<string>>(new Set());
     const [flippedCardKeys, setFlippedCardKeys] = React.useState<Set<string>>(new Set());
     const [dealingCardKey, setDealingCardKey] = React.useState<string | null>(null);
     const [cardSourceMap, setCardSourceMap] = React.useState<Map<string, 'deck' | 'discard'>>(new Map());
+    const [dealInitialOffsetMap, setDealInitialOffsetMap] = React.useState<Map<string, CardOffset>>(() => new Map());
     const prevHandKeysRef = React.useRef<string[]>([]);
     const dealTimersRef = React.useRef<number[]>([]);
     const flipTimersRef = React.useRef<number[]>([]);
@@ -311,13 +354,13 @@ export const HandArea = ({
         const pendingDiscard = pendingDiscardRef.current;
         if (pendingDiscard && !handKeys.includes(pendingDiscard.cardKey)) {
             const { card, cardKey, originalIndex } = pendingDiscard;
-            setFlyingOutCard({
+            setFlyingOutCard(createFlyingOutCard({
                 card,
                 cardKey,
                 startOffset: { x: 0, y: 0 },
                 startIndex: originalIndex,
                 targetType: 'discard',
-            });
+            }));
             pendingDiscardRef.current = null;
             setDiscardingCardKey(null);
         }
@@ -335,46 +378,37 @@ export const HandArea = ({
                 const slotId = targetAbilityId ? getAbilitySlotId(targetAbilityId) : null;
 
                 if (slotId) {
-                    setFlyingOutCard({
+                    setFlyingOutCard(createFlyingOutCard({
                         card,
                         cardKey,
                         startOffset: offset,
                         startIndex: originalIndex,
                         targetType: 'abilitySlot',
                         targetSlotId: slotId,
-                    });
+                    }));
                 } else {
                     // 找不到技能槽，默认飞向弃牌堆
-                    setFlyingOutCard({
+                    setFlyingOutCard(createFlyingOutCard({
                         card,
                         cardKey,
                         startOffset: offset,
                         startIndex: originalIndex,
                         targetType: 'discard',
-                    });
+                    }));
                 }
             } else {
                 // 普通卡牌飞向弃牌堆
-                setFlyingOutCard({
+                setFlyingOutCard(createFlyingOutCard({
                     card,
                     cardKey,
                     startOffset: offset,
                     startIndex: originalIndex,
                     targetType: 'discard',
-                });
+                }));
             }
             clearPendingPlay();
         }
-    }, [clearPendingPlay, handKeys]);
-
-    React.useEffect(() => {
-        const currentKeys = new Set(handKeys);
-        dragValueMapRef.current.forEach((_value, cardKey) => {
-            if (!currentKeys.has(cardKey)) {
-                dragValueMapRef.current.delete(cardKey);
-            }
-        });
-    }, [handKeys]);
+    }, [clearPendingPlay, createFlyingOutCard, handKeys]);
 
     // 监听引擎通知：处理卡牌回弹（错误显示由全局 EngineNotificationListener 处理）
     React.useEffect(() => {
@@ -431,6 +465,23 @@ export const HandArea = ({
             const undoKeys = newKeys.filter(isUndoCard);
             const normalKeys = newKeys.filter(key => !isUndoCard(key));
 
+            setDealInitialOffsetMap(prev => {
+                const next = new Map(prev);
+                newKeys.forEach((key) => {
+                    const entry = handEntryByKey.get(key);
+                    if (!entry) return;
+                    const offset = entry.index - centerIndex;
+                    const yOffset = Math.abs(offset) * 0.8;
+                    const originPos = isUndoCard(key) ? getDiscardPileOffset() : getDeckOffset();
+                    next.set(key, {
+                        x: originPos.x - offset * window.innerWidth * 0.07,
+                        y: originPos.y - yOffset * window.innerWidth * 0.01,
+                    });
+                });
+                removedKeys.forEach(key => next.delete(key));
+                return next;
+            });
+
             setCardSourceMap(prev => {
                 const next = new Map(prev);
                 newKeys.forEach(key => {
@@ -478,7 +529,7 @@ export const HandArea = ({
         }
 
         prevHandKeysRef.current = currentKeys;
-    }, [clearAnimationTimers, handKeyToCardId, handKeys, undoCardId]);
+    }, [centerIndex, clearAnimationTimers, getDeckOffset, getDiscardPileOffset, handEntryByKey, handKeyToCardId, handKeys, undoCardId]);
 
     const isOverDiscardPile = React.useCallback(() => {
         if (!discardPileRef?.current || !draggingCardKey) return false;
@@ -512,7 +563,7 @@ export const HandArea = ({
         if (y < DRAG_PLAY_THRESHOLD) {
             if (onPlayCard) {
                 // 记录拖拽操作，防止后续点击事件重复触发
-                lastDragEndRef.current = { cardKey: entry.key, timestamp: Date.now() };
+                setLastDragEnd({ cardKey: entry.key, timestamp: Date.now() });
                 
                 pendingPlayRef.current = { cardKey: entry.key, card, offset, originalIndex: currentIndex };
                 if (pendingPlayTimeoutRef.current) {
@@ -533,7 +584,7 @@ export const HandArea = ({
                 onError(t('error.notYourTurn'));
             } else if (onSellCard) {
                 // 记录拖拽操作，防止后续点击事件重复触发
-                lastDragEndRef.current = { cardKey: entry.key, timestamp: Date.now() };
+                setLastDragEnd({ cardKey: entry.key, timestamp: Date.now() });
                 
                 // 和拖拽打出一样，记录 pending 状态，卡牌移除后触发飞向弃牌堆动画
                 pendingPlayRef.current = { cardKey: entry.key, card, offset, originalIndex: currentIndex };
@@ -564,8 +615,9 @@ export const HandArea = ({
         canInteract,
         canPlayCards,
         clearLongPressState,
+        clearPendingPlay,
         currentPhase,
-        hand,
+        handEntries,
         isOverDiscardPile,
         onError,
         onPlayCard,
@@ -587,6 +639,65 @@ export const HandArea = ({
             onSellHintChange?.(nextSellHint);
         }
     };
+
+    const handleCardDragStart = React.useCallback((entry: HandCardEntry, canDrag: boolean, dragValues: DragValues) => {
+        if (!canDrag) return;
+        clearLongPressState(entry.key);
+        dragEndHandledRef.current = false;
+        draggingCardRef.current = entry;
+        dragValues.x.set(0);
+        dragValues.y.set(0);
+        setDraggingCardKey(entry.key);
+        onSellButtonChange?.(true);
+        onPlayHintChange?.(true);
+    }, [clearLongPressState, onPlayHintChange, onSellButtonChange]);
+
+    const queuePendingPlay = React.useCallback((entry: HandCardEntry, offset: CardOffset) => {
+        pendingPlayRef.current = {
+            cardKey: entry.key,
+            card: entry.card,
+            offset,
+            originalIndex: entry.index,
+        };
+        if (pendingPlayTimeoutRef.current) {
+            window.clearTimeout(pendingPlayTimeoutRef.current);
+        }
+        pendingPlayTimeoutRef.current = window.setTimeout(() => {
+            resetDragValues(entry.key, 'drag');
+            clearPendingPlay();
+        }, PENDING_PLAY_TIMEOUT);
+    }, [clearPendingPlay, resetDragValues]);
+
+    const handleCardClick = React.useCallback((entry: HandCardEntry, options: {
+        canDrag: boolean;
+        canClickDiscard: boolean;
+    }) => {
+        const { canDrag, canClickDiscard } = options;
+        if (shouldBlockLongPressClick(entry.key)) return;
+
+        if (lastDragEnd && lastDragEnd.cardKey === entry.key) {
+            const timeSinceDrag = Date.now() - lastDragEnd.timestamp;
+            if (timeSinceDrag < DRAG_CLICK_DEBOUNCE) {
+                return;
+            }
+        }
+
+        if (canClickDiscard && onDiscardCard) {
+            pendingDiscardRef.current = {
+                cardKey: entry.key,
+                card: entry.card,
+                originalIndex: entry.index,
+            };
+            setDiscardingCardKey(entry.key);
+            onDiscardCard(entry.card.id);
+            return;
+        }
+
+        if (canDrag && onPlayCard) {
+            queuePendingPlay(entry, { x: 0, y: 0 });
+            onPlayCard(entry.card.id);
+        }
+    }, [lastDragEnd, onDiscardCard, onPlayCard, queuePendingPlay, shouldBlockLongPressClick]);
 
     React.useEffect(() => {
         const handlePointerEnd = (_event: PointerEvent) => {
@@ -614,6 +725,22 @@ export const HandArea = ({
         ? (totalCards - 1) * 7 + 12 + 4 // (n-1)*间距 + 卡宽 + 两侧余量（单位 vw）
         : 20;
     const cardAreaHeight = 18; // 卡牌可见高度（vw），卡牌高度约19.7vw减去底部溢出2vw
+    const flyingOutMetrics = React.useMemo(() => {
+        if (!flyingOutCard) return null;
+        const flyingCenterIndex = hand.length / 2;
+        const startIndexOffset = flyingOutCard.startIndex - flyingCenterIndex;
+        const startYOffset = Math.abs(startIndexOffset) * 0.8;
+        return {
+            card: flyingOutCard.card,
+            cardKey: flyingOutCard.cardKey,
+            startIndexOffset,
+            startYOffset,
+            startOffset: flyingOutCard.startOffset,
+            targetPos: flyingOutCard.targetPos,
+            targetScale: flyingOutCard.targetScale,
+            fadeOutAtTarget: flyingOutCard.targetType === 'abilitySlot',
+        };
+    }, [flyingOutCard, hand.length]);
 
     return (
         <div

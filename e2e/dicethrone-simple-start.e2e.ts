@@ -807,9 +807,13 @@ test.describe('DiceThrone Simple Start', () => {
     test('Local match: HUD 样式合同应保留生命条渐变与下一阶段按钮实体外观', async ({ page }, testInfo) => {
         test.setTimeout(60000);
 
+        await page.setViewportSize({ width: 802, height: 393 });
         await setChineseLocale(page);
         await page.goto('/play/dicethrone/local', { waitUntil: 'domcontentloaded' });
         await waitForCharacterSelection(page, 30000);
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(page, testInfo, '01-local-character-selection-mobile-baseline');
 
         await selectCharacter(page, 'barbarian');
         await selectCharacter(page, 'paladin');
@@ -838,7 +842,6 @@ test.describe('DiceThrone Simple Start', () => {
         expect(hudStyle.advanceButtonBorderColor).not.toBe('rgba(0, 0, 0, 0)');
         expect(hudStyle.advanceButtonText).toBe('下一阶段');
 
-        await clearEvidenceScreenshotsForTest(testInfo);
         await saveEvidenceScreenshot(page, testInfo, '02-hud-style-contract');
     });
 

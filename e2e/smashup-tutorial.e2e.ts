@@ -11,7 +11,7 @@
  */
 
 import { test, expect } from './framework';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { setEnglishLocale, disableAudio, blockAudioRequests } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
@@ -90,6 +90,23 @@ const skipIntroSteps = async (page: Page) => {
     }
 };
 
+const swipeUpHandCard = async (page: Page, locator: Locator) => {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    const box = await locator.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) {
+        throw new Error('无法获取教程手牌坐标');
+    }
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height * 0.72;
+    const endY = Math.max(box.y + box.height * 0.18, startY - Math.min(120, box.height * 0.55));
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX, endY, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+};
+
 const doPlayMinion = async (page: Page) => {
     await waitForTutorialStep(page, 'playMinion', 10000);
     await waitForActionPrompt(page);
@@ -100,7 +117,7 @@ const doPlayMinion = async (page: Page) => {
 
     const handCards = handArea.locator('> div > div');
     await expect(handCards.first()).toBeVisible({ timeout: 10000 });
-    await handCards.first().click({ force: true });
+    await swipeUpHandCard(page, handCards.first());
     await page.waitForTimeout(500);
 
     const bases = page.locator('.group\\/base');
@@ -120,7 +137,7 @@ const doPlayAction = async (page: Page) => {
     const count = await actionCards.count();
 
     for (let i = 0; i < count; i++) {
-        await actionCards.nth(i).click({ force: true });
+        await swipeUpHandCard(page, actionCards.nth(i));
         await page.waitForTimeout(300);
         if (await bases.first().isVisible().catch(() => false)) {
             await bases.first().click({ force: true });

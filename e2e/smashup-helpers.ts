@@ -177,9 +177,20 @@ export const waitForHandArea = async (page: Page, timeout = 30000) => {
 
 export const clickHandCard = async (page: Page, index: number) => {
     const handArea = page.getByTestId('su-hand-area');
-    const cards = handArea.locator('> div > div');
-    await expect(cards.nth(index)).toBeVisible({ timeout: 5000 });
-    await cards.nth(index).click();
+    const card = handArea.locator('> div > div').nth(index);
+    await expect(card).toBeVisible({ timeout: 5000 });
+    const box = await card.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) {
+        throw new Error(`无法获取第 ${index} 张手牌的位置`);
+    }
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height * 0.72;
+    const endY = Math.max(box.y + box.height * 0.18, startY - Math.min(120, box.height * 0.55));
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX, endY, { steps: 10 });
+    await page.mouse.up();
 };
 
 export const clickBase = async (page: Page, index: number) => {

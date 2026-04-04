@@ -31,6 +31,8 @@ const MOBILE_CARD_WIDTH_VW = 10.5;
 const DESKTOP_SELECTED_Y_LIFT_VW = 5;
 const MOBILE_SELECTED_Y_LIFT_VW = 3.8;
 const DRAG_START_DISTANCE_PX = 12;
+const SWIPE_PLAY_DISTANCE_PX = 72;
+const SWIPE_PLAY_MAX_HORIZONTAL_DRIFT_PX = 64;
 const DRAG_DROP_SHADOW = '0 0 30px rgba(34, 211, 238, 0.45)';
 type Props = {
     hand: CardInstance[];
@@ -45,6 +47,7 @@ type Props = {
     disabledCardUids?: Set<string>;
     isOpponentView?: boolean;
     interactionMode?: 'click' | 'drag';
+    onCardSwipePlay?: (card: CardInstance) => void;
     onResolveDropTarget?: (card: CardInstance, clientX: number, clientY: number) => HandAreaDropTarget | null;
     onCardDragPlay?: (card: CardInstance, dropTarget: HandAreaDropTarget) => void;
     onDragStateChange?: (preview: HandAreaDragPreview | null) => void;
@@ -73,6 +76,9 @@ type HandCardProps = {
     onPointerMove?: (event: React.PointerEvent, card: CardInstance) => void;
     onPointerEnd?: (card: CardInstance) => void;
     shouldBlockClick?: (card: CardInstance) => boolean;
+    clickBehavior: 'select' | 'view';
+    swipePlayEnabled: boolean;
+    onSwipePlay?: () => void;
     interactionMode: 'click' | 'drag';
     onResolveDropTarget?: (card: CardInstance, clientX: number, clientY: number) => HandAreaDropTarget | null;
     onCardDragPlay?: (card: CardInstance, dropTarget: HandAreaDropTarget) => void;
@@ -99,6 +105,9 @@ const HandCard: React.FC<HandCardProps> = ({
     onPointerMove,
     onPointerEnd,
     shouldBlockClick,
+    clickBehavior,
+    swipePlayEnabled,
+    onSwipePlay,
     onResolveDropTarget,
     onCardDragPlay,
     onDragStateChange,
@@ -121,6 +130,30 @@ const HandCard: React.FC<HandCardProps> = ({
         startY: 0,
         hasMoved: false,
     });
+    const swipeStateRef = useRef<{
+        pointerId: number | null;
+        startX: number;
+        startY: number;
+        hasTriggered: boolean;
+    }>({
+        pointerId: null,
+        startX: 0,
+        startY: 0,
+        hasTriggered: false,
+    });
+
+    const resetSwipeState = useCallback((event?: React.PointerEvent) => {
+        const swipeState = swipeStateRef.current;
+        if (swipeState.pointerId != null && event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(swipeState.pointerId)) {
+            event.currentTarget.releasePointerCapture(swipeState.pointerId);
+        }
+        swipeStateRef.current = {
+            pointerId: null,
+            startX: 0,
+            startY: 0,
+            hasTriggered: false,
+        };
+    }, []);
 
     const handleDragFinish = useCallback((event?: React.PointerEvent) => {
         const dragState = dragStateRef.current;
@@ -168,8 +201,20 @@ const HandCard: React.FC<HandCardProps> = ({
 
     const handlePointerDownInternal = useCallback((event: React.PointerEvent) => {
         onPointerDown?.(event, card);
-        if (interactionMode !== 'drag' || isOpponentView || disableInteraction || isDisabled) return;
         suppressClickRef.current = false;
+        if (isOpponentView) return;
+        if (interactionMode === 'click') {
+            if (!swipePlayEnabled || disableInteraction || isDisabled) return;
+            swipeStateRef.current = {
+                pointerId: event.pointerId,
+                startX: event.clientX,
+                startY: event.clientY,
+                hasTriggered: false,
+            };
+            event.currentTarget.setPointerCapture(event.pointerId);
+            return;
+        }
+        if (disableInteraction || isDisabled) return;
         dragStateRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -182,10 +227,23 @@ const HandCard: React.FC<HandCardProps> = ({
             y: rect.top + rect.height * 0.34,
         };
         event.currentTarget.setPointerCapture(event.pointerId);
-    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onDragStateChange, onPointerDown]);
+    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onPointerDown, swipePlayEnabled]);
 
     const handlePointerMoveInternal = useCallback((event: React.PointerEvent) => {
         onPointerMove?.(event, card);
+        if (interactionMode === 'click') {
+            const swipeState = swipeStateRef.current;
+            if (!swipePlayEnabled || swipeState.pointerId !== event.pointerId || swipeState.hasTriggered) return;
+
+            const offsetX = event.clientX - swipeState.startX;
+            const offsetY = event.clientY - swipeState.startY;
+            if (offsetY <= -SWIPE_PLAY_DISTANCE_PX && Math.abs(offsetX) <= SWIPE_PLAY_MAX_HORIZONTAL_DRIFT_PX) {
+                swipeState.hasTriggered = true;
+                suppressClickRef.current = true;
+                onSwipePlay?.();
+            }
+            return;
+        }
         const dragState = dragStateRef.current;
         if (interactionMode !== 'drag' || dragState.pointerId !== event.pointerId) return;
 
@@ -207,17 +265,25 @@ const HandCard: React.FC<HandCardProps> = ({
             clientY: event.clientY,
             dropTarget,
         });
-    }, [card, interactionMode, onDragStateChange, onPointerMove, onResolveDropTarget]);
+    }, [card, interactionMode, onDragStateChange, onPointerMove, onResolveDropTarget, onSwipePlay, swipePlayEnabled]);
 
     const handlePointerUpInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
+        if (interactionMode === 'click') {
+            resetSwipeState(event);
+            return;
+        }
         handleDragFinish(event);
-    }, [card, handleDragFinish, onPointerEnd]);
+    }, [card, handleDragFinish, interactionMode, onPointerEnd, resetSwipeState]);
 
     const handlePointerCancelInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
+        if (interactionMode === 'click') {
+            resetSwipeState(event);
+            return;
+        }
         handleDragCancel(event);
-    }, [card, handleDragCancel, onPointerEnd]);
+    }, [card, handleDragCancel, interactionMode, onPointerEnd, resetSwipeState]);
 
     const def = lookupCardDef(card.defId);
     const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
@@ -260,7 +326,7 @@ const HandCard: React.FC<HandCardProps> = ({
                 marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
                 zIndex: isDragging ? 200 : baseZIndex,
                 boxShadow: isDragging && isDragPlayable ? DRAG_DROP_SHADOW : undefined,
-                touchAction: interactionMode === 'drag' ? 'none' : undefined,
+                touchAction: interactionMode === 'drag' || swipePlayEnabled ? 'none' : undefined,
             }}
             // 对手视角时完全不使用动画
             initial={isOpponentView ? { opacity: 1, y: 0, scale: 1, rotate: rotationSeed } : { y: 200, opacity: 0, scale: 0.8 }}
@@ -287,6 +353,10 @@ const HandCard: React.FC<HandCardProps> = ({
                 }
                 if (shouldBlockClick?.(card)) return;
                 if (isOpponentView) return; // 对手视角不可点击
+                if (clickBehavior === 'view' && onViewDetail) {
+                    onViewDetail();
+                    return;
+                }
                 if (disableInteraction || isDisabled) {
                     // 不可操作时摇头抖动
                     setIsShaking(true);
@@ -363,6 +433,7 @@ export const HandArea: React.FC<Props> = ({
     disabledCardUids,
     isOpponentView = false,
     interactionMode = 'click',
+    onCardSwipePlay,
     onResolveDropTarget,
     onCardDragPlay,
     onDragStateChange,
@@ -379,6 +450,8 @@ export const HandArea: React.FC<Props> = ({
             onCardView?.(card);
         },
     });
+    const clickBehavior: 'select' | 'view' = isDiscardMode ? 'select' : 'view';
+    const swipePlayEnabled = interactionMode === 'click' && !isOpponentView && !isDiscardMode && Boolean(onCardSwipePlay);
     useEffect(() => { setIsLoaded(true); }, []);
     if (!isLoaded) return null;
 
@@ -420,6 +493,8 @@ export const HandArea: React.FC<Props> = ({
                             isOpponentView={true}
                             compactLayout={compactLayout}
                             showTouchInspectButton={false}
+                            clickBehavior="view"
+                            swipePlayEnabled={false}
                             interactionMode={interactionMode}
                             onResolveDropTarget={onResolveDropTarget}
                             onCardDragPlay={onCardDragPlay}
@@ -443,6 +518,9 @@ export const HandArea: React.FC<Props> = ({
                                 isOpponentView={false}
                                 compactLayout={compactLayout}
                                 showTouchInspectButton={isCoarsePointer && !isDiscardMode}
+                                clickBehavior={clickBehavior}
+                                swipePlayEnabled={swipePlayEnabled}
+                                onSwipePlay={() => onCardSwipePlay?.(card)}
                                 interactionMode={interactionMode}
                                 onResolveDropTarget={onResolveDropTarget}
                                 onCardDragPlay={onCardDragPlay}

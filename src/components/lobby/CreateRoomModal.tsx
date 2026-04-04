@@ -8,7 +8,7 @@
  * - manifest 声明的 setupOptions（单选 / 多选）
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameManifestEntry } from '../../games/manifest.types';
@@ -130,7 +130,7 @@ export const CreateRoomModal = ({
 }: CreateRoomModalProps) => {
     const gameNamespace = `game-${gameManifest.id}`;
     const { t } = useTranslation(['lobby', gameNamespace]);
-    const playerOptions = gameManifest.playerOptions ?? [2];
+    const playerOptions = useMemo(() => gameManifest.playerOptions ?? [2], [gameManifest.playerOptions]);
     const hasPlayerOptions = playerOptions.length > 1;
 
     const [roomName, setRoomName] = useState('');
@@ -156,25 +156,39 @@ export const CreateRoomModal = ({
                     Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
                 ),
             );
-        setRoomName('');
-        setNumPlayers(nextPreferences.numPlayers);
-        setTtlSeconds(0);
-        setPassword('');
-        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
-        setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
-        setSeatControllers(nextSeatControllers);
-        setSetupSelections(nextPreferences.setupSelections);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setRoomName('');
+            setNumPlayers(nextPreferences.numPlayers);
+            setTtlSeconds(0);
+            setPassword('');
+            setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
+            setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
+            setSeatControllers(nextSeatControllers);
+            setSetupSelections(nextPreferences.setupSelections);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
 
     useEffect(() => {
-        setSeatControllers((current) => {
-            const normalized = normalizeLocalMatchPreferences(gameManifest, {
-                numPlayers,
-                seatControllers: current,
-                setupSelections,
-            }).seatControllers;
-            return forceHumanOwnerSeat(normalized);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setSeatControllers((current) => {
+                const normalized = normalizeLocalMatchPreferences(gameManifest, {
+                    numPlayers,
+                    seatControllers: current,
+                    setupSelections,
+                }).seatControllers;
+                return forceHumanOwnerSeat(normalized);
+            });
         });
+        return () => {
+            cancelled = true;
+        };
     }, [gameManifest, numPlayers, setupSelections]);
 
     const handleToggleAiEnabled = () => {

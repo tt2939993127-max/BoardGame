@@ -5,6 +5,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import path from 'node:path';
 import sharp from 'sharp';
+import { acquireGlobalHeavyBudget } from '../infra/global-heavy-budget.mjs';
+import { acquireTaskGuard } from '../infra/heavy-task-guard.mjs';
 import {
     DEFAULT_ANDROID_COMPAT_BOOT_TIMEOUT_MS,
     DEFAULT_ANDROID_COMPAT_LAUNCH_DELAY_MS,
@@ -35,6 +37,26 @@ const webViewCdpLoadingHints = [
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const createCompatSmokeMetadata = ({
+    serial,
+    avd,
+    route,
+    skipInstall,
+    keepEmulator,
+    minWebViewMajor,
+    launchDelayMs,
+    bootTimeoutMs,
+}) => ({
+    serial: serial || '<auto>',
+    avd: avd || '<auto>',
+    route: route || '<default>',
+    skipInstall,
+    keepEmulator,
+    minWebViewMajor,
+    launchDelayMs,
+    bootTimeoutMs,
+});
+
 const readArgValue = (name, defaultValue = '') => {
     const direct = `--${name}`;
     const inline = `--${name}=`;
@@ -62,7 +84,7 @@ const printUsage = () => {
         '',
         '选项:',
         '  --serial <adb serial>          直接使用已连接设备/模拟器',
-        '  --avd <name>                   没有连接设备时自动启动指定 AVD',
+        '  --avd <name>                   优先使用/启动指定 AVD，并忽略其他已连接实体机',
         '  --apk <path>                   安装指定 APK；默认优先用 debug APK',
         '  --app-id <id>                  默认 top.easyboardgame.app',
         '  --route <path>                 启动后直接深链到指定应用内路由，例如 /play/dicethrone/local',
@@ -158,6 +180,14 @@ const listAdbDevices = async (adbPath) => {
     return entries.filter((entry) => entry.state === 'device');
 };
 
+const formatDeviceEntries = (entries) => {
+    if (!entries.length) {
+        return '(none)';
+    }
+
+    return entries.map((entry) => `${entry.serial}:${entry.state || 'unknown'}`).join(', ');
+};
+
 const listAvds = (emulatorPath) => {
     const result = spawnSync(emulatorPath, ['-list-avds'], {
         cwd: rootDir,
@@ -193,6 +223,111 @@ const chooseAvd = (avds, preferredName) => {
     }
 
     return avds[0] ?? '';
+};
+
+const resolveCompatDeviceTarget = async ({
+    adbPath,
+    emulatorPath,
+    serialArg,
+    avdArg,
+    bootTimeoutMs,
+}) => {
+    const existingEntries = await listAdbDeviceEntries(adbPath);
+    const existingDevices = existingEntries.filter((entry) => entry.state === 'device');
+
+    if (serialArg) {
+        const matched = existingDevices.find((entry) => entry.serial === serialArg);
+        if (!matched) {
+            throw new Error(`指定设备未连接: ${serialArg}。当前 adb 设备: ${formatDeviceEntries(existingEntries)}`);
+        }
+        return {
+            serial: serialArg,
+            startedEmulator: false,
+        };
+    }
+
+    if (avdArg) {
+        const existingEmulator = existingDevices.find((device) => device.serial.startsWith('emulator-'));
+        if (existingEmulator) {
+            return {
+                serial: existingEmulator.serial,
+                startedEmulator: false,
+            };
+        }
+
+        const avds = listAvds(emulatorPath);
+        const avdName = chooseAvd(avds, avdArg);
+        const emulatorPort = allocateEmulatorPort(existingEntries);
+        spawn(emulatorPath, [
+            '-avd',
+            avdName,
+            '-port',
+            String(emulatorPort),
+            '-no-snapshot-load',
+            '-no-snapshot-save',
+            '-no-boot-anim',
+            '-gpu',
+            'swiftshader_indirect',
+        ], {
+            cwd: rootDir,
+            env: process.env,
+            stdio: 'ignore',
+            windowsHide: true,
+            detached: true,
+            shell: false,
+        }).unref();
+
+        return {
+            serial: await waitForNewEmulatorSerial(adbPath, emulatorPort, bootTimeoutMs),
+            startedEmulator: true,
+        };
+    }
+
+    const existingEmulator = existingDevices.find((device) => device.serial.startsWith('emulator-'));
+    if (existingEmulator) {
+        return {
+            serial: existingEmulator.serial,
+            startedEmulator: false,
+        };
+    }
+
+    if (existingDevices.length > 0) {
+        return {
+            serial: existingDevices[0].serial,
+            startedEmulator: false,
+        };
+    }
+
+    const avds = listAvds(emulatorPath);
+    const avdName = chooseAvd(avds, avdArg);
+    if (!avdName) {
+        throw new Error('没有检测到可用 AVD，请先在 Android Studio 创建设备，或显式传 --serial。');
+    }
+
+    const emulatorPort = allocateEmulatorPort(existingEntries);
+    spawn(emulatorPath, [
+        '-avd',
+        avdName,
+        '-port',
+        String(emulatorPort),
+        '-no-snapshot-load',
+        '-no-snapshot-save',
+        '-no-boot-anim',
+        '-gpu',
+        'swiftshader_indirect',
+    ], {
+        cwd: rootDir,
+        env: process.env,
+        stdio: 'ignore',
+        windowsHide: true,
+        detached: true,
+        shell: false,
+    }).unref();
+
+    return {
+        serial: await waitForNewEmulatorSerial(adbPath, emulatorPort, bootTimeoutMs),
+        startedEmulator: true,
+    };
 };
 
 const allocateEmulatorPort = (entries) => {
@@ -792,167 +927,167 @@ const main = async () => {
         readArgValue('output-dir', path.join(DEFAULT_ANDROID_COMPAT_OUTPUT_ROOT, timestampForPath())),
     );
     const apkPath = path.resolve(rootDir, readArgValue('apk', resolveDefaultApk()));
-    ensureDirectory(outputDir);
+    const metadata = createCompatSmokeMetadata({
+        serial: serialArg,
+        avd: avdArg,
+        route,
+        skipInstall,
+        keepEmulator,
+        minWebViewMajor,
+        launchDelayMs,
+        bootTimeoutMs,
+    });
+    const command = process.argv.join(' ');
+    const taskGuard = acquireTaskGuard({
+        name: 'android-compat-smoke',
+        conflicts: ['e2e-run', 'quality-gate'],
+        command,
+        metadata,
+    });
+    let globalBudgetHandle = null;
 
-    let serial = serialArg;
-    let startedEmulator = false;
+    try {
+        globalBudgetHandle = await acquireGlobalHeavyBudget({
+            group: 'android-compat',
+            weight: 2,
+            command,
+            metadata,
+        });
+        ensureDirectory(outputDir);
 
-    if (!serial) {
-        const existingEntries = await listAdbDeviceEntries(adbPath);
-        const existingDevices = existingEntries.filter((entry) => entry.state === 'device');
-        const existingEmulator = existingDevices.find((device) => device.serial.startsWith('emulator-'));
-        if (existingEmulator) {
-            serial = existingEmulator.serial;
-        } else {
-            const avds = listAvds(emulatorPath);
-            const avdName = chooseAvd(avds, avdArg);
-            if (!avdName) {
-                throw new Error('没有检测到可用 AVD，请先在 Android Studio 创建设备，或显式传 --serial。');
+        const resolvedTarget = await resolveCompatDeviceTarget({
+            adbPath,
+            emulatorPath,
+            serialArg,
+            avdArg,
+            bootTimeoutMs,
+        });
+        const serial = resolvedTarget.serial;
+        const startedEmulator = resolvedTarget.startedEmulator;
+
+        await waitForBootCompleted(adbPath, serial, bootTimeoutMs);
+        await waitForDeviceOnline(adbPath, serial, Math.min(bootTimeoutMs, 120000));
+        writeTextFile(path.join(outputDir, 'device-serial.txt'), `${serial}\n`);
+
+        if (!skipInstall) {
+            await runAdb(adbPath, serial, ['install', '-r', apkPath]);
+        }
+
+        await runAdbAllowFailure(adbPath, serial, ['logcat', '-c']);
+        await launchApp(adbPath, serial, appId);
+        await sleep(launchDelayMs);
+        let cdpNavigation = route
+            ? await driveRouteInWebView(adbPath, serial, appId, route, outputDir, launchDelayMs)
+            : {
+                attempted: false,
+                succeeded: false,
+                reason: '',
+            };
+        if (route && !cdpNavigation.succeeded) {
+            await launchApp(adbPath, serial, appId, { route, customUrlScheme });
+            await sleep(Math.min(launchDelayMs, 5000));
+            cdpNavigation = await driveRouteInWebView(adbPath, serial, appId, route, outputDir, launchDelayMs);
+        }
+        if (cdpNavigation.attempted && cdpNavigation.succeeded) {
+            await sleep(2000);
+        }
+        await dismissImmersiveClingIfPresent(adbPath, serial, outputDir);
+
+        const screenshotPath = path.join(outputDir, 'screen.png');
+        await captureScreenshot(adbPath, serial, screenshotPath);
+        const uiDumpText = await dumpUiHierarchy(adbPath, serial, outputDir);
+        const logcatResult = await runAdbAllowFailure(adbPath, serial, ['logcat', '-d', '-v', 'time']);
+        const logcatPath = path.join(outputDir, 'logcat.txt');
+        writeTextFile(logcatPath, logcatResult.stdout || logcatResult.stderr || '');
+
+        const deviceInfo = await collectDeviceInfo(adbPath, serial);
+        const webViewDump = await collectPackageDump(adbPath, serial, 'com.google.android.webview', outputDir);
+        const chromeDump = await collectPackageDump(adbPath, serial, 'com.android.chrome', outputDir);
+        const trichromeDump = await collectPackageDump(adbPath, serial, 'com.google.android.trichromelibrary', outputDir);
+        const screenshotAnalysis = await analyzeScreenshotFile(screenshotPath);
+        const uiStrings = extractUiStrings(uiDumpText);
+        const providerText = deviceInfo.webViewProviderCurrent || deviceInfo.webViewProviderSetting || webViewDump || chromeDump;
+        const currentVersionName = parsePackageVersionName(providerText)
+            || parsePackageVersionName(webViewDump)
+            || parsePackageVersionName(chromeDump)
+            || parsePackageVersionName(trichromeDump);
+        const currentMajorVersion = parseMajorVersion(currentVersionName);
+        const currentProviderPackage = (() => {
+            const providerMatch = providerText.match(/\(([^,]+),/);
+            if (providerMatch?.[1]) {
+                return providerMatch[1].trim();
             }
+            if (deviceInfo.webViewProviderSetting && deviceInfo.webViewProviderSetting !== 'null') {
+                return deviceInfo.webViewProviderSetting;
+            }
+            return currentVersionName ? 'com.google.android.webview' : '';
+        })();
 
-            const emulatorPort = allocateEmulatorPort(existingEntries);
-            spawn(emulatorPath, [
-                '-avd',
-                avdName,
-                '-port',
-                String(emulatorPort),
-                '-no-snapshot-load',
-                '-no-snapshot-save',
-                '-no-boot-anim',
-                '-gpu',
-                'swiftshader_indirect',
-            ], {
-                cwd: rootDir,
-                env: process.env,
-                stdio: 'ignore',
-                windowsHide: true,
-                detached: true,
-                shell: false,
-            }).unref();
-            startedEmulator = true;
-            serial = await waitForNewEmulatorSerial(adbPath, emulatorPort, bootTimeoutMs);
-        }
-    }
+        const friendlyPromptDetected = detectFriendlyPrompt(uiStrings);
+        const baselineSatisfied = currentMajorVersion === null ? false : currentMajorVersion >= minWebViewMajor;
+        const status = screenshotAnalysis.blackScreenSuspected && !friendlyPromptDetected
+            ? 'suspected-black-screen'
+            : friendlyPromptDetected
+                ? 'friendly-fallback-visible'
+                : 'visible-ui';
 
-    await waitForBootCompleted(adbPath, serial, bootTimeoutMs);
-    await waitForDeviceOnline(adbPath, serial, Math.min(bootTimeoutMs, 120000));
-    writeTextFile(path.join(outputDir, 'device-serial.txt'), `${serial}\n`);
-
-    if (!skipInstall) {
-        await runAdb(adbPath, serial, ['install', '-r', apkPath]);
-    }
-
-    await runAdbAllowFailure(adbPath, serial, ['logcat', '-c']);
-    await launchApp(adbPath, serial, appId);
-    await sleep(launchDelayMs);
-    let cdpNavigation = route
-        ? await driveRouteInWebView(adbPath, serial, appId, route, outputDir, launchDelayMs)
-        : {
-            attempted: false,
-            succeeded: false,
-            reason: '',
+        const summary = {
+            status,
+            device: {
+                serial,
+                manufacturer: deviceInfo.manufacturer || '',
+                model: deviceInfo.model || '',
+                androidRelease: deviceInfo.androidRelease || '',
+                androidSdk: deviceInfo.androidSdk || '',
+            },
+            webView: {
+                packageName: currentProviderPackage,
+                versionName: currentVersionName,
+                majorVersion: currentMajorVersion,
+                baselineSatisfied,
+                requiredMinimumMajor: minWebViewMajor,
+            },
+            launch: {
+                route,
+                customUrlScheme,
+                cdpNavigation,
+            },
+            analysis: {
+                ...screenshotAnalysis,
+                uiStringSample: uiStrings.slice(0, 20),
+                friendlyPromptDetected,
+            },
+            artifacts: {
+                outputDir,
+                screenshot: screenshotPath,
+                uiDump: path.join(outputDir, 'window_dump.xml'),
+                logcat: logcatPath,
+                webViewDump: path.join(outputDir, 'com_google_android_webview.txt'),
+                chromeDump: path.join(outputDir, 'com_android_chrome.txt'),
+                trichromeDump: path.join(outputDir, 'com_google_android_trichromelibrary.txt'),
+            },
         };
-    if (route && !cdpNavigation.succeeded) {
-        await launchApp(adbPath, serial, appId, { route, customUrlScheme });
-        await sleep(Math.min(launchDelayMs, 5000));
-        cdpNavigation = await driveRouteInWebView(adbPath, serial, appId, route, outputDir, launchDelayMs);
-    }
-    if (cdpNavigation.attempted && cdpNavigation.succeeded) {
-        await sleep(2000);
-    }
-    await dismissImmersiveClingIfPresent(adbPath, serial, outputDir);
 
-    const screenshotPath = path.join(outputDir, 'screen.png');
-    await captureScreenshot(adbPath, serial, screenshotPath);
-    const uiDumpText = await dumpUiHierarchy(adbPath, serial, outputDir);
-    const logcatResult = await runAdbAllowFailure(adbPath, serial, ['logcat', '-d', '-v', 'time']);
-    const logcatPath = path.join(outputDir, 'logcat.txt');
-    writeTextFile(logcatPath, logcatResult.stdout || logcatResult.stderr || '');
+        writeTextFile(path.join(outputDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+        writeTextFile(path.join(outputDir, 'summary.txt'), `${toSummaryText(summary)}\n`);
 
-    const deviceInfo = await collectDeviceInfo(adbPath, serial);
-    const webViewDump = await collectPackageDump(adbPath, serial, 'com.google.android.webview', outputDir);
-    const chromeDump = await collectPackageDump(adbPath, serial, 'com.android.chrome', outputDir);
-    const trichromeDump = await collectPackageDump(adbPath, serial, 'com.google.android.trichromelibrary', outputDir);
-    const screenshotAnalysis = await analyzeScreenshotFile(screenshotPath);
-    const uiStrings = extractUiStrings(uiDumpText);
-    const providerText = deviceInfo.webViewProviderCurrent || deviceInfo.webViewProviderSetting || webViewDump || chromeDump;
-    const currentVersionName = parsePackageVersionName(providerText)
-        || parsePackageVersionName(webViewDump)
-        || parsePackageVersionName(chromeDump)
-        || parsePackageVersionName(trichromeDump);
-    const currentMajorVersion = parseMajorVersion(currentVersionName);
-    const currentProviderPackage = (() => {
-        const providerMatch = providerText.match(/\(([^,]+),/);
-        if (providerMatch?.[1]) {
-            return providerMatch[1].trim();
+        console.log(`Android smoke 输出目录: ${outputDir}`);
+        console.log(toSummaryText(summary));
+
+        if (startedEmulator && !keepEmulator) {
+            await runAdbAllowFailure(adbPath, serial, ['emu', 'kill']);
         }
-        if (deviceInfo.webViewProviderSetting && deviceInfo.webViewProviderSetting !== 'null') {
-            return deviceInfo.webViewProviderSetting;
+
+        if (!baselineSatisfied) {
+            throw new Error(`当前 WebView/Chrome 主版本 ${currentMajorVersion ?? 'unknown'} 低于要求 ${minWebViewMajor}。`);
         }
-        return currentVersionName ? 'com.google.android.webview' : '';
-    })();
 
-    const friendlyPromptDetected = detectFriendlyPrompt(uiStrings);
-    const baselineSatisfied = currentMajorVersion === null ? false : currentMajorVersion >= minWebViewMajor;
-    const status = screenshotAnalysis.blackScreenSuspected && !friendlyPromptDetected
-        ? 'suspected-black-screen'
-        : friendlyPromptDetected
-            ? 'friendly-fallback-visible'
-            : 'visible-ui';
-
-    const summary = {
-        status,
-        device: {
-            serial,
-            manufacturer: deviceInfo.manufacturer || '',
-            model: deviceInfo.model || '',
-            androidRelease: deviceInfo.androidRelease || '',
-            androidSdk: deviceInfo.androidSdk || '',
-        },
-        webView: {
-            packageName: currentProviderPackage,
-            versionName: currentVersionName,
-            majorVersion: currentMajorVersion,
-            baselineSatisfied,
-            requiredMinimumMajor: minWebViewMajor,
-        },
-        launch: {
-            route,
-            customUrlScheme,
-            cdpNavigation,
-        },
-        analysis: {
-            ...screenshotAnalysis,
-            uiStringSample: uiStrings.slice(0, 20),
-            friendlyPromptDetected,
-        },
-        artifacts: {
-            outputDir,
-            screenshot: screenshotPath,
-            uiDump: path.join(outputDir, 'window_dump.xml'),
-            logcat: logcatPath,
-            webViewDump: path.join(outputDir, 'com_google_android_webview.txt'),
-            chromeDump: path.join(outputDir, 'com_android_chrome.txt'),
-            trichromeDump: path.join(outputDir, 'com_google_android_trichromelibrary.txt'),
-        },
-    };
-
-    writeTextFile(path.join(outputDir, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
-    writeTextFile(path.join(outputDir, 'summary.txt'), `${toSummaryText(summary)}\n`);
-
-    console.log(`Android smoke 输出目录: ${outputDir}`);
-    console.log(toSummaryText(summary));
-
-    if (startedEmulator && !keepEmulator) {
-        await runAdbAllowFailure(adbPath, serial, ['emu', 'kill']);
-    }
-
-    if (!baselineSatisfied) {
-        throw new Error(`当前 WebView/Chrome 主版本 ${currentMajorVersion ?? 'unknown'} 低于要求 ${minWebViewMajor}。`);
-    }
-
-    if (status === 'suspected-black-screen') {
-        throw new Error('截图分析疑似黑屏，且 UI dump 未检测到友好提示。');
+        if (status === 'suspected-black-screen') {
+            throw new Error('截图分析疑似黑屏，且 UI dump 未检测到友好提示。');
+        }
+    } finally {
+        globalBudgetHandle?.release();
+        taskGuard.release();
     }
 };
 
