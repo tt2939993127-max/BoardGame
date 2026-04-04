@@ -74,12 +74,24 @@ export const DeckDiscardZone: React.FC<Props> = ({
     // interaction 驱动的弃牌堆选择（僵尸领主等）：自动打开/关闭面板
     const prevAutoOpen = React.useRef(false);
     useEffect(() => {
+        let cancelled = false;
         if (autoOpenPanel && !prevAutoOpen.current) {
-            setShowDiscard(true);
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setShowDiscard(true);
+                }
+            });
         } else if (!autoOpenPanel && prevAutoOpen.current) {
-            setShowDiscard(false);
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setShowDiscard(false);
+                }
+            });
         }
         prevAutoOpen.current = !!autoOpenPanel;
+        return () => {
+            cancelled = true;
+        };
     }, [autoOpenPanel]);
 
     // 使用 discard 数组的长度作为 topCard 判断依据，避免在中间状态（弃牌堆暂时为空）时渲染错误

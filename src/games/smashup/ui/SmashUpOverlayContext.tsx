@@ -70,15 +70,25 @@ export function SmashUpOverlayProvider({ children }: { children: ReactNode }) {
     const initUserIdRef = useRef<string | null>(null);
 
     useEffect(() => {
+        let cancelled = false;
         if (!user || !token) {
             initUserIdRef.current = null;
-            setPreference(readLocalPreference());
-            return;
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setPreference(readLocalPreference());
+                }
+            });
+            return () => {
+                cancelled = true;
+            };
         }
 
-        let cancelled = false;
         const localPreference = readLocalPreference();
-        setPreference(localPreference);
+        queueMicrotask(() => {
+            if (!cancelled) {
+                setPreference(localPreference);
+            }
+        });
 
         void getSmashUpPreference(token)
             .then(async (response) => {

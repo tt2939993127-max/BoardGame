@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { UI_Z_INDEX, buildLocalizedImageSet } from '../../../core';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
+import { buildRuntimeInlineUnitValue } from '../../mobileSupport';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
@@ -57,44 +58,42 @@ export const CenterBoard = ({
     const showTouchMagnifyButton = useCoarsePointer();
     const boardUiTuning = getPlayerBoardUiTuning(characterId);
     const playerBoardAspectRatio = getPlayerBoardAspectRatio(characterId);
-    const shellFrameClassName = 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
-    const boardGapClassName = 'gap-[0.5vw]';
-    const overlayButtonIconClassName = 'w-[0.72vw] h-[0.72vw] fill-current';
+    const inlineUnit = buildRuntimeInlineUnitValue;
+    const shellFrameClassName = 'absolute bottom-0 flex items-center justify-center pointer-events-auto';
     const overlayButtonClassName = `absolute flex items-center justify-center rounded-full border border-white/20 bg-black/60 p-0 text-white shadow-xl transition-[background-color,border-color,opacity] duration-300 hover:bg-amber-500/72 hover:border-amber-300/45 ${showTouchMagnifyButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`;
     const overlayButtonVisualClassName = 'flex h-full w-full items-center justify-center';
     const overlayButtonStyle = {
-        top: `${boardUiTuning.magnifyButtonTop}vw`,
-        right: '0.9vw',
-        width: '2.6vw',
-        height: '2.6vw',
+        top: inlineUnit(boardUiTuning.magnifyButtonTop),
+        right: inlineUnit(0.9),
+        width: inlineUnit(2.6),
+        height: inlineUnit(2.6),
         minWidth: '0',
         minHeight: '0',
-        maxWidth: '2.6vw',
-        maxHeight: '2.6vw',
+        maxWidth: inlineUnit(2.6),
+        maxHeight: inlineUnit(2.6),
         appearance: 'none',
         WebkitAppearance: 'none',
         fontSize: '0',
         lineHeight: '0',
     } as const;
-    const tipToggleButtonOffsetClassName = isTipOpen ? 'right-[0.8vw]' : 'left-[0.1vw]';
-    const tipToggleButtonClassName = `absolute top-[55%] z-50 flex p-[0.5vw] text-[inherit] -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white/50 transition-[background-color,color,border-color] duration-500 border border-white/8 hover:bg-black/50 hover:text-white hover:border-white/16 ${tipToggleButtonOffsetClassName}`;
+    const tipToggleButtonClassName = 'absolute z-50 flex text-[inherit] -translate-y-1/2 items-center justify-center rounded-full bg-black/30 text-white/50 transition-[background-color,color,border-color] duration-500 border border-white/8 hover:bg-black/50 hover:text-white hover:border-white/16';
 
     const playerBoardPath = ASSETS.PLAYER_BOARD(characterId);
     const tipBoardPath = ASSETS.TIP_BOARD(characterId);
     const playerBoardBackground = buildLocalizedImageSet(playerBoardPath, locale);
     const tipBoardBackground = buildLocalizedImageSet(tipBoardPath, locale);
     const playerBoardStyle = React.useMemo(() => {
-        const shellWidthBudget = `calc(100vw - ${CENTER_BOARD_SHELL_INSET_VW * 2}vw)`;
+        const shellWidthBudget = `calc(${inlineUnit(100)} - ${inlineUnit(CENTER_BOARD_SHELL_INSET_VW * 2)})`;
         const tipBoardWidth = isTipOpen
-            ? `calc(${CENTER_BOARD_BASE_HEIGHT_VW}vw * ${TIP_BOARD_ASPECT_RATIO})`
-            : '0vw';
-        const maxBoardWidth = `calc(${shellWidthBudget} - ${tipBoardWidth} - ${CENTER_BOARD_GAP_VW}vw)`;
+            ? inlineUnit(CENTER_BOARD_BASE_HEIGHT_VW * TIP_BOARD_ASPECT_RATIO)
+            : '0px';
+        const maxBoardWidth = `calc(${shellWidthBudget} - ${tipBoardWidth} - ${inlineUnit(CENTER_BOARD_GAP_VW)})`;
 
         return {
-            width: `min(calc(${CENTER_BOARD_BASE_HEIGHT_VW}vw * ${playerBoardAspectRatio}), ${maxBoardWidth})`,
+            width: `min(${inlineUnit(CENTER_BOARD_BASE_HEIGHT_VW * playerBoardAspectRatio)}, ${maxBoardWidth})`,
             aspectRatio: String(playerBoardAspectRatio),
         } as const;
-    }, [isTipOpen, playerBoardAspectRatio]);
+    }, [inlineUnit, isTipOpen, playerBoardAspectRatio]);
 
     const handleMagnifySurfaceClick = React.useCallback((
         event: React.MouseEvent<HTMLElement>,
@@ -115,18 +114,36 @@ export const CenterBoard = ({
     return (
         <div
             className={shellFrameClassName}
-            style={boardUiTuning.shellTranslateX === 0
-                ? undefined
-                : { transform: `translateX(${boardUiTuning.shellTranslateX}vw)` }}
+            style={{
+                left: inlineUnit(CENTER_BOARD_SHELL_INSET_VW),
+                right: inlineUnit(CENTER_BOARD_SHELL_INSET_VW),
+                top: inlineUnit(-6.5),
+                ...(boardUiTuning.shellTranslateX === 0
+                    ? {}
+                    : { transform: `translateX(${inlineUnit(boardUiTuning.shellTranslateX)})` }),
+            }}
         >
-            <div className={`relative flex items-center justify-center ${boardGapClassName}`}>
+            <div
+                className="relative flex items-center justify-center"
+                style={{ gap: inlineUnit(CENTER_BOARD_GAP_VW) }}
+            >
                 <div
-                    className={`relative h-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    className={`relative h-auto shadow-2xl z-10 group transition-[outline] duration-300 overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400' : ''}`}
                     style={boardUiTuning.playerBoardTranslateY === 0
-                        ? playerBoardStyle
+                        ? {
+                            ...playerBoardStyle,
+                            borderRadius: inlineUnit(0.8),
+                            ...(coreAreaHighlighted
+                                ? { outlineOffset: inlineUnit(0.1) }
+                                : {}),
+                        }
                         : {
                             ...playerBoardStyle,
-                            transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)`,
+                            borderRadius: inlineUnit(0.8),
+                            transform: `translateY(${inlineUnit(boardUiTuning.playerBoardTranslateY)})`,
+                            ...(coreAreaHighlighted
+                                ? { outlineOffset: inlineUnit(0.1) }
+                                : {}),
                         }}
                     data-tutorial-id="player-board"
                     data-testid="player-board-surface"
@@ -168,22 +185,39 @@ export const CenterBoard = ({
                         aria-label="查看大图"
                     >
                         <span className={overlayButtonVisualClassName}>
-                            <svg className={overlayButtonIconClassName} viewBox="0 0 20 20">
+                            <svg
+                                className="fill-current"
+                                style={{ width: inlineUnit(0.72), height: inlineUnit(0.72) }}
+                                viewBox="0 0 20 20"
+                            >
                                 <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                             </svg>
                         </span>
                     </button>
                 </div>
-                <div className="flex items-center relative h-[35vw]" data-tutorial-id="tip-board">
+                <div
+                    className="flex items-center relative"
+                    style={{ height: inlineUnit(CENTER_BOARD_BASE_HEIGHT_VW) }}
+                    data-tutorial-id="tip-board"
+                >
                     <button
                         type="button"
                         onClick={onToggleTip}
                         className={tipToggleButtonClassName}
+                        style={{
+                            top: '55%',
+                            padding: inlineUnit(0.5),
+                            left: isTipOpen ? undefined : inlineUnit(0.1),
+                            right: isTipOpen ? inlineUnit(0.8) : undefined,
+                        }}
                         data-board-magnify-ignore="true"
                     >
                         {isTipOpen ? '<' : '>'}
                     </button>
-                    <div className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden rounded-[0.8vw] ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}>
+                    <div
+                        className={`relative h-full transition-[width,opacity,transform] duration-500 overflow-hidden ${isTipOpen ? 'w-auto opacity-100 scale-100' : 'w-0 opacity-0 scale-95'}`}
+                        style={{ borderRadius: inlineUnit(0.8) }}
+                    >
                         <div
                             className={`relative h-full w-auto aspect-[1311/2048] group ${isLayoutEditing ? '' : 'cursor-zoom-in'}`}
                             data-testid="tip-board-surface"
@@ -210,7 +244,11 @@ export const CenterBoard = ({
                                 aria-label="查看大图"
                             >
                                 <span className={overlayButtonVisualClassName}>
-                                    <svg className={overlayButtonIconClassName} viewBox="0 0 20 20">
+                                    <svg
+                                        className="fill-current"
+                                        style={{ width: inlineUnit(0.72), height: inlineUnit(0.72) }}
+                                        viewBox="0 0 20 20"
+                                    >
                                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                                     </svg>
                                 </span>

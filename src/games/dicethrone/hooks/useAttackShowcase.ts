@@ -125,10 +125,11 @@ export function useAttackShowcase(config: AttackShowcaseConfig): AttackShowcaseS
 
     // 离开 defensiveRoll 时重置
     useEffect(() => {
-        if (currentPhase !== 'defensiveRoll') {
+        if (currentPhase === 'defensiveRoll' || dismissedKey === null) return;
+        queueMicrotask(() => {
             setDismissedKey(null);
-        }
-    }, [currentPhase]);
+        });
+    }, [currentPhase, dismissedKey]);
 
     // 判断是否应该展示（纯派生逻辑）
     const shouldShow =

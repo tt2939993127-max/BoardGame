@@ -221,20 +221,20 @@ const DissipateEffect: React.FC<{
   onImpact: () => void;
   onComplete: () => void;
 }> = ({ content, position, onImpact, onComplete }) => {
-  const impactFired = useRef(false);
+  const stableImpact = useStableComplete(onImpact);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      stableImpact();
+    }, 125);
+    return () => window.clearTimeout(timeoutId);
+  }, [stableImpact]);
 
   return createPortal(
     React.createElement(motion.div, {
       initial: { opacity: 1, scale: 1.1, y: 0 },
       animate: { opacity: [1, 1, 0], scale: [1.1, 1.3, 0.3], y: [0, -4, -16] },
       transition: { duration: 0.5, ease: 'easeOut', times: [0, 0.25, 1] },
-      onUpdate: (latest: { opacity?: number }) => {
-        // 在闪光峰值（scale 最大时）触发 onImpact
-        if (!impactFired.current && typeof latest.opacity === 'number' && latest.opacity < 0.95) {
-          impactFired.current = true;
-          onImpact();
-        }
-      },
       onAnimationComplete: onComplete,
       style: {
         position: 'fixed',
