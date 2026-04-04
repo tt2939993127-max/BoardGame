@@ -30,16 +30,24 @@ export interface MatchInfo {
 export interface CreateMatchOptions {
     numPlayers: number;
     setupData?: Record<string, unknown>;
+    playerName?: string;
+}
+
+export interface CreateMatchResult {
+    matchID: string;
+    ownerPlayerID?: string;
+    ownerCredentials?: string;
 }
 
 export interface JoinMatchOptions {
-    playerID: string;
+    playerID?: string;
     playerName?: string;
     data?: Record<string, unknown>;
 }
 
 export interface JoinMatchResult {
     playerCredentials: string;
+    playerID?: string;
 }
 
 export interface LeaveMatchOptions {
@@ -100,11 +108,12 @@ export async function createMatch(
     gameName: string,
     options: CreateMatchOptions,
     init?: { headers?: Record<string, string> },
-): Promise<{ matchID: string }> {
+): Promise<CreateMatchResult> {
     const url = `${baseUrl()}/games/${gameName}/create`;
-    return apiPost<{ matchID: string }>(url, {
+    return apiPost<CreateMatchResult>(url, {
         numPlayers: options.numPlayers,
         setupData: options.setupData,
+        playerName: options.playerName,
     }, init?.headers);
 }
 
@@ -128,11 +137,14 @@ export async function joinMatch(
     options: JoinMatchOptions,
 ): Promise<JoinMatchResult> {
     const url = `${baseUrl()}/games/${gameName}/${matchID}/join`;
-    return apiPost<JoinMatchResult>(url, {
-        playerID: options.playerID,
+    const payload: Record<string, unknown> = {
         playerName: options.playerName,
         data: options.data,
-    });
+    };
+    if (options.playerID) {
+        payload.playerID = options.playerID;
+    }
+    return apiPost<JoinMatchResult>(url, payload);
 }
 
 /**

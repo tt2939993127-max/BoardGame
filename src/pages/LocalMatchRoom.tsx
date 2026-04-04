@@ -60,6 +60,7 @@ export const LocalMatchRoom = () => {
     const seedFromUrl = searchParams.get('seed');
     const [fallbackSeed] = useState(() => seedFromUrl || createLocalMatchSeed());
     const gameSeed = seedFromUrl || fallbackSeed;
+    const [hasCompletedInitialLocalPreload, setHasCompletedInitialLocalPreload] = useState(false);
 
     useEffect(() => {
         if (seedFromUrl) return;
@@ -98,6 +99,10 @@ export const LocalMatchRoom = () => {
         [seatControllers],
     );
 
+    useEffect(() => {
+        setHasCompletedInitialLocalPreload(false);
+    }, [gameId, gameSeed, localPlayerCount]);
+
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
         if (!gameId || !isGameImplementationReady) return null;
@@ -116,13 +121,17 @@ export const LocalMatchRoom = () => {
                 gameState={props?.G}
                 locale={i18n.language}
                 playerID={props?.playerID}
+                blockRendering={!hasCompletedInitialLocalPreload}
                 loadingDescription={t('matchRoom.loadingResources')}
+                onReady={() => {
+                    setHasCompletedInitialLocalPreload(true);
+                }}
             >
                 <Board {...props} />
             </CriticalImageGate>
         );
         return WrappedLocalBoard;
-    }, [gameId, i18n.language, t, isGameImplementationReady]);
+    }, [gameId, hasCompletedInitialLocalPreload, i18n.language, t, isGameImplementationReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast

@@ -608,16 +608,24 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         }
     };
 
+    const stripAiSeatsFromPreferences = useCallback((preferences: LocalMatchPreferences): LocalMatchPreferences => ({
+        ...preferences,
+        seatControllers: Object.fromEntries(
+            Array.from({ length: preferences.numPlayers }, (_, index) => [String(index), { type: 'human' }]),
+        ),
+    }), []);
+
     const persistCreateRoomPreferences = async (preferences: LocalMatchPreferences) => {
         if (!gameManifest) return;
+        const sanitizedPreferences = stripAiSeatsFromPreferences(preferences);
 
         if (!token) {
-            writeLocalMatchPreferences(gameManifest, preferences);
+            writeLocalMatchPreferences(gameManifest, sanitizedPreferences);
             return;
         }
 
         try {
-            await updateLocalMatchPreferences(token, gameManifest.id, preferences);
+            await updateLocalMatchPreferences(token, gameManifest.id, sanitizedPreferences);
         } catch (error) {
             logger.error('[GameDetailsModal] 保存创建房间 AI 偏好失败', {
                 gameId,

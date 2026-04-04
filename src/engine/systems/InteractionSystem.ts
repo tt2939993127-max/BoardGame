@@ -708,15 +708,72 @@ function buildEmergencySkipOption<T>(): PromptOption<T> {
     };
 }
 
+function mergeRenderableOptionMetadata<T>(
+    freshOptions: PromptOption<T>[],
+    previousOptions: PromptOption<T>[] | undefined,
+): PromptOption<T>[] {
+    if (freshOptions.length === 0 || !previousOptions || previousOptions.length === 0) {
+        return freshOptions;
+    }
+
+    const previousById = new Map(previousOptions.map((option) => [option.id, option] as const));
+
+    return freshOptions.map((option) => {
+        const previous = previousById.get(option.id);
+        if (!previous) return option;
+
+        let nextOption = option;
+        let optionChanged = false;
+
+        if (!nextOption.displayMode && previous.displayMode) {
+            nextOption = { ...nextOption, displayMode: previous.displayMode };
+            optionChanged = true;
+        }
+
+        const previousSource = (previous as { _source?: unknown })._source;
+        if ((nextOption as { _source?: unknown })._source === undefined && previousSource !== undefined) {
+            nextOption = { ...(nextOption as Record<string, unknown>), _source: previousSource } as PromptOption<T>;
+            optionChanged = true;
+        }
+
+        const currentValue = nextOption.value;
+        const previousValue = previous.value;
+        if (
+            currentValue
+            && typeof currentValue === 'object'
+            && previousValue
+            && typeof previousValue === 'object'
+        ) {
+            const mergedValue = { ...(currentValue as Record<string, unknown>) };
+            let valueChanged = false;
+
+            for (const key of ['defId', 'minionDefId', 'baseDefId'] as const) {
+                if (typeof mergedValue[key] !== 'string' && typeof (previousValue as Record<string, unknown>)[key] === 'string') {
+                    mergedValue[key] = (previousValue as Record<string, unknown>)[key];
+                    valueChanged = true;
+                }
+            }
+
+            if (valueChanged) {
+                nextOption = { ...nextOption, value: mergedValue as T };
+                optionChanged = true;
+            }
+        }
+
+        return optionChanged ? nextOption : option;
+    });
+}
+
 function normalizeFreshSimpleChoiceOptions<T>(
     freshOptions: PromptOption<T>[],
     data: SimpleChoiceData<T>,
 ): PromptOption<T>[] {
-    if (freshOptions.length > 0) return freshOptions;
+    const hydratedOptions = mergeRenderableOptionMetadata(freshOptions, data.options);
+    if (hydratedOptions.length > 0) return hydratedOptions;
 
     const minSelections = data.multi?.min ?? 1;
     if (minSelections === 0) {
-        return freshOptions;
+        return hydratedOptions;
     }
 
     const fallbackOptions = (data.options ?? []).filter((option) => {
@@ -859,7 +916,7 @@ export function createInteractionSystem<TCore>(
             if (isSamePlayerId(current?.playerId, playerId) && current.kind === 'simple-choice') {
                 const data = current.data as SimpleChoiceData;
                 if (data.optionsGenerator) {
-                    const freshOptions = data.optionsGenerator(state, data);
+                    const freshOptions = normalizeFreshSimpleChoiceOptions(data.optionsGenerator(state, data), data);
                     processedCurrent = {
                         ...current,
                         data: { ...data, options: freshOptions },
@@ -877,7 +934,7 @@ export function createInteractionSystem<TCore>(
                     if (i.kind === 'simple-choice') {
                         const data = i.data as SimpleChoiceData;
                         if (data.optionsGenerator) {
-                            const freshOptions = data.optionsGenerator(state, data);
+                            const freshOptions = normalizeFreshSimpleChoiceOptions(data.optionsGenerator(state, data), data);
                             return {
                                 ...i,
                                 data: { ...data, options: freshOptions },

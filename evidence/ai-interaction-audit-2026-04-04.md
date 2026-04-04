@@ -171,7 +171,7 @@
 - 旧结论：`未修复`
 - 新结论：`已修复`
 - 回归：
-  - `e2e/dicethrone-simple-start.e2e.ts:1170`
+  - `e2e/dicethrone-simple-start.e2e.ts:1335`
 - 证据文档：
   - `evidence/dicethrone-online-ai-hidden-multistep-e2e-test.md`
 - 证据截图：
@@ -188,14 +188,14 @@
 
 - 旧表述失效：
   - `SmashUp` 的“AI seat 持有隐藏 simple-choice 后自动 batch 响应并推进状态”现已由 `e2e/smashup-phase-transition-simple.e2e.ts:998` 覆盖。
-  - `DiceThrone` 的“AI seat 持有隐藏 multistep-choice 后 batch 提交多条命令”现已由 `e2e/dicethrone-simple-start.e2e.ts:1170` 覆盖。
+  - `DiceThrone` 的“AI seat 持有隐藏 multistep-choice 后 batch 提交多条命令”现已由 `e2e/dicethrone-simple-start.e2e.ts:1335` 覆盖。
 - 新风险：
   - `batch:rejected` 与 retry 分支目前仍主要依赖页面/transport 层回归，没有真实在线房间的拒绝链路证据。
   - 目前也还没有单独的真实联机用例覆盖“第一轮 batch 被拒后，AI 自动解锁并在第二轮 retry 成功”的整条线上链。
 
 ### 风险 2
 
-- 旧表述失效：本地 AI 的“无进展才解锁重试”核心判定与 `LocalGameProvider` 的 30ms 自动重试链路，现已由 `src/pages/__tests__/matchSeatValidation.test.ts:661` 与 `src/pages/__tests__/matchSeatValidation.test.ts:736` 覆盖。
+- 旧表述失效：本地 AI 的“无进展才解锁重试”核心判定与 `LocalGameProvider` 的自动重试链路，现已由 `src/pages/__tests__/matchSeatValidation.test.ts:765` 与 `src/pages/__tests__/matchSeatValidation.test.ts:822` 覆盖。
 - 新风险：
   - 目前还没有单独回归去覆盖“连续多轮 rejection / unmount 取消 / attemptKey 在不同 seat 间切换”这类更长的本地共享链路。
   - 这已经不是“第一次失败后直接卡死”的 blocker，而是更靠近资源清理与多轮重试稳定性的剩余风险。
@@ -216,7 +216,7 @@
 ## 本轮验证
 
 - `node scripts/infra/vitest-cli-safe.mjs run src/pages/__tests__/matchSeatValidation.test.ts --configLoader native`
-  - 结果：`27 passed`
+  - 结果：`31 passed`
 - `node scripts/infra/vitest-cli-safe.mjs run src/engine/transport/__tests__/patch.test.ts --configLoader native`
   - 结果：`24 passed`
 - `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --configLoader native`
