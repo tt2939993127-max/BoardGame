@@ -34,10 +34,12 @@ export function useIsInteractionBusy<TCore>(
     G: MatchState<TCore>,
     playerID: string | null,
 ): boolean {
+    const interaction = G.sys.interaction;
+
     return useMemo(() => {
         if (!playerID) return false;
-        const current = G.sys.interaction?.current;
+        const current = interaction?.current;
         if (!current) return false;
         return current.playerId === playerID;
-    }, [G.sys.interaction?.current, playerID]);
+    }, [interaction, playerID]);
 }

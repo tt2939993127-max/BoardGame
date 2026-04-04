@@ -8,7 +8,7 @@ import {
     resolveGamePackageManifest,
 } from './manifestClient';
 import { resetGamePackageState, startGamePackageInstall, subscribeGamePackageState, syncGamePackageState } from './packageManagerService';
-import type { GamePackageCardState, PendingGamePackageInstall } from './types';
+import type { GamePackageCardState, PendingGamePackageInstall, ResolvedGamePackageManifest } from './types';
 import { createDefaultGamePackageState, hasUsableInstalledGamePackageVersion, toGamePackageCardState } from './types';
 
 interface UseGamePackageStateOptions {
@@ -28,6 +28,23 @@ interface UseGamePackageStateResult {
     confirmInstall: () => Promise<void>;
     retryInstall: () => void;
 }
+
+const mergeManifestIntoCardState = (
+    state: GamePackageCardState,
+    manifest?: ResolvedGamePackageManifest | null,
+): GamePackageCardState => {
+    if (!manifest) {
+        return state;
+    }
+
+    return {
+        ...state,
+        modulePackId: state.modulePackId ?? manifest.modulePackId,
+        assetPackId: state.assetPackId ?? manifest.assetPackId,
+        modulePackBytes: state.modulePackBytes ?? manifest.modulePackBytes,
+        assetPackBytes: state.assetPackBytes ?? manifest.assetPackBytes,
+    };
+};
 
 export const useGamePackageState = ({
     gameId,
@@ -75,6 +92,7 @@ export const useGamePackageState = ({
     );
     const [pendingInstall, setPendingInstall] = useState<PendingGamePackageInstall | null>(null);
     const [isConfirmingInstall, setIsConfirmingInstall] = useState(false);
+    const [previewManifest, setPreviewManifest] = useState<ResolvedGamePackageManifest | null>(null);
     const requestSerialRef = useRef(0);
     const confirmInFlightRef = useRef(false);
 
@@ -95,6 +113,7 @@ export const useGamePackageState = ({
                 gameId,
                 fallbackState,
             });
+            setPreviewManifest(null);
             setPendingInstall(null);
             setCardState(toGamePackageCardState(fallbackState));
             return;
@@ -117,6 +136,32 @@ export const useGamePackageState = ({
     }, [fallbackState, gameId, isPackageManaged]);
 
     useEffect(() => {
+        if (!isPackageManaged || !hasRemoteGamePackageManifestEndpoint) {
+            setPreviewManifest(null);
+            return;
+        }
+
+        let isDisposed = false;
+        setPreviewManifest(null);
+
+        void resolveGamePackageManifest(gameId, normalizedDelivery).then((resolvedManifest) => {
+            if (isDisposed) {
+                return;
+            }
+
+            logMobileRuntime('UseGamePackageState', 'preview-manifest-resolved', {
+                gameId,
+                resolvedManifest,
+            });
+            setPreviewManifest(resolvedManifest);
+        });
+
+        return () => {
+            isDisposed = true;
+        };
+    }, [gameId, isPackageManaged, normalizedDelivery]);
+
+    useEffect(() => {
         if (!pendingInstall) {
             return;
         }
@@ -130,6 +175,11 @@ export const useGamePackageState = ({
         confirmInFlightRef.current = false;
         setIsConfirmingInstall(false);
     }, [cardState.status, pendingInstall]);
+
+    const displayCardState = useMemo(
+        () => mergeManifestIntoCardState(cardState, previewManifest ?? fallbackManifest),
+        [cardState, fallbackManifest, previewManifest],
+    );
 
     const requestInstall = useCallback(() => {
         logMobileRuntimeCritical('UseGamePackageState', 'request-install-clicked', {
@@ -150,10 +200,12 @@ export const useGamePackageState = ({
             gameId,
             requestSerial,
             fallbackManifest,
+            previewManifest,
         });
+        const initialInstallManifest = previewManifest ?? fallbackManifest;
         setPendingInstall({
             gameName,
-            ...fallbackManifest,
+            ...initialInstallManifest,
         });
 
         if (!hasRemoteGamePackageManifestEndpoint) {
@@ -161,6 +213,15 @@ export const useGamePackageState = ({
                 gameId,
                 requestSerial,
             }, 'warn');
+            return;
+        }
+
+        if (previewManifest?.source === 'remote') {
+            logMobileRuntime('UseGamePackageState', 'request-install-use-preview-manifest', {
+                gameId,
+                requestSerial,
+                hasAssetPackUrl: Boolean(previewManifest.assetPackUrl),
+            });
             return;
         }
 
@@ -187,7 +248,7 @@ export const useGamePackageState = ({
                 };
             });
         });
-    }, [fallbackManifest, gameId, gameName, isPackageManaged, normalizedDelivery]);
+    }, [fallbackManifest, gameId, gameName, isPackageManaged, normalizedDelivery, previewManifest]);
 
     const cancelInstall = useCallback(() => {
         requestSerialRef.current += 1;
@@ -308,7 +369,7 @@ export const useGamePackageState = ({
 
     return {
         isPackageManaged,
-        cardState,
+        cardState: displayCardState,
         pendingInstall,
         isConfirmingInstall,
         requestInstall,

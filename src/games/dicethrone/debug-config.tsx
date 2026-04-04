@@ -35,8 +35,8 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
     const [deckIndex, setDeckIndex] = useState<string>('0');
 
     // 获取当前玩家牌库和手牌
-    const playerDeck: any[] = G?.core?.players?.[dealPlayer]?.deck ?? [];
-    const playerHand: any[] = G?.core?.players?.[dealPlayer]?.hand ?? [];
+    const playerDeck: any[] = useMemo(() => G?.core?.players?.[dealPlayer]?.deck ?? [], [G, dealPlayer]);
+    const playerHand: any[] = useMemo(() => G?.core?.players?.[dealPlayer]?.hand ?? [], [G, dealPlayer]);
 
     // 检查牌库中是否存在指定图集索引的卡牌
     const cardInDeck = useMemo(() => {

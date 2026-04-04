@@ -91,7 +91,9 @@ export function useCardSpotlightQueue<TData = unknown>(
 
         // Undo 回退：清空队列
         if (didReset) {
-            setQueue([]);
+            queueMicrotask(() => {
+                setQueue([]);
+            });
             if (newEntries.length === 0) return;
         }
 
@@ -117,12 +119,14 @@ export function useCardSpotlightQueue<TData = unknown>(
         }
 
         if (newItems.length > 0) {
-            setQueue(prev => {
-                const merged = [...prev, ...newItems];
-                // 超出上限时丢弃最旧的
-                return merged.length > maxQueue
-                    ? merged.slice(merged.length - maxQueue)
-                    : merged;
+            queueMicrotask(() => {
+                setQueue(prev => {
+                    const merged = [...prev, ...newItems];
+                    // 超出上限时丢弃最旧的
+                    return merged.length > maxQueue
+                        ? merged.slice(merged.length - maxQueue)
+                        : merged;
+                });
             });
         }
     }, [entries, consumeNew, currentPlayerId, extractCard, maxQueue]);

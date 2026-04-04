@@ -111,7 +111,9 @@ export const GlobalHUD = () => {
     useEffect(() => {
         if (isGamePage) return;
         closeByNamespace(HUD_MODAL_NS);
-        setSocialModalId(null);
+        queueMicrotask(() => {
+            setSocialModalId(null);
+        });
     }, [closeByNamespace, isGamePage]);
 
     if (isGamePage) return null;

@@ -298,7 +298,7 @@ export const TutorialOverlay: React.FC = () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver?.disconnect();
         };
-    }, [currentStep, isActive, isCompactTutorialLayout, viewport.height, viewport.safeArea, viewport.width]);
+    }, [currentStep, isActive, isCompactTutorialLayout, rootViewportHeight, rootViewportWidth, viewport.height, viewport.safeArea, viewport.width]);
 
     if (!isActive || !currentStep) {
         return null;

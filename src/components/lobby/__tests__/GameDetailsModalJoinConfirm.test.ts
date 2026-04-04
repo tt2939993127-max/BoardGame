@@ -725,6 +725,35 @@ describe('GameDetailsModal create room ai entry', () => {
         expect(screen.queryByTestId('game-details-mobile-package-card')).toBeNull();
     });
 
+    it('打开详情后会预取远端素材包大小，并显示在下载卡片上', async () => {
+        vi.mocked(manifestClient.resolveGamePackageManifest).mockImplementationOnce(async (gameId: string, delivery?: {
+            runtimeChannel?: string;
+            modulePackId?: string;
+            assetPackId?: string;
+        }) => ({
+            gameId,
+            runtimeChannel: delivery?.runtimeChannel?.trim() || 'stable',
+            modulePackId: delivery?.modulePackId?.trim(),
+            assetPackId: delivery?.assetPackId?.trim(),
+            modulePackVersion: 'test-module-pack-v1',
+            assetPackVersion: 'test-asset-pack-v1',
+            assetPackBytes: 12 * 1024 * 1024,
+            assetPackUrl: `https://example.com/${gameId}.zip`,
+            source: 'remote',
+        }));
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        await waitFor(() => {
+            expect(vi.mocked(manifestClient.resolveGamePackageManifest)).toHaveBeenCalledTimes(1);
+        });
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        expect(await screen.findByText('12.0 MB')).toBeInTheDocument();
+        expect(screen.queryByText('packageManager.sizeUnknown')).toBeNull();
+    });
+
     it('网页版不渲染 package-managed 下载入口', () => {
         setWebRuntime();
         render(createElement(GameDetailsModal, baseProps));
@@ -807,6 +836,20 @@ describe('GameDetailsModal create room ai entry', () => {
     }, 10000);
 
     it('确认下载进行中时重复点击只触发一次 re-resolve', async () => {
+        vi.mocked(manifestClient.resolveGamePackageManifest).mockImplementationOnce(async (gameId: string, delivery?: {
+            runtimeChannel?: string;
+            modulePackId?: string;
+            assetPackId?: string;
+        }) => ({
+            gameId,
+            runtimeChannel: delivery?.runtimeChannel?.trim() || 'stable',
+            modulePackId: delivery?.modulePackId?.trim(),
+            assetPackId: delivery?.assetPackId?.trim(),
+            modulePackVersion: 'test-module-pack-v1',
+            assetPackVersion: 'test-asset-pack-v1',
+            source: 'remote',
+        }));
+
         let resolveManifestPromise: ((value: {
             gameId: string;
             runtimeChannel: string;
@@ -818,13 +861,6 @@ describe('GameDetailsModal create room ai entry', () => {
             source: 'fallback' | 'remote';
         }) => void) | null = null;
 
-        vi.mocked(manifestClient.resolveGamePackageManifest).mockImplementationOnce(async (gameId: string, delivery?: {
-            runtimeChannel?: string;
-            modulePackId?: string;
-            assetPackId?: string;
-        }) => await new Promise((resolve) => {
-            resolveManifestPromise = resolve;
-        }));
         vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle).mockResolvedValueOnce({
             cancel: vi.fn(),
             finished: Promise.resolve({
@@ -838,10 +874,18 @@ describe('GameDetailsModal create room ai entry', () => {
 
         render(createElement(GameDetailsModal, baseProps));
 
+        await waitFor(() => {
+            expect(vi.mocked(manifestClient.resolveGamePackageManifest)).toHaveBeenCalledTimes(1);
+        });
+        await act(async () => {});
+        vi.mocked(manifestClient.resolveGamePackageManifest).mockClear();
+        vi.mocked(manifestClient.resolveGamePackageManifest).mockImplementationOnce(async () => await new Promise((resolve) => {
+            resolveManifestPromise = resolve;
+        }));
+
         fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
         fireEvent.click(screen.getByText('packageManager.installAction'));
         expect(screen.getByText('package-install-confirm')).toBeInTheDocument();
-        vi.mocked(manifestClient.resolveGamePackageManifest).mockClear();
 
         const modalProps = latestPackageInstallModalProps.current as null | {
             onConfirm?: () => Promise<void>;

@@ -34,27 +34,36 @@ export const useLobbyMatchPresence = ({
         const next = matchId ?? null;
         matchIdRef.current = next;
         if (previous !== next) {
-            setHasSeen(false);
+            queueMicrotask(() => {
+                setHasSeen(false);
+            });
         }
         prevMatchIdRef.current = next;
         if (!next) {
             return;
         }
-        setHasSeen((prev) => prev || matches.some((match) => match.matchID === next));
+        queueMicrotask(() => {
+            setHasSeen((prev) => prev || matches.some((match) => match.matchID === next));
+        });
     }, [matchId, matches]);
 
     useEffect(() => {
         if (!enabled || !gameId) {
-            setMatches([]);
-            setHasSnapshot(false);
-            setHasSeen(false);
+            queueMicrotask(() => {
+                setMatches([]);
+                setHasSnapshot(false);
+                setHasSeen(false);
+            });
             return;
         }
 
         let isActive = true;
-        setMatches([]);
-        setHasSnapshot(false);
-        setHasSeen(false);
+        queueMicrotask(() => {
+            if (!isActive) return;
+            setMatches([]);
+            setHasSnapshot(false);
+            setHasSeen(false);
+        });
 
         const updateHandler = (newMatches: LobbyMatch[]) => {
             if (!isActive) return;

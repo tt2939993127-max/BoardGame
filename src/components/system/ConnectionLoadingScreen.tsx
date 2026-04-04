@@ -52,11 +52,15 @@ export const ConnectionLoadingScreen = ({
 
     useEffect(() => {
         if (suppressTimeout) {
-            setTimedOut(false);
+            queueMicrotask(() => {
+                setTimedOut(false);
+            });
             return undefined;
         }
 
-        setTimedOut(false);
+        queueMicrotask(() => {
+            setTimedOut(false);
+        });
         const timer = window.setTimeout(() => {
             setTimedOut(true);
         }, timeoutMs);
