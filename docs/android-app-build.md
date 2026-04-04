@@ -344,9 +344,9 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 - `--channel <name>`：发布 channel，例如 `stable`、`gray`
 - `--version <bundleVersion>`：手动指定 bundle 版本号
 - `--native-version <version>`：当前打包对应的原生版本，默认取 `package.json.version`
-- `--target-native-version <version[,version]>`：只允许指定原生版本接收该 bundle
-- `--min-native-version <version>`：声明最低兼容原生版本
-- `--max-native-version <version>`：声明最高兼容原生版本
+- `--target-native-version <version[,version]>`：显式指定只有哪些原生版本能接收该 bundle
+- `--min-native-version <version>`：显式声明最低兼容原生版本
+- `--max-native-version <version>`：显式声明最高兼容原生版本
 - `--force-update`：把这次 OTA 标记为强制更新
 - `--no-force-update`：显式关闭强制更新，退回普通 OTA；仅建议在灰度/应急时使用
 - `--force-update-title <text>`：覆盖强更页标题
@@ -357,10 +357,11 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 兼容字段生成规则：
 
-- 如果你没有显式传兼容参数，脚本默认会把这次 OTA 绑定到当前 `package.json.version`
+- 如果你没有显式传兼容参数，脚本默认**不写任何原生版本门禁**
+- 这意味着默认发布策略是：旧 APK 继续接收 H5 OTA，只要这次 bundle 没依赖新的原生壳能力
 - 如果你传了 `--target-native-version`，则按精确版本列表生成 `targetNativeVersion`
-- 如果你传了 `--min-native-version` 或 `--max-native-version`，脚本不会再额外塞默认的精确 `targetNativeVersion`
-- `targetNativeVersion` 与 `min/maxNativeVersion` 不要混着乱用，除非你明确需要更窄的门控
+- 如果你传了 `--min-native-version` 或 `--max-native-version`，则按版本区间生成兼容门禁
+- `targetNativeVersion` 与 `min/maxNativeVersion` 都是显式收窄范围的工具，不是默认值；除非确实需要收窄，否则不要加
 
 当前发布脚本会写入：
 
@@ -378,7 +379,6 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
   "url": "https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.0-ota-2026-03-29T20-30-00-000Z.zip",
   "checksum": "sha256-hex",
   "channel": "stable",
-  "targetNativeVersion": "0.5.0",
   "publishedAt": "2026-03-29T20:30:00.000Z",
   "size": 1234567,
   "notes": "Android embedded OTA bundle"
@@ -387,7 +387,8 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 兼容性控制支持：
 
-- `targetNativeVersion`：只允许某个原生版本接收该 bundle
+- 默认 manifest 不带原生版本门禁
+- `targetNativeVersion`：只允许某个原生版本或某几个原生版本接收该 bundle
 - `minNativeVersion` / `maxNativeVersion`：允许一个原生版本区间
 - `forceUpdate`：声明这次 OTA 是否为阻塞式强更
 - `forceUpdateTitle` / `forceUpdateMessage`：覆盖强更页默认文案
