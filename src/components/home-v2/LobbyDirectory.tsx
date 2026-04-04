@@ -4,21 +4,9 @@ import { getGamesByCategory, type GameConfig } from '../../config/games.config';
 import { type Category } from '../layout/CategoryPills';
 import { resolveGameDisplayName } from '../lobby/gameDetailsContent';
 import clsx from 'clsx';
+import { HOME_V2_PAGE_ZONE_STYLES } from './sceneLayout';
 
-export const PAGE_ZONES = {
-    left: {
-        left: '10.49%',
-        top: '13.61%',
-        width: '31.25%',
-        height: '69.16%'
-    },
-    right: {
-        left: '58.03%',
-        top: '13.61%',
-        width: '31.25%',
-        height: '69.16%'
-    }
-};
+export const PAGE_ZONES = HOME_V2_PAGE_ZONE_STYLES;
 
 const CATEGORIES: Category[] = ['All', 'card', 'dice', 'abstract', 'wargame', 'casual', 'tools'];
 const CATEGORY_LABEL_KEYS: Record<Category, string> = {
@@ -61,9 +49,9 @@ export const LobbyDirectory = ({
     return (
         <>
             {/* 左页：品牌与导航 */}
-            <div 
+            <div
                 className="absolute flex flex-col pointer-events-auto"
-                style={HOME_V2_PAGE_ZONE_STYLES.left}
+                style={PAGE_ZONES.left}
             >
                 <div className="flex-1 flex flex-col pt-4 px-4">
                     <div className="mb-8 text-center">
@@ -111,9 +99,9 @@ export const LobbyDirectory = ({
             </div>
 
             {/* 右页：游戏列表 */}
-            <div 
+            <div
                 className="absolute flex flex-col pointer-events-auto"
-                style={HOME_V2_PAGE_ZONE_STYLES.right}
+                style={PAGE_ZONES.right}
             >
                 <div className="flex-1 overflow-y-auto custom-scrollbar py-4 px-2 grid grid-cols-2 gap-x-4 gap-y-6 content-start pr-4">
                     {filteredGames.map(game => (
