@@ -30,11 +30,6 @@ const atlasPreview = (index: number): CardPreviewRef => ({
     index,
 });
 
-const imagePreview = (src: string): CardPreviewRef => ({
-    type: 'image',
-    src,
-});
-
 const replaceAbility = (
     targetAbilityId: string,
     newAbilityDef: AbilityDef,
@@ -111,7 +106,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-fan-the-hammer-2', 'description'),
-        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/fan-the-hammer-2'),
+        previewRef: atlasPreview(22),
         effects: [replaceAbility('fan-the-hammer', FAN_THE_HAMMER_2, 2, '升级左轮速射至 II 级。')],
     },
     {
@@ -121,7 +116,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-pistol-whip', 'description'),
-        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/pistol-whip'),
+        previewRef: atlasPreview(22),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
             custom('gunslinger-card-pistol-whip', '选择 1 位敌方玩家，使其获得击倒并受到 1 点伤害。'),
@@ -134,7 +129,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-take-cover-2', 'description'),
-        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/take-cover-2'),
+        previewRef: atlasPreview(23),
         effects: [replaceAbility('take-cover', TAKE_COVER_2, 2, '升级掩护射击至 II 级。')],
     },
     {
@@ -144,7 +139,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-mark-the-target', 'description'),
-        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/mark-the-target'),
+        previewRef: atlasPreview(23),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。'),
             custom('gunslinger-card-mark-the-target', '选择 1 位敌方玩家，使其获得 1 个赏金。'),
@@ -157,7 +152,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-deadeye-2', 'description'),
-        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/deadeye-2'),
+        previewRef: atlasPreview(24),
         effects: [replaceAbility('deadeye', DEADEYE_2, 2, '升级死亡之眼至 II 级。')],
     },
     {
@@ -167,7 +162,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-the-law', 'description'),
-        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/the-law'),
+        previewRef: atlasPreview(24),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
             custom('gunslinger-card-the-law', '选择至多 2 位目标玩家。每名目标玩家获得 1 个赏金并受到 1 层击倒。'),

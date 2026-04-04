@@ -147,7 +147,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 ### 大杀四方 Wiki 爬虫规范（强制）
 
-> **查 Wiki/核对 Wiki/录入数据/审计时，涉及大杀四方必须用爬虫，禁止凭记忆。**
+> **涉及大杀四方时，禁止凭记忆。若用户已提供并明确指定清晰的本地图片/截图/扫描件为本轮真相源，则本地图片优先；Wiki 爬虫仅作为缺图、看不清、或用户明确要求交叉核对时的补充来源。**
 
 **触发场景**：数据录入、数据核对、审计检查、效果描述查询
 
@@ -161,6 +161,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 3. 根据报告用 `strReplace`/`editCode` 修复
 
 **注意**：
+- 若用户明确指定“以本地图片/截图为准”，则先看图，只有图片不足以确定结论时才允许补跑 Wiki
 - Wiki 用弯引号（`'`），代码用直引号（`'`），对比时需考虑编码差异
 - Wiki 可能有勘误重复（如 Saucy Wench vs Cut Lass），代码只保留勘误版
 - 数据可缓存，除非用户要求"重新抓取"

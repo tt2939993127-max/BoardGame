@@ -7,7 +7,11 @@ import { useToast } from '../../contexts/ToastContext';
 import { FabMenu, type FabAction } from './FabMenu';
 import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize, Download, RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { requestAndroidLiveUpdateCheck } from '../../lib/mobile/androidLiveUpdates';
+import {
+    readAndroidLiveUpdateActivityState,
+    requestAndroidLiveUpdateCheck,
+    subscribeAndroidLiveUpdateActivityState,
+} from '../../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 const HUD_MODAL_NS = 'hud';
@@ -55,6 +59,7 @@ export const GlobalHUD = () => {
     const [showFeedback, setShowFeedback] = useState(false);
     const [isFullscreen, setIsFullscreen] = useState(!!document.fullscreenElement);
     const [socialModalId, setSocialModalId] = useState<string | null>(null);
+    const [otaActivityState, setOtaActivityState] = useState(() => readAndroidLiveUpdateActivityState());
 
     const toggleFullscreen = async () => {
         const doc = document as LegacyFullscreenDocument;
@@ -107,6 +112,9 @@ export const GlobalHUD = () => {
     };
 
     const handleCheckAppUpdate = () => {
+        if (otaActivityState.active) {
+            return;
+        }
         requestAndroidLiveUpdateCheck({
             interactive: true,
             applyMode: 'immediate',
@@ -124,6 +132,16 @@ export const GlobalHUD = () => {
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
     }, [isGamePage]);
 
+    useEffect(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
+        return subscribeAndroidLiveUpdateActivityState((state) => {
+            setOtaActivityState(state);
+        });
+    }, [isNativeAndroid]);
+
     // 从游戏页返回大厅/主页时，清理 HUD 自己打开的弹窗，避免遗留。
     useEffect(() => {
         if (isGamePage) return;
@@ -134,6 +152,8 @@ export const GlobalHUD = () => {
     }, [closeByNamespace, isGamePage]);
 
     if (isGamePage) return null;
+
+    const isImmediateOtaActive = isNativeAndroid && otaActivityState.active;
 
     // 定义菜单项（主按钮优先）
     const items: FabAction[] = [];
@@ -173,8 +193,8 @@ export const GlobalHUD = () => {
     } else {
         items.push({
             id: 'check-update',
-            icon: <RefreshCw size={20} />,
-            label: t('hud.actions.checkUpdate'),
+            icon: <RefreshCw size={20} className={isImmediateOtaActive ? 'animate-spin' : undefined} />,
+            label: t(isImmediateOtaActive ? 'hud.actions.checkingUpdate' : 'hud.actions.checkUpdate'),
             onClick: handleCheckAppUpdate,
         });
     }

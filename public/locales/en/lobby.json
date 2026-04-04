@@ -128,6 +128,7 @@
     "assetPack": "Asset Pack",
     "packIdUnknown": "Pack ID pending",
     "sizeUnknown": "Pending manifest",
+    "packageSyncing": "Syncing",
     "packageUnpublished": "Package not published",
     "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
     "failedTitle": "Download Failed",

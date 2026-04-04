@@ -834,9 +834,10 @@
     },
     "fist-technique-3": {
       "name": "Fist Technique III",
-      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown.",
+      "description": "3/4/5 Fists: deal 7/8/9 damage. If you roll 4 matching numbers, inflict Knockdown.",
       "effects": {
-        "damage4": "Deal 4 damage"
+        "damage4": "Deal 4 damage",
+        "inflictKnockdownOnFourOfAKind": "If you roll 4 matching numbers, inflict Knockdown."
       }
     },
     "fist-technique-4": {
@@ -1253,7 +1254,7 @@
     },
     "longbow-3": {
       "name": "Longbow III",
-      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching symbols are rolled, inflict Entangle",
+      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching numbers are rolled, inflict Entangle",
       "effects": {
         "damage3": "Deal 3 damage",
         "damage5": "Deal 5 damage",
@@ -1273,7 +1274,7 @@
     },
     "longbow-2": {
       "name": "Longbow II",
-      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching symbols are rolled, inflict Entangle",
+      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching numbers are rolled, inflict Entangle",
       "effects": {
         "damage4": "Deal 4 damage",
         "damage6": "Deal 6 damage",
@@ -1726,20 +1727,22 @@
     },
     "slap-2": {
       "name": "Slap II",
-      "description": "3/4/5 Swords: deal 5/7/9 damage. 4/5 Swords deal undefendable damage.",
+      "description": "3/4/5 Swords: deal 5/7/9 damage. If you roll 4 matching numbers, this attack deals undefendable damage.",
       "effects": {
         "damage5": "Deal 5 damage",
-        "damage7Unblockable": "Deal 7 undefendable damage",
-        "damage9Unblockable": "Deal 9 undefendable damage"
+        "damage7": "Deal 7 damage",
+        "damage9": "Deal 9 damage",
+        "makeUnblockableOnFourOfAKind": "If you roll 4 matching numbers, this attack deals undefendable damage."
       }
     },
     "slap-3": {
       "name": "Slap III",
-      "description": "3/4/5 Swords: deal 6/8/10 damage. 4/5 Swords deal undefendable damage.",
+      "description": "3/4/5 Swords: deal 6/8/10 damage. If you roll 4 matching numbers, this attack deals undefendable damage.",
       "effects": {
         "damage6": "Deal 6 damage",
-        "damage8Unblockable": "Deal 8 undefendable damage",
-        "damage10Unblockable": "Deal 10 undefendable damage"
+        "damage8": "Deal 8 damage",
+        "damage10": "Deal 10 damage",
+        "makeUnblockableOnFourOfAKind": "If you roll 4 matching numbers, this attack deals undefendable damage."
       }
     },
     "all-out-strike-2": {
@@ -2129,7 +2132,7 @@
     },
     "card-thrust-punch-3": {
       "name": "Thrust Punch III",
-      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown."
+      "description": "3/4/5 Fists: deal 7/8/9 damage. If you roll 4 matching numbers, inflict Knockdown."
     },
     "card-contemplation-2": {
       "name": "Contemplation II",

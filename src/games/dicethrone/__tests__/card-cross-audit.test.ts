@@ -139,13 +139,13 @@ describe('月精灵长弓文案一致性', () => {
     const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
     const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
 
-    it('长弓 II / III 应明确使用相同符号文案', () => {
-        expect(zhAbilities['longbow-2']?.description).toContain('相同符号');
-        expect(zhAbilities['longbow-2']?.description).not.toContain('相同数字');
-        expect(zhAbilities['longbow-3']?.description).toContain('相同符号');
-        expect(zhAbilities['longbow-3']?.description).not.toContain('相同数字');
-        expect(enAbilities['longbow-2']?.description).toContain('matching symbols');
-        expect(enAbilities['longbow-3']?.description).toContain('matching symbols');
+    it('长弓 II / III 应明确使用相同数字文案', () => {
+        expect(zhAbilities['longbow-2']?.description).toContain('相同数字');
+        expect(zhAbilities['longbow-2']?.description).not.toContain('相同符号');
+        expect(zhAbilities['longbow-3']?.description).toContain('相同数字');
+        expect(zhAbilities['longbow-3']?.description).not.toContain('相同符号');
+        expect(enAbilities['longbow-2']?.description).toContain('matching numbers');
+        expect(enAbilities['longbow-3']?.description).toContain('matching numbers');
     });
 });
 
@@ -155,18 +155,17 @@ describe('武僧拳术 III 文案一致性', () => {
     const zhCards = (zhCN as Record<string, unknown>).cards as Record<string, { description?: string }> ?? {};
     const enCards = (en as Record<string, unknown>).cards as Record<string, { description?: string }> ?? {};
 
-    it('拳术 III 应明确使用 3/4/5 拳 与击倒文案', () => {
+    it('拳术 III 应明确使用 3/4/5 拳 与 4个相同数字击倒文案', () => {
         expect(zhAbilities['fist-technique-3']?.description).toContain('3/4/5拳');
-        expect(zhAbilities['fist-technique-3']?.description).toContain('4个及以上拳');
-        expect(zhAbilities['fist-technique-3']?.description).not.toContain('相同数字');
+        expect(zhAbilities['fist-technique-3']?.description).toContain('4个相同数字');
         expect(enAbilities['fist-technique-3']?.description).toContain('3/4/5 Fists');
         expect(enAbilities['fist-technique-3']?.description).toContain('Knockdown');
-        expect(enAbilities['fist-technique-3']?.description).not.toContain('four of a kind');
+        expect(enAbilities['fist-technique-3']?.description).toContain('4 matching numbers');
 
         expect(zhCards['card-thrust-punch-3']?.description).toContain('3/4/5拳');
-        expect(zhCards['card-thrust-punch-3']?.description).not.toContain('相同数字');
+        expect(zhCards['card-thrust-punch-3']?.description).toContain('4个相同数字');
         expect(enCards['card-thrust-punch-3']?.description).toContain('3/4/5 Fists');
-        expect(enCards['card-thrust-punch-3']?.description).toContain('Knockdown');
+        expect(enCards['card-thrust-punch-3']?.description).toContain('4 matching numbers');
         expect(enCards['card-thrust-punch-3']?.description).not.toContain('Stun');
     });
 });
@@ -175,20 +174,20 @@ describe('野蛮人符号计数文案一致性', () => {
     const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
     const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
 
-    it('百折不挠 II 与重击 II/III 应显式描述 Hearts / Swords 触发', () => {
+    it('百折不挠 II 与重击 II/III 应显式描述 Hearts / Swords 触发及相同数字追加效果', () => {
         expect(zhAbilities['steadfast-2']?.description).toContain('3/4/5心');
         expect(zhAbilities['steadfast-2']?.description).not.toContain('三连');
         expect(enAbilities['steadfast-2']?.description).toContain('3/4/5 Hearts');
         expect(enAbilities['steadfast-2']?.description).not.toContain('three of a kind');
 
-        expect(zhAbilities['slap-2']?.description).toContain('4/5剑');
-        expect(zhAbilities['slap-2']?.description).not.toContain('4个相同');
-        expect(zhAbilities['slap-3']?.description).toContain('4/5剑');
-        expect(zhAbilities['slap-3']?.description).not.toContain('4个相同');
+        expect(zhAbilities['slap-2']?.description).toContain('3/4/5剑');
+        expect(zhAbilities['slap-2']?.description).toContain('4个相同数字');
+        expect(zhAbilities['slap-3']?.description).toContain('3/4/5剑');
+        expect(zhAbilities['slap-3']?.description).toContain('4个相同数字');
         expect(enAbilities['slap-2']?.description).toContain('3/4/5 Swords');
-        expect(enAbilities['slap-2']?.description).not.toContain('of a kind');
+        expect(enAbilities['slap-2']?.description).toContain('4 matching numbers');
         expect(enAbilities['slap-3']?.description).toContain('3/4/5 Swords');
-        expect(enAbilities['slap-3']?.description).not.toContain('of a kind');
+        expect(enAbilities['slap-3']?.description).toContain('4 matching numbers');
     });
 });
 
@@ -238,12 +237,18 @@ describe('卡牌效果 target 合理性', () => {
 });
 
 describe('枪手 / 武士卡图接线一致性', () => {
-    it('枪手专属卡应直接使用 ability-cards 索引或裁切图，不能再走 hand atlas', () => {
+    it('枪手专属卡应直接使用 ability-cards atlas 索引，不能再走 hand atlas 或单卡图', () => {
         const gunslingerAtlasCards: Record<string, number> = {
             'upgrade-revolver-2': 18,
             'upgrade-bounty-hunter-2': 19,
             'upgrade-showdown-2': 20,
             'upgrade-showdown-3': 21,
+            'upgrade-fan-the-hammer-2': 22,
+            'card-pistol-whip': 22,
+            'upgrade-take-cover-2': 23,
+            'card-mark-the-target': 23,
+            'upgrade-deadeye-2': 24,
+            'card-the-law': 24,
             'upgrade-duel-2': 25,
             'upgrade-quick-draw': 26,
             'card-wanted': 27,
@@ -259,23 +264,6 @@ describe('枪手 / 武士卡图接线一致性', () => {
                 type: 'atlas',
                 atlasId: DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER,
                 index,
-            });
-        }
-
-        const gunslingerCropCards: Record<string, string> = {
-            'upgrade-fan-the-hammer-2': 'dicethrone/images/gunslinger/crops/ability-cards/fan-the-hammer-2',
-            'card-pistol-whip': 'dicethrone/images/gunslinger/crops/ability-cards/pistol-whip',
-            'upgrade-take-cover-2': 'dicethrone/images/gunslinger/crops/ability-cards/take-cover-2',
-            'card-mark-the-target': 'dicethrone/images/gunslinger/crops/ability-cards/mark-the-target',
-            'upgrade-deadeye-2': 'dicethrone/images/gunslinger/crops/ability-cards/deadeye-2',
-            'card-the-law': 'dicethrone/images/gunslinger/crops/ability-cards/the-law',
-        };
-
-        for (const [cardId, src] of Object.entries(gunslingerCropCards)) {
-            const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
-            expect(card?.previewRef).toEqual({
-                type: 'image',
-                src,
             });
         }
 
@@ -310,13 +298,16 @@ describe('枪手 / 武士卡图接线一致性', () => {
         }
     });
 
-    it('武士专属卡应直接使用 ability-cards 索引或裁切图，不能再走 hand atlas', () => {
+    it('武士专属卡应直接使用 ability-cards atlas 索引，不能再走 hand atlas 或单卡图', () => {
         const samuraiAtlasCards: Record<string, number> = {
             'upgrade-katana-slice-2': 18,
             'upgrade-katana-slice-3': 19,
             'upgrade-wakizashi-2': 20,
             'upgrade-wakizashi-3': 21,
+            'upgrade-solemnity-2': 22,
             'upgrade-budo-2': 23,
+            'upgrade-masamune-2': 24,
+            'upgrade-slot-06-2': 25,
             'upgrade-stand-tall-2': 26,
             'card-samurai-honor': 27,
             'card-you-should-be-ashamed': 28,
@@ -334,49 +325,35 @@ describe('枪手 / 武士卡图接线一致性', () => {
             });
         }
 
-        const samuraiCropCards: Record<string, string> = {
-            'upgrade-solemnity-2': 'dicethrone/images/samurai/crops/ability-cards/upgrade-solemnity-2',
-            'upgrade-masamune-2': 'dicethrone/images/samurai/crops/ability-cards/upgrade-masamune-2',
-            'upgrade-slot-06-2': 'dicethrone/images/samurai/crops/ability-cards/upgrade-slot-06-2',
+        const samuraiCommonAtlasIndex: Record<string, number> = {
+            'card-play-six': 17,
+            'card-just-this': 16,
+            'card-give-hand': 15,
+            'card-i-can-again': 14,
+            'card-me-too': 13,
+            'card-surprise': 12,
+            'card-worthy-of-me': 11,
+            'card-unexpected': 10,
+            'card-next-time': 9,
+            'card-boss-generous': 8,
+            'card-flick': 7,
+            'card-bye-bye': 6,
+            'card-double': 5,
+            'card-super-double': 4,
+            'card-get-away': 3,
+            'card-one-throw-fortune': 2,
+            'card-what-status': 1,
+            'card-transfer-status': 0,
         };
 
-        for (const [cardId, src] of Object.entries(samuraiCropCards)) {
-            const card = SAMURAI_CARDS.find((item) => item.id === cardId);
-            expect(card?.previewRef).toEqual({
-                type: 'image',
-                src,
-            });
-        }
-
-        const samuraiCommonCardIds = [
-            'card-play-six',
-            'card-just-this',
-            'card-give-hand',
-            'card-i-can-again',
-            'card-me-too',
-            'card-surprise',
-            'card-worthy-of-me',
-            'card-unexpected',
-            'card-next-time',
-            'card-boss-generous',
-            'card-flick',
-            'card-bye-bye',
-            'card-double',
-            'card-super-double',
-            'card-get-away',
-            'card-one-throw-fortune',
-            'card-what-status',
-            'card-transfer-status',
-        ] as const;
-
-        samuraiCommonCardIds.forEach((cardId, index) => {
+        for (const [cardId, index] of Object.entries(samuraiCommonAtlasIndex)) {
             const card = SAMURAI_CARDS.find((item) => item.id === cardId);
             expect(card?.previewRef).toEqual({
                 type: 'atlas',
                 atlasId: DICETHRONE_CARD_ATLAS_IDS.SAMURAI,
                 index,
             });
-        });
+        }
     });
 });
 

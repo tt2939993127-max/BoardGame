@@ -9,35 +9,33 @@
 
 ## 权威来源
 
-- Smash Up Fandom: `https://smashup.fandom.com/wiki/Elder_Things`
-- 项目内 Smash Up Wiki 爬虫：`node scripts/scrape-wiki-with-descriptions.mjs elder_things cthulhu`
+- 本地图片：`public/assets/i18n/zh-CN/smashup/cards/compressed/cards2.webp` 中 `CARDS2` 索引 `36`
+- 本轮临时裁图：`temp/byakhee-card-crop.png`
 
 ## 审计结论
 
 ### elder_thing_byakhee
 
-- 权威描述：`Each other player with a minion on this base draws a Madness card.`
-- 修复前实现：只要该基地存在任一对手随从，就让拜亚基的控制者自己抽 1 张疯狂牌。
-- 修复后实现：遍历 `turnOrder` 中除施放者外的每位玩家，只要该玩家在拜亚基所在基地有随从，就为该玩家各发 1 个 `MADNESS_DRAWN` 事件。
-- 判定：原实现为真实 bug，不是误报。
+- 卡面文字：`如果其他玩家有随从在这个基地抽一张疯狂卡。`
+- 按本轮已更新的“本地图片优先”规范，应以卡面图片作为主真相源。
+- 结论：当前实现“有任一其他玩家在该基地有随从时，由拜亚基控制者抽 1 张疯狂卡”与本地图面一致，本轮不再判定为 bug。
 
-## 命中审计维度
+## 修订记录
 
-- D1 语义保真：规则要求“每位其他玩家”抽牌，原实现错成“施放者”抽牌。
-- D3 数据流闭环：`drawMadnessCards` 的调用目标玩家传错，导致后续 reducer/UI/日志都围绕错误玩家生效。
-- D33 跨实体同类能力实现路径一致性：POD 版 `elder_thing_byakhee_pod` 已正确按“每位其他玩家”实现，原版与 POD 版语义分叉。
+- 失效结论：上一版文档曾按 Wiki 口径认定“原实现为真实 bug”，该结论在“本地图片优先”规则下失效。
+- 失效原因：上一版错误地把 Wiki 作为第一真相源，未先看本地卡图。
+- 处理：已恢复实现、恢复 locale、恢复测试预期，并保留本次规范修订。
 
-## 修复内容
+## 当前实现核对
 
 - `src/games/smashup/abilities/elder_things.ts`
-  - 将 `elderThingByakhee` 从“单次检测 + 施法者抽牌”改为“逐个其他玩家检测 + 各自抽牌”。
+  - 当前逻辑：检测该基地是否存在任一其他玩家随从；若存在，则 `ctx.playerId` 抽 1 张疯狂卡。
 - `src/games/smashup/__tests__/elderThingAbilities.test.ts`
-  - 把旧断言从“玩家 0 抽牌”改为“玩家 1 抽牌”。
-  - 新增多人回归：多个其他玩家都在该基地有随从时，`1`、`2` 各抽 1 张，拜亚基控制者 `0` 不抽。
+  - 当前断言：效果触发时 `MADNESS_DRAWN.payload.playerId === '0'`
 - `public/locales/zh-CN/game-smashup.json`
-  - 文案改为“每位在这个基地有随从的其他玩家各抽一张疯狂卡。”
+  - 已与卡面恢复一致。
 - `public/locales/en/game-smashup.json`
-  - 文案改为 `Each other player with a minion on this base draws a Madness card.`
+  - 已恢复为与当前卡面中文相匹配的旧文案。
 
 ## 验证证据
 
@@ -46,11 +44,10 @@
 - 结果：
   - `21 passed`
 - 关键验证点：
-  - 单对手在该基地有随从时，`MADNESS_DRAWN.payload.playerId === '1'`
-  - 多对手在该基地有随从时，事件目标依次为 `['1', '2']`
-  - 基地无其他玩家随从或疯狂牌库为空时，不产生错误抽牌事件
+  - 有对手随从时，`MADNESS_DRAWN.payload.playerId === '0'`
+  - 基地无其他玩家随从或疯狂牌库为空时，不产生疯狂抽牌事件
 
 ## 额外发现 / 未覆盖风险
 
-- 项目内 Wiki 爬虫本轮对 `elder_things` / `cthulhu` 返回 `0` 张卡，说明当前 HTML 解析规则已落后于 Fandom 页面结构；本次卡牌结论已通过手动核对 Fandom 页面补足，但爬虫本身仍需后续修。
-- 本轮只修了原版 `elder_thing_byakhee`；POD 版本来就是正确实现，未改逻辑。
+- 原版 `elder_thing_byakhee` 与 `elder_thing_byakhee_pod` 当前语义不一致：原版是“自己抽”，POD 版是“每位其他玩家抽”。在未见到 POD 对应本地图前，本轮不继续判 bug。
+- 项目内 Wiki 爬虫对 `elder_things` / `cthulhu` 返回 `0` 张卡，说明爬虫已落后；但在“本地图片优先”规则下，这不再影响本次结论。

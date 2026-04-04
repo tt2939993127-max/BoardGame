@@ -10,6 +10,8 @@ import {
     startAndroidLiveUpdateBackgroundCheck,
 } from '../../lib/mobile/androidLiveUpdates';
 
+const autoNotifiedBackgroundOtaVersions = new Set<string>();
+
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
     const isNativeAndroid = isNativeAndroidRuntime();
@@ -39,7 +41,8 @@ export const AndroidLiveUpdateManager = () => {
                 if (result.mode === 'immediate') {
                     return;
                 }
-                if (!options?.suppressReadyToast) {
+                if (!options?.suppressReadyToast && !autoNotifiedBackgroundOtaVersions.has(result.version)) {
+                    autoNotifiedBackgroundOtaVersions.add(result.version);
                     toast.info(
                         `新版本 ${result.version} 已在后台下载完成，将在下次启动 App 时生效。`,
                         '应用更新',

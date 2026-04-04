@@ -4,11 +4,18 @@
 
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './framework';
 import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import { waitForSmashUpUI } from './helpers/smashup';
 import { setupSmashUpMatchSkipSetup } from './helpers/smashup-skip-setup';
+import {
+    ensureGameServerAvailable,
+    getGameServerBaseURL,
+    initContext,
+    seedMatchCredentials,
+    waitForMatchAvailable,
+} from './helpers/common';
 import { getMatchState, injectMatchState } from './helpers/state-injection';
 
 async function saveEvidenceScreenshot(page: Page, testInfo: TestInfo, name: string): Promise<void> {
@@ -26,6 +33,115 @@ async function applyOnlineMatchState(
     const nextState = updater(currentState);
     await injectMatchState(matchId, nextState, page);
     await page.waitForTimeout(800);
+}
+
+async function setupSmashUpOnlineAiRoom(
+    browser: Browser,
+    baseURL: string | undefined,
+): Promise<{
+    hostPage: Page;
+    hostContext: BrowserContext;
+    matchId: string;
+} | null> {
+    const hostContext = await browser.newContext({ baseURL });
+    await initContext(hostContext, { storageKey: '__su_storage_reset_ai', skipImageGate: true });
+    const hostPage = await hostContext.newPage();
+
+    await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await hostPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+
+    if (!(await ensureGameServerAvailable(hostPage))) {
+        await hostContext.close();
+        return null;
+    }
+
+    const guestId = `su_ai_e2e_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    await hostPage.addInitScript(
+        (id) => {
+            localStorage.setItem('guest_id', id);
+            sessionStorage.setItem('guest_id', id);
+            document.cookie = `bg_guest_id=${encodeURIComponent(id)}; path=/; SameSite=Lax`;
+        },
+        guestId,
+    );
+
+    const base = getGameServerBaseURL();
+    const createResponse = await hostPage.request.post(`${base}/games/smashup/create`, {
+        data: {
+            numPlayers: 2,
+            setupData: {
+                guestId,
+                ownerKey: `guest:${guestId}`,
+                ownerType: 'guest',
+                seatControllers: {
+                    '1': {
+                        type: 'local-ai',
+                        minimumActionDelayMs: 2000,
+                    },
+                },
+            },
+        },
+    });
+    if (!createResponse.ok()) {
+        await hostContext.close();
+        return null;
+    }
+
+    const createData = (await createResponse.json().catch(() => null)) as { matchID?: string } | null;
+    const matchId = createData?.matchID;
+    if (!matchId) {
+        await hostContext.close();
+        return null;
+    }
+
+    const claimResponse = await hostPage.request.post(`${base}/games/smashup/${matchId}/claim-seat`, {
+        data: { playerID: '0', playerName: 'Host-SU-AI-E2E', guestId },
+    });
+    if (!claimResponse.ok()) {
+        await hostContext.close();
+        return null;
+    }
+
+    const claimData = (await claimResponse.json().catch(() => null)) as { playerCredentials?: string } | null;
+    const credentials = claimData?.playerCredentials;
+    if (!credentials) {
+        await hostContext.close();
+        return null;
+    }
+
+    await seedMatchCredentials(hostPage, 'smashup', matchId, '0', credentials);
+
+    if (!(await waitForMatchAvailable(hostPage, 'smashup', matchId, 20000))) {
+        await hostContext.close();
+        return null;
+    }
+
+    await hostPage.goto(`/play/smashup/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
+    return { hostPage, hostContext, matchId };
+}
+
+async function waitForAiSeatCredential(
+    page: Page,
+    matchId: string,
+    playerId: string,
+): Promise<void> {
+    await expect.poll(async () => {
+        return page.evaluate(({ targetMatchId, targetPlayerId }) => {
+            const raw = localStorage.getItem(`match_ai_creds_${targetMatchId}`);
+            if (!raw) return null;
+            try {
+                const parsed = JSON.parse(raw) as Record<string, unknown>;
+                return typeof parsed[targetPlayerId] === 'string' ? parsed[targetPlayerId] as string : null;
+            } catch {
+                return null;
+            }
+        }, { targetMatchId: matchId, targetPlayerId: playerId });
+    }, {
+        timeout: 20000,
+        message: `等待 AI seat ${playerId} 凭据超时`,
+    }).not.toBeNull();
+
+    await page.waitForTimeout(1200);
 }
 
 async function waitForTurnTracker(page: Page, side: 'YOU' | 'OPP'): Promise<void> {
@@ -245,6 +361,119 @@ function buildFactionSelectStuckState(baseState: any) {
             },
             queue: [],
             isBlocked: false,
+        },
+    };
+
+    return nextState;
+}
+
+function buildOnlineAiHiddenSacrificeState(baseState: any) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+    const existingPlayers = nextState.core?.players ?? {};
+    const existingBases = Array.isArray(nextState.core?.bases) ? nextState.core.bases : [];
+    const primaryBase = existingBases[0] ?? { defId: 'base_temple_of_goju', minions: [], ongoingActions: [] };
+    const turnOrder = Array.isArray(nextState.core?.turnOrder) && nextState.core.turnOrder.length > 0
+        ? [...nextState.core.turnOrder]
+        : ['0', '1'];
+
+    nextState.core = {
+        ...nextState.core,
+        currentPlayerIndex: 1,
+        phase: 'playCards',
+        turnNumber: 3,
+        turnOrder,
+        factionSelection: undefined,
+        players: {
+            ...existingPlayers,
+            '0': {
+                ...(existingPlayers['0'] ?? {}),
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+            },
+            '1': {
+                ...(existingPlayers['1'] ?? {}),
+                hand: [],
+                deck: [
+                    { uid: 'ai-draw-1', defId: 'wizard_archmage', type: 'minion', owner: '1' },
+                    { uid: 'ai-draw-2', defId: 'wizard_apprentice', type: 'minion', owner: '1' },
+                    { uid: 'ai-draw-3', defId: 'wizard_enchantress', type: 'minion', owner: '1' },
+                ],
+                discard: [
+                    { uid: 'ai-sacrifice-action', defId: 'wizard_sacrifice', type: 'action', owner: '1' },
+                ],
+                factions: ['wizards', 'ninjas'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 1,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+            },
+        },
+        bases: [
+            {
+                ...primaryBase,
+                defId: primaryBase.defId ?? 'base_temple_of_goju',
+                minions: [{
+                    uid: 'ai-sacrifice-target',
+                    defId: 'ninja_shinobi',
+                    controller: '1',
+                    owner: '1',
+                    basePower: 3,
+                    powerCounters: 0,
+                    powerModifier: 0,
+                    tempPowerModifier: 0,
+                    talentUsed: false,
+                    playedThisTurn: true,
+                    attachedActions: [],
+                }],
+                ongoingActions: Array.isArray(primaryBase.ongoingActions) ? primaryBase.ongoingActions : [],
+            },
+        ],
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder,
+        currentPlayerIndex: 1,
+        phase: 'playCards',
+        turnNumber: 3,
+        flowHalted: false,
+        interaction: {
+            current: {
+                id: 'wizard_sacrifice_hidden_choice',
+                playerId: '1',
+                kind: 'simple-choice',
+                data: {
+                    title: '选择要牺牲的随从（抽取等量力量的牌）',
+                    sourceId: 'wizard_sacrifice',
+                    targetType: 'minion',
+                    options: [{
+                        id: 'target-shinobi',
+                        label: '影舞者',
+                        value: { minionUid: 'ai-sacrifice-target', baseIndex: 0 },
+                    }],
+                },
+            },
+            queue: [],
+            isBlocked: true,
+        },
+        responseWindow: {
+            current: null,
+            history: [],
+        },
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
         },
     };
 
@@ -763,6 +992,61 @@ test('在线模式对手打出行动卡时应显示特写', async ({ browser }, 
     } finally {
         await secondSetup.guestContext.close();
         await secondSetup.hostContext.close();
+    }
+});
+
+test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenSacrificeState);
+        await waitForSmashUpUI(hostPage);
+
+        const injectedState = await getMatchState(matchId, hostPage);
+        expect(injectedState.sys?.interaction?.current?.playerId).toBe('1');
+        expect(injectedState.sys?.interaction?.current?.data?.sourceId).toBe('wizard_sacrifice');
+        expect(injectedState.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid)).toEqual(['ai-sacrifice-target']);
+        await expect(hostPage.getByText('选择要牺牲的随从（抽取等量力量的牌）')).toHaveCount(0);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hidden-choice-before-resolve');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                minionsOnBase: state.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid) ?? [],
+                aiHandDefIds: state.core?.players?.['1']?.hand?.map((card: any) => card.defId) ?? [],
+                aiDeckCount: state.core?.players?.['1']?.deck?.length ?? -1,
+            };
+        }, {
+            timeout: 20000,
+            message: '等待在线 AI 自动响应隐藏交互并完成结算',
+        }).toEqual({
+            interactionSourceId: null,
+            interactionPlayerId: null,
+            minionsOnBase: [],
+            aiHandDefIds: ['wizard_archmage', 'wizard_apprentice', 'wizard_enchantress'],
+            aiDeckCount: 0,
+        });
+
+        await expect.poll(async () => {
+            return hostPage.locator('[data-minion-uid="ai-sacrifice-target"]').count();
+        }, { timeout: 8000 }).toBe(0);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hidden-choice-after-resolve');
+    } finally {
+        await setup.hostContext.close();
     }
 });
 

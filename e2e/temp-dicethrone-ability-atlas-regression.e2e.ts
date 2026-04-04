@@ -106,7 +106,7 @@ async function setupHeroScene(
 }
 
 test.describe('DiceThrone hand card preview regression', () => {
-  test('samurai and gunslinger hand cards should use ability atlas or single-card crops without shimmer', async ({ page, game }) => {
+  test('samurai and gunslinger hand cards should use ability atlas without shimmer', async ({ page, game }) => {
     test.setTimeout(120000);
     await game.openTestGame('dicethrone');
     const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'dicethrone-hand-preview-regression');
@@ -119,9 +119,9 @@ test.describe('DiceThrone hand card preview regression', () => {
     ]);
 
     const samuraiDiag = await collectHandDiag(page, {
-      'upgrade-solemnity-2': 'upgrade-solemnity-2.webp',
+      'upgrade-solemnity-2': 'ability-cards.webp',
       'upgrade-budo-2': 'ability-cards.webp',
-      'upgrade-masamune-2': 'upgrade-masamune-2.webp',
+      'upgrade-masamune-2': 'ability-cards.webp',
     });
     console.log('samurai-hand-preview-diag:', JSON.stringify(samuraiDiag));
     expect(samuraiDiag).toMatchObject({ missing: false, shimmerCount: 0 });
@@ -135,8 +135,8 @@ test.describe('DiceThrone hand card preview regression', () => {
     ]);
 
     const gunslingerDiag = await collectHandDiag(page, {
-      'upgrade-fan-the-hammer-2': 'fan-the-hammer-2.webp',
-      'card-pistol-whip': 'pistol-whip.webp',
+      'upgrade-fan-the-hammer-2': 'ability-cards.webp',
+      'card-pistol-whip': 'ability-cards.webp',
       'upgrade-duel-2': 'ability-cards.webp',
     });
     console.log('gunslinger-hand-preview-diag:', JSON.stringify(gunslingerDiag));

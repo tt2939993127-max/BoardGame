@@ -8,6 +8,7 @@ import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAi
 import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
+import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch } from '../../engine/transport/react';
 import { submitOnlineAiResolution } from '../MatchRoom';
 
 type Player = { id: number; name?: string | null };
@@ -654,6 +655,149 @@ describe('submitOnlineAiResolution', () => {
         rejectHandler?.('unauthorized');
         expect(lastAiAttemptKeyRef.current).toBeNull();
         expect(retry).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('本地 AI 无进展重试判定', () => {
+    const buildProgressState = (
+        overrides?: Partial<MatchState<unknown>>,
+    ): MatchState<unknown> => ({
+        core: {
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        },
+        sys: {
+            turnNumber: 1,
+            phase: 'playCards',
+            eventStream: { nextId: 5 },
+            interaction: { current: null, queue: [] },
+            responseWindow: { current: null },
+        },
+        ...overrides,
+    } as MatchState<unknown>);
+
+    it('attemptKey 未变化且状态 marker 未推进时，应允许解锁重试', () => {
+        const previousState = buildProgressState();
+        const nextState = buildProgressState();
+
+        expect(shouldRetryLocalAiAttemptAfterDispatch({
+            cancelled: false,
+            activeAttemptKey: 'attempt-1',
+            resolutionAttemptKey: 'attempt-1',
+            markerBeforeDispatch: buildAiProgressMarker(previousState),
+            nextState,
+        })).toBe(true);
+    });
+
+    it('状态 marker 已推进或 attemptKey 已切换时，不应重复重试', () => {
+        const previousState = buildProgressState();
+        const advancedState = buildProgressState({
+            sys: {
+                turnNumber: 1,
+                phase: 'playCards',
+                eventStream: { nextId: 6 },
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null },
+            },
+        });
+
+        expect(shouldRetryLocalAiAttemptAfterDispatch({
+            cancelled: false,
+            activeAttemptKey: 'attempt-1',
+            resolutionAttemptKey: 'attempt-1',
+            markerBeforeDispatch: buildAiProgressMarker(previousState),
+            nextState: advancedState,
+        })).toBe(false);
+
+        expect(shouldRetryLocalAiAttemptAfterDispatch({
+            cancelled: false,
+            activeAttemptKey: 'attempt-2',
+            resolutionAttemptKey: 'attempt-1',
+            markerBeforeDispatch: buildAiProgressMarker(previousState),
+            nextState: previousState,
+        })).toBe(false);
+
+        expect(shouldRetryLocalAiAttemptAfterDispatch({
+            cancelled: true,
+            activeAttemptKey: 'attempt-1',
+            resolutionAttemptKey: 'attempt-1',
+            markerBeforeDispatch: buildAiProgressMarker(previousState),
+            nextState: previousState,
+        })).toBe(false);
+    });
+});
+
+describe('LocalGameProvider AI 重试集成', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+        cleanup();
+    });
+
+    it('本地 AI 命令被领域校验拒绝后，会在解锁后自动再尝试一轮', async () => {
+        const gameId = '__test_local_ai_retry_after_rejection__';
+        const decideSpy = vi.fn(() => {
+            const callIndex = decideSpy.mock.calls.length;
+            return callIndex <= 2 ? { actionId: 'invalid-action' } : null;
+        });
+
+        registerGameAiRuntime({
+            gameId,
+            buildLegalActions: ({ playerId }) => (
+                playerId === '1'
+                    ? [{
+                        actionId: 'invalid-action',
+                        kind: 'main-action',
+                        label: '触发失败命令',
+                        commands: [{ type: 'FAIL_CMD', payload: { reason: 'retry-check' } }],
+                    }]
+                    : []
+            ),
+            localPolicies: {
+                default: {
+                    id: 'default',
+                    decide: decideSpy,
+                },
+            },
+            defaultLocalPolicyId: 'default',
+        });
+
+        const engineConfig = {
+            gameId,
+            domain: {
+                gameId,
+                setup: () => ({
+                    turnOrder: ['0', '1'],
+                    currentPlayerIndex: 1,
+                }),
+                validate: (_state: MatchState<unknown>, command: { type: string }) => (
+                    command.type === 'FAIL_CMD'
+                        ? { valid: false, error: 'rule_blocked' }
+                        : { valid: true }
+                ),
+                execute: () => [],
+                reduce: (core: unknown) => core,
+            },
+            systems: [],
+        } as const;
+
+        render(createElement(
+            LocalGameProvider,
+            {
+                config: engineConfig as never,
+                numPlayers: 2,
+                seed: 'local-ai-retry-seed',
+                seatControllers: { '1': { type: 'local-ai', minimumActionDelayMs: 0 } },
+            },
+            createElement('div', null, 'local-ai-retry'),
+        ));
+
+        await waitFor(() => {
+            expect(decideSpy).toHaveBeenCalledTimes(1);
+        });
+
+        await waitFor(() => {
+            expect(decideSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
+        }, { timeout: 1000 });
     });
 });
 

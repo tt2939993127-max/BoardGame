@@ -827,9 +827,10 @@
     },
     "fist-technique-3": {
       "name": "拳术 III",
-      "description": "3/4/5拳触发：造成7/8/9伤害，4个及以上拳施加击倒",
+      "description": "3/4/5拳触发：造成7/8/9伤害；若投出4个相同数字，施加击倒",
       "effects": {
-        "damage4": "造成4点伤害"
+        "damage4": "造成4点伤害",
+        "inflictKnockdownOnFourOfAKind": "若投出4个相同数字，施加击倒"
       }
     },
     "fist-technique-4": {
@@ -1261,20 +1262,22 @@
     },
     "slap-2": {
       "name": "重击 II",
-      "description": "3/4/5剑触发：造成5/7/9伤害，其中4/5剑造成不可防御伤害",
+      "description": "3/4/5剑触发：造成5/7/9伤害；若投出4个相同数字，本次攻击造成不可防御伤害",
       "effects": {
         "damage5": "造成5点伤害",
-        "damage7Unblockable": "造成7点不可防御伤害",
-        "damage9Unblockable": "造成9点不可防御伤害"
+        "damage7": "造成7点伤害",
+        "damage9": "造成9点伤害",
+        "makeUnblockableOnFourOfAKind": "若投出4个相同数字，本次攻击造成不可防御伤害"
       }
     },
     "slap-3": {
       "name": "重击 III",
-      "description": "3/4/5剑触发：造成6/8/10伤害，其中4/5剑造成不可防御伤害",
+      "description": "3/4/5剑触发：造成6/8/10伤害；若投出4个相同数字，本次攻击造成不可防御伤害",
       "effects": {
         "damage6": "造成6点伤害",
-        "damage8Unblockable": "造成8点不可防御伤害",
-        "damage10Unblockable": "造成10点不可防御伤害"
+        "damage8": "造成8点伤害",
+        "damage10": "造成10点伤害",
+        "makeUnblockableOnFourOfAKind": "若投出4个相同数字，本次攻击造成不可防御伤害"
       }
     },
     "all-out-strike-2": {
@@ -1741,7 +1744,7 @@
     },
     "longbow-3": {
       "name": "长弓 III",
-      "description": "3/4/5弓触发：造成5/7/9伤害，3个及以上相同符号施加缠绕",
+      "description": "3/4/5弓触发：造成5/7/9伤害；若投出3个及以上相同数字，施加缠绕",
       "effects": {
         "damage3": "造成3点伤害",
         "damage5": "造成5点伤害",
@@ -1761,7 +1764,7 @@
     },
     "longbow-2": {
       "name": "长弓 II",
-      "description": "3/4/5弓触发：造成4/6/8伤害，4个及以上相同符号施加缠绕",
+      "description": "3/4/5弓触发：造成4/6/8伤害；若投出4个及以上相同数字，施加缠绕",
       "effects": {
         "damage4": "造成4点伤害",
         "damage6": "造成6点伤害",
@@ -2165,7 +2168,7 @@
     },
     "card-thrust-punch-3": {
       "name": "冲拳 III",
-      "description": "3/4/5拳触发：造成7/8/9伤害，4个及以上拳施加击倒。"
+      "description": "3/4/5拳触发：造成7/8/9伤害；若投出4个相同数字，施加击倒。"
     },
     "card-contemplation-2": {
       "name": "冥想 II",

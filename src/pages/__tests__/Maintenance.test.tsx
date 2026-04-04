@@ -13,7 +13,7 @@ import {
     shouldReserveSystemBackGesture,
 } from '../../games/summonerwars/ui/MapContainer';
 
-const { nativeAndroidRuntimeState, androidLiveUpdateSnapshotState } = vi.hoisted(() => ({
+const { nativeAndroidRuntimeState, androidLiveUpdateSnapshotState, androidLiveUpdateActivityState } = vi.hoisted(() => ({
     nativeAndroidRuntimeState: {
         value: false,
     },
@@ -24,6 +24,12 @@ const { nativeAndroidRuntimeState, androidLiveUpdateSnapshotState } = vi.hoisted
             channel: 'stable',
             nativeAndroid: false,
             updaterLoaded: false,
+        },
+    },
+    androidLiveUpdateActivityState: {
+        value: {
+            active: false,
+            phase: 'idle' as const,
         },
     },
 }));
@@ -53,6 +59,7 @@ const mockReadStoredMatchCredentials = vi.fn();
 const mockValidateStoredMatchSeat = vi.fn(() => ({ shouldClear: false }));
 const mockGetOwnerActiveMatch = vi.fn(() => null);
 const mockPruneStoredMatchCredentials = vi.fn();
+const mockRequestAndroidLiveUpdateCheck = vi.fn();
 let mockAuthToken: string | null = null;
 
 let hasStoredMatch = true;
@@ -211,6 +218,12 @@ vi.mock('../../lib/mobile/androidRuntime', () => ({
 
 vi.mock('../../lib/mobile/androidLiveUpdates', () => ({
     readAndroidLiveUpdateSnapshot: vi.fn(async () => androidLiveUpdateSnapshotState.value),
+    readAndroidLiveUpdateActivityState: vi.fn(() => androidLiveUpdateActivityState.value),
+    subscribeAndroidLiveUpdateActivityState: vi.fn((listener: (state: typeof androidLiveUpdateActivityState.value) => void) => {
+        listener(androidLiveUpdateActivityState.value);
+        return () => undefined;
+    }),
+    requestAndroidLiveUpdateCheck: (...args: unknown[]) => mockRequestAndroidLiveUpdateCheck(...args),
 }));
 
 vi.mock('../../core/cursor/useGlobalCursor', () => ({
@@ -881,6 +894,11 @@ describe('Home native runtime footer', () => {
         mockGetMatch.mockReset();
         mockSetSearchParams.mockReset();
         mockNavigate.mockReset();
+        mockRequestAndroidLiveUpdateCheck.mockReset();
+        androidLiveUpdateActivityState.value = {
+            active: false,
+            phase: 'idle',
+        };
     });
 
     afterEach(() => {
@@ -921,6 +939,65 @@ describe('Home native runtime footer', () => {
 
         expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
         expect(screen.getByText('Latest 0.5.1')).toBeInTheDocument();
-        expect(screen.getByText('OTA 未对齐')).toBeInTheDocument();
+        expect(screen.getByText('OTA 未对齐，点击立即更新')).toBeInTheDocument();
+    });
+
+    it('点击 OTA 未对齐角标时直接触发即时 OTA 检查', async () => {
+        nativeAndroidRuntimeState.value = true;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            channel: 'stable',
+            nativeAndroid: true,
+            updaterLoaded: true,
+            nativeVersion: '0.5.1',
+            currentBundleVersion: '0.5.0-ota-2026-04-04',
+            manifestVersion: '0.5.1-ota-2026-04-04',
+        };
+
+        render(<Home />);
+
+        const footerButton = await screen.findByRole('button', {
+            name: /versions are not aligned/i,
+        });
+
+        await act(async () => {
+            footerButton.click();
+        });
+
+        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
+            interactive: true,
+            applyMode: 'immediate',
+        });
+    });
+
+    it('原生 Android 版本已对齐时点击右下角仍只触发即时 OTA 检查，不再切换展开态', async () => {
+        nativeAndroidRuntimeState.value = true;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            channel: 'stable',
+            nativeAndroid: true,
+            updaterLoaded: true,
+            nativeVersion: '0.5.1',
+            currentBundleVersion: '0.5.1-ota-2026-04-04',
+            manifestVersion: '0.5.1-ota-2026-04-04',
+        };
+
+        render(<Home />);
+
+        const footerButton = await screen.findByRole('button', {
+            name: /current bundle version 0\.5\.1, app version 0\.5\.1/i,
+        });
+
+        await act(async () => {
+            footerButton.click();
+        });
+
+        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
+            interactive: true,
+            applyMode: 'immediate',
+        });
+        expect(screen.queryByText('0.5.1-ota-2026-04-04')).toBeNull();
     });
 });

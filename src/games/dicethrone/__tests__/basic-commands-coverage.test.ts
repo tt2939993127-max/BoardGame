@@ -504,6 +504,130 @@ describe('AI legal actions', () => {
         }));
     });
 
+    it('selectDie 多骰交互应枚举 1..selectCount 的合法骰子组合，而不是只生成单骰动作', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [1, 2, 5][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-dice-multi',
+            playerId: '0',
+            sourceCardId: 'reroll-two-test',
+            type: 'selectDie',
+            titleKey: 'interaction.selectDiceToReroll',
+            selectCount: 2,
+            selected: [],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const rerollPayloads = actions
+            .filter((action) => action.kind === 'interaction-multistep')
+            .map((action) => action.commands
+                .filter((command) => command.type === 'REROLL_DIE')
+                .map((command) => (command.payload as { dieId: number }).dieId)
+                .join(','))
+            .sort();
+
+        expect(rerollPayloads).toEqual([
+            '0',
+            '0,1',
+            '0,2',
+            '1',
+            '1,2',
+            '2',
+        ]);
+    });
+
+    it('本地 AI 在 selectDie=2 时应优先一次处理两颗低点骰，而不是只选第一颗', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [1, 2, 6][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-dice-low-values',
+            playerId: '0',
+            sourceCardId: 'reroll-two-test',
+            type: 'selectDie',
+            titleKey: 'interaction.selectDiceToReroll',
+            selectCount: 2,
+            selected: [],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-multistep');
+        expect(
+            resolution?.action.commands
+                .filter((command) => command.type === 'REROLL_DIE')
+                .map((command) => (command.payload as { dieId: number }).dieId),
+        ).toEqual([0, 1]);
+    });
+
+    it('modifyDie copy 双骰交互应生成有顺序的源骰→目标骰批动作，而不是单骰确认', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [6, 2, 4][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-copy-die-multi',
+            playerId: '0',
+            sourceCardId: 'copy-die-test',
+            type: 'modifyDie',
+            titleKey: 'interaction.selectDieToCopy',
+            selectCount: 2,
+            selected: [],
+            dieModifyConfig: { mode: 'copy' },
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const modifyPayloads = actions
+            .filter((action) => action.kind === 'interaction-multistep')
+            .map((action) => action.commands
+                .filter((command) => command.type === 'MODIFY_DIE')
+                .map((command) => {
+                    const payload = command.payload as { dieId: number; newValue: number };
+                    return `${payload.dieId}:${payload.newValue}`;
+                })
+                .join(','))
+            .sort();
+
+        expect(modifyPayloads).toEqual([
+            '0:6,1:6',
+            '0:6,2:6',
+            '1:2,0:2',
+            '1:2,2:2',
+            '2:4,0:4',
+            '2:4,1:4',
+        ]);
+    });
+
     it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {
         const state = createInitializedState(['0', '1'], fixedRandom);
         state.sys.interaction = {

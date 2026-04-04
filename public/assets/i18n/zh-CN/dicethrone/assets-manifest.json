@@ -1777,33 +1777,6 @@
         }
       }
     },
-    "images/samurai/crops/ability-cards/compressed/upgrade-masamune-2": {
-      "variants": {
-        "webp": {
-          "sha256": "453cb1dac7e69b8a266d2e293293202f40b0ecba37c980d620e37c475a09c0c0",
-          "bytes": 9120,
-          "mime": "image/webp"
-        }
-      }
-    },
-    "images/samurai/crops/ability-cards/compressed/upgrade-slot-06-2": {
-      "variants": {
-        "webp": {
-          "sha256": "704a70386f5ebeda1a8accef9bca49ca7b46c38e35fb37488357b28ccf07051e",
-          "bytes": 10988,
-          "mime": "image/webp"
-        }
-      }
-    },
-    "images/samurai/crops/ability-cards/compressed/upgrade-solemnity-2": {
-      "variants": {
-        "webp": {
-          "sha256": "a3e052633c5a40202e91de81a926ad864df194f71c0e33125e18a459ee5639fd",
-          "bytes": 9684,
-          "mime": "image/webp"
-        }
-      }
-    },
     "images/samurai/crops/ability-cards/slot-00": {
       "variants": {
         "webp": {
@@ -2160,33 +2133,6 @@
         "webp": {
           "sha256": "694188ac57b1e59f032629e2ebe00e22aa5fbf2ed7b1af19eae4850e75c25105",
           "bytes": 136,
-          "mime": "image/webp"
-        }
-      }
-    },
-    "images/samurai/crops/ability-cards/upgrade-masamune-2": {
-      "variants": {
-        "webp": {
-          "sha256": "453cb1dac7e69b8a266d2e293293202f40b0ecba37c980d620e37c475a09c0c0",
-          "bytes": 9120,
-          "mime": "image/webp"
-        }
-      }
-    },
-    "images/samurai/crops/ability-cards/upgrade-slot-06-2": {
-      "variants": {
-        "webp": {
-          "sha256": "704a70386f5ebeda1a8accef9bca49ca7b46c38e35fb37488357b28ccf07051e",
-          "bytes": 10988,
-          "mime": "image/webp"
-        }
-      }
-    },
-    "images/samurai/crops/ability-cards/upgrade-solemnity-2": {
-      "variants": {
-        "webp": {
-          "sha256": "a3e052633c5a40202e91de81a926ad864df194f71c0e33125e18a459ee5639fd",
-          "bytes": 9684,
           "mime": "image/webp"
         }
       }

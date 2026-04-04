@@ -583,12 +583,14 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 // ========== 攻击掷骰阶段结束时 Token 使用（暴击、精准） ==========
                 // 检查攻击方是否有可用的 onOffensiveRollEnd 时机 Token
                 const attackerId = core.pendingAttack.attackerId;
-                const sourceAbilityId = core.pendingAttack.sourceAbilityId;
-                const expectedDamage = getPendingAttackExpectedDamage(coreAfterPreDefense, core.pendingAttack);
+                const sourceAbilityId = coreAfterPreDefense.pendingAttack?.sourceAbilityId;
+                const expectedDamage = coreAfterPreDefense.pendingAttack
+                    ? getPendingAttackExpectedDamage(coreAfterPreDefense, coreAfterPreDefense.pendingAttack)
+                    : 0;
                 const offensiveRollEndTokens = getUsableTokensForOffensiveRollEnd(coreAfterPreDefense, attackerId, expectedDamage);
                 
                 // 检查是否已经处理过 Token 选择（避免重复询问）
-                if (offensiveRollEndTokens.length > 0 && !core.pendingAttack.offensiveRollEndTokenResolved) {
+                if (offensiveRollEndTokens.length > 0 && !coreAfterPreDefense.pendingAttack?.offensiveRollEndTokenResolved) {
                     // 创建选择事件让玩家选择是否使用 Token
                     const tokenOptions = offensiveRollEndTokens.map(def => ({
                         tokenId: def.id,
@@ -623,7 +625,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return { events, overrideNextPhase: 'targetingRoll' };
                 }
 
-                if (core.pendingAttack.isDefendable) {
+                if (coreAfterPreDefense.pendingAttack?.isDefendable) {
                     // 攻击可防御，切换到防御阶段
                     return { events, overrideNextPhase: 'defensiveRoll' };
                 }

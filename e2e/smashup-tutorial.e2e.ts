@@ -21,7 +21,7 @@ const waitForTutorialStep = async (page: Page, stepId: string, timeout = 30000) 
 
 const clickNext = async (page: Page) => {
     for (let attempt = 0; attempt < 3; attempt++) {
-        const nextBtn = page.getByRole('button', { name: /^Next$/i });
+        const nextBtn = page.getByRole('button', { name: /^(Next|下一步)$/i });
         await expect(nextBtn).toBeVisible({ timeout: 10000 });
         try {
             await nextBtn.click({ timeout: 5000 });
@@ -30,12 +30,12 @@ const clickNext = async (page: Page) => {
             await page.waitForTimeout(300);
         }
     }
-    await page.getByRole('button', { name: /^Next$/i }).click({ force: true });
+    await page.getByRole('button', { name: /^(Next|下一步)$/i }).click({ force: true });
 };
 
 const clickFinish = async (page: Page) => {
     for (let attempt = 0; attempt < 3; attempt++) {
-        const finishBtn = page.getByRole('button', { name: /^Finish and return$/i });
+        const finishBtn = page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i });
         await expect(finishBtn).toBeVisible({ timeout: 10000 });
         try {
             await finishBtn.click({ timeout: 5000 });
@@ -44,7 +44,7 @@ const clickFinish = async (page: Page) => {
             await page.waitForTimeout(300);
         }
     }
-    await page.getByRole('button', { name: /^Finish and return$/i }).click({ force: true });
+    await page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).click({ force: true });
 };
 
 const waitForActionPrompt = async (page: Page, timeout = 15000) => {
@@ -160,7 +160,7 @@ const doUseTalent = async (page: Page) => {
 const doEndPlayCards = async (page: Page) => {
     await waitForTutorialStep(page, 'endPlayCards', 15000);
     await waitForActionPrompt(page);
-    const finishTurnButton = page.getByRole('button', { name: /^Finish Turn$/i });
+    const finishTurnButton = page.getByRole('button', { name: /^(Finish Turn|结束回合)$/i });
     await expect(finishTurnButton).toBeVisible({ timeout: 5000 });
     await finishTurnButton.click({ force: true });
     await page.waitForTimeout(500);

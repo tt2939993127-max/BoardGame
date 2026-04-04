@@ -74,10 +74,18 @@ export const GamePackageInstallConfirmModal = ({
     const isFailed = state.status === 'failed';
     const isInstalled = state.status === 'installed';
     const isPreview = state.status === 'not-installed';
-    const isUnpublishedPreview = isPreview && manifestSource === 'remote' && !assetPackUrl;
+    const isSyncingPreview = isPreview
+        && state.previewResolved !== true
+        && totalBytes === undefined;
+    const isUnpublishedPreview = isPreview
+        && state.previewResolved === true
+        && manifestSource === 'fallback'
+        && !assetPackUrl;
     const previewSizeFallbackLabel = isUnpublishedPreview
         ? unpublishedLabel
-        : sizeUnknownLabel;
+        : isSyncingPreview
+            ? t('packageManager.packageSyncing')
+            : sizeUnknownLabel;
     const modalTitle = isPreview
         ? t('packageManager.confirmTitle', { game: gameName })
         : isFailed
@@ -157,6 +165,8 @@ export const GamePackageInstallConfirmModal = ({
                                                 && ((item.kind === 'asset' && !assetPackUrl)
                                                     || (item.kind === 'module' && !modulePackUrl))
                                                 ? unpublishedLabel
+                                                : isSyncingPreview
+                                                    ? t('packageManager.packageSyncing')
                                                 : sizeUnknownLabel,
                                         )}
                                     </span>

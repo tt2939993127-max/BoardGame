@@ -167,12 +167,17 @@ export const GameDetailsMobilePackageCard = ({
     const totalBytes = hasAnyKnownBytes
         ? knownTotalBytes
         : undefined;
+    const isSyncingPreview = state.status === 'not-installed'
+        && state.previewResolved !== true
+        && !hasKnownPackageBytes(totalBytes);
     const isUnpublishedPreview = state.status === 'not-installed'
-        && state.manifestSource === 'remote'
-        && !state.assetPackUrl;
+        && state.previewResolved === true
+        && state.manifestSource === 'fallback';
     const sizeFallbackLabel = isUnpublishedPreview
         ? t('packageManager.packageUnpublished')
-        : t('packageManager.sizeUnknown');
+        : isSyncingPreview
+            ? t('packageManager.packageSyncing')
+            : t('packageManager.sizeUnknown');
     const sizeLabel = formatPackageBytes(totalBytes, sizeFallbackLabel);
     const actionHandler = state.status === 'failed' ? (onRetry ?? onInstall) : onInstall;
     const badgeLabel = presentation === 'update-required'

@@ -122,8 +122,8 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
     const useDesktopLikeLandscapeLayout = isMobileLandscape;
     const selectionGridClassName = useDesktopLikeLandscapeLayout
-        ? 'mx-auto grid w-full max-w-none grid-cols-5 gap-4 pb-28'
-        : 'mx-auto grid w-full max-w-[920px] grid-cols-4 gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
+        ? 'mx-auto grid w-full max-w-none grid-cols-5 justify-items-center gap-4 pb-28'
+        : 'mx-auto grid w-full max-w-[920px] grid-cols-4 justify-items-center gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
     const selectionCardFrameClassName = useDesktopLikeLandscapeLayout
         ? 'relative mb-2 w-full max-w-[168px] aspect-[0.727]'
         : 'relative mb-2.5 w-full max-w-[148px] lg:max-w-[192px] aspect-[0.727] xl:max-w-[208px]';
@@ -293,7 +293,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     );
     const playerSelectionRail = (
         <div
-            className={useDesktopLikeLandscapeLayout ? 'absolute bottom-4 inset-x-0 z-40 pointer-events-none' : 'absolute bottom-3 inset-x-0 z-40 pointer-events-none'}
+            className={useDesktopLikeLandscapeLayout ? 'absolute bottom-[18px] inset-x-0 z-40 pointer-events-none' : 'absolute bottom-3 inset-x-0 z-40 pointer-events-none'}
             data-testid="faction-selection-player-rail"
         >
             <div className={useDesktopLikeLandscapeLayout ? 'max-w-6xl mx-auto flex items-end justify-center gap-2.5 px-2.5 -translate-y-1' : 'max-w-7xl mx-auto flex items-end justify-center gap-3 px-3 lg:gap-8 lg:px-6'}>
@@ -309,14 +309,14 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                             transition={{ delay: 0.5 + pidx * 0.1 }}
                             data-testid={`faction-selection-player-card-${pid}`}
                             className={`
-                                flex flex-col items-center rounded-sm border-2 pointer-events-auto transition-all
+                                flex rounded-sm border-2 pointer-events-auto transition-all
                                 ${isCurrent
                                     ? useDesktopLikeLandscapeLayout
-                                        ? 'min-w-[90px] gap-1.5 px-4.5 py-1.5 bg-[#fef3c7] border-amber-500 shadow-[0_8px_18px_rgba(0,0,0,0.42)] -rotate-1 z-10 scale-[1] origin-bottom'
-                                        : 'gap-2 px-4 py-2.5 lg:px-6 lg:py-3 bg-[#fef3c7] border-amber-500 shadow-[0_10px_25px_rgba(0,0,0,0.5)] -rotate-1 z-10 scale-110'
+                                        ? 'w-[120px] flex-row items-center justify-start gap-2 px-3 py-2 bg-[#fef3c7] border-amber-500 shadow-[0_8px_18px_rgba(0,0,0,0.42)] -rotate-1 z-10 scale-[1] origin-bottom'
+                                        : 'flex-col items-center gap-2 px-4 py-2.5 lg:px-6 lg:py-3 bg-[#fef3c7] border-amber-500 shadow-[0_10px_25px_rgba(0,0,0,0.5)] -rotate-1 z-10 scale-110'
                                     : useDesktopLikeLandscapeLayout
-                                        ? 'min-w-[84px] gap-1.5 px-4 py-1.5 bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3] scale-[0.98] origin-bottom'
-                                        : 'gap-2 px-4 py-2.5 lg:px-6 lg:py-3 bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3]'}
+                                        ? 'w-[112px] flex-row items-center justify-start gap-2 px-3 py-2 bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3] scale-[0.98] origin-bottom'
+                                        : 'flex-col items-center gap-2 px-4 py-2.5 lg:px-6 lg:py-3 bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3]'}
                             `}
                         >
                             <div className={`
@@ -327,7 +327,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 {t('ui.player_short', { id: pid })}
                             </div>
 
-                            <div className={useDesktopLikeLandscapeLayout ? 'flex gap-1.5' : 'flex gap-1.5 sm:gap-2'}>
+                            <div className={useDesktopLikeLandscapeLayout ? 'flex gap-1.5 shrink-0' : 'flex gap-1.5 sm:gap-2'}>
                                 {[0, 1].map((i) => {
                                     const fid = selections[i];
                                     const meta = fid ? FACTION_METADATA.find((faction) => faction.id === fid) : null;
@@ -355,13 +355,13 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 })}
                             </div>
 
-                            <div className="flex flex-col items-center">
+                            <div className={useDesktopLikeLandscapeLayout ? 'flex min-w-0 flex-col items-start leading-none' : 'flex flex-col items-center'}>
                                 <span className={`${useDesktopLikeLandscapeLayout ? 'text-[10px]' : 'text-[10px] sm:text-[11px]'} font-black uppercase tracking-tight sm:tracking-tighter leading-none ${isCurrent ? 'text-amber-800' : 'text-slate-50'}`}>
                                     {t('ui.player_short', { id: pid })}
                                 </span>
                                 {isCurrent && (
                                     <span className={useDesktopLikeLandscapeLayout
-                                        ? 'text-[9px] font-black text-amber-600 uppercase tracking-[0.08em] mt-0.5 animate-pulse'
+                                        ? 'text-[8px] font-black text-amber-600 uppercase tracking-[0.04em] mt-0.5 animate-pulse'
                                         : 'text-[9px] sm:text-[10px] font-black text-amber-600 uppercase tracking-[0.12em] sm:tracking-widest mt-0.5 sm:mt-1 animate-pulse'}
                                     >
                                         {t('ui.thinking')}
