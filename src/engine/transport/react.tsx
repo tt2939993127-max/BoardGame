@@ -206,9 +206,15 @@ export function GameProvider({
 
     // 用 ref 存储回调，避免回调引用变化导致 effect 重新执行（断开重连）
     const onErrorRef = useRef(onError);
-    onErrorRef.current = onError;
     const onConnectionChangeRef = useRef(onConnectionChange);
-    onConnectionChangeRef.current = onConnectionChange;
+
+    useEffect(() => {
+        onErrorRef.current = onError;
+    }, [onError]);
+
+    useEffect(() => {
+        onConnectionChangeRef.current = onConnectionChange;
+    }, [onConnectionChange]);
 
     // 初始化乐观更新引擎
     useEffect(() => {
@@ -614,12 +620,16 @@ export function LocalGameProvider({
         [config.gameId, numPlayers, persistSession, seed],
     );
 
-    const randomRef = useRef<LocalProviderRandom>(
+    const [initialRandom] = useState<LocalProviderRandom>(() =>
         createLocalProviderRandom(seed, persistedSnapshot?.randomCursor ?? 0),
     );
+    const randomRef = useRef<LocalProviderRandom>(initialRandom);
     const onCommandRejectedRef = useRef(onCommandRejected);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
-    onCommandRejectedRef.current = onCommandRejected;
+
+    useEffect(() => {
+        onCommandRejectedRef.current = onCommandRejected;
+    }, [onCommandRejected]);
 
     const [state, setState] = useState<MatchState<unknown>>(() => {
         console.log('[LocalGameProvider] 初始化状态');
@@ -631,7 +641,7 @@ export function LocalGameProvider({
             });
             return persistedSnapshot.state;
         }
-        const random = randomRef.current;
+        const random = initialRandom;
         
         // 检查是否启用 skipInitialization（测试模式 - 完全跳过初始化）
         const testConfig = typeof window !== 'undefined' 
@@ -1002,7 +1012,7 @@ export function LocalGameProvider({
         isConnected: true,
         isMultiplayer: false,
         reset,
-    }), [state, dispatch, matchPlayers, reset, localBoardPlayerId, config.domain]);
+    }), [state, dispatch, matchPlayers, reset, localBoardPlayerId]);
 
     // 注册测试工具访问器（仅在测试环境生效）
     useEffect(() => {

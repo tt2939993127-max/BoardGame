@@ -212,13 +212,12 @@ export const Home = () => {
     }, [ownerActive, ownerKey, storedLocalMatchRole, suppressedOwnerMatchId]);
     const localMatchRole = storedLocalMatchRole ?? ownerLocalMatchRole;
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
-    const activeOtaBundleVersion = useMemo(() => {
+    const activeBundleVersion = useMemo(() => {
         const bundleVersion = otaSnapshot?.currentBundleVersion?.trim();
-        if (!bundleVersion || !bundleVersion.includes('-ota-')) {
-            return null;
-        }
-        return bundleVersion;
+        return bundleVersion || packageJson.version;
     }, [otaSnapshot?.currentBundleVersion]);
+    const isUsingOtaBundle = activeBundleVersion.includes('-ota-');
+    const homeVersionLabel = useMemo(() => `v${activeBundleVersion}`, [activeBundleVersion]);
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
@@ -825,11 +824,20 @@ export const Home = () => {
 
             {/* 活跃对局指示器 */}
             <div
-                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 pointer-events-none select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
-                aria-label={activeOtaBundleVersion ? `Current version ${APP_VERSION_LABEL}, OTA bundle ${activeOtaBundleVersion}` : `Current version ${APP_VERSION_LABEL}`}
-                title={activeOtaBundleVersion ? `原生版本 ${APP_VERSION_LABEL}\n当前 OTA Bundle ${activeOtaBundleVersion}` : `原生版本 ${APP_VERSION_LABEL}`}
+                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 max-w-[min(72vw,20rem)] pointer-events-none select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
+                aria-label={isUsingOtaBundle
+                    ? `Current home version ${homeVersionLabel}, app version ${APP_VERSION_LABEL}`
+                    : `Current version ${homeVersionLabel}`}
+                title={isUsingOtaBundle
+                    ? `首页当前版本 ${homeVersionLabel}\nApp 壳版本 ${APP_VERSION_LABEL}`
+                    : `当前版本 ${homeVersionLabel}`}
             >
-                <span className="block">{APP_VERSION_LABEL}</span>
+                <span className="block break-all">{homeVersionLabel}</span>
+                {isUsingOtaBundle && (
+                    <span className="mt-1 block text-[0.58rem] tracking-[0.04em] text-parchment-light-text/60 md:text-[0.64rem]">
+                        App {APP_VERSION_LABEL}
+                    </span>
+                )}
             </div>
 
             {activeMatch && (

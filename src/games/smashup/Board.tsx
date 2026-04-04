@@ -703,13 +703,20 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     // 这里必须监听 currentPrompt 对象引用，而不是 currentPrompt?.id，
     // 否则同 id 的新交互复用时会残留上一轮移动端选中态。
     useEffect(() => {
-        if (currentPrompt) {
-            setSelectedCardUid(null);
-            setSelectedCardMode(null);
-            setPendingFusionChoiceUid(null);
-        }
-        setDiscardStripSelectedUid(null);
-        setMultiSelectedOptionIds(new Set());
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            if (currentPrompt) {
+                setSelectedCardUid(null);
+                setSelectedCardMode(null);
+                setPendingFusionChoiceUid(null);
+            }
+            setDiscardStripSelectedUid(null);
+            setMultiSelectedOptionIds(new Set());
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [currentPrompt]);
 
     // 统一弃牌堆出牌：合并正常弃牌堆出牌 + interaction 驱动的弃牌堆随从选择
@@ -740,7 +747,15 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
     // 横排消失时重置
     useEffect(() => {
-        if (discardStripCards.length === 0) setDiscardStripSelectedUid(null);
+        if (discardStripCards.length !== 0) return;
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setDiscardStripSelectedUid(null);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [discardStripCards.length]);
 
     // 弃牌堆出牌横排可选基地集合
@@ -883,6 +898,9 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         if (!selectedSetAsideTitanUid) return new Set<number>();
         return new Set(setAsideTitanActivationState.get(selectedSetAsideTitanUid)?.baseIndices ?? []);
     }, [selectedSetAsideTitanUid, setAsideTitanActivationState]);
+    const activeSelectedSetAsideTitanUid = selectedSetAsideTitanUid && selectedTitanDeployableBaseIndices.size > 0
+        ? selectedSetAsideTitanUid
+        : null;
 
     const usableTitanTalentUids = useMemo(() => {
         const next = new Set<string>();
@@ -1003,11 +1021,6 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return next;
     }, [G, core, coreTitans, playerID]);
 
-    useEffect(() => {
-        if (!selectedSetAsideTitanUid) return;
-        if (selectedTitanDeployableBaseIndices.size > 0) return;
-        setSelectedSetAsideTitanUid(null);
-    }, [selectedSetAsideTitanUid, selectedTitanDeployableBaseIndices]);
     const resolvePlayableCardMode = useCallback((card: CardInstance): 'minion' | 'ongoing' | 'ongoing-minion' | 'action-minion' | null => {
         if (card.uid === selectedCardUid && selectedCardMode) return selectedCardMode;
         if (card.type === 'minion') return 'minion';
@@ -1143,7 +1156,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
     const usableActiveBaseAbilityIndices = useMemo(() => {
         if (!playerID || !isMyTurn || phase !== 'playCards') return new Set<number>();
-        if (selectedCardUid || discardStripSelectedUid || selectedSetAsideTitanUid || isBaseSelectPrompt || isBuriedSelectPrompt || meFirstPendingCard) {
+        if (selectedCardUid || discardStripSelectedUid || activeSelectedSetAsideTitanUid || isBaseSelectPrompt || isBuriedSelectPrompt || meFirstPendingCard) {
             return new Set<number>();
         }
         const usable = new Set<number>();
@@ -1158,7 +1171,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
         });
         return usable;
-    }, [G, playerID, isMyTurn, phase, selectedCardUid, discardStripSelectedUid, selectedSetAsideTitanUid, isBaseSelectPrompt, isBuriedSelectPrompt, meFirstPendingCard, core, coreBases]);
+    }, [G, playerID, isMyTurn, phase, selectedCardUid, discardStripSelectedUid, activeSelectedSetAsideTitanUid, isBaseSelectPrompt, isBuriedSelectPrompt, meFirstPendingCard, core, coreBases]);
 
     const draggedCard = useMemo(() => {
         if (!handDragPreview || !myPlayer) return null;
@@ -1324,31 +1337,52 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const [isEndTurnUiHidden, setIsEndTurnUiHidden] = useState(false);
     const prevCurrentPidRef = useRef(currentPid);
     useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        let cancelled = false;
         if (prevCurrentPidRef.current !== currentPid) {
             prevCurrentPidRef.current = currentPid;
             if (currentPid === playerID) {
-                setShowTurnNotice(true);
-                const timer = setTimeout(() => setShowTurnNotice(false), 3000);
-                return () => clearTimeout(timer);
+                queueMicrotask(() => {
+                    if (cancelled) return;
+                    setShowTurnNotice(true);
+                    timer = setTimeout(() => setShowTurnNotice(false), 3000);
+                });
             }
         }
+        return () => {
+            cancelled = true;
+            if (timer) clearTimeout(timer);
+        };
     }, [currentPid, playerID]);
 
     // --- State Management ---
     useEffect(() => {
-        setSelectedCardUid(null);
-        setSelectedCardMode(null);
-        setDiscardSelection(new Set());
-        setMeFirstPendingCard(null);
-        setIsSubmitting(false);
-        setIsEndTurnUiHidden(false);
-        setHandDragPreview(null);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
+            setDiscardSelection(new Set());
+            setMeFirstPendingCard(null);
+            setIsSubmitting(false);
+            setIsEndTurnUiHidden(false);
+            setHandDragPreview(null);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [phase, currentPid]);
 
     useEffect(() => {
-        if (interactionMode !== 'drag' || viewMode === 'opponent') {
+        if (interactionMode === 'drag' && viewMode !== 'opponent') return;
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
             setHandDragPreview(null);
-        }
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [interactionMode, viewMode]);
 
     // 卡牌和基地图集已在模块顶层 initSmashUpAtlases() 同步注册，无需异步加载
@@ -1435,12 +1469,12 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             setDiscardStripSelectedUid(null);
             return;
         }
-        if (selectedSetAsideTitanUid && playerID) {
+        if (activeSelectedSetAsideTitanUid && playerID) {
             if (!selectedTitanDeployableBaseIndices.has(index)) {
                 toast(t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
                 return;
             }
-            dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { titanUid: selectedSetAsideTitanUid, baseIndex: index });
+            dispatch(SU_COMMANDS.ACTIVATE_SPECIAL, { titanUid: activeSelectedSetAsideTitanUid, baseIndex: index });
             setSelectedSetAsideTitanUid(null);
             return;
         }
@@ -1503,7 +1537,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             dispatch(SU_COMMANDS.USE_BASE_ABILITY, { baseIndex: index });
         }
-    }, [selectedCardUid, selectedCardMode, selectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, coreBases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed]);
+    }, [selectedCardUid, selectedCardMode, activeSelectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, coreBases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed]);
 
     const handleBuriedCardSelect = useCallback((cardUid: string) => {
         if (!isBuriedSelectPrompt || !currentPrompt) return;
@@ -1553,11 +1587,11 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setPendingFusionChoiceUid(null);
         setDiscardStripSelectedUid(null);
         setMeFirstPendingCard(null);
-        setSelectedSetAsideTitanUid((current) => current === titanUid ? null : titanUid);
-    }, [playerID, isHandDiscardPrompt, currentPrompt, handPromptTitanUids, dispatch, setAsideTitanActivationState, toast]);
+        setSelectedSetAsideTitanUid(activeSelectedSetAsideTitanUid === titanUid ? null : titanUid);
+    }, [playerID, isHandDiscardPrompt, currentPrompt, handPromptTitanUids, dispatch, setAsideTitanActivationState, activeSelectedSetAsideTitanUid]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
-        if (selectedSetAsideTitanUid) {
+        if (activeSelectedSetAsideTitanUid) {
             setSelectedSetAsideTitanUid(null);
         }
         // 手牌弃牌交互优先：直接响应 interaction
@@ -1721,7 +1755,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 setSelectedCardMode('minion');
             }
         }
-    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, selectedSetAsideTitanUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, responseWindow]);
+    }, [isMyTurn, phase, dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, selectedCardUid, activeSelectedSetAsideTitanUid, pendingFusionChoiceUid, isHandDiscardPrompt, currentPrompt, myPlayer, t, needDiscard, discardCount, isMeFirstResponse, isAfterScoringResponse, responseWindow]);
 
     const confirmFusionPlayAs = useCallback((playAs: 'minion' | 'action') => {
         if (!pendingFusionChoiceUid || !myPlayer) return;
@@ -1827,7 +1861,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return;
         }
         setViewingCard(nextTarget);
-    }, []);
+    }, [setViewingCard]);
 
 
     const resolveHandDropTarget = useCallback((card: CardInstance, clientX: number, clientY: number): HandAreaDropTarget | null => {
@@ -1916,7 +1950,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
     const handleViewAction = useCallback((defId: string) => {
         setViewingCard({ defId, type: 'action' });
-    }, []);
+    }, [setViewingCard]);
 
     const dragGuideTarget = useMemo(() => {
         if (!handDragPreview?.dropTarget || typeof document === 'undefined') return null;
@@ -1929,7 +1963,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
             }
         }
-        const baseElement = baseRefsMap.current.get(dropTarget.baseIndex);
+        const baseElement = document.querySelector<HTMLElement>(`[data-base-index="${dropTarget.baseIndex}"]`);
         if (!baseElement) return null;
         const rect = baseElement.getBoundingClientRect();
         return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
@@ -2642,7 +2676,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 isDeployMode={
                                     (!!selectedCardUid && deployableBaseIndices.has(idx))
                                     || (!!meFirstPendingCard && meFirstEligibleBaseIndices.has(idx))
-                                    || (!!selectedSetAsideTitanUid && selectedTitanDeployableBaseIndices.has(idx))
+                                    || (!!activeSelectedSetAsideTitanUid && selectedTitanDeployableBaseIndices.has(idx))
                                     || (!!handDragPreview && dragDeployableBaseIndices.has(idx))
                                 }
                                 isMinionSelectMode={!isOngoingSelectPrompt && (
@@ -2670,7 +2704,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                     || (discardStripSelectedUid != null && !discardStripAllowedBases.has(idx))
                                     || (!!selectedCardUid && selectedCardMode !== 'ongoing-minion' && selectedCardMode !== 'action-minion' && !deployableBaseIndices.has(idx))
                                     || (!!meFirstPendingCard && !meFirstEligibleBaseIndices.has(idx))
-                                    || (!!selectedSetAsideTitanUid && !selectedTitanDeployableBaseIndices.has(idx))
+                                    || (!!activeSelectedSetAsideTitanUid && !selectedTitanDeployableBaseIndices.has(idx))
                                     || (!!handDragPreview && draggedCardMode !== 'ongoing-minion' && draggedCardMode !== 'action-minion' && !dragDeployableBaseIndices.has(idx))
                                 }
                                 isMyTurn={isMyTurn}
@@ -2876,7 +2910,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 }
                                 setAsideTitans={setAsideTitansForDisplay}
                                 activatableTitanUids={selectableSetAsideTitanUids}
-                                selectedTitanUid={selectedSetAsideTitanUid}
+                                selectedTitanUid={activeSelectedSetAsideTitanUid}
                                 onSelectTitan={handleSetAsideTitanSelect}
                                 onViewTitan={(defId) => setViewingCard({ defId, type: 'titan' })}
                                 dispatch={dispatch}
