@@ -175,18 +175,7 @@ const HandCard: React.FC<HandCardProps> = ({
         onPointerDown?.(event, card);
         suppressClickRef.current = false;
         if (isOpponentView) return;
-        if (interactionMode === 'click') {
-            if (!swipePlayEnabled || disableInteraction || isDisabled) return;
-            swipeStateRef.current = {
-                pointerId: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                hasTriggered: false,
-            };
-            event.currentTarget.setPointerCapture(event.pointerId);
-            return;
-        }
-        if (disableInteraction || isDisabled) return;
+        if (interactionMode !== 'drag' || disableInteraction || isDisabled) return;
         dragStateRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -199,23 +188,10 @@ const HandCard: React.FC<HandCardProps> = ({
             y: rect.top + rect.height * 0.34,
         };
         event.currentTarget.setPointerCapture(event.pointerId);
-    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onPointerDown, swipePlayEnabled]);
+    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onPointerDown]);
 
     const handlePointerMoveInternal = useCallback((event: React.PointerEvent) => {
         onPointerMove?.(event, card);
-        if (interactionMode === 'click') {
-            const swipeState = swipeStateRef.current;
-            if (!swipePlayEnabled || swipeState.pointerId !== event.pointerId || swipeState.hasTriggered) return;
-
-            const offsetX = event.clientX - swipeState.startX;
-            const offsetY = event.clientY - swipeState.startY;
-            if (offsetY <= -SWIPE_PLAY_DISTANCE_PX && Math.abs(offsetX) <= SWIPE_PLAY_MAX_HORIZONTAL_DRIFT_PX) {
-                swipeState.hasTriggered = true;
-                suppressClickRef.current = true;
-                onSwipePlay?.();
-            }
-            return;
-        }
         const dragState = dragStateRef.current;
         if (interactionMode !== 'drag' || dragState.pointerId !== event.pointerId) return;
 
@@ -237,25 +213,17 @@ const HandCard: React.FC<HandCardProps> = ({
             clientY: event.clientY,
             dropTarget,
         });
-    }, [card, interactionMode, onDragStateChange, onPointerMove, onResolveDropTarget, onSwipePlay, swipePlayEnabled]);
+    }, [card, interactionMode, onDragStateChange, onPointerMove, onResolveDropTarget]);
 
     const handlePointerUpInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
-        if (interactionMode === 'click') {
-            resetSwipeState(event);
-            return;
-        }
         handleDragFinish(event);
-    }, [card, handleDragFinish, interactionMode, onPointerEnd, resetSwipeState]);
+    }, [card, handleDragFinish, onPointerEnd]);
 
     const handlePointerCancelInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
-        if (interactionMode === 'click') {
-            resetSwipeState(event);
-            return;
-        }
         handleDragCancel(event);
-    }, [card, handleDragCancel, interactionMode, onPointerEnd, resetSwipeState]);
+    }, [card, handleDragCancel, onPointerEnd]);
 
     const def = lookupCardDef(card.defId);
     const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
