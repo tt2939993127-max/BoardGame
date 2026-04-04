@@ -255,12 +255,24 @@ const dispatchHarnessCommand = async (
     });
 };
 
-async function installOneShotAiBatchRejectPatch(page: Page, targetPlayerId = '1') {
-    await page.evaluate(async ({ aiPlayerId }) => {
+async function installAiBatchRejectPatch(
+    page: Page,
+    options: {
+        targetPlayerId?: string;
+        rejectLimit?: number;
+    } = {},
+) {
+    const {
+        targetPlayerId = '1',
+        rejectLimit = 1,
+    } = options;
+
+    await page.evaluate(async ({ aiPlayerId, rejectCountLimit }) => {
         const globalWindow = window as Window & {
             __DT_AI_BATCH_RETRY_PATCH__?: {
                 installed: boolean;
                 aiPlayerId: string;
+                rejectLimit: number;
                 interceptedCount: number;
                 rejectedCount: number;
                 delegatedCount: number;
@@ -291,6 +303,7 @@ async function installOneShotAiBatchRejectPatch(page: Page, targetPlayerId = '1'
         globalWindow.__DT_AI_BATCH_RETRY_PATCH__ = {
             installed: true,
             aiPlayerId,
+            rejectLimit: rejectCountLimit,
             interceptedCount: 0,
             rejectedCount: 0,
             delegatedCount: 0,
@@ -313,7 +326,7 @@ async function installOneShotAiBatchRejectPatch(page: Page, targetPlayerId = '1'
             if (
                 tracker
                 && config?.playerID === tracker.aiPlayerId
-                && tracker.rejectedCount === 0
+                && tracker.rejectedCount < tracker.rejectLimit
                 && commandCount >= 2
             ) {
                 tracker.interceptedCount += 1;
@@ -338,12 +351,16 @@ async function installOneShotAiBatchRejectPatch(page: Page, targetPlayerId = '1'
 
             return originalSendBatch.call(this, batchId, commands, onConfirmed, onRejected);
         };
-    }, { aiPlayerId: targetPlayerId });
+    }, {
+        aiPlayerId: targetPlayerId,
+        rejectCountLimit: rejectLimit,
+    });
 }
 
 async function readAiBatchRejectPatchStatus(page: Page): Promise<{
     installed: boolean;
     aiPlayerId: string;
+    rejectLimit: number;
     interceptedCount: number;
     rejectedCount: number;
     delegatedCount: number;
@@ -356,6 +373,7 @@ async function readAiBatchRejectPatchStatus(page: Page): Promise<{
             __DT_AI_BATCH_RETRY_PATCH__?: {
                 installed: boolean;
                 aiPlayerId: string;
+                rejectLimit: number;
                 interceptedCount: number;
                 rejectedCount: number;
                 delegatedCount: number;
@@ -1583,7 +1601,7 @@ test.describe('DiceThrone Simple Start', () => {
             await expect(startButton).toBeEnabled({ timeout: 10000 });
             await startButton.click();
             await hostPage.waitForTimeout(500);
-            await installOneShotAiBatchRejectPatch(hostPage, '1');
+            await installAiBatchRejectPatch(hostPage, { targetPlayerId: '1', rejectLimit: 1 });
             await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenModifyDiceState);
             await waitForPhase(hostPage, 'offensiveRoll', 30000);
             await waitForGameBoard(hostPage, 30000);
@@ -1673,6 +1691,137 @@ test.describe('DiceThrone Simple Start', () => {
             });
 
             await saveEvidenceScreenshot(hostPage, testInfo, '16-online-ai-hidden-multistep-after-retry');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI 连续两轮 batch 被拒后仍应自动重试并完成隐藏 multistep-choice', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 一起完成双拒绝 retry 测试前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+            await installAiBatchRejectPatch(hostPage, { targetPlayerId: '1', rejectLimit: 2 });
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenModifyDiceState);
+            await waitForPhase(hostPage, 'offensiveRoll', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            await expect.poll(async () => {
+                const status = await readAiBatchRejectPatchStatus(hostPage);
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    rejectLimit: status?.rejectLimit ?? 0,
+                    rejectedCount: status?.rejectedCount ?? 0,
+                    delegatedCount: status?.delegatedCount ?? 0,
+                    interactionKind: state.sys?.interaction?.current?.kind ?? null,
+                    interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                    diceValues: (state.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                };
+            }, {
+                timeout: 20000,
+                message: '等待前两轮 AI batch 都被测试补丁拒绝',
+            }).toEqual({
+                rejectLimit: 2,
+                rejectedCount: 2,
+                delegatedCount: 0,
+                interactionKind: 'multistep-choice',
+                interactionPlayerId: '1',
+                diceValues: [1, 2],
+            });
+
+            await expect.poll(async () => {
+                return hostPage.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return {
+                        interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                        isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                        diceValues: (state?.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                    };
+                });
+            }, {
+                timeout: 10000,
+                message: '等待房主过滤视角在双拒绝期间仍保持被隐藏交互阻塞',
+            }).toEqual({
+                interactionPlayerId: null,
+                isBlocked: true,
+                diceValues: [1, 2],
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '17-online-ai-hidden-multistep-rejected-twice-before-retry');
+
+            await expect.poll(async () => {
+                const status = await readAiBatchRejectPatchStatus(hostPage);
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    rejectLimit: status?.rejectLimit ?? 0,
+                    rejectedCount: status?.rejectedCount ?? 0,
+                    delegatedCount: status?.delegatedCount ?? 0,
+                    lastCommandCount: status?.lastCommandCount ?? 0,
+                    interactionKind: state.sys?.interaction?.current?.kind ?? null,
+                    interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                    diceValues: (state.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                };
+            }, {
+                timeout: 40000,
+                message: '等待 AI 在连续两轮 batch 被拒后仍成功完成第三轮 retry',
+            }).toEqual({
+                rejectLimit: 2,
+                rejectedCount: 2,
+                delegatedCount: 1,
+                lastCommandCount: 3,
+                interactionKind: null,
+                interactionPlayerId: null,
+                diceValues: [6, 6],
+            });
+
+            await expect.poll(async () => {
+                return hostPage.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return {
+                        interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                        isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                        diceValues: (state?.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                    };
+                });
+            }, {
+                timeout: 10000,
+                message: '等待房主过滤视角在第三轮 retry 成功后解除阻塞',
+            }).toEqual({
+                interactionPlayerId: null,
+                isBlocked: false,
+                diceValues: [6, 6],
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '18-online-ai-hidden-multistep-after-third-attempt');
         } finally {
             await setup.hostContext.close();
         }
