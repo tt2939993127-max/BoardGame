@@ -98,9 +98,15 @@ export const SpotlightSkeleton = memo(function SpotlightSkeleton({
     // 入场动画延迟
     useEffect(() => {
         if (!isVisible) {
-            setIsContentReady(false);
-            setIsConfirmButtonVisible(false);
-            return;
+            let cancelled = false;
+            queueMicrotask(() => {
+                if (cancelled) return;
+                setIsContentReady(false);
+                setIsConfirmButtonVisible(false);
+            });
+            return () => {
+                cancelled = true;
+            };
         }
 
         // 短暂延迟后显示内容，确保入场动画生效
@@ -114,8 +120,14 @@ export const SpotlightSkeleton = memo(function SpotlightSkeleton({
     // 确认按钮延迟显示
     useEffect(() => {
         if (!isVisible || confirmButtonDelay === undefined) {
-            setIsConfirmButtonVisible(false);
-            return;
+            let cancelled = false;
+            queueMicrotask(() => {
+                if (cancelled) return;
+                setIsConfirmButtonVisible(false);
+            });
+            return () => {
+                cancelled = true;
+            };
         }
 
         const timer = setTimeout(() => {

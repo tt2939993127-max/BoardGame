@@ -44,6 +44,20 @@ export interface FabAction {
     mobilePanelVariant?: 'popover' | 'sheet';
 }
 
+export const resolveFabSatellitesToRender = <T,>(items: T[]) => [...items].reverse();
+
+export const shouldTrackFabButtonRect = ({
+    showTooltip,
+    showPreview,
+    isActive,
+    hasContent,
+}: {
+    showTooltip: boolean;
+    showPreview: boolean;
+    isActive: boolean;
+    hasContent: boolean;
+}) => showTooltip || showPreview || (isActive && hasContent);
+
 export const FabMenu = ({
     items,
     position: initialPosition = 'bottom-right',
@@ -411,8 +425,7 @@ export const FabMenu = ({
 
     const renderPosition = renderLayout.position;
     const renderAlignment = renderLayout.alignment;
-    const isButtonBottom = renderAlignment.v === 'bottom';
-    const satellitesToRender = isButtonBottom ? [...items.slice(1)].reverse() : items.slice(1);
+    const satellitesToRender = resolveFabSatellitesToRender(items.slice(1));
 
     const hasAnyNotification = items.some((item) => item.active);
     // 波纹/辉光颜色跟随"选中态"同色系，避免不明显
@@ -672,7 +685,7 @@ const Panel = ({
     onRequestClose,
 }: any) => {
     const panelGap = isMobileViewport ? FAB_PANEL_GAP_MOBILE : FAB_PANEL_GAP_DESKTOP;
-    const resolvedAnchor = anchorRect ?? {
+    const logicalAnchor = {
         left: anchorPosition.left,
         top: anchorPosition.top,
         right: anchorPosition.left + buttonSize,
@@ -680,6 +693,9 @@ const Panel = ({
         width: buttonSize,
         height: buttonSize,
     };
+    const resolvedAnchor = isActive && item.content
+        ? logicalAnchor
+        : (anchorRect ?? logicalAnchor);
     const resolvedReference = referenceRect ?? resolvedAnchor;
     const panelAnchorOffset = resolvedAnchor.width + panelGap;
     const isMobileSheetPanel = isMobileViewport && item.mobilePanelVariant === 'sheet';
@@ -701,12 +717,20 @@ const Panel = ({
         Math.floor(resolvedReference.bottom - safeAreaInsets.top - edgePadding),
     );
 
-    const horizontalPlacement: FabAlignment['h'] = spaceRight === spaceLeft
-        ? alignment.h
-        : (spaceRight >= spaceLeft ? 'right' : 'left');
-    const verticalPlacement: FabAlignment['v'] = spaceBelow === spaceAbove
-        ? alignment.v
-        : (spaceBelow >= spaceAbove ? 'top' : 'bottom');
+    const horizontalPlacement: FabAlignment['h'] = referenceRect
+        ? (spaceRight === spaceLeft ? alignment.h : (spaceRight >= spaceLeft ? 'right' : 'left'))
+        : alignment.h;
+    const verticalPlacement: FabAlignment['v'] = referenceRect
+        ? (spaceBelow === spaceAbove ? alignment.v : (spaceBelow >= spaceAbove ? 'top' : 'bottom'))
+        : alignment.v;
+    const panelContainerTopMin = safeAreaInsets.top;
+    const panelContainerTopMax = Math.max(
+        panelContainerTopMin,
+        viewportHeight - safeAreaInsets.bottom - resolvedAnchor.height,
+    );
+    const panelContainerTop = verticalPlacement === 'top'
+        ? Math.max(resolvedReference.top, panelContainerTopMin)
+        : Math.min(resolvedReference.bottom - resolvedAnchor.height, panelContainerTopMax);
     const safeAvailableWidth = horizontalPlacement === 'right' ? spaceRight : spaceLeft;
     const safeAvailableHeight = verticalPlacement === 'top' ? spaceBelow : spaceAbove;
     const resolvedPanelWidth = safeAvailableWidth > 0 ? Math.min(panelWidth, safeAvailableWidth) : panelWidth;
@@ -798,9 +822,7 @@ const Panel = ({
                 style={{
                     position: 'fixed',
                     left: resolvedAnchor.left,
-                    top: verticalPlacement === 'top'
-                        ? resolvedReference.top
-                        : resolvedReference.bottom - resolvedAnchor.height,
+                    top: panelContainerTop,
                     width: resolvedAnchor.width,
                     height: resolvedAnchor.height,
                     zIndex: layerZIndex ?? Math.max(UI_Z_INDEX.hud - 1, 1),
@@ -861,6 +883,12 @@ const MenuButton = ({
     const buttonRef = useRef<HTMLButtonElement>(null);
     const [tooltipRect, setTooltipRect] = useState<DOMRect | null>(null);
     const visualButtonSize = isMobileViewport ? Math.max(buttonSize - 4, 40) : buttonSize;
+    const shouldTrackRect = shouldTrackFabButtonRect({
+        showTooltip,
+        showPreview,
+        isActive,
+        hasContent: Boolean(item.content),
+    });
 
     const updateTooltipRect = useCallback(() => {
         if (!buttonRef.current) return;
@@ -877,16 +905,20 @@ const MenuButton = ({
     }, [onRectChange]);
 
     useEffect(() => {
-        const shouldTrackRect = showTooltip || showPreview;
         if (!shouldTrackRect) return;
         updateTooltipRect();
+        let frameId = window.requestAnimationFrame(function syncRect() {
+            updateTooltipRect();
+            frameId = window.requestAnimationFrame(syncRect);
+        });
         window.addEventListener('resize', updateTooltipRect);
         window.addEventListener('scroll', updateTooltipRect, true);
         return () => {
+            window.cancelAnimationFrame(frameId);
             window.removeEventListener('resize', updateTooltipRect);
             window.removeEventListener('scroll', updateTooltipRect, true);
         };
-    }, [showTooltip, showPreview, updateTooltipRect]);
+    }, [shouldTrackRect, updateTooltipRect]);
 
     useEffect(() => {
         updateTooltipRect();

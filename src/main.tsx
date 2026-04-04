@@ -7,6 +7,7 @@ import { SENTRY_DSN } from './config/server';
 import { notifyAndroidBundleReady } from './lib/mobile/androidLiveUpdates';
 import { isStaleChunkError, reloadForStaleChunkOnce } from './lib/staleChunkReloadGuard';
 import { hydrateInstalledNativeGamePackages } from './features/mobile-packages/packageManagerService';
+import { isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
 
 const STALE_CHUNK_BOOTSTRAP_WINDOW_MS = 8000;
 const bootstrapStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -102,10 +103,12 @@ if (SENTRY_DSN) {
   });
 }
 
-void notifyAndroidBundleReady();
-void hydrateInstalledNativeGamePackages().catch((error) => {
-  console.warn('[MobilePackages] 同步原生已安装游戏包失败', error);
-});
+if (isNativeAndroidRuntime()) {
+  void notifyAndroidBundleReady();
+  void hydrateInstalledNativeGamePackages().catch((error) => {
+    console.warn('[MobilePackages] 同步原生已安装游戏包失败', error);
+  });
+}
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

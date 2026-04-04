@@ -157,7 +157,7 @@ export const AndroidBackNavigationBridge = () => {
                 void listenerHandle.remove().catch(() => {});
             }
         };
-    }, [closeTop, handleBackNavigation, navigateFromAppUrl]);
+    }, []);
 
     return null;
 };

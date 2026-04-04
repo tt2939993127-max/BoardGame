@@ -124,6 +124,23 @@ const openFabSettingsPanel = async (page: Page) => {
     return settingsPanel;
 };
 
+const swipeUpHandCard = async (page: Page, locator: Locator) => {
+    await expect(locator).toBeVisible({ timeout: 5000 });
+    const box = await locator.boundingBox();
+    expect(box).not.toBeNull();
+    if (!box) {
+        throw new Error('无法获取手牌坐标');
+    }
+    const startX = box.x + box.width / 2;
+    const startY = box.y + box.height * 0.72;
+    const endY = Math.max(box.y + box.height * 0.18, startY - Math.min(120, box.height * 0.55));
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX, endY, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(300);
+};
+
 // ============================================================================
 // 测试用例
 // ============================================================================
@@ -172,7 +189,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         // P0 出第一张牌到第一个基地
         const handArea = page.getByTestId('su-hand-area');
         const firstCard = handArea.locator('> div > div').first();
-        await firstCard.click();
+        await swipeUpHandCard(page, firstCard);
         await page.waitForTimeout(600);
 
         // 点击第一个基地
@@ -360,6 +377,125 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await game.screenshot('smashup-drag-play-resolved-ui', testInfo);
     });
 
+    test('本地模式：手机横屏下拖拽箭头起点应贴着手牌而不是漂到屏幕中部', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.setViewportSize({ width: 812, height: 375 });
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'drag');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'robots,zombies',
+            p1: 'pirates,aliens',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 54321,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'mobile-drag-minion-1', defId: 'robot_hoverbot', type: 'minion' },
+                ],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_the_homeworld' },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        await game.waitForPhase('playCards');
+        await game.waitForCurrentPlayer('0');
+        await expect(page.getByTestId('su-hand-area')).toBeVisible({ timeout: 10000 });
+        await expect.poll(async () => {
+            return await page.evaluate(() => localStorage.getItem('smashup_interaction_mode'));
+        }).toBe('drag');
+
+        const card = page.locator('[data-card-uid="mobile-drag-minion-1"]');
+        const base = page.locator('[data-base-index="0"]').first();
+        await expect(card).toBeVisible({ timeout: 5000 });
+        await expect(base).toBeVisible({ timeout: 5000 });
+
+        const cardBox = await card.boundingBox();
+        const baseBox = await base.boundingBox();
+        expect(cardBox).not.toBeNull();
+        expect(baseBox).not.toBeNull();
+        if (!cardBox || !baseBox) {
+            throw new Error('无法获取移动端拖拽所需的卡牌或基地坐标');
+        }
+
+        const startX = cardBox.x + cardBox.width / 2;
+        const startY = cardBox.y + cardBox.height * 0.62;
+        const targetX = baseBox.x + baseBox.width / 2;
+        const targetY = baseBox.y + Math.min(baseBox.height * 0.35, 96);
+
+        await page.mouse.move(startX, startY);
+        await page.mouse.down();
+        await page.mouse.move(targetX, targetY, { steps: 18 });
+
+        const dragArrow = page.getByTestId('su-drag-arrow');
+        await expect(dragArrow).toBeVisible({ timeout: 5000 });
+
+        const dragMetrics = await dragArrow.evaluate((node) => {
+            const line = node.querySelector('path');
+            const d = line?.getAttribute('d') ?? '';
+            const match = d.match(/M\s*([0-9.+-]+)\s+([0-9.+-]+)/i);
+            return {
+                path: d,
+                startX: match ? Number.parseFloat(match[1]) : Number.NaN,
+                startY: match ? Number.parseFloat(match[2]) : Number.NaN,
+            };
+        });
+
+        expect(Number.isFinite(dragMetrics.startX), `拖拽箭头路径缺少起点: ${dragMetrics.path}`).toBe(true);
+        expect(Number.isFinite(dragMetrics.startY), `拖拽箭头路径缺少起点: ${dragMetrics.path}`).toBe(true);
+        expect(
+            dragMetrics.startX,
+            `移动端拖拽箭头起点 X 应落在手牌附近，当前=${dragMetrics.startX}，卡牌范围=${cardBox.x}-${cardBox.x + cardBox.width}`,
+        ).toBeGreaterThanOrEqual(cardBox.x - 24);
+        expect(
+            dragMetrics.startX,
+            `移动端拖拽箭头起点 X 应落在手牌附近，当前=${dragMetrics.startX}，卡牌范围=${cardBox.x}-${cardBox.x + cardBox.width}`,
+        ).toBeLessThanOrEqual(cardBox.x + cardBox.width + 24);
+        expect(
+            dragMetrics.startY,
+            `移动端拖拽箭头起点 Y 应落在手牌附近，当前=${dragMetrics.startY}，卡牌范围=${cardBox.y}-${cardBox.y + cardBox.height}`,
+        ).toBeGreaterThanOrEqual(cardBox.y - 24);
+        expect(
+            dragMetrics.startY,
+            `移动端拖拽箭头起点 Y 应落在手牌附近，当前=${dragMetrics.startY}，卡牌范围=${cardBox.y}-${cardBox.y + cardBox.height}`,
+        ).toBeLessThanOrEqual(cardBox.y + cardBox.height + 24);
+
+        await game.screenshot('smashup-mobile-drag-origin-follows-hand', testInfo);
+        await saveEvidenceLocatorScreenshot(dragArrow, 'smashup-mobile-drag-origin-arrow', testInfo);
+
+        await page.mouse.up();
+
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return state.core.bases[0].minions.some((minion: { uid: string }) => minion.uid === 'mobile-drag-minion-1');
+            });
+        }, { timeout: 5000 }).toBe(true);
+    });
+
     test('本地模式：悬浮球设置面板显示 Smash Up 偏好设置', async ({ page }, testInfo) => {
         const game = new GameTestContext(page);
 
@@ -379,15 +515,156 @@ test.describe('SmashUp 本地模式 E2E', () => {
         const settingsPanel = await openFabSettingsPanel(page);
         await expect(settingsPanel.getByText(/大杀四方|Smash Up/i)).toBeVisible({ timeout: 5000 });
         await expect(settingsPanel.getByText(/交互模式|Interaction mode/i)).toBeVisible();
-        await expect(settingsPanel.getByRole('button', { name: /点击|Click/i })).toBeVisible();
+        await expect(settingsPanel.getByRole('button', { name: /上滑|Swipe Up/i })).toBeVisible();
         await expect(settingsPanel.getByRole('button', { name: /拖拽|Drag/i })).toBeVisible();
         await expect(settingsPanel.getByText(/中文覆盖层|Chinese overlay/i)).toBeVisible();
-        await expect(settingsPanel.getByText(/^(已开启|On)$/i)).toBeVisible();
+        const overlayButton = settingsPanel.locator('button').filter({ hasText: /中文覆盖层|Chinese overlay/i }).first();
+        await expect(overlayButton).toHaveAttribute('aria-pressed', 'true');
+        await expect(overlayButton.locator('[aria-hidden="true"]')).toBeVisible();
+        const overlayLayout = await overlayButton.evaluate((element) => {
+            const button = element as HTMLElement;
+            const toggle = button.querySelector('[aria-hidden="true"]') as HTMLElement | null;
+            return {
+                buttonClientWidth: button.clientWidth,
+                buttonScrollWidth: button.scrollWidth,
+                toggleWidth: toggle?.getBoundingClientRect().width ?? 0,
+                toggleHeight: toggle?.getBoundingClientRect().height ?? 0,
+            };
+        });
+        expect(overlayLayout.buttonScrollWidth, '中文覆盖层按钮不应出现横向溢出').toBeLessThanOrEqual(overlayLayout.buttonClientWidth);
+        expect(overlayLayout.toggleWidth, '开启态应显示固定宽度 toggle').toBeGreaterThanOrEqual(40);
+        expect(overlayLayout.toggleHeight, 'toggle 高度不应塌缩').toBeGreaterThanOrEqual(20);
         await expect.poll(async () => {
             return await page.evaluate(() => localStorage.getItem('smashup_interaction_mode'));
         }).toBe('drag');
 
         await game.screenshot('smashup-settings-panel-open', testInfo);
         await saveEvidenceLocatorScreenshot(settingsPanel, 'smashup-settings-preference-detail', testInfo);
+    });
+
+    test('本地模式：默认模式下点击手牌只放大，不会进入打出选择', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'click');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'pirates,aliens',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'click-preview-card', defId: 'pirate_first_mate', type: 'minion' },
+                ],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_the_homeworld' },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        const card = page.locator('[data-card-uid="click-preview-card"]');
+        const firstBase = page.locator('[data-base-index="0"]').first();
+        await expect(card).toBeVisible({ timeout: 10000 });
+        await card.click({ force: true });
+
+        await expect(page.getByTestId('su-card-magnify-overlay')).toBeVisible({ timeout: 5000 });
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return state.core.bases[0].minions.length;
+            });
+        }).toBe(0);
+
+        await page.getByTestId('su-card-magnify-overlay').click({ force: true });
+        await firstBase.click({ force: true });
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return state.core.bases[0].minions.length;
+            });
+        }).toBe(0);
+
+        await game.screenshot('smashup-click-preview-only', testInfo);
+    });
+
+    test('本地模式：默认模式下上滑手牌后才能进入打出选择', async ({ page }, testInfo) => {
+        const game = new GameTestContext(page);
+
+        await page.addInitScript(() => {
+            localStorage.setItem('smashup_interaction_mode', 'click');
+        });
+
+        await game.openTestGame('smashup', {
+            p0: 'pirates,aliens',
+            p1: 'robots,zombies',
+            skipFactionSelect: true,
+            skipInitialization: false,
+            seed: 24680,
+        }, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'swipe-play-card', defId: 'pirate_first_mate', type: 'minion' },
+                ],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                hand: [],
+                factions: ['robots', 'zombies'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_the_homeworld' },
+                { defId: 'base_the_mothership' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        const card = page.locator('[data-card-uid="swipe-play-card"]');
+        const firstBase = page.locator('[data-base-index="0"]').first();
+        await swipeUpHandCard(page, card);
+        await firstBase.click({ force: true });
+
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return state.core.bases[0].minions.some((minion: { uid: string }) => minion.uid === 'swipe-play-card');
+            });
+        }, { timeout: 5000 }).toBe(true);
+
+        await game.screenshot('smashup-swipe-play-resolved', testInfo);
     });
 });

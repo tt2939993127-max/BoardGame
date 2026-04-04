@@ -194,18 +194,29 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         onSellHintChange?.(false);
     }, [onDragStateChange, onPlayHintChange, onSellHintChange]);
 
-    useEffect(() => {
-        if (allowDrag) return;
-        if (!isDraggingRef.current && !draggingCardId && dragOffset.x === 0 && dragOffset.y === 0) {
-            return;
-        }
+    const resetDragInteraction = useCallback(() => {
         isDraggingRef.current = false;
         setDraggingCardId(null);
         setDragOffset({ x: 0, y: 0 });
         onDragStateChange?.(false, null);
         onPlayHintChange?.(false);
         onSellHintChange?.(false);
-    }, [allowDrag, dragOffset.x, dragOffset.y, draggingCardId, onDragStateChange, onPlayHintChange, onSellHintChange]);
+    }, [onDragStateChange, onPlayHintChange, onSellHintChange]);
+
+    useEffect(() => {
+        if (allowDrag) return;
+        if (!isDraggingRef.current && !draggingCardId && dragOffset.x === 0 && dragOffset.y === 0) {
+            return;
+        }
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            resetDragInteraction();
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [allowDrag, dragOffset.x, dragOffset.y, draggingCardId, resetDragInteraction]);
 
     // 发牌动画状态追踪（简化版）
     const [visibleCardIds, setVisibleCardIds] = useState<Set<string>>(new Set());
@@ -217,9 +228,15 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
 
         if (!dealAnimation) {
             // 无动画时直接显示所有卡牌
-            setVisibleCardIds(new Set(currentIds));
+            let cancelled = false;
+            queueMicrotask(() => {
+                if (cancelled) return;
+                setVisibleCardIds(new Set(currentIds));
+            });
             prevCardIdsRef.current = currentIds;
-            return;
+            return () => {
+                cancelled = true;
+            };
         }
 
         // 检测新增的卡牌
@@ -239,8 +256,15 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
         }
 
         // 更新可见卡牌（移除已不存在的卡牌）
-        setVisibleCardIds(new Set(currentIds));
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setVisibleCardIds(new Set(currentIds));
+        });
         prevCardIdsRef.current = currentIds;
+        return () => {
+            cancelled = true;
+        };
     }, [cards, dealAnimation]);
 
     // 处理卡牌点击（选中/取消选中）
@@ -376,7 +400,7 @@ export const HandAreaSkeleton = memo(function HandAreaSkeleton<TCard>({
 
             return baseStyle;
         },
-        [getLayoutStyle, getSelectStyle, dragOffset, allowDrag, allowSelect, processedCards.length]
+        [getLayoutStyle, getSelectStyle, dragOffset, allowDrag, allowSelect, cards.length]
     );
 
     return (

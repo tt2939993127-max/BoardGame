@@ -111,6 +111,21 @@ export const BaseZone: React.FC<{
     const ongoingCardOverlap = Math.max(layout.ongoingCardWidth * 0.2, 0.4);
     const titanSideContainerGap = Math.max(layout.ongoingCardWidth * 0.04, 0.08);
     const titanSideContainerAnchorOffset = titanRowWidth / 2 + titanSideContainerGap;
+    const isBaseHighlighted = isSelectable || canUseBaseAbility || (isDeployMode && !isMinionSelectMode);
+    const baseContainerClassName = isDimmed
+        ? 'opacity-40 grayscale cursor-not-allowed rotate-1'
+        : isBaseHighlighted
+            ? 'cursor-pointer rotate-0 scale-105'
+            : 'cursor-pointer rotate-1 hover:rotate-0';
+    const baseCardFrameClassName = `relative w-full h-full bg-white p-[0.4vw] rounded-sm transition-[box-shadow] duration-300
+        ${isSelectable
+            ? 'shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
+            : canUseBaseAbility
+            ? 'shadow-[0_0_2vw_rgba(251,191,36,0.45)] ring-4 ring-amber-300'
+            : isDeployMode && !isMinionSelectMode
+            ? 'shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
+            : 'shadow-sm group-hover/base:shadow-xl'
+        }`;
 
     // 获取基地限制信息
     const restrictions = getBaseRestrictions(core, baseIndex);
@@ -501,71 +516,67 @@ export const BaseZone: React.FC<{
                 {...getBaseTouchInspectProps(`base-${baseIndex}`, { defId: base.defId })}
                 ref={tokenRef}
                 data-base-index={baseIndex}
-                className={`
-                    relative aspect-[1.43] bg-white p-[0.4vw] shadow-sm rounded-sm transition-all duration-300 z-20
-                    ${isDimmed
-                        ? 'opacity-40 grayscale cursor-not-allowed rotate-1'
-                        : isSelectable
-                        ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
-                        : canUseBaseAbility
-                        ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(251,191,36,0.45)] ring-4 ring-amber-300'
-                        : isDeployMode && !isMinionSelectMode
-                        ? 'cursor-pointer rotate-0 scale-105 shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
-                        : 'rotate-1 hover:rotate-0 hover:shadow-xl cursor-pointer'}
-                `}
+                data-testid={`base-zone-${baseIndex}`}
+                className={`relative aspect-[1.43] transition-all duration-300 z-20 ${baseContainerClassName}`}
                 style={{
                     width: `${layout.baseCardWidth}vw`,
-                    backgroundImage: 'repeating-linear-gradient(45deg, #fff 0px, #fff 2px, #fdfdfd 2px, #fdfdfd 4px)',
                 }}
             >
-                {/* Inner Art Area — AnimatePresence 实现基地替换过渡 */}
-                <AnimatePresence mode="wait">
-                    <motion.div
-                        key={base.defId}
-                        className="w-full h-full bg-slate-200 border border-slate-300 overflow-hidden relative"
-                        initial={{ opacity: 0, scale: 0.85 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.85 }}
-                        transition={{ duration: 0.4, ease: 'easeInOut' }}
-                    >
-                    <CardPreview
-                        previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: base.defId } }}
-                        className="w-full h-full"
-                        title={baseName}
-                    />
-                    </motion.div>
-                </AnimatePresence>
+                <div
+                    className={baseCardFrameClassName}
+                    style={{
+                        backgroundImage: 'repeating-linear-gradient(45deg, #fff 0px, #fff 2px, #fdfdfd 2px, #fdfdfd 4px)',
+                    }}
+                >
+                    {/* Inner Art Area — AnimatePresence 实现基地替换过渡 */}
+                    <AnimatePresence mode="wait">
+                        <motion.div
+                            key={base.defId}
+                            className="w-full h-full bg-slate-200 border border-slate-300 overflow-hidden relative"
+                            initial={{ opacity: 0, scale: 0.85 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.85 }}
+                            transition={{ duration: 0.4, ease: 'easeInOut' }}
+                        >
+                        <CardPreview
+                            previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: base.defId } }}
+                            className="w-full h-full"
+                            title={baseName}
+                        />
+                        </motion.div>
+                    </AnimatePresence>
 
-                {/* 基地可选时的脉冲发光叠层 */}
-                {isSelectable && (
-                    <motion.div
-                        className="absolute inset-0 pointer-events-none z-25 rounded-sm"
-                        animate={{ opacity: [0.1, 0.3, 0.1] }}
-                        transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.4) 0%, transparent 70%)' }}
-                    />
-                )}
+                    {/* 基地可选时的脉冲发光叠层 */}
+                    {isSelectable && (
+                        <motion.div
+                            className="absolute inset-0 pointer-events-none z-25 rounded-sm"
+                            animate={{ opacity: [0.1, 0.3, 0.1] }}
+                            transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
+                            style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.4) 0%, transparent 70%)' }}
+                        />
+                    )}
 
-                {canUseBaseAbility && !isSelectable && (
-                    <motion.div
-                        className="absolute inset-0 pointer-events-none z-25 rounded-sm"
-                        animate={{ opacity: [0.08, 0.24, 0.08] }}
-                        transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
-                        style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.32) 0%, transparent 72%)' }}
-                    />
-                )}
+                    {canUseBaseAbility && !isSelectable && (
+                        <motion.div
+                            className="absolute inset-0 pointer-events-none z-25 rounded-sm"
+                            animate={{ opacity: [0.08, 0.24, 0.08] }}
+                            transition={{ duration: 1.8, repeat: Infinity, ease: 'easeInOut' }}
+                            style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.32) 0%, transparent 72%)' }}
+                        />
+                    )}
 
-                {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
-                {showDesktopInspectButton && (
-                    <button
-                        onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
-                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
-                    >
-                        <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                )}
+                    {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
+                    {showDesktopInspectButton && (
+                        <button
+                            onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
+                            className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
+                        >
+                            <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
 
                 {canUseBaseAbility && (
                     <div className="absolute bottom-[0.45vw] left-1/2 -translate-x-1/2 bg-amber-300/95 text-slate-900 text-[0.55vw] font-black px-[0.42vw] py-[0.08vw] rounded-sm shadow-md border border-white z-30 whitespace-nowrap pointer-events-none">
@@ -926,7 +937,6 @@ const MinionCard: React.FC<{
 
     const seed = minion.uid.charCodeAt(0) + index;
     const rotation = (seed % 6) - 3;
-
     const style = {
         marginTop: index === 0 ? 0 : `${layout.minionStackOffset}vw`,
         zIndex: index + 1,
@@ -997,6 +1007,30 @@ const MinionCard: React.FC<{
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
     const showUsedMinionState = hasTalent && minion.talentUsed && !canActivate;
+    const minionContainerClassName = `relative aspect-[0.714] transition-transform duration-200 group hover:!z-[999] hover:scale-110 hover:rotate-0 ${
+        isDimmed
+            ? 'opacity-40 grayscale cursor-not-allowed'
+            : 'cursor-pointer'
+    }`;
+    const minionFrameClassName = `relative w-full h-full bg-white p-[0.2vw] rounded-[0.2vw] border-[0.15vw] transition-shadow duration-200
+        ${isMultiSelected
+            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
+            : isSelectableMinion
+            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
+            : isExpanded
+            ? isMinionActivationArmed
+                ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                : canActivate
+                ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                : showUsedMinionState
+                ? USED_STATE_CLASS
+                : 'border-purple-300 ring-2 ring-purple-300 shadow-[0_0_14px_rgba(216,180,254,0.55),0_0_28px_rgba(216,180,254,0.25)]'
+            : canActivate
+            ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
+            : showUsedMinionState
+            ? USED_STATE_CLASS
+            : `${conf.border} ${conf.shadow}`
+        }`;
 
     return (
         <motion.div
@@ -1008,30 +1042,7 @@ const MinionCard: React.FC<{
             data-activation-armed={isMinionActivationArmed ? 'true' : 'false'}
             {...getMinionTouchInspectProps(`minion-${minion.uid}`, undefined)}
             onClick={handleClick}
-            className={`
-                relative aspect-[0.714] bg-white p-[0.2vw] rounded-[0.2vw] 
-                transition-shadow duration-200 group hover:!z-[999] hover:scale-110 hover:rotate-0
-                border-[0.15vw] shadow-md
-                ${isDimmed
-                    ? 'opacity-40 grayscale cursor-not-allowed'
-                    : isMultiSelected
-                    ? 'cursor-pointer border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
-                    : isSelectableMinion
-                    ? 'cursor-pointer border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
-                    : isExpanded
-                    ? isMinionActivationArmed
-                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
-                    : canActivate
-                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
-                    : showUsedMinionState
-                    ? `cursor-pointer ${USED_STATE_CLASS}`
-                    : 'cursor-pointer border-purple-300 ring-2 ring-purple-300 shadow-[0_0_14px_rgba(216,180,254,0.55),0_0_28px_rgba(216,180,254,0.25)]'
-                    : canActivate
-                    ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
-                    : showUsedMinionState
-                    ? `cursor-pointer ${USED_STATE_CLASS}`
-                    : `cursor-pointer ${conf.border} ${conf.shadow}`}
-            `}
+            className={minionContainerClassName}
             style={style}
             initial={{ scale: 0.3, y: -60, opacity: 0, rotate: -15 }}
             animate={isSelectableMinion
@@ -1064,7 +1075,8 @@ const MinionCard: React.FC<{
                     </div>
                 </>
             )}
-            <div className="w-full h-full bg-slate-100 relative overflow-hidden">
+            <div className={minionFrameClassName}>
+                <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                     <CardPreview
                         previewRef={genericDef?.previewRef
                             ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: minion.defId, cardUid: minion.uid } }
@@ -1091,6 +1103,7 @@ const MinionCard: React.FC<{
                         style={{ background: 'radial-gradient(circle, rgba(251,191,36,0.6) 0%, transparent 70%)' }}
                     />
                 )}
+                </div>
             </div>
             {/* 放大镜按钮 - hover 时显示在右上角，z-40 确保不被力量徽章遮挡 */}
             {showDesktopInspectButton && (

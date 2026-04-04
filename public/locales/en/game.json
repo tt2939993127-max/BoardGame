@@ -173,8 +173,8 @@
     "smashup": {
       "title": "Smash Up",
       "interaction": "Interaction mode",
-      "interactionHint": "Switch between click and drag at any time. Default is click.",
-      "modeClick": "Click",
+      "interactionHint": "Default mode: swipe up to play, tap to magnify. Drag mode plays only on drop.",
+      "modeClick": "Swipe Up",
       "modeDrag": "Drag",
       "overlay": "Chinese overlay",
       "overlayHint": "Show Chinese name and rules text on English card art.",

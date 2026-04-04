@@ -1187,11 +1187,22 @@ const collapseFabMenuToMainButton = async (page: Page, mainId = 'exit') => {
     }
 
     if (await mainButton.isVisible().catch(() => false)) {
-      await mainButton.click();
+      await mainButton.click({ force: true });
     } else {
       visibleButtons.sort((a, b) => b.y - a.y);
-      await fabButtons.nth(visibleButtons[0].index).click();
+      await fabButtons.nth(visibleButtons[0].index).click({ force: true });
     }
+    await page.waitForTimeout(120);
+  }
+
+  if (await mainButton.isVisible().catch(() => false)) {
+    await mainButton.evaluate((element) => {
+      (element as HTMLElement).click();
+    });
+    await page.waitForTimeout(120);
+    await mainButton.evaluate((element) => {
+      (element as HTMLElement).click();
+    });
     await page.waitForTimeout(120);
   }
 
@@ -2911,10 +2922,13 @@ test.describe('SummonerWars', () => {
       await collapseFabMenuToMainButton(hostPage);
 
       const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+      const exitFabPanel = hostPage.getByTestId('fab-panel-exit');
       await expect(exitFab).toBeVisible({ timeout: 5000 });
       await exitFab.click();
       await expect(hostPage.getByTestId('fab-sheet-exit')).toHaveCount(0);
-      await expect(hostPage.getByTestId('fab-panel-exit')).toBeVisible({ timeout: 5000 });
+      await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+      const exitPanelRectBeforeDrag = await exitFabPanel.boundingBox();
+      expect(exitPanelRectBeforeDrag).not.toBeNull();
 
       await touchDragElement(exitFab, {
         deltaX: 0,
@@ -2934,7 +2948,31 @@ test.describe('SummonerWars', () => {
         expect((draggedStoredPosition?.topPercent ?? 0)).toBeGreaterThan(0.9);
         expect((draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0)).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height - 12);
       }
+      await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+      await expect.poll(async () => {
+        const rect = await exitFabPanel.boundingBox();
+        return rect ? Math.round(rect.y) : null;
+      }, { timeout: 2500, intervals: [80, 120, 160] }).not.toBeNull();
+      const rawExitPanelRectAfterDrag = await exitFabPanel.boundingBox();
+      expect(rawExitPanelRectAfterDrag).not.toBeNull();
+      const resolvedExitPanelRectAfterDrag = {
+        x: rawExitPanelRectAfterDrag?.x ?? 0,
+        y: rawExitPanelRectAfterDrag?.y ?? 0,
+        right: (rawExitPanelRectAfterDrag?.x ?? 0) + (rawExitPanelRectAfterDrag?.width ?? 0),
+        bottom: (rawExitPanelRectAfterDrag?.y ?? 0) + (rawExitPanelRectAfterDrag?.height ?? 0),
+      };
+      expect(
+        Math.abs(resolvedExitPanelRectAfterDrag.y - (exitPanelRectBeforeDrag?.y ?? 0)),
+        `${overflowDirection} overflow after drag should move the active exit panel with the FAB anchor`,
+      ).toBeGreaterThan(60);
+      expect(resolvedExitPanelRectAfterDrag.x).toBeGreaterThanOrEqual(0);
+      expect(resolvedExitPanelRectAfterDrag.y).toBeGreaterThanOrEqual(0);
+      expect(resolvedExitPanelRectAfterDrag.right).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.width + 1);
+      expect(resolvedExitPanelRectAfterDrag.bottom).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.height + 1);
 
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
       const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
       await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
       const expandedFabMetrics = await waitForExpandedFabLayoutStable(hostPage);
@@ -2951,6 +2989,20 @@ test.describe('SummonerWars', () => {
       expect(expandedFabMetrics.pageScrollY).toBe(0);
       expect(expandedFabMetrics.gamePageRect?.top ?? -1).toBeGreaterThanOrEqual(0);
       expect(expandedFabMetrics.gamePageRect?.bottom ?? -1).toBeGreaterThanOrEqual(expandedFabMetrics.viewportHeight - 1);
+      const nearestSatelliteToMain = expandedFabMetrics.visibleButtons
+        .filter((button) => button.id !== 'exit')
+        .map((button) => ({
+          ...button,
+          distanceToMain: Math.abs(
+            ((button.rect.top + button.rect.bottom) / 2)
+            - (((expandedFabMetrics.mainVisualRect?.top ?? 0) + (expandedFabMetrics.mainVisualRect?.bottom ?? 0)) / 2),
+          ),
+        }))
+        .sort((a, b) => a.distanceToMain - b.distanceToMain)[0];
+      expect(
+        nearestSatelliteToMain?.id,
+        `${overflowDirection} overflow should keep the business order stable and leave settings closest to the main FAB`,
+      ).toBe('settings');
 
       const expandedButtons = expandedFabMetrics.visibleButtons.filter((button) => button.id !== 'exit');
       const panelRect = expandedFabMetrics.panelRect;

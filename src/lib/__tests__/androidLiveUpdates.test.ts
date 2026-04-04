@@ -142,7 +142,7 @@ describe('androidLiveUpdates', () => {
         }, appInfo)).toBe(false);
     });
 
-    it('Android 运行时边界必须看真实原生环境，而不是只看构建模式', () => {
+    it('Android 运行时边界必须看真实原生环境，而不是只看构建模式或孤立桥对象', () => {
         expect(detectNativeAndroidRuntime({
             capacitor: {
                 isNativePlatform: () => false,
@@ -165,6 +165,6 @@ describe('androidLiveUpdates', () => {
             windowObject: {
                 androidBridge: {},
             },
-        })).toBe(true);
+        })).toBe(false);
     });
 });

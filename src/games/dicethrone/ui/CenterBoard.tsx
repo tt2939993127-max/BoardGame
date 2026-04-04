@@ -7,6 +7,11 @@ import type { AbilityOverlaysHandle } from './AbilityOverlays';
 import { ASSETS } from './assets';
 import { getPlayerBoardAspectRatio, getPlayerBoardUiTuning } from './abilitySlotLayout';
 
+const CENTER_BOARD_SHELL_INSET_VW = 15;
+const CENTER_BOARD_BASE_HEIGHT_VW = 35;
+const CENTER_BOARD_GAP_VW = 0.5;
+const TIP_BOARD_ASPECT_RATIO = 1311 / 2048;
+
 export interface CenterBoardProps {
     coreAreaHighlighted: boolean;
     isTipOpen: boolean;
@@ -78,6 +83,18 @@ export const CenterBoard = ({
     const tipBoardPath = ASSETS.TIP_BOARD(characterId);
     const playerBoardBackground = buildLocalizedImageSet(playerBoardPath, locale);
     const tipBoardBackground = buildLocalizedImageSet(tipBoardPath, locale);
+    const playerBoardStyle = React.useMemo(() => {
+        const shellWidthBudget = `calc(100vw - ${CENTER_BOARD_SHELL_INSET_VW * 2}vw)`;
+        const tipBoardWidth = isTipOpen
+            ? `calc(${CENTER_BOARD_BASE_HEIGHT_VW}vw * ${TIP_BOARD_ASPECT_RATIO})`
+            : '0vw';
+        const maxBoardWidth = `calc(${shellWidthBudget} - ${tipBoardWidth} - ${CENTER_BOARD_GAP_VW}vw)`;
+
+        return {
+            width: `min(calc(${CENTER_BOARD_BASE_HEIGHT_VW}vw * ${playerBoardAspectRatio}), ${maxBoardWidth})`,
+            aspectRatio: String(playerBoardAspectRatio),
+        } as const;
+    }, [isTipOpen, playerBoardAspectRatio]);
 
     const handleMagnifySurfaceClick = React.useCallback((
         event: React.MouseEvent<HTMLElement>,
@@ -104,20 +121,22 @@ export const CenterBoard = ({
         >
             <div className={`relative flex items-center justify-center ${boardGapClassName}`}>
                 <div
-                    className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    className={`relative h-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
                     style={boardUiTuning.playerBoardTranslateY === 0
-                        ? undefined
-                        : { transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)` }}
+                        ? playerBoardStyle
+                        : {
+                            ...playerBoardStyle,
+                            transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)`,
+                        }}
                     data-tutorial-id="player-board"
                     data-testid="player-board-surface"
                     onClick={(event) => handleMagnifySurfaceClick(event, playerBoardPath)}
                 >
                     <div
-                        className="h-full"
+                        className="h-full w-full"
                         role="img"
                         aria-label={t('imageAlt.playerBoard')}
                         style={{
-                            width: `calc(35vw * ${playerBoardAspectRatio})`,
                             backgroundImage: playerBoardBackground,
                             backgroundRepeat: 'no-repeat',
                             backgroundPosition: 'center',

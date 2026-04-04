@@ -4,6 +4,8 @@ import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-libr
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as matchApi from '../../services/matchApi';
 import { isMatchNotFoundError, useMatchStatus, validateStoredMatchSeat, type StoredMatchCredentials } from '../../hooks/match/useMatchStatus';
+import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAiSeats';
+import type { GameManifestEntry } from '../../games/manifest.types';
 
 type Player = { id: number; name?: string | null };
 
@@ -15,6 +17,22 @@ const buildStored = (overrides?: Partial<StoredMatchCredentials>): StoredMatchCr
 });
 
 const buildPlayers = (players: Player[]): Player[] => players;
+const buildGameManifest = (): GameManifestEntry => ({
+    id: 'smashup',
+    type: 'game',
+    enabled: true,
+    titleKey: 'games.smashup.title',
+    descriptionKey: 'games.smashup.description',
+    category: 'card',
+    playersKey: 'games.smashup.players',
+    icon: 'gamepad-2',
+    playerOptions: [2, 3],
+    ai: {
+        capture: false,
+        localAi: true,
+        remoteAi: false,
+    },
+});
 
 describe('validateStoredMatchSeat', () => {
     it('缺失本地信息时不清理', () => {
@@ -71,6 +89,65 @@ describe('isMatchNotFoundError', () => {
 
     it('忽略非 404 错误', () => {
         expect(isMatchNotFoundError(new Error('500: network error'))).toBe(false);
+    });
+});
+
+describe('onlineAiSeats', () => {
+    it('缺少本地 AI 凭据时仍保留 AI 座位定义', async () => {
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-1',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {},
+        });
+
+        expect(state.seatControllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
+        expect(state.seatCredentials).toEqual({});
+    });
+
+    it('房主可补领缺失的 AI 凭据并合并现有凭据', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `claimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-2',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }, { id: 2, name: 'P2' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'hard' },
+                        '2': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+            claimMissingSeatCredential,
+        });
+
+        expect(claimMissingSeatCredential).toHaveBeenCalledWith('2');
+        expect(state.seatCredentials).toEqual({
+            '1': 'existing-ai-1',
+            '2': 'claimed-2',
+        });
+    });
+
+    it('仅凭据有变化时才触发持久化', () => {
+        expect(haveAiSeatCredentialsChanged({}, {})).toBe(false);
+        expect(haveAiSeatCredentialsChanged({ '1': 'same' }, { '1': 'same' })).toBe(false);
+        expect(haveAiSeatCredentialsChanged({ '1': 'old' }, { '1': 'new' })).toBe(true);
     });
 });
 

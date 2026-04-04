@@ -471,41 +471,19 @@ export function queueInteraction<TCore>(
     if (!current) {
         // 如果当前没有交互，新交互立即成为 current
         // 如果有选项生成器，立即基于当前状态生成选项
-        console.log('[InteractionSystem] popInteraction: No current, making new interaction current:', {
-            interactionId: interaction.id,
-            kind: interaction.kind,
-        });
-        
         if (interaction.kind === 'simple-choice') {
             const data = interaction.data as SimpleChoiceData;
-            console.log('[InteractionSystem] popInteraction: Checking optionsGenerator:', {
-                hasOptionsGenerator: !!data.optionsGenerator,
-                hasContinuationContext: !!(data as any).continuationContext,
-                continuationContext: (data as any).continuationContext,
-                originalOptionsCount: data.options?.length,
-            });
-            
             if (data.optionsGenerator) {
                 // 传递 state 和 data（包含 continuationContext）给 optionsGenerator
-                console.log('[InteractionSystem] popInteraction: Calling optionsGenerator...');
                 const generatedOptions = data.optionsGenerator(state, data);
                 const freshOptions = normalizeFreshSimpleChoiceOptions(generatedOptions, data);
-                console.log('[InteractionSystem] popInteraction: optionsGenerator returned:', {
-                    freshOptionsCount: freshOptions.length,
-                    freshOptions,
-                });
-                
+
                 // 更新交互选项
                 const updatedInteraction = {
                     ...interaction,
                     data: { ...data, options: freshOptions },
                 };
-                
-                console.log('[InteractionSystem] popInteraction: Updated interaction:', {
-                    interactionId: updatedInteraction.id,
-                    optionsCount: (updatedInteraction.data as SimpleChoiceData).options.length,
-                });
-                
+
                 interaction = updatedInteraction;
             }
         }
@@ -550,13 +528,6 @@ export function resolveInteraction<TCore>(
     let next = queue[0];
     const newQueue = queue.slice(1);
 
-    console.log('[InteractionSystem] resolveInteraction START:', {
-        hasNext: !!next,
-        nextId: next?.id,
-        nextKind: next?.kind,
-        queueLength: queue.length,
-    });
-
     // 【通用修复】传递延迟事件给下一个交互
     // 当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），
     // 延迟的 BASE_CLEARED 事件存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
@@ -567,12 +538,6 @@ export function resolveInteraction<TCore>(
         const deferredEvents = currentCtx._deferredPostScoringEvents;
         
         if (deferredEvents && Array.isArray(deferredEvents) && deferredEvents.length > 0) {
-            console.log('[InteractionSystem] Transferring deferred events to next interaction:', {
-                currentId: current.id,
-                nextId: next.id,
-                deferredEventsCount: deferredEvents.length,
-            });
-            
             const nextData = next.data as Record<string, unknown>;
             const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
             nextCtx._deferredPostScoringEvents = deferredEvents;
@@ -585,28 +550,13 @@ export function resolveInteraction<TCore>(
     // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {
         const data = next.data as SimpleChoiceData;
-        
-        console.log('[InteractionSystem] Processing simple-choice:', {
-            interactionId: next.id,
-            hasOptionsGenerator: !!data.optionsGenerator,
-            hasContinuationContext: !!(data as any).continuationContext,
-            continuationContext: (data as any).continuationContext,
-            originalOptionsCount: data.options?.length,
-            originalOptions: data.options,
-        });
-        
+
         // 优先使用手动提供的 optionsGenerator
         let freshOptions: PromptOption[];
         if (data.optionsGenerator) {
-            console.log('[InteractionSystem] Calling optionsGenerator...');
             freshOptions = data.optionsGenerator(state, data);
-            console.log('[InteractionSystem] optionsGenerator returned:', {
-                freshOptionsCount: freshOptions.length,
-                freshOptions,
-            });
         } else {
             // 使用通用刷新逻辑（opt-in：只有显式声明了 autoRefresh 才刷新）
-            console.log('[InteractionSystem] Using generic refresh...');
             const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing' | undefined;
             freshOptions = refreshOptionsGeneric(state, next, data.options, autoRefresh);
         }
@@ -619,10 +569,6 @@ export function resolveInteraction<TCore>(
                 ...next,
                 data: { ...data, options: freshOptions },
             };
-            console.log('[InteractionSystem] Updated next interaction with fresh options:', {
-                interactionId: next.id,
-                newOptionsCount: freshOptions.length,
-            });
         } else {
             console.warn('[InteractionSystem] Fresh options do not meet multi.min requirement, keeping original options');
         }
@@ -906,14 +852,6 @@ export function createInteractionSystem<TCore>(
         },
 
         playerView: (state, playerId): Partial<{ interaction: InteractionState }> => {
-            console.log('[InteractionSystem playerView] START:', {
-                playerId,
-                hasCurrent: !!state.sys.interaction.current,
-                currentId: state.sys.interaction.current?.id,
-                currentOptionsCount: (state.sys.interaction.current?.data as any)?.options?.length,
-                currentOptions: JSON.stringify((state.sys.interaction.current?.data as any)?.options, null, 2),
-            });
-            
             const { current, queue } = state.sys.interaction;
 
             // 如果交互有 optionsGenerator，先调用它生成选项，再序列化
@@ -921,16 +859,7 @@ export function createInteractionSystem<TCore>(
             if (isSamePlayerId(current?.playerId, playerId) && current.kind === 'simple-choice') {
                 const data = current.data as SimpleChoiceData;
                 if (data.optionsGenerator) {
-                    console.log('[InteractionSystem playerView] Calling optionsGenerator for current:', {
-                        hasData: !!data,
-                        hasContinuationContext: !!(data as any).continuationContext,
-                        continuationContext: (data as any).continuationContext,
-                    });
                     const freshOptions = data.optionsGenerator(state, data);
-                    console.log('[InteractionSystem playerView] optionsGenerator returned:', {
-                        optionsCount: freshOptions.length,
-                        options: freshOptions,
-                    });
                     processedCurrent = {
                         ...current,
                         data: { ...data, options: freshOptions },
@@ -940,13 +869,7 @@ export function createInteractionSystem<TCore>(
 
             const filteredCurrent =
                 isSamePlayerId(processedCurrent?.playerId, playerId) ? stripNonSerializable(processedCurrent) : undefined;
-            
-            console.log('[InteractionSystem playerView] After stripNonSerializable:', {
-                hasFilteredCurrent: !!filteredCurrent,
-                filteredOptionsCount: (filteredCurrent?.data as any)?.options?.length,
-                filteredOptions: JSON.stringify((filteredCurrent?.data as any)?.options, null, 2),
-            });
-            
+
             // 同样处理 queue 中的交互
             const processedQueue = queue
                 .filter((i) => isSamePlayerId(i?.playerId, playerId))

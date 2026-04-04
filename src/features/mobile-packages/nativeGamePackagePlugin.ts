@@ -3,6 +3,7 @@ import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGameP
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { mergeGamePackageState } from './types';
 import { normalizeGamePackageAssetBaseUrl, normalizeNativeAssetRootPath } from './assetBaseUrl';
+import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 type PluginListenerHandle = {
     remove(): Promise<void>;
@@ -74,7 +75,6 @@ export interface NativeRemoteJsonResponse {
     contentType?: string;
 }
 
-const isAndroidShellBuild = import.meta.env.MODE === 'android';
 let nativePluginLoader: NativeGamePackagePlugin | null | undefined;
 const nativeGamePackagePlugin = registerPlugin<NativeGamePackagePlugin>('GamePackage');
 
@@ -121,25 +121,18 @@ const getNativePlugin = (): NativeGamePackagePlugin | null => {
         return nativePluginLoader;
     }
 
-    if (!isAndroidShellBuild) {
-        logMobileRuntime('NativeGamePackagePlugin', 'capacitor-core-skip-non-android', {
+    if (!isNativeAndroidRuntime()) {
+        logMobileRuntime('NativeGamePackagePlugin', 'skip-non-native-android-runtime', {
             mode: import.meta.env.MODE,
         });
         nativePluginLoader = null;
         return nativePluginLoader;
     }
 
-    const isNative = Capacitor.isNativePlatform();
-    const platform = Capacitor.getPlatform();
     logMobileRuntimeCritical('NativeGamePackagePlugin', 'get-plugin-platform-check', {
-        isNative,
-        platform,
+        isNative: Capacitor.isNativePlatform(),
+        platform: Capacitor.getPlatform(),
     });
-    if (!isNative || platform !== 'android') {
-        nativePluginLoader = null;
-        return nativePluginLoader;
-    }
-
     // registerPlugin 返回的是 Proxy。不要把它包装进 async/await 返回链，
     // 否则可能被 Promise 当成 thenable 吸收并卡住解析。
     nativePluginLoader = nativeGamePackagePlugin;

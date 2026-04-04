@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchChatMessage } from '../../services/matchSocket';
 import { getLatestIncomingMessage, isSelfChatMessage, trimChatMessages } from '../game/framework/widgets/GameHUD';
+import { resolveFabSatellitesToRender, shouldTrackFabButtonRect } from '../system/FabMenu';
 
 const buildMessage = (override: Partial<MatchChatMessage> = {}): MatchChatMessage => ({
     id: 'msg-1',
@@ -63,5 +64,37 @@ describe('GameHUD chat preview helpers', () => {
         ];
         const trimmed = trimChatMessages(messages, 3);
         expect(trimmed).toEqual(messages);
+    });
+});
+
+describe('FabMenu helpers', () => {
+    it('卫星按钮顺序始终按业务定义靠近主球的一端优先渲染', () => {
+        expect(resolveFabSatellitesToRender(['feedback', 'fullscreen', 'action-log', 'settings'])).toEqual([
+            'settings',
+            'action-log',
+            'fullscreen',
+            'feedback',
+        ]);
+    });
+
+    it('激活态内容面板会持续追踪按钮锚点位置', () => {
+        expect(shouldTrackFabButtonRect({
+            showTooltip: false,
+            showPreview: false,
+            isActive: true,
+            hasContent: true,
+        })).toBe(true);
+        expect(shouldTrackFabButtonRect({
+            showTooltip: false,
+            showPreview: false,
+            isActive: true,
+            hasContent: false,
+        })).toBe(false);
+        expect(shouldTrackFabButtonRect({
+            showTooltip: true,
+            showPreview: false,
+            isActive: false,
+            hasContent: false,
+        })).toBe(true);
     });
 });

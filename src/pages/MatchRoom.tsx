@@ -20,6 +20,7 @@ import {
     leaveMatch,
     rejoinMatch,
     persistMatchCredentials,
+    persistAiSeatCredentials,
     clearMatchCredentials,
     clearOwnerActiveMatch,
     suppressOwnerActiveMatch,
@@ -27,7 +28,7 @@ import {
     readStoredMatchCredentials,
     validateStoredMatchSeat,
 } from '../hooks/match/useMatchStatus';
-import { getOrCreateGuestId } from '../hooks/match/ownerIdentity';
+import { getGuestName, getOrCreateGuestId } from '../hooks/match/ownerIdentity';
 import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { useModalStack } from '../contexts/ModalStackContext';
@@ -57,8 +58,8 @@ import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 import { useGameImplementationReady } from '../hooks/useGameImplementationReady';
 import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
+import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
-    normalizeLocalMatchPreferences,
     resolveAiMinimumActionDelayMs,
     resolveNextAiAction,
     type AiSeatController,
@@ -360,7 +361,7 @@ export const MatchRoom = () => {
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
-    const { user } = useAuth();
+    const { user, token } = useAuth();
     const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
     const renderLogKeyRef = useRef<string | null>(null);
 
@@ -377,6 +378,8 @@ export const MatchRoom = () => {
     }
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const guestId = useMemo(() => getOrCreateGuestId(), []);
+    const guestName = useMemo(() => getGuestName(t, guestId), [guestId, t]);
     const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
     const gamePageDataAttributes = useMemo(
         () => getGamePageDataAttributes(gameId, gameConfig),
@@ -762,64 +765,6 @@ export const MatchRoom = () => {
         }
     }, [gameId, matchId]);
 
-    useEffect(() => {
-        if (isTutorialRoute || !matchId || !gameId || !gameConfig) {
-            setOnlineAiSeatControllers({});
-            setOnlineAiSeatCredentials({});
-            return;
-        }
-
-        let cancelled = false;
-
-        const loadOnlineAiSeatControllers = async () => {
-            try {
-                const matchInfo = await matchApi.getMatch(gameId, matchId);
-                if (cancelled) return;
-
-                const setupData = matchInfo.setupData && typeof matchInfo.setupData === 'object'
-                    ? matchInfo.setupData as Record<string, unknown>
-                    : {};
-                const rawSeatControllers = setupData.seatControllers && typeof setupData.seatControllers === 'object' && !Array.isArray(setupData.seatControllers)
-                    ? setupData.seatControllers as Record<string, unknown>
-                    : {};
-                const rawSetupSelections = setupData.setupSelections && typeof setupData.setupSelections === 'object' && !Array.isArray(setupData.setupSelections)
-                    ? setupData.setupSelections as Record<string, unknown>
-                    : {};
-                const normalized = normalizeLocalMatchPreferences(gameConfig, {
-                    numPlayers: matchInfo.players.length,
-                    seatControllers: rawSeatControllers,
-                    setupSelections: rawSetupSelections,
-                }).seatControllers;
-                const storedAiSeatCredentials = readStoredAiSeatCredentials(matchId);
-                const nextSeatControllers: Record<string, AiSeatController> = {};
-
-                for (let index = 0; index < matchInfo.players.length; index += 1) {
-                    const playerId = String(index);
-                    const controller = normalized[playerId] ?? { type: 'human' };
-                    if (controller.type !== 'human' && !storedAiSeatCredentials[playerId]) {
-                        nextSeatControllers[playerId] = { type: 'human' };
-                        continue;
-                    }
-                    nextSeatControllers[playerId] = controller;
-                }
-
-                setOnlineAiSeatControllers(nextSeatControllers);
-                setOnlineAiSeatCredentials(storedAiSeatCredentials);
-            } catch {
-                if (!cancelled) {
-                    setOnlineAiSeatControllers({});
-                    setOnlineAiSeatCredentials({});
-                }
-            }
-        };
-
-        void loadOnlineAiSeatControllers();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [gameConfig, gameId, isTutorialRoute, localStorageTick, matchId]);
-
     const tutorialPlayerID = debugPlayerID ?? urlPlayerID ?? '0';
 
     // 进入联机对局时，调试面板自动切换到自己对应的玩家视角
@@ -885,6 +830,70 @@ export const MatchRoom = () => {
         setLocalStorageTick((t) => t + 1);
         toast.warning({ kind: 'i18n', key: 'error.localStateCleared', ns: 'lobby' });
     }, [isTutorialRoute, matchId, statusPlayerID, matchStatus.isLoading, matchStatus.players, toast, shouldAutoJoin, isAutoJoining]);
+
+    useEffect(() => {
+        if (isTutorialRoute || !matchId || !gameId || !gameConfig) {
+            setOnlineAiSeatControllers({});
+            setOnlineAiSeatCredentials({});
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadOnlineAiSeatControllers = async () => {
+            try {
+                const matchInfo = await matchApi.getMatch(gameId, matchId);
+                if (cancelled) return;
+
+                const storedAiSeatCredentials = readStoredAiSeatCredentials(matchId);
+                const nextAiSeatState = await loadOnlineAiSeatState({
+                    gameConfig,
+                    matchInfo,
+                    storedAiSeatCredentials,
+                    claimMissingSeatCredential: matchStatus.isHost
+                        ? async (playerId) => {
+                            const response = await matchApi.claimSeat(gameId, matchId, playerId, token
+                                ? {
+                                    token,
+                                    playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
+                                }
+                                : {
+                                    guestId,
+                                    playerName: guestName,
+                                });
+                            return response.playerCredentials;
+                        }
+                        : undefined,
+                    onClaimError: (playerId, error) => {
+                        console.warn('[MatchRoom] AI 座位补领失败', {
+                            matchId,
+                            playerId,
+                            error: error instanceof Error ? error.message : String(error),
+                        });
+                    },
+                });
+                if (cancelled) return;
+
+                if (matchStatus.isHost && haveAiSeatCredentialsChanged(storedAiSeatCredentials, nextAiSeatState.seatCredentials)) {
+                    persistAiSeatCredentials(matchId, nextAiSeatState.seatCredentials);
+                }
+
+                setOnlineAiSeatControllers(nextAiSeatState.seatControllers);
+                setOnlineAiSeatCredentials(nextAiSeatState.seatCredentials);
+            } catch {
+                if (!cancelled) {
+                    setOnlineAiSeatControllers({});
+                    setOnlineAiSeatCredentials({});
+                }
+            }
+        };
+
+        void loadOnlineAiSeatControllers();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [gameConfig, gameId, guestId, guestName, isTutorialRoute, localStorageTick, matchId, matchStatus.isHost, t, token]);
     // 教程启动 effect
     // 使用 useLayoutEffect 确保在 CriticalImageGate 的 useEffect 之前执行。
     // 配合 TutorialDispatchBridge 的 useLayoutEffect（先 bindDispatch），
