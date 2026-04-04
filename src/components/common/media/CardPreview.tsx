@@ -68,7 +68,7 @@ const getFallbackLocale = (locale: string): string => {
 const MIN_VALID_ATLAS_DIMENSION_PX = 16;
 
 const hasUsableAtlasImage = (img: HTMLImageElement | null | undefined): img is HTMLImageElement =>
-    Boolean(img) && img.naturalWidth >= MIN_VALID_ATLAS_DIMENSION_PX && img.naturalHeight >= MIN_VALID_ATLAS_DIMENSION_PX;
+    img != null && img.naturalWidth >= MIN_VALID_ATLAS_DIMENSION_PX && img.naturalHeight >= MIN_VALID_ATLAS_DIMENSION_PX;
 
 const isUsableAtlasUrlLoaded = (url: string): boolean => {
     if (!isImagePreloaded(url)) return false;
@@ -103,7 +103,7 @@ export function CardPreview({
     const { i18n } = useTranslation();
     
     if (!previewRef) return null;
-    const effectiveLocale = locale || i18n.language || 'zh-CN';
+    const effectiveLocale = locale || i18n?.language || 'zh-CN';
 
     if (previewRef.type === 'image') {
         return (
@@ -246,13 +246,13 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         };
 
         const tryLoad = (idx: number) => {
-            if (idx >= checkUrls.length) {
+            if (idx >= checkUrls.length || !source) {
                 return;
             }
             const url = checkUrls[idx];
             const img = new Image();
             img.onload = () => {
-                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
+                if (cancelled || loadAttemptRef.current !== currentAttempt || !source) return;
                 if (!hasUsableAtlasImage(img)) {
                     tryLoad(idx + 1);
                     return;
