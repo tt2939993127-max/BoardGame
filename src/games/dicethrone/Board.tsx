@@ -65,6 +65,7 @@ import { AttackShowcaseOverlay } from './ui/AttackShowcaseOverlay';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
 import { getAutoResponseEnabled } from './ui/AutoResponseToggle';
 import { getAbilityChoiceText } from './ui/abilityChoiceText';
+import { buildRuntimeInlineUnitValue } from '../mobileSupport';
 
 type DiceThroneBoardProps = GameBoardProps<DiceThroneCore>;
 
@@ -115,6 +116,7 @@ function hasDivergentVariants(state: DiceThroneCore, playerId: string, variantId
 
 // --- Main Layout ---
 export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispatch, playerID, reset, matchData, isMultiplayer }) => {
+    const inlineUnit = buildRuntimeInlineUnitValue;
     const G = rawG.core;
     const access = useDiceThroneState(rawG);
     const choice = useCurrentChoice(access);
@@ -1134,7 +1136,13 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                 </div>
 
                 {otherPids.length > 0 && (
-                    <div className="absolute top-[0.9vw] inset-x-0 z-50 flex items-start justify-center gap-[0.6vw] pointer-events-none">
+                    <div
+                        className="absolute inset-x-0 z-50 flex items-start justify-center pointer-events-none"
+                        style={{
+                            top: inlineUnit(0.9),
+                            gap: inlineUnit(0.6),
+                        }}
+                    >
                         {otherPids.map((pid) => {
                             const headerPlayer = G.players[pid];
                             if (!headerPlayer) return null;
@@ -1211,7 +1219,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         advanceQueue(id);
                     }}
                 />
-                <div className="absolute inset-x-0 top-[2vw] bottom-0 z-10 pointer-events-none">
+                <div
+                    className="absolute inset-x-0 bottom-0 z-10 pointer-events-none"
+                    style={{ top: inlineUnit(2) }}
+                >
                     <LeftSidebar
                         currentPhase={currentPhase}
                         viewPlayer={player} // Always show own stats
@@ -1400,7 +1411,10 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     const isDiscardMode = currentPhase === 'discard' && mustDiscardCount > 0 && canOperateView;
                     return (
                         <>
-                            <div className="absolute bottom-0 left-0 right-0 z-40 pointer-events-none bg-gradient-to-t from-black/90 via-black/40 to-transparent h-[15vw]" />
+                            <div
+                                className="absolute bottom-0 left-0 right-0 z-40 pointer-events-none bg-gradient-to-t from-black/90 via-black/40 to-transparent"
+                                style={{ height: inlineUnit(15) }}
+                            />
                             {/* 游戏提示统一组件 */}
                             <GameHints
                                 isDiscardMode={isDiscardMode}

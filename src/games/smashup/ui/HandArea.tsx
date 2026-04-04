@@ -452,7 +452,11 @@ export const HandArea: React.FC<Props> = ({
     });
     const clickBehavior: 'select' | 'view' = isDiscardMode ? 'select' : 'view';
     const swipePlayEnabled = interactionMode === 'click' && !isOpponentView && !isDiscardMode && Boolean(onCardSwipePlay);
-    useEffect(() => { setIsLoaded(true); }, []);
+    useEffect(() => {
+        queueMicrotask(() => {
+            setIsLoaded(true);
+        });
+    }, []);
     if (!isLoaded) return null;
 
     return (

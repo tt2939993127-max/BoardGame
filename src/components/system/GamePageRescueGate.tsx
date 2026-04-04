@@ -174,7 +174,9 @@ export const GamePageRescueGate = () => {
 
     useEffect(() => {
         if (!isGameRoutePath(location.pathname)) {
-            setSnapshot(null);
+            queueMicrotask(() => {
+                setSnapshot(null);
+            });
             removeInitialLoaderIfPresent();
             return undefined;
         }

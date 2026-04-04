@@ -10,6 +10,7 @@ import { STATUS_IDS } from '../domain/ids';
 import type { HitStopConfig } from '../../../components/common/animations';
 import { UI_Z_INDEX } from '../../../core';
 import { AutoResponseToggle } from './AutoResponseToggle';
+import { buildRuntimeInlineUnitValue } from '../../mobileSupport';
 
 
 export const LeftSidebar = ({
@@ -65,21 +66,41 @@ export const LeftSidebar = ({
     /** 自动响应开关回调 */
     onAutoResponseToggle?: (enabled: boolean) => void;
 }) => {
+    const inlineUnit = buildRuntimeInlineUnitValue;
     return (
         <div
-            className="absolute left-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto"
-            style={{ zIndex: UI_Z_INDEX.hud }}
+            className="absolute top-0 flex flex-col items-center pointer-events-auto"
+            style={{
+                zIndex: UI_Z_INDEX.hud,
+                left: inlineUnit(1.5),
+                bottom: inlineUnit(1.5),
+                width: inlineUnit(15),
+            }}
         >
             {/* 回合顺序 - 上移 */}
-            <div className="w-full pt-[0.2rem] px-[1vw]"><PhaseIndicator currentPhase={currentPhase} /></div>
+            <div
+                className="w-full"
+                style={{
+                    paddingTop: '0.2rem',
+                    paddingLeft: inlineUnit(1),
+                    paddingRight: inlineUnit(1),
+                }}
+            >
+                <PhaseIndicator currentPhase={currentPhase} />
+            </div>
             <div className="flex-grow" />
-            <div className="w-full flex flex-col items-center gap-[0.5vw]">
+            <div className="w-full flex flex-col items-center" style={{ gap: inlineUnit(0.5) }}>
                 {/*
                  * selfBuffRef is used as the end position for buff/status flying effects.
                  * Use a small offset above the HP container so the effect doesn't land too low.
                  */}
                 <div
-                    className="w-full px-[1.2vw] flex flex-col-reverse gap-[0.3vw]"
+                    className="w-full flex flex-col-reverse"
+                    style={{
+                        paddingLeft: inlineUnit(1.2),
+                        paddingRight: inlineUnit(1.2),
+                        gap: inlineUnit(0.3),
+                    }}
                     ref={selfBuffRef}
                     data-tutorial-id="status-tokens"
                 >
@@ -120,8 +141,15 @@ export const LeftSidebar = ({
                     />
                 </div>
                 {/* 血条和自动响应开关容器 */}
-                <div className="w-full px-[1vw]" data-tutorial-id="player-stats">
-                    <div className="w-full flex flex-col gap-[0.4vw]">
+                <div
+                    className="w-full"
+                    style={{
+                        paddingLeft: inlineUnit(1),
+                        paddingRight: inlineUnit(1),
+                    }}
+                    data-tutorial-id="player-stats"
+                >
+                    <div className="w-full flex flex-col" style={{ gap: inlineUnit(0.4) }}>
                         <PlayerStats
                             player={viewPlayer}
                             hpRef={selfHpRef}
@@ -139,7 +167,15 @@ export const LeftSidebar = ({
                         </div>
                     </div>
                 </div>
-                <div className="w-full px-[1vw] pt-[0.3vw]" data-tutorial-id="draw-deck">
+                <div
+                    className="w-full"
+                    style={{
+                        paddingLeft: inlineUnit(1),
+                        paddingRight: inlineUnit(1),
+                        paddingTop: inlineUnit(0.3),
+                    }}
+                    data-tutorial-id="draw-deck"
+                >
                     <DrawDeck ref={drawDeckRef} count={viewPlayer.deck.length} locale={locale} />
                 </div>
             </div>

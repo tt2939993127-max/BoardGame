@@ -31,7 +31,9 @@ export function CursorPreferenceProvider({ children }: { children: ReactNode }) 
     // 登录用户：异步从数据库同步
     useEffect(() => {
         if (!user || !token) {
-            setPreference(DEFAULT_CURSOR_PREFERENCE);
+            queueMicrotask(() => {
+                setPreference(DEFAULT_CURSOR_PREFERENCE);
+            });
             return;
         }
         let cancelled = false;

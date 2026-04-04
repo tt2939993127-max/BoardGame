@@ -38,7 +38,11 @@ export const DamageNumber: React.FC<DamageNumberProps> = ({
     const parent = wrapRef.current?.parentElement;
     if (parent) {
       const w = parent.offsetWidth;
-      setContainerScale(Math.max(0.5, Math.min(2.5, w / REF_CONTAINER_WIDTH)));
+      const nextScale = Math.max(0.5, Math.min(2.5, w / REF_CONTAINER_WIDTH));
+      const frameId = window.requestAnimationFrame(() => {
+        setContainerScale(nextScale);
+      });
+      return () => window.cancelAnimationFrame(frameId);
     }
   }, [triggerKey]);
 

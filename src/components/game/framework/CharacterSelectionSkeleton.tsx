@@ -107,7 +107,7 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                 />
             );
         });
-    }, [playerIds, selectedCharacters, readyPlayers, hostPlayerId]);
+    }, [hostPlayerId, inlineUnit, playerIds, readyPlayers, selectedCharacters]);
 
     // 可选角色列表（过滤掉不可选的）
     const availableCharacters = useMemo(() => {
