@@ -10,6 +10,13 @@
 import { describe, it, expect } from 'vitest';
 import { UGCHostBridge, createHostBridge } from '../runtime/hostBridge';
 import { UGCViewSdk, createViewSdk, getGlobalSdk, initGlobalSdk } from '../runtime/viewSdk';
+import {
+    HOME_V2_BOOK_SCENE,
+    createUIScenePrefabRegistry,
+    resolveArtboardRegion,
+    scaleArtboardRect,
+    scaleLayoutTransform,
+} from '../runtime';
 import type { UGCGameState, PlayerId, PackageId } from '../sdk/types';
 
 // ============================================================================
@@ -110,6 +117,54 @@ describe('UGC Runtime', () => {
         it('应支持 PackageId 类型', () => {
             const packageId: PackageId = 'pkg-test';
             expect(packageId).toBe('pkg-test');
+        });
+    });
+
+    describe('UI Scene foundation', () => {
+        it('应从 artboard 命名区域中解析书签槽位与翻页热点', () => {
+            const tabStrip = resolveArtboardRegion(HOME_V2_BOOK_SCENE.artboard, 'tabStrip');
+            const lobbyTab = resolveArtboardRegion(HOME_V2_BOOK_SCENE.artboard, 'tabLobby');
+            const nextPage = resolveArtboardRegion(HOME_V2_BOOK_SCENE.artboard, 'nextPage');
+
+            expect(tabStrip).toEqual({
+                x: 738,
+                y: 0,
+                width: 158,
+                height: 720,
+                label: '书签槽位',
+            });
+            expect(lobbyTab?.label).toBe('大厅书签');
+            expect(nextPage?.label).toBe('右页翻页热点');
+        });
+
+        it('应按 artboard 缩放节点 transform 与区域矩形', () => {
+            const scaled = scaleLayoutTransform(
+                {
+                    anchor: { x: 0.5, y: 0.5 },
+                    pivot: { x: 0.5, y: 0.5 },
+                    offset: { x: 20, y: -10 },
+                    width: 200,
+                    height: 100,
+                },
+                0.5,
+            );
+            const scaledRect = scaleArtboardRect({ x: 738, y: 0, width: 158, height: 720 }, 0.5);
+
+            expect(scaled.anchor).toEqual({ x: 0.5, y: 0.5 });
+            expect(scaled.pivot).toEqual({ x: 0.5, y: 0.5 });
+            expect(scaled.offset).toEqual({ x: 10, y: -5 });
+            expect(scaled.width).toBe(100);
+            expect(scaled.height).toBe(50);
+            expect(scaledRect).toEqual({ x: 369, y: 0, width: 79, height: 360 });
+        });
+
+        it('应拒绝重复 prefab 注册', () => {
+            expect(() =>
+                createUIScenePrefabRegistry([
+                    { prefabId: 'image', version: '1.0.0', displayName: 'A', render: () => null },
+                    { prefabId: 'image', version: '1.0.0', displayName: 'B', render: () => null },
+                ]),
+            ).toThrow('重复的 prefab 注册: image');
         });
     });
 });

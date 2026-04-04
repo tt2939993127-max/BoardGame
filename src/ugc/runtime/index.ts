@@ -16,3 +16,4 @@ export { UGCRuntimeView } from './UGCRuntimeView';
 export type { RuntimeViewMode } from './UGCRuntimeView';
 export { BUILDER_PREVIEW_CONFIG_KEY, attachBuilderPreviewConfig, extractBuilderPreviewConfig } from './previewConfig';
 export type { BuilderPreviewConfig } from './previewConfig';
+export * from './ui-scene';
