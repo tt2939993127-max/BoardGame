@@ -974,6 +974,128 @@ const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 
   }, { testId: overlayTestId, target: expected }), { timeout: 5000 }).toBe(true);
 };
 
+const getExpandedFabMetrics = async (page: Page) => (
+  page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
+    const panel = document.querySelector('[data-testid="fab-panel-action-log"]') as HTMLElement | null;
+    const rows = Array.from(document.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+    const firstRow = rows[0] ?? null;
+    const mainVisual = document.querySelector('[data-fab-visual-id="exit"]') as HTMLElement | null;
+    const gamePage = document.querySelector('[data-game-page]') as HTMLElement | null;
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      pageScrollX: window.scrollX,
+      pageScrollY: window.scrollY,
+      gamePageRect: gamePage
+        ? (() => {
+          const rect = gamePage.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      mainVisualRect: mainVisual
+        ? (() => {
+          const rect = mainVisual.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      panelRect: panel
+        ? (() => {
+          const rect = panel.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      panelClientHeight: panel?.clientHeight ?? 0,
+      panelScrollHeight: panel?.scrollHeight ?? 0,
+      panelClientWidth: panel?.clientWidth ?? 0,
+      panelScrollWidth: panel?.scrollWidth ?? 0,
+      firstRowClientWidth: firstRow?.clientWidth ?? 0,
+      firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+      rowCount: rows.length,
+      visibleButtons: buttons
+        .map((button) => {
+          const styles = window.getComputedStyle(button);
+          const rect = button.getBoundingClientRect();
+          return {
+            id: button.dataset.fabId ?? '',
+            visible: styles.display !== 'none'
+              && styles.visibility !== 'hidden'
+              && styles.opacity !== '0'
+              && rect.width > 0
+              && rect.height > 0,
+            rect: {
+              left: rect.left,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+            },
+          };
+        })
+        .filter((entry) => entry.visible),
+    };
+  })
+);
+
+const waitForExpandedFabLayoutStable = async (page: Page) => {
+  let previousSignature: string | null = null;
+  let stableMetrics: Awaited<ReturnType<typeof getExpandedFabMetrics>> | null = null;
+  let stableCount = 0;
+
+  await expect.poll(async () => {
+    const metrics = await getExpandedFabMetrics(page);
+    if (!metrics.panelRect || !metrics.mainVisualRect || metrics.visibleButtons.length === 0) {
+      stableCount = 0;
+      previousSignature = null;
+      return 0;
+    }
+
+    const signature = JSON.stringify({
+      panelRect: Object.fromEntries(
+        Object.entries(metrics.panelRect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+      ),
+      mainVisualRect: Object.fromEntries(
+        Object.entries(metrics.mainVisualRect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+      ),
+      visibleButtons: metrics.visibleButtons.map((button) => ({
+        id: button.id,
+        rect: Object.fromEntries(
+          Object.entries(button.rect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+        ),
+      })),
+    });
+
+    if (signature === previousSignature) {
+      stableCount += 1;
+    } else {
+      stableCount = 0;
+      previousSignature = signature;
+    }
+
+    stableMetrics = metrics;
+    return stableCount;
+  }, { timeout: 2500, intervals: [80, 120, 160] }).toBeGreaterThanOrEqual(1);
+
+  if (!stableMetrics) {
+    throw new Error('展开态 FAB 布局未能稳定');
+  }
+  return stableMetrics;
+};
+
 const getMapTransform = async (page: Page) => (
   page.getByTestId('sw-map-content').evaluate((node) => getComputedStyle(node).transform)
 );
@@ -2815,81 +2937,7 @@ test.describe('SummonerWars', () => {
 
       const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
       await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
-      await hostPage.waitForTimeout(160);
-      const expandedFabMetrics = await hostPage.evaluate(() => {
-        const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
-        const panel = document.querySelector('[data-testid="fab-panel-action-log"]') as HTMLElement | null;
-        const rows = Array.from(document.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
-        const firstRow = rows[0] ?? null;
-        const mainVisual = document.querySelector('[data-fab-visual-id="exit"]') as HTMLElement | null;
-        const gamePage = document.querySelector('[data-game-page]') as HTMLElement | null;
-        return {
-          viewportWidth: window.innerWidth,
-          viewportHeight: window.innerHeight,
-          pageScrollX: window.scrollX,
-          pageScrollY: window.scrollY,
-          gamePageRect: gamePage
-            ? (() => {
-              const rect = gamePage.getBoundingClientRect();
-              return {
-                left: rect.left,
-                top: rect.top,
-                right: rect.right,
-                bottom: rect.bottom,
-              };
-            })()
-            : null,
-          mainVisualRect: mainVisual
-            ? (() => {
-              const rect = mainVisual.getBoundingClientRect();
-              return {
-                left: rect.left,
-                top: rect.top,
-                right: rect.right,
-                bottom: rect.bottom,
-              };
-            })()
-            : null,
-          panelRect: panel
-            ? (() => {
-              const rect = panel.getBoundingClientRect();
-              return {
-                left: rect.left,
-                top: rect.top,
-                right: rect.right,
-                bottom: rect.bottom,
-              };
-            })()
-            : null,
-          panelClientHeight: panel?.clientHeight ?? 0,
-          panelScrollHeight: panel?.scrollHeight ?? 0,
-          panelClientWidth: panel?.clientWidth ?? 0,
-          panelScrollWidth: panel?.scrollWidth ?? 0,
-          firstRowClientWidth: firstRow?.clientWidth ?? 0,
-          firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
-          rowCount: rows.length,
-          visibleButtons: buttons
-            .map((button) => {
-              const styles = window.getComputedStyle(button);
-              const rect = button.getBoundingClientRect();
-              return {
-                id: button.dataset.fabId ?? '',
-                visible: styles.display !== 'none'
-                  && styles.visibility !== 'hidden'
-                  && styles.opacity !== '0'
-                  && rect.width > 0
-                  && rect.height > 0,
-                rect: {
-                  left: rect.left,
-                  top: rect.top,
-                  right: rect.right,
-                  bottom: rect.bottom,
-                },
-              };
-            })
-            .filter((entry) => entry.visible),
-        };
-      });
+      const expandedFabMetrics = await waitForExpandedFabLayoutStable(hostPage);
       expect(expandedFabMetrics.panelRect).not.toBeNull();
       expect(expandedFabMetrics.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
       expect(expandedFabMetrics.panelScrollHeight).toBeGreaterThan(expandedFabMetrics.panelClientHeight);
