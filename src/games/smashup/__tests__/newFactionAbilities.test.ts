@@ -677,6 +677,127 @@ describe('Cowboys abilities', () => {
         expect(optionValues).not.toContain('enemy-smoke');
     });
 
+    it('cowboys_run_em_off 在获胜时应由被移动随从的控制者而非 owner 选择目标基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('run-1', 'cowboys_run_em_off', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('ally-1', 'cowboys_gunfighter', '0', 4),
+                        makeMinion('enemy-1', 'robot_microbot_alpha', '1', 2, { owner: '0' }),
+                    ],
+                    ongoingActions: [],
+                },
+                { defId: 'base_b', minions: [], ongoingActions: [] },
+                { defId: 'base_c', minions: [], ongoingActions: [] },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'run-1' } },
+            defaultTestRandom,
+        );
+        const friendlyPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(friendlyPrompt?.data?.sourceId).toBe('cowboys_run_em_off_friendly');
+
+        const chooseAlly = friendlyPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-1');
+        const afterFriendly = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseAlly.id } } as any,
+            defaultTestRandom,
+        );
+
+        const enemyPrompt = getInteractionsFromMS(afterFriendly.finalState)[0] as any;
+        expect(enemyPrompt?.data?.sourceId).toBe('cowboys_run_em_off_enemy');
+
+        const chooseEnemy = enemyPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-1');
+        const started = runCommand(
+            afterFriendly.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseEnemy.id } } as any,
+            defaultTestRandom,
+        );
+
+        let movePromptPlayerId: string | null = null;
+        const duelResolved = resolveDuelChain(started.finalState, {
+            smashup_duel_run_em_off_move: (prompt) => {
+                movePromptPlayerId = prompt.playerId;
+                const option = findInteractionOption(prompt, entry => entry?.value?.baseIndex === 1);
+                if (!option) throw new Error('未找到 base_b 作为赶走他们的移动目标');
+                return { optionId: option.id };
+            },
+        });
+
+        expect(movePromptPlayerId).toBe('1');
+        expect(duelResolved.finalState.core.bases[1].minions.some(minion => minion.uid === 'enemy-1')).toBe(true);
+        expect(duelResolved.finalState.core.bases[0].minions.some(minion => minion.uid === 'enemy-1')).toBe(false);
+    });
+
+    it('cowboys_run_em_off 平局时也应由各自被移动随从的控制者依次选择目标基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('run-1', 'cowboys_run_em_off', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('ally-1', 'cowboys_gunfighter', '0', 3),
+                        makeMinion('enemy-1', 'robot_microbot_alpha', '1', 3),
+                    ],
+                    ongoingActions: [],
+                },
+                { defId: 'base_b', minions: [], ongoingActions: [] },
+                { defId: 'base_c', minions: [], ongoingActions: [] },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'run-1' } },
+            defaultTestRandom,
+        );
+        const friendlyPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const chooseAlly = friendlyPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-1');
+        const afterFriendly = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseAlly.id } } as any,
+            defaultTestRandom,
+        );
+
+        const enemyPrompt = getInteractionsFromMS(afterFriendly.finalState)[0] as any;
+        const chooseEnemy = enemyPrompt.data.options.find((entry: any) => entry.value?.minionUid === 'enemy-1');
+        const started = runCommand(
+            afterFriendly.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseEnemy.id } } as any,
+            defaultTestRandom,
+        );
+
+        const movePromptPlayers: string[] = [];
+        const duelResolved = resolveDuelChain(started.finalState, {
+            smashup_duel_run_em_off_move: (prompt) => {
+                movePromptPlayers.push(prompt.playerId);
+                const targetBaseIndex = prompt.playerId === '0' ? 1 : 2;
+                const option = findInteractionOption(prompt, entry => entry?.value?.baseIndex === targetBaseIndex);
+                if (!option) throw new Error(`未找到 base_${targetBaseIndex} 作为赶走他们的平局移动目标`);
+                return { optionId: option.id };
+            },
+        });
+
+        expect(movePromptPlayers).toEqual(['0', '1']);
+        expect(duelResolved.finalState.core.bases[1].minions.some(minion => minion.uid === 'ally-1')).toBe(true);
+        expect(duelResolved.finalState.core.bases[2].minions.some(minion => minion.uid === 'enemy-1')).toBe(true);
+    });
+
     it('cthulhu_corruption 不会把挂有烟雾弹的对手随从列为消灭目标', () => {
         const core = makeState({
             players: {
@@ -1147,6 +1268,59 @@ describe('Cowboys abilities', () => {
         const optionValues = targetPrompt.data.options.map((entry: any) => entry.value?.minionUid);
         expect(optionValues).toContain('enemy-plain');
         expect(optionValues).not.toContain('enemy-smoke');
+    });
+
+    it('cowboys_gold_in_them_thar_hills 选择额外无目标行动时会立刻打出该牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('gold-1', 'cowboys_gold_in_them_thar_hills', 'action', '0')],
+                    deck: [
+                        makeCard('top-action', 'wizard_summon', 'action', '0'),
+                        makeCard('top-b', 'robot_microbot_alpha', 'minion', '0'),
+                        makeCard('top-c', 'robot_microbot_beta', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'gold-1' } },
+            defaultTestRandom,
+        );
+        const choicePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const chooseAction = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-action');
+        const afterChoice = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseAction.id } } as any,
+            defaultTestRandom,
+        );
+
+        const orderPrompt = getInteractionsFromMS(afterChoice.finalState)[0] as any;
+        const chooseTopB = orderPrompt.data.options.find((entry: any) => entry.value?.topCardUid === 'top-b');
+        const afterOrder = runCommand(
+            afterChoice.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopB.id } } as any,
+            defaultTestRandom,
+        );
+
+        const modePrompt = getInteractionsFromMS(afterOrder.finalState)[0] as any;
+        const playOption = modePrompt.data.options.find((entry: any) => entry.value?.mode === 'play');
+        const resolved = runCommand(
+            afterOrder.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: playOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(getInteractionsFromMS(resolved.finalState)).toHaveLength(0);
+        expect(resolved.finalState.core.players['0'].discard.some(card => card.uid === 'top-action')).toBe(true);
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-action')).toBe(false);
+        expect(resolved.finalState.core.players['0'].minionLimit).toBe(2);
+        expect(resolved.finalState.core.players['0'].actionsPlayed).toBe(1);
+        expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).toEqual(['top-b', 'top-c']);
     });
 
     it('cowboys_gold_in_them_thar_hills 选择额外随从时会先选基地再直接打出', () => {

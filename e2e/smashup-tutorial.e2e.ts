@@ -90,20 +90,9 @@ const skipIntroSteps = async (page: Page) => {
     }
 };
 
-const swipeUpHandCard = async (page: Page, locator: Locator) => {
+const clickHandCard = async (page: Page, locator: Locator) => {
     await expect(locator).toBeVisible({ timeout: 10000 });
-    const box = await locator.boundingBox();
-    expect(box).not.toBeNull();
-    if (!box) {
-        throw new Error('无法获取教程手牌坐标');
-    }
-    const startX = box.x + box.width / 2;
-    const startY = box.y + box.height * 0.72;
-    const endY = Math.max(box.y + box.height * 0.18, startY - Math.min(120, box.height * 0.55));
-    await page.mouse.move(startX, startY);
-    await page.mouse.down();
-    await page.mouse.move(startX, endY, { steps: 10 });
-    await page.mouse.up();
+    await locator.click({ force: true });
     await page.waitForTimeout(300);
 };
 
@@ -117,7 +106,7 @@ const doPlayMinion = async (page: Page) => {
 
     const handCards = handArea.locator('> div > div');
     await expect(handCards.first()).toBeVisible({ timeout: 10000 });
-    await swipeUpHandCard(page, handCards.first());
+    await clickHandCard(page, handCards.first());
     await page.waitForTimeout(500);
 
     const bases = page.locator('.group\\/base');
@@ -137,8 +126,13 @@ const doPlayAction = async (page: Page) => {
     const count = await actionCards.count();
 
     for (let i = 0; i < count; i++) {
-        await swipeUpHandCard(page, actionCards.nth(i));
+        await clickHandCard(page, actionCards.nth(i));
         await page.waitForTimeout(300);
+        if (!(await page.locator('[data-tutorial-step="playAction"]').isVisible({ timeout: 1000 }).catch(() => false))) {
+            break;
+        }
+        await clickHandCard(page, actionCards.nth(i));
+        await page.waitForTimeout(500);
         if (await bases.first().isVisible().catch(() => false)) {
             await bases.first().click({ force: true });
             await page.waitForTimeout(500);

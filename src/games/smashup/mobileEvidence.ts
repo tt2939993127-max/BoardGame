@@ -29,6 +29,32 @@ function createPlayerState(
     };
 }
 
+function buildFactionSelectionScene() {
+    return {
+        currentPlayer: '0',
+        phase: 'factionSelect',
+        extra: {
+            core: {
+                turnOrder: ['0', '1'],
+                turnNumber: 1,
+                nextUid: 1000,
+                players: {
+                    '0': createPlayerState('0', 0, ['aliens', 'pirates']),
+                    '1': createPlayerState('1', 0, ['ninjas', 'dinosaurs']),
+                },
+                factionSelection: {
+                    takenFactions: [],
+                    playerSelections: {
+                        '0': [],
+                        '1': [],
+                    },
+                    completedPlayers: [],
+                },
+            },
+        },
+    };
+}
+
 function getMinionBasePower(defId: string) {
     const def = getCardDef(defId);
     if (def && 'power' in def && typeof def.power === 'number') {
@@ -249,4 +275,41 @@ export function injectSmashUpFourPlayerMobileEvidenceScene(harness: TestHarness)
     };
 
     harness.state.patch(patch);
+}
+
+export function injectSmashUpFactionSelectionMobileEvidenceScene(harness: TestHarness) {
+    if (!harness?.state?.isRegistered?.()) {
+        throw new Error('TestHarness 状态注入器未就绪');
+    }
+
+    const scene = buildFactionSelectionScene();
+    const state = harness.state.get();
+    if (!state?.core?.players) {
+        throw new Error('当前 Smash Up 状态未就绪');
+    }
+
+    harness.state.patch({
+        core: {
+            ...state.core,
+            ...scene.extra.core,
+            currentPlayerIndex: Number(scene.currentPlayer),
+            players: {
+                ...state.core.players,
+                ...scene.extra.core.players,
+            },
+            factionSelection: scene.extra.core.factionSelection,
+        },
+        sys: {
+            ...(state.sys ?? {}),
+            phase: scene.phase,
+            interaction: {
+                ...(state.sys?.interaction ?? {}),
+                current: undefined,
+                queue: [],
+            },
+            responseWindow: {
+                current: undefined,
+            },
+        },
+    });
 }

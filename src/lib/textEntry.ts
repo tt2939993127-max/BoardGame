@@ -42,3 +42,19 @@ export const isTextEntryElement = (candidate: Element | null): candidate is HTML
     ]);
     return !blockedTypes.has(input.type.toLowerCase());
 };
+
+export const scrollTextEntryIntoView = (
+    candidate: Element | null,
+    behavior: ScrollBehavior = 'smooth',
+) => {
+    if (!isTextEntryElement(candidate)) {
+        return false;
+    }
+
+    candidate.scrollIntoView({
+        block: 'center',
+        inline: 'nearest',
+        behavior,
+    });
+    return true;
+};

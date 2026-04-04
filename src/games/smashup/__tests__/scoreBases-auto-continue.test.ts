@@ -7,8 +7,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { registerGameAiRuntime, resolveNextLocalAiAction } from '../../../engine/ai';
 import { smashUpFlowHooks } from '../domain/index';
-import { buildSmashUpAiLegalActions } from '../ai';
+import { buildSmashUpAiLegalActions, smashUpAiRuntime } from '../ai';
 import type { MatchState } from '../../../core/types';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../types';
 
@@ -66,6 +67,12 @@ function makeMinion(owner: string, defId: string, power: number): MinionOnBase {
         attachedActions: [],
     };
 }
+
+const smashUpAiEngineConfig = {
+    gameId: 'smashup',
+    domain: {} as never,
+    systems: [],
+};
 
 describe('scoreBases 阶段自动推进', () => {
     it('交互解决后应该自动推进到 draw 阶段', () => {
@@ -411,6 +418,207 @@ describe('scoreBases 阶段自动推进', () => {
             .sort();
 
         expect(comboPayloads).toEqual(['m1,m2', 'm1,m3', 'm2,m3']);
+    });
+
+    it('在线隐藏交互只对 AI seat 可见时，Smash Up AI 仍应生成 simple-choice 响应', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const filteredHumanState: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                currentPlayerIndex: 0,
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                    },
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                    },
+                },
+            }),
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: undefined,
+                    queue: [],
+                    isBlocked: true,
+                },
+                responseWindow: { current: null, history: [] },
+                eventStream: { nextId: 22 },
+            } as any,
+        };
+
+        const aiSeatVisibleState: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                currentPlayerIndex: 0,
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                    },
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                        hand: [
+                            { uid: 'c54', defId: 'wizard_summon', type: 'action', owner: '1' },
+                            { uid: 'c70', defId: 'ninja_acolyte', type: 'minion', owner: '1' },
+                        ],
+                        discard: [
+                            { uid: 'c58', defId: 'wizard_sacrifice', type: 'action', owner: '1' },
+                        ],
+                        factions: ['wizards', 'ninjas'],
+                        minionsPlayed: 1,
+                        actionsPlayed: 1,
+                    },
+                },
+                bases: [makeBase('base_temple_of_goju', [{
+                    uid: 'c66',
+                    defId: 'ninja_shinobi',
+                    controller: '1',
+                    owner: '1',
+                    basePower: 3,
+                    powerCounters: 0,
+                    powerModifier: 0,
+                    tempPowerModifier: 0,
+                    talentUsed: false,
+                    playedThisTurn: true,
+                    attachedActions: [],
+                } as MinionOnBase])],
+            }),
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'wizard_sacrifice_hidden_choice',
+                        playerId: '1',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'wizard_sacrifice',
+                            options: [{
+                                id: 'target-shinobi',
+                                label: '影舞者',
+                                value: { minionUid: 'c66', baseIndex: 0 },
+                            }],
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+                eventStream: { nextId: 22 },
+            } as any,
+        };
+
+        const withoutSeatSpecificState = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: filteredHumanState,
+            matchId: 'smashup-hidden-choice-regression',
+            seatControllers: { '1': { type: 'local-ai' } },
+        });
+
+        expect(withoutSeatSpecificState).toBeNull();
+
+        const withSeatSpecificState = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: filteredHumanState,
+            matchId: 'smashup-hidden-choice-regression',
+            seatControllers: { '1': { type: 'local-ai' } },
+            visibleStateResolver: (playerId) => (playerId === '1' ? aiSeatVisibleState : undefined),
+        });
+
+        expect(withSeatSpecificState?.playerId).toBe('1');
+        expect(withSeatSpecificState?.action.kind).toBe('interaction-choice');
+        expect(withSeatSpecificState?.action.commands).toEqual([{
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: {
+                optionId: 'target-shinobi',
+                mergedValue: { minionUid: 'c66', baseIndex: 0 },
+            },
+        }]);
+    });
+
+    it('afterScoring 响应窗口与 reaction queue 主动选择并存时，AI 应优先响应当前交互而不是窗口动作', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                currentPlayerIndex: 1,
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                    },
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                        hand: [
+                            { uid: 'c54', defId: 'wizard_summon', type: 'action', owner: '1' },
+                            { uid: 'c70', defId: 'ninja_acolyte', type: 'minion', owner: '1' },
+                        ],
+                        factions: ['wizards', 'ninjas'],
+                    },
+                },
+            }),
+            sys: {
+                phase: 'scoreBases',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'reaction-order-choice',
+                        playerId: '1',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'reaction_queue_choose_next',
+                            options: [
+                                {
+                                    id: 'trigger-a',
+                                    label: '先结算触发 A',
+                                    displayMode: 'button',
+                                    value: { triggerId: 'afterScoring:base_a:1:0' },
+                                },
+                                {
+                                    id: 'trigger-b',
+                                    label: '先结算触发 B',
+                                    displayMode: 'button',
+                                    value: { triggerId: 'afterScoring:base_b:1:0' },
+                                },
+                            ],
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: {
+                    current: {
+                        id: 'afterscoring-window',
+                        windowType: 'afterScoring',
+                        responderQueue: ['1'],
+                        currentResponderIndex: 0,
+                        passedPlayers: [],
+                    },
+                    history: [],
+                },
+                eventStream: { nextId: 30 },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '1',
+            state,
+        });
+
+        expect(legalActions.length).toBeGreaterThan(0);
+        expect(legalActions.every((action) => action.kind === 'interaction-choice')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'response-pass')).toBe(false);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state,
+            matchId: 'smashup-reaction-queue-ai-regression',
+            seatControllers: { '1': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect(resolution?.action.commands[0]?.type).toBe('SYS_INTERACTION_RESPOND');
+        expect(['trigger-a', 'trigger-b']).toContain(
+            (resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId,
+        );
     });
 
     it('AI 在计分阶段仅存在可激活的泰坦 special 时也不应暴露 advance-phase', () => {

@@ -1,9 +1,9 @@
-import { startTransition, useEffect, useState } from 'react';
+import { startTransition, useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
 import type { GameManifestEntry } from '../../games/manifest';
 import { onAppVisible } from '../../lib/mobile/appVisibility';
-import { isTextEntryElement } from '../../lib/textEntry';
+import { isTextEntryElement, scrollTextEntryIntoView } from '../../lib/textEntry';
 import {
     extractGameIdFromPlayPath,
     getGameMobileBannerKind,
@@ -176,6 +176,22 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     const activeBannerKind = !shouldSuppressBannerInAppShell && bannerKey && dismissedBannerKey !== bannerKey
         ? bannerKind
         : null;
+    const isMobileViewport = viewport.width > 0 && viewport.width <= 1023;
+
+    const scheduleScrollActiveTextEntryIntoView = useCallback((behavior: ScrollBehavior = 'smooth') => {
+        const activeElement = document.activeElement;
+        if (!isTextEntryElement(activeElement)) {
+            return undefined;
+        }
+
+        const frameId = window.requestAnimationFrame(() => {
+            scrollTextEntryIntoView(activeElement, behavior);
+        });
+
+        return () => {
+            window.cancelAnimationFrame(frameId);
+        };
+    }, []);
 
     useEffect(() => {
         if (!gameId || builtInGameConfig) {
@@ -241,23 +257,51 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             return undefined;
         }
 
-        const activeElement = document.activeElement;
-        if (!isTextEntryElement(activeElement)) {
+        return scheduleScrollActiveTextEntryIntoView('smooth');
+    }, [scheduleScrollActiveTextEntryIntoView, viewport.keyboardInsetBottom]);
+
+    useEffect(() => {
+        if (!isMobileViewport) {
             return undefined;
         }
 
-        const frameId = window.requestAnimationFrame(() => {
-            activeElement.scrollIntoView({
-                block: 'center',
-                inline: 'nearest',
-                behavior: 'smooth',
+        const frameIds = new Set<number>();
+        const timeoutIds = new Set<number>();
+
+        const cleanupScheduled = () => {
+            frameIds.forEach((frameId) => window.cancelAnimationFrame(frameId));
+            timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+            frameIds.clear();
+            timeoutIds.clear();
+        };
+
+        const handleFocusIn = (event: FocusEvent) => {
+            const target = event.target as Element | null;
+            if (!isTextEntryElement(target)) {
+                return;
+            }
+
+            const behavior: ScrollBehavior = viewport.keyboardInsetBottom > 0 ? 'smooth' : 'auto';
+            const frameId = window.requestAnimationFrame(() => {
+                frameIds.delete(frameId);
+                scrollTextEntryIntoView(target, behavior);
             });
-        });
+            frameIds.add(frameId);
+
+            const timeoutId = window.setTimeout(() => {
+                timeoutIds.delete(timeoutId);
+                scrollTextEntryIntoView(target, 'smooth');
+            }, 180);
+            timeoutIds.add(timeoutId);
+        };
+
+        window.addEventListener('focusin', handleFocusIn);
 
         return () => {
-            window.cancelAnimationFrame(frameId);
+            window.removeEventListener('focusin', handleFocusIn);
+            cleanupScheduled();
         };
-    }, [viewport.keyboardInsetBottom]);
+    }, [isMobileViewport, viewport.keyboardInsetBottom]);
 
     useEffect(() => {
         if (!nativeAppShell) return;

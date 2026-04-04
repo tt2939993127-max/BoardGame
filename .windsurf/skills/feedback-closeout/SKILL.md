@@ -28,13 +28,21 @@ description: 用于 BoardGame 项目中批量处理后台反馈、开放反馈�
 node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-url http://127.0.0.1:3000 --slots 4
 ```
 
+如果要把挑出的并行候选立即认领成 `in_progress`：
+
+```bash
+node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-url http://127.0.0.1:3000 --slots 4 --mark-in-progress
+```
+
 脚本会：
 
 - 默认抓取 `open,in_progress`
 - 按内容与错误签名做重复组归并
 - 产出 `temp/feedback-closeout/<timestamp>/summary.json`
+- 把反馈中的内嵌截图落到本地 `images/` 临时目录
 - 为每个代表项生成一份 Markdown 诊断包
 - 选出一组 `parallelCandidates`，用于后续并行分派
+- 可选把 `parallelCandidates` 立即改成 `in_progress`
 
 ### 2. 先分类，再决定真假 bug
 
@@ -95,6 +103,12 @@ node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-
 node .windsurf/skills/feedback-closeout/scripts/update-feedback-status.mjs <feedbackId> <status> --base-url http://127.0.0.1:3000
 ```
 
+收口代表项并顺带关闭重复项：
+
+```bash
+node .windsurf/skills/feedback-closeout/scripts/finalize-feedback-group.mjs temp/feedback-closeout/<timestamp>/summary.json <feedbackId> resolved --base-url http://127.0.0.1:3000
+```
+
 ### 5. 交付口径
 
 最终汇报必须明确：
@@ -114,6 +128,8 @@ node .windsurf/skills/feedback-closeout/scripts/update-feedback-status.mjs <feed
   - 拉取开放反馈、排重、分类、生成诊断包与并行候选。
 - `update-feedback-status.mjs`
   - 用开放接口回写状态。
+- `finalize-feedback-group.mjs`
+  - 按 `summary.json` 收口代表项，并默认关闭同组重复项。
 
 ### references/
 

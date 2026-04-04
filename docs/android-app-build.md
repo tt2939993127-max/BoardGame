@@ -133,8 +133,8 @@ npm run mobile:android:native-update:publish -- --channel stable --skip-latest
 
 - 运行时插件：`@capgo/capacitor-updater`
 - 发布源：自托管 manifest + zip bundle，当前约定放在对象存储 `official/app-updates/android/<channel>/...`
-- 当前默认发布策略：**强制 OTA**
-- 默认行为：启动后后台检查；一旦发现兼容的新 bundle，立即进入阻塞式下载与切换流程
+- 当前默认发布策略：**后台 OTA**
+- 默认行为：启动后后台检查；一旦发现兼容的新 bundle，后台下载并排队，切到后台或下次重启后生效
 - 启动确认：App 每次原生启动时尽早调用 `notifyAppReady()`，避免已下载 bundle 被插件自动回滚
 
 ### OTA 何时生效
@@ -145,17 +145,16 @@ npm run mobile:android:native-update:publish -- --channel stable --skip-latest
 
 ### 当前升级策略
 
-- 强制 OTA
-  - 这是当前默认发布策略
-  - App 启动后显示阻塞式全屏更新页
-  - 页面会显示检查中、下载中、切换中
-  - 下载完成后立即切到新 bundle
 - 普通 OTA
-  - 仅在发布时显式关闭强更后才会出现
-  - manifest 未声明 `forceUpdate: true`
+  - 这是当前默认发布策略
+  - manifest 默认不声明 `forceUpdate: true`
   - App 启动后后台检查，兼容则后台下载
   - 下载完成后排队，切到后台或下次重启后生效
   - 不阻塞用户
+- 带 `forceUpdate: true` 的 OTA
+  - 对兼容当前原生壳的 bundle，仍然按普通 OTA 处理
+  - 不再在当前会话显示阻塞式下载/切换页
+  - 仍然是后台下载并排队，切到后台或下次重启后生效
 - 需要更新 App
   - manifest 声明 `forceUpdate: true`，但当前原生壳版本不满足兼容条件
   - 不会继续下载 OTA bundle
@@ -308,7 +307,7 @@ npm run mobile:android:ota:publish -- --channel stable --skip-latest
 npm run mobile:android:ota:publish -- --channel stable
 ```
 
-当前默认发布已经是强制 OTA；下面写法只是显式声明：
+如果你确实要把这次 OTA 标记为“原生版本不兼容时必须先升级 App”，才显式加 `--force-update`：
 
 ```bash
 npm run mobile:android:ota:publish -- --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
@@ -320,7 +319,7 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --force-up
 npm run mobile:android:ota:publish -- --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
 ```
 
-如果这次 OTA 既要强更，又要求至少某个壳版本：
+如果这次 OTA 既要求原生版本不兼容时阻断，又要求至少某个壳版本：
 
 ```bash
 npm run mobile:android:ota:publish -- --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
@@ -347,10 +346,10 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 - `--target-native-version <version[,version]>`：显式指定只有哪些原生版本能接收该 bundle
 - `--min-native-version <version>`：显式声明最低兼容原生版本
 - `--max-native-version <version>`：显式声明最高兼容原生版本
-- `--force-update`：把这次 OTA 标记为强制更新
-- `--no-force-update`：显式关闭强制更新，退回普通 OTA；仅建议在灰度/应急时使用
-- `--force-update-title <text>`：覆盖强更页标题
-- `--force-update-message <text>`：覆盖强更页正文
+- `--force-update`：把这次 OTA 标记为“原生版本不兼容时需先升级 App”
+- `--no-force-update`：显式关闭该阻断语义；当前默认就是关闭
+- `--force-update-title <text>`：覆盖“需先升级 App”阻断页标题
+- `--force-update-message <text>`：覆盖“需先升级 App”阻断页正文
 - `--notes <text>`：写入 manifest 备注
 - `--dry-run`：只打 zip、算 checksum、打印 manifest，不上传
 - `--skip-latest`：上传 zip 和版本 manifest，但不覆盖 `<channel>/latest.json`
@@ -390,8 +389,8 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 - 默认 manifest 不带原生版本门禁
 - `targetNativeVersion`：只允许某个原生版本或某几个原生版本接收该 bundle
 - `minNativeVersion` / `maxNativeVersion`：允许一个原生版本区间
-- `forceUpdate`：声明这次 OTA 是否为阻塞式强更
-- `forceUpdateTitle` / `forceUpdateMessage`：覆盖强更页默认文案
+- `forceUpdate`：声明这次 OTA 在原生版本不兼容时是否阻断并要求先升级 App
+- `forceUpdateTitle` / `forceUpdateMessage`：覆盖该阻断页默认文案
 
 示例：
 
@@ -430,8 +429,8 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 - 预演发布先用 `--dry-run`
 - 小流量验证建议先发 `gray` 之类独立 channel，再切 `stable`
-- 普通 OTA 的 App 端提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
-- 强制 OTA 会显示阻塞式全屏进度页，不走普通 toast
+- OTA 的 App 端提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
+- 只有原生版本不兼容且 manifest 显式声明 `forceUpdate: true` 时，才会显示阻塞页要求先升级 App
 - 若本次改动涉及原生层，仍必须重新打包安装验证，不能把 OTA 当成原生更新替代品
 
 ## GitHub Actions 配置

@@ -48,7 +48,7 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 补充口径：
 
 - `crops/...` 默认只算录入核对中间产物，不计入“正式资源已完成”。
-- 如果该角色需要额外的正式手牌 atlas，完成判据应看 `compressed/hand-cards-atlas.webp` 或等价正式资源，而不是看 `crops/hand-preview/`。
+- 但如果某些牌在现有 atlas 模型里无法被正确表达，允许把稳定单卡图作为正式运行时资源；此时完成判据应看这些单卡图是否已进 manifest、可被 `previewRef.type = 'image'` 正式引用。
 
 ## 执行步骤
 
@@ -95,13 +95,15 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 强制补充：
 
 - `crops/ability-cards/` 默认只是真相源裁图，不自动等于运行时素材。
-- 只要某个角色的正式 `ability-cards.webp` 不能直接满足手牌展示，就必须单独设计正式运行时方案，例如新的正式手牌 atlas。
-- 正式手牌 atlas 的默认要求：
-  - 正式图片落到 `public/assets/i18n/zh-CN/dicethrone/images/<hero>/compressed/`
-  - atlas 配置落到 `public/assets/atlas-configs/dicethrone/`，或显式声明为均匀网格
-  - `previewRef` 只允许指向正式 atlas，不允许指向 `crops/` 下的核对裁图
+- 默认优先级永远是：
+  - 能直接复用原 `ability-cards` atlas 的，继续走 atlas
+  - 只有 atlas 模型表达不了的特殊牌，才单独落正式单卡图
+- `previewRef` 可以指向两类正式资源：
+  - `type = 'atlas'`：原 `ability-cards` atlas + 正确 index
+  - `type = 'image'`：已进 manifest 的正式单卡图
+- 不得为了迁就少数特殊牌，额外发明 `hand-cards-atlas.webp` 这类并行运行时方案；`gunslinger` / `samurai` 的历史 hand atlas 已确认是错误方向。
 - 真相源裁图与正式运行时 atlas 必须分开登记；前者服务核对合同，后者服务手牌 UI。
-- 禁止因为“已有 slot 裁图”就直接把复合裁图、临时 hand preview 或 `crops/` 目录接到 `cards.ts` 的手牌图引用上。
+- 禁止因为“已有 slot 裁图”就直接把复合裁图、临时 hand preview 或未进 manifest 的中间产物接到 `cards.ts` 的手牌图引用上。
 - 手牌 atlas 的使用方式必须先对照旧角色的 `cards.ts`、`previewRef`、图集配置和现有手牌渲染逻辑；禁止只凭新角色原图外观判断“一格是不是两张”“角落那格是不是牌”“需不需要额外 split/topCrop”。
 - 如果新角色素材看起来和旧角色不同，但旧实现与专项文档都不能唯一说明接线方式，必须先问用户；不得擅自发明新的图集语义。
 
@@ -140,13 +142,14 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 - 卡图顺序必须以 `ability-cards` 裁图和合同表为唯一来源
 - 不得沿用旧角色的 slot 顺序假设
 - 不得伪造未确认的 `abilityTags`、费用、数值或时机
-- 如果正式 `ability-cards.webp` 不能直接支撑手牌显示，`previewRef` 必须改接正式 hand atlas，而不是引用合同裁图
+- 如果正式 `ability-cards.webp` 不能直接支撑某几张手牌显示，优先补正式单卡图并在 `previewRef` 上显式切到 `type = 'image'`
 - 允许“一张正式卡图对应多个运行时技能卡/可选卡”；是否采用这种复用关系，必须以旧实现或用户裁决为准，禁止凭 atlas 外观猜
 - 对“上下叠放拆卡”或“源图布局与通用 atlas 不一致”的角色，合同表里必须显式写出：
   - 哪些文件是主真相源裁图
   - 哪些文件是正式运行时 atlas
-  - 哪些只是生成正式 atlas 过程中的临时中间产物
-  - 三者的生成规则与目录
+  - 哪些文件是正式单卡图
+  - 哪些只是核对或生成过程中的临时中间产物
+  - 三者的目录与引用规则
 
 ### 6. 同步规则文档
 
@@ -192,7 +195,7 @@ npm run assets:upload
 上传后必须至少回查这些代表性 URL：
 
 - 主 atlas 1 个
-- 正式 hand atlas 1 个（如果本轮新增）
+- 正式单卡图 1 个（如果本轮新增）
 - `crops/player-board/compressed/` 1 个
 - `crops/tip/compressed/` 1 个
 

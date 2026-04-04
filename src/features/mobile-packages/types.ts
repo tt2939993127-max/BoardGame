@@ -45,7 +45,12 @@ export interface StoredGamePackageState {
     updatedAt: number;
 }
 
-export type GamePackageCardState = Omit<StoredGamePackageState, 'gameId' | 'runtimeChannel' | 'updatedAt'>;
+export type GamePackageCardState = Omit<StoredGamePackageState, 'gameId' | 'runtimeChannel' | 'updatedAt'> & {
+    previewResolved?: boolean;
+    manifestSource?: ResolvedGamePackageManifest['source'];
+    modulePackUrl?: string;
+    assetPackUrl?: string;
+};
 
 export interface PendingGamePackageInstall extends ResolvedGamePackageManifest {
     gameName: string;
@@ -113,6 +118,10 @@ export const toGamePackageCardState = (state: StoredGamePackageState): GamePacka
     progressMode: state.progressMode,
     modulePackId: state.modulePackId,
     assetPackId: state.assetPackId,
+    previewResolved: undefined,
+    manifestSource: undefined,
+    modulePackUrl: undefined,
+    assetPackUrl: undefined,
     modulePackBytes: state.modulePackBytes,
     assetPackBytes: state.assetPackBytes,
     installedVersion: state.installedVersion,

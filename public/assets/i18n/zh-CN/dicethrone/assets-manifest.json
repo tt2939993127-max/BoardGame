@@ -112,20 +112,20 @@
         }
       }
     },
-    "images/gunslinger/compressed/hand-cards-atlas": {
-      "variants": {
-        "webp": {
-          "sha256": "d3225dc5c83749f045edeb86ee6241f263597cc31310e5e73d28e197e20aa76f",
-          "bytes": 1868400,
-          "mime": "image/webp"
-        }
-      }
-    },
     "images/gunslinger/compressed/player-board": {
       "variants": {
         "webp": {
           "sha256": "9fd4d912e3ed300083c1141022c7ce82b280e7a2039391702d3986f3bd7ec5a7",
           "bytes": 487964,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/gunslinger/compressed/status-icons-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "039a011da531c13f1cf97c402273cd1f448a393e435c131ab5a9500c097f9e48",
+          "bytes": 30220,
           "mime": "image/webp"
         }
       }
@@ -142,8 +142,8 @@
     "images/gunslinger/crops/ability-cards/compressed/deadeye-2": {
       "variants": {
         "webp": {
-          "sha256": "afe8a11c9b5f5f2d01a9e662c840732f88d4d7d2c95c3359d70efa4382fef4b2",
-          "bytes": 191972,
+          "sha256": "d5a212a629ae56b51e50f094e53c11efa9623d0982eea21e470fbb07b59702ef",
+          "bytes": 149912,
           "mime": "image/webp"
         }
       }
@@ -151,8 +151,8 @@
     "images/gunslinger/crops/ability-cards/compressed/fan-the-hammer-2": {
       "variants": {
         "webp": {
-          "sha256": "6db43b2333b9b4f334cc5100101e3b1d618b4c2dacea2699df0b5940b61104df",
-          "bytes": 198304,
+          "sha256": "e4351243d79e3518ed665801ea4dd58a9d7e6a35b3aa0ebc09aa57a15f9efa67",
+          "bytes": 185676,
           "mime": "image/webp"
         }
       }
@@ -169,8 +169,8 @@
     "images/gunslinger/crops/ability-cards/compressed/mark-the-target": {
       "variants": {
         "webp": {
-          "sha256": "cab9e35ec24c50310d3692e4d451854606e15fc26319eaf2904cf7fbcf0a7c88",
-          "bytes": 89814,
+          "sha256": "cb70159f40ce1c6af527878dca804eae94f9e76e0ddbc27e39bddeb5d5b9cc45",
+          "bytes": 184912,
           "mime": "image/webp"
         }
       }
@@ -178,8 +178,8 @@
     "images/gunslinger/crops/ability-cards/compressed/pistol-whip": {
       "variants": {
         "webp": {
-          "sha256": "bd56ca0bf73b585bfa2cf11cdae914bfbb3fd80431617378358e09c124f56389",
-          "bytes": 92182,
+          "sha256": "3db1942531710ed7dbddec4c1a12a426bb45f18e2efd7a913276f9a772db5966",
+          "bytes": 175630,
           "mime": "image/webp"
         }
       }
@@ -484,8 +484,8 @@
     "images/gunslinger/crops/ability-cards/compressed/take-cover-2": {
       "variants": {
         "webp": {
-          "sha256": "08435b74b3dbcc71234246e956ee5dfa97e89e10712d2487299b8f3bd4ad9233",
-          "bytes": 226142,
+          "sha256": "9ee4ac884541468a7d975261be43791565669bf8ba6ba84de071384054677a58",
+          "bytes": 172692,
           "mime": "image/webp"
         }
       }
@@ -493,8 +493,8 @@
     "images/gunslinger/crops/ability-cards/compressed/the-law": {
       "variants": {
         "webp": {
-          "sha256": "1d6644a6ce323382d9842b11296d89ab3652ab7619792a2071d4524612d41dc9",
-          "bytes": 117218,
+          "sha256": "5c9dba943eb2cba4e45b3c288b6e9aa56644705cfd99771f33d14bb7bf97cae1",
+          "bytes": 201684,
           "mime": "image/webp"
         }
       }
@@ -1390,20 +1390,20 @@
         }
       }
     },
-    "images/samurai/compressed/hand-cards-atlas": {
-      "variants": {
-        "webp": {
-          "sha256": "d81dc8e24d721f3b5760b8ebc2bca224d2c774a47e6dbfb8b827f59b09673acc",
-          "bytes": 138190,
-          "mime": "image/webp"
-        }
-      }
-    },
     "images/samurai/compressed/player-board": {
       "variants": {
         "webp": {
           "sha256": "a1c1c57c04160c4bdd475201d8de0bceba8cae5d0df002603e8315334983b917",
           "bytes": 431352,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/samurai/compressed/status-icons-atlas": {
+      "variants": {
+        "webp": {
+          "sha256": "3362498161cac08141fe3b9d84ed63f5e3407ac55deb50e901f44bc6a6595efd",
+          "bytes": 41390,
           "mime": "image/webp"
         }
       }
@@ -1777,6 +1777,33 @@
         }
       }
     },
+    "images/samurai/crops/ability-cards/compressed/upgrade-masamune-2": {
+      "variants": {
+        "webp": {
+          "sha256": "453cb1dac7e69b8a266d2e293293202f40b0ecba37c980d620e37c475a09c0c0",
+          "bytes": 9120,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/samurai/crops/ability-cards/compressed/upgrade-slot-06-2": {
+      "variants": {
+        "webp": {
+          "sha256": "704a70386f5ebeda1a8accef9bca49ca7b46c38e35fb37488357b28ccf07051e",
+          "bytes": 10988,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/samurai/crops/ability-cards/compressed/upgrade-solemnity-2": {
+      "variants": {
+        "webp": {
+          "sha256": "a3e052633c5a40202e91de81a926ad864df194f71c0e33125e18a459ee5639fd",
+          "bytes": 9684,
+          "mime": "image/webp"
+        }
+      }
+    },
     "images/samurai/crops/ability-cards/slot-00": {
       "variants": {
         "webp": {
@@ -2133,6 +2160,33 @@
         "webp": {
           "sha256": "694188ac57b1e59f032629e2ebe00e22aa5fbf2ed7b1af19eae4850e75c25105",
           "bytes": 136,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/samurai/crops/ability-cards/upgrade-masamune-2": {
+      "variants": {
+        "webp": {
+          "sha256": "453cb1dac7e69b8a266d2e293293202f40b0ecba37c980d620e37c475a09c0c0",
+          "bytes": 9120,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/samurai/crops/ability-cards/upgrade-slot-06-2": {
+      "variants": {
+        "webp": {
+          "sha256": "704a70386f5ebeda1a8accef9bca49ca7b46c38e35fb37488357b28ccf07051e",
+          "bytes": 10988,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "images/samurai/crops/ability-cards/upgrade-solemnity-2": {
+      "variants": {
+        "webp": {
+          "sha256": "a3e052633c5a40202e91de81a926ad864df194f71c0e33125e18a459ee5639fd",
+          "bytes": 9684,
           "mime": "image/webp"
         }
       }

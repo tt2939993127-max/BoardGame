@@ -120,7 +120,7 @@ export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases>
     }, {} as StatusAtlases);
 };
 
-import { STATUS_EFFECT_META, TOKEN_META, type StatusEffectMeta } from '../domain/statusEffects';
+import { STATUS_EFFECT_META, TOKEN_META, getVisualMetaById, type StatusEffectMeta } from '../domain/statusEffects';
 
 // Re-export for consumers that import from ui/statusEffects
 export { STATUS_EFFECT_META, TOKEN_META, type StatusEffectMeta };
@@ -135,6 +135,18 @@ const getStatusIconFrameStyle = (atlas: StatusIconAtlasConfig, frame: StatusIcon
         backgroundPosition: `${xPos}% ${yPos}%`,
     } as CSSProperties;
 };
+
+const hasAtlasFrame = (meta: StatusEffectMeta, atlas?: StatusAtlases | null) => {
+    if (!atlas || !meta.frameId) return false;
+    if (meta.atlasId && atlas[meta.atlasId]) {
+        return Boolean(atlas[meta.atlasId].frames[meta.frameId]);
+    }
+    return Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
+};
+
+const hasVisualIcon = (meta: StatusEffectMeta, atlas?: StatusAtlases | null) => (
+    hasAtlasFrame(meta, atlas) || Boolean(meta.iconPath)
+);
 
 export const getStatusEffectIconNode = (
     meta: StatusEffectMeta,
@@ -162,6 +174,17 @@ export const getStatusEffectIconNode = (
     }
 
     if (!frame || !targetAtlas) {
+        if (meta.iconPath) {
+            return (
+                <span
+                    className="block w-full h-full bg-center bg-no-repeat"
+                    style={{
+                        backgroundImage: buildLocalizedImageSet(meta.iconPath, locale),
+                        backgroundSize: 'contain',
+                    }}
+                />
+            );
+        }
         // 无精灵图时不显示内容，外层渐变背景已提供视觉标识
         return <span className="block w-full h-full" />;
     }
@@ -204,15 +227,7 @@ export const StatusEffectBadge = ({
     const meta = STATUS_EFFECT_META[effectId] || { color: 'from-gray-500 to-gray-600' };
 
     // Check if sprite exists in the resolved atlas
-    let hasSprite = false;
-    if (atlas && meta.frameId) {
-        if (meta.atlasId && atlas[meta.atlasId]) {
-            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
-        } else {
-            // Fallback check
-            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
-        }
-    }
+    const hasSprite = hasVisualIcon(meta, atlas);
     const description = resolveI18nList(
         t(`statusEffects.${effectId}.description`, { returnObjects: true })
     );
@@ -339,16 +354,9 @@ export const TokenBadge = ({
     clickable?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const meta = TOKEN_META[tokenId] || { color: 'from-gray-500 to-gray-600' };
+    const meta = getVisualMetaById(tokenId) || { color: 'from-gray-500 to-gray-600' };
 
-    let hasSprite = false;
-    if (atlas && meta.frameId) {
-        if (meta.atlasId && atlas[meta.atlasId]) {
-            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
-        } else {
-            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
-        }
-    }
+    const hasSprite = hasVisualIcon(meta, atlas);
     const description = resolveI18nList(
         t(`tokens.${tokenId}.description`, { returnObjects: true })
     );
@@ -506,14 +514,7 @@ export const SelectableStatusBadge = ({
     const isToken = !STATUS_EFFECT_META[effectId] && Boolean(TOKEN_META[effectId]);
     const i18nPrefix = isToken ? 'tokens' : 'statusEffects';
 
-    let hasSprite = false;
-    if (atlas && meta.frameId) {
-        if (meta.atlasId && atlas[meta.atlasId]) {
-            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
-        } else {
-            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
-        }
-    }
+    const hasSprite = hasVisualIcon(meta, atlas);
     const descriptionKey = `${i18nPrefix}.${effectId}.description`;
     const nameKey = `${i18nPrefix}.${effectId}.name`;
     const description = resolveI18nList(

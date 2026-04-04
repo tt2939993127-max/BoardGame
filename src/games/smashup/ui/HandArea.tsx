@@ -133,7 +133,11 @@ const HandCard: React.FC<HandCardProps> = ({
         const didDrag = dragState.hasMoved;
 
         if (event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(dragState.pointerId)) {
-            event.currentTarget.releasePointerCapture(dragState.pointerId);
+            try {
+                event.currentTarget.releasePointerCapture(dragState.pointerId);
+            } catch {
+                // 合成 pointer 事件测试场景下可能没有真实 capture，忽略即可。
+            }
         }
 
         const dropTarget = didDrag && event ? onResolveDropTarget?.(card, event.clientX, event.clientY) ?? null : null;
@@ -158,7 +162,11 @@ const HandCard: React.FC<HandCardProps> = ({
         if (interactionMode !== 'drag' || dragState.pointerId == null) return;
         suppressClickRef.current = dragState.hasMoved;
         if (event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(dragState.pointerId)) {
-            event.currentTarget.releasePointerCapture(dragState.pointerId);
+            try {
+                event.currentTarget.releasePointerCapture(dragState.pointerId);
+            } catch {
+                // 合成 pointer 事件测试场景下可能没有真实 capture，忽略即可。
+            }
         }
         dragStateRef.current = {
             pointerId: null,
@@ -174,8 +182,8 @@ const HandCard: React.FC<HandCardProps> = ({
     const handlePointerDownInternal = useCallback((event: React.PointerEvent) => {
         onPointerDown?.(event, card);
         suppressClickRef.current = false;
-        if (isOpponentView) return;
-        if (interactionMode !== 'drag' || disableInteraction || isDisabled) return;
+        if (isOpponentView || interactionMode !== 'drag') return;
+        if (disableInteraction || isDisabled) return;
         dragStateRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -187,7 +195,11 @@ const HandCard: React.FC<HandCardProps> = ({
             x: rect.left + rect.width / 2,
             y: rect.top + rect.height * 0.34,
         };
-        event.currentTarget.setPointerCapture(event.pointerId);
+        try {
+            event.currentTarget.setPointerCapture(event.pointerId);
+        } catch {
+            // 合成 pointer 事件测试场景下可能没有真实 capture，忽略即可。
+        }
     }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onPointerDown]);
 
     const handlePointerMoveInternal = useCallback((event: React.PointerEvent) => {
@@ -217,13 +229,15 @@ const HandCard: React.FC<HandCardProps> = ({
 
     const handlePointerUpInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
+        if (interactionMode !== 'drag') return;
         handleDragFinish(event);
-    }, [card, handleDragFinish, onPointerEnd]);
+    }, [card, handleDragFinish, interactionMode, onPointerEnd]);
 
     const handlePointerCancelInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
+        if (interactionMode !== 'drag') return;
         handleDragCancel(event);
-    }, [card, handleDragCancel, onPointerEnd]);
+    }, [card, handleDragCancel, interactionMode, onPointerEnd]);
 
     const def = lookupCardDef(card.defId);
     const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
@@ -266,7 +280,7 @@ const HandCard: React.FC<HandCardProps> = ({
                 marginLeft: index === 0 ? 0 : `${spacingVw}vw`,
                 zIndex: isDragging ? 200 : baseZIndex,
                 boxShadow: isDragging && isDragPlayable ? DRAG_DROP_SHADOW : undefined,
-                touchAction: interactionMode === 'drag' || swipePlayEnabled ? 'none' : undefined,
+                touchAction: interactionMode === 'drag' ? 'none' : undefined,
             }}
             // 对手视角时完全不使用动画
             initial={isOpponentView ? { opacity: 1, y: 0, scale: 1, rotate: rotationSeed } : { y: 200, opacity: 0, scale: 0.8 }}
@@ -293,10 +307,6 @@ const HandCard: React.FC<HandCardProps> = ({
                 }
                 if (shouldBlockClick?.(card)) return;
                 if (isOpponentView) return; // 对手视角不可点击
-                if (clickBehavior === 'view' && onViewDetail) {
-                    onViewDetail();
-                    return;
-                }
                 if (disableInteraction || isDisabled) {
                     // 不可操作时摇头抖动
                     setIsShaking(true);
@@ -330,6 +340,9 @@ const HandCard: React.FC<HandCardProps> = ({
                         onClick={(e) => {
                             e.stopPropagation();
                             onViewDetail?.();
+                        }}
+                        onPointerDown={(e) => {
+                            e.stopPropagation();
                         }}
                     >
                         <svg
@@ -373,7 +386,6 @@ export const HandArea: React.FC<Props> = ({
     disabledCardUids,
     isOpponentView = false,
     interactionMode = 'click',
-    onCardSwipePlay,
     onResolveDropTarget,
     onCardDragPlay,
     onDragStateChange,
@@ -390,8 +402,6 @@ export const HandArea: React.FC<Props> = ({
             onCardView?.(card);
         },
     });
-    const clickBehavior: 'select' | 'view' = isDiscardMode ? 'select' : 'view';
-    const swipePlayEnabled = interactionMode === 'click' && !isOpponentView && !isDiscardMode && Boolean(onCardSwipePlay);
     useEffect(() => {
         queueMicrotask(() => {
             setIsLoaded(true);
@@ -437,8 +447,6 @@ export const HandArea: React.FC<Props> = ({
                             isOpponentView={true}
                             compactLayout={compactLayout}
                             showTouchInspectButton={false}
-                            clickBehavior="view"
-                            swipePlayEnabled={false}
                             interactionMode={interactionMode}
                             onResolveDropTarget={onResolveDropTarget}
                             onCardDragPlay={onCardDragPlay}
@@ -462,9 +470,6 @@ export const HandArea: React.FC<Props> = ({
                                 isOpponentView={false}
                                 compactLayout={compactLayout}
                                 showTouchInspectButton={isCoarsePointer && !isDiscardMode}
-                                clickBehavior={clickBehavior}
-                                swipePlayEnabled={swipePlayEnabled}
-                                onSwipePlay={() => onCardSwipePlay?.(card)}
                                 interactionMode={interactionMode}
                                 onResolveDropTarget={onResolveDropTarget}
                                 onCardDragPlay={onCardDragPlay}

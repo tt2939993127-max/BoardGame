@@ -141,6 +141,31 @@ const buildSimpleChoicePayload = (
     return { optionIds };
 };
 
+const enumerateInteractionOptionCombinations = <T extends { id: string }>(
+    options: T[],
+    minCount: number,
+    maxCount: number,
+): T[][] => {
+    const results: T[][] = [];
+    const path: T[] = [];
+
+    const dfs = (start: number) => {
+        if (path.length >= minCount && path.length <= maxCount) {
+            results.push([...path]);
+        }
+        if (path.length === maxCount) return;
+
+        for (let index = start; index < options.length; index += 1) {
+            path.push(options[index]);
+            dfs(index + 1);
+            path.pop();
+        }
+    };
+
+    dfs(0);
+    return results;
+};
+
 const sumFaceRequirement = (faces: Record<string, number>): number => {
     return Object.values(faces).reduce((sum, count) => sum + count, 0);
 };
@@ -504,27 +529,64 @@ const buildInteractionActions = (
         const availableOptions = (data.options ?? []).filter((option): option is { id: string; label?: string } => {
             return typeof option?.id === 'string' && option.disabled !== true;
         });
-        const minCount = Math.max(1, data.multi?.min ?? 1);
-        return availableOptions.map((option, index) => {
-            const selectedIds = availableOptions.slice(0, minCount).map((item) => item.id);
-            const payload = buildSimpleChoicePayload(
-                minCount > 1 ? selectedIds : [option.id],
-                data.multi,
+        const minCount = data.multi?.min ?? 1;
+        const maxCount = data.multi?.max ?? minCount;
+
+        if (data.multi) {
+            const actions: AiLegalAction[] = [];
+            if (minCount === 0) {
+                actions.push({
+                    actionId: createAiLegalActionId('interaction', current.id, 'empty-selection'),
+                    kind: 'interaction-choice',
+                    label: '不选择任何项',
+                    commands: [{
+                        type: 'SYS_INTERACTION_RESPOND',
+                        payload: { optionIds: [] },
+                    }],
+                    metadata: {
+                        interactionId: current.id,
+                        optionIds: [],
+                    },
+                });
+            }
+
+            const combinations = enumerateInteractionOptionCombinations(
+                availableOptions,
+                Math.max(1, minCount),
+                maxCount,
             );
-            return {
-                actionId: createAiLegalActionId('interaction', current.id, option.id),
+            actions.push(...combinations.map((combination, index) => ({
+                actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
                 kind: 'interaction-choice',
-                label: option.label ?? `选择 ${index + 1}`,
+                label: combination.map((option) => option.label ?? option.id).join(' + ') || `选择 ${index + 1}`,
                 commands: [{
                     type: 'SYS_INTERACTION_RESPOND',
-                    payload,
+                    payload: buildSimpleChoicePayload(
+                        combination.map((option) => option.id),
+                        data.multi,
+                    ),
                 }],
                 metadata: {
                     interactionId: current.id,
-                    optionId: option.id,
+                    optionIds: combination.map((option) => option.id),
                 },
-            };
-        });
+            })));
+            return actions;
+        }
+
+        return availableOptions.map((option, index) => ({
+            actionId: createAiLegalActionId('interaction', current.id, option.id),
+            kind: 'interaction-choice',
+            label: option.label ?? `选择 ${index + 1}`,
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: buildSimpleChoicePayload([option.id], data.multi),
+            }],
+            metadata: {
+                interactionId: current.id,
+                optionId: option.id,
+            },
+        }));
     }
 
     if (current.kind === 'dt:card-interaction') {

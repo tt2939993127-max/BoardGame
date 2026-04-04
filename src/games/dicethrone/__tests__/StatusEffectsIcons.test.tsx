@@ -2,9 +2,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { render, waitFor } from '@testing-library/react';
 
-import { DICETHRONE_STATUS_ATLAS_IDS } from '../domain/ids';
+import { DICETHRONE_STATUS_ATLAS_IDS, TOKEN_IDS } from '../domain/ids';
 import { registerDiceDefinition } from '../domain/diceRegistry';
 import { moonElfDiceDefinition } from '../heroes/moon_elf/diceConfig';
+import { getVisualMetaById } from '../domain/statusEffects';
 import { Dice3D } from '../ui/Dice3D';
 import {
     buildSpriteBackgroundImage,
@@ -48,6 +49,27 @@ describe('StatusEffectsIcons', () => {
         );
 
         expect(html).toContain('/assets/dicethrone/images/monk/compressed/status-icons-atlas.webp');
+    });
+
+    it('token 展示查询 debuff token 时应回退到对应视觉元数据', () => {
+        const meta = getVisualMetaById(TOKEN_IDS.BOUNTY);
+
+        expect(meta?.frameId).toBe(TOKEN_IDS.BOUNTY);
+        expect(meta?.iconPath).toBe('dicethrone/images/gunslinger/icons/赏金');
+    });
+
+    it('无 atlas 时应回退到单图 iconPath', () => {
+        const html = renderToStaticMarkup(
+            getStatusEffectIconNode(
+                { iconPath: 'dicethrone/images/samurai/icons/荣誉' },
+                'zh-CN',
+                'normal',
+                null
+            )
+        );
+
+        expect(html).toContain('icons/compressed/');
+        expect(html).toContain('background-size:contain');
     });
 
     it('会把 game-data 骰图路径折算成 dice-sprite 资源 key', () => {

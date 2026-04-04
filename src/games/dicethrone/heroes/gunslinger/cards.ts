@@ -7,7 +7,7 @@ import {
     GUNSLINGER_COMMON_ATLAS_INDEX,
     injectCommonCardPreviewRefs,
 } from '../../domain/commonCards';
-import { DICETHRONE_CARD_ATLAS_IDS, DICETHRONE_HAND_CARD_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
+import { DICETHRONE_CARD_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
 import {
     BOUNTY_HUNTER_2,
     DEADEYE_2,
@@ -22,12 +22,17 @@ import {
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 
-const GUNSLINGER_CARD_ATLAS_ID = DICETHRONE_HAND_CARD_ATLAS_IDS.GUNSLINGER;
+const GUNSLINGER_CARD_ATLAS_ID = DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER;
 
 const atlasPreview = (index: number): CardPreviewRef => ({
     type: 'atlas',
     atlasId: GUNSLINGER_CARD_ATLAS_ID,
     index,
+});
+
+const imagePreview = (src: string): CardPreviewRef => ({
+    type: 'image',
+    src,
 });
 
 const replaceAbility = (
@@ -66,7 +71,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-revolver-2', 'description'),
-        previewRef: atlasPreview(0),
+        previewRef: atlasPreview(18),
         effects: [replaceAbility('revolver', REVOLVER_2, 2, '升级左轮手枪至 II 级。')],
     },
     {
@@ -76,7 +81,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('upgrade-bounty-hunter-2', 'description'),
-        previewRef: atlasPreview(1),
+        previewRef: atlasPreview(19),
         effects: [replaceAbility('bounty-hunter', BOUNTY_HUNTER_2, 2, '升级赏金猎人至 II 级。')],
     },
     {
@@ -86,7 +91,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('upgrade-showdown-2', 'description'),
-        previewRef: atlasPreview(2),
+        previewRef: atlasPreview(20),
         effects: [replaceAbility('showdown', SHOWDOWN_2, 2, '升级摊到牌面至 II 级。')],
     },
     {
@@ -96,7 +101,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-showdown-3', 'description'),
-        previewRef: atlasPreview(3),
+        previewRef: atlasPreview(21),
         effects: [replaceAbility('showdown', SHOWDOWN_3, 3, '升级摊到牌面至 III 级。')],
     },
     {
@@ -106,7 +111,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-fan-the-hammer-2', 'description'),
-        previewRef: atlasPreview(4),
+        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/fan-the-hammer-2'),
         effects: [replaceAbility('fan-the-hammer', FAN_THE_HAMMER_2, 2, '升级左轮速射至 II 级。')],
     },
     {
@@ -116,7 +121,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-pistol-whip', 'description'),
-        previewRef: atlasPreview(5),
+        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/pistol-whip'),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
             custom('gunslinger-card-pistol-whip', '选择 1 位敌方玩家，使其获得击倒并受到 1 点伤害。'),
@@ -129,7 +134,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-take-cover-2', 'description'),
-        previewRef: atlasPreview(6),
+        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/take-cover-2'),
         effects: [replaceAbility('take-cover', TAKE_COVER_2, 2, '升级掩护射击至 II 级。')],
     },
     {
@@ -139,7 +144,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 0,
         timing: 'main',
         description: cardText('card-mark-the-target', 'description'),
-        previewRef: atlasPreview(7),
+        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/mark-the-target'),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。'),
             custom('gunslinger-card-mark-the-target', '选择 1 位敌方玩家，使其获得 1 个赏金。'),
@@ -152,7 +157,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-deadeye-2', 'description'),
-        previewRef: atlasPreview(8),
+        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/deadeye-2'),
         effects: [replaceAbility('deadeye', DEADEYE_2, 2, '升级死亡之眼至 II 级。')],
     },
     {
@@ -162,7 +167,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-the-law', 'description'),
-        previewRef: atlasPreview(9),
+        previewRef: imagePreview('dicethrone/images/gunslinger/crops/ability-cards/the-law'),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
             custom('gunslinger-card-the-law', '选择至多 2 位目标玩家。每名目标玩家获得 1 个赏金并受到 1 层击倒。'),
@@ -175,7 +180,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 3,
         timing: 'main',
         description: cardText('upgrade-duel-2', 'description'),
-        previewRef: atlasPreview(10),
+        previewRef: atlasPreview(25),
         effects: [replaceAbility('duel', DUEL_2, 2, '升级对决至 II 级。')],
     },
     {
@@ -185,7 +190,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('upgrade-quick-draw', 'description'),
-        previewRef: atlasPreview(11),
+        previewRef: atlasPreview(26),
         effects: [replaceAbility('quick-draw', QUICK_DRAW_UPGRADED, 2, '升级快速拔枪至 II 级。')],
     },
     {
@@ -195,7 +200,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'main',
         description: cardText('card-wanted', 'description'),
-        previewRef: atlasPreview(12),
+        previewRef: atlasPreview(27),
         effects: [
             custom('gunslinger-card-wanted', '选择 1 位敌方玩家，使其获得 1 个赏金。'),
         ],
@@ -207,7 +212,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-spin-the-chamber', 'description'),
-        previewRef: atlasPreview(13),
+        previewRef: atlasPreview(28),
         effects: [
             grantToken('self', TOKEN_IDS.LOADED, 1, '获得 1 个装填。'),
         ],
@@ -219,7 +224,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'main',
         description: cardText('card-high-noon', 'description'),
-        previewRef: atlasPreview(14),
+        previewRef: atlasPreview(29),
         effects: [
             custom('gunslinger-card-high-noon', '选择 1 位敌方玩家，掷 1 颗骰子并按结果结算。'),
         ],
@@ -231,7 +236,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'roll',
         description: cardText('card-wild-west', 'description'),
-        previewRef: atlasPreview(15),
+        previewRef: atlasPreview(30),
         isAttackModifier: true,
         playCondition: { requireDiceExists: true, requireHasRolled: true },
         effects: [
@@ -245,7 +250,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         cpCost: 2,
         timing: 'roll',
         description: cardText('card-eat-my-lead', 'description'),
-        previewRef: atlasPreview(16),
+        previewRef: atlasPreview(31),
         isAttackModifier: true,
         playCondition: { requireDiceExists: true, requireHasRolled: true },
         effects: [

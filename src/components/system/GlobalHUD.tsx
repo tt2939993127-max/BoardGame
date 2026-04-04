@@ -7,7 +7,7 @@ import { useToast } from '../../contexts/ToastContext';
 import { FabMenu, type FabAction } from './FabMenu';
 import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize, Download, RefreshCw } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
-import { requestAndroidNativeUpdateCheck } from '../../lib/mobile/androidNativeUpdates';
+import { requestAndroidLiveUpdateCheck } from '../../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 const HUD_MODAL_NS = 'hud';
@@ -20,6 +20,20 @@ const LazyFeedbackModal = lazy(() => import('./FeedbackModal').then(m => ({ defa
 const WEB_APP_DOWNLOAD_URL = typeof import.meta.env.VITE_ANDROID_APP_DOWNLOAD_URL === 'string'
     ? import.meta.env.VITE_ANDROID_APP_DOWNLOAD_URL.trim()
     : '';
+
+type LegacyFullscreenDocument = Document & {
+    msExitFullscreen?: () => Promise<void> | void;
+    mozCancelFullScreen?: () => Promise<void> | void;
+    webkitExitFullscreen?: () => Promise<void> | void;
+};
+
+type LegacyFullscreenElement = HTMLElement & {
+    msRequestFullscreen?: () => Promise<void> | void;
+    mozRequestFullScreen?: () => Promise<void> | void;
+    webkitRequestFullscreen?: (keyboardInput?: number) => Promise<void> | void;
+};
+
+const LEGACY_KEYBOARD_INPUT_ALLOWED = 1;
 
 export const GlobalHUD = () => {
     const isNativeAndroid = isNativeAndroidRuntime();
@@ -43,8 +57,8 @@ export const GlobalHUD = () => {
     const [socialModalId, setSocialModalId] = useState<string | null>(null);
 
     const toggleFullscreen = async () => {
-        const doc = document as any;
-        const elem = document.documentElement as any;
+        const doc = document as LegacyFullscreenDocument;
+        const elem = document.documentElement as LegacyFullscreenElement;
 
         if (!document.fullscreenElement) {
             try {
@@ -55,10 +69,10 @@ export const GlobalHUD = () => {
                 } else if (elem.mozRequestFullScreen) {
                     await elem.mozRequestFullScreen();
                 } else if (elem.webkitRequestFullscreen) {
-                    await elem.webkitRequestFullscreen((Element as any).ALLOW_KEYBOARD_INPUT);
+                    await elem.webkitRequestFullscreen(LEGACY_KEYBOARD_INPUT_ALLOWED);
                 }
                 setIsFullscreen(true);
-            } catch (error) {
+            } catch {
                 toast.error(t('hud.fullscreen.enterFailed'));
             }
             return;
@@ -75,7 +89,7 @@ export const GlobalHUD = () => {
                 await doc.webkitExitFullscreen();
             }
             setIsFullscreen(false);
-        } catch (error) {
+        } catch {
             toast.error(t('hud.fullscreen.exitFailed'));
         }
     };
@@ -93,7 +107,10 @@ export const GlobalHUD = () => {
     };
 
     const handleCheckAppUpdate = () => {
-        requestAndroidNativeUpdateCheck({ interactive: true });
+        requestAndroidLiveUpdateCheck({
+            interactive: true,
+            applyMode: 'immediate',
+        });
     };
 
     useEffect(() => {

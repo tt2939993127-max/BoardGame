@@ -41,6 +41,9 @@ const mergeManifestIntoCardState = (
         ...state,
         modulePackId: state.modulePackId ?? manifest.modulePackId,
         assetPackId: state.assetPackId ?? manifest.assetPackId,
+        manifestSource: manifest.source,
+        modulePackUrl: state.modulePackUrl ?? manifest.modulePackUrl,
+        assetPackUrl: state.assetPackUrl ?? manifest.assetPackUrl,
         modulePackBytes: state.modulePackBytes ?? manifest.modulePackBytes,
         assetPackBytes: state.assetPackBytes ?? manifest.assetPackBytes,
     };
@@ -177,7 +180,10 @@ export const useGamePackageState = ({
     }, [cardState.status, pendingInstall]);
 
     const displayCardState = useMemo(
-        () => mergeManifestIntoCardState(cardState, previewManifest ?? fallbackManifest),
+        () => ({
+            ...mergeManifestIntoCardState(cardState, previewManifest ?? fallbackManifest),
+            previewResolved: Boolean(previewManifest),
+        }),
         [cardState, fallbackManifest, previewManifest],
     );
 

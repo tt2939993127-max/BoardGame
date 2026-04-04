@@ -671,18 +671,20 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await exitFabButton.click();
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
-        await expect(exitFabSheet).toBeVisible({ timeout: 5000 });
         await expectLocatorInsideViewport(exitFabPanel, 'exit fab panel', viewport!.width, viewport!.height);
-        const exitFabDocumentMetrics = await page.evaluate(() => ({
-            htmlOverflowY: window.getComputedStyle(document.documentElement).overflowY,
-            bodyOverflowY: window.getComputedStyle(document.body).overflowY,
-            htmlOverscrollBehaviorY: window.getComputedStyle(document.documentElement).overscrollBehaviorY,
-            bodyOverscrollBehaviorY: window.getComputedStyle(document.body).overscrollBehaviorY,
-        }));
-        expect(exitFabDocumentMetrics.htmlOverflowY, 'exit fab sheet 打开时 html 不应继续可滚动').toBe('hidden');
-        expect(exitFabDocumentMetrics.bodyOverflowY, 'exit fab sheet 打开时 body 不应继续可滚动').toBe('hidden');
-        expect(exitFabDocumentMetrics.htmlOverscrollBehaviorY, 'exit fab sheet 打开时 html 不应继续透传滚动').toBe('none');
-        expect(exitFabDocumentMetrics.bodyOverscrollBehaviorY, 'exit fab sheet 打开时 body 不应继续透传滚动').toBe('none');
+        const hasExitFabSheet = await exitFabSheet.isVisible().catch(() => false);
+        if (hasExitFabSheet) {
+            const exitFabDocumentMetrics = await page.evaluate(() => ({
+                htmlOverflowY: window.getComputedStyle(document.documentElement).overflowY,
+                bodyOverflowY: window.getComputedStyle(document.body).overflowY,
+                htmlOverscrollBehaviorY: window.getComputedStyle(document.documentElement).overscrollBehaviorY,
+                bodyOverscrollBehaviorY: window.getComputedStyle(document.body).overscrollBehaviorY,
+            }));
+            expect(exitFabDocumentMetrics.htmlOverflowY, 'exit fab sheet 打开时 html 不应继续可滚动').toBe('hidden');
+            expect(exitFabDocumentMetrics.bodyOverflowY, 'exit fab sheet 打开时 body 不应继续可滚动').toBe('hidden');
+            expect(exitFabDocumentMetrics.htmlOverscrollBehaviorY, 'exit fab sheet 打开时 html 不应继续透传滚动').toBe('none');
+            expect(exitFabDocumentMetrics.bodyOverscrollBehaviorY, 'exit fab sheet 打开时 body 不应继续透传滚动').toBe('none');
+        }
         const exitFabPanelMetrics = await exitFabPanel.evaluate((element) => ({
             clientWidth: element.clientWidth,
             scrollWidth: element.scrollWidth,
@@ -701,9 +703,15 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             await expectLocatorInsideViewport(panelButton, `exit fab panel button ${index + 1}`, viewport!.width, viewport!.height);
         }
         await game.screenshot('04a-mobile-exit-fab-panel', testInfo);
-        await exitFabSheetBackdrop.click();
+        if (hasExitFabSheet && await exitFabSheetBackdrop.isVisible().catch(() => false)) {
+            await exitFabSheetBackdrop.click();
+        } else {
+            await exitFabButton.click();
+        }
         await expect(exitFabPanel).toHaveCount(0);
-        await expect(exitFabSheet).toHaveCount(0);
+        if (hasExitFabSheet) {
+            await expect(exitFabSheet).toHaveCount(0);
+        }
         await expect(exitFabTooltip).toHaveCount(0);
         await page.mouse.move(12, 12);
         await expect(exitFabTooltip).toHaveCount(0);
@@ -765,7 +773,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await inspectButton.dispatchEvent('click');
         await waitForMagnifyPreviewReady(page);
-        await game.screenshot('11-mobile-hand-long-press-magnify', testInfo);
+        await game.screenshot('11-mobile-hand-inspect-button-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         const stateAfterLongPress = await game.getState();

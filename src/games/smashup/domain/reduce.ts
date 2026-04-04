@@ -1948,6 +1948,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const oldBase = baseIndex < state.bases.length ? state.bases[baseIndex] : undefined;
             let reusedTalent = false;
             let consumedStandingStones = false;
+            let standingStonesHostMinionUid: string | undefined;
 
             if (ongoingCardUid) {
                 const baseOngoing = oldBase?.ongoingActions.find(o => o.uid === ongoingCardUid);
@@ -1959,6 +1960,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         const attached = minion.attachedActions.find(action => action.uid === ongoingCardUid);
                         if (attached?.talentUsed) {
                             reusedTalent = true;
+                            consumedStandingStones =
+                                oldBase?.defId === 'base_standing_stones'
+                                && minion.controller === playerId
+                                && !state.standingStonesDoubleTalentMinionUid;
+                            standingStonesHostMinionUid = minion.uid;
                             break;
                         }
                     }
@@ -2001,8 +2007,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             });
             // 巨石阵双才能追踪：如果随从在使用前 talentUsed 已为 true，说明这是第二次使用
             let newStandingStonesUid = state.standingStonesDoubleTalentMinionUid;
-            if (minionUid && !ongoingCardUid && consumedStandingStones) {
-                newStandingStonesUid = minionUid;
+            if (consumedStandingStones) {
+                newStandingStonesUid = standingStonesHostMinionUid ?? minionUid;
             }
             const newTitans = titanUid
                 ? (state.titans ?? []).map(titan =>
