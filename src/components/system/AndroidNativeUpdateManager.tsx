@@ -19,6 +19,7 @@ import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import { AndroidNativeUpdateGate } from './AndroidNativeUpdateGate';
 
 const autoPromptedNativeUpdateVersions = new Set<string>();
+let hasAutoStartedAndroidNativeUpdateCheck = false;
 
 export const AndroidNativeUpdateManager = () => {
     const toast = useToast();
@@ -141,7 +142,10 @@ export const AndroidNativeUpdateManager = () => {
             void applyCheck(request.interactive !== false);
         });
 
-        void applyCheck(false);
+        if (!hasAutoStartedAndroidNativeUpdateCheck) {
+            hasAutoStartedAndroidNativeUpdateCheck = true;
+            void applyCheck(false);
+        }
 
         return () => {
             disposed = true;

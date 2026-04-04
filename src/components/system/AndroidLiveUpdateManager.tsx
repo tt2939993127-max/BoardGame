@@ -11,6 +11,7 @@ import {
 } from '../../lib/mobile/androidLiveUpdates';
 
 const autoNotifiedBackgroundOtaVersions = new Set<string>();
+let hasAutoStartedAndroidLiveUpdateCheck = false;
 
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
@@ -82,15 +83,18 @@ export const AndroidLiveUpdateManager = () => {
             }
         };
 
-        void startAndroidLiveUpdateBackgroundCheck({
-            onForceStateChange: (state) => {
-                if (disposed) return;
-                setForceUpdateState(state);
-            },
-            applyMode: 'background',
-        }).then((result) => {
-            handleResult(result, { suppressReadyToast: isGamePageRef.current });
-        });
+        if (!hasAutoStartedAndroidLiveUpdateCheck) {
+            hasAutoStartedAndroidLiveUpdateCheck = true;
+            void startAndroidLiveUpdateBackgroundCheck({
+                onForceStateChange: (state) => {
+                    if (disposed) return;
+                    setForceUpdateState(state);
+                },
+                applyMode: 'background',
+            }).then((result) => {
+                handleResult(result, { suppressReadyToast: isGamePageRef.current });
+            });
+        }
 
         const unsubscribeRequest = subscribeAndroidLiveUpdateRequests((request) => {
             void startAndroidLiveUpdateBackgroundCheck({
