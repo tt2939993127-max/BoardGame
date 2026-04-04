@@ -83,6 +83,10 @@ async function readFactionSelectionMetrics(page: Page) {
     });
     const stage = document.querySelector<HTMLElement>('[data-testid="faction-selection-main-stage"]');
     const stageRect = stage?.getBoundingClientRect() ?? null;
+    const rail = document.querySelector<HTMLElement>('[data-testid="faction-selection-player-rail"]');
+    const railRect = rail?.getBoundingClientRect() ?? null;
+    const playerCard = document.querySelector<HTMLElement>('[data-testid="faction-selection-player-card-0"]');
+    const playerCardRect = playerCard?.getBoundingClientRect() ?? null;
     const firstTop = boxes[0]?.top ?? 0;
 
     return {
@@ -103,6 +107,19 @@ async function readFactionSelectionMetrics(page: Page) {
             height: stageRect.height,
           }
         : null,
+      railRect: railRect
+        ? {
+            left: railRect.left,
+            top: railRect.top,
+            right: railRect.right,
+            bottom: railRect.bottom,
+            width: railRect.width,
+            height: railRect.height,
+          }
+        : null,
+      playerCardWidth: playerCardRect?.width ?? 0,
+      playerCardWidthRatio: playerCardRect ? playerCardRect.width / window.innerWidth : 0,
+      playerCardBottom: playerCardRect?.bottom ?? 0,
     };
   });
 }
@@ -127,6 +144,10 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     expect(mobileMetrics.stageRect, '移动端应启用主选派缩放舞台').not.toBeNull();
     expect(mobileMetrics.stageRect?.left ?? -1, '移动端缩放舞台左侧不应出屏').toBeGreaterThanOrEqual(-1);
     expect(mobileMetrics.stageRect?.right ?? 9999, '移动端缩放舞台右侧不应出屏').toBeLessThanOrEqual(mobileMetrics.innerWidth + 1);
+    expect(mobileMetrics.railRect, '移动端玩家卡片栏应存在').not.toBeNull();
+    expect(mobileMetrics.railRect?.bottom ?? 9999, '移动端玩家卡片栏底部不应被裁剪').toBeLessThanOrEqual(mobileMetrics.innerHeight + 1);
+    expect(mobileMetrics.playerCardWidth, '移动端玩家卡片应成功渲染').toBeGreaterThan(0);
+    expect(mobileMetrics.playerCardBottom, '移动端玩家卡片底部不应出屏').toBeLessThanOrEqual(mobileMetrics.innerHeight + 1);
 
     await page.screenshot({ path: join(evidenceDir, 'mobile-landscape-800x450.png'), fullPage: false });
     await page.screenshot({ path: testInfo.outputPath('mobile-landscape-800x450.png'), fullPage: false });
@@ -144,6 +165,8 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
 
     const widthRatioDelta = Math.abs(mobileMetrics.firstWidthRatio - desktopMetrics.firstWidthRatio);
     expect(widthRatioDelta, '移动端派系卡宽度占比应接近 PC，同构缩放不应改成另一套手机稿').toBeLessThan(0.035);
+    const playerCardRatioDelta = Math.abs(mobileMetrics.playerCardWidthRatio - desktopMetrics.playerCardWidthRatio);
+    expect(playerCardRatioDelta, '移动端底部玩家卡片也必须跟随桌面构图等比缩小').toBeLessThan(0.03);
 
     await page.screenshot({ path: join(evidenceDir, 'desktop-reference-1920x1080.png'), fullPage: false });
     await page.screenshot({ path: testInfo.outputPath('desktop-reference-1920x1080.png'), fullPage: false });

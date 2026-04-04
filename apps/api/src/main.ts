@@ -10,6 +10,8 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { MsgpackIoAdapter } from './adapters/msgpack-io.adapter';
+import { createAdminTestLatencyMiddleware } from './modules/admin/admin-test-latency.middleware';
+import { AdminTestLatencyService } from './modules/admin/admin-test-latency.service';
 import { GlobalHttpExceptionFilter } from './shared/filters/http-exception.filter';
 import logger from '../../../server/logger';
 import { isNoCacheSpaEntryPath, shouldServeSpaFallback } from './spa-fallback';
@@ -70,6 +72,7 @@ async function bootstrap() {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.use(express.json({ limit: '2mb' }));
     expressApp.use(express.urlencoded({ extended: true, limit: '2mb' }));
+    expressApp.use('/admin', createAdminTestLatencyMiddleware(app.get(AdminTestLatencyService)));
 
     const gameServerTarget =
         process.env.GAME_SERVER_PROXY_TARGET

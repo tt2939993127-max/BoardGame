@@ -31,12 +31,12 @@ import {
   resolvePlayRouteFallbackLobbyPath,
   shouldShowPlayRouteLoadingPrompt,
 } from './lib/gameRouteFallback';
-import { isAndroidShellBuildMode, isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
+import { isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
 
 import { NotFound } from './pages/NotFound';
 import { MaintenancePage } from './pages/Maintenance';
 
-const isAndroidShellBuild = isAndroidShellBuildMode();
+const ENABLE_INTERNAL_DEVTOOLS = import.meta.env.DEV;
 
 // 页面级懒加载：首页不需要加载 MatchRoom 的引擎/传输层/教程系统代码
 const Home = React.lazy(() => import('./pages/Home').then(m => ({ default: m.Home })));
@@ -60,13 +60,10 @@ TestHarness.init();
  */
 const TutorialMatchRoom = React.lazy(() => import('./pages/TutorialMatchRoomWithAudio'));
 
-const DevToolsSlicer = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AssetSlicer')) : null;
-const DevToolsFxPreview = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
-const DevToolsAudioBrowser = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
-const DevToolsArchView = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
-const UnifiedBuilder = !isAndroidShellBuild ? React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio')) : null;
-const UGCRuntimeViewPage = !isAndroidShellBuild ? React.lazy(() => import('./ugc/runtime/RuntimeViewPage')) : null;
-const UGCSandbox = !isAndroidShellBuild ? React.lazy(() => import('./ugc/builder/pages/UGCSandbox').then(m => ({ default: m.UGCSandbox }))) : null;
+const DevToolsSlicer = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/AssetSlicer')) : null;
+const DevToolsFxPreview = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
+const DevToolsAudioBrowser = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
+const DevToolsArchView = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
 const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayout'));
 const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
@@ -74,20 +71,29 @@ const UserDetailPage = React.lazy(() => import('./pages/admin/UserDetail'));
 const GameChangelogsPage = React.lazy(() => import('./pages/admin/GameChangelogs'));
 const MatchesPage = React.lazy(() => import('./pages/admin/Matches'));
 const RoomsPage = React.lazy(() => import('./pages/admin/Rooms'));
-const UgcPackagesPage = React.lazy(() => import('./pages/admin/UgcPackages'));
 const FeedbackPage = React.lazy(() => import('./pages/admin/Feedback'));
 const SystemHealthPage = React.lazy(() => import('./pages/admin/SystemHealth'));
 const SponsorsPage = React.lazy(() => import('./pages/admin/Sponsors'));
 const NotificationsPage = React.lazy(() => import('./pages/admin/Notifications'));
-const SmashUp4PLayoutTest = !isAndroidShellBuild ? React.lazy(() => import('./pages/SmashUp4PLayoutTest')) : null;
+const SmashUp4PLayoutTest = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/SmashUp4PLayoutTest')) : null;
 const DevMobileEvidenceCaptureAgent = import.meta.env.DEV
   ? React.lazy(() =>
       import('./components/system/MobileEvidenceCaptureAgent').then(m => ({ default: m.MobileEvidenceCaptureAgent })),
     )
   : null;
 
-const RouteLoadingFallback = ({ title }: { title?: string }) => {
-  const { t } = useTranslation('lobby');
+const RouteLoadingFallback = ({
+  eyebrow,
+  title,
+  description,
+  progressText,
+}: {
+  eyebrow?: string;
+  title?: string;
+  description?: string;
+  progressText?: string;
+}) => {
+  const { t } = useTranslation(['lobby', 'common']);
   const location = useLocation();
   const navigate = useNavigate();
   const [routeLoadingState, setRouteLoadingState] = useState(() => ({
@@ -127,7 +133,7 @@ const RouteLoadingFallback = ({ title }: { title?: string }) => {
       <div className="relative flex h-full min-h-0 items-center justify-center px-5 py-[max(1.5rem,env(safe-area-inset-top))]">
         <section className="w-full max-w-[25rem] rounded-[20px] border border-amber-200/15 bg-[#161008]/94 p-6 text-center shadow-[0_30px_100px_rgba(0,0,0,0.55)] backdrop-blur-md">
           <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-amber-200/70">
-            {isTimedOut ? t('matchRoom.routeLoadingTimeout.eyebrow') : t('matchRoom.title.connecting')}
+            {isTimedOut ? t('matchRoom.routeLoadingTimeout.eyebrow') : (eyebrow ?? t('routeLoading.eyebrow', { ns: 'common' }))}
           </p>
           <div className="mt-5 flex justify-center" aria-hidden="true">
             <div className="relative h-14 w-14">
@@ -139,17 +145,17 @@ const RouteLoadingFallback = ({ title }: { title?: string }) => {
           <h2 className="mt-5 text-[1.45rem] font-bold leading-tight text-amber-50">
             {isTimedOut
               ? t('matchRoom.routeLoadingTimeout.title')
-              : (title ?? t('matchRoom.loadingResources'))}
+              : (title ?? t('routeLoading.title', { ns: 'common' }))}
           </h2>
           <p className="mt-3 text-sm leading-6 text-amber-100/75">
             {isTimedOut
               ? t('matchRoom.routeLoadingTimeout.description')
-              : t('matchRoom.loadingResources')}
+              : (description ?? t('routeLoading.description', { ns: 'common' }))}
           </p>
           <div className="mt-5 rounded-2xl border border-amber-200/12 bg-black/20 px-4 py-3 text-left text-xs leading-6 text-amber-100/80">
             {isTimedOut
               ? t('matchRoom.routeLoadingTimeout.reason')
-              : t('matchRoom.loadingProgress.loadingGameModule')}
+              : (progressText ?? t('routeLoading.progress', { ns: 'common' }))}
           </div>
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <button
@@ -210,7 +216,23 @@ const AppContent = () => {
                 <BrowserCompatibilityGate>
                 <MobileOrientationGuard>
                   <Routes>
-                    <Route path="/" element={<React.Suspense fallback={<RouteLoadingFallback />}><Home /></React.Suspense>} />
+                    <Route
+                      path="/"
+                      element={(
+                        <React.Suspense
+                          fallback={(
+                            <RouteLoadingFallback
+                              eyebrow={t('home.routeLoading.eyebrow')}
+                              title={t('home.routeLoading.title')}
+                              description={t('home.routeLoading.description')}
+                              progressText={t('home.routeLoading.progress')}
+                            />
+                          )}
+                        >
+                          <Home />
+                        </React.Suspense>
+                      )}
+                    />
                     <Route
                       path="/play/:gameId/match/:matchId"
                       element={(
@@ -237,35 +259,19 @@ const AppContent = () => {
                       )}
                     />
                     {/* /test 路由已废弃，使用新的 TestHarness 框架（/play/:gameId + setupScene） */}
-                    {!isAndroidShellBuild && DevToolsSlicer && (
+                    {ENABLE_INTERNAL_DEVTOOLS && DevToolsSlicer && (
                       <Route path="/dev/slicer" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.assetSlicer')} />}><DevToolsSlicer /></React.Suspense>} />
                     )}
-                    {!isAndroidShellBuild && DevToolsFxPreview && (
+                    {ENABLE_INTERNAL_DEVTOOLS && DevToolsFxPreview && (
                       <Route path="/dev/fx" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.effectPreview')} />}><DevToolsFxPreview /></React.Suspense>} />
                     )}
-                    {!isAndroidShellBuild && DevToolsAudioBrowser && (
+                    {ENABLE_INTERNAL_DEVTOOLS && DevToolsAudioBrowser && (
                       <Route path="/dev/audio" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.audioBrowser')} />}><DevToolsAudioBrowser /></React.Suspense>} />
                     )}
-                    {!isAndroidShellBuild && DevToolsArchView && (
+                    {ENABLE_INTERNAL_DEVTOOLS && DevToolsArchView && (
                       <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
                     )}
-                    {!isAndroidShellBuild && UnifiedBuilder && (
-                      <Route
-                        path="/dev/ugc"
-                        element={(
-                          <React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcBuilder')} />}>
-                            <UnifiedBuilder />
-                          </React.Suspense>
-                        )}
-                      />
-                    )}
-                    {!isAndroidShellBuild && UGCRuntimeViewPage && (
-                      <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.runtimeView')} />}><UGCRuntimeViewPage /></React.Suspense>} />
-                    )}
-                    {!isAndroidShellBuild && UGCSandbox && (
-                      <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={<RouteLoadingFallback title={t('matchRoom.devTools.ugcSandbox')} />}><UGCSandbox /></React.Suspense>} />
-                    )}
-                    {!isAndroidShellBuild && SmashUp4PLayoutTest && (
+                    {ENABLE_INTERNAL_DEVTOOLS && SmashUp4PLayoutTest && (
                       <Route path="/dev/smashup-4p-layout" element={<React.Suspense fallback={<RouteLoadingFallback title="四人局布局测试" />}><SmashUp4PLayoutTest /></React.Suspense>} />
                     )}
                     {/* 教程路由：使用 TutorialMatchRoom 包装组件（不同组件类型），
@@ -301,7 +307,6 @@ const AppContent = () => {
                       <Route path="users/:id" element={renderAdminOnly(<UserDetailPage />)} />
                       <Route path="matches" element={renderAdminOnly(<MatchesPage />)} />
                       <Route path="rooms" element={renderAdminOnly(<RoomsPage />)} />
-                      <Route path="ugc" element={renderAdminOnly(<UgcPackagesPage />)} />
                       <Route path="sponsors" element={renderAdminOnly(<SponsorsPage />)} />
                       <Route
                         path="feedback"

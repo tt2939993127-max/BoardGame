@@ -166,5 +166,28 @@ describe('androidLiveUpdates', () => {
                 androidBridge: {},
             },
         })).toBe(false);
+
+        expect(detectNativeAndroidRuntime({
+            capacitor: {
+                isNativePlatform: () => false,
+                getPlatform: () => 'web',
+            },
+            windowObject: {
+                Capacitor: {
+                    isNativePlatform: () => true,
+                    getPlatform: () => 'android',
+                },
+            },
+        })).toBe(false);
+
+        expect(detectNativeAndroidRuntime({
+            capacitor: {},
+            windowObject: {
+                Capacitor: {
+                    isNativePlatform: () => true,
+                    getPlatform: () => 'android',
+                },
+            },
+        })).toBe(true);
     });
 });

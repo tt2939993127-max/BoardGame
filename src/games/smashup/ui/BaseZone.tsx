@@ -565,18 +565,19 @@ export const BaseZone: React.FC<{
                         />
                     )}
 
-                    {/* 放大镜按钮 - hover 时显示，部署模式下也能预览基地 */}
-                    {showDesktopInspectButton && (
-                        <button
-                            onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
-                            className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
-                        >
-                            <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
-                                <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                            </svg>
-                        </button>
-                    )}
                 </div>
+
+                {/* 放大镜按钮保持悬浮在卡框外层，避免被基地高亮描边吞进去 */}
+                {showDesktopInspectButton && (
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onViewBase(base.defId); }}
+                        className="absolute top-[0.6vw] left-[0.6vw] w-[1.6vw] h-[1.6vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover/base:opacity-100 group-hover/base:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg border border-white/20 z-30 cursor-zoom-in"
+                    >
+                        <svg className="w-[0.9vw] h-[0.9vw] fill-current" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                )}
 
                 {canUseBaseAbility && (
                     <div className="absolute bottom-[0.45vw] left-1/2 -translate-x-1/2 bg-amber-300/95 text-slate-900 text-[0.55vw] font-black px-[0.42vw] py-[0.08vw] rounded-sm shadow-md border border-white z-30 whitespace-nowrap pointer-events-none">
@@ -671,15 +672,22 @@ export const BaseZone: React.FC<{
                     const pConf = PLAYER_CONFIG[parseInt(pid) % PLAYER_CONFIG.length];
 
                     return (
-                        <div 
-                            key={pid} 
+                        <motion.div
+                            key={pid}
+                            layout
                             className="flex flex-col items-center relative"
                             style={{ minWidth: `${layout.minionCardWidth}vw` }}
+                            transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}
                         >
 
                             {/* --- MINIONS + BURIED CARDS --- */}
-                            {minions.length > 0 || (base.buriedCards?.some((buried) => buried.controllerId === pid) ?? false) ? (
-                                <div className="flex flex-col items-center isolate z-10 hover:z-[100]">
+                            <motion.div
+                                layout
+                                className="flex flex-col items-center isolate z-10 hover:z-[100]"
+                                transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}
+                            >
+                                {(minions.length > 0 || (base.buriedCards?.some((buried) => buried.controllerId === pid) ?? false)) ? (
+                                    <>
                                     {(() => {
                                         const buriedCards = (base.buriedCards ?? []).filter((buried) => buried.controllerId === pid);
                                         const buriedCardWidth = Math.max(layout.minionCardWidth * 0.92, 2.6);
@@ -786,21 +794,26 @@ export const BaseZone: React.FC<{
                                             isCoarsePointer={isCoarsePointer}
                                         />
                                     ))}
-                                </div>
-                            ) : (
-                                /* Empty Placeholder for Layout Stability */
-                                <div
-                                    className={`h-[2vw] rounded-sm border md-2 border-dashed border-slate-300/30 ${isDeployMode && isMyTurn ? 'animate-pulse bg-white/5' : ''}`}
-                                    style={{ width: `${layout.minionCardWidth}vw` }}
-                                >
-                                    {isDeployMode && isMyTurn && myPlayerId === pid && minions.length === 0 && (
-                                        <div className="w-full h-full flex items-center justify-center text-white/50 text-[0.8vw]">+</div>
-                                    )}
-                                </div>
-                            )}
+                                    </>
+                                ) : (
+                                    /* Empty Placeholder for Layout Stability */
+                                    <div
+                                        className={`h-[2vw] rounded-sm border md-2 border-dashed border-slate-300/30 ${isDeployMode && isMyTurn ? 'animate-pulse bg-white/5' : ''}`}
+                                        style={{ width: `${layout.minionCardWidth}vw` }}
+                                    >
+                                        {isDeployMode && isMyTurn && myPlayerId === pid && minions.length === 0 && (
+                                            <div className="w-full h-full flex items-center justify-center text-white/50 text-[0.8vw]">+</div>
+                                        )}
+                                    </div>
+                                )}
+                            </motion.div>
 
                             {/* --- SCORE (POWER) --- */}
-                            <div className="mt-2 flex items-center justify-center gap-1 z-10 bg-slate-900/40 rounded-full px-2 py-0.5 backdrop-blur-sm">
+                            <motion.div
+                                layout="position"
+                                className="mt-2 flex items-center justify-center gap-1 z-10 bg-slate-900/40 rounded-full px-2 py-0.5 backdrop-blur-sm"
+                                transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}
+                            >
                                 <div className={`w-[0.6vw] h-[0.6vw] rounded-full ${pConf.bg}`} />
                                 <span className={`text-[0.7vw] font-black leading-none ${modifierDelta > 0 ? 'text-green-300' :
                                     modifierDelta < 0 ? 'text-red-300' :
@@ -808,9 +821,9 @@ export const BaseZone: React.FC<{
                                     }`}>
                                     {total}
                                 </span>
-                            </div>
+                            </motion.div>
 
-                        </div>
+                        </motion.div>
                     );
                 })}
             </div>

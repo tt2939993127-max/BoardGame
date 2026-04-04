@@ -154,9 +154,13 @@ const DEV_CORS_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:5174',
+    'http://localhost:4173',
+    'http://localhost:6174',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
+    'http://127.0.0.1:4173',
+    'http://127.0.0.1:6174',
 ];
 
 const APP_CORS_ORIGINS = RAW_APP_WEB_ORIGINS.length > 0
@@ -168,10 +172,15 @@ const CORS_ORIGINS = Array.from(new Set([
 ]));
 const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
+const SOCKET_IO_ALLOW_POLLING = process.env.SOCKET_IO_ALLOW_POLLING;
 const SOCKET_IO_SERVER_TRANSPORTS =
-    process.env.SOCKET_IO_ALLOW_POLLING === 'true'
+    SOCKET_IO_ALLOW_POLLING === 'true'
         ? ['websocket', 'polling']
-        : ['websocket'];
+        : SOCKET_IO_ALLOW_POLLING === 'false'
+            ? ['websocket']
+            : process.env.NODE_ENV === 'production'
+                ? ['websocket']
+                : ['websocket', 'polling'];
 
 // ============================================================================
 // 归档逻辑

@@ -23,6 +23,8 @@
 
 - 基地描边截图：
   - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\manual-smashup-outline-highlight\smashup-outline-base-highlight.png`
+- 基地描边 + 放大镜截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\manual-smashup-outline-highlight\smashup-outline-base-highlight-magnifier.png`
 - 随从描边截图：
   - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\manual-smashup-outline-highlight\smashup-outline-minion-highlight.png`
 
@@ -33,6 +35,8 @@
 - 中间基地的金色高亮只沿着白色基地卡框一圈发光，没有把右上角圆形 `/20` 记分 token 包进同一个描边轮廓。
 - 右上角记分 token 明显悬浮在基地卡框外，和高亮边框之间留有间隔，不再形成“基地卡框连着记分 UI 一起描边”的视觉。
 - 基地下方两个小型持续行动槽位也没有被高亮边框吞进去，说明描边确实收缩到了卡框层。
+- 左侧基地左上角的放大镜按钮现在也是基地外层的悬浮兄弟节点，视觉上贴着卡面角落，但没有被金色描边包进同一轮廓。
+- 针对放大镜又做了一轮 DOM 断言：`inspectOutsideHighlight === true`，说明放大镜节点和基地记分 token 一样，都已经脱离高亮卡框 DOM 子树。
 
 ### 随从描边
 

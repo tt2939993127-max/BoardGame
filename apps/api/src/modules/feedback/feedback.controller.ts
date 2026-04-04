@@ -33,6 +33,29 @@ export class FeedbackController {
         const userId = req.user?.userId || null;
         return this.feedbackService.create(userId, dto);
     }
+
+    @Get('open')
+    async findAllOpen(@Query() query: QueryFeedbackDto) {
+        return this.feedbackService.findAllOpen(query);
+    }
+
+    @Get('open/:id')
+    async findOneOpen(@Param('id') id: string) {
+        const item = await this.feedbackService.findByIdOpen(id);
+        if (!item) {
+            throw new NotFoundException('feedback not found');
+        }
+        return item;
+    }
+
+    @Patch('open/:id/status')
+    async updateStatusOpen(@Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
+        const updated = await this.feedbackService.updateStatusOpen(id, dto.status);
+        if (!updated) {
+            throw new NotFoundException('feedback not found');
+        }
+        return updated;
+    }
 }
 
 @UseGuards(JwtAuthGuard, AdminGuard)

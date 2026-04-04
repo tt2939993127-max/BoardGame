@@ -12,8 +12,14 @@ import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture
 // Layout Constants
 // ============================================================================
 export type HandAreaDropTarget = {
+    kind: 'board';
+} | {
+    kind: 'base';
     baseIndex: number;
-    minionUid?: string;
+} | {
+    kind: 'minion';
+    baseIndex: number;
+    minionUid: string;
 };
 
 export type HandAreaDragPreview = {
@@ -31,8 +37,6 @@ const MOBILE_CARD_WIDTH_VW = 10.5;
 const DESKTOP_SELECTED_Y_LIFT_VW = 5;
 const MOBILE_SELECTED_Y_LIFT_VW = 3.8;
 const DRAG_START_DISTANCE_PX = 12;
-const SWIPE_PLAY_DISTANCE_PX = 72;
-const SWIPE_PLAY_MAX_HORIZONTAL_DRIFT_PX = 64;
 const DRAG_DROP_SHADOW = '0 0 30px rgba(34, 211, 238, 0.45)';
 type Props = {
     hand: CardInstance[];
@@ -47,7 +51,6 @@ type Props = {
     disabledCardUids?: Set<string>;
     isOpponentView?: boolean;
     interactionMode?: 'click' | 'drag';
-    onCardSwipePlay?: (card: CardInstance) => void;
     onResolveDropTarget?: (card: CardInstance, clientX: number, clientY: number) => HandAreaDropTarget | null;
     onCardDragPlay?: (card: CardInstance, dropTarget: HandAreaDropTarget) => void;
     onDragStateChange?: (preview: HandAreaDragPreview | null) => void;
@@ -76,9 +79,6 @@ type HandCardProps = {
     onPointerMove?: (event: React.PointerEvent, card: CardInstance) => void;
     onPointerEnd?: (card: CardInstance) => void;
     shouldBlockClick?: (card: CardInstance) => boolean;
-    clickBehavior: 'select' | 'view';
-    swipePlayEnabled: boolean;
-    onSwipePlay?: () => void;
     interactionMode: 'click' | 'drag';
     onResolveDropTarget?: (card: CardInstance, clientX: number, clientY: number) => HandAreaDropTarget | null;
     onCardDragPlay?: (card: CardInstance, dropTarget: HandAreaDropTarget) => void;
@@ -105,9 +105,6 @@ const HandCard: React.FC<HandCardProps> = ({
     onPointerMove,
     onPointerEnd,
     shouldBlockClick,
-    clickBehavior,
-    swipePlayEnabled,
-    onSwipePlay,
     onResolveDropTarget,
     onCardDragPlay,
     onDragStateChange,
@@ -130,31 +127,6 @@ const HandCard: React.FC<HandCardProps> = ({
         startY: 0,
         hasMoved: false,
     });
-    const swipeStateRef = useRef<{
-        pointerId: number | null;
-        startX: number;
-        startY: number;
-        hasTriggered: boolean;
-    }>({
-        pointerId: null,
-        startX: 0,
-        startY: 0,
-        hasTriggered: false,
-    });
-
-    const resetSwipeState = useCallback((event?: React.PointerEvent) => {
-        const swipeState = swipeStateRef.current;
-        if (swipeState.pointerId != null && event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(swipeState.pointerId)) {
-            event.currentTarget.releasePointerCapture(swipeState.pointerId);
-        }
-        swipeStateRef.current = {
-            pointerId: null,
-            startX: 0,
-            startY: 0,
-            hasTriggered: false,
-        };
-    }, []);
-
     const handleDragFinish = useCallback((event?: React.PointerEvent) => {
         const dragState = dragStateRef.current;
         if (interactionMode !== 'drag' || dragState.pointerId == null) return;

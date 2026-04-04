@@ -447,7 +447,7 @@ describe('browser compatibility detection', () => {
         });
     });
 
-    it('blocks ugc dev routes when ResizeObserver is missing', () => {
+    it('移除 UGC 入口后不再为旧 dev 路由额外拦截 ResizeObserver', () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         Object.defineProperty(globalThis, 'ResizeObserver', {
             configurable: true,
@@ -456,8 +456,8 @@ describe('browser compatibility detection', () => {
 
         const report = detectBrowserCompatibility('/dev/ugc');
 
-        expect(report.isCompatible).toBe(false);
-        expect(report.reasons).toEqual(['game-resize-observer']);
+        expect(report.isCompatible).toBe(true);
+        expect(report.reasons).toEqual([]);
 
         Object.defineProperty(globalThis, 'ResizeObserver', {
             configurable: true,

@@ -296,12 +296,13 @@ const buildAndroidOrientationMapFile = ({ entries, outputPath }) => {
 
 const run = async () => {
     const entries = await collectGameEntries();
-    const serverEntries = entries.filter((entry) => entry.type === 'game' && entry.gameImport);
+    const publicEntries = entries.filter((entry) => entry.type === 'game');
+    const serverEntries = publicEntries.filter((entry) => entry.gameImport);
 
-    const dataUpdated = await buildDataManifestFile({ entries, outputPath: outputFiles.data });
-    const clientUpdated = await buildClientManifestFile({ entries, outputPath: outputFiles.client });
+    const dataUpdated = await buildDataManifestFile({ entries: publicEntries, outputPath: outputFiles.data });
+    const clientUpdated = await buildClientManifestFile({ entries: publicEntries, outputPath: outputFiles.client });
     const serverUpdated = await buildServerManifestFile({ entries: serverEntries, outputPath: outputFiles.server });
-    const androidOrientationMapUpdated = await buildAndroidOrientationMapFile({ entries, outputPath: outputFiles.androidOrientationMap });
+    const androidOrientationMapUpdated = await buildAndroidOrientationMapFile({ entries: publicEntries, outputPath: outputFiles.androidOrientationMap });
 
     console.log('[Manifest] Generated manifests:');
     console.log(`- ${path.relative(process.cwd(), outputFiles.data)} ${dataUpdated ? '(updated)' : '(unchanged)'}`);
