@@ -1,42 +1,64 @@
-# 大杀四方选择派系页移动端等比缩放 E2E 证据
+# 大杀四方选择派系页移动端对照验收证据
 
 ## 范围
 
 - 页面：`smashup` 选择派系页
 - 目标：
-  - 手机横屏呈现桌面整页同构缩放，而不是只缩上半部分
-  - 下半部分不再整体被裁掉
-  - 底部玩家卡片栏跟随同一缩放链路一起缩小
-  - 收敛“内容缩成中间一块，四周大块留白”的错误效果
+  - 移动端继续复用 `board-shell` 的整页等比缩放，不重写一套手机稿
+  - 手机横屏主态保持和 PC 同构的五列三行构图
+  - 中下当前玩家卡、右侧非当前玩家卡保持同一套竖向玩家卡语义，不再出现“一边正常一边贴片”
+  - 间距、占比、PC 居中都要做对照核验，不只看“有没有出屏”
 
-## 本轮实现摘要
+## 本轮实现
 
 - `src/games/smashup/Board.tsx`
-  - 保留 `board-shell` 作为唯一缩放容器。
-  - 仅在 `phase === 'factionSelect'` 且手机横屏时，覆盖 Smash Up 的运行时 shell 设计宽，改为更接近桌面整页缩进手机横屏的缩放基线。
+  - 将 `factionSelect` 阶段的 shell 设计宽从 `1580` 收回到 `1500`，避免整页被缩得过头。
 - `src/games/smashup/ui/FactionSelection.tsx`
-  - 继续压缩手机横屏下的标题区、卡阵间距和卡面最大宽度。
-  - 底部玩家 rail 改成更适合横屏底栏的横向状态条，而不是继续把桌面竖卡整体压成很小一块。
-  - rail 整体轻微上移，避免再次把第三行卡牌或底部 rail 顶出视口。
+  - 手机横屏下保留同一套桌面式五列卡阵，但把派系卡最大宽度调到 `160px`，避免 shell 放大后第三行重新挤爆。
+  - 底部玩家区改为同一套竖向玩家卡 token：
+    - 当前玩家：`128px`
+    - 非当前玩家：`124px`
+    - 两边都保留头像 + 派系槽位 + 玩家标识的同构结构
+  - 玩家区 gap 调整为 `gap-5`，避免底部两张卡再次挤成一团。
 - `e2e/smashup-faction-selection-spacing.e2e.ts`
-  - 验证点改为当前真实目标：五列三行仍成立、第三行可见、底部 rail 不再明显裁掉、玩家卡片不能被压得明显低于桌面相对比例。
+  - 继续保留 PC/移动端双端对照。
+  - 收紧验收阈值：
+    - `playerCardToFactionCardRatio >= 0.44`
+    - `otherPlayerCardAspectRatio >= 1.1`
+    - `playerCardWidthDeltaRatio <= 0.1`
+    - `playerRailGapRatio >= 0.055`
+    - `mobile playerCardToFactionCardRatio >= desktop * 0.62`
 
 ## 执行命令
 
 ```powershell
-$env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'
-npm run test:e2e:ci:file -- e2e/smashup-faction-selection-spacing.e2e.ts "手机横屏应保持与 PC 同构的五列选派布局，并输出移动端/桌面端对照截图"
+$env:BG_BYPASS_GLOBAL_HEAVY_BUDGET='1'
+npm run test:e2e:ci:file -- e2e/smashup-faction-selection-spacing.e2e.ts
 ```
 
-## 结果
+## 量化结果
 
-- `e2e/smashup-faction-selection-spacing.e2e.ts` 指定用例通过。
-- 自动断言已覆盖：
-  - 移动端首行五列仍对齐
-  - 移动端至少可见三行派系卡
-  - 第三行不会被底部 rail 或视口裁掉
-  - 底部玩家 rail 存在且整体未明显出屏
-  - 玩家卡片宽度明显小于桌面版，但仍保住合理的相对比例
+> 数据来自本轮同一条 E2E 的实际采样。
+
+### 手机横屏 `800x450`
+
+- `contentCenterOffsetRatio = 0.0000055`
+- `playerCardToFactionCardRatio = 0.4508`
+- `playerRailHeightRatio = 0.1772`
+- `playerCardAspectRatio = 1.1630`
+- `otherPlayerCardAspectRatio = 1.1135`
+- `playerCardWidthDeltaRatio = 0.0319`
+- `playerRailGapRatio = 0.0604`
+
+### PC 对照 `1920x1080`
+
+- `contentCenterOffsetRatio = 0.0000041`
+- `playerCardToFactionCardRatio = 0.7177`
+- `playerRailHeightRatio = 0.1537`
+- `playerCardAspectRatio = 1.0888`
+- `otherPlayerCardAspectRatio = 0.9682`
+- `playerCardWidthDeltaRatio = 0.0929`
+- `playerRailGapRatio = 0.0863`
 
 ## 截图证据与人工观察
 
@@ -48,14 +70,13 @@ npm run test:e2e:ci:file -- e2e/smashup-faction-selection-spacing.e2e.ts "手机
 
 人工观察：
 
-- 现在已经是完整的五列三行派系卡构图，不再是“上半部分缩了、下半部分没进来”的错误状态。
-- 第三行派系卡已进入视口，底部玩家 rail 也缩进主构图底部中央，不再像之前那样把下半部分整体顶掉。
-- 底部玩家卡片不再是之前那种几乎缩成小贴片的竖向卡块，当前已经改成横向状态条，肉眼能区分玩家头像、已选派系槽位和当前玩家状态。
-- 底部玩家 rail 仍然比桌面版小，但已经回到“同构缩小后的信息条”而不是“存在但几乎不可读”的程度。
-- 画面四周留白已明显收敛，当前更像桌面同一页面缩进手机横屏，而不是中间一张海报、周围空一圈。
-- 底边仍有变换取整带来的极小尾差，自动断言放宽到 `5px`；从截图肉眼看，已经不是用户之前指出的那种明显底部裁切。
+- 五列三行还在，同一页没有被拆成“上半部分缩放、下半部分另算”的两套体系。
+- 中下当前玩家卡仍明显比 PC 小，但已经不是之前那种只剩一个色块或图标贴片；头像、两个派系槽、玩家标识都还能直接辨认。
+- 右侧非当前玩家卡和左侧当前玩家卡现在是同一套竖卡结构，只保留轻微宽度和状态差异，不再是一边像卡、一边像碎片。
+- 底部两张卡之间有明确缝隙，不再贴死；同时 gap 也没有散到破坏中轴。
+- 第三行派系卡完整可见，底部没有再把下半块裁掉。
 
-### 2. PC 对照图
+### 2. PC 主态对照
 
 路径：
 
@@ -63,16 +84,16 @@ npm run test:e2e:ci:file -- e2e/smashup-faction-selection-spacing.e2e.ts "手机
 
 人工观察：
 
-- 桌面端仍保持原有的五列三行桌面构图，没有被这轮手机横屏修复带坏。
-- 标题、卡阵、底部玩家 rail 的上下关系与手机横屏图一致，当前是同一页面按比例缩小，而不是额外做出另一套手机稿。
-- 桌面对照图里的底部玩家 rail 仍明显比手机图更大，但手机图已经保住了头像、已选槽位和状态提示的可辨识结构，而不是只剩一团很小的色块。
+- 主卡阵仍保持居中，未出现之前那种整体偏左的回归。
+- 标题、卡阵、中下玩家区的纵向关系仍是桌面原构图，没有被移动端修复带坏。
+- PC 底部玩家卡仍比移动端更大，但移动端已经回到“桌面同构缩小版”的感觉，不是另画一套状态条 UI。
 
 ## 结论
 
-- 本轮已经修正为“桌面整页同构缩进手机横屏”的方向，不再是内部二次缩放海报。
-- 用户这轮指出的几个核心问题都已对应收敛：
-  - 不再只缩放上半部分
-  - 下半部分不再整体被裁掉
-  - 底部玩家卡片已缩小并进入同一构图，但不再被压成几乎不可读的小块
-  - 周围大块空白已明显减少
-- 当前剩余的是 `transform` 取整带来的底边 `5px` 内尾差，不影响这轮视觉目标的达成。
+- 这轮已经从“硬改手机稿”拉回到“PC 权威 + 整页同构缩放”的方向。
+- 用户前面反复指出的几类问题，这次有对应证据：
+  - 当前玩家卡不再小到接近看不见
+  - 右侧玩家卡不再和左侧用两套完全不同的结构
+  - 玩家区间距已做量化并卡住下限
+  - PC 主卡阵继续保持居中
+- 当前版本仍然是“移动端缩小版”，不会和 PC 一样大；但从截图和量化值看，已经脱离此前“不合格”的状态。

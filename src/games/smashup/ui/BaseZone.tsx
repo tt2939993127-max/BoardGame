@@ -158,6 +158,19 @@ export const BaseZone: React.FC<{
             onViewTitan(payload.defId);
         },
     });
+    const {
+        getTouchInspectProps: getBuriedTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockBuriedClick,
+    } = useTouchInspectGesture<string, { defId: string; cardType: 'minion' | 'action' }>({
+        enabled: Boolean(base.buriedCards?.length),
+        onInspect: (_key, payload) => {
+            if (payload.cardType === 'minion') {
+                onViewMinion(payload.defId);
+                return;
+            }
+            onViewAction(payload.defId);
+        },
+    });
 
     // 分组
     React.useEffect(() => {
@@ -397,7 +410,7 @@ export const BaseZone: React.FC<{
                             clearArmedActivation();
                             onViewTitan(titan.defId);
                         }}
-                        className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full border border-white/20 bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                        className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
                     >
                         <svg className="h-[0.8vw] w-[0.8vw] fill-current" viewBox="0 0 20 20">
                             <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
@@ -580,8 +593,13 @@ export const BaseZone: React.FC<{
                 )}
 
                 {canUseBaseAbility && (
-                    <div className="absolute bottom-[0.45vw] left-1/2 -translate-x-1/2 bg-amber-300/95 text-slate-900 text-[0.55vw] font-black px-[0.42vw] py-[0.08vw] rounded-sm shadow-md border border-white z-30 whitespace-nowrap pointer-events-none">
-                        基地能力
+                    <div className="absolute bottom-[0.45vw] inset-x-0 z-30 flex justify-center px-[0.3vw] pointer-events-none">
+                        <div
+                            data-testid={`base-ability-badge-${baseIndex}`}
+                            className="bg-amber-300/95 text-slate-900 text-[0.55vw] font-black px-[0.42vw] py-[0.08vw] rounded-sm shadow-md border border-white whitespace-nowrap"
+                        >
+                            基地能力
+                        </div>
                     </div>
                 )}
 
@@ -704,6 +722,13 @@ export const BaseZone: React.FC<{
                                             >
                                                 {buriedCards.map((buried, index) => {
                                                     const buriedDef = buried.defId === 'buried_unknown' ? undefined : getCardDef(buried.defId);
+                                                    const buriedInspectPayload = buriedDef
+                                                        ? {
+                                                            defId: buried.defId,
+                                                            cardType: buriedDef.type === 'minion' ? 'minion' as const : 'action' as const,
+                                                        }
+                                                        : undefined;
+                                                    const buriedInspectKey = `buried-${buried.uid}`;
                                                     const buriedTitle = buriedDef
                                                         ? `${resolveCardName(buriedDef, t) || buried.defId}\n${resolveCardText(buriedDef, t) || ''}`.trim()
                                                         : `${t('ui.card_placeholder')} · P${parseInt(buried.controllerId, 10) + 1}`;
@@ -718,46 +743,72 @@ export const BaseZone: React.FC<{
                                                         }
                                                         : SMASHUP_CARD_BACK;
                                                     return (
-                                                        <button
+                                                        <div
                                                             key={buried.uid}
-                                                            type="button"
-                                                            data-buried-card-uid={buried.uid}
-                                                            data-buried-selectable={isBuriedSelectable ? 'true' : 'false'}
-                                                            data-buried-selected={isBuriedSelected ? 'true' : 'false'}
-                                                            data-buried-face-up={isBuriedSelectMode && buriedDef ? 'true' : 'false'}
-                                                            onClick={(event) => {
-                                                                event.stopPropagation();
-                                                                if (isBuriedSelectMode) {
-                                                                    if (isBuriedSelectable) {
-                                                                        onBuriedCardSelect?.(buried.uid);
-                                                                    }
-                                                                    return;
-                                                                }
-                                                                if (!buriedDef) return;
-                                                                if (buriedDef.type === 'minion') {
-                                                                    onViewMinion(buried.defId);
-                                                                    return;
-                                                                }
-                                                                onViewAction(buried.defId);
-                                                            }}
-                                                            title={buriedTitle}
-                                                            className={`relative aspect-[0.714] overflow-hidden rounded-[0.18vw] border-[0.12vw] shadow-md bg-slate-800 transition-[transform,box-shadow,opacity,filter,border-color] ${
-                                                                isBuriedSelected
-                                                                    ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
-                                                                    : isBuriedSelectable
-                                                                        ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.55)] hover:scale-105'
-                                                                        : isBuriedDimmed
-                                                                            ? 'cursor-default border-slate-700 opacity-35 grayscale-[0.35] saturate-[0.75]'
-                                                                            : 'cursor-pointer border-slate-500'
-                                                            }`}
+                                                            className="group relative"
                                                             style={{
                                                                 width: `${buriedCardWidth}vw`,
                                                                 marginBottom: `${index === buriedCards.length - 1 ? buriedToMinionOffset : buriedStackOffset}vw`,
                                                                 transform: `rotate(${(index % 2 === 0 ? -1 : 1) * 1.5}deg)`,
                                                             }}
                                                         >
-                                                            <CardPreview previewRef={buriedPreviewRef} className="w-full h-full" title={buriedTitle} />
-                                                        </button>
+                                                            <button
+                                                                type="button"
+                                                                data-buried-card-uid={buried.uid}
+                                                                data-buried-selectable={isBuriedSelectable ? 'true' : 'false'}
+                                                                data-buried-selected={isBuriedSelected ? 'true' : 'false'}
+                                                                data-buried-face-up={isBuriedSelectMode && buriedDef ? 'true' : 'false'}
+                                                                {...(buriedInspectPayload ? getBuriedTouchInspectProps(buriedInspectKey, buriedInspectPayload) : {})}
+                                                                onClick={(event) => {
+                                                                    event.stopPropagation();
+                                                                    if (shouldBlockBuriedClick(buriedInspectKey)) return;
+                                                                    if (isBuriedSelectMode) {
+                                                                        if (isBuriedSelectable) {
+                                                                            onBuriedCardSelect?.(buried.uid);
+                                                                        }
+                                                                        return;
+                                                                    }
+                                                                    if (!buriedDef) return;
+                                                                    if (buriedDef.type === 'minion') {
+                                                                        onViewMinion(buried.defId);
+                                                                        return;
+                                                                    }
+                                                                    onViewAction(buried.defId);
+                                                                }}
+                                                                title={buriedTitle}
+                                                                className={`relative aspect-[0.714] w-full overflow-hidden rounded-[0.18vw] border-[0.12vw] shadow-md bg-slate-800 transition-[transform,box-shadow,opacity,filter,border-color] ${
+                                                                    isBuriedSelected
+                                                                        ? 'cursor-pointer border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
+                                                                        : isBuriedSelectable
+                                                                            ? 'cursor-pointer border-amber-400 ring-2 ring-amber-400 shadow-[0_0_14px_rgba(251,191,36,0.55)] hover:scale-105'
+                                                                            : isBuriedDimmed
+                                                                                ? 'cursor-default border-slate-700 opacity-35 grayscale-[0.35] saturate-[0.75]'
+                                                                                : 'cursor-pointer border-slate-500'
+                                                                }`}
+                                                            >
+                                                                <CardPreview previewRef={buriedPreviewRef} className="w-full h-full" title={buriedTitle} />
+                                                            </button>
+                                                            {showDesktopInspectButton && buriedDef && (
+                                                                <button
+                                                                    type="button"
+                                                                    aria-label={`查看${resolveCardName(buriedDef, t) || buried.defId}`}
+                                                                    data-testid={`buried-inspect-${buried.uid}`}
+                                                                    onClick={(event) => {
+                                                                        event.stopPropagation();
+                                                                        if (buriedDef.type === 'minion') {
+                                                                            onViewMinion(buried.defId);
+                                                                            return;
+                                                                        }
+                                                                        onViewAction(buried.defId);
+                                                                    }}
+                                                                    className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.25vw] w-[1.25vw] items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                                                                >
+                                                                    <svg className="h-[0.72vw] w-[0.72vw] fill-current" viewBox="0 0 20 20">
+                                                                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                                                                    </svg>
+                                                                </button>
+                                                            )}
+                                                        </div>
                                                     );
                                                 })}
                                             </div>

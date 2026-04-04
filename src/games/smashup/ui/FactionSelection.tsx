@@ -122,10 +122,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
     const useDesktopLikeLandscapeLayout = isMobileLandscape;
     const selectionGridClassName = useDesktopLikeLandscapeLayout
-        ? 'mx-auto grid w-full max-w-none grid-cols-5 justify-items-center gap-4 pb-32'
+        ? 'mx-auto grid w-full max-w-none grid-cols-5 justify-items-center gap-3.5 pb-28'
         : 'mx-auto grid w-full max-w-[920px] grid-cols-4 justify-items-center gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
     const selectionCardFrameClassName = useDesktopLikeLandscapeLayout
-        ? 'relative mb-2 w-full max-w-[168px] aspect-[0.727]'
+        ? 'relative mb-1.5 w-full max-w-[160px] aspect-[0.727]'
         : 'relative mb-2.5 w-full max-w-[148px] lg:max-w-[192px] aspect-[0.727] xl:max-w-[208px]';
     const selectionCardSurfaceClassName = useDesktopLikeLandscapeLayout
         ? 'absolute inset-0 rounded-sm overflow-hidden shadow-[3px_3px_10px_rgba(0,0,0,0.38)] border-[4px] transition-all bg-white p-[3px]'
@@ -293,10 +293,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     );
     const playerSelectionRail = (
         <div
-            className={useDesktopLikeLandscapeLayout ? 'absolute bottom-[20px] inset-x-0 z-40 pointer-events-none' : 'absolute bottom-3 inset-x-0 z-40 pointer-events-none'}
+            className={useDesktopLikeLandscapeLayout ? 'absolute bottom-[18px] inset-x-0 z-40 pointer-events-none' : 'absolute bottom-3 inset-x-0 z-40 pointer-events-none'}
             data-testid="faction-selection-player-rail"
         >
-            <div className={useDesktopLikeLandscapeLayout ? 'max-w-6xl mx-auto flex items-end justify-center gap-3 px-3 -translate-y-1' : 'max-w-7xl mx-auto flex items-end justify-center gap-3 px-3 lg:gap-8 lg:px-6'}>
+            <div className={useDesktopLikeLandscapeLayout ? 'max-w-6xl mx-auto flex items-end justify-center gap-5 px-3' : 'max-w-7xl mx-auto flex items-end justify-center gap-3 px-3 lg:gap-8 lg:px-6'}>
                 {core.turnOrder.map((pid, pidx) => {
                     const selections = selectionState.playerSelections[pid] || [];
                     const isCurrent = pid === currentPlayerId;
@@ -312,22 +312,22 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                 flex rounded-sm border-2 pointer-events-auto transition-all
                                 ${isCurrent
                                     ? useDesktopLikeLandscapeLayout
-                                        ? 'w-[138px] flex-col items-center gap-2.5 px-4 py-3 bg-[#fef3c7] border-amber-500 shadow-[0_12px_24px_rgba(0,0,0,0.42)] -rotate-1 z-10 scale-[1] origin-bottom'
+                                        ? 'w-[128px] flex-col items-center gap-2.5 px-3.5 py-2.5 bg-[#fef3c7] border-amber-500 shadow-[0_10px_22px_rgba(0,0,0,0.42)] -rotate-[0.8deg] z-10'
                                         : 'flex-col items-center gap-2 px-4 py-2.5 lg:px-6 lg:py-3 bg-[#fef3c7] border-amber-500 shadow-[0_10px_25px_rgba(0,0,0,0.5)] -rotate-1 z-10 scale-110'
                                     : useDesktopLikeLandscapeLayout
-                                        ? 'w-[96px] flex-col items-center gap-1.5 px-2.5 py-2 bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3] scale-[0.9] origin-bottom opacity-90'
+                                        ? 'w-[124px] flex-col items-center gap-2.5 px-3.5 py-2.5 bg-white/92 border-slate-200 shadow-lg rotate-[0.8deg] grayscale-[0.08] opacity-95'
                                         : 'flex-col items-center gap-2 px-4 py-2.5 lg:px-6 lg:py-3 bg-white/90 border-slate-200 shadow-lg rotate-1 grayscale-[0.3]'}
                             `}
                         >
                             <div className={`
                                 rounded-full flex items-center justify-center font-black text-white shadow-inner border-4 border-white
-                                ${useDesktopLikeLandscapeLayout ? isCurrent ? 'w-12 h-12 text-[14px]' : 'w-8 h-8 text-[10px]' : 'w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 text-sm sm:text-base md:text-lg'}
+                                ${useDesktopLikeLandscapeLayout ? 'w-11 h-11 text-[13px]' : 'w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 text-sm sm:text-base md:text-lg'}
                                 ${pid === '0' ? 'bg-red-500' : pidx === 1 ? 'bg-blue-500' : 'bg-green-500'}
                             `}>
                                 {t('ui.player_short', { id: pid })}
                             </div>
 
-                            <div className={useDesktopLikeLandscapeLayout ? 'flex gap-1.5 shrink-0' : 'flex gap-1.5 sm:gap-2'}>
+                            <div className={useDesktopLikeLandscapeLayout ? 'flex gap-2 shrink-0' : 'flex gap-1.5 sm:gap-2'}>
                                 {[0, 1].map((i) => {
                                     const fid = selections[i];
                                     const meta = fid ? FACTION_METADATA.find((faction) => faction.id === fid) : null;
@@ -337,18 +337,18 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                             key={i}
                                             className={`
                                                 rounded-sm border-2 bg-slate-100 flex items-center justify-center overflow-hidden shadow-sm transition-all
-                                                ${useDesktopLikeLandscapeLayout ? isCurrent ? 'w-12 h-12' : 'w-8 h-8' : 'w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12'}
+                                                ${useDesktopLikeLandscapeLayout ? 'w-11 h-11' : 'w-9 h-9 sm:w-10 sm:h-10 md:w-12 md:h-12'}
                                                 ${!fid ? 'border-dashed border-slate-300 opacity-40' : 'border-slate-800 rotate-[-4deg]'}
                                             `}
                                             title={meta ? t(meta.nameKey) : undefined}
                                             style={{ transform: fid ? `rotate(${(i * 10) - 5}deg)` : 'none' }}
                                         >
                                             {meta?.icon ? (
-                                                <div className={useDesktopLikeLandscapeLayout ? isCurrent ? 'text-slate-900 scale-[0.96]' : 'text-slate-900 scale-[0.84]' : 'text-slate-900 scale-90 sm:scale-100'}>
-                                                    <meta.icon size={useDesktopLikeLandscapeLayout ? (isCurrent ? 30 : 20) : 28} strokeWidth={2.5} />
+                                                <div className={useDesktopLikeLandscapeLayout ? 'text-slate-900 scale-[0.95]' : 'text-slate-900 scale-90 sm:scale-100'}>
+                                                    <meta.icon size={useDesktopLikeLandscapeLayout ? 26 : 28} strokeWidth={2.5} />
                                                 </div>
                                             ) : (
-                                                <span className={useDesktopLikeLandscapeLayout ? isCurrent ? 'text-[12px] text-slate-400 font-black' : 'text-[10px] text-slate-400 font-black' : 'text-[10px] sm:text-xs text-slate-400 font-black'}>?</span>
+                                                <span className={useDesktopLikeLandscapeLayout ? 'text-[10px] text-slate-400 font-black' : 'text-[10px] sm:text-xs text-slate-400 font-black'}>?</span>
                                             )}
                                         </div>
                                     );
@@ -356,7 +356,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                             </div>
 
                             <div className={useDesktopLikeLandscapeLayout ? 'flex min-w-0 flex-col items-center leading-none' : 'flex flex-col items-center'}>
-                                <span className={`${useDesktopLikeLandscapeLayout ? isCurrent ? 'text-[11px]' : 'text-[10px]' : 'text-[10px] sm:text-[11px]'} font-black uppercase tracking-tight sm:tracking-tighter leading-none ${isCurrent ? 'text-amber-800' : 'text-slate-50'}`}>
+                                <span className={`${useDesktopLikeLandscapeLayout ? 'text-[10.5px]' : 'text-[10px] sm:text-[11px]'} font-black uppercase tracking-tight sm:tracking-tighter leading-none ${isCurrent ? 'text-amber-800' : 'text-slate-700'}`}>
                                     {t('ui.player_short', { id: pid })}
                                 </span>
                                 {isCurrent && (

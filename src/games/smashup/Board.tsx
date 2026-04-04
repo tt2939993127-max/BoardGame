@@ -96,7 +96,7 @@ const EMPTY_TURN_ORDER = [] as SmashUpCore['turnOrder'];
 const EMPTY_TITANS = [] as NonNullable<SmashUpCore['titans']>;
 const EMPTY_EVENT_ENTRIES: MatchState<SmashUpCore>['sys']['eventStream']['entries'] = [];
 const SMASHUP_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1160;
-const SMASHUP_FACTION_SELECTION_SHELL_DESIGN_WIDTH = 1580;
+const SMASHUP_FACTION_SELECTION_SHELL_DESIGN_WIDTH = 1500;
 
 type DragGuidePoint = { x: number; y: number };
 
