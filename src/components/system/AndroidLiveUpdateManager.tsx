@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { useToast } from '../../contexts/ToastContext';
 import { AndroidForceUpdateGate } from './AndroidForceUpdateGate';
@@ -20,7 +20,13 @@ export const AndroidLiveUpdateManager = () => {
         phase: 'hidden',
         blocking: false,
     });
-    const isGamePage = location.pathname.startsWith('/play/');
+    const toastRef = useRef(toast);
+    const isGamePageRef = useRef(location.pathname.startsWith('/play/'));
+
+    useEffect(() => {
+        toastRef.current = toast;
+        isGamePageRef.current = location.pathname.startsWith('/play/');
+    }, [location.pathname, toast]);
 
     useEffect(() => {
         if (!isNativeAndroid) {
@@ -43,7 +49,7 @@ export const AndroidLiveUpdateManager = () => {
                 }
                 if (!options?.suppressReadyToast && !autoNotifiedBackgroundOtaVersions.has(result.version)) {
                     autoNotifiedBackgroundOtaVersions.add(result.version);
-                    toast.info(
+                    toastRef.current.info(
                         `新版本 ${result.version} 已在后台下载完成，将在下次启动 App 时生效。`,
                         '应用更新',
                         {
@@ -56,7 +62,7 @@ export const AndroidLiveUpdateManager = () => {
             }
 
             if (result.status === 'up-to-date' && options?.interactive) {
-                toast.success('当前已经是最新版本。', '应用更新', {
+                toastRef.current.success('当前已经是最新版本。', '应用更新', {
                     dedupeKey: 'android-ota-up-to-date',
                     ttlMs: 3000,
                 });
@@ -66,7 +72,7 @@ export const AndroidLiveUpdateManager = () => {
             if (result.status === 'error') {
                 console.warn('[OTA] 后台检查失败', result.reason);
                 if (options?.interactive) {
-                    toast.error(result.reason, '应用更新');
+                    toastRef.current.error(result.reason, '应用更新');
                 }
                 return;
             }
@@ -83,7 +89,7 @@ export const AndroidLiveUpdateManager = () => {
             },
             applyMode: 'background',
         }).then((result) => {
-            handleResult(result, { suppressReadyToast: isGamePage });
+            handleResult(result, { suppressReadyToast: isGamePageRef.current });
         });
 
         const unsubscribeRequest = subscribeAndroidLiveUpdateRequests((request) => {
@@ -103,7 +109,7 @@ export const AndroidLiveUpdateManager = () => {
             disposed = true;
             unsubscribeRequest();
         };
-    }, [isGamePage, isNativeAndroid, toast]);
+    }, [isNativeAndroid]);
 
     if (!isNativeAndroid) {
         return null;
