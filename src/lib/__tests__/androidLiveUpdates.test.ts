@@ -4,6 +4,12 @@ import {
     readAndroidLiveUpdateConfig,
 } from '../mobile/androidLiveUpdates';
 import {
+    isAndroidNativeUpdateAvailable,
+    readAndroidNativeUpdateConfig,
+    type AndroidAppInfo,
+} from '../mobile/androidNativeUpdates';
+import { detectNativeAndroidRuntime } from '../mobile/androidRuntime';
+import {
     DEFAULT_FORCE_UPDATE_MESSAGE,
     DEFAULT_FORCE_UPDATE_TITLE,
     resolveOtaForceUpdateOptions,
@@ -89,5 +95,76 @@ describe('androidLiveUpdates', () => {
             forceUpdateTitle: '',
             forceUpdateMessage: '',
         });
+    });
+
+    it('读取原生 APK 自更新配置时，只有启用且 manifest URL 合法才算开启', () => {
+        expect(readAndroidNativeUpdateConfig({
+            VITE_ANDROID_NATIVE_UPDATE_ENABLED: 'true',
+            VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json',
+            VITE_ANDROID_NATIVE_UPDATE_CHANNEL: 'stable',
+        })).toEqual({
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json',
+            channel: 'stable',
+        });
+
+        expect(readAndroidNativeUpdateConfig({
+            VITE_ANDROID_NATIVE_UPDATE_ENABLED: 'true',
+            VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL: '/relative.json',
+        }).enabled).toBe(false);
+    });
+
+    it('原生 APK 自更新优先比较 versionCode，否则回退到 versionName', () => {
+        const appInfo: AndroidAppInfo = {
+            versionName: '0.5.0',
+            versionCode: 500,
+            canRequestPackageInstalls: true,
+        };
+
+        expect(isAndroidNativeUpdateAvailable({
+            version: '0.5.0',
+            versionCode: 501,
+            url: 'https://example.com/app.apk',
+        }, appInfo)).toBe(true);
+
+        expect(isAndroidNativeUpdateAvailable({
+            version: '0.5.1',
+            url: 'https://example.com/app.apk',
+        }, {
+            ...appInfo,
+            versionCode: undefined,
+        })).toBe(true);
+
+        expect(isAndroidNativeUpdateAvailable({
+            version: '0.4.9',
+            versionCode: 499,
+            url: 'https://example.com/app.apk',
+        }, appInfo)).toBe(false);
+    });
+
+    it('Android 运行时边界必须看真实原生环境，而不是只看构建模式', () => {
+        expect(detectNativeAndroidRuntime({
+            capacitor: {
+                isNativePlatform: () => false,
+                getPlatform: () => 'web',
+            },
+        })).toBe(false);
+
+        expect(detectNativeAndroidRuntime({
+            capacitor: {
+                isNativePlatform: () => true,
+                getPlatform: () => 'android',
+            },
+        })).toBe(true);
+
+        expect(detectNativeAndroidRuntime({
+            capacitor: {
+                isNativePlatform: () => false,
+                getPlatform: () => 'web',
+            },
+            windowObject: {
+                androidBridge: {},
+            },
+        })).toBe(true);
     });
 });

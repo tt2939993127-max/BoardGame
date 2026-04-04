@@ -1,10 +1,10 @@
-import { Capacitor } from '@capacitor/core';
 import { useEffect, useEffectEvent, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useModalStack } from '../../contexts/ModalStackContext';
 import { resolveAndroidBackNavigationAction } from '../../lib/mobile/androidBackNavigation';
 import { resolveInAppUrlPath } from '../../lib/mobile/appUrlRouting';
 import { dispatchAppVisibilityChange } from '../../lib/mobile/appVisibility';
+import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import { isTextEntryElement } from '../../lib/textEntry';
 
 type PluginListenerHandle = {
@@ -32,8 +32,6 @@ type CapacitorAppPluginModule = {
 };
 
 let capacitorAppPluginLoader: Promise<CapacitorAppPluginModule | null> | null = null;
-
-const isNativeAndroidRuntime = () => Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'android';
 
 const loadCapacitorAppPlugin = async (): Promise<CapacitorAppPluginModule | null> => {
     if (!isNativeAndroidRuntime()) {

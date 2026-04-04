@@ -14,7 +14,7 @@ import type { GameBoardProps } from '../../engine/transport/protocol';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import type { MatchState } from '../../engine/types';
-import type { SmashUpCore, CardInstance, ActionCardDef, FusionCardDef, MinionCardDef, CardOrTitanChoiceValue } from './domain/types';
+import type { SmashUpCore, CardInstance, ActionCardDef, FusionCardDef, CardOrTitanChoiceValue } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
 import { FLOW_COMMANDS } from '../../engine/systems/FlowSystem';
 import { asSimpleChoice, INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
@@ -454,7 +454,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return !val.cardUid && !val.titanUid;
         }).map(opt => ({
             ...opt,
-            label: resolvePromptOptionLabel(opt as any),
+            label: resolvePromptOptionLabel(opt),
         }));
     }, [isHandDiscardPrompt, currentPrompt, resolvePromptOptionLabel]);
 
@@ -494,7 +494,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return true;
         }).map(opt => ({
             ...opt,
-            label: resolvePromptOptionLabel(opt as any),
+            label: resolvePromptOptionLabel(opt),
         }));
     }, [isBaseSelectPrompt, currentPrompt, resolvePromptOptionLabel]);
 
@@ -554,7 +554,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return !(typeof val.cardUid === 'string' && typeof val.baseIndex === 'number' && val.baseIndex >= 0);
         }).map(opt => ({
             ...opt,
-            label: resolvePromptOptionLabel(opt as any),
+            label: resolvePromptOptionLabel(opt),
         }));
     }, [isBuriedSelectPrompt, currentPrompt, resolvePromptOptionLabel]);
 
@@ -594,7 +594,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return true;
         }).map(opt => ({
             ...opt,
-            label: resolvePromptOptionLabel(opt as any),
+            label: resolvePromptOptionLabel(opt),
         }));
     }, [isMinionSelectPrompt, currentPrompt, resolvePromptOptionLabel]);
 
@@ -1171,7 +1171,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
         });
         return usable;
-    }, [G, playerID, isMyTurn, phase, selectedCardUid, discardStripSelectedUid, activeSelectedSetAsideTitanUid, isBaseSelectPrompt, isBuriedSelectPrompt, meFirstPendingCard, core, coreBases]);
+    }, [G, playerID, isMyTurn, phase, selectedCardUid, discardStripSelectedUid, activeSelectedSetAsideTitanUid, isBaseSelectPrompt, isBuriedSelectPrompt, meFirstPendingCard, coreBases]);
 
     const draggedCard = useMemo(() => {
         if (!handDragPreview || !myPlayer) return null;
@@ -1208,6 +1208,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     // 事件流消费 → FX 特效驱动
     const myPid = playerID || '0';
     const gameEvents = useGameEvents({ G, myPlayerId: myPid, fxBus, baseRefs: baseRefsMap });
+    const { feedbacks: gameFeedbacks, removeFeedback: removeGameFeedback } = gameEvents;
 
     // 行动卡特写队列：
     // - 在线模式：只显示对手打出的行动卡
@@ -1265,8 +1266,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
     // 能力反馈 toast：失败提示，以及成功获得额外出牌额度的明确反馈。
     useEffect(() => {
-        if (gameEvents.feedbacks.length === 0) return;
-        for (const fb of gameEvents.feedbacks) {
+        if (gameFeedbacks.length === 0) return;
+        for (const fb of gameFeedbacks) {
             if (fb.playerId === playerID) {
                 const defaultMessage = fb.messageKey === 'ui.extra_minion_granted'
                     ? '获得{{count}}次额外随从机会'
@@ -1279,9 +1280,9 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     : '牌库中未找到符合条件的卡牌，已重洗牌库';
                 toast(t(fb.messageKey, { defaultValue: defaultMessage, ...fb.messageParams }));
             }
-            gameEvents.removeFeedback(fb.id);
+            removeGameFeedback(fb.id);
         }
-    }, [gameEvents.feedbacks, gameEvents.removeFeedback, playerID, t]);
+    }, [gameFeedbacks, removeGameFeedback, playerID, t]);
 
     // 音效系统
     useGameAudio({
@@ -1537,7 +1538,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             dispatch(SU_COMMANDS.USE_BASE_ABILITY, { baseIndex: index });
         }
-    }, [selectedCardUid, selectedCardMode, activeSelectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, coreBases, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed]);
+    }, [selectedCardUid, selectedCardMode, activeSelectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed]);
 
     const handleBuriedCardSelect = useCallback((cardUid: string) => {
         if (!isBuriedSelectPrompt || !currentPrompt) return;

@@ -62,6 +62,7 @@ public class MainActivity extends BridgeActivity {
     protected void onCreate(Bundle savedInstanceState) {
         WebView.setWebContentsDebuggingEnabled(true);
         gameOrientations.putAll(loadOrientationMap());
+        registerPlugin(AppUpdatePlugin.class);
         registerPlugin(GamePackagePlugin.class);
         bridgeBuilder.addWebViewListener(
             new WebViewListener() {

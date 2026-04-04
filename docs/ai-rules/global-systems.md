@@ -45,6 +45,25 @@
 
 ---
 
+## 2.5 App 壳层与网页边界（强制）
+
+> **触发条件**：接入/修改 OTA、原生更新、Capacitor 插件、Android/iOS 返回桥、壳层专属设置入口、原生包管理入口时必读。**
+
+- **构建模式不是运行时边界**：
+    - `import.meta.env.MODE === 'android'`、渠道名、构建脚本参数这类信息，只能用于构建裁剪和静态配置选择。
+    - **禁止**直接用它们决定网页运行时是否展示 OTA/UI、是否调用原生插件、是否监听原生返回事件。
+- **必须使用统一运行时探测**：
+    - 原生专属逻辑必须通过统一 helper 判断真实运行环境，例如 `Capacitor.isNativePlatform()` + `Capacitor.getPlatform()`，必要时再补 `window.androidBridge` / `window.Capacitor` 等桥接探测。
+    - 推荐把探测集中到单一文件，例如 `src/lib/mobile/androidRuntime.ts`，共享组件统一复用，禁止各处重复手写、各自放宽条件。
+- **入口层与组件层双重门禁**：
+    - `App.tsx` 这类全局入口，禁止无条件挂载 Android/iOS 专属 Manager、Bridge、Gate。
+    - 壳层组件内部也必须自带兜底门禁，避免入口漏判时把原生逻辑泄到网页端。
+- **共享组件默认站在网页安全侧**：
+    - 像 `GlobalHUD`、首页、全局弹窗这类网页/壳层共用组件，默认优先保证网页端安全。
+    - 若需增加壳层专属入口，必须写成“网页安全默认分支 + 原生运行时覆盖分支”，不能反过来假设“只要是 android build 就一定在壳里运行”。
+
+---
+
 ## 3. 通用 UI 系统
 
 - **GameHUD (`src/components/game/GameHUD.tsx`)**：

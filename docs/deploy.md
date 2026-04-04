@@ -245,6 +245,14 @@ GitHub Actions 自动化：
 - 正式覆盖 `latest.json` 后，指向该 channel 的 Android App 会在下一次启动后的后台检查中感知到新 bundle，并在切后台或重启后生效
 - OTA 只覆盖 Web bundle；涉及原生层改动时仍必须重新发 APK / AAB
 
+## Android 原生 APK 更新源
+
+- 路径前缀：`official/native-app-updates/android/<channel>/...`
+- `latest.json`：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/latest.json`
+- APK：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/packages/<version>.apk`
+- version manifest：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/manifests/<version>.json`
+- 当前 App 内置的是“下载 APK -> 调起系统安装器”的私有分发链路，不是静默安装
+
 ## Nginx 反向代理（自动管理）
 
 > **无需手动配置**。部署脚本自动安装 Nginx 并管理 `/etc/nginx/conf.d/boardgame.conf`。
