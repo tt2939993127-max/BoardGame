@@ -94,10 +94,19 @@ export const LocalMatchRoom = () => {
         () => buildLocalMatchSetupData(setupSelections),
         [setupSelections],
     );
+    const humanSeatIds = useMemo(
+        () => Object.entries(seatControllers)
+            .filter(([, controller]) => controller.type === 'human')
+            .map(([playerId]) => playerId)
+            .sort((left, right) => Number(left) - Number(right)),
+        [seatControllers],
+    );
     const hasAiSeat = useMemo(
         () => Object.values(seatControllers).some((controller) => controller.type !== 'human'),
         [seatControllers],
     );
+    const shouldFollowCurrentTurnPlayer = !hasAiSeat || humanSeatIds.length === 0;
+    const fixedLocalPlayerId = shouldFollowCurrentTurnPlayer ? undefined : humanSeatIds[0];
 
     useEffect(() => {
         setHasCompletedInitialLocalPreload(false);
@@ -109,7 +118,8 @@ export const LocalMatchRoom = () => {
         return getGameImplementation(gameId)?.engineConfig ?? null;
     }, [gameId, isGameImplementationReady]);
 
-    // 包装 Board 组件，注入 CriticalImageGate
+    // 包装 Board 组件，注入 CriticalImageGate。
+    // 不要把 WrappedBoard 绑定到 t 引用，否则 namespace 变化会让 Board 重挂载。
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
         if (!gameId || !isGameImplementationReady) return null;
         const impl = getGameImplementation(gameId);
@@ -122,7 +132,7 @@ export const LocalMatchRoom = () => {
                 locale={i18n.language}
                 playerID={props?.playerID}
                 blockRendering={!hasCompletedInitialLocalPreload}
-                loadingDescription={t('matchRoom.loadingResources')}
+                loadingDescription={i18n.t('matchRoom.loadingResources', { ns: 'lobby' })}
                 onReady={() => {
                     setHasCompletedInitialLocalPreload(true);
                 }}
@@ -131,7 +141,7 @@ export const LocalMatchRoom = () => {
             </CriticalImageGate>
         );
         return WrappedLocalBoard;
-    }, [gameId, hasCompletedInitialLocalPreload, i18n.language, t, isGameImplementationReady]);
+    }, [gameId, hasCompletedInitialLocalPreload, i18n, isGameImplementationReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
@@ -187,7 +197,7 @@ export const LocalMatchRoom = () => {
                         } as React.CSSProperties}
                     >
                         <GameModeProvider mode="local">
-                            <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
+                            <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={fixedLocalPlayerId}>
                                 {engineConfig && WrappedBoard ? (
                                     <LocalGameProvider
                                         key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
@@ -197,7 +207,8 @@ export const LocalMatchRoom = () => {
                                         setupData={localSetupData}
                                         onCommandRejected={handleCommandRejected}
                                         seatControllers={seatControllers}
-                                        followCurrentTurnPlayer
+                                        playerId={fixedLocalPlayerId}
+                                        followCurrentTurnPlayer={shouldFollowCurrentTurnPlayer}
                                         persistSession
                                     >
                                         <BoardBridge

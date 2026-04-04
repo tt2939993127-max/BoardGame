@@ -19,16 +19,26 @@
 
 ## 验证
 
-- 托管 E2E 命令尝试：
-  - `npm run test:e2e:ci:file -- e2e/smashup-gameplay.e2e.ts "主动基地能力徽记应保持底部居中，不再向右偏"`
-  - 结果：未跑通，不是用例失败，而是同机已有另一条 Playwright runtime 占用重任务预算，随后又触发全局内存预算门禁（剩余内存低于 `2.5GB`）。
+- 正式托管 E2E：
+  - 命令：`npm run test:e2e:ci:file -- e2e/smashup-gameplay.e2e.ts "主动基地能力徽记应保持底部居中，不再向右偏"`
+  - 结果：`1 passed`
+  - 用例：[`e2e/smashup-gameplay.e2e.ts`](D:/gongzuo/webgame/BoardGame/e2e/smashup-gameplay.e2e.ts)
 - 轻量浏览器复核：
   - 方式：单独启动 `npm run dev:frontend`，用 Playwright 直连 `http://127.0.0.1:4173/play/smashup?...`，注入 `base_pyramids` 主动基地能力场景。
   - 结果：`base-ability-badge-0` 可见，且和 `base-zone-0` 的中心偏移为 `0.008209228515625px`，可视为居中。
 - 截图留档：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\manual-active-base-ability-badge\active-base-ability-badge-centered.png`
+  - 正式 E2E：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-gameplay.e2e\主动基地能力徽记应保持底部居中，不再向右偏\active-base-ability-badge-centered.png`
+  - 轻量复核：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\manual-active-base-ability-badge\active-base-ability-badge-centered.png`
+
+## 肉眼观察
+
+- 左侧 `Pyramids` 基地底部的 `基地能力` 徽记位于卡面下沿正中，没有再向右漂到靠近 `/21` 记分 token 的一侧。
+- 徽记左右两侧留白接近对称，和基地高亮描边的中线对齐，视觉中心稳定。
+- 右上角圆形记分 token 仍然保持在基地卡框外侧，没有把底部徽记的对齐感再次拉歪。
 
 ## 备注
 
-- 本轮已经拿到浏览器内真实 DOM 几何结果和截图证据。
-- 由于托管 E2E 被外部运行中的重任务和全局内存预算阻塞，本轮没有拿到 `test:e2e:ci:file` 的正式通过记录；若后续机器空闲，建议把新增的那条 E2E 再补跑一次收口。
+- 本轮已经同时拿到：
+  - 托管 E2E 通过记录
+  - 浏览器内真实 DOM 几何结果
+  - 正式截图与轻量复核截图

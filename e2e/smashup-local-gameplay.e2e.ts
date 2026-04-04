@@ -756,7 +756,8 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await expect(card).toBeVisible({ timeout: 10000 });
         await clickHandCard(page, card);
 
-        await expect(cardFrame).toHaveClass(/ring-cyan-400/);
+        await expect(cardFrame).toHaveClass(/ring-green-400/);
+        await game.screenshot('smashup-click-mode-selection-state', testInfo);
         await expect.poll(async () => {
             return await page.evaluate(() => {
                 const state = window.__BG_TEST_HARNESS__!.state.get();
@@ -1032,7 +1033,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await expect(card).toBeVisible({ timeout: 10000 });
         await clickHandCard(page, card);
 
-        await expect(cardFrame).toHaveClass(/ring-cyan-400/);
+        await expect(cardFrame).toHaveClass(/ring-green-400/);
         await expect.poll(async () => {
             return await page.evaluate(() => {
                 const state = window.__BG_TEST_HARNESS__!.state.get();
@@ -1124,7 +1125,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await clickHandCard(page, card);
 
         await expect(toastMessage).toBeVisible({ timeout: 5000 });
-        await expect(cardFrame).not.toHaveClass(/ring-cyan-400/);
+        await expect(cardFrame).not.toHaveClass(/ring-green-400/);
         await expect.poll(async () => {
             return await page.evaluate(() => {
                 const state = window.__BG_TEST_HARNESS__!.state.get();

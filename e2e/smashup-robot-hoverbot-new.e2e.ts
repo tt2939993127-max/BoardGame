@@ -400,6 +400,180 @@ test.describe('Smash Up 牌库检索交互', () => {
         expect(sphinx?.location?.baseIndex).toBe(0);
     });
 
+    test('狮身人面像埋葬牌交互遇到 stale 选项时应只保留仍存在的埋葬牌', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.goto('/play/smashup');
+        await page.waitForFunction(
+            () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+            { timeout: 15000 },
+        );
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['ancient_egyptians', 'robots'],
+            },
+            player1: {
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['pirates', 'dinosaurs'],
+            },
+            currentPlayer: '0',
+            phase: 'playCards',
+            bases: [
+                {
+                    defId: 'base_pyramids',
+                    buriedCards: [
+                        {
+                            uid: 'sphinx-buried-real',
+                            defId: 'robot_warbot',
+                            trueOwnerId: '0',
+                            controllerId: '0',
+                            buriedFrom: 'hand',
+                        },
+                    ],
+                },
+            ],
+            extra: {
+                core: {
+                    titans: [
+                        {
+                            uid: 't-sphinx-stale',
+                            defId: 'sphinx',
+                            faction: 'ancient_egyptians',
+                            ownerId: '0',
+                            controllerId: '0',
+                            powerCounters: 0,
+                            talentUsed: false,
+                            location: { zone: 'setaside' },
+                        },
+                    ],
+                },
+                sys: {
+                    interaction: {
+                        current: {
+                            id: 'e2e-prior-step',
+                            kind: 'simple-choice',
+                            playerId: '0',
+                            data: {
+                                title: '前置步骤：继续到狮身人面像交互',
+                                sourceId: 'e2e_prior_step',
+                                targetType: 'button',
+                                options: [
+                                    {
+                                        id: 'continue',
+                                        label: '继续',
+                                        value: { continue: true },
+                                        displayMode: 'button',
+                                    },
+                                ],
+                            },
+                        },
+                        queue: [
+                            {
+                                id: 'e2e-sphinx-bury-stale-prompt',
+                                kind: 'simple-choice',
+                                playerId: '0',
+                                data: {
+                                    title: '狮身人面像：选择一张你的埋葬牌，将其回手并把此泰坦放到其所在基地',
+                                    sourceId: 'titan_sphinx_start_turn',
+                                    targetType: 'generic',
+                                    autoRefresh: 'buried',
+                                    responseValidationMode: 'live',
+                                    continuationContext: {
+                                        titanUid: 't-sphinx-stale',
+                                        titanDefId: 'sphinx',
+                                    },
+                                    options: [
+                                        {
+                                            id: 'buried-sphinx-buried-real',
+                                            label: '战斗机器人 @ 金字塔',
+                                            value: {
+                                                cardUid: 'sphinx-buried-real',
+                                                defId: 'robot_warbot',
+                                                baseIndex: 0,
+                                                baseDefId: 'base_pyramids',
+                                            },
+                                            displayMode: 'card',
+                                        },
+                                        {
+                                            id: 'buried-sphinx-buried-stale',
+                                            label: '过期埋葬牌 @ 金字塔',
+                                            value: {
+                                                cardUid: 'sphinx-buried-stale',
+                                                defId: 'pirate_first_mate',
+                                                baseIndex: 0,
+                                                baseDefId: 'base_pyramids',
+                                            },
+                                            displayMode: 'card',
+                                        },
+                                        {
+                                            id: 'skip',
+                                            label: '跳过',
+                                            value: { skip: true },
+                                            displayMode: 'button',
+                                        },
+                                    ],
+                                },
+                            },
+                        ],
+                    },
+                },
+            },
+        });
+
+        await page.getByRole('button', { name: '继续' }).click();
+
+        await expect.poll(async () => {
+            return page.evaluate(() => {
+                const harness = (window as any).__BG_TEST_HARNESS__;
+                const current = harness?.state?.get?.()?.sys?.interaction?.current;
+                return (current?.data?.options ?? []).map((option: any) => option.id);
+            });
+        }, { timeout: 5000 }).toEqual(['buried-sphinx-buried-real', 'skip']);
+
+        const interactionMeta = await page.evaluate(() => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            const current = harness?.state?.get?.()?.sys?.interaction?.current;
+            return {
+                sourceId: current?.data?.sourceId,
+                autoRefresh: current?.data?.autoRefresh,
+                responseValidationMode: current?.data?.responseValidationMode,
+                optionIds: (current?.data?.options ?? []).map((option: any) => option.id),
+            };
+        });
+
+        expect(interactionMeta.sourceId).toBe('titan_sphinx_start_turn');
+        expect(interactionMeta.autoRefresh).toBe('buried');
+        expect(interactionMeta.responseValidationMode).toBe('live');
+        expect(interactionMeta.optionIds).toEqual(['buried-sphinx-buried-real', 'skip']);
+
+        const realBuriedCard = page.locator('[data-buried-card-uid="sphinx-buried-real"]').first();
+        await expect(realBuriedCard).toBeVisible();
+        await expect(realBuriedCard).toHaveAttribute('data-buried-face-up', 'true');
+        await expect(realBuriedCard).toHaveAttribute('data-buried-selectable', 'true');
+        await expect(page.locator('[data-buried-card-uid="sphinx-buried-stale"]')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: '跳过' })).toBeVisible();
+
+        await game.screenshot('sphinx-bury-stale-options-filtered', testInfo);
+        await saveStableScreenshot(page, testInfo, 'sphinx-bury-stale-options-filtered');
+
+        await realBuriedCard.click();
+        await game.waitForNoInteraction();
+
+        const finalState = await game.getState();
+        expect(finalState.core.bases[0].buriedCards?.some((card: any) => card.uid === 'sphinx-buried-real') ?? false).toBe(false);
+        expect(finalState.core.players['0'].hand.some((card: any) => card.uid === 'sphinx-buried-real')).toBe(true);
+        const sphinx = (finalState.core.titans ?? []).find((titan: any) => titan.uid === 't-sphinx-stale');
+        expect(sphinx?.location?.zone).toBe('base');
+        expect(sphinx?.location?.baseIndex).toBe(0);
+    });
+
     test('企鹅帝皇天赋交互应显示卡牌选项而不是文字按钮', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 

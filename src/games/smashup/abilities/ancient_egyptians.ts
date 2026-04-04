@@ -103,7 +103,7 @@ function ancientEgyptiansPyramidEngineerOnPlay(ctx: AbilityContext): AbilityResu
         ctx.playerId,
         '金字塔工程师：你可以翻开这里你的一张埋葬牌',
         [createSkipOption(), ...options] as any[],
-        { sourceId: 'ancient_egyptians_pyramid_engineer_uncover', targetType: 'generic' },
+        { sourceId: 'ancient_egyptians_pyramid_engineer_uncover', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -327,7 +327,7 @@ function ancientEgyptiansPharaohBeforeScoring(ctx: any): AbilityResult {
         ctx.sourceControllerId,
         '法老：你可以在计分前翻开这里你的一张埋葬牌',
         [createSkipOption(), ...options] as any[],
-        { sourceId: 'ancient_egyptians_pharaoh_before_scoring', targetType: 'generic' },
+        { sourceId: 'ancient_egyptians_pharaoh_before_scoring', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -387,7 +387,7 @@ function queueLostKnowledgeUncover(
         playerId,
         '失落知识：选择一张你的埋葬牌翻开',
         buildBuriedCardChoiceOptions(state, playerId, choices),
-        { sourceId: 'ancient_egyptians_lost_knowledge_uncover', targetType: 'generic' },
+        { sourceId: 'ancient_egyptians_lost_knowledge_uncover', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(matchState, interaction) };
 }
@@ -594,7 +594,13 @@ const handleSealTheTombMode: InteractionHandler = (state, playerId, value, data,
         playerId,
         '封印墓穴：翻开同一基地至多两张你的埋葬牌',
         buildBuriedCardChoiceOptions(state.core, playerId, choices),
-        { sourceId: 'ancient_egyptians_seal_the_tomb_uncover', targetType: 'generic', multi: { min: 0, max: Math.min(2, choices.length) } },
+        {
+            sourceId: 'ancient_egyptians_seal_the_tomb_uncover',
+            targetType: 'generic',
+            multi: { min: 0, max: Math.min(2, choices.length) },
+            autoRefresh: 'buried',
+            responseValidationMode: 'live',
+        },
     );
     return { state: queueInteraction(state, interaction), events: [] };
 };

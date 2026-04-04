@@ -27,6 +27,9 @@ interface TestCore {
             hand: Array<{ uid: string; defId: string }>;
         };
     };
+    bases?: Array<{
+        buriedCards?: Array<{ uid: string; defId: string; controllerId?: string }>;
+    }>;
 }
 
 const dummyRandom = {
@@ -657,6 +660,113 @@ describe('InteractionSystem - 通用刷新', () => {
                 type: INTERACTION_COMMANDS.RESPOND,
                 playerId: 'p1',
                 payload: { optionId: 'opt-2' },
+            } as any,
+            events: [],
+            random: dummyRandom as any,
+            playerIds: ['p1'],
+        });
+
+        expect(result?.halt).toBe(true);
+        expect(result?.error).toBe('无效的选择');
+    });
+
+    it('autoRefresh=buried 时，后续交互弹出应剔除已失效的埋葬牌选项', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: { hand: [] },
+                },
+                bases: [{
+                    buriedCards: [
+                        { uid: 'buried-1', defId: 'card-1', controllerId: 'p1' },
+                        { uid: 'buried-2', defId: 'card-2', controllerId: 'p1' },
+                    ],
+                }],
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const current = createSimpleChoice(
+            'interaction-current',
+            'p1',
+            '当前步骤',
+            [{ id: 'skip', label: '跳过', value: { skip: true } }],
+        );
+        const queued = createSimpleChoice(
+            'interaction-buried',
+            'p1',
+            '选择埋葬牌',
+            [
+                { id: 'buried-1', label: '埋葬牌 1', value: { cardUid: 'buried-1', baseIndex: 0, defId: 'card-1' } },
+                { id: 'buried-2', label: '埋葬牌 2', value: { cardUid: 'buried-2', baseIndex: 0, defId: 'card-2' } },
+            ],
+            { sourceId: 'test-buried', autoRefresh: 'buried', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, current);
+        state = queueInteraction(state, queued);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                bases: [{
+                    buriedCards: [{ uid: 'buried-1', defId: 'card-1', controllerId: 'p1' }],
+                }],
+            },
+        };
+
+        state = resolveInteraction(state);
+
+        const options = (state.sys.interaction.current?.data as any)?.options ?? [];
+        expect(options.map((option: any) => option.value?.cardUid)).toEqual(['buried-1']);
+    });
+
+    it('autoRefresh=buried 且 live 校验时，应拒绝已被移除的埋葬牌响应', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: { hand: [] },
+                },
+                bases: [{
+                    buriedCards: [{ uid: 'buried-1', defId: 'card-1', controllerId: 'p1' }],
+                }],
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'respond-with-buried-live',
+            'p1',
+            '选择埋葬牌',
+            [
+                { id: 'buried-1', label: '埋葬牌 1', value: { cardUid: 'buried-1', baseIndex: 0, defId: 'card-1' } },
+                { id: 'buried-2', label: '埋葬牌 2', value: { cardUid: 'buried-2', baseIndex: 0, defId: 'card-2' } },
+            ],
+            { sourceId: 'test-buried', autoRefresh: 'buried', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                bases: [{
+                    buriedCards: [{ uid: 'buried-1', defId: 'card-1', controllerId: 'p1' }],
+                }],
+            },
+        };
+
+        const system = createSimpleChoiceSystem<TestCore>();
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: 'p1',
+                payload: { optionId: 'buried-2' },
             } as any,
             events: [],
             random: dummyRandom as any,

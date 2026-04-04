@@ -220,39 +220,39 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                 const isSelected = selectedTitanUid === titan.uid;
                                 const isActivatable = !!activatableTitanUids?.has(titan.uid) && isMyTurn;
                                 return (
-                                    <button
-                                        key={titan.uid}
-                                        type="button"
-                                        data-testid={`su-rail-titan-${titan.uid}`}
-                                        {...getTitanTouchInspectProps(`rail-titan-${titan.uid}`, { defId: titan.defId })}
-                                        onClick={(event) => {
-                                            event.stopPropagation();
-                                            if (shouldBlockTitanClick(`rail-titan-${titan.uid}`)) return;
-                                            handleTitanClick(titan);
-                                        }}
-                                        className={`group relative aspect-[0.714] rounded-sm overflow-hidden shadow-lg border transition-all cursor-pointer ${
-                                            isSelected
-                                                ? 'border-amber-300 ring-2 ring-amber-300 -translate-y-1 shadow-[0_0_18px_rgba(251,191,36,0.65)]'
-                                                : isActivatable
-                                                ? 'border-emerald-300 ring-1 ring-emerald-300 hover:-translate-y-1'
-                                                : 'border-slate-300 hover:-translate-y-1'
-                                        }`}
-                                        style={{ width: titanWidth }}
-                                        title={titanName}
-                                    >
-                                        <CardPreview
-                                            previewRef={titanDef?.previewRef
-                                                ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: titan.defId, cardUid: titan.uid } }
-                                                : undefined}
-                                            className="h-full w-full"
+                                    <div key={titan.uid} className="group relative" style={{ width: titanWidth }}>
+                                        <button
+                                            type="button"
+                                            data-testid={`su-rail-titan-${titan.uid}`}
+                                            {...getTitanTouchInspectProps(`rail-titan-${titan.uid}`, { defId: titan.defId })}
+                                            onClick={(event) => {
+                                                event.stopPropagation();
+                                                if (shouldBlockTitanClick(`rail-titan-${titan.uid}`)) return;
+                                                handleTitanClick(titan);
+                                            }}
+                                            className={`relative aspect-[0.714] w-full rounded-sm overflow-hidden shadow-lg border transition-all cursor-pointer ${
+                                                isSelected
+                                                    ? 'border-green-400 ring-2 ring-green-400 -translate-y-1 shadow-[0_0_18px_rgba(74,222,128,0.65)]'
+                                                    : isActivatable
+                                                    ? 'border-amber-400 ring-1 ring-amber-300/90 hover:-translate-y-1 shadow-[0_0_12px_rgba(251,191,36,0.28)]'
+                                                    : 'border-slate-300 hover:-translate-y-1'
+                                            }`}
                                             title={titanName}
-                                        />
-                                        {isActivatable && (
-                                            <div className="absolute inset-x-0 top-0 h-1.5 bg-emerald-400/90" />
-                                        )}
-                                        {isSelected && (
-                                            <div className="absolute inset-0 border-2 border-amber-300 pointer-events-none" />
-                                        )}
+                                        >
+                                            <CardPreview
+                                                previewRef={titanDef?.previewRef
+                                                    ? { type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: titan.defId, cardUid: titan.uid } }
+                                                    : undefined}
+                                                className="h-full w-full"
+                                                title={titanName}
+                                            />
+                                            {isActivatable && (
+                                                <div className="absolute inset-x-0 top-0 h-1.5 bg-amber-300/90" />
+                                            )}
+                                            {isSelected && (
+                                                <div className="absolute inset-0 border-2 border-green-400 pointer-events-none" />
+                                            )}
+                                        </button>
                                         {showDesktopInspectButton && (
                                             <span
                                                 data-testid={`su-rail-titan-magnify-${titan.uid}`}
@@ -267,12 +267,12 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                                 </svg>
                                             </span>
                                         )}
-                                    </button>
+                                    </div>
                                 );
                             })}
                         </div>
                         <div
-                            className="mt-2 bg-black/60 backdrop-blur-sm px-2 py-0.5 rounded text-white font-bold uppercase tracking-wider"
+                            className="mt-2 bg-black/60 px-2 py-0.5 rounded text-white font-bold uppercase tracking-wider"
                             style={{ minHeight: labelMinHeight, fontSize: labelFontSize }}
                         >
                             {t('ui.titan', { defaultValue: '泰坦' })}
@@ -291,14 +291,14 @@ export const DeckDiscardZone: React.FC<Props> = ({
                 <div className="relative aspect-[0.714]" style={{ width: stackWidth }}>
                     {hasPlayableFromDiscard && (
                         <div className="absolute -inset-2 rounded-lg z-0 pointer-events-none">
-                            <div className="absolute inset-0 rounded-lg bg-amber-400/40 animate-ping" />
-                            <div className="absolute inset-0 rounded-lg bg-amber-400/30 animate-pulse shadow-[0_0_20px_6px_rgba(251,191,36,0.5)]" />
+                            <div className="absolute inset-0 rounded-lg bg-green-400/40 animate-ping" />
+                            <div className="absolute inset-0 rounded-lg bg-green-400/30 animate-pulse shadow-[0_0_20px_6px_rgba(74,222,128,0.45)]" />
                         </div>
                     )}
                     {discard.length > 0 ? (
                         <>
                             <div className="absolute inset-0 bg-white rounded-sm border border-slate-300 shadow-sm -translate-x-1 -translate-y-1 -rotate-1" />
-                            <div className={`absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border overflow-hidden z-10 ${hasPlayableFromDiscard ? 'border-amber-400 border-2' : 'border-slate-200'}`}>
+                            <div className={`absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border overflow-hidden z-10 ${hasPlayableFromDiscard ? 'border-green-400 border-2' : 'border-slate-200'}`}>
                                 <CardPreview
                                     previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: topCard!.defId, cardUid: topCard!.uid } }}
                                     className="w-full h-full"
@@ -312,12 +312,12 @@ export const DeckDiscardZone: React.FC<Props> = ({
                     )}
                 </div>
                 <div
-                    className={`mt-2 backdrop-blur-sm px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-amber-500/80 text-white animate-pulse' : showDiscard ? 'bg-red-600/80 text-white' : 'bg-black/60 text-white group-hover:text-red-400'}`}
+                    className={`mt-2 px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-green-600/85 text-white animate-pulse' : showDiscard ? 'bg-green-700/85 text-green-50' : 'bg-black/60 text-white group-hover:text-green-300'}`}
                     style={{ minHeight: labelMinHeight, fontSize: labelFontSize }}
                 >
                     <Trash2 size={10} /> {t('ui.discard')} ({discard.length})
                     {hasPlayableFromDiscard && <span className="text-[9px] ml-1">⚡</span>}
-                    {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-yellow-400 text-[9px]">({t('ui.viewing')})</span>}
+                    {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-green-300 text-[9px]">({t('ui.viewing')})</span>}
                 </div>
             </div>
 

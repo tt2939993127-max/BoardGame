@@ -22,7 +22,7 @@ import type { TrainingDataRecorder } from './trainingData';
 import { buildTrainingDecisionSample } from './trainingData';
 import logger, { gameLogger } from '../../../server/logger.js';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
-import { applyPlayerViewToState, buildAiDecisionContext } from '../ai';
+import { applyPlayerViewToState, buildAiDecisionContext, getAiSeatIds } from '../ai';
 import {
     executePipeline,
     createSeededRandom,
@@ -30,6 +30,7 @@ import {
     type PipelineConfig,
 } from '../pipeline';
 import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
+import { setUndoAiSeatIds } from '../systems/UndoSystem';
 import { computeDiff } from './patch';
 
 // 离线裁决：按交互 kind 选择最小语义正确的兜底命令
@@ -53,6 +54,19 @@ const ALLOWED_INJECT_STATE_ENVS = new Set(['test', 'development']);
 
 const canInjectStateInCurrentEnv = (nodeEnv: string | undefined): boolean =>
     typeof nodeEnv === 'string' && ALLOWED_INJECT_STATE_ENVS.has(nodeEnv);
+
+const extractSetupSeatControllers = (setupData: unknown): Record<string, { type?: unknown } | undefined> | undefined => {
+    if (!setupData || typeof setupData !== 'object' || Array.isArray(setupData)) {
+        return undefined;
+    }
+
+    const rawSeatControllers = (setupData as { seatControllers?: unknown }).seatControllers;
+    if (!rawSeatControllers || typeof rawSeatControllers !== 'object' || Array.isArray(rawSeatControllers)) {
+        return undefined;
+    }
+
+    return rawSeatControllers as Record<string, { type?: unknown } | undefined>;
+};
 
 // ============================================================================
 // 游戏引擎定义
@@ -353,7 +367,10 @@ export class GameTransportServer {
             engineConfig.systems as EngineSystem[],
             matchID,
         );
-        const state: MatchState<unknown> = { sys, core };
+        const state = setUndoAiSeatIds(
+            { sys, core },
+            getAiSeatIds(extractSetupSeatControllers(setupData)),
+        );
         return {
             state,
             randomCursor: trackedRandom.getCursor(),
@@ -1400,7 +1417,10 @@ export class GameTransportServer {
         const engineConfig = this.gameIndex.get(gameId);
         if (!engineConfig) return undefined;
 
-        const state = result.state.G as MatchState<unknown>;
+        const state = setUndoAiSeatIds(
+            result.state.G as MatchState<unknown>,
+            getAiSeatIds(extractSetupSeatControllers(result.metadata.setupData)),
+        );
         const playerIds = Object.keys(result.metadata.players) as PlayerId[];
 
         const randomSeed = resolveStoredRandomSeed(result.state, matchID);

@@ -207,6 +207,46 @@ const MISKATONIC_ACTION_KEYS = [
     'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_002',
     'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_aetherial_pulse_003',
 ];
+const ANCIENT_EGYPTIAN_MINION_KEYS = [
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none',
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_02_krst_none',
+    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_03_krst_none',
+];
+const ANCIENT_EGYPTIAN_ACTION_KEYS = [
+    'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_01_krst_none',
+    'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_02_krst_none',
+    'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_03_krst_none',
+];
+const COWBOY_MINION_KEYS = [
+    'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_1',
+    'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_2',
+    'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_3',
+];
+const COWBOY_ACTION_KEYS = [
+    'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_a',
+    'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_b',
+    'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_c',
+];
+const SAMURAI_MINION_KEYS = [
+    'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_01_krst',
+    'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_02_krst',
+    'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_03_krst',
+];
+const SAMURAI_ACTION_KEYS = [
+    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_01_krst',
+    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_02_krst',
+    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_03_krst',
+];
+const VIKING_MINION_KEYS = [
+    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_01_krst',
+    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_02_krst',
+    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_03_krst',
+];
+const VIKING_ACTION_KEYS = [
+    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_strike.weapaxe_heavy_axe_strike_01_krst',
+    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_strike.weapaxe_heavy_axe_strike_02_krst',
+    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_strike.weapaxe_heavy_axe_strike_03_krst',
+];
 
 // 狼人：统一用攻击音效（风格一致）
 const WEREWOLF_MINION_KEYS = [
@@ -271,6 +311,14 @@ const FACTION_SFX_KEYS: Record<string, string[]> = {
     [SMASHUP_FACTION_IDS.ELDER_THINGS]: [...ELDER_THING_MINION_KEYS, ...ELDER_THING_ACTION_KEYS, MADNESS_KEY],
     [SMASHUP_FACTION_IDS.INNSMOUTH]: [...INNSMOUTH_MINION_KEYS, ...INNSMOUTH_ACTION_KEYS, MADNESS_KEY],
     [SMASHUP_FACTION_IDS.MISKATONIC_UNIVERSITY]: [...MISKATONIC_MINION_KEYS, ...MISKATONIC_ACTION_KEYS, MADNESS_KEY],
+    [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS]: [...ANCIENT_EGYPTIAN_MINION_KEYS, ...ANCIENT_EGYPTIAN_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS_POD]: [...ANCIENT_EGYPTIAN_MINION_KEYS, ...ANCIENT_EGYPTIAN_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.COWBOYS]: [...COWBOY_MINION_KEYS, ...COWBOY_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.COWBOYS_POD]: [...COWBOY_MINION_KEYS, ...COWBOY_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.SAMURAI]: [...SAMURAI_MINION_KEYS, ...SAMURAI_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.SAMURAI_POD]: [...SAMURAI_MINION_KEYS, ...SAMURAI_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.VIKINGS]: [...VIKING_MINION_KEYS, ...VIKING_ACTION_KEYS],
+    [SMASHUP_FACTION_IDS.VIKINGS_POD]: [...VIKING_MINION_KEYS, ...VIKING_ACTION_KEYS],
     [SMASHUP_FACTION_IDS.WEREWOLVES]: [...WEREWOLF_MINION_KEYS, ...WEREWOLF_ACTION_KEYS],
     [SMASHUP_FACTION_IDS.FRANKENSTEIN]: [...FRANKENSTEIN_MINION_KEYS, ...FRANKENSTEIN_ACTION_KEYS],
     [SMASHUP_FACTION_IDS.VAMPIRES]: [...VAMPIRE_MINION_KEYS, ...VAMPIRE_ACTION_KEYS],
@@ -368,6 +416,22 @@ const resolveFactionSound = (defId: string | undefined, cardType: 'minion' | 'ac
     if (defId.startsWith('miskatonic_')) {
         const keys = cardType === 'action' ? MISKATONIC_ACTION_KEYS : MISKATONIC_MINION_KEYS;
         return pickRandomSoundKey(`smashup.miskatonic.${cardType}`, keys, { minGap: 1 });
+    }
+    if (defId.startsWith('ancient_egyptians_')) {
+        const keys = cardType === 'action' ? ANCIENT_EGYPTIAN_ACTION_KEYS : ANCIENT_EGYPTIAN_MINION_KEYS;
+        return pickRandomSoundKey(`smashup.ancient_egyptians.${cardType}`, keys, { minGap: 1 });
+    }
+    if (defId.startsWith('cowboys_')) {
+        const keys = cardType === 'action' ? COWBOY_ACTION_KEYS : COWBOY_MINION_KEYS;
+        return pickRandomSoundKey(`smashup.cowboys.${cardType}`, keys, { minGap: 1 });
+    }
+    if (defId.startsWith('samurai_')) {
+        const keys = cardType === 'action' ? SAMURAI_ACTION_KEYS : SAMURAI_MINION_KEYS;
+        return pickRandomSoundKey(`smashup.samurai.${cardType}`, keys, { minGap: 1 });
+    }
+    if (defId.startsWith('vikings_')) {
+        const keys = cardType === 'action' ? VIKING_ACTION_KEYS : VIKING_MINION_KEYS;
+        return pickRandomSoundKey(`smashup.vikings.${cardType}`, keys, { minGap: 1 });
     }
     if (defId.startsWith('werewolf_')) {
         const keys = cardType === 'action' ? WEREWOLF_ACTION_KEYS : WEREWOLF_MINION_KEYS;

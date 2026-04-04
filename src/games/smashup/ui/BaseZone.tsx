@@ -119,11 +119,11 @@ export const BaseZone: React.FC<{
             : 'cursor-pointer rotate-1 hover:rotate-0';
     const baseCardFrameClassName = `relative w-full h-full bg-white p-[0.4vw] rounded-sm transition-[box-shadow] duration-300
         ${isSelectable
-            ? 'shadow-[0_0_2.5vw_rgba(251,191,36,0.6)] ring-4 ring-amber-400'
+            ? 'shadow-[0_0_2.5vw_rgba(74,222,128,0.58)] ring-4 ring-green-400'
             : canUseBaseAbility
             ? 'shadow-[0_0_2vw_rgba(251,191,36,0.45)] ring-4 ring-amber-300'
             : isDeployMode && !isMinionSelectMode
-            ? 'shadow-[0_0_2vw_rgba(255,255,255,0.4)] ring-4 ring-green-400'
+            ? 'shadow-[0_0_1.8vw_rgba(134,239,172,0.4)] ring-4 ring-green-300'
             : 'shadow-sm group-hover/base:shadow-xl'
         }`;
 
@@ -254,7 +254,7 @@ export const BaseZone: React.FC<{
                     border-[0.12vw] ${isDimmedOngoing
                         ? 'opacity-40 grayscale cursor-not-allowed'
                         : isSelectableOngoing
-                        ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6)]'
+                        ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.52)]'
                         : isOngoingActivationArmed
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
                         : canUseOngoingTalent
@@ -321,6 +321,7 @@ export const BaseZone: React.FC<{
         const showUsedTitanState = titan.talentUsed && !canActivateTitan;
 
         return (
+            <div className="group relative" style={{ width: `${titanCardWidth}vw` }}>
             <motion.div
                 key={titan.uid}
                 data-titan-uid={titan.uid}
@@ -368,7 +369,7 @@ export const BaseZone: React.FC<{
                     clearArmedActivation();
                     onViewTitan(titan.defId);
                 }}
-                className={`group relative aspect-[0.714] bg-white rounded-[0.18vw] shadow-lg cursor-pointer
+                className={`relative aspect-[0.714] w-full bg-white rounded-[0.18vw] shadow-lg cursor-pointer
                     hover:z-50 hover:scale-125 hover:-translate-y-[0.3vw] transition-all border-[0.12vw]
                     ${isTitanActivationArmed
                         ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75)]'
@@ -377,7 +378,6 @@ export const BaseZone: React.FC<{
                         : showUsedTitanState
                         ? USED_STATE_CLASS
                         : `${pConf.border} ${pConf.shadow}`}`}
-                style={{ width: `${titanCardWidth}vw` }}
                 initial={{ y: 20, opacity: 0, scale: 0.7 }}
                 animate={canActivateTitan
                     ? { y: 0, opacity: 1, scale: 1, rotate: [-1, 1, -1], transition: { rotate: { repeat: Infinity, duration: 1.5, ease: 'easeInOut' } } }
@@ -400,22 +400,6 @@ export const BaseZone: React.FC<{
                         transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
                         style={{ background: 'radial-gradient(ellipse at center, rgba(251,191,36,0.4) 0%, transparent 70%)' }}
                     />
-                )}
-                {showDesktopInspectButton && (
-                    <button
-                        type="button"
-                        data-testid={`su-base-titan-magnify-${titan.uid}`}
-                        onClick={(event) => {
-                            event.stopPropagation();
-                            clearArmedActivation();
-                            onViewTitan(titan.defId);
-                        }}
-                        className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
-                    >
-                        <svg className="h-[0.8vw] w-[0.8vw] fill-current" viewBox="0 0 20 20">
-                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                        </svg>
-                    </button>
                 )}
                 {hasMultipleTitanActivations && isTitanActivationArmed && (
                     <div className="absolute -top-[1.45vw] left-1/2 z-50 flex -translate-x-1/2 gap-[0.18vw]">
@@ -455,6 +439,23 @@ export const BaseZone: React.FC<{
                     </div>
                 )}
             </motion.div>
+            {showDesktopInspectButton && (
+                <button
+                    type="button"
+                    data-testid={`su-base-titan-magnify-${titan.uid}`}
+                    onClick={(event) => {
+                        event.stopPropagation();
+                        clearArmedActivation();
+                        onViewTitan(titan.defId);
+                    }}
+                    className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                >
+                    <svg className="h-[0.8vw] w-[0.8vw] fill-current" viewBox="0 0 20 20">
+                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            )}
+            </div>
         );
     };
 
@@ -1076,16 +1077,17 @@ const MinionCard: React.FC<{
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
     const showUsedMinionState = hasTalent && minion.talentUsed && !canActivate;
-    const minionContainerClassName = `relative aspect-[0.714] transition-transform duration-200 group hover:!z-[999] hover:scale-110 hover:rotate-0 ${
+    const minionContainerClassName = `relative aspect-[0.714] transition-transform duration-200 group hover:!z-[999] ${
         isDimmed
-            ? 'opacity-40 grayscale cursor-not-allowed'
+            ? 'cursor-not-allowed'
             : 'cursor-pointer'
     }`;
     const minionFrameClassName = `relative w-full h-full bg-white p-[0.2vw] rounded-[0.2vw] border-[0.15vw] transition-shadow duration-200
+        ${isDimmed ? 'opacity-40 grayscale' : 'hover:scale-110 hover:rotate-0'}
         ${isMultiSelected
-            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.6),0_0_30px_rgba(74,222,128,0.3)]'
+            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.58),0_0_30px_rgba(74,222,128,0.26)]'
             : isSelectableMinion
-            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.6),0_0_30px_rgba(168,85,247,0.3)]'
+            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_15px_rgba(74,222,128,0.52),0_0_30px_rgba(74,222,128,0.22)]'
             : isExpanded
             ? isMinionActivationArmed
                 ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
@@ -1093,7 +1095,7 @@ const MinionCard: React.FC<{
                 ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_18px_rgba(251,191,36,0.75),0_0_36px_rgba(251,191,36,0.35)]'
                 : showUsedMinionState
                 ? USED_STATE_CLASS
-                : 'border-purple-300 ring-2 ring-purple-300 shadow-[0_0_14px_rgba(216,180,254,0.55),0_0_28px_rgba(216,180,254,0.25)]'
+                : 'border-green-300 ring-2 ring-green-300/90 shadow-[0_0_14px_rgba(134,239,172,0.4),0_0_28px_rgba(134,239,172,0.18)]'
             : canActivate
             ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_15px_rgba(251,191,36,0.6),0_0_30px_rgba(251,191,36,0.3)]'
             : showUsedMinionState
@@ -1293,14 +1295,14 @@ const MinionCard: React.FC<{
                                         border-[0.08vw] ${isDimmedAA
                                             ? 'opacity-40 grayscale cursor-not-allowed border-slate-400'
                                             : isSelectableAA
-                                            ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_10px_rgba(168,85,247,0.6)]'
+                                            ? 'border-green-400 ring-2 ring-green-400 shadow-[0_0_10px_rgba(74,222,128,0.55)]'
                                             : isAttachedActivationArmed
                                             ? 'border-amber-300 ring-4 ring-amber-300 shadow-[0_0_14px_rgba(251,191,36,0.75)]'
                                             : canUseAATalent
                                             ? 'border-amber-400 ring-2 ring-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.6)]'
                                             : showUsedAttachedState
                                             ? USED_STATE_CLASS
-                                            : 'border-purple-400 ring-1 ring-purple-300/50'
+                                            : 'border-green-300 ring-1 ring-green-300/65 shadow-[0_0_10px_rgba(134,239,172,0.18)]'
                                         }`}
                                     title={actionTitle}
                                 >
