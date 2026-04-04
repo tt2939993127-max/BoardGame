@@ -14,7 +14,7 @@ const loadingPromises = new Map<string, Promise<GameClientRuntimeModule>>();
 /** 游戏 ID → loadRuntime 函数的映射 */
 const loaderMap = new Map<string, () => Promise<GameClientRuntimeModule>>();
 
-export const GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 4000;
+export const GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 15000;
 
 const createGameImplementationTimeoutMessage = (gameId: string) => (
     `游戏客户端加载超时：${gameId}（${GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS}ms）`

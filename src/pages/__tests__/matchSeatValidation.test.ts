@@ -93,6 +93,32 @@ describe('isMatchNotFoundError', () => {
 });
 
 describe('onlineAiSeats', () => {
+    it('回归：房主重进在线房间时，本地缺失 AI 凭据也不能把 AI 座位降级成人类', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-regression',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {},
+            claimMissingSeatCredential,
+        });
+
+        expect(state.seatControllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
+        expect(claimMissingSeatCredential).toHaveBeenCalledTimes(1);
+        expect(claimMissingSeatCredential).toHaveBeenCalledWith('1');
+        expect(state.seatCredentials).toEqual({ '1': 'reclaimed-1' });
+    });
+
     it('缺少本地 AI 凭据时仍保留 AI 座位定义', async () => {
         const state = await loadOnlineAiSeatState({
             gameConfig: buildGameManifest(),
