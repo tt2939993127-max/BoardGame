@@ -899,14 +899,15 @@ export const MatchRoom = () => {
                     storedAiSeatCredentials,
                     claimMissingSeatCredential: matchStatus.isHost
                         ? async (playerId) => {
+                            const aiPlayerName = t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 });
                             const response = await matchApi.claimSeat(gameId, matchId, playerId, token
                                 ? {
                                     token,
-                                    playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
+                                    playerName: aiPlayerName,
                                 }
                                 : {
                                     guestId,
-                                    playerName: guestName,
+                                    playerName: aiPlayerName,
                                 });
                             return response.playerCredentials;
                         }

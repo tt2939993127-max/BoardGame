@@ -956,6 +956,12 @@
         "damageByFist": "Deal damage equal to Fist faces rolled"
       }
     },
+    "meditation-2": {
+      "name": "Meditation II",
+      "description": "During Defensive Roll Phase, roll 5 dice. Gain Taiji tokens based on results. Deal 1 damage for each [Fist].",
+      "taijiByResult": "Gain Taiji tokens based on results",
+      "damageByFist": "Deal 1 damage for each [Fist]"
+    },
     "transcendence": {
       "name": "Transcendence!",
       "description": "Ultimate Ability! Once activated, opponents cannot interfere.",
@@ -1667,6 +1673,14 @@
       "effects": {
         "damage15": "Deal 15 damage",
         "selfDamage4": "Take 4 self-damage (only if damage was dealt)"
+      }
+    },
+    "rage": {
+      "name": "Rage",
+      "description": "Ultimate Ability: 5 Strength faces, inflict Daze and deal 15 damage.",
+      "effects": {
+        "inflictDaze": "Inflict Daze",
+        "damage15": "Deal 15 damage"
       }
     },
     "thick-skin": {

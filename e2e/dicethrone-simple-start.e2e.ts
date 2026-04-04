@@ -255,6 +255,118 @@ const dispatchHarnessCommand = async (
     });
 };
 
+async function installOneShotAiBatchRejectPatch(page: Page, targetPlayerId = '1') {
+    await page.evaluate(async ({ aiPlayerId }) => {
+        const globalWindow = window as Window & {
+            __DT_AI_BATCH_RETRY_PATCH__?: {
+                installed: boolean;
+                aiPlayerId: string;
+                interceptedCount: number;
+                rejectedCount: number;
+                delegatedCount: number;
+                lastBatchId: string | null;
+                lastReason: string | null;
+                lastCommandCount: number;
+            };
+        };
+        if (globalWindow.__DT_AI_BATCH_RETRY_PATCH__?.installed) {
+            return;
+        }
+
+        const transportModule = await import('/src/engine/transport/client.ts');
+        const proto = transportModule.GameTransportClient?.prototype as {
+            sendBatch?: (
+                this: unknown,
+                batchId: string,
+                commands: Array<{ type: string; payload: unknown }>,
+                onConfirmed?: (state: unknown) => void,
+                onRejected?: (reason: string) => void,
+            ) => void;
+        } | undefined;
+        if (!proto?.sendBatch) {
+            throw new Error('GameTransportClient.sendBatch not available');
+        }
+
+        const originalSendBatch = proto.sendBatch;
+        globalWindow.__DT_AI_BATCH_RETRY_PATCH__ = {
+            installed: true,
+            aiPlayerId,
+            interceptedCount: 0,
+            rejectedCount: 0,
+            delegatedCount: 0,
+            lastBatchId: null,
+            lastReason: null,
+            lastCommandCount: 0,
+        };
+
+        proto.sendBatch = function patchedSendBatch(
+            this: unknown,
+            batchId: string,
+            commands: Array<{ type: string; payload: unknown }>,
+            onConfirmed?: (state: unknown) => void,
+            onRejected?: (reason: string) => void,
+        ) {
+            const tracker = globalWindow.__DT_AI_BATCH_RETRY_PATCH__;
+            const config = (this as { config?: { playerID?: string | null } }).config;
+            const commandCount = Array.isArray(commands) ? commands.length : 0;
+
+            if (
+                tracker
+                && config?.playerID === tracker.aiPlayerId
+                && tracker.rejectedCount === 0
+                && commandCount >= 2
+            ) {
+                tracker.interceptedCount += 1;
+                tracker.rejectedCount += 1;
+                tracker.lastBatchId = batchId;
+                tracker.lastReason = 'command_failed';
+                tracker.lastCommandCount = commandCount;
+                onRejected?.('command_failed');
+                return;
+            }
+
+            if (
+                tracker
+                && config?.playerID === tracker.aiPlayerId
+                && commandCount >= 2
+            ) {
+                tracker.interceptedCount += 1;
+                tracker.delegatedCount += 1;
+                tracker.lastBatchId = batchId;
+                tracker.lastCommandCount = commandCount;
+            }
+
+            return originalSendBatch.call(this, batchId, commands, onConfirmed, onRejected);
+        };
+    }, { aiPlayerId: targetPlayerId });
+}
+
+async function readAiBatchRejectPatchStatus(page: Page): Promise<{
+    installed: boolean;
+    aiPlayerId: string;
+    interceptedCount: number;
+    rejectedCount: number;
+    delegatedCount: number;
+    lastBatchId: string | null;
+    lastReason: string | null;
+    lastCommandCount: number;
+} | null> {
+    return page.evaluate(() => {
+        return (window as Window & {
+            __DT_AI_BATCH_RETRY_PATCH__?: {
+                installed: boolean;
+                aiPlayerId: string;
+                interceptedCount: number;
+                rejectedCount: number;
+                delegatedCount: number;
+                lastBatchId: string | null;
+                lastReason: string | null;
+                lastCommandCount: number;
+            };
+        }).__DT_AI_BATCH_RETRY_PATCH__ ?? null;
+    });
+}
+
 const waitForPhase = async (page: Page, phase: string, timeout = 15000) => {
     await page.waitForFunction((expectedPhase) => {
         return (window as any).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.phase === expectedPhase;
@@ -1002,6 +1114,84 @@ const buildFourPlayerMeteorAllOpponentsState = (state: any) => {
 };
 
 test.describe('DiceThrone Simple Start', () => {
+    test('Online HUD: transport 未就绪时不应误报离线横幅', async ({ browser }, testInfo) => {
+        test.setTimeout(60000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostContext, hostPage } = setup;
+
+        try {
+            await hostContext.addInitScript(() => {
+                const OriginalWebSocket = window.WebSocket;
+                class BlockedWebSocket extends OriginalWebSocket {
+                    constructor(url: string | URL, protocols?: string | string[]) {
+                        super('ws://127.0.0.1:1', protocols);
+                        queueMicrotask(() => {
+                            try {
+                                this.close();
+                            } catch {
+                                // ignore
+                            }
+                        });
+                    }
+                }
+                Object.defineProperty(window, 'WebSocket', {
+                    configurable: true,
+                    writable: true,
+                    value: BlockedWebSocket,
+                });
+            });
+            await hostContext.route(/socket\.io/i, async (route) => {
+                await route.abort();
+            });
+
+            await hostPage.goto(`/play/dicethrone/match/${setup.matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
+            await expect(hostPage.getByText('连接中')).toBeVisible({ timeout: 10000 });
+            await hostPage.waitForTimeout(4200);
+
+            await expect(hostPage.getByText('等待对手加入...')).toHaveCount(0);
+            await expect(hostPage.getByText(/已离线|离线\s*\d+\s*秒/)).toHaveCount(0);
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-hud-loading-no-offline-banner');
+        } finally {
+            await hostContext.unroute(/socket\.io/i).catch(() => undefined);
+            await cleanupDTMatch(setup);
+        }
+    });
+
+    test('Online HUD: 对手真实断开后应显示离线横幅', async ({ browser }, testInfo) => {
+        test.setTimeout(60000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage, guestContext } = setup;
+
+        try {
+            await expect(hostPage.getByText(/已离线|离线\s*\d+\s*秒/)).toHaveCount(0);
+            await guestContext.close();
+
+            await hostPage.waitForTimeout(3500);
+            await expect(hostPage.getByText(/已离线|离线\s*\d+\s*秒/)).toBeVisible({ timeout: 10000 });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '21-online-hud-real-disconnect-offline-banner');
+        } finally {
+            await cleanupDTMatch(setup);
+        }
+    });
+
     test('Online match: Can start a game successfully', async ({ browser }, testInfo) => {
         test.setTimeout(60000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -1356,6 +1546,133 @@ test.describe('DiceThrone Simple Start', () => {
             });
 
             await saveEvidenceScreenshot(hostPage, testInfo, '14-online-ai-hidden-after');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI 首轮 batch 被拒后应自动重试并完成隐藏 multistep-choice', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 一起完成 retry 测试前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+            await installOneShotAiBatchRejectPatch(hostPage, '1');
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenModifyDiceState);
+            await waitForPhase(hostPage, 'offensiveRoll', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            await expect.poll(async () => {
+                const status = await readAiBatchRejectPatchStatus(hostPage);
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    rejectedCount: status?.rejectedCount ?? 0,
+                    delegatedCount: status?.delegatedCount ?? 0,
+                    interactionKind: state.sys?.interaction?.current?.kind ?? null,
+                    interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                    diceValues: (state.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                };
+            }, {
+                timeout: 15000,
+                message: '等待首轮 AI batch 被测试补丁拒绝',
+            }).toEqual({
+                rejectedCount: 1,
+                delegatedCount: 0,
+                interactionKind: 'multistep-choice',
+                interactionPlayerId: '1',
+                diceValues: [1, 2],
+            });
+
+            await expect.poll(async () => {
+                return hostPage.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return {
+                        interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                        isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                        diceValues: (state?.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                    };
+                });
+            }, {
+                timeout: 10000,
+                message: '等待房主过滤视角仍保持被隐藏交互阻塞',
+            }).toEqual({
+                interactionPlayerId: null,
+                isBlocked: true,
+                diceValues: [1, 2],
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '15-online-ai-hidden-multistep-rejected-before-retry');
+
+            await expect.poll(async () => {
+                const status = await readAiBatchRejectPatchStatus(hostPage);
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    rejectedCount: status?.rejectedCount ?? 0,
+                    delegatedCount: status?.delegatedCount ?? 0,
+                    lastCommandCount: status?.lastCommandCount ?? 0,
+                    interactionKind: state.sys?.interaction?.current?.kind ?? null,
+                    interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                    diceValues: (state.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                };
+            }, {
+                timeout: 30000,
+                message: '等待 AI 在 batch 被拒后自动重试并成功提交多条 MODIFY_DIE',
+            }).toEqual({
+                rejectedCount: 1,
+                delegatedCount: 1,
+                lastCommandCount: 3,
+                interactionKind: null,
+                interactionPlayerId: null,
+                diceValues: [6, 6],
+            });
+
+            await expect.poll(async () => {
+                return hostPage.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return {
+                        interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                        isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                        diceValues: (state?.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                    };
+                });
+            }, {
+                timeout: 10000,
+                message: '等待房主过滤视角在 retry 成功后解除阻塞',
+            }).toEqual({
+                interactionPlayerId: null,
+                isBlocked: false,
+                diceValues: [6, 6],
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '16-online-ai-hidden-multistep-after-retry');
         } finally {
             await setup.hostContext.close();
         }

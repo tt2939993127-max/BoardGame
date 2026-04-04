@@ -1,5 +1,5 @@
 import type { GameManifestEntry } from '../games/manifest.types';
-import { normalizeLocalMatchPreferences, type AiSeatController } from '../engine/ai';
+import { normalizeSeatController, type AiSeatController } from '../engine/ai';
 import type { MatchInfo } from '../services/matchApi';
 
 export type OnlineAiSeatState = {
@@ -46,12 +46,19 @@ export async function loadOnlineAiSeatState({
 }: LoadOnlineAiSeatStateArgs): Promise<OnlineAiSeatState> {
     const setupData = toPlainRecord(matchInfo.setupData);
     const rawSeatControllers = toPlainRecord(setupData.seatControllers);
-    const rawSetupSelections = toPlainRecord(setupData.setupSelections);
-    const seatControllers = normalizeLocalMatchPreferences(gameConfig, {
-        numPlayers: matchInfo.players.length,
-        seatControllers: rawSeatControllers,
-        setupSelections: rawSetupSelections,
-    }).seatControllers;
+    const seatControllers: Record<string, AiSeatController> = {};
+    for (let index = 0; index < matchInfo.players.length; index += 1) {
+        const playerId = String(index);
+        const rawController = rawSeatControllers[playerId];
+        seatControllers[playerId] = (
+            rawController
+            && typeof rawController === 'object'
+            && !Array.isArray(rawController)
+            && typeof rawController.type === 'string'
+        )
+            ? normalizeSeatController(rawController as AiSeatController, gameConfig.ai)
+            : { type: 'human' };
+    }
 
     const seatCredentials: Record<string, string> = { ...storedAiSeatCredentials };
     if (claimMissingSeatCredential) {

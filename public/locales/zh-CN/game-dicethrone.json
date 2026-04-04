@@ -1120,6 +1120,12 @@
         "damageByFist": "造成伤害=结果中拳面的数量"
       }
     },
+    "meditation-2": {
+      "name": "清修 II",
+      "description": "防御掷骰阶段，投掷5颗骰子。根据结果获得太极标记。每有[拳]造成1点伤害。",
+      "taijiByResult": "根据结果获得太极标记",
+      "damageByFist": "每有[拳]造成1点伤害"
+    },
     "transcendence": {
       "name": "超越！",
       "description": "终极招式！一旦启动，对手无法干扰。",

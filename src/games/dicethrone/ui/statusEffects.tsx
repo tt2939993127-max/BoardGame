@@ -509,7 +509,7 @@ export const SelectableStatusBadge = ({
     /** 在弹窗内使用时传 true，确保 tooltip 层级高于弹窗 */
     inModal?: boolean;
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { color: 'from-gray-500 to-gray-600' };
     const isToken = !STATUS_EFFECT_META[effectId] && Boolean(TOKEN_META[effectId]);
     const i18nPrefix = isToken ? 'tokens' : 'statusEffects';
@@ -518,11 +518,15 @@ export const SelectableStatusBadge = ({
     const descriptionKey = `${i18nPrefix}.${effectId}.description`;
     const nameKey = `${i18nPrefix}.${effectId}.name`;
     const description = resolveI18nList(
-        t(descriptionKey, { returnObjects: true, defaultValue: [] })
+        i18n.exists(descriptionKey, { ns: 'game-dicethrone' })
+            ? t(descriptionKey, { returnObjects: true, defaultValue: [] })
+            : []
     );
     const info = {
         ...meta,
-        name: t(nameKey, { defaultValue: effectId }) as string,
+        name: (i18n.exists(nameKey, { ns: 'game-dicethrone' })
+            ? t(nameKey, { defaultValue: effectId })
+            : effectId) as string,
         description,
     };
     const [isHovered, setIsHovered] = React.useState(false);

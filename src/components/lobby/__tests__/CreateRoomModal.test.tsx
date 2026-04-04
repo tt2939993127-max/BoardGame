@@ -71,7 +71,7 @@ describe('CreateRoomModal AI default state', () => {
         expect(screen.queryByText('AI 占位')).toBeNull();
     });
 
-    it('有已保存 AI 偏好时，打开弹窗会恢复为开启', () => {
+    it('有已保存 AI 偏好时，打开弹窗仍默认关闭，等用户自己开启', () => {
         const initialPreferences: LocalMatchPreferences = {
             numPlayers: 2,
             setupSelections: {},
@@ -89,8 +89,8 @@ describe('CreateRoomModal AI default state', () => {
             initialPreferences,
         }));
 
-        expect(screen.getByText('Enabled')).toBeInTheDocument();
-        expect(screen.getByText('AI 占位')).toBeInTheDocument();
+        expect(screen.getByText('Disabled')).toBeInTheDocument();
+        expect(screen.queryByText('AI 占位')).toBeNull();
     });
 
     it('首次打开默认关闭时，手动点击后仍可开启 AI', () => {
@@ -150,6 +150,7 @@ describe('CreateRoomModal AI default state', () => {
             initialPreferences,
         }));
 
+        fireEvent.click(screen.getByRole('button', { name: /加入 AI/i }));
         fireEvent.click(screen.getByRole('button', { name: '困难' }));
         fireEvent.click(screen.getByRole('button', { name: '确认' }));
 

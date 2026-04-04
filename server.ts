@@ -25,7 +25,7 @@ import { hybridStorage } from './src/server/storage/HybridStorage';
 import { runStartupCleanupTasks, type StartupCleanupTask } from './src/server/storage/startupCleanup';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
-import { areAllSeatsOccupied, hasOccupiedPlayers, isSupportedPlayerCount } from './src/server/matchOccupancy';
+import { areAllSeatsOccupied, hasOccupiedPlayers, isSeatOccupied, isSupportedPlayerCount } from './src/server/matchOccupancy';
 import {
     decideDuplicateOwnerRoomAction,
     DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
@@ -440,17 +440,25 @@ app.use(bodyParser());
 const resolveOwnerFromRequest = (
     ctx: Koa.Context,
     setupData: Record<string, unknown>,
-): { ownerKey: string; ownerType: 'user' | 'guest' } => {
+    requestedPlayerName?: string,
+): { ownerKey: string; ownerType: 'user' | 'guest'; ownerName?: string } => {
     const authHeader = ctx.get('authorization');
     const rawToken = claimSeatUtils.parseBearerToken(authHeader);
     const payload = rawToken ? claimSeatUtils.verifyGameToken(rawToken, JWT_SECRET) : null;
+    const normalizedRequestedPlayerName = typeof requestedPlayerName === 'string' && requestedPlayerName.trim()
+        ? requestedPlayerName.trim()
+        : undefined;
 
     if (rawToken && !payload?.userId) {
         ctx.throw(401, 'Invalid token');
         return { ownerKey: 'user:invalid', ownerType: 'user' };
     }
     if (payload?.userId) {
-        return { ownerKey: `user:${payload.userId}`, ownerType: 'user' };
+        return {
+            ownerKey: `user:${payload.userId}`,
+            ownerType: 'user',
+            ownerName: normalizedRequestedPlayerName ?? (payload.username?.trim() || undefined),
+        };
     }
 
     const guestId =
@@ -461,7 +469,11 @@ const resolveOwnerFromRequest = (
         ctx.throw(400, 'guestId is required');
         return { ownerKey: 'guest:invalid', ownerType: 'guest' };
     }
-    return { ownerKey: `guest:${guestId}`, ownerType: 'guest' };
+    return {
+        ownerKey: `guest:${guestId}`,
+        ownerType: 'guest',
+        ownerName: normalizedRequestedPlayerName,
+    };
 };
 
 const resolveOwnerKeyFromMetadata = (metadata?: MatchMetadata | null): string | undefined => {
@@ -472,6 +484,32 @@ const resolveOwnerKeyFromMetadata = (metadata?: MatchMetadata | null): string | 
 const isEmptyRoomByMetadata = (metadata?: MatchMetadata | null): boolean => {
     if (!metadata?.players) return false;
     return !hasOccupiedPlayers(metadata.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean | null }>);
+};
+
+const resolveJoinSeat = (
+    players: MatchMetadata['players'],
+    requestedPlayerID?: string,
+): { playerID?: string; reason?: 'player_not_found' | 'seat_occupied' | 'room_full' } => {
+    if (requestedPlayerID) {
+        const requestedSeat = players[requestedPlayerID];
+        if (!requestedSeat) {
+            return { reason: 'player_not_found' };
+        }
+        if (isSeatOccupied(requestedSeat)) {
+            return { reason: 'seat_occupied' };
+        }
+        return { playerID: requestedPlayerID };
+    }
+
+    const openSeat = Object.entries(players)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .find(([, seat]) => !isSeatOccupied(seat));
+
+    if (!openSeat) {
+        return { reason: 'room_full' };
+    }
+
+    return { playerID: openSeat[0] };
 };
 
 const cleanupMatchRoom = async (

@@ -594,11 +594,21 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const isViewRolling = viewPid === rollerId;
     const rollConfirmed = G.rollConfirmed;
     
+    const shouldDeferSelfAbilitySelectionUntilResponseEnds = (
+        isResponseWindowOpen
+        && currentResponderId === rootPid
+    );
+
     // availableAbilityIds 计算：
-    // 1. 响应窗口打开时，显示响应者的可用技能（不限于掷骰阶段）
-    // 2. 掷骰阶段，显示掷骰者的可用技能
-    // 3. 其他情况，不显示技能
+    // 1. 自己正处于响应窗口时，先隐藏技能提示，等响应结束后再恢复选择
+    // 2. 响应窗口打开时，非本地响应者视角仍可显示其可用技能
+    // 3. 掷骰阶段，显示掷骰者的可用技能
+    // 4. 其他情况，不显示技能
     const availableAbilityIds = React.useMemo(() => {
+        if (shouldDeferSelfAbilitySelectionUntilResponseEnds) {
+            return [];
+        }
+
         // 响应窗口打开时，显示当前响应者的可用技能
         if (isResponseWindowOpen && currentResponderId) {
             // 如果当前视角是响应者，显示响应者的可用技能
@@ -611,7 +621,16 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
         }
         // 掷骰阶段，显示掷骰者的可用技能
         return isViewRolling ? access.availableAbilityIds : [];
-    }, [isResponseWindowOpen, currentResponderId, viewPid, isViewRolling, access.availableAbilityIds, G, currentPhase]);
+    }, [
+        shouldDeferSelfAbilitySelectionUntilResponseEnds,
+        isResponseWindowOpen,
+        currentResponderId,
+        viewPid,
+        isViewRolling,
+        access.availableAbilityIds,
+        G,
+        currentPhase,
+    ]);
     
     const availableAbilityIdsForRoller = access.availableAbilityIds;
     const selectedAbilityId = currentPhase === 'defensiveRoll'
@@ -629,17 +648,17 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     // 进攻技能特写期间阻止所有操作
     const canAdvancePhase = isFocusPlayer && access.canAdvancePhase && !isAttackShowcaseVisible;
     const canResolveChoice = Boolean(choice.hasChoice && choice.playerId === rootPid);
-    const canInteractDice = canOperateView && isViewRolling && !isAttackShowcaseVisible;
+    const canInteractDice = canOperateView && isViewRolling && isRollPhase && !isAttackShowcaseVisible;
 
     // 防御阶段进入时就应高亮可用的防御技能，不需要等投骰
-    // 响应窗口打开时，如果本地玩家是响应者，也应该高亮可用技能
+    // 但如果自己正处于响应窗口，需要先完成响应，避免提前再次选技能
     const canHighlightAbility = (
-        (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' || hasRolled))
-        || (isResponseWindowOpen && currentResponderId === rootPid)
+        !shouldDeferSelfAbilitySelectionUntilResponseEnds
+        && (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' || hasRolled))
     ) && !isAttackShowcaseVisible;
     const canSelectAbility = (
-        (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed))
-        || (isResponseWindowOpen && currentResponderId === rootPid)
+        !shouldDeferSelfAbilitySelectionUntilResponseEnds
+        && (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' ? true : G.rollConfirmed))
     ) && !isAttackShowcaseVisible;
 
     // 同一 slot 多 variant 选择：玩家点击 slot 时，如果该 slot 有多个 variant 同时满足，弹窗让玩家选

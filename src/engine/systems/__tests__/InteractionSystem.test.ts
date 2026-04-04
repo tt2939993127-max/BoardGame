@@ -122,6 +122,48 @@ describe('InteractionSystem', () => {
         expect(viewForOther?.interaction?.isBlocked).toBe(true);
     });
 
+    it('playerView 应为 optionsGenerator 刷新的同 ID 选项保留卡面元数据', () => {
+        const system = createInteractionSystem<TestCore>();
+        const interaction = createSimpleChoice(
+            'interaction-player-view-refresh',
+            '0',
+            '查看对手手牌',
+            [
+                {
+                    id: 'card-1',
+                    label: '测试卡牌',
+                    value: { cardUid: 'card-1', defId: 'test-card-1' },
+                    displayMode: 'card' as const,
+                },
+            ],
+        );
+        (interaction.data as typeof interaction.data & {
+            optionsGenerator?: (state: MatchState<TestCore>) => Array<{ id: string; label: string; value: { cardUid: string } }>;
+        }).optionsGenerator = () => [
+            {
+                id: 'card-1',
+                label: '测试卡牌',
+                value: { cardUid: 'card-1' },
+            },
+        ];
+
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current: interaction,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
+
+        const viewForTarget = system.playerView?.(state, '0') as any;
+        const option = viewForTarget?.interaction?.current?.data?.options?.[0];
+
+        expect(option?.displayMode).toBe('card');
+        expect(option?.value?.defId).toBe('test-card-1');
+    });
+
     it('非 slider simple-choice 允许追加 mergedValue 字段，但不允许覆盖原字段', () => {
         const system = createSimpleChoiceSystem<TestCore>();
         const current = createSimpleChoice(

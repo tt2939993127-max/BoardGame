@@ -263,6 +263,55 @@ describe('InteractionSystem - 通用刷新', () => {
         expect(options[0].id).toBe('custom');
     });
 
+    it('refreshInteractionOptions 应为同 ID 选项保留原始卡面元数据', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'test-renderable-metadata-refresh',
+            'p1',
+            '选择一张卡牌',
+            [
+                {
+                    id: 'card-1',
+                    label: '卡牌 1',
+                    value: { cardUid: 'card-1', defId: 'test-card-1' },
+                    displayMode: 'card' as const,
+                },
+            ],
+            { sourceId: 'test' },
+        );
+
+        (interaction.data as any).optionsGenerator = () => [
+            {
+                id: 'card-1',
+                label: '卡牌 1',
+                value: { cardUid: 'card-1' },
+            },
+        ];
+
+        state = queueInteraction(state, interaction);
+        state = refreshInteractionOptions(state);
+
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(1);
+        expect(options[0].displayMode).toBe('card');
+        expect(options[0].value.defId).toBe('test-card-1');
+    });
+
     it('选项中包含非卡牌选项（如 skip）时，应该保留这些选项', () => {
         let state: MatchState<TestCore> = {
             core: {

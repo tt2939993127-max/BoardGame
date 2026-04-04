@@ -26,7 +26,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import type { DamageDealtEvent, HealAppliedEvent, HeroState, AbilityDef } from '../domain/types';
-import type { CpChangedEvent, AttackResolvedEvent } from '../domain/events';
+import type { CpChangedEvent } from '../domain/events';
 import type { PlayerId } from '../../../engine/types';
 import type { StatusAtlases } from '../ui/statusEffects';
 import { getStatusEffectIconNode } from '../ui/statusEffects';
@@ -268,7 +268,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             frozenHp,
             damage: 0,
         };
-    }, [opponentId, opponent, player, getAbilityStartPos, refs.opponentHp, refs.selfHp]);
+    }, [currentPlayerId, opponentId, opponent, player, getAbilityStartPos, refs.opponentHp, refs.selfHp]);
 
     /**
      * 构建单个 CP 变化事件的 FX 参数
@@ -348,19 +348,20 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
 
     /** 推入队列中的下一步，返回是否成功 */
     const pushNextStep = useCallback(() => {
-        const next = pendingStepsRef.current.shift();
-        if (!next) {
-            activeFxIdRef.current = null;
-            return;
-        }
-        const fxId = fxBus.push(next.cue, {}, next.params);
-        if (fxId) {
-            fxImpactMapRef.current.set(fxId, { bufferKey: next.bufferKey, damage: next.damage });
-            activeFxIdRef.current = fxId;
-        } else {
+        while (true) {
+            const next = pendingStepsRef.current.shift();
+            if (!next) {
+                activeFxIdRef.current = null;
+                return;
+            }
+            const fxId = fxBus.push(next.cue, {}, next.params);
+            if (fxId) {
+                fxImpactMapRef.current.set(fxId, { bufferKey: next.bufferKey, damage: next.damage });
+                activeFxIdRef.current = fxId;
+                return;
+            }
             // cue 未注册或被跳过：立即释放冻结，避免旧 HP 卡住。
             releaseBufferedStep(next);
-            pushNextStep();
         }
     }, [fxBus, releaseBufferedStep]);
 

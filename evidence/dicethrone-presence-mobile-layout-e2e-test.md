@@ -38,7 +38,7 @@ node scripts/infra/vitest-cli-safe.mjs run src/pages/__tests__/matchSeatValidati
   - 传输就绪后应优先采用在线同步状态
   - AI 座位在 HUD 中视作常在线
 
-### 2. Playwright E2E
+### 2. Playwright E2E（移动端右漂）
 
 命令：
 
@@ -57,6 +57,34 @@ npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "mobile na
 - 主棋盘、玩家板、提示板、弃牌堆的移动端边界断言
 - 主棋盘中心组合区（玩家板 + 提示板）的横向中心点断言，防止整体继续右漂
 
+### 3. Playwright E2E（HUD 离线横幅）
+
+命令 1：
+
+```powershell
+npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online HUD: transport 未就绪时不应误报离线横幅"
+```
+
+结果：
+
+- `1 passed`
+
+命令 2：
+
+```powershell
+npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online HUD: 对手真实断开后应显示离线横幅"
+```
+
+结果：
+
+- `1 passed`
+
+这两条用例覆盖：
+
+- 在线 Dice Throne 双人房间，双方都已完成真实占座并进入联机角色选择页。
+- `transport` 被人为阻断时，页面停留在“连接中 / 正在加载对局资源...”，但顶部不应提前出现“已离线 xx 秒”红色横幅。
+- 对手页面真实断开后，房主页顶部应在延迟后出现红色离线横幅，而不是在加载阶段误报。
+
 ## 产物截图
 
 - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\10-mobile-main-board-state.png`
@@ -64,9 +92,16 @@ npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "mobile na
 - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\12-mobile-tip-board-surface-magnify-open.png`
 - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\13-mobile-player-board-button-magnify-open.png`
 - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\14-mobile-discard-pile-inspect-open.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-HUD-transport-未就绪时不应误报离线横幅\20-online-hud-loading-no-offline-banner.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-HUD-对手真实断开后应显示离线横幅\21-online-hud-real-disconnect-offline-banner.png`
 
-## 限制说明
+## HUD 截图人工复核结论
 
-- 本轮截图已成功生成，且对应 E2E 断言全部通过。
-- 但当前会话的本地图像查看工具受限，无法直接打开这些本地 PNG 做肉眼复核。
-- 因此本文件只记录“自动化断言已通过 + 截图路径已落地”的事实，不伪造“已人工看图”的结论。
+- `20-online-hud-loading-no-offline-banner.png`
+  - 画面只有居中的“连接中 / 正在加载对局资源...”加载态，没有顶部红色离线横幅。
+  - 按钮文案为“连接服务器...”，说明此时确实处于 transport 未就绪阶段，不是已经连上后被断开。
+  - 图中不存在“等待对手加入...”或“已离线 xx 秒”文案，符合“加载中不误报离线”的目标。
+- `21-online-hud-real-disconnect-offline-banner.png`
+  - 顶部中央出现红色横幅，文案为 `Guest-... 已离线 0秒`，证明真实断开后 HUD 已进入离线提示态。
+  - 红色横幅和角色选择主界面同时存在，说明这是 HUD 层提示，不是页面整体错误兜底。
+  - 房主与对手底部座位胶囊仍保留，页面主界面未塌陷，符合“只补正确离线提示，不破坏正常 UI”的目标。

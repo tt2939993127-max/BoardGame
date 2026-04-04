@@ -88,19 +88,6 @@ function countAiSeats(seatControllers: Record<string, AiSeatController>, numPlay
     return total;
 }
 
-function resolveLocalAiDifficulty(
-    seatControllers: Record<string, AiSeatController>,
-    numPlayers: number,
-): AiDifficultyLevel {
-    for (let index = 0; index < numPlayers; index += 1) {
-        const controller = seatControllers[String(index)];
-        if (controller?.type === 'local-ai') {
-            return controller.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY;
-        }
-    }
-    return DEFAULT_LOCAL_AI_DIFFICULTY;
-}
-
 function applyLocalAiDifficulty(
     seatControllers: Record<string, AiSeatController>,
     numPlayers: number,
@@ -144,25 +131,22 @@ export const CreateRoomModal = ({
 
     useEffect(() => {
         if (!isOpen) return;
-        const hasSavedPreferences = initialPreferences != null;
         const nextPreferences = normalizeLocalMatchPreferences(
             gameManifest,
             (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
         );
-        const nextSeatControllers = hasSavedPreferences
-            ? forceHumanOwnerSeat(nextPreferences.seatControllers)
-            : forceHumanOwnerSeat(
-                Object.fromEntries(
-                    Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
-                ),
-            );
+        const nextSeatControllers = forceHumanOwnerSeat(
+            Object.fromEntries(
+                Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+            ),
+        );
 
         setRoomName('');
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
-        setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
+        setEnableAi(false);
+        setAiDifficulty(DEFAULT_LOCAL_AI_DIFFICULTY);
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
