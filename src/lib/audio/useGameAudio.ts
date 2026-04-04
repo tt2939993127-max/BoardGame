@@ -182,19 +182,19 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         return lastSignature ?? eventEntries.length;
     })();
 
-    const runtimeContext: AudioRuntimeContext<G, Ctx, Meta> = { G, ctx, meta };
+    const runtimeContext = useMemo<AudioRuntimeContext<G, Ctx, Meta>>(() => ({ G, ctx, meta }), [G, ctx, meta]);
     // 用 ref 持有 runtimeContext，避免 useCallback 依赖不稳定的对象引用
     const runtimeContextRef = useRef(runtimeContext);
     useEffect(() => {
         runtimeContextRef.current = runtimeContext;
-    });
+    }, [runtimeContext]);
 
     const contextualPreloadKeys = useMemo(() => {
         if (!config.contextualPreloadKeys) return [] as SoundKey[];
         const keys = config.contextualPreloadKeys(runtimeContext);
         if (!keys || keys.length === 0) return [] as SoundKey[];
         return keys.filter((key): key is SoundKey => !!key);
-    }, [config.contextualPreloadKeys, G, ctx, meta]);
+    }, [config, runtimeContext]);
 
     const contextualPreloadSignature = useMemo(() => {
         if (contextualPreloadKeys.length === 0) return '';
@@ -276,7 +276,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         return () => {
             active = false;
         };
-    }, []);
+    }, [config.criticalSounds]);
 
     useEffect(() => {
         if (!registryLoaded) return;
@@ -315,6 +315,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         setPlaylist,
         playBgm,
         stopBgm,
+        eventEntries,
         eventEntriesVersion,
         resolveBgmPlan,
         gameId,
@@ -332,7 +333,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         pending.forEach((key) => contextualPreloadRef.current.add(key));
         // preloadKeys 内部已走 requestIdleCallback 空闲调度，不会与图片竞争连接
         AudioManager.preloadKeys(pending);
-    }, [registryLoaded, contextualPreloadSignature, contextualPreloadKeys.length]);
+    }, [registryLoaded, contextualPreloadKeys, contextualPreloadSignature]);
 
     useEffect(() => {
         if (!initializedRef.current || !registryLoaded) return;
@@ -439,7 +440,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 playSound(key);
             }
         }
-    }, [registryLoaded, eventEntriesVersion, config]);
+    }, [registryLoaded, eventEntries, eventEntriesVersion, config, gameId]);
 
     useEffect(() => {
         if (!registryLoaded) return;
@@ -464,7 +465,7 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
         }
 
         prevRuntimeRef.current = currentRuntime;
-    }, [registryLoaded, config.stateTriggers, G, ctx]);
+    }, [registryLoaded, config.stateTriggers, runtimeContext]);
 
     useEffect(() => (
         () => {

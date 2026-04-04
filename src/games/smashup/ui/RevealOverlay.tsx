@@ -20,7 +20,6 @@ import { getCardDef, getBaseDef, resolveCardName } from '../data/cards';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
 import type { EventStreamEntry, PlayerId } from '../../../engine/types';
 import { SU_EVENTS } from '../domain/types';
-import { CARD_DISPLAY_CONFIG } from './cardDisplayConfig';
 
 // ============================================================================
 // 类型
@@ -63,14 +62,21 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
     // 注意：展示 UI 需要显示历史的展示事件，所以不跳过历史事件
     // 不使用 useEventStreamCursor（它会跳过历史事件），直接管理游标
     useEffect(() => {
+        let cancelled = false;
         // 检测 Undo 回退：最大 ID 回退时重置队列和游标
         if (entries.length > 0) {
             const maxId = entries[entries.length - 1].id;
             if (maxId < lastSeenIdRef.current) {
                 console.log('[RevealOverlay] Undo 回退检测，重置队列');
-                setQueue([]);
+                queueMicrotask(() => {
+                    if (!cancelled) {
+                        setQueue([]);
+                    }
+                });
                 lastSeenIdRef.current = maxId;
-                return;
+                return () => {
+                    cancelled = true;
+                };
             }
         }
 
@@ -171,10 +177,17 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
 
         if (newItems.length > 0) {
             console.log('[RevealOverlay] 更新队列，新增项:', newItems.length);
-            setQueue(prev => [...prev, ...newItems].slice(-5));
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setQueue(prev => [...prev, ...newItems].slice(-5));
+                }
+            });
         } else {
             console.log('[RevealOverlay] 无新项添加到队列');
         }
+        return () => {
+            cancelled = true;
+        };
     }, [entries, currentPlayerId, TRIGGER_EVENTS]);
 
     // 自动消失定时器

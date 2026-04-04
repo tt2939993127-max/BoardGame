@@ -53,6 +53,15 @@ function buildRendererPreviewRef(defId: string | undefined): CardPreviewRef | un
     };
 }
 
+type PromptContextShape = {
+    continuationContext?: {
+        defId?: string;
+        baseIndex?: number;
+    };
+};
+
+type I18nTranslate = (key: string, opts?: Record<string, unknown>) => string;
+
 /** 从选项 value 中提取 defId（卡牌/随从/基地） */
 function extractDefId(value: unknown): string | undefined {
     if (!value || typeof value !== 'object') return undefined;
@@ -81,14 +90,14 @@ function isCardOption(option: { value: unknown; displayMode?: 'card' | 'button' 
 }
 
 /** 从 continuationContext 提取上下文卡牌预览 ref */
-function extractContextPreview(prompt: any): CardPreviewRef | undefined {
-    const ctx = prompt?.continuationContext as Record<string, unknown> | undefined;
+function extractContextPreview(prompt: PromptContextShape | null | undefined): CardPreviewRef | undefined {
+    const ctx = prompt?.continuationContext;
     if (!ctx || typeof ctx.defId !== 'string') return undefined;
     return buildRendererPreviewRef(ctx.defId);
 }
 
 /** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
-export function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
+export function resolveI18nKeys(text: string, t: I18nTranslate): string {
     const directResolved = t(text, { defaultValue: '' });
     if (directResolved && directResolved !== text) {
         return directResolved;
@@ -221,8 +230,15 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     // 使用 interaction 对象引用而不是 interaction.id，因为可能出现 ID 相同但内容不同的情况
     // （如海盗王移动后，基地能力创建新交互时使用了相同的 timestamp）
     useEffect(() => {
-        setSubmittingInteractionId(null);
-        setSelectedIds([]);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setSubmittingInteractionId(null);
+            setSelectedIds([]);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [interaction]);  // ← 监听 interaction 对象引用，而不是 interaction?.id
 
     const canSubmitMulti = useMemo(
@@ -247,7 +263,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
     const title = useMemo(() => {
         if (!prompt) return '';
         return resolveI18nKeys(prompt.title, t);
-    }, [prompt?.title, t]);
+    }, [prompt, t]);
 
     // 解析所有选项 label 中的 i18n key
     const resolvedOptions = useMemo(() => {
@@ -261,26 +277,40 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                 })
                 : resolveI18nKeys(opt.label, t),
         }));
-    }, [prompt?.options, t]);
+    }, [prompt, t]);
 
     // 通用跳过选项检测：自动分离 id === 'skip' 的选项，渲染为独立按钮
     const skipOption = useMemo(() => resolvedOptions.find(opt => opt.id === 'skip'), [resolvedOptions]);
     const nonSkipOptions = useMemo(() => resolvedOptions.filter(opt => opt.id !== 'skip'), [resolvedOptions]);
     const rawSlider = (prompt as { slider?: unknown } | undefined)?.slider;
-    const sliderConfig = useMemo(() => parseSliderConfig({ slider: rawSlider }), [prompt?.id, rawSlider]);
+    const sliderConfig = useMemo(() => parseSliderConfig({ slider: rawSlider }), [rawSlider]);
     const [sliderValue, setSliderValue] = useState(1);
 
     useEffect(() => {
+        let cancelled = false;
         if (!sliderConfig) {
-            setSliderValue(1);
-            return;
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setSliderValue(1);
+                }
+            });
+            return () => {
+                cancelled = true;
+            };
         }
         const normalized = Math.min(
             sliderConfig.max,
             Math.max(sliderConfig.min, Math.floor(sliderConfig.defaultValue)),
         );
-        setSliderValue(normalized);
-    }, [prompt?.id, sliderConfig?.min, sliderConfig?.max, sliderConfig?.defaultValue]);
+        queueMicrotask(() => {
+            if (!cancelled) {
+                setSliderValue(normalized);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [sliderConfig]);
 
     const sliderConfirmOption = useMemo(() => {
         if (!sliderConfig) return undefined;
@@ -631,7 +661,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
         const textOptions = nonSkipOptions.filter(opt => !isCardOption(opt));
         
         // 提取基地上下文信息（用于高亮和标题显示）
-        const contextBaseIndex = (prompt as any)?.continuationContext?.baseIndex;
+        const contextBaseIndex = (prompt as PromptContextShape | undefined)?.continuationContext?.baseIndex;
         const contextBaseDef = contextBaseIndex !== undefined ? getBaseDef(prompt.state?.bases?.[contextBaseIndex]?.defId) : undefined;
         const contextBaseName = contextBaseDef ? resolveCardName(contextBaseDef, t) : undefined;
 
