@@ -13,6 +13,21 @@ import {
     shouldReserveSystemBackGesture,
 } from '../../games/summonerwars/ui/MapContainer';
 
+const { nativeAndroidRuntimeState, androidLiveUpdateSnapshotState } = vi.hoisted(() => ({
+    nativeAndroidRuntimeState: {
+        value: false,
+    },
+    androidLiveUpdateSnapshotState: {
+        value: {
+            enabled: false,
+            manifestUrl: '',
+            channel: 'stable',
+            nativeAndroid: false,
+            updaterLoaded: false,
+        },
+    },
+}));
+
 const mockLoggerError = vi.fn();
 const mockNavigate = vi.fn();
 const mockSetSearchParams = vi.fn();
@@ -187,6 +202,15 @@ vi.mock('../../services/lobbySocket', () => ({
 
 vi.mock('../../hooks/useLobbyMatchPresence', () => ({
     useLobbyMatchPresence: () => lobbyPresenceState,
+}));
+
+vi.mock('../../lib/mobile/androidRuntime', () => ({
+    isNativeAndroidRuntime: () => nativeAndroidRuntimeState.value,
+    isAndroidShellBuildMode: () => false,
+}));
+
+vi.mock('../../lib/mobile/androidLiveUpdates', () => ({
+    readAndroidLiveUpdateSnapshot: vi.fn(async () => androidLiveUpdateSnapshotState.value),
 }));
 
 vi.mock('../../core/cursor/useGlobalCursor', () => ({
@@ -684,6 +708,14 @@ describe('resolveFollowCurrentTurnPlayerId', () => {
 describe('Home missing match confirmation', () => {
     beforeEach(() => {
         cleanup();
+        nativeAndroidRuntimeState.value = false;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: false,
+            manifestUrl: '',
+            channel: 'stable',
+            nativeAndroid: false,
+            updaterLoaded: false,
+        };
         hasStoredMatch = true;
         lobbyPresenceState = {
             matches: [{ matchID: 'match-1', gameName: 'tictactoe', players: [] }],
@@ -829,5 +861,66 @@ describe('Home missing match confirmation', () => {
         expect(mockPublishMatchCleanupNotice).toHaveBeenCalledWith('match-1');
         expect(mockMarkMatchCleanupNoticeSeen).toHaveBeenCalled();
         expect(mockToastWarning).toHaveBeenCalledWith({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    });
+});
+
+describe('Home native runtime footer', () => {
+    beforeEach(() => {
+        cleanup();
+        nativeAndroidRuntimeState.value = false;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: false,
+            manifestUrl: '',
+            channel: 'stable',
+            nativeAndroid: false,
+            updaterLoaded: false,
+        };
+        mockGetLatestStoredMatchCredentials.mockImplementation(() => null);
+        mockReadStoredMatchCredentials.mockImplementation(() => null);
+        mockGetOwnerActiveMatch.mockReturnValue(null);
+        mockGetMatch.mockReset();
+        mockSetSearchParams.mockReset();
+        mockNavigate.mockReset();
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('网页端只显示单一版本号，不显示 Bundle/App/OTA 信息', async () => {
+        render(<Home />);
+
+        await waitFor(() => {
+            expect(screen.getByText('0.5.1')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText(/^Bundle /)).toBeNull();
+        expect(screen.queryByText(/^App /)).toBeNull();
+        expect(screen.queryByText(/^Latest /)).toBeNull();
+        expect(screen.queryByText('OTA 未对齐')).toBeNull();
+    });
+
+    it('仅在原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {
+        nativeAndroidRuntimeState.value = true;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            channel: 'stable',
+            nativeAndroid: true,
+            updaterLoaded: true,
+            nativeVersion: '0.5.1',
+            currentBundleVersion: '0.5.0-ota-2026-04-04',
+            manifestVersion: '0.5.1-ota-2026-04-04',
+        };
+
+        render(<Home />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Bundle 0.5.0')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
+        expect(screen.getByText('Latest 0.5.1')).toBeInTheDocument();
+        expect(screen.getByText('OTA 未对齐')).toBeInTheDocument();
     });
 });

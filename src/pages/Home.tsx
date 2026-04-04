@@ -220,7 +220,7 @@ export const Home = () => {
         const bundleVersion = otaSnapshot?.currentBundleVersion?.trim();
         return bundleVersion || packageJson.version;
     }, [otaSnapshot?.currentBundleVersion]);
-    const shouldShowNativeAppVersion = isNativeAndroid;
+    const shouldShowNativeAppVersion = isNativeAndroid && otaSnapshot?.nativeAndroid === true;
     const homeVersionLabel = useMemo(
         () => isVersionExpanded ? activeBundleVersion.replace(/^v/i, '') : toShortVersionLabel(activeBundleVersion),
         [activeBundleVersion, isVersionExpanded],
