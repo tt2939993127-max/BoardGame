@@ -36,7 +36,7 @@ async function waitForSelectableMinion(page: Page, minionUid: string) {
             if (!(node instanceof HTMLElement)) return { exists: false, selectable: false, className: '' };
             return {
                 exists: true,
-                selectable: node.className.includes('ring-purple-400'),
+                selectable: node.className.includes('ring-green-400'),
                 className: node.className,
             };
         }, minionUid);

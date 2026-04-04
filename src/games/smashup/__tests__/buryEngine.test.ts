@@ -8,6 +8,7 @@ import { runCommand, defaultTestRandom } from './testRunner';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import { buildBuryCardEvents, buildBuriedCardReturnedToHandEvent } from '../domain/bury';
+import { SMASHUP_AUDIO_CONFIG } from '../audio.config';
 
 beforeAll(() => {
     clearRegistry();
@@ -18,6 +19,55 @@ beforeAll(() => {
 });
 
 describe('bury engine', () => {
+    it('audio config wires bury, uncover, and new faction feedback', () => {
+        const context = {
+            G: undefined,
+            ctx: { currentPhase: 'playCards', isGameOver: false },
+            meta: {},
+        } as any;
+
+        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+            type: SU_EVENTS.CARD_BURIED,
+            payload: { defId: 'ancient_egyptians_mummy' },
+        } as any, context)).toBe('card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001');
+
+        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+            type: SU_EVENTS.BURIED_CARD_UNCOVERED,
+            payload: { defId: 'ancient_egyptians_mummy' },
+        } as any, context)).toBe('card.handling.decks_and_cards_sound_fx_pack.card_take_001');
+
+        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+            type: SU_EVENTS.MINION_PLAYED,
+            payload: { defId: 'ancient_egyptians_mummy' },
+        } as any, context)).toBeTruthy();
+
+        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+            type: SU_EVENTS.ACTION_PLAYED,
+            payload: { defId: 'cowboys_high_noon' },
+        } as any, context)).toBeTruthy();
+
+        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+            type: SU_EVENTS.TALENT_USED,
+            payload: { defId: 'ancient_egyptians_pyramid_engineer' },
+        } as any, context)).toBeTruthy();
+
+        expect(SMASHUP_AUDIO_CONFIG.contextualPreloadKeys?.({
+            G: makeState({
+                players: {
+                    '0': makePlayer('0', { factions: ['ancient_egyptians', 'samurai_pod'] as any }),
+                    '1': makePlayer('1', { factions: ['cowboys_pod', 'vikings'] as any }),
+                },
+            }),
+            ctx: { currentPhase: 'playCards', isGameOver: false },
+            meta: {},
+        } as any)).toEqual(expect.arrayContaining([
+            'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none',
+            'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_01_krst',
+            'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_1',
+            'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_01_krst',
+        ]));
+    });
+
     it('playing You Can Take It With You requires a chosen base and buries onto that base', () => {
         const core = makeState({
             players: {

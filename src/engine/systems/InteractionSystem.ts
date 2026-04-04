@@ -67,7 +67,8 @@ export type SimpleChoiceAutoRefresh =
     | 'deck'
     | 'field'
     | 'base'
-    | 'ongoing';
+    | 'ongoing'
+    | 'buried';
 
 export type SimpleChoiceResponseValidationMode = 'snapshot' | 'live';
 
@@ -280,6 +281,7 @@ export interface SimpleChoiceConfig {
      * - 'field': 检查 minionUid 是否仍在场上
      * - 'base': 检查 baseIndex 是否仍然有效
      * - 'ongoing': 检查 cardUid 是否仍附着在场上
+     * - 'buried': 检查 cardUid 是否仍埋葬在指定基地
      * - undefined: 不自动刷新（默认，向后兼容）
      * 
      * 注意：
@@ -692,6 +694,12 @@ function refreshOptionsGeneric<T>(
                     }
                 }
                 return false;
+            }
+            case 'buried': {
+                if (!val.cardUid) return true;
+                if (typeof val.baseIndex !== 'number') return false;
+                const base = state.core?.bases?.[val.baseIndex];
+                return base?.buriedCards?.some((card: any) => card.uid === val.cardUid) ?? false;
             }
             default:
                 return true;

@@ -1,5 +1,5 @@
 /* @vitest-environment happy-dom */
-import { createElement } from 'react';
+import { createElement, useEffect } from 'react';
 import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as matchApi from '../../services/matchApi';
@@ -8,7 +8,7 @@ import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from '../onlineAi
 import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
-import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch } from '../../engine/transport/react';
+import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
 import { submitOnlineAiResolution } from '../MatchRoom';
 import { resolveOnlineHudPresence } from '../matchHudPresence';
 
@@ -884,6 +884,114 @@ describe('LocalGameProvider AI 重试集成', () => {
         await waitFor(() => {
             expect(decideSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
         }, { timeout: 1000 });
+    });
+});
+
+describe('LocalGameProvider 视角与重置契约', () => {
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('传入固定 playerId 且关闭 followCurrentTurnPlayer 时，不应因当前回合变成对手而翻转视角', async () => {
+        const engineConfig = {
+            gameId: '__test_local_fixed_player_view__',
+            domain: {
+                gameId: '__test_local_fixed_player_view__',
+                setup: () => ({
+                    turnOrder: ['0', '1'],
+                    currentPlayerIndex: 1,
+                }),
+                validate: () => ({ valid: true }),
+                execute: () => [],
+                reduce: (core: unknown) => core,
+            },
+            systems: [],
+        } as const;
+
+        const Probe = () => {
+            const { playerId } = useGameClient();
+            return createElement('div', { 'data-testid': 'local-fixed-player-view' }, playerId ?? 'null');
+        };
+
+        render(
+            createElement(
+                LocalGameProvider,
+                {
+                    config: engineConfig as never,
+                    numPlayers: 2,
+                    seed: 'local-fixed-player-view-seed',
+                    playerId: '0',
+                    followCurrentTurnPlayer: false,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'human' },
+                    },
+                },
+                createElement(Probe),
+            ),
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('local-fixed-player-view')).toHaveTextContent('0');
+        });
+    });
+
+    it('reset 应透传原始 setupData，避免重赛掉回默认配置', async () => {
+        const setupData = { preferredMap: 'desert', expansions: ['titans'] };
+        const setupSpy = vi.fn((_playerIds: string[], _random: unknown, receivedSetupData?: unknown) => ({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            setupEcho: receivedSetupData,
+        }));
+        let resetRef: (() => void) | undefined;
+
+        const engineConfig = {
+            gameId: '__test_local_reset_setup_data__',
+            domain: {
+                gameId: '__test_local_reset_setup_data__',
+                setup: setupSpy,
+                validate: () => ({ valid: true }),
+                execute: () => [],
+                reduce: (core: unknown) => core,
+            },
+            systems: [],
+        } as const;
+
+        const Probe = () => {
+            const { reset } = useGameClient();
+            useEffect(() => {
+                resetRef = reset;
+            }, [reset]);
+            return createElement('div', { 'data-testid': 'local-reset-setup-probe' }, 'ready');
+        };
+
+        render(
+            createElement(
+                LocalGameProvider,
+                {
+                    config: engineConfig as never,
+                    numPlayers: 2,
+                    seed: 'local-reset-setup-seed',
+                    setupData,
+                },
+                createElement(Probe),
+            ),
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('local-reset-setup-probe')).toBeInTheDocument();
+            expect(setupSpy).toHaveBeenCalledTimes(1);
+        });
+
+        act(() => {
+            resetRef?.();
+        });
+
+        await waitFor(() => {
+            expect(setupSpy).toHaveBeenCalledTimes(2);
+        });
+        expect(setupSpy.mock.calls[0]?.[2]).toEqual(setupData);
+        expect(setupSpy.mock.calls[1]?.[2]).toEqual(setupData);
     });
 });
 

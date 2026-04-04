@@ -228,7 +228,7 @@ async function waitForSelectableMinion(page: Page, minionUid: string): Promise<v
             if (!(node instanceof HTMLElement)) return { exists: false, selectable: false, className: '' };
             return {
                 exists: true,
-                selectable: node.className.includes('ring-purple-400') || node.className.includes('ring-green-400'),
+                selectable: node.className.includes('ring-green-400') || node.className.includes('ring-green-300'),
                 className: node.className,
             };
         }, minionUid);
@@ -478,6 +478,173 @@ function buildOnlineAiHiddenSacrificeState(baseState: any) {
     };
 
     return nextState;
+}
+
+function buildOnlineAiPassTurnState(baseState: any) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+    const existingPlayers = nextState.core?.players ?? {};
+    const existingBases = Array.isArray(nextState.core?.bases) && nextState.core.bases.length > 0
+        ? nextState.core.bases
+        : [{ defId: 'base_jungle_oasis', minions: [], ongoingActions: [] }];
+    const turnOrder = Array.isArray(nextState.core?.turnOrder) && nextState.core.turnOrder.length > 0
+        ? [...nextState.core.turnOrder]
+        : ['0', '1'];
+
+    nextState.core = {
+        ...nextState.core,
+        currentPlayerIndex: 1,
+        phase: 'playCards',
+        turnNumber: 4,
+        turnOrder,
+        factionSelection: undefined,
+        players: {
+            ...existingPlayers,
+            '0': {
+                ...(existingPlayers['0'] ?? {}),
+                hand: [
+                    { uid: 'host-card-1', defId: 'pirates_first_mate', type: 'minion', owner: '0' },
+                    { uid: 'host-card-2', defId: 'pirates_broadside', type: 'action', owner: '0' },
+                ],
+                deck: [],
+                discard: [],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+                vp: 3,
+            },
+            '1': {
+                ...(existingPlayers['1'] ?? {}),
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['wizards', 'ninjas'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 1,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+                vp: 2,
+            },
+        },
+        bases: existingBases.map((base: any, index: number) => ({
+            ...base,
+            defId: base.defId ?? (index === 0 ? 'base_jungle_oasis' : 'base_mushroom_kingdom'),
+            minions: Array.isArray(base.minions) ? base.minions : [],
+            ongoingActions: Array.isArray(base.ongoingActions) ? base.ongoingActions : [],
+        })),
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder,
+        currentPlayerIndex: 1,
+        phase: 'playCards',
+        turnNumber: 4,
+        flowHalted: false,
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            current: null,
+            history: [],
+        },
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return nextState;
+}
+
+async function installUiRefreshMonitor(page: Page): Promise<void> {
+    await page.evaluate(() => {
+        const selectors = {
+            turnTracker: '[data-tutorial-id="su-turn-tracker"]',
+            scoreboard: '[data-tutorial-id="su-scoreboard"]',
+            handArea: '[data-testid="su-hand-area"]',
+        } as const;
+
+        const refs = {
+            turnTracker: document.querySelector(selectors.turnTracker),
+            scoreboard: document.querySelector(selectors.scoreboard),
+            handArea: document.querySelector(selectors.handArea),
+        };
+
+        const stats = {
+            loadingVisibleSamples: 0,
+            samples: 0,
+            replacements: {
+                turnTracker: 0,
+                scoreboard: 0,
+                handArea: 0,
+            },
+            disconnects: {
+                turnTracker: 0,
+                scoreboard: 0,
+                handArea: 0,
+            },
+        };
+
+        const sample = () => {
+            stats.samples += 1;
+            if (document.querySelector('[data-testid="loading-screen"]')) {
+                stats.loadingVisibleSamples += 1;
+            }
+
+            for (const key of Object.keys(selectors) as Array<keyof typeof selectors>) {
+                const current = refs[key];
+                const next = document.querySelector(selectors[key]);
+                if (current && !current.isConnected) {
+                    stats.disconnects[key] += 1;
+                }
+                if (current && next && current !== next) {
+                    stats.replacements[key] += 1;
+                    refs[key] = next;
+                } else if (!current && next) {
+                    refs[key] = next;
+                }
+            }
+        };
+
+        sample();
+        const timer = window.setInterval(sample, 50);
+        (window as Window & {
+            __SU_REFRESH_MONITOR__?: {
+                stats: typeof stats;
+                stop: () => typeof stats;
+            };
+        }).__SU_REFRESH_MONITOR__ = {
+            stats,
+            stop: () => {
+                window.clearInterval(timer);
+                sample();
+                return stats;
+            },
+        };
+    });
+}
+
+async function readUiRefreshMonitor(page: Page) {
+    return page.evaluate(() => {
+        const monitor = (window as Window & {
+            __SU_REFRESH_MONITOR__?: {
+                stop: () => unknown;
+            };
+        }).__SU_REFRESH_MONITOR__;
+        if (!monitor) {
+            throw new Error('UI refresh monitor not installed');
+        }
+        return monitor.stop();
+    });
 }
 
 test('简单阶段转换 - 点击结束回合', async ({ page, game }, testInfo) => {
@@ -1047,6 +1214,60 @@ test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', asy
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hidden-choice-after-resolve');
     } finally {
         await setup.hostContext.close();
+    }
+});
+
+test('在线 AI 结束回合切回我方时不应出现整板重挂载或 loading 闪屏', async ({ browser }, testInfo) => {
+    const baseURL = testInfo.project.use.baseURL;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    const { hostPage, hostContext, matchId } = setup;
+
+    try {
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+        await installUiRefreshMonitor(hostPage);
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiPassTurnState);
+        await waitForSmashUpUI(hostPage);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-pass-turn-before-host-turn');
+
+        await expect.poll(async () => {
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                currentPlayerIndex: state.core?.currentPlayerIndex,
+                turnNumber: state.core?.turnNumber,
+                phase: state.sys?.phase,
+            };
+        }, {
+            timeout: 12000,
+            message: '等待 AI 自动结束回合并切回玩家 0',
+        }).toMatchObject({
+            currentPlayerIndex: 0,
+        });
+
+        await expect(hostPage.locator('[data-tutorial-id="su-turn-tracker"]')).toBeVisible({ timeout: 8000 });
+        await hostPage.waitForTimeout(1200);
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-pass-turn-after-host-turn');
+
+        const monitor = await readUiRefreshMonitor(hostPage) as {
+            loadingVisibleSamples: number;
+            samples: number;
+            replacements: Record<string, number>;
+            disconnects: Record<string, number>;
+        };
+
+        expect(monitor.loadingVisibleSamples).toBe(0);
+        expect(monitor.replacements.turnTracker).toBe(0);
+        expect(monitor.replacements.scoreboard).toBe(0);
+        expect(monitor.replacements.handArea).toBe(0);
+        expect(monitor.disconnects.turnTracker).toBe(0);
+        expect(monitor.disconnects.scoreboard).toBe(0);
+        expect(monitor.disconnects.handArea).toBe(0);
+    } finally {
+        await hostContext.close();
     }
 });
 

@@ -54,6 +54,7 @@ import {
 import {
     resolveAiMinimumActionDelayMs,
     resolveNextAiAction,
+    getAiSeatIds,
     type AiSeatController,
 } from '../ai';
 import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
@@ -61,6 +62,7 @@ import { onAppVisible } from '../../lib/mobile/appVisibility';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
+import { setUndoAiSeatIds } from '../systems/UndoSystem';
 
 // re-export 供外部使用（测试等场景）
 export { filterPlayedEvents };
@@ -655,6 +657,7 @@ export function LocalGameProvider({
         () => Array.from({ length: numPlayers }, (_, i) => String(i)),
         [numPlayers],
     );
+    const aiSeatIds = useMemo(() => getAiSeatIds(seatControllers), [seatControllers]);
     const persistedSnapshot = useMemo(
         () => (
             persistSession
@@ -684,7 +687,7 @@ export function LocalGameProvider({
                 seed,
                 randomCursor: persistedSnapshot.randomCursor,
             });
-            return persistedSnapshot.state;
+            return setUndoAiSeatIds(persistedSnapshot.state, aiSeatIds);
         }
         const random = initialRandom;
         
@@ -736,7 +739,7 @@ export function LocalGameProvider({
             
             console.log('[LocalGameProvider] 最小化空白状态已创建，等待测试注入状态');
             
-            return { sys, core };
+            return setUndoAiSeatIds({ sys, core }, aiSeatIds);
         }
         
         const shouldSkipFactionSelect = testConfig?.skipFactionSelect === true &&
@@ -752,7 +755,7 @@ export function LocalGameProvider({
                 playerIds,
                 config.systems as EngineSystem[],
             );
-            let currentState: MatchState<unknown> = { sys, core };
+            let currentState: MatchState<unknown> = setUndoAiSeatIds({ sys, core }, aiSeatIds);
             
             // 同步执行 4 个派系选择命令（蛇形选秀：P0 → P1 → P1 → P0）
             const selectionOrder: Array<{ playerId: string; factionIndex: number }> = [
@@ -811,7 +814,7 @@ export function LocalGameProvider({
                 player1Hand: (currentState.core as any).players?.['1']?.hand?.length,
             });
             
-            return currentState;
+            return setUndoAiSeatIds(currentState, aiSeatIds);
         }
         
         // 正常流程：从 factionSelect 阶段开始
@@ -825,7 +828,7 @@ export function LocalGameProvider({
             hasSys: !!sys,
             phase: sys?.flow?.phase,
         });
-        return { sys, core };
+        return setUndoAiSeatIds({ sys, core }, aiSeatIds);
     });
     const stateRef = useRef(state);
 
@@ -1043,13 +1046,13 @@ export function LocalGameProvider({
     const reset = useCallback(() => {
         randomRef.current = createLocalProviderRandom(seed);
         const random = randomRef.current;
-        const core = config.domain.setup(playerIds, random);
+        const core = config.domain.setup(playerIds, random, setupData);
         const sys = createInitialSystemState(
             playerIds,
             config.systems as EngineSystem[],
         );
-        setState({ sys, core });
-    }, [config, playerIds, seed]);
+        setState(setUndoAiSeatIds({ sys, core }, aiSeatIds));
+    }, [aiSeatIds, config, playerIds, seed, setupData]);
 
     const matchPlayers = useMemo<MatchPlayerInfo[]>(
         () => playerIds.map((id) => ({ id: Number(id), isConnected: true })),

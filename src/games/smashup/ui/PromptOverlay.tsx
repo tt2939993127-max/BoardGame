@@ -757,7 +757,6 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                                 <Check size={14} strokeWidth={3} className="text-black" />
                                             </div>
                                         )}
-                                        {/* 放大镜按钮 - 右上角突出显示，多选模式下勾选在左上角 */}
                                         {defId && (
                                             <button
                                                 className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl z-50 cursor-zoom-in`}

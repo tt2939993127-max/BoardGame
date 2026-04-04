@@ -58,6 +58,7 @@ import { playDeniedSound } from '../../lib/audio/useGameAudio';
 import { computeViewModeState, getResponseViewSuggestionKey, shouldSuggestOpponentViewOnResponseChange } from './ui/viewMode';
 import { isDirectDiceInterferenceActor } from './domain/responseWindowGuards';
 import { resolveMoves, type DiceThroneMoveMap } from './ui/resolveMoves';
+import { shouldHighlightOpponentViewAbilities } from './ui/abilityHighlightVisibility';
 import { LayoutSaveButton } from './ui/LayoutSaveButton';
 import { useAutoSkipSelection } from './hooks/useAutoSkipSelection';
 import { useAttackShowcase } from './hooks/useAttackShowcase';
@@ -600,13 +601,15 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     );
 
     // availableAbilityIds 计算：
-    // 1. 自己正处于响应窗口时，先隐藏技能提示，等响应结束后再恢复选择
+    // 1. 自己正处于响应窗口时，不显示自己的技能提示，但保留对手可选技能的观察高亮
     // 2. 响应窗口打开时，非本地响应者视角仍可显示其可用技能
     // 3. 掷骰阶段，显示掷骰者的可用技能
     // 4. 其他情况，不显示技能
     const availableAbilityIds = React.useMemo(() => {
         if (shouldDeferSelfAbilitySelectionUntilResponseEnds) {
-            return [];
+            return !isSelfView && isViewRolling
+                ? getAvailableAbilityIds(G, viewPid, currentPhase)
+                : [];
         }
 
         // 响应窗口打开时，显示当前响应者的可用技能
@@ -649,12 +652,27 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const canAdvancePhase = isFocusPlayer && access.canAdvancePhase && !isAttackShowcaseVisible;
     const canResolveChoice = Boolean(choice.hasChoice && choice.playerId === rootPid);
     const canInteractDice = canOperateView && isViewRolling && isRollPhase && !isAttackShowcaseVisible;
+    const canHighlightObservedOpponentAbilities = shouldDeferSelfAbilitySelectionUntilResponseEnds
+        && shouldHighlightOpponentViewAbilities({
+            isSelfView,
+            isSpectator,
+            currentPhase,
+            isViewRolling,
+            hasRolled,
+        });
 
     // 防御阶段进入时就应高亮可用的防御技能，不需要等投骰
-    // 但如果自己正处于响应窗口，需要先完成响应，避免提前再次选技能
+    // 但如果自己正处于响应窗口，需要避免提前再次选择自己技能；
+    // 此时仍允许高亮当前观察到的对手可选技能，便于观察战局
     const canHighlightAbility = (
-        !shouldDeferSelfAbilitySelectionUntilResponseEnds
-        && (canOperateView && isViewRolling && isRollPhase && (currentPhase === 'defensiveRoll' || hasRolled))
+        (
+            (!shouldDeferSelfAbilitySelectionUntilResponseEnds
+                && canOperateView
+                && isViewRolling
+                && isRollPhase
+                && (currentPhase === 'defensiveRoll' || hasRolled))
+            || canHighlightObservedOpponentAbilities
+        )
     ) && !isAttackShowcaseVisible;
     const canSelectAbility = (
         !shouldDeferSelfAbilitySelectionUntilResponseEnds

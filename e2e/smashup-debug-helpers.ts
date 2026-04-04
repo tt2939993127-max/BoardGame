@@ -289,15 +289,15 @@ export const clickBaseByIndex = async (page: Page, index = 0) => {
     await page.waitForTimeout(500);
 };
 
-/** 点击高亮的基地（ring-amber-400） — 基地选择交互模式下基地直接高亮在棋盘上 */
+/** 点击高亮的基地（ring-green-400） — 基地选择交互模式下基地直接高亮在棋盘上 */
 export const clickHighlightedBase = async (page: Page, index = 0) => {
     const result = await page.evaluate((idx) => {
-        // 基地选择模式下，可选基地的卡片 div（w-[14vw]）上有 ring-amber-400 class
+        // 基地选择模式下，可选基地的卡片 div（w-[14vw]）上有 ring-green-400 class
         // onClick 绑定在这个 div 上，必须直接点击它
         const allBases = document.querySelectorAll('.group\\/base');
         const selectableCards: HTMLElement[] = [];
         for (const base of allBases) {
-            const baseCard = base.querySelector('[class*="ring-amber-400"]') as HTMLElement;
+            const baseCard = base.querySelector('[class*="ring-green-400"]') as HTMLElement;
             if (baseCard) selectableCards.push(baseCard);
         }
         if (selectableCards[idx]) {
@@ -317,10 +317,10 @@ export const clickHighlightedBase = async (page: Page, index = 0) => {
     return result;
 };
 
-/** 点击高亮的随从（ring-purple-400） — 随从选择交互模式下随从直接高亮在棋盘上 */
+/** 点击高亮的随从（ring-green-400） — 随从选择交互模式下随从直接高亮在棋盘上 */
 export const clickHighlightedMinion = async (page: Page, index = 0) => {
     const result = await page.evaluate((idx) => {
-        const selectableMinions = document.querySelectorAll('[class*="ring-purple-400"]');
+        const selectableMinions = document.querySelectorAll('[class*="ring-green-400"]');
         if (selectableMinions[idx]) {
             (selectableMinions[idx] as HTMLElement).click();
             return `clicked-minion-${idx}`;
@@ -331,27 +331,27 @@ export const clickHighlightedMinion = async (page: Page, index = 0) => {
     return result;
 };
 
-/** 等待基地选择模式出现（基地高亮 ring-amber-400） */
+/** 等待基地选择模式出现（基地高亮 ring-green-400） */
 export const waitForBaseSelect = async (page: Page, timeout = 10000) => {
     await page.waitForFunction(
-        () => document.querySelectorAll('[class*="ring-amber-400"]').length > 0,
+        () => document.querySelectorAll('[class*="ring-green-400"]').length > 0,
         { timeout },
     );
 };
 
-/** 等待随从选择模式出现（随从高亮 ring-purple-400） */
+/** 等待随从选择模式出现（随从高亮 ring-green-400） */
 export const waitForMinionSelect = async (page: Page, timeout = 10000) => {
     await page.waitForFunction(
-        () => document.querySelectorAll('[class*="ring-purple-400"]').length > 0,
+        () => document.querySelectorAll('[class*="ring-green-400"]').length > 0,
         { timeout },
     );
 };
 
-/** 点击高亮的随从（ring-purple-400）- 用于交互驱动的随从选择 */
+/** 点击高亮的随从（ring-green-400）- 用于交互驱动的随从选择 */
 export const clickHighlightedMinionByIndex = async (page: Page, index = 0) => {
     const result = await page.evaluate((idx) => {
-        // 查找所有带 ring-purple-400 的随从卡片（可选随从）
-        const selectableMinions = document.querySelectorAll('[class*="ring-purple-400"]');
+        // 查找所有带 ring-green-400 的随从卡片（可选随从）
+        const selectableMinions = document.querySelectorAll('[class*="ring-green-400"]');
         if (selectableMinions[idx]) {
             (selectableMinions[idx] as HTMLElement).click();
             return `clicked-minion-${idx}`;
@@ -364,12 +364,12 @@ export const clickHighlightedMinionByIndex = async (page: Page, index = 0) => {
 
 /** 检查是否处于基地选择模式 */
 export const isBaseSelectMode = async (page: Page) => {
-    return page.evaluate(() => document.querySelectorAll('[class*="ring-amber-400"]').length > 0).catch(() => false);
+    return page.evaluate(() => document.querySelectorAll('[class*="ring-green-400"]').length > 0).catch(() => false);
 };
 
 /** 检查是否处于随从选择模式 */
 export const isMinionSelectMode = async (page: Page) => {
-    return page.evaluate(() => document.querySelectorAll('[class*="ring-purple-400"]').length > 0).catch(() => false);
+    return page.evaluate(() => document.querySelectorAll('[class*="ring-green-400"]').length > 0).catch(() => false);
 };
 
 // ============================================================================

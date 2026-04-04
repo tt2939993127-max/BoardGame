@@ -37,7 +37,7 @@ const MOBILE_CARD_WIDTH_VW = 10.5;
 const DESKTOP_SELECTED_Y_LIFT_VW = 5;
 const MOBILE_SELECTED_Y_LIFT_VW = 3.8;
 const DRAG_START_DISTANCE_PX = 12;
-const DRAG_DROP_SHADOW = '0 0 30px rgba(34, 211, 238, 0.45)';
+const DRAG_DROP_SHADOW = '0 0 30px rgba(251, 191, 36, 0.38)';
 type Props = {
     hand: CardInstance[];
     selectedCardUid: string | null;
@@ -321,40 +321,10 @@ const HandCard: React.FC<HandCardProps> = ({
             <div className={`
                 w-full h-full relative rounded-md shadow-md transition-all duration-200
                 ${isDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
-                ${isSelected ? 'ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)]' : 'shadow-black/30'}
-                ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]' : ''}
-                ${!isSelected && !isDiscardSelected && !isDisabled && !isOpponentView ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white hover:shadow-xl') : ''}
+                ${isSelected ? 'ring-4 ring-green-400 shadow-[0_0_20px_rgba(74,222,128,0.5)]' : 'shadow-black/30'}
+                ${isDiscardSelected ? 'ring-4 ring-green-500 shadow-[0_0_14px_rgba(34,197,94,0.4)]' : ''}
+                ${!isSelected && !isDiscardSelected && !isDisabled && !isOpponentView ? (isDiscardMode ? 'ring-2 ring-green-500/35' : 'hover:ring-2 hover:ring-green-200/85 hover:shadow-xl') : ''}
             `}>
-
-                {/* Detail View Button (Magnifying Glass) - Appears on hover, inside card top-right */}
-                {!isOpponentView && (
-                    <button
-                        data-testid={`su-hand-card-inspect-${card.uid}`}
-                        className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-                        style={{
-                            top: compactLayout ? '0.45vw' : '0.3vw',
-                            right: compactLayout ? '0.45vw' : '0.3vw',
-                            width: `${inspectButtonSizeVw}vw`,
-                            height: `${inspectButtonSizeVw}vw`,
-                        }}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            onViewDetail?.();
-                        }}
-                        onPointerDown={(e) => {
-                            e.stopPropagation();
-                        }}
-                    >
-                        <svg
-                            className="fill-current"
-                            style={{ width: `${inspectIconSizeVw}vw`, height: `${inspectIconSizeVw}vw` }}
-                            viewBox="0 0 20 20"
-                        >
-                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                        </svg>
-                    </button>
-                )}
-
                 {/* Card Asset Preview */}
                 <div className="w-full h-full rounded-md overflow-hidden bg-[#f3f0e8] border border-slate-400/50 shadow-inner relative">
                     <CardPreview
@@ -370,6 +340,33 @@ const HandCard: React.FC<HandCardProps> = ({
                 </div>
 
             </div>
+            {!isOpponentView && (
+                <button
+                    data-testid={`su-hand-card-inspect-${card.uid}`}
+                    className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                    style={{
+                        top: compactLayout ? '0.45vw' : '0.3vw',
+                        right: compactLayout ? '0.45vw' : '0.3vw',
+                        width: `${inspectButtonSizeVw}vw`,
+                        height: `${inspectButtonSizeVw}vw`,
+                    }}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onViewDetail?.();
+                    }}
+                    onPointerDown={(e) => {
+                        e.stopPropagation();
+                    }}
+                >
+                    <svg
+                        className="fill-current"
+                        style={{ width: `${inspectIconSizeVw}vw`, height: `${inspectIconSizeVw}vw` }}
+                        viewBox="0 0 20 20"
+                    >
+                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                    </svg>
+                </button>
+            )}
         </motion.div>
     );
 };

@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { executePipeline, createInitialSystemState, createSeededRandom } from '../pipeline';
 import { createEventStreamSystem, getEventStreamEntries } from '../systems/EventStreamSystem';
-import { createUndoSystem, UNDO_COMMANDS } from '../systems/UndoSystem';
+import { createUndoSystem, setUndoAiSeatIds, UNDO_COMMANDS } from '../systems/UndoSystem';
 import type { Command, DomainCore, GameEvent, MatchState, ValidationResult } from '../types';
 import { computeEventStreamDelta } from '../../games/summonerwars/ui/useGameEvents';
 
@@ -146,5 +146,65 @@ describe('撤回后 EventStream 行为', () => {
     const entriesAfter = getEventStreamEntries(state);
     expect(entriesAfter.length).toBeGreaterThan(0);
     console.log('重新执行后 entries:', entriesAfter.map(e => ({ id: e.id, type: e.event.type })));
+  });
+
+  it('只有 AI 对手时，请求撤回应直接通过', () => {
+    let state = setUndoAiSeatIds(makeState(), ['1']);
+
+    const r1 = exec(state, { type: 'INCREMENT', playerId: '0', payload: {} });
+    expect(r1.success).toBe(true);
+    state = r1.state;
+    expect(state.core.counter).toBe(1);
+
+    const r2 = exec(state, { type: UNDO_COMMANDS.REQUEST_UNDO, playerId: '0', payload: {} });
+    expect(r2.success).toBe(true);
+    state = r2.state;
+
+    expect(state.core.counter).toBe(0);
+    expect(state.sys.undo.pendingRequest).toBeUndefined();
+    expect(state.sys.undo.aiSeatIds).toEqual(['1']);
+  });
+
+  it('混合人机对局中，AI 不参与投票，但真人仍需同意', () => {
+    const playerIds3 = ['0', '1', '2'];
+    const random3 = createSeededRandom('test-seed-3');
+    const systems3 = [
+      createEventStreamSystem<TestCore>(),
+      createUndoSystem<TestCore>({
+        requireApproval: true,
+        requiredApprovals: 2,
+        snapshotCommandAllowlist: ['INCREMENT'],
+      }),
+    ];
+
+    const makeState3 = (): MatchState<TestCore> => {
+      const core = testDomain.setup();
+      const sys = createInitialSystemState(playerIds3, systems3, 'test-match-3');
+      return setUndoAiSeatIds({ core, sys }, ['2']);
+    };
+
+    const exec3 = (state: MatchState<TestCore>, command: TestCommand) =>
+      executePipeline({ domain: testDomain, systems: systems3 }, state, command, random3, playerIds3);
+
+    let state = makeState3();
+
+    const r1 = exec3(state, { type: 'INCREMENT', playerId: '0', payload: {} });
+    expect(r1.success).toBe(true);
+    state = r1.state;
+
+    const r2 = exec3(state, { type: UNDO_COMMANDS.REQUEST_UNDO, playerId: '0', payload: {} });
+    expect(r2.success).toBe(true);
+    state = r2.state;
+    expect(state.sys.undo.pendingRequest?.requiredApprovals).toBe(1);
+
+    const r3 = exec3(state, { type: UNDO_COMMANDS.APPROVE_UNDO, playerId: '2', payload: {} });
+    expect(r3.success).toBe(false);
+    expect(r3.error).toBe('AI 玩家不参与撤销投票');
+    expect(r3.state.sys.undo.pendingRequest).toBeDefined();
+
+    const r4 = exec3(state, { type: UNDO_COMMANDS.APPROVE_UNDO, playerId: '1', payload: {} });
+    expect(r4.success).toBe(true);
+    expect(r4.state.core.counter).toBe(0);
+    expect(r4.state.sys.undo.pendingRequest).toBeUndefined();
   });
 });

@@ -260,6 +260,25 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(result?.randomCursor).toBeGreaterThan(0);
     });
 
+    it('setupMatch 应把 AI 座位写入 undo 状态', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+        });
+
+        const result = await server.setupMatch('match-ai-undo', 'test-game', ['0', '1'], 'seed-ai', {
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(result?.state.sys.undo.aiSeatIds).toEqual(['1']);
+    });
+
     it('setupMatch 应透传 setupData 到 domain.setup', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();

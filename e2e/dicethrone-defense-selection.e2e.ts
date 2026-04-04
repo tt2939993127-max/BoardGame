@@ -71,10 +71,10 @@ async function setupSelfResponseAbilityScene(
         player1: {
             resources: { cp: 2, hp: 50 },
         },
-        currentPlayer: '0',
+        currentPlayer: '1',
         phase: 'offensiveRoll',
         extra: {
-            selectedCharacters: { '0': 'monk', '1': 'barbarian' },
+            selectedCharacters: { '0': 'barbarian', '1': 'monk' },
             hostStarted: true,
             rollCount: 1,
             rollLimit: 3,
@@ -127,7 +127,7 @@ async function setupSelfResponseAbilityScene(
         };
     }, { timeout: 5000 }).toMatchObject({
         phase: 'offensiveRoll',
-        activePlayerId: '0',
+        activePlayerId: '1',
         rollConfirmed: true,
         responderId: '0',
         responseWindowId: 'self-response-ability-window',
@@ -196,15 +196,16 @@ test.describe('DiceThrone - 防御技能选择', () => {
         await expect(page.locator('[data-tutorial-id="dice-roll-button"]')).toBeEnabled({ timeout: 5000 });
     });
 
-    test('自己处于响应窗口时不应提前高亮技能，结束响应后再恢复高亮', async ({ page, game }, testInfo) => {
+    test('自己处于响应窗口时应高亮对方可选技能', async ({ page, game }, testInfo) => {
         await setupSelfResponseAbilityScene(page, game);
 
         const highlightedSlots = page
             .locator('[data-ability-slot]')
             .filter({ has: page.locator('div.animate-pulse[class*="border-"]') });
 
-        await expect(highlightedSlots).toHaveCount(0);
-        await game.screenshot('self-response-window-no-ability-highlight', testInfo);
+        await expect(highlightedSlots.first()).toBeVisible({ timeout: 5000 });
+        expect(await highlightedSlots.count()).toBeGreaterThan(0);
+        await game.screenshot('self-response-window-opponent-highlight', testInfo);
 
         await game.passResponseWindow('0');
 
@@ -218,10 +219,5 @@ test.describe('DiceThrone - 防御技能选择', () => {
             responseWindowId: null,
             phase: 'offensiveRoll',
         });
-
-        await page.getByTestId('dt-top-header-1').click();
-        await expect(highlightedSlots.first()).toBeVisible({ timeout: 5000 });
-        expect(await highlightedSlots.count()).toBeGreaterThan(0);
-        await game.screenshot('self-response-window-highlight-restored', testInfo);
     });
 });

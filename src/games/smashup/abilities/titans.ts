@@ -1220,7 +1220,7 @@ function sphinxOnTurnStart(ctx: TriggerContext) {
             })),
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
-        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false },
+        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false, autoRefresh: 'buried', responseValidationMode: 'live' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -1262,7 +1262,7 @@ function sphinxAfterScoring(ctx: {
                 })),
                 { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ],
-            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic' },
+            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
         );
         nextMatchState = queueInteraction(nextMatchState, interaction);
     }

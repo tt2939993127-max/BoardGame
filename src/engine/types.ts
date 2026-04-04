@@ -64,6 +64,8 @@ export interface UndoState {
     snapshots: unknown[];
     /** 最大快照数 */
     maxSnapshots: number;
+    /** AI 控制的座位 ID；这些座位在撤回审批中自动排除，不参与投票 */
+    aiSeatIds?: PlayerId[];
     /** 撤销请求（多人握手） */
     pendingRequest?: {
         requesterId: PlayerId;
