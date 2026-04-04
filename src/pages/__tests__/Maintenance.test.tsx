@@ -703,6 +703,50 @@ describe('useGameImplementationReady', () => {
     });
 });
 
+describe('loadGameImplementation stale chunk recovery', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/manifest.client');
+        vi.doUnmock('../../lib/staleChunkReloadGuard');
+        vi.resetModules();
+    });
+
+    it('游戏 runtime 动态导入命中 stale chunk 时会触发一次页面刷新', async () => {
+        const staleError = new Error('Failed to fetch dynamically imported module');
+        const loadRuntime = vi.fn().mockRejectedValueOnce(staleError);
+        const reloadForStaleChunkOnce = vi.fn(() => true);
+
+        vi.doMock('../../games/manifest.client', () => ({
+            GAME_CLIENT_MANIFEST: [
+                {
+                    manifest: {
+                        id: 'smashup',
+                        type: 'game',
+                        enabled: true,
+                    },
+                    loadRuntime,
+                },
+            ],
+        }));
+
+        vi.doMock('../../lib/staleChunkReloadGuard', () => ({
+            isStaleChunkError: (value: unknown) => value === staleError,
+            reloadForStaleChunkOnce,
+        }));
+
+        const { loadGameImplementation } = await import('../../games/registry');
+
+        await expect(loadGameImplementation('smashup')).rejects.toThrow('Failed to fetch dynamically imported module');
+
+        expect(loadRuntime).toHaveBeenCalledTimes(1);
+        expect(reloadForStaleChunkOnce).toHaveBeenCalledTimes(1);
+        expect(reloadForStaleChunkOnce).toHaveBeenCalledWith('game-runtime-load-failed:smashup', window);
+    });
+});
+
 describe('resolveFollowCurrentTurnPlayerId', () => {
     it('优先使用 turnOrder/currentPlayerIndex，其次 currentPlayer/currentPlayerId', async () => {
         const { resolveFollowCurrentTurnPlayerId } = await import('../../engine/transport/followCurrentTurnPlayer');
@@ -939,10 +983,10 @@ describe('Home native runtime footer', () => {
 
         expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
         expect(screen.getByText('Latest 0.5.1')).toBeInTheDocument();
-        expect(screen.getByText('OTA 未对齐，点击立即更新')).toBeInTheDocument();
+        expect(screen.getByText('OTA 未对齐')).toBeInTheDocument();
     });
 
-    it('点击 OTA 未对齐角标时直接触发即时 OTA 检查', async () => {
+    it('点击 OTA 未对齐角标时只展开完整版本号，不触发 OTA 检查', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -965,13 +1009,11 @@ describe('Home native runtime footer', () => {
             footerButton.click();
         });
 
-        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
-            interactive: true,
-            applyMode: 'immediate',
-        });
+        expect(mockRequestAndroidLiveUpdateCheck).not.toHaveBeenCalled();
+        expect(screen.getByText('Bundle 0.5.0-ota-2026-04-04')).toBeInTheDocument();
     });
 
-    it('原生 Android 版本已对齐时点击右下角仍只触发即时 OTA 检查，不再切换展开态', async () => {
+    it('原生 Android 版本已对齐时点击右下角只切换展开态，不触发 OTA 检查', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -994,10 +1036,7 @@ describe('Home native runtime footer', () => {
             footerButton.click();
         });
 
-        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
-            interactive: true,
-            applyMode: 'immediate',
-        });
-        expect(screen.queryByText('0.5.1-ota-2026-04-04')).toBeNull();
+        expect(mockRequestAndroidLiveUpdateCheck).not.toHaveBeenCalled();
+        expect(screen.getByText('Bundle 0.5.1-ota-2026-04-04')).toBeInTheDocument();
     });
 });

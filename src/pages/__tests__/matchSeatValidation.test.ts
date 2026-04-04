@@ -10,6 +10,7 @@ import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch } from '../../engine/transport/react';
 import { submitOnlineAiResolution } from '../MatchRoom';
+import { resolveOnlineHudPresence } from '../matchHudPresence';
 
 type Player = { id: number; name?: string | null };
 
@@ -178,6 +179,68 @@ describe('onlineAiSeats', () => {
         expect(haveAiSeatCredentialsChanged({}, {})).toBe(false);
         expect(haveAiSeatCredentialsChanged({ '1': 'same' }, { '1': 'same' })).toBe(false);
         expect(haveAiSeatCredentialsChanged({ '1': 'old' }, { '1': 'new' })).toBe(true);
+    });
+});
+
+describe('resolveOnlineHudPresence', () => {
+    it('在线传输未就绪时，不应把玩家误标成离线', () => {
+        const result = resolveOnlineHudPresence({
+            fallbackPlayers: [
+                { id: 0, name: '房主', isConnected: true },
+                { id: 1, name: '真人', isConnected: false },
+            ],
+            transportPlayers: [],
+            transportReady: false,
+            myPlayerId: '0',
+        });
+
+        expect(result.presenceReady).toBe(false);
+        expect(result.opponentName).toBe('真人');
+        expect(result.opponentConnected).toBeUndefined();
+        expect(result.players.map((player) => player.isConnected)).toEqual([undefined, undefined]);
+    });
+
+    it('传输就绪后应优先采用在线同步的连接状态', () => {
+        const result = resolveOnlineHudPresence({
+            fallbackPlayers: [
+                { id: 0, name: '房主', isConnected: true },
+                { id: 1, name: '真人', isConnected: false },
+            ],
+            transportPlayers: [
+                { id: 0, name: '房主', isConnected: true },
+                { id: 1, name: '真人', isConnected: true },
+            ],
+            transportReady: true,
+            myPlayerId: '0',
+        });
+
+        expect(result.presenceReady).toBe(true);
+        expect(result.opponentName).toBe('真人');
+        expect(result.opponentConnected).toBe(true);
+        expect(result.players[1]?.isConnected).toBe(true);
+    });
+
+    it('AI 座位在 HUD 中应视作常在线，避免出现假离线提示', () => {
+        const result = resolveOnlineHudPresence({
+            fallbackPlayers: [
+                { id: 0, name: '房主', isConnected: true },
+                { id: 2, name: 'AI 2号位', isConnected: false },
+            ],
+            transportPlayers: [
+                { id: 0, name: '房主', isConnected: true },
+                { id: 2, name: 'AI 2号位', isConnected: false },
+            ],
+            transportReady: true,
+            myPlayerId: '0',
+            seatControllers: {
+                '0': { type: 'human' },
+                '2': { type: 'local-ai', difficulty: 'normal' },
+            },
+        });
+
+        expect(result.players.find((player) => player.id === 2)?.isConnected).toBe(true);
+        expect(result.opponentName).toBe('AI 2号位');
+        expect(result.opponentConnected).toBe(true);
     });
 });
 

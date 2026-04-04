@@ -5,11 +5,12 @@
 
 import { mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import type { Page, TestInfo } from '@playwright/test';
+import type { Browser, BrowserContext, Page, TestInfo } from '@playwright/test';
 import { test, expect } from './framework';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
-import { setChineseLocale, waitForTestHarness } from './helpers/common';
+import { ensureGameServerAvailable, getGameServerBaseURL, initContext, setChineseLocale, waitForTestHarness } from './helpers/common';
 import { getMatchState, injectMatchState } from './helpers/state-injection';
+import { createCharacterDice } from '../src/games/dicethrone/domain/characters';
 import { COMMON_CARDS } from '../src/games/dicethrone/domain/commonCards';
 import { PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
 import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
@@ -20,16 +21,18 @@ import { VENGEANCE_2 } from '../src/games/dicethrone/heroes/paladin/abilities';
 import { PALADIN_CARDS } from '../src/games/dicethrone/heroes/paladin/cards';
 import { SAMURAI_CARDS } from '../src/games/dicethrone/heroes/samurai/cards';
 import {
+    claimDTSeatViaAPI,
     cleanupDTMatch,
+    createDTRoomViaAPI,
     readyAndStartGame,
     readyMultiplePlayersAndStartGame,
+    seedDTMatchCredentials,
     selectCharacter,
     setupDTOnlineMatch,
     setupDTOnlineMatchWithPlayers,
     waitForCharacterSelection,
     waitForGameBoard,
 } from './helpers/dicethrone';
-import { getGameServerBaseURL } from './helpers/common';
 
 registerDiceThroneConditions();
 
@@ -98,6 +101,100 @@ const waitForHarnessPages = async (pages: Page[]) => {
         await waitForTestHarness(page, 15000);
     }
 };
+
+async function waitForAiSeatCredential(
+    page: Page,
+    matchId: string,
+    playerId: string,
+): Promise<void> {
+    await expect.poll(async () => {
+        return page.evaluate(({ targetMatchId, targetPlayerId }) => {
+            const raw = localStorage.getItem(`match_ai_creds_${targetMatchId}`);
+            if (!raw) return null;
+            try {
+                const parsed = JSON.parse(raw) as Record<string, unknown>;
+                return typeof parsed[targetPlayerId] === 'string' ? parsed[targetPlayerId] as string : null;
+            } catch {
+                return null;
+            }
+        }, { targetMatchId: matchId, targetPlayerId: playerId });
+    }, {
+        timeout: 20000,
+        message: `等待 DiceThrone AI seat ${playerId} 凭据超时`,
+    }).not.toBeNull();
+}
+
+async function setupDTOnlineAiRoom(
+    browser: Browser,
+    baseURL: string | undefined,
+): Promise<{
+    hostPage: Page;
+    hostContext: BrowserContext;
+    matchId: string;
+} | null> {
+    const hostContext = await browser.newContext({ baseURL });
+    await initContext(hostContext, {
+        storageKey: '__dicethrone_storage_reset_online_ai',
+        skipImageGate: true,
+        gameServerBaseURL: getGameServerBaseURL(),
+    });
+    await setChineseLocale(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+    if (!(await ensureGameServerAvailable(hostPage, getGameServerBaseURL()))) {
+        await hostContext.close();
+        return null;
+    }
+
+    const guestId = `dt_ai_e2e_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+    await hostPage.addInitScript(
+        (id) => {
+            localStorage.setItem('guest_id', id);
+            sessionStorage.setItem('guest_id', id);
+            document.cookie = `bg_guest_id=${encodeURIComponent(id)}; path=/; SameSite=Lax`;
+        },
+        guestId,
+    );
+
+    const matchId = await createDTRoomViaAPI(hostPage, {
+        guestId,
+        numPlayers: 2,
+        gameServerBaseURL: getGameServerBaseURL(),
+        setupData: {
+            seatControllers: {
+                '1': {
+                    type: 'local-ai',
+                    minimumActionDelayMs: 2000,
+                },
+            },
+        },
+    });
+    if (!matchId) {
+        await hostContext.close();
+        return null;
+    }
+
+    const credentials = await claimDTSeatViaAPI(hostPage, matchId, '0', {
+        guestId,
+        playerName: 'Host-DT-AI-E2E',
+        gameServerBaseURL: getGameServerBaseURL(),
+    });
+    if (!credentials) {
+        await hostContext.close();
+        return null;
+    }
+
+    await seedDTMatchCredentials(hostContext, matchId, '0', credentials);
+    await hostPage.goto(`/play/dicethrone/match/${matchId}?playerID=0`, { waitUntil: 'domcontentloaded' });
+    await waitForTestHarness(hostPage, 20000);
+
+    return {
+        hostPage,
+        hostContext,
+        matchId,
+    };
+}
 
 const readHarnessState = async <T = any>(page: Page): Promise<T> => page.evaluate(() => {
     return (window as any).__BG_TEST_HARNESS__!.state.get();
@@ -213,6 +310,93 @@ const buildFourPlayerNoResponseState = (state: any) => {
     };
     next.sys.gameover = undefined;
     return next;
+};
+
+const buildOnlineAiHiddenModifyDiceState = (state: any) => {
+    const next = structuredClone(state);
+    const fallbackTurnOrder = Array.isArray(next.sys?.turnOrder)
+        ? [...next.sys.turnOrder]
+        : ['0', '1'];
+    const aiCharacterId = next.core?.selectedCharacters?.['1']
+        ?? next.core?.players?.['1']?.characterId
+        ?? next.players?.['1']?.characterId
+        ?? 'barbarian';
+    const baseDice = Array.isArray(next.core?.dice) && next.core.dice.length > 0
+        ? next.core.dice
+        : typeof aiCharacterId === 'string' && aiCharacterId !== 'unselected'
+            ? createCharacterDice(aiCharacterId)
+            : [];
+
+    next.core = {
+        ...next.core,
+        activePlayerId: '1',
+        turnNumber: 3,
+        phase: 'offensiveRoll',
+        rollCount: 1,
+        rollLimit: 2,
+        rollDiceCount: 2,
+        rollConfirmed: true,
+        pendingAttack: null,
+        pendingDamage: null,
+        pendingBonusDiceSettlement: undefined,
+        activatingAbilityId: undefined,
+        dice: baseDice.map((die: any, index: number) => ({
+            ...die,
+            id: typeof die?.id === 'number' ? die.id : index,
+            value: [1, 2, 5, 5, 5][index] ?? 5,
+            isLocked: false,
+            isKept: false,
+        })),
+    };
+
+    next.sys = {
+        ...next.sys,
+        turnNumber: 3,
+        phase: 'offensiveRoll',
+        turnOrder: fallbackTurnOrder,
+        currentPlayerIndex: 1,
+        interaction: {
+            current: {
+                id: 'dt-online-ai-hidden-modify',
+                kind: 'multistep-choice',
+                playerId: '1',
+                data: {
+                    title: 'interaction.selectDiceToChange',
+                    sourceId: 'card-unexpected',
+                    maxSteps: 2,
+                    minSteps: 1,
+                    initialResult: {
+                        modifications: {},
+                        modCount: 0,
+                        totalAdjustment: 0,
+                    },
+                    meta: {
+                        dtType: 'modifyDie',
+                        dieModifyConfig: {
+                            mode: 'set',
+                            targetValue: 6,
+                        },
+                        selectCount: 2,
+                        diceOwnerId: '1',
+                        targetOpponentDice: false,
+                    },
+                },
+            },
+            queue: [],
+            isBlocked: true,
+        },
+        responseWindow: {
+            ...next.sys?.responseWindow,
+            current: undefined,
+        },
+        eventStream: {
+            ...(next.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-hidden-modify', next);
 };
 
 const buildTargetingRollState = (state: any, targetingValue: number) => {
@@ -379,6 +563,48 @@ const buildTwoPlayerTransferTokenState = (state: any) => {
         ...(next.core.players['1'].tokens ?? {}),
         [TOKEN_IDS.CRIT]: 1,
     };
+    return next;
+};
+
+const buildTwoPlayerMeteorState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'offensiveRoll';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = {
+        attackerId: '0',
+        defenderId: '1',
+        targetingSelectionPending: false,
+        targetingSelectionResolved: true,
+        isDefendable: false,
+        damage: 4,
+        sourceAbilityId: 'meteor',
+        defenseAbilityId: undefined,
+        preDefenseResolved: false,
+        bonusDamage: 0,
+        attackModifierBonusDamage: 0,
+        damageResolved: false,
+        resolvedDamage: 0,
+        offensiveRollEndTokenResolved: false,
+        bonusDiceResolved: false,
+    };
+    next.core.selectedAbilityId = 'meteor';
+    next.core.rollConfirmed = true;
+    next.core.rollCount = 1;
+    next.core.rollLimit = 1;
+    next.core.rollDiceCount = 5;
+    next.core.players['0'].tokens = {
+        ...(next.core.players['0'].tokens ?? {}),
+        [TOKEN_IDS.FIRE_MASTERY]: 0,
+    };
+    for (const pid of ['0', '1']) {
+        next.core.players[pid].resources = {
+            ...(next.core.players[pid].resources ?? {}),
+            [RESOURCE_IDS.HP]: 50,
+        };
+    }
+
     return next;
 };
 
@@ -909,6 +1135,52 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
+    test('Online 2-player Meteor: opponent header HP should sync after undefendable damage resolves', async ({ browser }, testInfo) => {
+        test.setTimeout(90000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage, guestPage, matchId } = setup;
+
+        await selectCharacter(hostPage, 'pyromancer');
+        await selectCharacter(guestPage, 'paladin');
+        await readyAndStartGame(hostPage, guestPage);
+
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+        await waitForHarnessPages([hostPage, guestPage]);
+
+        await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerMeteorState);
+        await waitForPhase(hostPage, 'offensiveRoll');
+
+        await dispatchHarnessCommand(hostPage, 'ADVANCE_PHASE', '0');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return (state?.core?.players?.['1']?.resources?.hp ?? 0) === 46;
+        }, undefined, { timeout: 10000 });
+        await guestPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return (state?.core?.players?.['1']?.resources?.hp ?? 0) === 46;
+        }, undefined, { timeout: 10000 });
+
+        await expect(hostPage.getByTestId('dt-top-header-1-hp')).toHaveText('46', { timeout: 10000 });
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '03-two-player-meteor-opponent-hp-synced');
+
+        const hostState = await readHarnessState<any>(hostPage);
+        const guestState = await readHarnessState<any>(guestPage);
+        expect(hostState.core.players['1'].resources[RESOURCE_IDS.HP] ?? 0).toBe(46);
+        expect(guestState.core.players['1'].resources[RESOURCE_IDS.HP] ?? 0).toBe(46);
+
+        await cleanupDTMatch(setup);
+    });
+
     test('Online 4-player room: create claim-seat join and start successfully', async ({ browser }, testInfo) => {
         test.setTimeout(120000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -980,6 +1252,113 @@ test.describe('DiceThrone Simple Start', () => {
         await expect(hostPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 5000 });
 
         await cleanupDTMatch(setup);
+    });
+
+    test('Online AI 持有隐藏 multistep-choice 时应 batch 提交多条 MODIFY_DIE 并完成私有结算', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 一起完成 setup 前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenModifyDiceState);
+            await waitForPhase(hostPage, 'offensiveRoll', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            const injectedState = await getMatchState(matchId, hostPage);
+            expect(injectedState.sys?.interaction?.current?.playerId).toBe('1');
+            expect(injectedState.sys?.interaction?.current?.kind).toBe('multistep-choice');
+            expect(injectedState.sys?.interaction?.current?.data?.meta?.dtType).toBe('modifyDie');
+            expect(injectedState.sys?.interaction?.current?.data?.meta?.selectCount).toBe(2);
+            expect(injectedState.core?.dice?.slice(0, 2).map((die: any) => die.value)).toEqual([1, 2]);
+
+            await expect.poll(async () => {
+                return hostPage.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return {
+                        phase: state?.sys?.phase ?? null,
+                        interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                        isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                        diceValues: (state?.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                    };
+                });
+            }, {
+                timeout: 10000,
+                message: '等待房主视角同步为“隐藏交互阻塞但无可见 prompt”',
+            }).toEqual({
+                phase: 'offensiveRoll',
+                interactionPlayerId: null,
+                isBlocked: true,
+                diceValues: [1, 2],
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '13-online-ai-hidden-multistep-before-resolve');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    interactionKind: state.sys?.interaction?.current?.kind ?? null,
+                    interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                    diceValues: (state.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                };
+            }, {
+                timeout: 20000,
+                message: '等待在线 AI 自动处理隐藏多步交互并提交多条 MODIFY_DIE',
+            }).toEqual({
+                interactionKind: null,
+                interactionPlayerId: null,
+                diceValues: [6, 6],
+            });
+
+            await expect.poll(async () => {
+                return hostPage.evaluate(() => {
+                    const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                    return {
+                        interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                        isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                        diceValues: (state?.core?.dice ?? []).slice(0, 2).map((die: any) => die.value),
+                    };
+                });
+            }, {
+                timeout: 10000,
+                message: '等待房主过滤视角解除阻塞并收到骰值更新',
+            }).toEqual({
+                interactionPlayerId: null,
+                isBlocked: false,
+                diceValues: [6, 6],
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '14-online-ai-hidden-after');
+        } finally {
+            await setup.hostContext.close();
+        }
     });
 
     test('Online 4-player seating panel: clicking an AI portrait swaps seats immediately', async ({ browser }, testInfo) => {
@@ -2054,6 +2433,10 @@ test.describe('DiceThrone Simple Start', () => {
 
         await clearEvidenceScreenshotsForTest(testInfo);
         await saveEvidenceScreenshot(hostPage, testInfo, '11-four-player-meteor-all-opponents-resolution');
+
+        await expect(hostPage.getByTestId('dt-top-header-1-hp')).toHaveText('44', { timeout: 10000 });
+        await expect(hostPage.getByTestId('dt-top-header-2-hp')).toHaveText('50', { timeout: 10000 });
+        await expect(hostPage.getByTestId('dt-top-header-3-hp')).toHaveText('44', { timeout: 10000 });
 
         const hostState = await readHarnessState<any>(hostPage);
         const allyState = await readHarnessState<any>(allyPage);

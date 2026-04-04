@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { AndroidForceUpdateGate } from './AndroidForceUpdateGate';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
@@ -9,25 +8,17 @@ import {
     subscribeAndroidLiveUpdateRequests,
     startAndroidLiveUpdateBackgroundCheck,
 } from '../../lib/mobile/androidLiveUpdates';
+import { requestAndroidNativeUpdateCheck } from '../../lib/mobile/androidNativeUpdates';
 
-const autoNotifiedBackgroundOtaVersions = new Set<string>();
 let hasAutoStartedAndroidLiveUpdateCheck = false;
 
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
     const isNativeAndroid = isNativeAndroidRuntime();
-    const location = useLocation();
     const [forceUpdateState, setForceUpdateState] = useState<AndroidForceUpdateState>({
         phase: 'hidden',
         blocking: false,
     });
-    const toastRef = useRef(toast);
-    const isGamePageRef = useRef(location.pathname.startsWith('/play/'));
-
-    useEffect(() => {
-        toastRef.current = toast;
-        isGamePageRef.current = location.pathname.startsWith('/play/');
-    }, [location.pathname, toast]);
 
     useEffect(() => {
         if (!isNativeAndroid) {
@@ -40,30 +31,16 @@ export const AndroidLiveUpdateManager = () => {
 
         const handleResult = (
             result: Awaited<ReturnType<typeof startAndroidLiveUpdateBackgroundCheck>>,
-            options?: { interactive?: boolean; suppressReadyToast?: boolean },
+            options?: { interactive?: boolean },
         ) => {
             if (disposed) return;
 
             if (result.status === 'queued') {
-                if (result.mode === 'immediate') {
-                    return;
-                }
-                if (!options?.suppressReadyToast && !autoNotifiedBackgroundOtaVersions.has(result.version)) {
-                    autoNotifiedBackgroundOtaVersions.add(result.version);
-                    toastRef.current.info(
-                        `新版本 ${result.version} 已在后台下载完成，将在下次启动 App 时生效。`,
-                        '应用更新',
-                        {
-                            dedupeKey: `android-ota-ready:${result.version}`,
-                            ttlMs: 6000,
-                        },
-                    );
-                }
                 return;
             }
 
             if (result.status === 'up-to-date' && options?.interactive) {
-                toastRef.current.success('当前已经是最新版本。', '应用更新', {
+                toast.success('当前已经是最新版本。', '应用更新', {
                     dedupeKey: 'android-ota-up-to-date',
                     ttlMs: 3000,
                 });
@@ -73,13 +50,14 @@ export const AndroidLiveUpdateManager = () => {
             if (result.status === 'error') {
                 console.warn('[OTA] 后台检查失败', result.reason);
                 if (options?.interactive) {
-                    toastRef.current.error(result.reason, '应用更新');
+                    toast.error(result.reason, '应用更新');
                 }
                 return;
             }
 
             if (result.status === 'incompatible') {
                 console.info('[OTA] 检测到不兼容更新，已跳过', result.reason);
+                requestAndroidNativeUpdateCheck({ interactive: false });
             }
         };
 
@@ -90,9 +68,9 @@ export const AndroidLiveUpdateManager = () => {
                     if (disposed) return;
                     setForceUpdateState(state);
                 },
-                applyMode: 'background',
+                applyMode: 'immediate',
             }).then((result) => {
-                handleResult(result, { suppressReadyToast: isGamePageRef.current });
+                handleResult(result);
             });
         }
 
@@ -100,12 +78,13 @@ export const AndroidLiveUpdateManager = () => {
             void startAndroidLiveUpdateBackgroundCheck({
                 force: true,
                 applyMode: request.applyMode ?? 'immediate',
+                initialImmediatePhase: request.initialImmediatePhase,
                 onForceStateChange: (state) => {
                     if (disposed) return;
                     setForceUpdateState(state);
                 },
             }).then((result) => {
-                handleResult(result, { interactive: request.interactive, suppressReadyToast: false });
+                handleResult(result, { interactive: request.interactive });
             });
         });
 
@@ -113,7 +92,7 @@ export const AndroidLiveUpdateManager = () => {
             disposed = true;
             unsubscribeRequest();
         };
-    }, [isNativeAndroid]);
+    }, [isNativeAndroid, toast]);
 
     if (!isNativeAndroid) {
         return null;

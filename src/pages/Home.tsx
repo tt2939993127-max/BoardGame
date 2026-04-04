@@ -42,14 +42,10 @@ import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 import { versionedPublicFileUrl } from '../lib/publicFileUrl';
 import {
-    readAndroidLiveUpdateActivityState,
     readAndroidLiveUpdateSnapshot,
-    requestAndroidLiveUpdateCheck,
-    subscribeAndroidLiveUpdateActivityState,
     type AndroidLiveUpdateSnapshot,
 } from '../lib/mobile/androidLiveUpdates';
 import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
-import { RefreshCw } from 'lucide-react';
 import { AudioManager } from '../lib/audio/AudioManager';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
@@ -111,7 +107,6 @@ export const Home = () => {
     const [guestId, setGuestId] = useState<string | null>(null);
     const [otaSnapshot, setOtaSnapshot] = useState<AndroidLiveUpdateSnapshot | null>(null);
     const [isVersionExpanded, setIsVersionExpanded] = useState(false);
-    const [otaActivityState, setOtaActivityState] = useState(() => readAndroidLiveUpdateActivityState());
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
@@ -199,10 +194,6 @@ export const Home = () => {
         if (!isNativeAndroid) {
             return;
         }
-
-        return subscribeAndroidLiveUpdateActivityState((state) => {
-            setOtaActivityState(state);
-        });
     }, [isNativeAndroid]);
 
     const storedLocalMatchRole = useMemo(() => {
@@ -267,20 +258,7 @@ export const Home = () => {
     const otaVersionMismatch = shouldShowNativeAppVersion
         && Boolean(latestManifestVersion)
         && latestManifestVersion !== activeBundleVersion;
-    const isImmediateOtaActive = shouldShowNativeAppVersion && otaActivityState.active;
     const handleVersionFooterClick = () => {
-        if (shouldShowNativeAppVersion) {
-            if (otaActivityState.active) {
-                return;
-            }
-            requestAndroidLiveUpdateCheck({
-                interactive: true,
-                applyMode: 'immediate',
-                initialImmediatePhase: otaVersionMismatch ? 'downloading' : 'checking',
-            });
-            return;
-        }
-
         setIsVersionExpanded((expanded) => !expanded);
     };
     const nativeVersionTitle = useMemo(() => {
@@ -295,11 +273,13 @@ export const Home = () => {
         if (latestManifestVersion) {
             lines.push(`最新 OTA ${latestManifestVersion.replace(/^v/i, '')}`);
         }
-        lines.push(isImmediateOtaActive ? '状态：正在检查并应用 OTA 更新' : otaVersionMismatch ? '状态：当前 Bundle 与最新 OTA 不一致，点击立即更新' : '状态：点击立即检查 OTA 更新');
+        if (otaVersionMismatch) {
+            lines.push('状态：当前 Bundle 与最新 OTA 不一致');
+        }
+        lines.push(`点击${isVersionExpanded ? '收起' : '展开'}完整版本号`);
         return lines.join('\n');
     }, [
         activeBundleVersion,
-        isImmediateOtaActive,
         isVersionExpanded,
         latestManifestVersion,
         nativeAppVersion,
@@ -891,11 +871,8 @@ export const Home = () => {
                     : `Current version ${homeVersionLabel}`}
                 title={nativeVersionTitle}
             >
-                <span className="inline-flex max-w-full items-center justify-end gap-1 break-all">
-                    {shouldShowNativeAppVersion && (
-                        <RefreshCw size={11} className={`shrink-0 ${isImmediateOtaActive ? 'animate-spin text-amber-700' : otaVersionMismatch ? 'text-red-700' : 'text-parchment-light-text/60'}`} />
-                    )}
-                    <span>{shouldShowNativeAppVersion ? `Bundle ${homeVersionLabel}` : homeVersionLabel}</span>
+                <span className="block break-all">
+                    {shouldShowNativeAppVersion ? `Bundle ${homeVersionLabel}` : homeVersionLabel}
                 </span>
                 {shouldShowNativeAppVersion && (
                     <span className="mt-1 block text-[0.58rem] tracking-[0.04em] text-parchment-light-text/60 md:text-[0.64rem]">
@@ -908,13 +885,8 @@ export const Home = () => {
                     </span>
                 )}
                 {otaVersionMismatch && (
-                    <span className={`mt-1 block text-[0.58rem] font-bold tracking-[0.04em] md:text-[0.64rem] ${isImmediateOtaActive ? 'text-amber-800' : 'text-red-800'}`}>
-                        {isImmediateOtaActive ? '正在立即更新' : 'OTA 未对齐，点击立即更新'}
-                    </span>
-                )}
-                {!otaVersionMismatch && shouldShowNativeAppVersion && (
-                    <span className={`mt-1 block text-[0.58rem] font-bold tracking-[0.04em] md:text-[0.64rem] ${isImmediateOtaActive ? 'text-amber-800' : 'text-parchment-light-text/55'}`}>
-                        {isImmediateOtaActive ? '正在检查更新' : '点击检查更新'}
+                    <span className="mt-1 block text-[0.58rem] font-bold tracking-[0.04em] text-red-800 md:text-[0.64rem]">
+                        OTA 未对齐
                     </span>
                 )}
             </button>

@@ -140,6 +140,19 @@ describe('androidLiveUpdates', () => {
         expect(states).toContain('true:checking');
     });
 
+    it('已知存在 OTA 新版本时可直接把首帧切到 downloading 活动态', () => {
+        requestAndroidLiveUpdateCheck({
+            interactive: true,
+            applyMode: 'immediate',
+            initialImmediatePhase: 'downloading',
+        });
+
+        expect(readAndroidLiveUpdateActivityState()).toMatchObject({
+            active: true,
+            phase: 'downloading',
+        });
+    });
+
     it('强制 OTA manifest 若当前 bundle 已是最新版，不应先闪出 blocking gate', async () => {
         vi.resetModules();
         vi.stubEnv('VITE_ANDROID_OTA_ENABLED', 'true');

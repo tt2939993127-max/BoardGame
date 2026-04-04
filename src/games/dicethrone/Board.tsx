@@ -1215,6 +1215,15 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         }
                     }}
                     onEffectComplete={(id) => {
+                        // 兜底：某些特效可能直接 complete 而不触发 impact。
+                        // 此时若不释放 HP 冻结，血量会一直停在旧值。
+                        const info = fxImpactMapRef.current.get(id);
+                        if (info) {
+                            if (info.bufferKey) {
+                                damageBuffer.release([info.bufferKey]);
+                            }
+                            fxImpactMapRef.current.delete(id);
+                        }
                         // 动画完成：推进队列中的下一步（伤害→治疗序列化）
                         advanceQueue(id);
                     }}

@@ -2,6 +2,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { UI_Z_INDEX, buildLocalizedImageSet } from '../../../core';
 import { useCoarsePointer } from '../../../hooks/ui/useCoarsePointer';
+import { useMobileViewport } from '../../../hooks/ui/useMobileViewport';
 import { buildRuntimeInlineUnitValue } from '../../mobileSupport';
 import { AbilityOverlays } from './AbilityOverlays';
 import type { AbilityOverlaysHandle } from './AbilityOverlays';
@@ -56,7 +57,9 @@ export const CenterBoard = ({
 }: CenterBoardProps) => {
     const { t } = useTranslation('game-dicethrone');
     const showTouchMagnifyButton = useCoarsePointer();
+    const isMobileNarrowViewport = useMobileViewport();
     const boardUiTuning = getPlayerBoardUiTuning(characterId);
+    const shellTranslateX = isMobileNarrowViewport ? 0 : boardUiTuning.shellTranslateX;
     const playerBoardAspectRatio = getPlayerBoardAspectRatio(characterId);
     const inlineUnit = buildRuntimeInlineUnitValue;
     const shellFrameClassName = 'absolute bottom-0 flex items-center justify-center pointer-events-auto';
@@ -118,9 +121,9 @@ export const CenterBoard = ({
                 left: inlineUnit(CENTER_BOARD_SHELL_INSET_VW),
                 right: inlineUnit(CENTER_BOARD_SHELL_INSET_VW),
                 top: inlineUnit(-6.5),
-                ...(boardUiTuning.shellTranslateX === 0
+                ...(shellTranslateX === 0
                     ? {}
-                    : { transform: `translateX(${inlineUnit(boardUiTuning.shellTranslateX)})` }),
+                    : { transform: `translateX(${inlineUnit(shellTranslateX)})` }),
             }}
         >
             <div

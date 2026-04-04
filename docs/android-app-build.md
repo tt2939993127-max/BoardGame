@@ -429,9 +429,48 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 - 预演发布先用 `--dry-run`
 - 小流量验证建议先发 `gray` 之类独立 channel，再切 `stable`
-- OTA 的 App 端提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
-- 只有原生版本不兼容且 manifest 显式声明 `forceUpdate: true` 时，才会显示阻塞页要求先升级 App
+- 当前 App 主线 OTA 语义已经调整为“启动即检查，发现新 bundle 时优先即时 OTA”，不再把正式更新口径建立在“后台下载完成、下次重启再生效”上
+- 只有原生版本不兼容且 manifest 显式声明 `forceUpdate: true` 时，才会进入 OTA 阻塞页；此时运行时会继续触发原生 APK 更新检查，要求用户安装新壳
 - 若本次改动涉及原生层，仍必须重新打包安装验证，不能把 OTA 当成原生更新替代品
+
+## 正式发版强制策略
+
+以后正式 Android 发版统一按“双保险强更”执行，禁止再依赖单条链路碰运气：
+
+1. 兼容当前壳的 H5 修复：
+
+```bash
+npm run mobile:android:ota:publish -- --channel stable --force-update --target-native-version 0.5.1 --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+```
+
+2. 不兼容当前壳或需要修原生能力时，同时发布原生强更 manifest：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable --force-update-title "需要安装新版 App" --force-update-message "当前版本需要升级 App 后继续使用。"
+```
+
+执行原则：
+
+- OTA manifest 负责“兼容壳优先即时更新”
+- OTA manifest 的 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion` 负责显式声明“哪些旧壳还能吃这次 OTA”
+- 一旦 OTA manifest 判定当前壳不兼容，运行时会切到 `native-update-required`，并继续触发原生 APK 更新检查
+- 原生 update manifest 必须与 OTA 的兼容门禁一起设计，不能只发其中一条
+
+## 正式发版前双门禁
+
+正式发包 / 正式切 `stable` 之前，必须至少人工验证以下两条：
+
+1. 旧壳兼容路径：
+- 安装上一个正式 APK
+- 启动 App
+- 必须自动进入即时 OTA 或成功切到最新 bundle
+
+2. 旧壳不兼容路径：
+- 把 OTA manifest 收窄到不兼容当前旧壳
+- 启动 App
+- 必须进入“需要更新 App”的阻塞链路，并能拉起原生 APK 更新流程
+
+只要这两条没有都验证过，就不能再宣称“这次发版以后不需要第二次发包”。
 
 ## GitHub Actions 配置
 

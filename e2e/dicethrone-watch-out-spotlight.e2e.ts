@@ -65,6 +65,28 @@ async function expectMaxViewportWidthRatio(
     expect(box!.width / viewportWidth, `${label} width ratio`).toBeLessThanOrEqual(maxRatio);
 }
 
+async function expectCombinedHorizontalCenter(
+    locators: Locator[],
+    label: string,
+    viewportWidth: number,
+    tolerancePx: number,
+): Promise<void> {
+    const boxes = (await Promise.all(locators.map((locator) => locator.boundingBox())))
+        .filter((box): box is NonNullable<typeof box> => box !== null);
+
+    expect(boxes.length, `${label} should expose bounding boxes`).toBeGreaterThan(0);
+
+    const left = Math.min(...boxes.map((box) => box.x));
+    const right = Math.max(...boxes.map((box) => box.x + box.width));
+    const combinedCenter = left + ((right - left) / 2);
+    const viewportCenter = viewportWidth / 2;
+
+    expect(
+        Math.abs(combinedCenter - viewportCenter),
+        `${label} combined center should stay near viewport center`,
+    ).toBeLessThanOrEqual(tolerancePx);
+}
+
 async function expectNoHorizontalOverflow(page: Page): Promise<void> {
     const metrics = await page.evaluate(() => {
         const root = document.getElementById('root');
@@ -2028,6 +2050,12 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await expect(playerBoardSurface).toBeVisible({ timeout: 5000 });
     await expect(playerBoardAbilitySlot).toBeVisible({ timeout: 5000 });
     await expect(tipBoardSurface).toBeVisible({ timeout: 5000 });
+    await expectCombinedHorizontalCenter(
+        [playerBoardSurface, tipBoardSurface],
+        'mobile center board cluster',
+        viewport!.width,
+        12,
+    );
 
     await game.screenshot('10-mobile-main-board-state', testInfo);
 
