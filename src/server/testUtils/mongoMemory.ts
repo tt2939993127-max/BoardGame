@@ -9,6 +9,7 @@ export const MONGO_TEST_HOOK_TIMEOUT_MS = 180000;
 function configureMongoMemoryServerEnv() {
     process.env.MONGOMS_PREFER_GLOBAL_PATH ??= 'true';
     process.env.MONGOMS_DOWNLOAD_DIR ??= path.join(os.homedir(), '.cache', 'mongodb-binaries');
+    process.env.MONGOMS_EXP_NET0LISTEN ??= 'true';
 
     // 允许开发者显式指定系统 mongod，避免任何下载。
     if (process.env.TEST_MONGOD_PATH && !process.env.MONGOMS_SYSTEM_BINARY) {
@@ -30,7 +31,7 @@ export async function createSharedMongoMemoryServer(retries = 3): Promise<MongoM
         } catch (error) {
             lastError = error;
             const code = error instanceof Error && 'code' in error ? String(error.code) : '';
-            const isRetryable = code === 'EBUSY' || code === 'ETXTBSY';
+            const isRetryable = code === 'EACCES' || code === 'EADDRINUSE' || code === 'EBUSY' || code === 'ETXTBSY';
             if (!isRetryable || attempt === retries) {
                 throw error;
             }

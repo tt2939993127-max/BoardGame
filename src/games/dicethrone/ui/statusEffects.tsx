@@ -513,18 +513,21 @@ export const SelectableStatusBadge = ({
     const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { color: 'from-gray-500 to-gray-600' };
     const isToken = !STATUS_EFFECT_META[effectId] && Boolean(TOKEN_META[effectId]);
     const i18nPrefix = isToken ? 'tokens' : 'statusEffects';
+    const hasI18nKey = (key: string) => (
+        typeof i18n?.exists === 'function' ? i18n.exists(key, { ns: 'game-dicethrone' }) : false
+    );
 
     const hasSprite = hasVisualIcon(meta, atlas);
     const descriptionKey = `${i18nPrefix}.${effectId}.description`;
     const nameKey = `${i18nPrefix}.${effectId}.name`;
     const description = resolveI18nList(
-        i18n.exists(descriptionKey, { ns: 'game-dicethrone' })
+        hasI18nKey(descriptionKey)
             ? t(descriptionKey, { returnObjects: true, defaultValue: [] })
             : []
     );
     const info = {
         ...meta,
-        name: (i18n.exists(nameKey, { ns: 'game-dicethrone' })
+        name: (hasI18nKey(nameKey)
             ? t(nameKey, { defaultValue: effectId })
             : effectId) as string,
         description,

@@ -171,7 +171,7 @@
 - 旧结论：`未修复`
 - 新结论：`已修复`
 - 回归：
-  - `e2e/dicethrone-simple-start.e2e.ts:1447`
+  - `e2e/dicethrone-simple-start.e2e.ts:1465`
 - 证据文档：
   - `evidence/dicethrone-online-ai-hidden-multistep-e2e-test.md`
 - 证据截图：
@@ -187,7 +187,7 @@
 - 旧结论：`未修复`
 - 新结论：`已修复`
 - 回归：
-  - `e2e/dicethrone-simple-start.e2e.ts:1554`
+  - `e2e/dicethrone-simple-start.e2e.ts:1572`
 - 证据文档：
   - `evidence/dicethrone-online-ai-batch-retry-e2e-test.md`
 - 证据截图：
@@ -198,17 +198,34 @@
   - `after-retry` 图里界面依旧没有把交互泄漏给房主，但右侧前两颗骰子已经明显不再是重试前的旧结果，说明第二轮 retry 已把改骰动作真正落到了权威状态，而且不是靠人类补点确认。
   - 同一条 E2E 还直接断言了补丁状态：首轮 `rejectedCount=1`、中间 `delegatedCount=0`、retry 成功后 `delegatedCount=1`、`lastCommandCount=3`，并验证服务端交互清空、房主过滤视角从 `isBlocked=true` 回到 `false`。
 
+### 12. DiceThrone 在线 AI 连续两轮 `batch:rejected` 后仍缺少真实联机 retry 证据
+
+- 旧结论：`未修复`
+- 新结论：`已修复`
+- 回归：
+  - `e2e/dicethrone-simple-start.e2e.ts:1699`
+- 证据文档：
+  - `evidence/dicethrone-online-ai-double-batch-retry-e2e-test.md`
+- 证据截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-AI-连续两轮-batch-被拒后仍应自动重试并完成隐藏-multistep-choice\17-online-ai-hidden-multistep-rejected-twice-before-retry.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-AI-连续两轮-batch-被拒后仍应自动重试并完成隐藏-multistep-choice\18-online-ai-hidden-multistep-after-third-attempt.png`
+- 人工观察：
+  - `before-third-attempt` 图里房主视角仍停在同一阶段，右侧骰列还保持旧结果，没有出现“两轮拒绝后只落下一半”的残留态。
+  - `after-third-attempt` 图里房主界面仍没有出现 AI 私有交互 UI，但右侧骰列已明显变化，说明第三次尝试已实际推进权威状态，而不是单纯把阻塞标记清空。
+  - 同一条 E2E 还直接断言了补丁状态：`rejectLimit=2`、中间 `rejectedCount=2 delegatedCount=0`，最终 `delegatedCount=1 lastCommandCount=3`，并验证服务端交互清空、房主过滤视角恢复可交互。
+
 ## 仍然保留的风险
 
 ### 风险 1
 
 - 旧表述失效：
   - `SmashUp` 的“AI seat 持有隐藏 simple-choice 后自动 batch 响应并推进状态”现已由 `e2e/smashup-phase-transition-simple.e2e.ts:998` 覆盖。
-  - `DiceThrone` 的“AI seat 持有隐藏 multistep-choice 后 batch 提交多条命令”现已由 `e2e/dicethrone-simple-start.e2e.ts:1447` 覆盖。
-  - `DiceThrone` 的“第一轮 batch 被拒后，AI 自动解锁并在第二轮 retry 成功”现已由 `e2e/dicethrone-simple-start.e2e.ts:1554` 覆盖。
+  - `DiceThrone` 的“AI seat 持有隐藏 multistep-choice 后 batch 提交多条命令”现已由 `e2e/dicethrone-simple-start.e2e.ts:1465` 覆盖。
+  - `DiceThrone` 的“第一轮 batch 被拒后，AI 自动解锁并在第二轮 retry 成功”现已由 `e2e/dicethrone-simple-start.e2e.ts:1572` 覆盖。
+  - `DiceThrone` 的“连续两轮 batch 被拒后，AI 仍能在第三轮 retry 成功”现已由 `e2e/dicethrone-simple-start.e2e.ts:1699` 覆盖。
 - 新风险：
-  - 目前仍缺“连续两次及以上 `batch:rejected` / 网络抖动导致重复拒绝 / runtime attach-detach 期间 retry 连续触发”的真实联机证据。
-  - 现有覆盖已经能证明“单次拒绝不会永久卡死”，但还没有把多轮拒绝下的退避与收口稳定性锁死。
+  - 目前仍缺“连续三次及以上 `batch:rejected` / 网络抖动伴随 socket 断连重连 / runtime attach-detach 期间 retry 连续触发”的真实联机证据。
+  - 现有覆盖已经能证明“单次和双次拒绝都不会永久卡死”，但还没有把更长时间抖动下的退避与收口稳定性锁死。
 
 ### 风险 2
 
@@ -248,6 +265,8 @@
   - 结果：`1 passed`
 - `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 BG_BYPASS_GLOBAL_HEAVY_BUDGET=1 npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online AI 首轮 batch 被拒后应自动重试并完成隐藏 multistep-choice"`
   - 结果：`1 passed`
+- `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 BG_BYPASS_GLOBAL_HEAVY_BUDGET=1 npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online AI 连续两轮 batch 被拒后仍应自动重试并完成隐藏 multistep-choice"`
+  - 结果：`1 passed`
 - `npm run typecheck`
   - 结果：通过
 
@@ -262,3 +281,4 @@
 - 2026-04-04 修订：补齐 `LocalGameProvider` 的本地 AI 自动重试集成回归，确认命令被领域拒绝后仍会在 30ms 解锁后自动再跑一轮。
 - 2026-04-04 修订：补齐 `DiceThrone` 在线 AI 隐藏 `multistep-choice` 的真实房间 E2E，确认私有多步交互会通过 batch 提交两条 `MODIFY_DIE` 并在房主视角无泄漏地完成结算。
 - 2026-04-05 修订：补齐 `DiceThrone` 在线 AI `batch:rejected -> retry` 的真实房间 E2E，确认首轮拒绝后不会半提交、不会永久卡死，并能在下一轮以 3 条命令批量完成隐藏多步交互。
+- 2026-04-05 修订：补齐 `DiceThrone` 在线 AI “连续两轮 `batch:rejected` 后第三轮 retry 成功”的真实房间 E2E，确认多轮拒绝下仍不会半提交、不会把隐藏交互泄漏给人类。

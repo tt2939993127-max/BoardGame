@@ -1571,7 +1571,7 @@ describe('samurai_pod audit regressions', () => {
         return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
     }
 
-    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的两个 +1 指示物交互', () => {
+    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的一个 +1 指示物交互', () => {
         const executor = resolveAbility('samurai_ronin_pod', 'onPlay');
         expect(executor).toBeDefined();
 
@@ -1601,7 +1601,7 @@ describe('samurai_pod audit regressions', () => {
         const resolved = handler!(prompted.matchState!, '0', yesOption.value, prompt.data, dummyRandom, 102);
         const counterEvents = resolved.events.filter(event => event.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
 
-        expect(counterEvents).toHaveLength(2);
+        expect(counterEvents).toHaveLength(1);
         expect(counterEvents.every(event => event.payload.minionUid === 'ronin-pod')).toBe(true);
     });
 
