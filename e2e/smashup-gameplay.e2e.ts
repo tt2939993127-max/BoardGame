@@ -264,4 +264,62 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
         await expect(attachedAction).toBeVisible({ timeout: 5000 });
         await game.screenshot('werewolf-standing-stones-after-second-talent', testInfo);
     });
+
+    test('主动基地能力徽记应保持底部居中，不再向右偏', async ({ page, game }, testInfo) => {
+        test.setTimeout(90000);
+
+        await game.openTestGame('smashup', SMASHUP_GAMEPLAY_QUERY, 45000);
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [
+                    { uid: 'hand-bury-card', defId: 'ancient_egyptians_you_can_take_it_with_you', type: 'action' },
+                ],
+                factions: ['ancient_egyptians', 'robots'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            player1: {
+                factions: ['ninjas', 'pirates'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+            },
+            bases: [
+                { defId: 'base_pyramids' },
+                { defId: 'base_the_homeworld' },
+            ],
+            currentPlayer: '0',
+            phase: 'playCards',
+        });
+
+        await game.waitForPhase('playCards');
+        await game.waitForCurrentPlayer('0');
+
+        const baseCard = page.getByTestId('base-zone-0');
+        const badge = page.getByTestId('base-ability-badge-0');
+
+        await expect(baseCard).toBeVisible({ timeout: 5000 });
+        await expect(badge).toBeVisible({ timeout: 5000 });
+
+        const centerOffsetPx = await page.evaluate(() => {
+            const base = document.querySelector<HTMLElement>('[data-testid="base-zone-0"]');
+            const badgeEl = document.querySelector<HTMLElement>('[data-testid="base-ability-badge-0"]');
+            if (!base || !badgeEl) return null;
+            const baseRect = base.getBoundingClientRect();
+            const badgeRect = badgeEl.getBoundingClientRect();
+            const baseCenter = baseRect.left + baseRect.width / 2;
+            const badgeCenter = badgeRect.left + badgeRect.width / 2;
+            return Math.abs(baseCenter - badgeCenter);
+        });
+
+        expect(centerOffsetPx).not.toBeNull();
+        expect(centerOffsetPx!).toBeLessThan(2);
+
+        await game.screenshot('active-base-ability-badge-centered', testInfo);
+    });
 });

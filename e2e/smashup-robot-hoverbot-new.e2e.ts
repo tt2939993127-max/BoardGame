@@ -9,6 +9,47 @@ async function saveStableScreenshot(page: Page, testInfo: TestInfo, name: string
     await page.screenshot({ path: join(dir, `${name}.png`), fullPage: true });
 }
 
+async function waitForMagnifyOverlay(page: Page): Promise<void> {
+    const overlay = page.locator('[data-testid="su-card-magnify-overlay"]');
+    await expect(overlay).toBeVisible({ timeout: 5000 });
+    await expect(overlay.locator('[data-testid="su-card-magnify-content"]')).toBeVisible({ timeout: 5000 });
+    await page.waitForTimeout(150);
+}
+
+async function closeMagnifyOverlay(page: Page): Promise<void> {
+    const overlay = page.locator('[data-testid="su-card-magnify-overlay"]');
+    await overlay.getByRole('button').click();
+    await expect(overlay).toHaveCount(0);
+}
+
+async function longPressTouch(locator: ReturnType<Page['locator']>, page: Page): Promise<void> {
+    await locator.evaluate(async (element: HTMLElement) => {
+        const rect = element.getBoundingClientRect();
+        const clientX = rect.left + rect.width / 2;
+        const clientY = rect.top + rect.height / 2;
+        const pointerId = 77;
+
+        element.dispatchEvent(new PointerEvent('pointerdown', {
+            bubbles: true,
+            pointerId,
+            pointerType: 'touch',
+            clientX,
+            clientY,
+        }));
+
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 720));
+
+        element.dispatchEvent(new PointerEvent('pointerup', {
+            bubbles: true,
+            pointerId,
+            pointerType: 'touch',
+            clientX,
+            clientY,
+        }));
+    });
+    await page.waitForTimeout(120);
+}
+
 test.describe('Smash Up 牌库检索交互', () => {
     test('悬浮机器人应显示可选卡牌并允许打出', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
@@ -210,6 +251,19 @@ test.describe('Smash Up 牌库检索交互', () => {
         await game.screenshot('sphinx-bury-board-select', testInfo);
         await saveStableScreenshot(page, testInfo, 'sphinx-bury-board-select');
 
+        await buriedCard.hover();
+        const buriedInspectButton = page.getByTestId('buried-inspect-sphinx-buried-1');
+        await expect(buriedInspectButton).toBeVisible();
+        await buriedInspectButton.click();
+        await waitForMagnifyOverlay(page);
+        await expect(page.locator('[data-testid="su-card-magnify-content"]')).toHaveAttribute('data-card-def-id', 'robot_warbot');
+        await game.screenshot('sphinx-bury-board-magnify-open', testInfo);
+        await saveStableScreenshot(page, testInfo, 'sphinx-bury-board-magnify-open');
+        await closeMagnifyOverlay(page);
+
+        const stateAfterInspect = await game.getState();
+        expect(stateAfterInspect.core.bases[0].buriedCards?.some((card: any) => card.uid === 'sphinx-buried-1') ?? false).toBe(true);
+
         await buriedCard.click();
         await game.waitForNoInteraction();
         await page.waitForFunction(
@@ -226,6 +280,122 @@ test.describe('Smash Up 牌库检索交互', () => {
         const finalState = await game.getState();
         expect(finalState.core.bases[0].buriedCards?.some((card: any) => card.uid === 'sphinx-buried-1') ?? false).toBe(false);
         const sphinx = (finalState.core.titans ?? []).find((titan: any) => titan.uid === 't-sphinx-setaside');
+        expect(sphinx?.location?.zone).toBe('base');
+        expect(sphinx?.location?.baseIndex).toBe(0);
+    });
+
+    test('狮身人面像埋葬牌交互在手机长按时应只放大不误触选择', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize({ width: 800, height: 450 });
+        await page.goto('/play/smashup?bgForceCoarsePointer=1');
+        await page.waitForFunction(
+            () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+            { timeout: 15000 },
+        );
+
+        await game.setupScene({
+            gameId: 'smashup',
+            player0: {
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['ancient_egyptians', 'robots'],
+            },
+            player1: {
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['pirates', 'dinosaurs'],
+            },
+            currentPlayer: '0',
+            phase: 'playCards',
+            bases: [
+                {
+                    defId: 'base_pyramids',
+                    buriedCards: [
+                        {
+                            uid: 'sphinx-buried-mobile-1',
+                            defId: 'ancient_egyptians_lost_knowledge',
+                            trueOwnerId: '0',
+                            controllerId: '0',
+                            buriedFrom: 'hand',
+                        },
+                    ],
+                },
+            ],
+            extra: {
+                core: {
+                    titans: [
+                        {
+                            uid: 't-sphinx-mobile-setaside',
+                            defId: 'sphinx',
+                            faction: 'ancient_egyptians',
+                            ownerId: '0',
+                            controllerId: '0',
+                            powerCounters: 0,
+                            talentUsed: false,
+                            location: { zone: 'setaside' },
+                        },
+                    ],
+                },
+                sys: {
+                    interaction: {
+                        current: {
+                            id: 'e2e-sphinx-bury-mobile-prompt',
+                            kind: 'simple-choice',
+                            playerId: '0',
+                            data: {
+                                title: '狮身人面像：选择一张你的埋葬牌，将其回手并把此泰坦放到其所在基地',
+                                sourceId: 'titan_sphinx_start_turn',
+                                targetType: 'generic',
+                                continuationContext: {
+                                    titanUid: 't-sphinx-mobile-setaside',
+                                    titanDefId: 'sphinx',
+                                },
+                                options: [
+                                    {
+                                        id: 'buried-sphinx-buried-mobile-1',
+                                        label: '失落知识 @ 金字塔',
+                                        displayMode: 'card',
+                                        value: {
+                                            cardUid: 'sphinx-buried-mobile-1',
+                                            defId: 'ancient_egyptians_lost_knowledge',
+                                            baseIndex: 0,
+                                            baseDefId: 'base_pyramids',
+                                        },
+                                    },
+                                    { id: 'skip', label: '跳过', displayMode: 'button', value: { skip: true } },
+                                ],
+                            },
+                        },
+                        queue: [],
+                    },
+                },
+            },
+        });
+
+        const buriedCard = page.locator('[data-buried-card-uid="sphinx-buried-mobile-1"]').first();
+        await expect(buriedCard).toBeVisible();
+        await expect(buriedCard).toHaveAttribute('data-buried-face-up', 'true');
+        await expect(buriedCard).toHaveAttribute('data-buried-selectable', 'true');
+
+        await longPressTouch(buriedCard, page);
+        await waitForMagnifyOverlay(page);
+        await expect(page.locator('[data-testid="su-card-magnify-content"]')).toHaveAttribute('data-card-def-id', 'ancient_egyptians_lost_knowledge');
+        await game.screenshot('sphinx-bury-mobile-long-press-magnify', testInfo);
+        await saveStableScreenshot(page, testInfo, 'sphinx-bury-mobile-long-press-magnify');
+        await closeMagnifyOverlay(page);
+
+        const stateAfterLongPress = await game.getState();
+        expect(stateAfterLongPress.core.bases[0].buriedCards?.some((card: any) => card.uid === 'sphinx-buried-mobile-1') ?? false).toBe(true);
+        expect(stateAfterLongPress.sys.interaction?.current?.id).toBe('e2e-sphinx-bury-mobile-prompt');
+
+        await buriedCard.click();
+        await game.waitForNoInteraction();
+        const finalState = await game.getState();
+        expect(finalState.core.bases[0].buriedCards?.some((card: any) => card.uid === 'sphinx-buried-mobile-1') ?? false).toBe(false);
+        const sphinx = (finalState.core.titans ?? []).find((titan: any) => titan.uid === 't-sphinx-mobile-setaside');
         expect(sphinx?.location?.zone).toBe('base');
         expect(sphinx?.location?.baseIndex).toBe(0);
     });

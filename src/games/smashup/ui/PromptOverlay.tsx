@@ -14,6 +14,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
 import { logger } from '../../../lib/logger';
+import i18n from '../../../lib/i18n';
 import { GameButton } from './GameButton';
 import { CardMagnifyOverlay, type CardMagnifyTarget } from './CardMagnifyOverlay';
 import { INTERACTION_COMMANDS, asSimpleChoice, type InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -98,6 +99,7 @@ function extractContextPreview(prompt: PromptContextShape | null | undefined): C
 
 /** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
 export function resolveI18nKeys(text: string, t: I18nTranslate): string {
+    void i18n.exists(text, { ns: 'game-smashup' });
     const directResolved = t(text, { defaultValue: '' });
     if (directResolved && directResolved !== text) {
         return directResolved;
@@ -111,11 +113,15 @@ export function resolveI18nKeys(text: string, t: I18nTranslate): string {
             const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
 
             if (def && field === 'name') {
-                const resolvedName = resolveCardName(def, (localeKey: string) => t(localeKey, { defaultValue: localeKey }));
+                const resolvedName = resolveCardName(def, (localeKey: string) => {
+                    void i18n.exists(localeKey, { ns: 'game-smashup' });
+                    return t(localeKey, { defaultValue: localeKey });
+                });
                 return resolvedName || key;
             }
         }
 
+        void i18n.exists(key, { ns: 'game-smashup' });
         const resolved = t(key, { defaultValue: '' });
         return resolved || key;
     });
@@ -406,7 +412,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                             </div>
                                         </div>
                                         <button
-                                            className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
+                                            className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl z-50 cursor-zoom-in`}
                                             onClick={(e) => { e.stopPropagation(); setMagnifyTarget({ defId: card.defId, type: def?.type ?? 'action' }); }}
                                         >
                                             <svg className="w-[1.1vw] h-[1.1vw] fill-current" viewBox="0 0 20 20">
@@ -754,7 +760,7 @@ export const PromptOverlay: React.FC<Props> = ({ interaction, dispatch, playerID
                                         {/* 放大镜按钮 - 右上角突出显示，多选模式下勾选在左上角 */}
                                         {defId && (
                                             <button
-                                                className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl border-2 border-white/30 z-50 cursor-zoom-in`}
+                                                className={`absolute top-[0.3vw] right-[0.3vw] w-[2vw] h-[2vw] flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-xl z-50 cursor-zoom-in`}
                                                 onClick={(e) => {
                                                     e.stopPropagation();
                                                     const cardType = getBaseDef(defId) ? 'base' as const : (def && 'type' in def ? def.type : 'action' as const);

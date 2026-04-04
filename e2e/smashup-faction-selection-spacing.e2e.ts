@@ -93,6 +93,8 @@ async function readFactionSelectionMetrics(page: Page) {
     const railRect = rail?.getBoundingClientRect() ?? null;
     const playerCard = document.querySelector<HTMLElement>('[data-testid="faction-selection-player-card-0"]');
     const playerCardRect = playerCard?.getBoundingClientRect() ?? null;
+    const otherPlayerCard = document.querySelector<HTMLElement>('[data-testid="faction-selection-player-card-1"]');
+    const otherPlayerCardRect = otherPlayerCard?.getBoundingClientRect() ?? null;
     const contentBounds = boxes.length
       ? boxes.reduce(
           (acc, box) => ({
@@ -143,9 +145,18 @@ async function readFactionSelectionMetrics(page: Page) {
       playerCardWidth: playerCardRect?.width ?? 0,
       playerCardHeight: playerCardRect?.height ?? 0,
       playerCardBottom: playerCardRect?.bottom ?? 0,
+      otherPlayerCardWidth: otherPlayerCardRect?.width ?? 0,
+      otherPlayerCardHeight: otherPlayerCardRect?.height ?? 0,
       playerCardToFactionCardRatio: playerCardRect && boxes[0] ? playerCardRect.width / boxes[0].width : 0,
       playerRailHeightRatio: railRect ? railRect.height / window.innerHeight : 0,
       playerCardAspectRatio: playerCardRect ? playerCardRect.height / Math.max(playerCardRect.width, 1) : 0,
+      otherPlayerCardAspectRatio: otherPlayerCardRect ? otherPlayerCardRect.height / Math.max(otherPlayerCardRect.width, 1) : 0,
+      playerCardWidthDeltaRatio: playerCardRect && otherPlayerCardRect
+        ? Math.abs(playerCardRect.width - otherPlayerCardRect.width) / Math.max(playerCardRect.width, otherPlayerCardRect.width, 1)
+        : 0,
+      playerRailGapRatio: playerCardRect && otherPlayerCardRect && boxes[0]
+        ? Math.max(0, otherPlayerCardRect.left - playerCardRect.right) / Math.max(boxes[0].width, 1)
+        : 0,
       contentCenterOffsetRatio: contentBounds
         ? Math.abs(((contentBounds.left + contentBounds.right) / 2) - (window.innerWidth / 2)) / window.innerWidth
         : 0,
@@ -179,11 +190,18 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     expect(mobileMetrics.railRect?.bottom ?? 9999, '移动端玩家卡片栏底部不应被裁剪').toBeLessThanOrEqual(mobileMetrics.innerHeight + 1);
     expect(mobileMetrics.playerCardWidth, '移动端玩家卡片应成功渲染').toBeGreaterThan(0);
     expect(mobileMetrics.playerCardHeight, '移动端玩家卡片高度应成功渲染').toBeGreaterThan(0);
+    expect(mobileMetrics.otherPlayerCardWidth, '移动端另一名玩家卡片应成功渲染').toBeGreaterThan(0);
+    expect(mobileMetrics.otherPlayerCardHeight, '移动端另一名玩家卡片高度应成功渲染').toBeGreaterThan(0);
     expect(mobileMetrics.playerCardBottom, '移动端玩家卡片底边最多只允许保留变换带来的 5px 内尾差').toBeLessThanOrEqual(mobileMetrics.innerHeight + 5);
     expect(mobileMetrics.visibleRowCount, '移动端应至少保留与桌面一致的三行派系构图').toBeGreaterThanOrEqual(3);
     expect(mobileMetrics.thirdRowVisible, '移动端第三行派系卡不应被底部 rail 或视口裁掉').toBe(true);
     expect(mobileMetrics.playerRailHeightRatio, '移动端底部玩家区不能被压缩到只剩图标条').toBeGreaterThanOrEqual(0.055);
+    expect(mobileMetrics.playerCardToFactionCardRatio, '移动端当前玩家卡相对主卡阵不能再缩到近似图标贴片').toBeGreaterThanOrEqual(0.44);
     expect(mobileMetrics.playerCardAspectRatio, '移动端当前玩家卡应保留桌面端的竖向卡片语义，而不是变成扁平横条').toBeGreaterThanOrEqual(1.15);
+    expect(mobileMetrics.otherPlayerCardAspectRatio, '移动端非当前玩家卡也应保留同一套竖向卡片语义').toBeGreaterThanOrEqual(1.1);
+    expect(mobileMetrics.playerCardWidthDeltaRatio, '移动端左右玩家卡不能再被硬改成两套差异过大的 UI').toBeLessThanOrEqual(0.1);
+    expect(mobileMetrics.playerRailGapRatio, '移动端玩家区间距不能被拉得过散').toBeLessThanOrEqual(0.24);
+    expect(mobileMetrics.playerRailGapRatio, '移动端玩家区间距也不能挤得过死').toBeGreaterThanOrEqual(0.055);
 
     await page.setViewportSize(DESKTOP_VIEWPORT);
     await game.openTestGame('smashup', { skipInitialization: true }, 20000);
@@ -205,7 +223,7 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
     expect(
       mobileMetrics.playerCardToFactionCardRatio,
       '移动端底部玩家卡片不能只求“还在屏内”，其相对主卡阵的比例不能被压得明显低于桌面版',
-    ).toBeGreaterThanOrEqual(desktopMetrics.playerCardToFactionCardRatio * 0.55);
+    ).toBeGreaterThanOrEqual(desktopMetrics.playerCardToFactionCardRatio * 0.62);
     expect(
       mobileMetrics.playerRailHeightRatio,
       '移动端底部玩家区高度占比不能低到远离桌面构图关系',
