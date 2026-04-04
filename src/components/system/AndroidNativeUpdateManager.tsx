@@ -27,6 +27,13 @@ export const AndroidNativeUpdateManager = () => {
     const [state, setState] = useState<AndroidNativeUpdateState>(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
     const pendingManifestRef = useRef<AndroidNativeUpdateManifest | null>(null);
     const interactiveRef = useRef(false);
+    const toastRef = useRef(toast);
+    const tRef = useRef(t);
+
+    useEffect(() => {
+        toastRef.current = toast;
+        tRef.current = t;
+    }, [toast, t]);
 
     useEffect(() => {
         if (!isNativeAndroid) {
@@ -42,7 +49,7 @@ export const AndroidNativeUpdateManager = () => {
             if (!config.enabled) {
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
                 if (interactive) {
-                    toast.warning(t('nativeUpdate.toast.disabled'));
+                    toastRef.current.warning(tRef.current('nativeUpdate.toast.disabled'));
                 }
                 return;
             }
@@ -56,7 +63,7 @@ export const AndroidNativeUpdateManager = () => {
                 pendingManifestRef.current = null;
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
                 if (interactive && availability.reason === 'up-to-date') {
-                    toast.success(t('nativeUpdate.toast.upToDate'), '应用更新', {
+                    toastRef.current.success(tRef.current('nativeUpdate.toast.upToDate'), '应用更新', {
                         dedupeKey: 'android-native-update:up-to-date',
                         ttlMs: 4000,
                     });
@@ -71,8 +78,8 @@ export const AndroidNativeUpdateManager = () => {
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
                 if (!autoPromptedNativeUpdateVersions.has(availability.manifest.version)) {
                     autoPromptedNativeUpdateVersions.add(availability.manifest.version);
-                    toast.info(
-                        t('nativeUpdate.toast.available', { version: availability.manifest.version }),
+                    toastRef.current.info(
+                        tRef.current('nativeUpdate.toast.available', { version: availability.manifest.version }),
                         '应用更新',
                         {
                             dedupeKey: `android-native-update:available:${availability.manifest.version}`,
@@ -97,7 +104,7 @@ export const AndroidNativeUpdateManager = () => {
                     return;
                 }
                 if (result.status === 'installer-launched' && availability.manifest.forceUpdate !== true) {
-                    toast.info(t('nativeUpdate.toast.installerOpened'), '应用更新', {
+                    toastRef.current.info(tRef.current('nativeUpdate.toast.installerOpened'), '应用更新', {
                         dedupeKey: `android-native-update:installer:${availability.manifest.version}`,
                         ttlMs: 5000,
                     });
@@ -143,7 +150,7 @@ export const AndroidNativeUpdateManager = () => {
                 void listenerHandlePromise.then((handle) => handle?.remove());
             }
         };
-    }, [isNativeAndroid, t, toast]);
+    }, [isNativeAndroid]);
 
     if (!isNativeAndroid) {
         return null;
@@ -155,14 +162,14 @@ export const AndroidNativeUpdateManager = () => {
 
     const handleOpenSettings = () => {
         void openAndroidUnknownSourcesSettings().catch((error) => {
-            toast.error(error instanceof Error ? error.message : t('nativeUpdate.toast.openSettingsFailed'));
+            toastRef.current.error(error instanceof Error ? error.message : tRef.current('nativeUpdate.toast.openSettingsFailed'));
         });
     };
 
     const handleContinueInstall = () => {
         const manifest = pendingManifestRef.current;
         if (!manifest) {
-            toast.warning(t('nativeUpdate.toast.missingPreparedUpdate'));
+            toastRef.current.warning(tRef.current('nativeUpdate.toast.missingPreparedUpdate'));
             return;
         }
 
