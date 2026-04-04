@@ -251,6 +251,7 @@ interface DronePreventContext {
     targetMinionDefId: string;
     fromBaseIndex: number;
     toPlayerId: PlayerId;
+    destroyerId?: PlayerId;
 }
 
 interface GimmePodFirstContext {
@@ -464,6 +465,7 @@ const handleDronePreventDestroy: IH = (state, playerId, value, interactionData, 
                 minionDefId: context.targetMinionDefId,
                 fromBaseIndex: context.fromBaseIndex,
                 ownerId: context.toPlayerId,
+                destroyerId: context.destroyerId,
                 reason: 'giant_ant_drone_skip',
             },
             timestamp,
@@ -483,6 +485,7 @@ const handleDronePreventDestroy: IH = (state, playerId, value, interactionData, 
                 minionDefId: context.targetMinionDefId,
                 fromBaseIndex: context.fromBaseIndex,
                 ownerId: context.toPlayerId,
+                destroyerId: context.destroyerId,
                 reason: 'giant_ant_drone_skip',
             },
             timestamp,
@@ -2269,6 +2272,7 @@ function giantAntDronePreventTrigger(ctx: TriggerContext): SmashUpEvent[] | { ev
         targetMinionDefId: triggerMinionDefId,
         fromBaseIndex: baseIndex,
         toPlayerId: target.owner,
+        destroyerId: ctx.destroyerId,
     };
 
     const finalInteraction = {
