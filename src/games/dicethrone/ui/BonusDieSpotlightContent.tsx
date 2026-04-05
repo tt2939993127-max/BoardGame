@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import type { DieFace } from '../types';
 import { Dice3D } from './Dice3D';
+import { resolveBonusDieText } from './bonusDieTranslation';
 
 interface BonusDieSpotlightContentProps {
     value: number;
@@ -80,8 +81,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
 
     // 获取翻译后的效果文本
     const effectText = React.useMemo(() => {
-        if (!effectKey) return null;
-        return i18n.exists(effectKey) ? t(effectKey, effectParams) : effectKey;
+        return resolveBonusDieText(effectKey, { t, i18n, params: effectParams });
     }, [t, i18n, effectKey, effectParams]);
 
     return (

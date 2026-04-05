@@ -186,3 +186,5 @@ export const _testExports = {
     getCharAssetsByTag,
     getAllCharAssets,
 };
+
+export default diceThroneCriticalImageResolver;

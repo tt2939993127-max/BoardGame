@@ -7,16 +7,20 @@ import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import { safeMatchMedia } from '../lib/mediaQuery';
 import { appendMatchLoadTrace, captureRecentMatchLoadResources } from '../lib/matchLoadTrace';
 import { isMobileViewport } from './mobileSupport';
+import { getCriticalImageResolver, registerCriticalImageResolver } from '../core';
+import type { CriticalImageResolver } from '../core/types';
 
 // 重新导出类型供外部使用
 export type { GameImplementation } from '../core/types';
 
 /** 游戏运行时缓存：加载一次后缓存，避免重复 import */
 const runtimeCache = new Map<string, GameClientRuntimeModule>();
-/** 正在加载中的 Promise，防止并发重复加载 */
+/** 正在加载中的 runtime Promise，防止并发重复加载 */
 const loadingPromises = new Map<string, Promise<GameClientRuntimeModule>>();
 /** 教程模块加载中的 Promise，避免重复 import */
 const tutorialLoadingPromises = new Map<string, Promise<void>>();
+/** 关键图片解析器加载中的 Promise，避免并发重复 import */
+const criticalImageResolverLoadingPromises = new Map<string, Promise<void>>();
 /** late success 通知，避免超时报错后模块实际加载完成却还卡在错误页 */
 const readyListeners = new Set<(gameId: string) => void>();
 
@@ -24,6 +28,8 @@ const readyListeners = new Set<(gameId: string) => void>();
 const loaderMap = new Map<string, () => Promise<GameClientRuntimeModule>>();
 /** 游戏 ID → loadTutorial 函数的映射 */
 const tutorialLoaderMap = new Map<string, () => Promise<GameClientRuntimeModule['tutorial']>>();
+/** 游戏 ID → loadCriticalImageResolver 函数的映射 */
+const criticalImageResolverLoaderMap = new Map<string, () => Promise<CriticalImageResolver>>();
 
 export const GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 15000;
 export const SLOW_DEVICE_GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 45000;
@@ -138,13 +144,181 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMe
 
 // 构建 loader 映射（同步，不触发实际加载）
 for (const entry of GAME_CLIENT_MANIFEST) {
-    const { manifest, loadRuntime, loadTutorial } = entry;
+    const { manifest, loadRuntime, loadTutorial, loadCriticalImageResolver } = entry;
     if (manifest.type !== 'game' || !manifest.enabled || !loadRuntime) continue;
     loaderMap.set(manifest.id, loadRuntime);
     if (loadTutorial) {
         tutorialLoaderMap.set(manifest.id, loadTutorial);
     }
+    if (loadCriticalImageResolver) {
+        criticalImageResolverLoaderMap.set(manifest.id, loadCriticalImageResolver);
+    }
 }
+
+export const ensureGameCriticalImageResolverLoaded = async (gameId: string): Promise<void> => {
+    if (getCriticalImageResolver(gameId)) {
+        appendMatchLoadTrace({
+            stage: 'critical-image-resolver-cache-hit',
+            gameId,
+        });
+        logMobileRuntime('GameRuntime', 'critical-image-resolver-cache-hit', { gameId });
+        return;
+    }
+
+    const loader = criticalImageResolverLoaderMap.get(gameId);
+    if (!loader) {
+        return;
+    }
+
+    const existing = criticalImageResolverLoadingPromises.get(gameId);
+    if (existing) {
+        appendMatchLoadTrace({
+            stage: 'critical-image-resolver-reuse-inflight',
+            gameId,
+        });
+        logMobileRuntime('GameRuntime', 'critical-image-resolver-reuse-inflight', { gameId });
+        await existing;
+        return;
+    }
+
+    const startedAt = Date.now();
+    appendMatchLoadTrace({
+        stage: 'critical-image-resolver-load-start',
+        gameId,
+    });
+    logMobileRuntime('GameRuntime', 'critical-image-resolver-load-start', { gameId });
+
+    const promise = loader()
+        .then((resolver) => {
+            if (!getCriticalImageResolver(gameId)) {
+                registerCriticalImageResolver(gameId, resolver);
+            }
+            const durationMs = Date.now() - startedAt;
+            appendMatchLoadTrace({
+                stage: 'critical-image-resolver-load-success',
+                gameId,
+                payload: {
+                    durationMs,
+                },
+            });
+            logMobileRuntime('GameRuntime', 'critical-image-resolver-load-success', {
+                gameId,
+                durationMs,
+            });
+        })
+        .catch((error: unknown) => {
+            const durationMs = Date.now() - startedAt;
+            appendMatchLoadTrace({
+                stage: 'critical-image-resolver-load-failed',
+                gameId,
+                payload: {
+                    durationMs,
+                    error: error instanceof Error ? error.message : String(error),
+                    ...captureRecentMatchLoadResources(),
+                },
+            });
+            logMobileRuntime('GameRuntime', 'critical-image-resolver-load-failed', {
+                gameId,
+                durationMs,
+                error: error instanceof Error ? error.message : String(error),
+            }, 'error');
+            throw error;
+        })
+        .finally(() => {
+            if (criticalImageResolverLoadingPromises.get(gameId) === promise) {
+                criticalImageResolverLoadingPromises.delete(gameId);
+            }
+        });
+
+    criticalImageResolverLoadingPromises.set(gameId, promise);
+    await promise;
+};
+
+const ensureGameImplementationLoadTask = (gameId: string): Promise<GameClientRuntimeModule> | null => {
+    const cached = runtimeCache.get(gameId);
+    if (cached) {
+        return Promise.resolve(cached);
+    }
+
+    const existing = loadingPromises.get(gameId);
+    if (existing) {
+        return existing;
+    }
+
+    const loader = loaderMap.get(gameId);
+    if (!loader) {
+        logMobileRuntime('GameRuntime', 'load-missing-loader', { gameId }, 'warn');
+        return null;
+    }
+
+    const promise = loader()
+        .then((runtime) => {
+            runtimeCache.set(gameId, runtime);
+            emitGameImplementationReady(gameId);
+            return runtime;
+        })
+        .finally(() => {
+            if (loadingPromises.get(gameId) === promise) {
+                loadingPromises.delete(gameId);
+            }
+        });
+
+    loadingPromises.set(gameId, promise);
+    return promise;
+};
+
+export const prefetchGameImplementation = async (
+    gameId: string,
+    options: LoadGameImplementationOptions = {},
+): Promise<GameImplementation | null> => {
+    const includeTutorial = options.includeTutorial === true;
+    const cached = runtimeCache.get(gameId);
+    if (cached) {
+        logMobileRuntime('GameRuntime', 'prefetch-cache-hit', {
+            gameId,
+            includeTutorial,
+            hasTutorial: Boolean(cached.tutorial),
+        });
+        if (includeTutorial) {
+            await ensureGameTutorialLoaded(gameId);
+        }
+        return runtimeCache.get(gameId) ?? cached;
+    }
+
+    const existing = loadingPromises.get(gameId);
+    const startedAt = Date.now();
+    logMobileRuntime(
+        'GameRuntime',
+        existing ? 'prefetch-reuse-inflight' : 'prefetch-start',
+        { gameId, includeTutorial },
+    );
+
+    const task = ensureGameImplementationLoadTask(gameId);
+    if (!task) {
+        return null;
+    }
+
+    try {
+        const runtime = await task;
+        if (includeTutorial) {
+            await ensureGameTutorialLoaded(gameId);
+        }
+        logMobileRuntime('GameRuntime', 'prefetch-success', {
+            gameId,
+            includeTutorial,
+            durationMs: Date.now() - startedAt,
+        });
+        return runtimeCache.get(gameId) ?? runtime;
+    } catch (error: unknown) {
+        logMobileRuntime('GameRuntime', 'prefetch-failed', {
+            gameId,
+            includeTutorial,
+            durationMs: Date.now() - startedAt,
+            error: error instanceof Error ? error.message : String(error),
+        }, 'warn');
+        throw error;
+    }
+};
 
 const ensureGameTutorialLoaded = async (gameId: string): Promise<void> => {
     const cached = runtimeCache.get(gameId);
@@ -242,67 +416,47 @@ export const loadGameImplementation = async (
         return runtimeCache.get(gameId) ?? cached;
     }
 
-    // 2. 正在加载中，复用 Promise
     const existing = loadingPromises.get(gameId);
-    if (existing) {
-        const runtime = await existing;
-        appendMatchLoadTrace({
-            stage: 'game-runtime-reuse-inflight',
-            gameId,
-            payload: {
-                includeTutorial,
-                hasTutorial: Boolean(runtime?.tutorial),
-            },
-        });
-        if (includeTutorial) {
-            await ensureGameTutorialLoaded(gameId);
-        }
-        logMobileRuntime('GameRuntime', 'load-reuse-inflight', { gameId });
-        return runtimeCache.get(gameId) ?? runtime;
-    }
-
-    // 3. 查找 loader
-    const loader = loaderMap.get(gameId);
-    if (!loader) {
-        logMobileRuntime('GameRuntime', 'load-missing-loader', { gameId }, 'warn');
-        return null;
-    }
-
-    // 4. 发起加载
     const startedAt = Date.now();
     const timeoutMs = resolveGameImplementationLoadTimeoutMs();
     const timeoutMessage = createGameImplementationTimeoutMessage(gameId, timeoutMs);
+
     appendMatchLoadTrace({
-        stage: 'game-runtime-load-start',
+        stage: existing ? 'game-runtime-reuse-inflight' : 'game-runtime-load-start',
         gameId,
         payload: {
             includeTutorial,
-            timeoutMs,
+            ...(existing ? {} : { timeoutMs }),
         },
     });
-    logMobileRuntime('GameRuntime', 'load-start', { gameId });
-
-    const rawPromise = loader().then((runtime) => {
-        runtimeCache.set(gameId, runtime);
-        emitGameImplementationReady(gameId);
-        appendMatchLoadTrace({
-            stage: 'game-runtime-load-success',
-            gameId,
-            payload: {
-                includeTutorial,
-                durationMs: Date.now() - startedAt,
-                hasTutorial: Boolean(runtime.tutorial),
-                hasLatencyConfig: Boolean(runtime.latencyConfig),
-            },
-        });
-        logMobileRuntime('GameRuntime', 'load-success', {
-            gameId,
-            durationMs: Date.now() - startedAt,
-        });
-        return runtime;
+    logMobileRuntime('GameRuntime', existing ? 'load-reuse-inflight' : 'load-start', {
+        gameId,
+        ...(existing ? {} : { timeoutMs }),
     });
 
-    const promise = withTimeout(rawPromise, timeoutMs, timeoutMessage)
+    const task = ensureGameImplementationLoadTask(gameId);
+    if (!task) {
+        return null;
+    }
+
+    const promise = withTimeout(task, timeoutMs, timeoutMessage)
+        .then((runtime) => {
+            appendMatchLoadTrace({
+                stage: 'game-runtime-load-success',
+                gameId,
+                payload: {
+                    includeTutorial,
+                    durationMs: Date.now() - startedAt,
+                    hasTutorial: Boolean(runtime.tutorial),
+                    hasLatencyConfig: Boolean(runtime.latencyConfig),
+                },
+            });
+            logMobileRuntime('GameRuntime', 'load-success', {
+                gameId,
+                durationMs: Date.now() - startedAt,
+            });
+            return runtime;
+        })
         .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             const isTimeout = message === timeoutMessage;
@@ -337,14 +491,7 @@ export const loadGameImplementation = async (
                 reloadForStaleChunkOnce(`game-runtime-load-failed:${gameId}`, window);
             }
             throw error;
-        })
-        .finally(() => {
-            if (loadingPromises.get(gameId) === promise) {
-                loadingPromises.delete(gameId);
-            }
         });
-
-    loadingPromises.set(gameId, promise);
     const runtime = await promise;
     if (includeTutorial) {
         await ensureGameTutorialLoaded(gameId);

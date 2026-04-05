@@ -19,6 +19,7 @@ export interface FabAction {
     active?: boolean;    // 通知提示
     onActivate?: (isActive: boolean) => void;
     preview?: ReactNode; // 通知简略信息
+    mobilePopoverVerticalAnchor?: 'button' | 'column';
 }
 
 interface FabMenuProps {
@@ -693,6 +694,8 @@ const Panel = ({
     };
     const resolvedAnchor = anchorRect ?? logicalAnchor;
     const resolvedReference = referenceRect ?? resolvedAnchor;
+    const verticalAnchorMode = item.mobilePopoverVerticalAnchor === 'column' ? 'column' : 'button';
+    const resolvedVerticalAnchor = verticalAnchorMode === 'column' ? resolvedReference : resolvedAnchor;
     const panelAnchorOffset = resolvedAnchor.width + panelGap;
     const isMobileSheetPanel = isMobileViewport && item.mobilePanelVariant === 'sheet';
     const panelWidth = isMobileViewport ? 260 : 300;
@@ -706,19 +709,19 @@ const Panel = ({
     );
     const spaceBelow = Math.max(
         0,
-        Math.floor(viewportHeight - resolvedReference.top - safeAreaInsets.bottom - edgePadding),
+        Math.floor(viewportHeight - resolvedVerticalAnchor.top - safeAreaInsets.bottom - edgePadding),
     );
     const spaceAbove = Math.max(
         0,
-        Math.floor(resolvedReference.bottom - safeAreaInsets.top - edgePadding),
+        Math.floor(resolvedVerticalAnchor.bottom - safeAreaInsets.top - edgePadding),
     );
     const anchorSpaceBelow = Math.max(
         0,
-        Math.floor(viewportHeight - resolvedAnchor.top - safeAreaInsets.bottom - edgePadding),
+        Math.floor(viewportHeight - resolvedVerticalAnchor.top - safeAreaInsets.bottom - edgePadding),
     );
     const anchorSpaceAbove = Math.max(
         0,
-        Math.floor(resolvedAnchor.bottom - safeAreaInsets.top - edgePadding),
+        Math.floor(resolvedVerticalAnchor.bottom - safeAreaInsets.top - edgePadding),
     );
 
     const horizontalPlacement: FabAlignment['h'] = referenceRect
@@ -732,10 +735,10 @@ const Panel = ({
     const panelContainerTopMin = safeAreaInsets.top;
     const panelContainerTopMax = Math.max(
         panelContainerTopMin,
-        viewportHeight - safeAreaInsets.bottom - resolvedAnchor.height,
+        viewportHeight - safeAreaInsets.bottom - resolvedVerticalAnchor.height,
     );
     const panelContainerTop = Math.min(
-        Math.max(resolvedAnchor.top, panelContainerTopMin),
+        Math.max(resolvedVerticalAnchor.top, panelContainerTopMin),
         panelContainerTopMax,
     );
     const resolvedPanelWidth = safeAvailableWidth > 0 ? Math.min(panelWidth, safeAvailableWidth) : panelWidth;
@@ -829,7 +832,7 @@ const Panel = ({
                     left: resolvedAnchor.left,
                     top: panelContainerTop,
                     width: resolvedAnchor.width,
-                    height: resolvedAnchor.height,
+                    height: resolvedVerticalAnchor.height,
                     zIndex: layerZIndex ?? Math.max(UI_Z_INDEX.hud - 1, 1),
                     pointerEvents: 'none',
                 }}

@@ -102,6 +102,10 @@ export interface AndroidLiveUpdateSnapshot {
     compatibilityReason?: string;
 }
 
+export interface ReadAndroidLiveUpdateSnapshotOptions {
+    includeManifest?: boolean;
+}
+
 export interface AndroidOtaManifest {
     version: string;
     url: string;
@@ -477,7 +481,10 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
     }
 };
 
-export const readAndroidLiveUpdateSnapshot = async (): Promise<AndroidLiveUpdateSnapshot> => {
+export const readAndroidLiveUpdateSnapshot = async (
+    options: ReadAndroidLiveUpdateSnapshotOptions = {},
+): Promise<AndroidLiveUpdateSnapshot> => {
+    const { includeManifest = true } = options;
     const config = getConfigFromMetaEnv();
     const baseSnapshot: AndroidLiveUpdateSnapshot = {
         enabled: config.enabled,
@@ -491,6 +498,7 @@ export const readAndroidLiveUpdateSnapshot = async (): Promise<AndroidLiveUpdate
         enabled: config.enabled,
         manifestUrl: config.manifestUrl,
         channel: config.channel,
+        includeManifest,
     });
 
     if (!config.enabled) {
@@ -527,7 +535,7 @@ export const readAndroidLiveUpdateSnapshot = async (): Promise<AndroidLiveUpdate
         return snapshot;
     }
 
-    const manifest = await readManifest(config.manifestUrl);
+    const manifest = includeManifest ? await readManifest(config.manifestUrl) : null;
     const current = await updaterModule.CapacitorUpdater.current();
     const compatibility = manifest
         ? isManifestCompatibleWithNativeVersion(manifest, current.native)

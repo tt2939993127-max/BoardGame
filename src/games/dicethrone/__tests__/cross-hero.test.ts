@@ -282,6 +282,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '0'),
                     cmd('RESPONSE_PASS', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('SYS_INTERACTION_CONFIRM', '1'),
                 ],
                 expect: {
                     turnPhase: 'main2',
@@ -295,6 +296,88 @@ describe('cross hero battles', () => {
 
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.sys.interaction.current).toBeFalsy();
+        });
+
+        it('showdown uses compare-roll-choice and confirms into bonus damage', () => {
+            const playerIds: PlayerId[] = ['0', '1'];
+            let state = createInitializedStateWithCharacters(
+                playerIds,
+                fixedRandom,
+                { '0': 'gunslinger', '1': 'monk' }
+            );
+            const random = createQueuedRandom([6, 1]);
+
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+
+            state = {
+                ...state,
+                core: {
+                    ...state.core,
+                    players: {
+                        ...state.core.players,
+                        '0': {
+                            ...state.core.players['0'],
+                            tokens: {
+                                ...state.core.players['0'].tokens,
+                                [TOKEN_IDS.LOADED]: 0,
+                            },
+                        },
+                    },
+                    activePlayerId: '0',
+                    pendingAttack: {
+                        attackerId: '0',
+                        defenderId: '1',
+                        isDefendable: true,
+                        damage: 6,
+                        bonusDamage: 0,
+                        sourceAbilityId: 'showdown',
+                    },
+                },
+                sys: {
+                    ...state.sys,
+                    phase: 'offensiveRoll',
+                },
+            };
+
+            const advanceResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'ADVANCE_PHASE',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                random,
+                playerIds,
+            );
+
+            expect(advanceResult.success).toBe(true);
+            state = advanceResult.state as MatchState<DiceThroneCore>;
+
+            expect(state.sys.interaction.current?.kind).toBe('compare-roll-choice');
+            expect(state.core.pendingAttack?.bonusDamage ?? 0).toBe(0);
+
+            const confirmResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'SYS_INTERACTION_CONFIRM',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                random,
+                playerIds,
+            );
+
+            expect(confirmResult.success).toBe(true);
+            const finalState = confirmResult.state as MatchState<DiceThroneCore>;
+            expect(finalState.sys.interaction.current).toBeUndefined();
+            expect(finalState.core.pendingAttack?.bonusDamage).toBe(2);
         });
 
         it('fill-em-with-lead can reroll loaded die and add damage', () => {

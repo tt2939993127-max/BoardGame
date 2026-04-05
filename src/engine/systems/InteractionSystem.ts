@@ -185,6 +185,36 @@ export interface SliderChoiceData {
     meta?: Record<string, unknown>;
 }
 
+export interface CompareRollChoiceParticipant {
+    playerId?: PlayerId;
+    label: string;
+    labelKey?: string;
+    labelParams?: Record<string, string | number>;
+    roll: number;
+    face?: string;
+    characterId?: string;
+    effectKey?: string;
+    effectParams?: Record<string, string | number>;
+}
+
+export interface CompareRollChoiceData<T = unknown> {
+    title: string;
+    sourceId?: string;
+    contestants: [CompareRollChoiceParticipant, CompareRollChoiceParticipant];
+    resultText?: string;
+    resultTextKey?: string;
+    resultTextParams?: Record<string, string | number>;
+    resultTone?: 'neutral' | 'success' | 'warning' | 'danger';
+    options?: PromptOption<T>[];
+    /**
+     * 无显式按钮时，UI 可在展示完成后发送 SYS_INTERACTION_CONFIRM。
+     * 若提供 confirmValue，这次确认会被转换为 RESOLVED 事件，
+     * 方便复用既有的 follow-up handler 链路。
+     */
+    confirmValue?: T;
+    autoConfirmDelayMs?: number;
+}
+
 /**
  * 交互系统状态
  */
@@ -373,6 +403,19 @@ export function createSliderChoice(
     return {
         id,
         kind: 'slider-choice',
+        playerId,
+        data,
+    };
+}
+
+export function createCompareRollChoice<T>(
+    id: string,
+    playerId: PlayerId,
+    data: CompareRollChoiceData<T>,
+): InteractionDescriptor<CompareRollChoiceData<T>> {
+    return {
+        id,
+        kind: 'compare-roll-choice',
         playerId,
         data,
     };
@@ -617,6 +660,14 @@ export function asMultistepChoice<TStep = unknown, TResult = unknown>(
 ): (MultistepChoiceData<TStep, TResult> & { id: string; playerId: PlayerId }) | undefined {
     if (!interaction || interaction.kind !== 'multistep-choice') return undefined;
     const data = interaction.data as MultistepChoiceData<TStep, TResult>;
+    return { ...data, id: interaction.id, playerId: interaction.playerId };
+}
+
+export function asCompareRollChoice<T = unknown>(
+    interaction?: InteractionDescriptor,
+): (CompareRollChoiceData<T> & { id: string; playerId: PlayerId }) | undefined {
+    if (!interaction || interaction.kind !== 'compare-roll-choice') return undefined;
+    const data = interaction.data as CompareRollChoiceData<T>;
     return { ...data, id: interaction.id, playerId: interaction.playerId };
 }
 

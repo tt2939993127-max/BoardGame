@@ -7,6 +7,7 @@ import {
     getLocalizedImageUrls,
     getOptimizedImageUrls,
     setGameAssetBaseOverride,
+    setCommonAudioAssetBaseOverride,
     setAssetHashesForTesting,
     setAssetsBaseUrl,
 } from '../AssetLoader';
@@ -20,6 +21,7 @@ describe('AssetLoader.getOptimizedImageUrls', () => {
         setAssetsBaseUrl('/assets');
         setAssetHashesForTesting({});
         setPublicFileHashesForTesting({});
+        setCommonAudioAssetBaseOverride(undefined);
         clearGameAssetBaseOverrides();
     });
 

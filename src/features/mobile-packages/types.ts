@@ -16,16 +16,22 @@ export interface ResolvedGamePackageManifest {
     runtimeChannel: string;
     modulePackId?: string;
     assetPackId?: string;
+    sharedAudioPackId?: string;
     modulePackVersion?: string;
     assetPackVersion?: string;
+    sharedAudioPackVersion?: string;
     modulePackUrl?: string;
     assetPackUrl?: string;
+    sharedAudioPackUrl?: string;
     modulePackChecksum?: string;
     assetPackChecksum?: string;
+    sharedAudioPackChecksum?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    sharedAudioPackBytes?: number;
     modulePackFileCount?: number;
     assetPackFileCount?: number;
+    sharedAudioPackFileCount?: number;
     source: 'fallback' | 'remote';
 }
 

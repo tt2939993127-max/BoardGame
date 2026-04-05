@@ -209,6 +209,8 @@ export interface GameProviderProps {
     onError?: (error: string) => void;
     /** 连接状态变更回调 */
     onConnectionChange?: (connected: boolean) => void;
+    /** 首次拿到权威状态时回调 */
+    onStateReady?: () => void;
     /** 游戏引擎配置（乐观更新需要在客户端执行 Pipeline） */
     engineConfig?: GameEngineConfig;
     /** 延迟优化配置（可选，不传则不启用任何优化） */
@@ -223,6 +225,7 @@ export function GameProvider({
     children,
     onError,
     onConnectionChange,
+    onStateReady,
     engineConfig,
     latencyConfig,
 }: GameProviderProps) {
@@ -253,6 +256,8 @@ export function GameProvider({
     // 用 ref 存储回调，避免回调引用变化导致 effect 重新执行（断开重连）
     const onErrorRef = useRef(onError);
     const onConnectionChangeRef = useRef(onConnectionChange);
+    const onStateReadyRef = useRef(onStateReady);
+    const hasReportedStateReadyRef = useRef(false);
     const RECOVERABLE_COMMAND_ERRORS = useMemo(
         () => new Set([
             'command_failed',
@@ -287,6 +292,10 @@ export function GameProvider({
     useEffect(() => {
         onConnectionChangeRef.current = onConnectionChange;
     }, [onConnectionChange]);
+
+    useEffect(() => {
+        onStateReadyRef.current = onStateReady;
+    }, [onStateReady]);
 
     // 初始化乐观更新引擎
     useEffect(() => {
@@ -348,6 +357,11 @@ export function GameProvider({
             playerID: playerId,
             credentials,
             onStateUpdate: (newState, players, meta, randomMeta) => {
+                if (!hasReportedStateReadyRef.current) {
+                    hasReportedStateReadyRef.current = true;
+                    onStateReadyRef.current?.();
+                }
+
                 // 状态版本号检查：防止旧状态覆盖新状态（WebSocket 消息乱序/重复广播）
                 if (meta?.stateID !== undefined && lastConfirmedStateIDRef.current !== null) {
                     if (meta.stateID < lastConfirmedStateIDRef.current) {
@@ -448,6 +462,7 @@ export function GameProvider({
         client.connect();
 
         return () => {
+            hasReportedStateReadyRef.current = false;
             client.disconnect();
             clientRef.current = null;
         };

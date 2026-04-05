@@ -36,7 +36,15 @@ const navigateMock = vi.fn();
 const openModalMock = vi.fn();
 const closeModalMock = vi.fn();
 const mockLoggerInfo = vi.fn();
-const { getGameByIdMock, latestCreateRoomModalProps, latestPackageInstallModalProps } = vi.hoisted(() => ({
+const {
+    getGameByIdMock,
+    latestCreateRoomModalProps,
+    latestPackageInstallModalProps,
+    ensureGameCriticalImageResolverLoadedMock,
+    prefetchGameImplementationMock,
+    resolveCriticalImagesMock,
+    preloadWarmImagesMock,
+} = vi.hoisted(() => ({
     getGameByIdMock: vi.fn((gameId: string) => {
         if (gameId !== 'dicethrone') return null;
         return {
@@ -65,6 +73,10 @@ const { getGameByIdMock, latestCreateRoomModalProps, latestPackageInstallModalPr
     }),
     latestCreateRoomModalProps: { current: null as null | Record<string, unknown> },
     latestPackageInstallModalProps: { current: null as null | Record<string, unknown> },
+    ensureGameCriticalImageResolverLoadedMock: vi.fn(),
+    prefetchGameImplementationMock: vi.fn(),
+    resolveCriticalImagesMock: vi.fn(),
+    preloadWarmImagesMock: vi.fn(),
 }));
 
 const buildMockGameManifest = (override: Record<string, unknown> = {}) => ({
@@ -209,6 +221,24 @@ vi.mock('../../../api/user-settings', () => ({
 vi.mock('../../../config/games.config', () => ({
     getGameById: getGameByIdMock,
 }));
+
+vi.mock('../../../games/registry', () => ({
+    ensureGameCriticalImageResolverLoaded: (...args: unknown[]) => ensureGameCriticalImageResolverLoadedMock(...args),
+    prefetchGameImplementation: (...args: unknown[]) => prefetchGameImplementationMock(...args),
+}));
+
+vi.mock('../../../core', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../core')>();
+    return {
+        ...actual,
+        UI_Z_INDEX: {
+            ...actual.UI_Z_INDEX,
+            modalTooltip: 1000,
+        },
+        resolveCriticalImages: (...args: unknown[]) => resolveCriticalImagesMock(...args),
+        preloadWarmImages: (...args: unknown[]) => preloadWarmImagesMock(...args),
+    };
+});
 
 vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
     createNativeGamePackageInstallHandle: vi.fn(async () => null),
@@ -396,6 +426,17 @@ beforeEach(() => {
     toastMock.warning.mockReset();
     toastMock.error.mockReset();
     mockLoggerInfo.mockReset();
+    ensureGameCriticalImageResolverLoadedMock.mockReset();
+    ensureGameCriticalImageResolverLoadedMock.mockResolvedValue(undefined);
+    prefetchGameImplementationMock.mockReset();
+    prefetchGameImplementationMock.mockResolvedValue(null);
+    resolveCriticalImagesMock.mockReset();
+    resolveCriticalImagesMock.mockReturnValue({
+        critical: ['dicethrone/cards/cards1'],
+        warm: [],
+        phaseKey: 'init:spectator',
+    });
+    preloadWarmImagesMock.mockReset();
     latestCreateRoomModalProps.current = null;
     latestPackageInstallModalProps.current = null;
 });
@@ -701,6 +742,8 @@ describe('GameDetailsModal create room ai entry', () => {
         await waitFor(() => {
             expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
         });
+        expect(ensureGameCriticalImageResolverLoadedMock).toHaveBeenCalledWith('dicethrone');
+        expect(prefetchGameImplementationMock).toHaveBeenCalledWith('dicethrone', { includeTutorial: false });
         fireEvent.click(screen.getByText('mock-create-room-confirm'));
 
         await waitFor(() => {
@@ -730,6 +773,11 @@ describe('GameDetailsModal create room ai entry', () => {
             expect.objectContaining({
                 guestId: 'guest-1',
             }),
+        );
+        expect(preloadWarmImagesMock).toHaveBeenCalledWith(
+            ['dicethrone/cards/cards1'],
+            'zh-CN',
+            'dicethrone',
         );
     });
 

@@ -91,12 +91,22 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     {
         id: 'gunslinger',
         nameKey: 'characters.gunslinger',
-        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
     },
     {
         id: 'samurai',
         nameKey: 'characters.samurai',
-        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
     },
 ];
 

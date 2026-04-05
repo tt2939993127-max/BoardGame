@@ -59,7 +59,9 @@ const pendingAttackNeedsTargetingRoll = (core: DiceThroneCore): boolean => {
 };
 
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
-    event.type === 'CHOICE_REQUESTED' || event.type === 'INTERACTION_REQUESTED';
+    event.type === 'CHOICE_REQUESTED'
+    || event.type === 'COMPARE_ROLL_REQUESTED'
+    || event.type === 'INTERACTION_REQUESTED';
 
 const playerHasAbility = (core: DiceThroneCore, playerId: string, abilityId: string): boolean =>
     core.players[playerId]?.abilities.some(ability => ability.id === abilityId) ?? false;
@@ -505,7 +507,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     // 不消耗潜行标记——潜行在回合末自动弃除，触发免伤时不移除
 
                     // 处理 preDefense 效果（攻击方的非伤害效果仍然生效）
-                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp);
+                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp, random);
                     events.push(...preDefenseEventsSneak);
 
                     const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
@@ -566,7 +568,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 处理进攻方的 preDefense 效果
-                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp);
+                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp, random);
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
@@ -827,7 +829,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 : undefined;
             const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
             if (sneakStacks > 0 && !targetingCore.pendingAttack.isUltimate) {
-                const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(targetingCore, timestamp);
+                const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(targetingCore, timestamp, random);
                 events.push(...preDefenseEventsSneak);
 
                 const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
@@ -881,7 +883,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 return { events, overrideNextPhase: 'main2' };
             }
 
-            const preDefenseEvents = resolveOffensivePreDefenseEffects(targetingCore, timestamp);
+            const preDefenseEvents = resolveOffensivePreDefenseEffects(targetingCore, timestamp, random);
             events.push(...preDefenseEvents);
 
             const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);

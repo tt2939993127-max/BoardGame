@@ -15,6 +15,7 @@ import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { createScopedLogger } from '../../../lib/logger';
+import { resolveBonusDieText } from './bonusDieTranslation';
 
 const bonusDieOverlayLogger = createScopedLogger('DT_BONUS_DIE_OVERLAY');
 
@@ -132,6 +133,9 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 autoCloseDelay={displayOnly ? 5000 : 3000}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
+                // 教程链路里会在特写出现后立刻引导玩家继续点手牌，
+                // 第一击必须能先关掉展示态特写，不能再被点击保护吞掉。
+                closeClickGuardMs={0}
             >
                 <div className="flex flex-col items-center gap-[1.5vw]" data-testid="bonus-die-overlay">
                     {/* 提示文字 - DiceThrone 风格 */}
@@ -213,9 +217,11 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                             className="text-white text-[1.4vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
                             style={{ textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)' }}
                         >
-                            {i18n.exists(summaryEffectKey)
-                                ? t(summaryEffectKey, summaryEffectParams)
-                                : summaryEffectKey}
+                            {resolveBonusDieText(summaryEffectKey, {
+                                t,
+                                i18n,
+                                params: summaryEffectParams,
+                            }) ?? summaryEffectKey}
                         </motion.div>
                     )}
 
@@ -260,6 +266,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             onClose={onClose}
             autoCloseDelay={autoCloseDelay}
             zIndex={UI_Z_INDEX.overlayRaised + 100}
+            // 奖励骰展示态需要允许首击立即关闭，否则教程下一步会被特写挡住。
+            closeClickGuardMs={0}
         >
             <div data-testid="bonus-die-overlay">
                 <BonusDieSpotlightContent

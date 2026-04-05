@@ -132,6 +132,7 @@ interface RemoteGamePackageManifest {
     runtimeChannel?: string;
     modulePack?: RemotePackInfo | null;
     assetPack?: RemotePackInfo | null;
+    sharedAudioPack?: RemotePackInfo | null;
 }
 
 interface RemoteGamePackageManifestEnvelope {
@@ -189,20 +190,50 @@ const applyRemotePack = (
         | 'assetPackUrl'
         | 'modulePackChecksum'
         | 'assetPackChecksum'
+        | 'sharedAudioPackId'
+        | 'sharedAudioPackVersion'
+        | 'sharedAudioPackUrl'
+        | 'sharedAudioPackChecksum'
         | 'modulePackBytes'
         | 'assetPackBytes'
+        | 'sharedAudioPackBytes'
         | 'modulePackFileCount'
         | 'assetPackFileCount'
+        | 'sharedAudioPackFileCount'
     >,
-    type: 'module' | 'asset',
+    type: 'module' | 'asset' | 'sharedAudio',
     remotePack?: RemotePackInfo | null,
 ) => {
-    const fallbackId = type === 'module' ? fallback.modulePackId : fallback.assetPackId;
-    const fallbackVersion = type === 'module' ? fallback.modulePackVersion : fallback.assetPackVersion;
-    const fallbackUrl = type === 'module' ? fallback.modulePackUrl : fallback.assetPackUrl;
-    const fallbackChecksum = type === 'module' ? fallback.modulePackChecksum : fallback.assetPackChecksum;
-    const fallbackBytes = type === 'module' ? fallback.modulePackBytes : fallback.assetPackBytes;
-    const fallbackFileCount = type === 'module' ? fallback.modulePackFileCount : fallback.assetPackFileCount;
+    const fallbackId = type === 'module'
+        ? fallback.modulePackId
+        : type === 'asset'
+            ? fallback.assetPackId
+            : fallback.sharedAudioPackId;
+    const fallbackVersion = type === 'module'
+        ? fallback.modulePackVersion
+        : type === 'asset'
+            ? fallback.assetPackVersion
+            : fallback.sharedAudioPackVersion;
+    const fallbackUrl = type === 'module'
+        ? fallback.modulePackUrl
+        : type === 'asset'
+            ? fallback.assetPackUrl
+            : fallback.sharedAudioPackUrl;
+    const fallbackChecksum = type === 'module'
+        ? fallback.modulePackChecksum
+        : type === 'asset'
+            ? fallback.assetPackChecksum
+            : fallback.sharedAudioPackChecksum;
+    const fallbackBytes = type === 'module'
+        ? fallback.modulePackBytes
+        : type === 'asset'
+            ? fallback.assetPackBytes
+            : fallback.sharedAudioPackBytes;
+    const fallbackFileCount = type === 'module'
+        ? fallback.modulePackFileCount
+        : type === 'asset'
+            ? fallback.assetPackFileCount
+            : fallback.sharedAudioPackFileCount;
 
     if (remotePack === null) {
         return {
@@ -249,22 +280,29 @@ const mapRemoteManifest = (
 
     const modulePack = applyRemotePack(fallbackManifest, 'module', remoteManifest.modulePack);
     const assetPack = applyRemotePack(fallbackManifest, 'asset', remoteManifest.assetPack);
+    const sharedAudioPack = applyRemotePack(fallbackManifest, 'sharedAudio', remoteManifest.sharedAudioPack);
 
     return {
         gameId,
         runtimeChannel: remoteManifest.runtimeChannel?.trim() || fallbackManifest.runtimeChannel,
         modulePackId: modulePack.id,
         assetPackId: assetPack.id,
+        sharedAudioPackId: sharedAudioPack.id,
         modulePackVersion: modulePack.version,
         assetPackVersion: assetPack.version,
+        sharedAudioPackVersion: sharedAudioPack.version,
         modulePackUrl: modulePack.url,
         assetPackUrl: assetPack.url,
+        sharedAudioPackUrl: sharedAudioPack.url,
         modulePackChecksum: modulePack.checksum,
         assetPackChecksum: assetPack.checksum,
+        sharedAudioPackChecksum: sharedAudioPack.checksum,
         modulePackBytes: modulePack.bytes,
         assetPackBytes: assetPack.bytes,
+        sharedAudioPackBytes: sharedAudioPack.bytes,
         modulePackFileCount: modulePack.fileCount,
         assetPackFileCount: assetPack.fileCount,
+        sharedAudioPackFileCount: sharedAudioPack.fileCount,
         source: 'remote',
     };
 };

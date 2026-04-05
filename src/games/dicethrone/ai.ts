@@ -645,6 +645,44 @@ const buildInteractionActions = (
         }));
     }
 
+    if (current.kind === 'compare-roll-choice') {
+        const data = current.data as {
+            options?: Array<{ id?: string; label?: string; disabled?: boolean }>;
+        };
+        const availableOptions = (data.options ?? []).filter((option): option is { id: string; label?: string } => {
+            return typeof option?.id === 'string' && option.disabled !== true;
+        });
+
+        if (availableOptions.length === 0) {
+            return [{
+                actionId: createAiLegalActionId('interaction', current.id, 'confirm'),
+                kind: 'interaction-choice',
+                label: '确认比较结果',
+                commands: [{
+                    type: 'SYS_INTERACTION_CONFIRM',
+                    payload: {},
+                }],
+                metadata: {
+                    interactionId: current.id,
+                },
+            }];
+        }
+
+        return availableOptions.map((option, index) => ({
+            actionId: createAiLegalActionId('interaction', current.id, option.id),
+            kind: 'interaction-choice',
+            label: option.label ?? `选择 ${index + 1}`,
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: { optionId: option.id },
+            }],
+            metadata: {
+                interactionId: current.id,
+                optionId: option.id,
+            },
+        }));
+    }
+
     if (current.kind === 'dt:card-interaction') {
         const data = current.data as CardInteractionData;
 

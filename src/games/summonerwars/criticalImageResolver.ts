@@ -173,3 +173,5 @@ export const summonerWarsCriticalImageResolver: CriticalImageResolver = (
         phaseKey: `playing:${perspectiveKey}:${buildSelectionSnapshot(core)}`,
     };
 };
+
+export default summonerWarsCriticalImageResolver;

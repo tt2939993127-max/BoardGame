@@ -12,6 +12,7 @@ async function setupDefenseSelectionScene(
         gameId: 'dicethrone',
         player0: {
             resources: { CP: 2, HP: 50 },
+            tokens: { loaded: 0 },
         },
         player1: {
             resources: { CP: 2, HP: 50 },
@@ -139,6 +140,116 @@ async function setupSelfResponseAbilityScene(
     });
 }
 
+async function setupGunslingerDuelCompareRollScene(game: GameTestContext): Promise<void> {
+    await game.openTestGame('dicethrone', { playerID: 1 });
+
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            resources: { CP: 2, HP: 50 },
+        },
+        player1: {
+            resources: { CP: 2, HP: 50 },
+        },
+        currentPlayer: '1',
+        phase: 'defensiveRoll',
+        randomQueue: [1],
+        extra: {
+            selectedCharacters: { '0': 'monk', '1': 'gunslinger' },
+            hostStarted: true,
+            activePlayerId: '1',
+            rollCount: 1,
+            rollLimit: 1,
+            rollConfirmed: true,
+            dice: [
+                { id: 0, definitionId: 'gunslinger-dice', value: 6, symbol: 'bullet', symbols: ['bullet'], isKept: false },
+                { id: 1, definitionId: 'gunslinger-dice', value: 2, symbol: 'dash', symbols: ['dash'], isKept: false },
+                { id: 2, definitionId: 'gunslinger-dice', value: 3, symbol: 'bullseye', symbols: ['bullseye'], isKept: false },
+                { id: 3, definitionId: 'gunslinger-dice', value: 4, symbol: 'bullet', symbols: ['bullet'], isKept: false },
+                { id: 4, definitionId: 'gunslinger-dice', value: 5, symbol: 'dash', symbols: ['dash'], isKept: false },
+            ],
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                damage: 8,
+                bonusDamage: 0,
+                sourceAbilityId: 'fist-technique-5',
+                defenseAbilityId: 'duel',
+            },
+        },
+    });
+
+    await expect.poll(async () => {
+        const state = await game.getState();
+        return {
+            phase: state?.sys?.phase ?? null,
+            defenseAbilityId: state?.core?.pendingAttack?.defenseAbilityId ?? null,
+            rollConfirmed: state?.core?.rollConfirmed ?? null,
+            dieValue: state?.core?.dice?.[0]?.value ?? null,
+        };
+    }, { timeout: 5000 }).toMatchObject({
+        phase: 'defensiveRoll',
+        defenseAbilityId: 'duel',
+        rollConfirmed: true,
+        dieValue: 6,
+    });
+}
+
+async function setupGunslingerShowdownCompareRollScene(game: GameTestContext): Promise<void> {
+    await game.openTestGame('dicethrone', { playerID: 0 });
+
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            resources: { CP: 2, HP: 50 },
+        },
+        player1: {
+            resources: { CP: 2, HP: 50 },
+        },
+        currentPlayer: '0',
+        phase: 'offensiveRoll',
+        randomQueue: [6, 1],
+        extra: {
+            selectedCharacters: { '0': 'gunslinger', '1': 'monk' },
+            hostStarted: true,
+            activePlayerId: '0',
+            rollCount: 1,
+            rollLimit: 3,
+            rollConfirmed: true,
+            dice: [
+                { id: 0, definitionId: 'gunslinger-dice', value: 1, symbol: 'bullet', symbols: ['bullet'], isKept: false },
+                { id: 1, definitionId: 'gunslinger-dice', value: 2, symbol: 'dash', symbols: ['dash'], isKept: false },
+                { id: 2, definitionId: 'gunslinger-dice', value: 3, symbol: 'bullseye', symbols: ['bullseye'], isKept: false },
+                { id: 3, definitionId: 'gunslinger-dice', value: 4, symbol: 'bullet', symbols: ['bullet'], isKept: false },
+                { id: 4, definitionId: 'gunslinger-dice', value: 5, symbol: 'dash', symbols: ['dash'], isKept: false },
+            ],
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                damage: 5,
+                bonusDamage: 0,
+                sourceAbilityId: 'showdown',
+                preDefenseResolved: false,
+            },
+        },
+    });
+
+    await expect.poll(async () => {
+        const state = await game.getState();
+        return {
+            phase: state?.sys?.phase ?? null,
+            sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+            bonusDamage: state?.core?.pendingAttack?.bonusDamage ?? null,
+        };
+    }, { timeout: 5000 }).toMatchObject({
+        phase: 'offensiveRoll',
+        sourceAbilityId: 'showdown',
+        bonusDamage: 0,
+    });
+}
+
 test.describe('DiceThrone - 防御技能选择', () => {
     test('影贼防御选择场景应高亮可选技能', async ({ page, game }, testInfo) => {
         await setupDefenseSelectionScene(game, 'shadow_thief', null);
@@ -193,5 +304,73 @@ test.describe('DiceThrone - 防御技能选择', () => {
             responseWindowId: null,
             phase: 'offensiveRoll',
         });
+    });
+
+    test('枪手 Duel 应展示双方对掷 UI，并在选择抵挡一半后结算', async ({ page, game }, testInfo) => {
+        await setupGunslingerDuelCompareRollScene(game);
+
+        await page.locator('[data-tutorial-id="advance-phase-button"]').click();
+
+        const overlay = page.getByTestId('compare-roll-overlay');
+        await expect(overlay).toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId('compare-roll-participant-0')).toBeVisible();
+        await expect(page.getByTestId('compare-roll-participant-1')).toBeVisible();
+        await expect(page.getByTestId('compare-roll-result')).toContainText('你赢下对决');
+        await expect(page.getByRole('button', { name: /抵挡 1\/2 进攻伤害/i })).toBeVisible();
+
+        await game.screenshot('gunslinger-duel-compare-roll-choice', testInfo);
+
+        await page.getByRole('button', { name: /抵挡 1\/2 进攻伤害/i }).click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                interactionKind: state?.sys?.interaction?.current?.kind ?? null,
+                phase: state?.sys?.phase ?? null,
+                defenderHp: state?.core?.players?.['1']?.resources?.HP ?? null,
+                attackerHp: state?.core?.players?.['0']?.resources?.HP ?? null,
+                pendingAttack: state?.core?.pendingAttack ?? null,
+            };
+        }, { timeout: 8000 }).toMatchObject({
+            interactionKind: null,
+            phase: 'main2',
+            defenderHp: 46,
+            attackerHp: 50,
+            pendingAttack: null,
+        });
+
+        await expect(overlay).toBeHidden();
+    });
+
+    test('枪手 Showdown 应展示双方对掷 UI，并在自动确认后继续结算链路', async ({ page, game }, testInfo) => {
+        await setupGunslingerShowdownCompareRollScene(game);
+
+        await page.locator('[data-tutorial-id="advance-phase-button"]').click();
+
+        const overlay = page.getByTestId('compare-roll-overlay');
+        await expect(overlay).toBeVisible({ timeout: 5000 });
+        await expect(page.getByTestId('compare-roll-participant-0')).toBeVisible();
+        await expect(page.getByTestId('compare-roll-participant-1')).toBeVisible();
+        await expect(page.getByTestId('compare-roll-result')).toContainText('本次攻击伤害 +2');
+        await expect(page.getByTestId('compare-roll-autoconfirm')).toContainText('正在确认对掷结果');
+
+        await game.screenshot('gunslinger-showdown-compare-roll-auto-confirm', testInfo);
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return {
+                interactionKind: state?.sys?.interaction?.current?.kind ?? null,
+                phase: state?.sys?.phase ?? null,
+                bonusDamage: state?.core?.pendingAttack?.bonusDamage ?? null,
+                sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+            };
+        }, { timeout: 8000 }).toMatchObject({
+            interactionKind: null,
+            phase: 'defensiveRoll',
+            bonusDamage: 2,
+            sourceAbilityId: 'showdown',
+        });
+
+        await expect(overlay).toBeHidden();
     });
 });

@@ -8,14 +8,45 @@ import express from 'express';
 import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
 import { AppModule } from './app.module';
 import { MsgpackIoAdapter } from './adapters/msgpack-io.adapter';
 import { createAdminTestLatencyMiddleware } from './modules/admin/admin-test-latency.middleware';
 import { AdminTestLatencyService } from './modules/admin/admin-test-latency.service';
 import { GlobalHttpExceptionFilter } from './shared/filters/http-exception.filter';
 import logger from '../../../server/logger';
+import { resolvePreferredTestMongoUri } from '../../../src/server/testUtils/mongoMemory';
 import { isNoCacheSpaEntryPath, shouldServeSpaFallback } from './spa-fallback';
 import { LONG_CACHE_MAX_AGE, NO_CACHE_HEADER, isNoCacheStaticFilePath } from './spa-fallback';
+
+let testMongoServer: MongoMemoryServer | null = null;
+
+const shouldPrepareTestMongo = () => process.env.NODE_ENV === 'test';
+
+const prepareTestMongoIfNeeded = async () => {
+    if (!shouldPrepareTestMongo() || process.env.MONGO_URI?.trim()) {
+        return;
+    }
+
+    const { mongo, mongoUri } = await resolvePreferredTestMongoUri();
+    process.env.MONGO_URI = mongoUri;
+    testMongoServer = mongo;
+
+    logger.info('[API] 测试模式 Mongo 已就绪', {
+        source: mongo ? 'memory-server' : 'external-or-local',
+        mongo_uri: mongo ? 'mongodb-memory-server' : mongoUri,
+    });
+};
+
+const stopTestMongoIfNeeded = async () => {
+    if (!testMongoServer) {
+        return;
+    }
+
+    const server = testMongoServer;
+    testMongoServer = null;
+    await server.stop();
+};
 
 const initSentryInBackground = async () => {
     const dsn = process.env.SENTRY_DSN?.trim();
@@ -40,6 +71,7 @@ const initSentryInBackground = async () => {
 
 async function bootstrap() {
     const bootstrapStartedAt = Date.now();
+    await prepareTestMongoIfNeeded();
 
     const webOrigins = process.env.WEB_ORIGINS
         ? process.env.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
@@ -177,6 +209,25 @@ async function bootstrap() {
     });
 
     void initSentryInBackground();
+
+    const shutdown = async (signal: string) => {
+        try {
+            await app.close();
+            await stopTestMongoIfNeeded();
+        } catch (error) {
+            logger.error(`[API] ${signal} 优雅关闭失败:`, error);
+        } finally {
+            process.exit(0);
+        }
+    };
+
+    process.once('SIGTERM', () => {
+        void shutdown('SIGTERM');
+    });
+
+    process.once('SIGINT', () => {
+        void shutdown('SIGINT');
+    });
 }
 
 bootstrap().catch((error) => {

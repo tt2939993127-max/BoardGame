@@ -5,10 +5,10 @@
 import type { GameAudioConfig } from '../../lib/audio/types';
 import { createFeedbackResolver, collectPreloadKeys } from '../../lib/audio/defineEvents';
 import { pickRandomSoundKey } from '../../lib/audio/audioUtils';
-import type { GamePhase, SmashUpCore } from './domain/types';
+import type { FactionId, GamePhase, SmashUpCore } from './domain/types';
 import { SU_EVENTS, SU_EVENT_TYPES } from './domain/events';
 import { SMASHUP_FACTION_IDS } from './domain/ids';
-import { getCardDef } from './data/cards';
+import { getCardDef, getFactionCards, getFactionTitans, getTitanDef } from './data/cards';
 
 type SmashUpAudioCtx = {
     currentPhase: GamePhase;
@@ -36,18 +36,50 @@ const BGM_NOBODY_KNOWS_INTENSE_KEY = 'bgm.funk.funk_music_pack.nobody_knows_rt_4
 const STINGER_WIN_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win';
 const STINGER_LOSE_KEY = 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose';
 
-const SELECTION_KEY = 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_system_192khz.dialog.dialog_choice.uiclick_dialog_choice_01_krst_none';
-const POSITIVE_SIGNAL_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.positive.signal_positive_bells_a';
-const UPDATE_CHIME_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
-
-const MINION_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
-const ACTION_PLAY_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_magic_deck_001';
-const CARD_DRAW_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_take_001';
-const CARD_DISCARD_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001';
+const UNEARTH_KEY = 'system.general.casual_mobile_sound_fx_pack_vol.interactions.misc_interactions.shovel_and_dig';
+const BURIED_RETURN_TO_HAND_KEY = 'magic.general.spells_variations_vol_1.close_temporal_rift_summoning.magspel_close_temporal_rift_summoning_01_krst';
 
 const MOVE_KEY = 'card.handling.mini_games_sound_effects_and_music_pack.card.sfx_card_play_1';
-const POWER_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
 const MADNESS_KEY = 'magic.dark.32.dark_spell_01';
+const SPHINX_TITAN_PLAY_KEY = 'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_02_krst_none';
+const SPHINX_TITAN_MOVE_KEY = 'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_01_krst_none';
+const PECOS_BILL_TITAN_PLAY_KEY = 'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_2';
+const PECOS_BILL_TITAN_MOVE_KEY = 'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_a';
+const BEAR_CAVALRY_TITAN_PLAY_KEY = 'monster.general.files.10.growl_with_slobber_01';
+const BEAR_CAVALRY_TITAN_MOVE_KEY = 'monster.general.files.9.growl_01';
+const GHOST_TITAN_PLAY_KEY = 'dark_fantasy_studio.ghostly.ghostly_33';
+const GHOST_TITAN_MOVE_KEY = 'dark_fantasy_studio.ghostly.ghostly_34';
+const CHANGERBOTS_TITAN_PLAY_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a3';
+const CHANGERBOTS_TITAN_MOVE_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a1';
+const BOULDER_TITAN_PLAY_KEY = 'magic.general.spells_variations_vol_2.stonecrash_impact.magelem_stonecrash_impact_01_krst_none';
+const HEAVY_OBJECT_MOVE_KEY = 'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.heavy_object_move';
+const PUZZLE_HEAVY_OBJECT_MOVE_KEY = 'system.general.casual_mobile_sound_fx_pack_vol.interactions.puzzles.puzzle_heavy_object_move';
+const GIANT_ANT_TITAN_PLAY_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.buzz_and_hum.buzzing';
+const GIANT_ANT_TITAN_MOVE_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.buzz_and_hum.buzz_and_hum_a';
+const INNSMOUTH_TITAN_PLAY_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_004';
+const INNSMOUTH_TITAN_MOVE_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_004';
+const KAIJU_TITAN_PLAY_KEY = 'monster.general.files.15.long_roar_01';
+const RAINBOROC_TITAN_PLAY_KEY = 'dark_fantasy_studio.birds.birds_1';
+const RAINBOROC_TITAN_MOVE_KEY = 'dark_fantasy_studio.birds.birds_2';
+const EMPEROR_PENGUIN_TITAN_PLAY_KEY = 'dark_fantasy_studio.birds.birds_3';
+const EMPEROR_PENGUIN_TITAN_MOVE_KEY = 'dark_fantasy_studio.birds.birds_4';
+const BIG_FUNNY_GIANT_TITAN_PLAY_KEY = 'monster.general.khron_studio_monster_library_vol_4_assets.behemoth.behemoth_roar.creamnstr_behemoth_roar_01';
+const MOON_ZERO_THREE_TITAN_PLAY_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.drones.hover_thing_approach';
+const MOON_ZERO_THREE_TITAN_MOVE_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.drones.hover_thing_passing';
+const VAMPIRE_TITAN_MOVE_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_grave_whisper_004';
+const WEREWOLF_TITAN_MOVE_KEY = 'fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_attack_004';
+const MEGABOT_TITAN_PLAY_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a4';
+const MEGABOT_TITAN_MOVE_KEY = 'cyberpunk.cyberpunk_sound_fx_pack_vol.android_esque.robotic_limb_single_a1';
+const CTHULHU_TITAN_PLAY_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_001';
+const CTHULHU_TITAN_MOVE_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_001';
+const VAMPIRE_TITAN_PLAY_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_shadow_wail_001';
+const WEREWOLF_TITAN_PLAY_KEY = 'fantasy.gothic_fantasy_sound_fx_pack_vol.creatures.werewolf_attack_001';
+const WIZARD_TITAN_PLAY_KEY = 'magic.general.spells_variations_vol_1.arcane_blast.magspel_arcane_blast_01_krst';
+const WIZARD_TITAN_MOVE_KEY = 'magic.general.spells_variations_vol_3.shield_blessing.magspel_shield_blessing_01_krst_none';
+const KRAKEN_TITAN_PLAY_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_maelstrom_roar_001';
+const KRAKEN_TITAN_MOVE_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_001';
+const TIME_BOX_TITAN_PLAY_KEY = 'magic.general.spells_variations_vol_1.temporal_rift_summoning.magspel_temporal_rift_summoning_krst';
+const TIME_BOX_TITAN_MOVE_KEY = 'magic.general.spells_variations_vol_1.temporal_rift_whoosh.magspel_temporal_rift_whoosh_01_krst';
 
 // 僵尸随从：DFS zombie_voices（语义高度匹配）
 const ZOMBIE_MINION_KEYS = [
@@ -210,42 +242,34 @@ const MISKATONIC_ACTION_KEYS = [
 const ANCIENT_EGYPTIAN_MINION_KEYS = [
     'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none',
     'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_02_krst_none',
-    'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_03_krst_none',
 ];
 const ANCIENT_EGYPTIAN_ACTION_KEYS = [
     'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_01_krst_none',
     'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_02_krst_none',
-    'magic.general.spells_variations_vol_2.breeze_of_the_ancients.magelem_breeze_of_the_ancients_03_krst_none',
 ];
 const COWBOY_MINION_KEYS = [
     'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_1',
     'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_2',
-    'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_3',
 ];
 const COWBOY_ACTION_KEYS = [
     'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_a',
     'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_b',
-    'combat.general.mini_games_sound_effects_and_music_pack.gun.reload.sfx_gun_mechanic_set_c',
 ];
 const SAMURAI_MINION_KEYS = [
     'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_01_krst',
     'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_02_krst',
-    'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_03_krst',
 ];
 const SAMURAI_ACTION_KEYS = [
-    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_01_krst',
-    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_02_krst',
-    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer.fghtimpt_katana_only_hit_layer_03_krst',
+    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer_with_metal.fghtimpt_katana_only_hit_layer_with_metal_07_krst',
+    'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer_with_metal.fghtimpt_katana_only_hit_layer_with_metal_08_krst',
 ];
 const VIKING_MINION_KEYS = [
     'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_01_krst',
     'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_02_krst',
-    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_short_whoosh.weapaxe_heavy_axe_short_whoosh_03_krst',
 ];
 const VIKING_ACTION_KEYS = [
     'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_strike.weapaxe_heavy_axe_strike_01_krst',
     'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_strike.weapaxe_heavy_axe_strike_02_krst',
-    'combat.general.forged_in_fury_vol_1.heavy_axe.heavy_axe_strike.weapaxe_heavy_axe_strike_03_krst',
 ];
 
 // 狼人：统一用攻击音效（风格一致）
@@ -330,8 +354,55 @@ const collectFactionPreloadKeys = (factionIds: string[]): string[] => {
     for (const factionId of factionIds) {
         const list = FACTION_SFX_KEYS[factionId];
         if (list) list.forEach(key => keys.add(key));
+        const typedFactionId = factionId as FactionId;
+        for (const card of getFactionCards(typedFactionId)) {
+            if ('soundKey' in card && card.soundKey) keys.add(card.soundKey);
+        }
+        for (const titan of getFactionTitans(typedFactionId)) {
+            const policy = SMASHUP_TITAN_SOUND_POLICY[titan.id];
+            if (!policy) continue;
+            if (policy.play !== 'generic') keys.add(policy.play);
+            if (policy.move !== 'generic') keys.add(policy.move);
+        }
     }
     return Array.from(keys);
+};
+
+type TitanSoundDecision = 'generic' | string;
+
+export const SMASHUP_TITAN_SOUND_POLICY: Record<string, { play: TitanSoundDecision; move: TitanSoundDecision }> = {
+    bear_cavalry_major_ursa: { play: BEAR_CAVALRY_TITAN_PLAY_KEY, move: BEAR_CAVALRY_TITAN_MOVE_KEY },
+    ghosts_creampuff_man: { play: GHOST_TITAN_PLAY_KEY, move: GHOST_TITAN_MOVE_KEY },
+    changerbots_mergacon: { play: CHANGERBOTS_TITAN_PLAY_KEY, move: CHANGERBOTS_TITAN_MOVE_KEY },
+    explorers_very_large_boulder: { play: BOULDER_TITAN_PLAY_KEY, move: HEAVY_OBJECT_MOVE_KEY },
+    giant_ants_death_on_six_legs: { play: GIANT_ANT_TITAN_PLAY_KEY, move: GIANT_ANT_TITAN_MOVE_KEY },
+    innsmouth_dagon: { play: INNSMOUTH_TITAN_PLAY_KEY, move: INNSMOUTH_TITAN_MOVE_KEY },
+    ignobles_the_hill_that_strolls: { play: PUZZLE_HEAVY_OBJECT_MOVE_KEY, move: HEAVY_OBJECT_MOVE_KEY },
+    itty_critters_rainboroc: { play: RAINBOROC_TITAN_PLAY_KEY, move: RAINBOROC_TITAN_MOVE_KEY },
+    kaiju_gorgodzolla: { play: KAIJU_TITAN_PLAY_KEY, move: HEAVY_OBJECT_MOVE_KEY },
+    magical_girls_walking_castle: { play: PUZZLE_HEAVY_OBJECT_MOVE_KEY, move: HEAVY_OBJECT_MOVE_KEY },
+    mega_troopers_megabot: { play: MEGABOT_TITAN_PLAY_KEY, move: MEGABOT_TITAN_MOVE_KEY },
+    cthulhu_cthulhu_titan: { play: CTHULHU_TITAN_PLAY_KEY, move: CTHULHU_TITAN_MOVE_KEY },
+    penguins_emperor_penguin: { play: EMPEROR_PENGUIN_TITAN_PLAY_KEY, move: EMPEROR_PENGUIN_TITAN_MOVE_KEY },
+    tricksters_big_funny_giant: { play: BIG_FUNNY_GIANT_TITAN_PLAY_KEY, move: HEAVY_OBJECT_MOVE_KEY },
+    vampires_ancient_lord: { play: VAMPIRE_TITAN_PLAY_KEY, move: VAMPIRE_TITAN_MOVE_KEY },
+    werewolves_great_wolf_spirit: { play: WEREWOLF_TITAN_PLAY_KEY, move: WEREWOLF_TITAN_MOVE_KEY },
+    wizards_arcane_protector: { play: WIZARD_TITAN_PLAY_KEY, move: WIZARD_TITAN_MOVE_KEY },
+    pirates_the_kraken: { play: KRAKEN_TITAN_PLAY_KEY, move: KRAKEN_TITAN_MOVE_KEY },
+    super_spies_moon_zero_three: { play: MOON_ZERO_THREE_TITAN_PLAY_KEY, move: MOON_ZERO_THREE_TITAN_MOVE_KEY },
+    time_travelers_time_box: { play: TIME_BOX_TITAN_PLAY_KEY, move: TIME_BOX_TITAN_MOVE_KEY },
+    sphinx: { play: SPHINX_TITAN_PLAY_KEY, move: SPHINX_TITAN_MOVE_KEY },
+    pecos_bill: { play: PECOS_BILL_TITAN_PLAY_KEY, move: PECOS_BILL_TITAN_MOVE_KEY },
+};
+
+const resolveTitanSound = (defId: string | undefined, kind: 'play' | 'move'): string | null => {
+    if (!defId) return null;
+    const titanDef = getTitanDef(defId);
+    if (!titanDef) return null;
+    const policy = SMASHUP_TITAN_SOUND_POLICY[defId];
+    if (!policy) return null;
+    const decision = policy[kind];
+    return decision === 'generic' ? null : decision;
 };
 
 /**
@@ -619,13 +690,33 @@ export const SMASHUP_AUDIO_CONFIG: GameAudioConfig = {
         if (type === SU_EVENT_TYPES.MINION_MOVED) {
             return MOVE_KEY;
         }
-        
+
+        if (type === SU_EVENT_TYPES.BURIED_CARD_UNCOVERED) {
+            return UNEARTH_KEY;
+        }
+
+        if (type === SU_EVENT_TYPES.BURIED_CARD_RETURNED_TO_HAND) {
+            return BURIED_RETURN_TO_HAND_KEY;
+        }
+
         // MINION_PLAYED：根据阵营选择音效
         if (type === SU_EVENT_TYPES.MINION_PLAYED) {
             const defId = (event.payload as { defId?: string })?.defId;
             const factionSound = resolveFactionSound(defId, 'minion');
             if (factionSound) return factionSound;
             // 回退到框架默认
+        }
+
+        if (type === SU_EVENT_TYPES.TITAN_PLAYED) {
+            const defId = (event.payload as { defId?: string })?.defId;
+            const titanSound = resolveTitanSound(defId, 'play');
+            if (titanSound) return titanSound;
+        }
+
+        if (type === SU_EVENT_TYPES.TITAN_MOVED) {
+            const defId = (event.payload as { defId?: string })?.defId;
+            const titanSound = resolveTitanSound(defId, 'move');
+            if (titanSound) return titanSound;
         }
         
         // ACTION_PLAYED / ONGOING_ATTACHED：根据阵营选择音效

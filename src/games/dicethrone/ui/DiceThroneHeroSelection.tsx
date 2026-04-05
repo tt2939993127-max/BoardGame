@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, MessageSquareWarning } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
+import { CharacterSelectionBadge } from '../../../components/game/framework/CharacterSelectionBadge';
 import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
@@ -312,35 +313,12 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
         });
     }, [hostPlayerId, inlineUnit, playerIds, readyPlayers, selectedCharacters]);
 
-    const getBadgeToneClassName = (character: CharacterDefinition, badgeId: string) => {
-        const badge = character.badges?.find((item) => item.id === badgeId);
-        switch (badge?.tone) {
-            case 'info':
-                return 'border-sky-300/55 bg-sky-500/85 text-white';
-            case 'success':
-                return 'border-emerald-300/55 bg-emerald-500/85 text-white';
-            case 'danger':
-                return 'border-rose-300/55 bg-rose-500/85 text-white';
-            case 'neutral':
-                return 'border-slate-200/45 bg-slate-500/80 text-white';
-            case 'warning':
-            default:
-                return 'border-slate-950/85 text-slate-950';
-        }
+    const getOverlayBadge = (character: CharacterDefinition) => {
+        return character.badges?.find((badge) => badge.variant === 'disabled-overlay');
     };
 
-    const getBadgeToneStyle = (character: CharacterDefinition, badgeId: string): React.CSSProperties | undefined => {
-        const badge = character.badges?.find((item) => item.id === badgeId);
-        if (badge?.tone !== 'warning') return undefined;
-
-        return {
-            backgroundColor: '#facc15',
-            backgroundImage: [
-                'linear-gradient(180deg, rgba(255,244,180,0.9) 0%, rgba(250,204,21,0.95) 100%)',
-                'repeating-linear-gradient(135deg, rgba(15,23,42,0.92) 0 6px, rgba(15,23,42,0) 6px 12px)',
-            ].join(', '),
-            boxShadow: '0 0 0 1px rgba(15,23,42,0.55), 0 6px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.35)',
-        };
+    const getPillBadges = (character: CharacterDefinition) => {
+        return character.badges?.filter((badge) => badge.variant !== 'disabled-overlay') ?? [];
     };
 
     if (!isOpen) return null;
@@ -395,6 +373,8 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 >
                     {availableCharacters.map((char, index) => {
                         const isSelectedByMe = selectedCharacters[currentPlayerId] === char.id;
+                        const overlayBadge = getOverlayBadge(char);
+                        const pillBadges = getPillBadges(char);
 
                         return (
                             <motion.div
@@ -420,37 +400,51 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
 
-                                {char.badges?.length ? (
+                                {pillBadges.length ? (
                                     <div
                                         className="absolute left-0 z-20 flex flex-col items-start pointer-events-none"
                                         style={{
-                                            top: inlineUnit(0.35),
-                                            left: inlineUnit(0.35),
-                                            gap: inlineUnit(0.24),
-                                            maxWidth: `calc(100% - ${inlineUnit(2.2)})`,
+                                            top: inlineUnit(0.34),
+                                            left: inlineUnit(0.34),
+                                            gap: inlineUnit(0.28),
+                                            maxWidth: `calc(100% - ${inlineUnit(1.9)})`,
                                         }}
                                     >
-                                        {char.badges.map((badge) => (
-                                            <span
+                                        {pillBadges.map((badge) => (
+                                            <CharacterSelectionBadge
                                                 key={badge.id}
-                                                data-testid={`character-badge-${char.id}-${badge.id}`}
-                                                className={clsx(
-                                                    'rounded-full border font-black uppercase tracking-[0.14em] shadow-lg backdrop-blur-sm',
-                                                    getBadgeToneClassName(char, badge.id)
-                                                )}
-                                                style={{
-                                                    paddingLeft: inlineUnit(0.42),
-                                                    paddingRight: inlineUnit(0.42),
-                                                    paddingTop: inlineUnit(0.18),
-                                                    paddingBottom: inlineUnit(0.18),
-                                                    fontSize: inlineUnit(0.38),
-                                                    lineHeight: 1.1,
-                                                    ...getBadgeToneStyle(char, badge.id),
-                                                }}
-                                            >
-                                                {t(badge.labelKey)}
-                                            </span>
+                                                badge={badge}
+                                                label={t(badge.labelKey)}
+                                                inlineUnit={inlineUnit}
+                                                testId={`character-badge-${char.id}-${badge.id}`}
+                                            />
                                         ))}
+                                    </div>
+                                ) : null}
+
+                                {overlayBadge ? (
+                                    <div className="absolute inset-0 z-20 pointer-events-none">
+                                        <div
+                                            className="absolute inset-0"
+                                            style={{
+                                                background: 'linear-gradient(180deg, rgba(2,6,23,0.22) 0%, rgba(2,6,23,0.62) 100%)',
+                                            }}
+                                        />
+                                        <div
+                                            className="absolute inset-0 opacity-90"
+                                            style={{
+                                                backgroundImage: 'linear-gradient(135deg, rgba(250,204,21,0) 0 36%, rgba(250,204,21,0.18) 36% 43%, rgba(250,204,21,0) 43% 100%)',
+                                            }}
+                                        />
+                                        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center overflow-visible">
+                                            <CharacterSelectionBadge
+                                                badge={overlayBadge}
+                                                label={t(overlayBadge.labelKey)}
+                                                inlineUnit={inlineUnit}
+                                                mode="overlay"
+                                                testId={`character-badge-${char.id}-${overlayBadge.id}`}
+                                            />
+                                        </div>
                                     </div>
                                 ) : null}
 
