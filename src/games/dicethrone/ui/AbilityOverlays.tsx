@@ -58,7 +58,6 @@ const getUpgradeTargetFromCard = (card?: AbilityCard): string | null => {
 
 
 export const ABILITY_SLOT_MAP = SHARED_ABILITY_SLOT_MAP;
-const ABILITY_UPGRADE_PREVIEW_CLASS_NAME = 'w-full h-full rounded-lg';
 
 export const getAbilitySlotId = (abilityId: string) => {
     return getSharedAbilitySlotId(abilityId);
@@ -351,13 +350,13 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                 {/* 只有升级后才叠加升级卡图片，未升级时玩家面板底图已有基础被动图案 */}
                                 {isUpgraded && passiveCard?.previewRef && (
                                     <div
-                                        className="absolute inset-0 pointer-events-none"
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
                                         data-upgrade-preview-slot={slot.id}
                                     >
                                         <CardPreview
                                             previewRef={passiveCard.previewRef}
                                             locale={locale}
-                                            className={ABILITY_UPGRADE_PREVIEW_CLASS_NAME}
+                                            className="h-full aspect-[0.61] rounded-lg"
                                         />
                                     </div>
                                 )}
@@ -429,13 +428,13 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             {/* 升级卡叠加层（保持卡牌原始比例，居中覆盖） */}
                             {!isUltimate && upgradePreviewRef && (
                                 <div
-                                    className="absolute inset-0 pointer-events-none"
+                                    className="absolute inset-0 flex items-center justify-center pointer-events-none"
                                     data-upgrade-preview-slot={slot.id}
                                 >
                                     <CardPreview
                                         previewRef={upgradePreviewRef}
                                         locale={locale}
-                                        className={ABILITY_UPGRADE_PREVIEW_CLASS_NAME}
+                                        className="h-full aspect-[0.61] rounded-lg"
                                     />
                                 </div>
                             )}
