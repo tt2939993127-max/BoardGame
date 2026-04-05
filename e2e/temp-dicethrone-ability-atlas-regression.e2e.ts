@@ -84,24 +84,58 @@ async function setupHeroScene(
   heroId: 'samurai' | 'gunslinger',
   hand: string[],
 ) {
+  await game.openTestGame('dicethrone');
   await game.setupScene({
     gameId: 'dicethrone',
     player0: {
       hand,
-      resources: { CP: 10, HP: 50 },
+      discard: [],
+      resources: { cp: 10, hp: 50 },
     },
     player1: {
-      resources: { HP: 50 },
+      hand: [],
+      discard: [],
+      resources: { cp: 2, hp: 50 },
     },
     currentPlayer: '0',
     phase: 'main1',
     extra: {
       selectedCharacters: { '0': heroId, '1': 'barbarian' },
       hostStarted: true,
+      pendingAttack: null,
+      pendingDamage: undefined,
+      rollCount: 0,
+      rollConfirmed: false,
     },
   });
 
   await game.waitForPhase('main1', 10000);
+  await expect.poll(async () => {
+    const state = await (game as any).getState();
+    const handIds = state?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [];
+    return {
+      phase: state?.sys?.phase ?? null,
+      activePlayerId: state?.core?.activePlayerId ?? null,
+      characterId: state?.core?.selectedCharacters?.['0'] ?? null,
+      cp: state?.core?.players?.['0']?.resources?.cp
+        ?? state?.core?.players?.['0']?.resources?.CP
+        ?? null,
+      hp: state?.core?.players?.['0']?.resources?.hp
+        ?? state?.core?.players?.['0']?.resources?.HP
+        ?? null,
+      handIds,
+    };
+  }, { timeout: 10000 }).toMatchObject({
+    phase: 'main1',
+    activePlayerId: '0',
+    characterId: heroId,
+    handIds: hand,
+  });
+
+  await page.evaluate(() => {
+    (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+  });
+
   await waitForHandReady(page, hand.length);
 }
 
@@ -143,5 +177,52 @@ test.describe('DiceThrone hand card preview regression', () => {
     expect(gunslingerDiag).toMatchObject({ missing: false, shimmerCount: 0 });
     expect(gunslingerDiag.cards?.every((card) => card.hasExpectedAsset)).toBe(true);
     await page.screenshot({ path: join(evidenceDir, 'gunslinger-hand-preview.png'), fullPage: true });
+  });
+
+  test('gunslinger deadeye upgrade should resolve without wrong spotlight in normal play', async ({ page, game }, testInfo) => {
+    test.setTimeout(120000);
+
+    await setupHeroScene(page, game, 'gunslinger', [
+      'upgrade-deadeye-2',
+    ]);
+
+    const handDiag = await collectHandDiag(page, {
+      'upgrade-deadeye-2': 'ability-cards.webp',
+    });
+    expect(handDiag).toMatchObject({ missing: false, shimmerCount: 0 });
+    expect(handDiag.cards?.some((card) => card.cardId === 'upgrade-deadeye-2' && card.hasExpectedAsset)).toBe(true);
+    await game.screenshot('gunslinger-deadeye-upgrade-hand-before-play', testInfo);
+
+    const handCard = page.locator('[data-testid="hand-area"] [data-card-id="upgrade-deadeye-2"]').first();
+    await expect(handCard).toBeVisible({ timeout: 10000 });
+    await handCard.click();
+
+    await expect.poll(async () => {
+      const state = await (game as any).getState();
+      const player = state?.core?.players?.['0'];
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        deadeyeLevel: player?.abilityLevels?.deadeye ?? 0,
+        cp: player?.resources?.cp ?? null,
+        handIds: player?.hand?.map((card: any) => card.id) ?? [],
+        discardIds: player?.discard?.map((card: any) => card.id) ?? [],
+        lastEventTypes: (state?.sys?.eventStream?.entries ?? [])
+          .slice(-6)
+          .map((entry: any) => entry?.event?.type ?? null),
+      };
+    }, { timeout: 15000 }).toMatchObject({
+      reject: null,
+      phase: 'main1',
+      deadeyeLevel: 2,
+      cp: 8,
+      handIds: [],
+      discardIds: ['upgrade-deadeye-2'],
+      lastEventTypes: ['CP_CHANGED', 'CARD_PLAYED', 'ABILITY_REPLACED'],
+    });
+
+    await expect(page.locator('[data-testid="card-spotlight-overlay"]')).toBeHidden({ timeout: 1000 });
+    await expect(page.locator('[data-testid="bonus-die-overlay"]')).toBeHidden({ timeout: 1000 });
+    await game.screenshot('gunslinger-deadeye-upgrade-after-play', testInfo);
   });
 });

@@ -59,6 +59,7 @@ public class GamePackagePlugin extends Plugin {
     private static final String ERROR_FILE_IO = "file-io";
     private static final String ERROR_CANCELLED = "cancelled";
     private static final String ERROR_UNKNOWN = "unknown";
+    private static final String STALE_IN_PROGRESS_ERROR_MESSAGE = "上次下载未完成，请重新发起。";
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -186,12 +187,16 @@ public class GamePackagePlugin extends Plugin {
         try {
             JSONObject payload = readJsonFile(resolveStateFile(gameId));
             JSObject result = new JSObject();
-            result.put("taskRunning", isTaskRunning(gameId));
+            boolean taskRunning = isTaskRunning(gameId);
+            result.put("taskRunning", taskRunning);
             if (payload == null) {
+                Log.i(TAG, "getInstallState empty gameId=" + gameId + " taskRunning=" + taskRunning);
                 result.put("exists", false);
                 call.resolve(result);
                 return;
             }
+
+            payload = normalizeStaleInstallState(gameId, payload, taskRunning);
 
             result.put("exists", true);
             copyJsonValue(payload, result, "gameId");
@@ -204,10 +209,38 @@ public class GamePackagePlugin extends Plugin {
             copyJsonValue(payload, result, "assetRootPath");
             copyJsonValue(payload, result, "installedAt");
             copyJsonValue(payload, result, "updatedAt");
+            Log.i(TAG, "getInstallState success gameId=" + gameId + " taskRunning=" + taskRunning + " payload=" + payload);
             call.resolve(result);
         } catch (Exception error) {
             Log.e(TAG, "getInstallState failed gameId=" + gameId, error);
             call.reject("读取安装任务状态失败", error);
+        }
+    }
+
+    private JSONObject normalizeStaleInstallState(String gameId, JSONObject payload, boolean taskRunning) {
+        if (payload == null || taskRunning) {
+            return payload;
+        }
+
+        String status = normalizeNonEmpty(payload.optString("status", null));
+        if (!isInProgressStatus(status)) {
+            return payload;
+        }
+
+        try {
+            JSONObject normalizedPayload = new JSONObject(payload.toString());
+            normalizedPayload.put("status", "failed");
+            normalizedPayload.remove("progressPercent");
+            normalizedPayload.remove("progressMode");
+            normalizedPayload.put("errorCode", ERROR_UNKNOWN);
+            normalizedPayload.put("errorMessage", STALE_IN_PROGRESS_ERROR_MESSAGE);
+            normalizedPayload.put("updatedAt", System.currentTimeMillis());
+            persistInstallState(gameId, normalizedPayload);
+            Log.w(TAG, "normalizeStaleInstallState gameId=" + gameId + " previousStatus=" + status + " normalizedPayload=" + normalizedPayload);
+            return normalizedPayload;
+        } catch (Exception error) {
+            Log.w(TAG, "normalizeStaleInstallState failed gameId=" + gameId + " status=" + status, error);
+            return payload;
         }
     }
 
@@ -400,19 +433,29 @@ public class GamePackagePlugin extends Plugin {
         if (resumedBytes > 0) {
             connection.setRequestProperty("Range", "bytes=" + resumedBytes + "-");
         }
-        Log.i(TAG, "downloadArchive start gameId=" + gameId + " version=" + assetPackVersion + " url=" + urlValue);
+        Log.i(
+            TAG,
+            "downloadArchive start gameId=" + gameId
+                + " version=" + assetPackVersion
+                + " url=" + urlValue
+                + " resumedBytes=" + resumedBytes
+                + " partExists=" + partFile.exists()
+        );
 
         try {
             int responseCode = connection.getResponseCode();
             boolean appendMode = false;
             if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_PARTIAL) {
                 appendMode = true;
+                Log.i(TAG, "downloadArchive resume-accepted gameId=" + gameId + " resumedBytes=" + resumedBytes);
             } else if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_OK) {
+                Log.w(TAG, "downloadArchive resume-reset gameId=" + gameId + " resumedBytes=" + resumedBytes);
                 if (!partFile.delete() && partFile.exists()) {
                     throw new IOException("重置续传文件失败");
                 }
                 resumedBytes = 0L;
             } else if (resumedBytes > 0 && responseCode == HTTP_RANGE_NOT_SATISFIABLE) {
+                Log.w(TAG, "downloadArchive resume-range-not-satisfiable gameId=" + gameId + " resumedBytes=" + resumedBytes);
                 if (isChecksumMatch(partFile, expectedChecksum)) {
                     if (targetFile.exists() && !targetFile.delete()) {
                         throw new IOException("清理旧安装包失败");
@@ -434,6 +477,9 @@ public class GamePackagePlugin extends Plugin {
                     + " version=" + assetPackVersion
                     + " code=" + responseCode
                     + " contentLength=" + connection.getContentLengthLong()
+                    + " contentRange=" + connection.getHeaderField("Content-Range")
+                    + " resumedBytes=" + resumedBytes
+                    + " appendMode=" + appendMode
             );
             if (responseCode < 200 || responseCode >= 300) {
                 throw new IOException("下载失败，HTTP " + responseCode);
@@ -750,6 +796,13 @@ public class GamePackagePlugin extends Plugin {
 
     private boolean isTaskRunning(String gameId) {
         return cancelRegistry.containsKey(gameId);
+    }
+
+    private boolean isInProgressStatus(String status) {
+        return "queued".equals(status)
+            || "manifest".equals(status)
+            || "downloading".equals(status)
+            || "verifying".equals(status);
     }
 
     private void persistInstallState(String gameId, JSONObject payload) {
