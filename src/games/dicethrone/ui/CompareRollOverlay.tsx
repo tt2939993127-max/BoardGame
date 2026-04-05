@@ -31,6 +31,9 @@ export const CompareRollOverlay: React.FC<CompareRollOverlayProps> = ({
     onConfirm,
 }) => {
     const { t, i18n } = useTranslation('game-dicethrone');
+    const hasTranslation = React.useCallback((key?: string) => {
+        return Boolean(key && i18n.exists(key, { ns: 'game-dicethrone' }));
+    }, [i18n]);
 
     const options = compareRoll?.options ?? [];
     const hasOptions = options.length > 0;
@@ -50,7 +53,7 @@ export const CompareRollOverlay: React.FC<CompareRollOverlayProps> = ({
         return null;
     }
 
-    const resultText = compareRoll.resultTextKey && i18n.exists(compareRoll.resultTextKey)
+    const resultText = hasTranslation(compareRoll.resultTextKey)
         ? t(compareRoll.resultTextKey, compareRoll.resultTextParams)
         : compareRoll.resultText;
     const resultTone = compareRoll.resultTone ?? 'neutral';
@@ -76,7 +79,7 @@ export const CompareRollOverlay: React.FC<CompareRollOverlayProps> = ({
                     className="bg-black/60 border border-amber-400/30 rounded-xl px-[2.4vw] py-[0.9vw] shadow-lg"
                 >
                     <span className="text-white text-[1.5vw] font-black tracking-wide">
-                        {i18n.exists(compareRoll.title)
+                        {hasTranslation(compareRoll.title)
                             ? t(compareRoll.title)
                             : compareRoll.title}
                     </span>
@@ -84,7 +87,7 @@ export const CompareRollOverlay: React.FC<CompareRollOverlayProps> = ({
 
                 <div className="flex items-start justify-center gap-[2vw] max-w-[90vw]">
                     {contestants.map((contestant, index) => {
-                        const label = contestant.labelKey && i18n.exists(contestant.labelKey)
+                        const label = hasTranslation(contestant.labelKey)
                             ? t(contestant.labelKey, contestant.labelParams)
                             : contestant.label;
 
@@ -135,7 +138,7 @@ export const CompareRollOverlay: React.FC<CompareRollOverlayProps> = ({
                         className="flex flex-wrap items-center justify-center gap-[1vw] max-w-[54vw]"
                     >
                         {options.map((option) => {
-                            const label = option.labelKey && i18n.exists(option.labelKey)
+                            const label = hasTranslation(option.labelKey)
                                 ? t(option.labelKey, option.labelParams)
                                 : option.label;
                             return (
