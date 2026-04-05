@@ -28,9 +28,90 @@ export type ForceSkippableHiddenAiInteraction = {
     resolution: AiResolution;
 };
 
+export type ForceEndTurnStalledAiResolution = {
+    playerId: string;
+    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn';
+    resolution: AiResolution;
+};
+
 function buildAiBatchId(playerId: string, attemptKey: string): string {
     const normalizedAttemptKey = attemptKey.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 120);
     return `ai-${playerId}-${normalizedAttemptKey}`;
+}
+
+function resolveCurrentPlayerId(sharedState: MatchState<unknown> | null | undefined): string | null {
+    const core = sharedState?.core as {
+        activePlayerId?: unknown;
+        currentPlayer?: unknown;
+        turnOrder?: unknown;
+        currentPlayerIndex?: unknown;
+    } | undefined;
+    if (!core) return null;
+    if (typeof core.activePlayerId === 'string') return core.activePlayerId;
+    if (typeof core.currentPlayer === 'string') return core.currentPlayer;
+    if (Array.isArray(core.turnOrder) && typeof core.currentPlayerIndex === 'number') {
+        const current = core.turnOrder[core.currentPlayerIndex];
+        return typeof current === 'string' ? current : null;
+    }
+    return null;
+}
+
+function buildForceEndTurnResolution(args: {
+    playerId: string;
+    suffix: string;
+    commands: Array<{ type: string; payload: unknown }>;
+}): AiResolution {
+    return {
+        playerId: args.playerId,
+        attemptKey: `force-end-turn:${args.playerId}:${args.suffix}`,
+        source: 'local-ai',
+        action: {
+            actionId: `force-end-turn:${args.suffix}`,
+            kind: 'force-end-turn',
+            label: '强制结束 AI 回合',
+            commands: args.commands,
+        },
+    };
+}
+
+function buildForceEndTurnFromInteractionState(
+    state: MatchState<unknown>,
+    playerId: string,
+    reason: 'hidden-interaction' | 'visible-interaction',
+): ForceEndTurnStalledAiResolution | null {
+    const current = (state.sys as { interaction?: { current?: unknown } } | undefined)?.interaction?.current as HiddenSimpleChoiceInteraction | undefined;
+    if (!current || String(current.playerId) !== playerId || typeof current.id !== 'string') {
+        return null;
+    }
+
+    const forceSkipPayload = buildForceSkipPayloadFromSeatState(state, playerId);
+    if (forceSkipPayload) {
+        return {
+            playerId,
+            reason,
+            resolution: buildForceEndTurnResolution({
+                playerId,
+                suffix: `${reason}:${forceSkipPayload.interactionId}`,
+                commands: [
+                    { type: 'SYS_INTERACTION_RESPOND', payload: forceSkipPayload.payload },
+                    { type: 'ADVANCE_PHASE', payload: {} },
+                ],
+            }),
+        };
+    }
+
+    return {
+        playerId,
+        reason,
+        resolution: buildForceEndTurnResolution({
+            playerId,
+            suffix: `${reason}:${current.id}`,
+            commands: [
+                { type: 'SYS_INTERACTION_CANCEL', payload: {} },
+                { type: 'ADVANCE_PHASE', payload: {} },
+            ],
+        }),
+    };
 }
 
 function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId: string): {
@@ -147,6 +228,77 @@ export function resolveForceSkippableHiddenAiInteraction(args: {
                     }],
                 },
             },
+        };
+    }
+
+    return null;
+}
+
+export function resolveForceEndTurnForStalledAi(args: {
+    sharedState: MatchState<unknown> | null | undefined;
+    seatControllers: Record<string, AiSeatController>;
+    seatStates: Record<string, MatchState<unknown> | null | undefined>;
+}): ForceEndTurnStalledAiResolution | null {
+    const currentInteraction = args.sharedState?.sys?.interaction as { current?: unknown; isBlocked?: unknown } | undefined;
+    const visibleCurrent = currentInteraction?.current as HiddenSimpleChoiceInteraction | undefined;
+    if (visibleCurrent?.playerId && args.seatControllers[String(visibleCurrent.playerId)]?.type !== 'human') {
+        return buildForceEndTurnFromInteractionState(
+            args.sharedState as MatchState<unknown>,
+            String(visibleCurrent.playerId),
+            'visible-interaction',
+        );
+    }
+
+    if (currentInteraction?.current == null && currentInteraction?.isBlocked === true) {
+        for (const [playerId, controller] of Object.entries(args.seatControllers)) {
+            if (controller.type === 'human') continue;
+            const seatState = args.seatStates[playerId];
+            if (!seatState) continue;
+            const hiddenResolution = buildForceEndTurnFromInteractionState(seatState, playerId, 'hidden-interaction');
+            if (hiddenResolution) {
+                return hiddenResolution;
+            }
+        }
+    }
+
+    const responseWindow = args.sharedState?.sys?.responseWindow as {
+        current?: {
+            responderQueue?: unknown;
+            currentResponderIndex?: unknown;
+        };
+    } | undefined;
+    const responderQueue = Array.isArray(responseWindow?.current?.responderQueue)
+        ? responseWindow?.current?.responderQueue
+        : [];
+    const responderIndex = typeof responseWindow?.current?.currentResponderIndex === 'number'
+        ? responseWindow.current.currentResponderIndex
+        : 0;
+    const responderId = responderQueue[responderIndex];
+    if (typeof responderId === 'string' && args.seatControllers[responderId]?.type !== 'human') {
+        return {
+            playerId: responderId,
+            reason: 'response-window',
+            resolution: buildForceEndTurnResolution({
+                playerId: responderId,
+                suffix: `response-window:${responderId}`,
+                commands: [
+                    { type: 'RESPONSE_PASS', payload: {} },
+                    { type: 'ADVANCE_PHASE', payload: {} },
+                ],
+            }),
+        };
+    }
+
+    const currentPlayerId = resolveCurrentPlayerId(args.sharedState);
+    if (currentPlayerId && args.seatControllers[currentPlayerId]?.type !== 'human') {
+        return {
+            playerId: currentPlayerId,
+            reason: 'active-turn',
+            resolution: buildForceEndTurnResolution({
+                playerId: currentPlayerId,
+                suffix: `active-turn:${currentPlayerId}`,
+                commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+            }),
         };
     }
 
