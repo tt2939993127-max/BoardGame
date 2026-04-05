@@ -7,6 +7,36 @@ import type { DiceThroneCore, DiceThroneEvent } from './types';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
 import { removeCard } from './utils';
+import { CHARACTER_DATA_MAP } from './characters';
+
+const CARD_LOOKUP_RANDOM = {
+    random: () => 0.5,
+    d: (_max: number) => 1,
+    range: (min: number) => min,
+    shuffle: <T>(arr: T[]) => arr,
+} as const;
+
+const CHARACTER_CARD_CACHE = new Map<string, Map<string, { id: string; cpCost: number }>>();
+
+function resolveCharacterCardMeta(characterId: string | undefined, cardId: string) {
+    if (!characterId) return null;
+
+    const cached = CHARACTER_CARD_CACHE.get(characterId);
+    if (cached?.has(cardId)) {
+        return cached.get(cardId) ?? null;
+    }
+
+    const data = CHARACTER_DATA_MAP[characterId as keyof typeof CHARACTER_DATA_MAP];
+    if (!data) return null;
+
+    const deck = data.getStartingDeck(CARD_LOOKUP_RANDOM as any);
+    const map = cached ?? new Map<string, { id: string; cpCost: number }>();
+    for (const card of deck) {
+        map.set(card.id, { id: card.id, cpCost: card.cpCost });
+    }
+    CHARACTER_CARD_CACHE.set(characterId, map);
+    return map.get(cardId) ?? null;
+}
 
 type EventHandler<E extends DiceThroneEvent> = (
     state: DiceThroneCore,
@@ -125,12 +155,15 @@ export const handleCardPlayed: EventHandler<Extract<DiceThroneEvent, { type: 'CA
     if (!card) return { ...state, lastSoldCardId: undefined };
 
     const newResources = resourceSystem.pay(player.resources, { [RESOURCE_IDS.CP]: cpCost });
+    const nextDiscard = card.type === 'upgrade'
+        ? player.discard
+        : [...player.discard, card];
 
     return {
         ...state,
         players: {
             ...state.players,
-            [playerId]: { ...player, hand: newHand, discard: [...player.discard, card], resources: newResources },
+            [playerId]: { ...player, hand: newHand, discard: nextDiscard, resources: newResources },
         },
         lastSoldCardId: undefined,
     };
@@ -244,12 +277,17 @@ export const handleAbilityReplaced: EventHandler<Extract<DiceThroneEvent, { type
     if (cardInHandIndex !== -1) {
         const card = player.hand[cardInHandIndex];
         newHand = [...player.hand.slice(0, cardInHandIndex), ...player.hand.slice(cardInHandIndex + 1)];
-        newDiscard = [...player.discard, card];
+        newDiscard = player.discard;
         upgradeCardByAbilityId[oldAbilityId] = { cardId: card.id, cpCost: card.cpCost };
     } else {
         const cardInDiscard = player.discard.find(c => c.id === cardId);
         if (cardInDiscard) {
             upgradeCardByAbilityId[oldAbilityId] = { cardId: cardInDiscard.id, cpCost: cardInDiscard.cpCost };
+        } else {
+            const resolvedCard = resolveCharacterCardMeta(player.characterId, cardId);
+            if (resolvedCard) {
+                upgradeCardByAbilityId[oldAbilityId] = { cardId: resolvedCard.id, cpCost: resolvedCard.cpCost };
+            }
         }
     }
 

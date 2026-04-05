@@ -19,6 +19,9 @@ final class AndroidDownloadTaskRecord {
     String kind;
     String logicalId;
     String displayName;
+    String runtimeChannel;
+    String packageId;
+    String packageVersion;
     String sourceUrl;
     String checksum;
     String destinationPath;
@@ -37,6 +40,9 @@ final class AndroidDownloadTaskRecord {
         String kind,
         String logicalId,
         String displayName,
+        String runtimeChannel,
+        String packageId,
+        String packageVersion,
         String sourceUrl,
         String checksum,
         String destinationPath,
@@ -48,6 +54,9 @@ final class AndroidDownloadTaskRecord {
         record.kind = kind;
         record.logicalId = logicalId;
         record.displayName = displayName;
+        record.runtimeChannel = runtimeChannel;
+        record.packageId = packageId;
+        record.packageVersion = packageVersion;
         record.sourceUrl = sourceUrl;
         record.checksum = checksum;
         record.destinationPath = destinationPath;
@@ -69,6 +78,9 @@ final class AndroidDownloadTaskRecord {
         record.kind = payload.optString("kind", "");
         record.logicalId = payload.optString("logicalId", "");
         record.displayName = payload.optString("displayName", "");
+        record.runtimeChannel = optNullableString(payload, "runtimeChannel");
+        record.packageId = optNullableString(payload, "packageId");
+        record.packageVersion = optNullableString(payload, "packageVersion");
         record.sourceUrl = payload.optString("sourceUrl", "");
         record.checksum = optNullableString(payload, "checksum");
         record.destinationPath = optNullableString(payload, "destinationPath");
@@ -90,6 +102,9 @@ final class AndroidDownloadTaskRecord {
         payload.put("kind", safeString(kind));
         payload.put("logicalId", safeString(logicalId));
         payload.put("displayName", safeString(displayName));
+        putNullable(payload, "runtimeChannel", runtimeChannel);
+        putNullable(payload, "packageId", packageId);
+        putNullable(payload, "packageVersion", packageVersion);
         payload.put("sourceUrl", safeString(sourceUrl));
         putNullable(payload, "checksum", checksum);
         putNullable(payload, "destinationPath", destinationPath);

@@ -39,6 +39,9 @@ final class AndroidDownloadTaskStore {
         String kind,
         String logicalId,
         String displayName,
+        String runtimeChannel,
+        String packageId,
+        String packageVersion,
         String sourceUrl,
         String checksum,
         String destinationPath,
@@ -59,6 +62,9 @@ final class AndroidDownloadTaskStore {
                 kind,
                 logicalId,
                 displayName,
+                runtimeChannel,
+                packageId,
+                packageVersion,
                 sourceUrl,
                 checksum,
                 destinationPath,
@@ -82,16 +88,18 @@ final class AndroidDownloadTaskStore {
             long now = System.currentTimeMillis();
             List<AndroidDownloadTaskRecord> records = readAllLocked();
             AndroidDownloadTaskRecord cancelled = null;
+            boolean wasActive = false;
             for (AndroidDownloadTaskRecord record : records) {
                 if (!safeEquals(record.taskId, taskId)) {
                     continue;
                 }
+                wasActive = record.isActive();
                 record.markCancelled(now);
                 cancelled = record;
                 break;
             }
 
-            if (cancelled != null && cancelled.isActive()) {
+            if (cancelled != null && wasActive) {
                 promoteNextQueuedLocked(records, now);
             }
 
@@ -109,6 +117,43 @@ final class AndroidDownloadTaskStore {
                 }
             }
             return null;
+        }
+    }
+
+    AndroidDownloadTaskRecord getByTaskId(String taskId) {
+        synchronized (lock) {
+            for (AndroidDownloadTaskRecord record : readAllLocked()) {
+                if (safeEquals(record.taskId, taskId)) {
+                    return record;
+                }
+            }
+            return null;
+        }
+    }
+
+    AndroidDownloadTaskRecord getLatestByTarget(String kind, String logicalId) {
+        synchronized (lock) {
+            AndroidDownloadTaskRecord latest = null;
+            for (AndroidDownloadTaskRecord record : readAllLocked()) {
+                if (!record.matchesTarget(kind, logicalId)) {
+                    continue;
+                }
+                if (latest == null || record.updatedAt > latest.updatedAt) {
+                    latest = record;
+                }
+            }
+            return latest;
+        }
+    }
+
+    boolean hasActiveTaskForTarget(String kind, String logicalId) {
+        synchronized (lock) {
+            for (AndroidDownloadTaskRecord record : readAllLocked()) {
+                if (record.matchesTarget(kind, logicalId) && record.isActive()) {
+                    return true;
+                }
+            }
+            return false;
         }
     }
 
@@ -141,6 +186,94 @@ final class AndroidDownloadTaskStore {
                 promoteNextQueuedLocked(records, now);
                 writeAllLocked(records);
             }
+        }
+    }
+
+    AndroidDownloadTaskRecord updateRunningProgress(
+        String taskId,
+        long downloadedBytes,
+        long totalBytes,
+        String status,
+        long now
+    ) {
+        synchronized (lock) {
+            List<AndroidDownloadTaskRecord> records = readAllLocked();
+            AndroidDownloadTaskRecord updated = null;
+            for (AndroidDownloadTaskRecord record : records) {
+                if (!safeEquals(record.taskId, taskId)) {
+                    continue;
+                }
+                record.status = status;
+                record.downloadedBytes = downloadedBytes;
+                record.totalBytes = totalBytes;
+                record.updatedAt = now;
+                updated = record;
+                break;
+            }
+            writeAllLocked(records);
+            return updated;
+        }
+    }
+
+    AndroidDownloadTaskRecord markVerifying(String taskId, long now) {
+        synchronized (lock) {
+            List<AndroidDownloadTaskRecord> records = readAllLocked();
+            AndroidDownloadTaskRecord updated = null;
+            for (AndroidDownloadTaskRecord record : records) {
+                if (!safeEquals(record.taskId, taskId)) {
+                    continue;
+                }
+                record.status = AndroidDownloadTaskRecord.STATUS_VERIFYING;
+                record.updatedAt = now;
+                updated = record;
+                break;
+            }
+            writeAllLocked(records);
+            return updated;
+        }
+    }
+
+    AndroidDownloadTaskRecord markCompleted(String taskId, long totalBytes, long now) {
+        synchronized (lock) {
+            List<AndroidDownloadTaskRecord> records = readAllLocked();
+            AndroidDownloadTaskRecord updated = null;
+            for (AndroidDownloadTaskRecord record : records) {
+                if (!safeEquals(record.taskId, taskId)) {
+                    continue;
+                }
+                record.status = AndroidDownloadTaskRecord.STATUS_COMPLETED;
+                record.downloadedBytes = totalBytes;
+                record.totalBytes = totalBytes;
+                record.errorCode = null;
+                record.errorMessage = null;
+                record.updatedAt = now;
+                updated = record;
+                break;
+            }
+            promoteNextQueuedLocked(records, now);
+            writeAllLocked(records);
+            return updated;
+        }
+    }
+
+    AndroidDownloadTaskRecord markFailed(String taskId, String errorCode, String errorMessage, long now) {
+        synchronized (lock) {
+            List<AndroidDownloadTaskRecord> records = readAllLocked();
+            AndroidDownloadTaskRecord updated = null;
+            for (AndroidDownloadTaskRecord record : records) {
+                if (!safeEquals(record.taskId, taskId)) {
+                    continue;
+                }
+                record.status = AndroidDownloadTaskRecord.STATUS_FAILED;
+                record.errorCode = errorCode;
+                record.errorMessage = errorMessage;
+                record.updatedAt = now;
+                updated = record;
+                break;
+            }
+            promoteNextQueuedLocked(records, now);
+            writeAllLocked(records);
+            return updated;
         }
     }
 
