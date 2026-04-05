@@ -64,6 +64,8 @@ function buildWizardMassEnchantmentOptions(
 type WizardPortalOrderContext = {
     remaining: { uid: string; defId: string }[];
     ordered: { uid: string; defId: string }[];
+    trackedAll?: { uid: string; defId: string }[];
+    pickedToHandUids?: string[];
 };
 
 function resolveWizardPortalOrderSnapshot(
@@ -71,8 +73,21 @@ function resolveWizardPortalOrderSnapshot(
     playerId: string,
     ctx: WizardPortalOrderContext,
 ) {
-    const trackedCards = [...ctx.ordered, ...ctx.remaining];
+    const trackedCards = ctx.trackedAll ?? [...ctx.ordered, ...ctx.remaining];
     const snapshot = getCurrentDeckTopSnapshotCards(state, playerId, trackedCards);
+
+    if (ctx.trackedAll) {
+        const snapshotByUid = new Set(snapshot.map((card) => card.uid));
+        const ordered = ctx.ordered.filter((card) => snapshotByUid.has(card.uid));
+        const orderedUidSet = new Set(ordered.map((card) => card.uid));
+        const pickedUidSet = new Set(ctx.pickedToHandUids ?? []);
+
+        return {
+            ordered,
+            remaining: snapshot.filter((card) => !pickedUidSet.has(card.uid) && !orderedUidSet.has(card.uid)),
+        };
+    }
+
     const orderedCount = Math.min(ctx.ordered.length, snapshot.length);
     return {
         ordered: snapshot.slice(0, orderedCount),
@@ -1099,7 +1114,12 @@ export function registerWizardInteractionHandlers(): void {
         }
 
         // 多张：进入排序流程
-        const portalOrderContext: WizardPortalOrderContext = { remaining, ordered: [] };
+        const portalOrderContext: WizardPortalOrderContext = {
+            remaining,
+            ordered: [],
+            trackedAll: currentTopCards.map((card) => ({ uid: card.uid, defId: card.defId })),
+            pickedToHandUids: validPickedUids,
+        };
         const next = createSimpleChoice(
             `wizard_portal_order_${timestamp}`,
             playerId,
@@ -1159,7 +1179,21 @@ export function registerWizardInteractionHandlers(): void {
             nextState: { core: SmashUpCore },
             interactionData: { continuationContext?: WizardPortalOrderContext } | undefined,
         ) => buildWizardPortalOrderOptions(nextState.core, playerId, interactionData?.continuationContext ?? { remaining, ordered });
-        return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered } } }), events: [] };
+        return {
+            state: queueInteraction(state, {
+                ...next,
+                data: {
+                    ...next.data,
+                    continuationContext: {
+                        remaining,
+                        ordered,
+                        trackedAll: ctx.trackedAll,
+                        pickedToHandUids: ctx.pickedToHandUids,
+                    },
+                },
+            }),
+            events: [],
+        };
     });
 
     // 献祭：选择随从→抽牌→消灭
