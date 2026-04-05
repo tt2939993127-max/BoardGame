@@ -424,18 +424,6 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                                 {overlayBadge ? (
                                     <div className="absolute inset-0 z-20 pointer-events-none">
-                                        <div
-                                            className="absolute inset-0"
-                                            style={{
-                                                background: 'linear-gradient(180deg, rgba(2,6,23,0.22) 0%, rgba(2,6,23,0.62) 100%)',
-                                            }}
-                                        />
-                                        <div
-                                            className="absolute inset-0 opacity-90"
-                                            style={{
-                                                backgroundImage: 'linear-gradient(135deg, rgba(250,204,21,0) 0 36%, rgba(250,204,21,0.18) 36% 43%, rgba(250,204,21,0) 43% 100%)',
-                                            }}
-                                        />
                                         <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center overflow-visible">
                                             <CharacterSelectionBadge
                                                 badge={overlayBadge}
