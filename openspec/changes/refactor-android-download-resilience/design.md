@@ -74,12 +74,36 @@
 
 ### Decision: 下载执行层必须支持续传
 - 优先方案：
-  - APK 更新包使用系统 `DownloadManager` 或等价系统托管下载。
-  - 游戏资源包使用 `WorkManager + ForegroundService` 或等价可恢复执行模型。
+  - APK 更新包使用系统托管下载或 `ForegroundService` 托管下载。
+  - 游戏资源包使用 `ForegroundService` 托管下载，并保留后续接入 `WorkManager` 恢复调度的扩展位。
 - 续传要求：
   - 维护 `.part` 文件与元数据。
   - 请求头带 `Range`，并校验 `206/200` 响应语义。
   - 服务端不支持续传时，显式降级到全量重下并记录原因。
+
+### Decision: V1 并发策略采用“单 active + 持久队列”
+- 当前阶段不采用“多游戏同时真并发下载”。
+- 同一时刻只允许一个原生下载任务处于 `running`。
+- 新任务发起时：
+  - 若同一 `kind + logicalId` 已存在非终态任务，则直接复用已有任务。
+  - 若已有其他 active 任务，则新任务进入 `queued`。
+  - 若当前无 active 任务，则立即提升为 `running` 并由 `ForegroundService` 托管。
+- 这样做的原因：
+  - 降低大包并发时的带宽竞争与磁盘压力。
+  - 简化通知、恢复、错误归因与客服排障。
+  - 保留未来把最大并发数扩展为配置项的空间，但默认值仍应为 `1`。
+
+### Decision: ForegroundService 是 Android 下载执行的唯一生命周期宿主
+- JS 不再持有下载任务生命周期，只负责：
+  - 发起下载请求
+  - 读取任务注册表
+  - 订阅任务状态并渲染 UI
+- `AppUpdatePlugin` 与 `GamePackagePlugin` 后续都必须桥接到统一下载执行层，而不是各自维护线程池和取消注册表。
+- `ForegroundService` 负责：
+  - 接收 enqueue/cancel/reconcile 指令
+  - 维护通知栏常驻进度
+  - 从任务注册表恢复 active/queued 任务
+  - 推进队列中的下一个任务
 
 ### Decision: 安装/激活继续使用 staging + 原子切换
 - 下载完成后只能先进入 `verifying` / `extracting` / `ready-to-install`。

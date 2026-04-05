@@ -307,6 +307,12 @@ export const refreshGamePackageStateFromNativeTask = async (
     }
 
     fallbackCache.set(gameId, resolvedFallback);
+    logMobileRuntimeCritical('PackageManagerService', 'refresh-native-task-entered', {
+        gameId,
+        fallbackStatus: resolvedFallback.status,
+        fallbackUpdatedAt: resolvedFallback.updatedAt,
+        hasActiveInstallHandle: activeInstallRegistry.has(gameId),
+    });
     const nativeSnapshot = await readNativeGamePackageInstallState(gameId);
     if (nativeSnapshot) {
         const mergedState = normalizeIncompleteInstalledState(
@@ -314,12 +320,27 @@ export const refreshGamePackageStateFromNativeTask = async (
             resolvedFallback,
             'cache',
         );
+        logMobileRuntimeCritical('PackageManagerService', 'refresh-native-task-snapshot', {
+            gameId,
+            taskRunning: nativeSnapshot.taskRunning,
+            snapshotState: nativeSnapshot.state,
+            mergedStatus: mergedState.status,
+            mergedProgressPercent: mergedState.progressPercent,
+            mergedUpdatedAt: mergedState.updatedAt,
+            hasActiveInstallHandle: activeInstallRegistry.has(gameId),
+        });
         if (
             isInProgressStatus(mergedState.status)
             && nativeSnapshot.taskRunning !== true
             && !activeInstallRegistry.has(gameId)
         ) {
             const staleState = toStaleInProgressFailureState(resolvedFallback, mergedState);
+            logMobileRuntimeCritical('PackageManagerService', 'refresh-native-task-stale-snapshot', {
+                gameId,
+                previousStatus: mergedState.status,
+                previousProgressPercent: mergedState.progressPercent,
+                staleState,
+            });
             emitState(staleState);
             return staleState;
         }
@@ -328,8 +349,21 @@ export const refreshGamePackageStateFromNativeTask = async (
     }
 
     const currentState = getCurrentOrStoredState(gameId, resolvedFallback);
+    logMobileRuntimeCritical('PackageManagerService', 'refresh-native-task-no-snapshot', {
+        gameId,
+        currentStatus: currentState.status,
+        currentProgressPercent: currentState.progressPercent,
+        currentUpdatedAt: currentState.updatedAt,
+        hasActiveInstallHandle: activeInstallRegistry.has(gameId),
+    });
     if (isInProgressStatus(currentState.status) && !activeInstallRegistry.has(gameId)) {
         const staleState = toStaleInProgressFailureState(resolvedFallback, currentState);
+        logMobileRuntimeCritical('PackageManagerService', 'refresh-native-task-stale-cache', {
+            gameId,
+            previousStatus: currentState.status,
+            previousProgressPercent: currentState.progressPercent,
+            staleState,
+        });
         emitState(staleState);
         return staleState;
     }

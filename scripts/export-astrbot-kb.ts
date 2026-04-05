@@ -255,17 +255,20 @@ async function exportDiceThroneKnowledge(): Promise<void> {
     const locale = await readJson<Record<string, unknown>>(join(repoRoot, 'public', 'locales', 'zh-CN', 'game-dicethrone.json'));
 
     for (const [heroId, hero] of Object.entries(HEROES_DATA)) {
+        const heroName = asText(getByPath(locale, `characters.${heroId}`))
+            || asText(getByPath(locale, `hero.${heroId}`))
+            || heroId;
         addDoc('dicethrone_structured', {
             id: `dicethrone:hero:${heroId}`,
             kind: 'hero',
-            title: `王权骰铸角色：${heroId}`,
+            title: `王权骰铸角色：${heroName}`,
             text: [
-                `角色：${heroId}`,
+                `角色：${heroName} (${heroId})`,
                 `技能数：${hero.abilities.length}`,
                 `卡牌数：${hero.cards.length}`,
                 `技能列表：${formatList(hero.abilities.map(ability => asText(getByPath(locale, ability.name)) || ability.id))}`,
             ].join('\n'),
-            keywords: uniq([heroId, ...hero.abilities.map(ability => ability.id)]),
+            keywords: uniq([heroId, heroName, ...hero.abilities.map(ability => ability.id)]),
             source: ['src/games/dicethrone/heroes/index.ts', 'public/locales/zh-CN/game-dicethrone.json'],
             metadata: {
                 game: 'dicethrone',
@@ -282,14 +285,14 @@ async function exportDiceThroneKnowledge(): Promise<void> {
                 kind: 'ability',
                 title: `王权骰铸技能：${name}`,
                 text: [
-                    `角色：${heroId}`,
+                    `角色：${heroName} (${heroId})`,
                     `名称：${name}`,
                     `ID：${ability.id}`,
                     `类型：${ability.type}`,
                     `描述：${description || '无'}`,
                     `变体：${stringifyCompact(ability.variants ?? [])}`,
                 ].join('\n'),
-                keywords: uniq([heroId, name, ability.id, ability.type]),
+                keywords: uniq([heroId, heroName, name, ability.id, ability.type]),
                 source: [
                     `src/games/dicethrone/heroes/${heroId}/abilities.ts`,
                     `public/locales/zh-CN/game-dicethrone.json#${ability.name}`,
@@ -312,7 +315,7 @@ async function exportDiceThroneKnowledge(): Promise<void> {
                 kind: 'card',
                 title: `王权骰铸卡牌：${name}`,
                 text: [
-                    `角色：${heroId}`,
+                    `角色：${heroName} (${heroId})`,
                     `名称：${name}`,
                     `ID：${card.id}`,
                     `类型：${card.type}`,
@@ -321,7 +324,7 @@ async function exportDiceThroneKnowledge(): Promise<void> {
                     `描述：${description || '无'}`,
                     `效果：${stringifyCompact(card.effects ?? [])}`,
                 ].join('\n'),
-                keywords: uniq([heroId, name, card.id, card.type, card.timing]),
+                keywords: uniq([heroId, heroName, name, card.id, card.type, card.timing]),
                 source: [
                     `src/games/dicethrone/heroes/${heroId}/cards.ts`,
                     `public/locales/zh-CN/game-dicethrone.json#${card.name}`,

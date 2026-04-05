@@ -126,6 +126,11 @@ export const useGamePackageState = ({
             gameId,
             fallbackState,
         });
+        logMobileRuntimeCritical('UseGamePackageState', 'sync-package-state-critical', {
+            gameId,
+            fallbackStatus: fallbackState.status,
+            fallbackUpdatedAt: fallbackState.updatedAt,
+        });
         setPendingInstall(null);
         setCardState(toGamePackageCardState(syncGamePackageState(gameId, fallbackState)));
         void refreshGamePackageStateFromNativeTask(gameId, fallbackState).catch((error) => {
@@ -133,14 +138,25 @@ export const useGamePackageState = ({
                 gameId,
                 error: error instanceof Error ? error.message : String(error),
             }, 'warn');
+            logMobileRuntimeCritical('UseGamePackageState', 'refresh-native-state-initial-failed', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
         });
 
         const cleanupVisible = onAppVisible(() => {
+            logMobileRuntimeCritical('UseGamePackageState', 'app-visible-refresh-start', {
+                gameId,
+            });
             void refreshGamePackageStateFromNativeTask(gameId, fallbackState).catch((error) => {
                 logMobileRuntime('UseGamePackageState', 'refresh-native-state-on-visible-failed', {
                     gameId,
                     error: error instanceof Error ? error.message : String(error),
                 }, 'warn');
+                logMobileRuntimeCritical('UseGamePackageState', 'app-visible-refresh-failed', {
+                    gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                });
             });
         });
 
