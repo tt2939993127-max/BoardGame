@@ -49,6 +49,11 @@ const loadTutorial3 = async () => {
     return tutorialModule.default;
 };
 
+const loadCriticalImageResolver3 = async () => {
+    const resolverModule = await import('./cardia/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.cardiaCriticalImageResolver;
+};
+
 const loadRuntime4 = async (): Promise<GameClientRuntimeModule> => {
     const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./dicethrone/game'),
@@ -65,6 +70,11 @@ const loadRuntime4 = async (): Promise<GameClientRuntimeModule> => {
 const loadTutorial4 = async () => {
     const tutorialModule = await import('./dicethrone/tutorial');
     return tutorialModule.default;
+};
+
+const loadCriticalImageResolver4 = async () => {
+    const resolverModule = await import('./dicethrone/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.diceThroneCriticalImageResolver;
 };
 
 const loadRuntime6 = async (): Promise<GameClientRuntimeModule> => {
@@ -85,6 +95,11 @@ const loadTutorial6 = async () => {
     return tutorialModule.default;
 };
 
+const loadCriticalImageResolver6 = async () => {
+    const resolverModule = await import('./smashup/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.smashUpCriticalImageResolver;
+};
+
 const loadRuntime7 = async (): Promise<GameClientRuntimeModule> => {
     const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./summonerwars/game'),
@@ -101,6 +116,11 @@ const loadRuntime7 = async (): Promise<GameClientRuntimeModule> => {
 const loadTutorial7 = async () => {
     const tutorialModule = await import('./summonerwars/tutorial');
     return tutorialModule.default;
+};
+
+const loadCriticalImageResolver7 = async () => {
+    const resolverModule = await import('./summonerwars/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.summonerWarsCriticalImageResolver;
 };
 
 const loadRuntime8 = async (): Promise<GameClientRuntimeModule> => {
@@ -141,6 +161,7 @@ const entry3: GameClientManifestEntry = {
     thumbnail: <Thumbnail3 />,
     loadRuntime: loadRuntime3,
     loadTutorial: loadTutorial3,
+    loadCriticalImageResolver: loadCriticalImageResolver3,
 };
 
 const entry4: GameClientManifestEntry = {
@@ -148,6 +169,7 @@ const entry4: GameClientManifestEntry = {
     thumbnail: <Thumbnail4 />,
     loadRuntime: loadRuntime4,
     loadTutorial: loadTutorial4,
+    loadCriticalImageResolver: loadCriticalImageResolver4,
 };
 
 const entry5: GameClientManifestEntry = {
@@ -160,6 +182,7 @@ const entry6: GameClientManifestEntry = {
     thumbnail: <Thumbnail6 />,
     loadRuntime: loadRuntime6,
     loadTutorial: loadTutorial6,
+    loadCriticalImageResolver: loadCriticalImageResolver6,
 };
 
 const entry7: GameClientManifestEntry = {
@@ -167,6 +190,7 @@ const entry7: GameClientManifestEntry = {
     thumbnail: <Thumbnail7 />,
     loadRuntime: loadRuntime7,
     loadTutorial: loadTutorial7,
+    loadCriticalImageResolver: loadCriticalImageResolver7,
 };
 
 const entry8: GameClientManifestEntry = {
