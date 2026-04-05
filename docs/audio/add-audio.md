@@ -265,7 +265,13 @@ playSound('combat.impact.hit_heavy_001');
 > `getOptimizedAudioUrl()` 会自动优先使用压缩音频路径，无需自行处理。
 > **已废弃**：`DeferredSoundMap`、`AudioTiming`、`EventSoundResult` 已移除，`feedbackResolver` 不再返回 `{ key, timing }` 对象。
 
-### 8.1 预加载策略（新增）
+### 8.1 语义优先级（强制）
+- **强机制语义优先**：埋藏、翻开隐藏牌、封印、解除封印、召回、传送、变形、吞噬、献祭、召唤、秘密区检视等事件，必须优先选择表达机制语义的音效。
+- **纯卡牌 handling 仅用于通用移牌**：抽牌、弃牌、洗切、公开区域中的普通转移、置顶/置底等没有更强机制语义的动作，才使用 `card.handling.*` / `card.fx.*`。
+- **复合事件按主语义选音**：当事件同时包含“特殊机制 + 卡牌位移”时，优先映射玩家首先感知到的机制语义，而不是位移结果。
+- **明确禁止**：不能因为对象是“卡牌”，就把隐藏区放置、翻开隐藏牌、解封、出土、秘密显现等事件默认映射成 `cards_scrolling_001`、`card_take_001` 之类的抽象卡牌音。
+
+### 8.2 预加载策略（新增）
 - **criticalSounds**：进入游戏后立即预加载（适合首回合高频音效）。
 - **contextualPreloadKeys**：基于上下文增量预热（如选派系/卡组后加载对应音效）。
 - **UI 层预热**：按钮/教程步骤等可在显示前手动调用 `AudioManager.preloadKeys()`。
@@ -296,6 +302,7 @@ AudioManager.preloadKeys(['ui.general.menu_click_01']);
 - [ ] `/dev/audio` 可预览且显示中文
 - [ ] 若生产走 R2/CDN，已确认远端 `compressed/` 音频已上传
 - [ ] 代码中不出现 `compressed/`
+- [ ] 隐藏区/封印/翻开/召回等强语义事件没有被偷换成抽象卡牌 handling 音
 
 ---
 

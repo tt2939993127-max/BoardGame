@@ -18,6 +18,7 @@ const CARD_DISCARD_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001';
 const CARD_SHUFFLE_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_shuffle_fast_001';
 const CARD_SCROLL_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001';
 const BURY_KEY = 'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none';
+const UNCOVER_KEY = 'magic.general.spells_variations_vol_1.open_temporal_rift_summoning.magspel_open_temporal_rift_summoning_01_krst';
 const MOVE_KEY = 'card.handling.mini_games_sound_effects_and_music_pack.card.sfx_card_play_1';
 const POWER_GAIN_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
 const POWER_LOSE_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a';
@@ -61,8 +62,8 @@ export const SU_EVENTS = defineEvents({
   'su:card_removed_from_game': 'silent',
   'su:stakeout_pod_block_added': 'silent',
   'su:card_buried': { audio: 'immediate', sound: BURY_KEY },
-  'su:buried_card_uncovered': { audio: 'immediate', sound: CARD_DRAW_KEY },
-  'su:buried_card_returned_to_hand': { audio: 'immediate', sound: CARD_DRAW_KEY },
+  'su:buried_card_uncovered': { audio: 'immediate', sound: UNCOVER_KEY },
+  'su:buried_card_returned_to_hand': { audio: 'immediate', sound: UNCOVER_KEY },
   'su:buried_cards_discarded_with_base': 'silent',
   'su:card_to_deck_top': { audio: 'immediate', sound: CARD_SCROLL_KEY },
   'su:card_to_deck_bottom': { audio: 'immediate', sound: CARD_SCROLL_KEY },
