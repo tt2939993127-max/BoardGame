@@ -58,41 +58,19 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
     }
 
     const isOverlay = mode === 'overlay';
-    const clipPath = isOverlay
-        ? 'polygon(3.5% 0, 100% 0, 96.5% 100%, 0 100%)'
-        : 'polygon(7.5% 0, 100% 0, 92.5% 100%, 0 100%)';
-    const shadowOffsetX = inlineUnit(isOverlay ? 0.08 : 0.06);
-    const shadowOffsetY = inlineUnit(isOverlay ? 0.08 : 0.06);
 
-    return (
-        <span
-            data-testid={testId}
-            className="relative inline-flex items-center justify-center isolate"
-            style={{
-                transform: `rotate(${isOverlay ? -13 : -12}deg)`,
-                width: isOverlay ? '146%' : undefined,
-            }}
-        >
-                <span
-                    aria-hidden="true"
-                    className="absolute inset-0 bg-black"
-                    style={{
-                        transform: `translate(${shadowOffsetX}, ${shadowOffsetY})`,
-                    clipPath,
-                }}
-            />
-
+    if (!isOverlay) {
+        return (
             <span
-                className="relative inline-flex items-center justify-center overflow-hidden border-[2px] border-black font-black uppercase text-black"
+                data-testid={testId}
+                className="relative inline-flex items-center justify-center overflow-hidden rounded-full border-2 border-black font-black uppercase text-black"
                 style={{
-                    width: isOverlay ? '100%' : undefined,
-                    minWidth: inlineUnit(isOverlay ? 11.5 : 4.95),
-                    minHeight: inlineUnit(isOverlay ? 1.95 : 0.98),
-                    paddingLeft: inlineUnit(isOverlay ? 1.28 : 0.7),
-                    paddingRight: inlineUnit(isOverlay ? 1.28 : 0.7),
-                    paddingTop: inlineUnit(isOverlay ? 0.16 : 0.11),
-                    paddingBottom: inlineUnit(isOverlay ? 0.16 : 0.11),
-                    clipPath,
+                    minWidth: inlineUnit(4.95),
+                    minHeight: inlineUnit(0.98),
+                    paddingLeft: inlineUnit(0.7),
+                    paddingRight: inlineUnit(0.7),
+                    paddingTop: inlineUnit(0.11),
+                    paddingBottom: inlineUnit(0.11),
                     backgroundColor: '#facc15',
                 }}
             >
@@ -100,15 +78,55 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
                     aria-hidden="true"
                     className="absolute inset-0"
                     style={{
-                        backgroundImage: 'repeating-linear-gradient(135deg, rgba(10,10,10,0.98) 0 12px, rgba(10,10,10,0.98) 12px 18px, rgba(250,204,21,0) 18px 34px)',
+                        backgroundImage:
+                            'repeating-linear-gradient(135deg, rgba(10,10,10,0.92) 0 9px, rgba(10,10,10,0.92) 9px 13px, rgba(250,204,21,0) 13px 24px)',
+                    }}
+                />
+                <span
+                    className="relative z-10 text-center font-black uppercase"
+                    style={{
+                        fontSize: inlineUnit(0.41),
+                        lineHeight: 1,
+                        letterSpacing: inlineUnit(0.018),
+                    }}
+                >
+                    {label}
+                </span>
+            </span>
+        );
+    }
+
+    return (
+        <span
+            data-testid={testId}
+            className="relative inline-flex items-center justify-center"
+            style={{
+                width: '152%',
+                transform: 'rotate(-12deg)',
+            }}
+        >
+            <span
+                className="relative inline-flex items-center justify-center overflow-hidden border-y-[3px] border-black font-black uppercase"
+                style={{
+                    width: '100%',
+                    minHeight: inlineUnit(1.78),
+                    backgroundColor: '#facc15',
+                }}
+            >
+                <span
+                    aria-hidden="true"
+                    className="absolute inset-0"
+                    style={{
+                        backgroundImage:
+                            'repeating-linear-gradient(135deg, rgba(12,12,12,0.95) 0 14px, rgba(12,12,12,0.95) 14px 20px, rgba(250,204,21,0) 20px 38px)',
                     }}
                 />
                 <span
                     aria-hidden="true"
                     className="absolute inset-y-0 left-1/2 -translate-x-1/2"
                     style={{
-                        width: isOverlay ? '52%' : '56%',
-                        backgroundColor: isOverlay ? 'rgba(55, 45, 14, 0.96)' : 'rgba(70, 57, 18, 0.94)',
+                        width: '50%',
+                        backgroundColor: 'rgba(74, 60, 18, 0.96)',
                         borderLeft: '2px solid #111111',
                         borderRight: '2px solid #111111',
                     }}
@@ -119,15 +137,15 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        minWidth: isOverlay ? '52%' : '56%',
-                        color: isOverlay ? '#facc15' : '#111111',
-                        paddingLeft: inlineUnit(isOverlay ? 0.95 : 0.36),
-                        paddingRight: inlineUnit(isOverlay ? 0.82 : 0.26),
-                        paddingTop: inlineUnit(isOverlay ? 0.16 : 0),
-                        paddingBottom: inlineUnit(isOverlay ? 0.16 : 0),
-                        fontSize: inlineUnit(isOverlay ? 0.58 : 0.41),
+                        minWidth: '50%',
+                        color: '#facc15',
+                        paddingLeft: inlineUnit(0.85),
+                        paddingRight: inlineUnit(0.85),
+                        paddingTop: inlineUnit(0.17),
+                        paddingBottom: inlineUnit(0.17),
+                        fontSize: inlineUnit(0.58),
                         lineHeight: 1,
-                        letterSpacing: inlineUnit(isOverlay ? 0.04 : 0.018),
+                        letterSpacing: inlineUnit(0.04),
                     }}
                 >
                     {label}
