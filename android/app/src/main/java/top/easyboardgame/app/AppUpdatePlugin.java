@@ -17,24 +17,42 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 @CapacitorPlugin(name = "AppUpdate")
 public class AppUpdatePlugin extends Plugin {
 
     private static final String TAG = "AppUpdatePlugin";
     private static final String ROOT_DIR = "app-updates";
+    private static final String TEMP_FILE_SUFFIX = ".part";
+    private static final String STATE_FILE_PREFIX = "state-";
+    private static final int HTTP_RANGE_NOT_SATISFIABLE = 416;
     private static final int BUFFER_SIZE = 16 * 1024;
+    private static final String ERROR_NETWORK_TIMEOUT = "network-timeout";
+    private static final String ERROR_HTTP = "http-error";
+    private static final String ERROR_RESUME_NOT_SUPPORTED = "resume-not-supported";
+    private static final String ERROR_CHECKSUM = "checksum-mismatch";
+    private static final String ERROR_INSUFFICIENT_STORAGE = "insufficient-storage";
+    private static final String ERROR_FILE_IO = "file-io";
+    private static final String ERROR_CANCELLED = "cancelled";
+    private static final String ERROR_INSTALLER = "installer-launch-failed";
+    private static final String ERROR_UNKNOWN = "unknown";
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -151,6 +169,7 @@ public class AppUpdatePlugin extends Plugin {
                     "error",
                     null,
                     null,
+                    classifyUpdateErrorCode(error),
                     error.getMessage() != null ? error.getMessage() : "准备更新安装失败",
                     apkFile.getAbsolutePath()
                 );
@@ -203,6 +222,15 @@ public class AppUpdatePlugin extends Plugin {
             call.resolve(result);
         } catch (Exception error) {
             Log.e(TAG, "installPreparedUpdate failed version=" + version, error);
+            emitUpdateState(
+                version,
+                "error",
+                null,
+                null,
+                classifyUpdateErrorCode(error),
+                error.getMessage() != null ? error.getMessage() : "启动安装失败",
+                resolveApkFile(version).getAbsolutePath()
+            );
             call.reject("启动安装失败", error);
         }
     }
@@ -211,29 +239,69 @@ public class AppUpdatePlugin extends Plugin {
         emitUpdateState(version, "downloading", 0, "determinate", null, apkFile.getAbsolutePath());
 
         HttpURLConnection connection = null;
-        File tempFile = new File(apkFile.getParentFile(), apkFile.getName() + ".download");
-        if (tempFile.exists() && !tempFile.delete()) {
-            throw new IOException("清理旧下载临时文件失败");
-        }
+        File tempFile = resolveTempApkFile(version);
+        long resumedBytes = tempFile.exists() ? tempFile.length() : 0L;
 
         try {
             connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
             connection.setConnectTimeout(15000);
             connection.setReadTimeout(120000);
             connection.setRequestProperty("Accept", "application/vnd.android.package-archive,application/octet-stream,*/*");
+            if (resumedBytes > 0) {
+                connection.setRequestProperty("Range", "bytes=" + resumedBytes + "-");
+            }
 
             int responseCode = connection.getResponseCode();
+            boolean appendMode = false;
+
+            if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_PARTIAL) {
+                appendMode = true;
+            } else if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_OK) {
+                if (!tempFile.delete() && tempFile.exists()) {
+                    throw new IOException("重置续传临时文件失败");
+                }
+                resumedBytes = 0L;
+            } else if (resumedBytes > 0 && responseCode == HTTP_RANGE_NOT_SATISFIABLE) {
+                if (isChecksumMatch(tempFile, checksum)) {
+                    if (apkFile.exists() && !apkFile.delete()) {
+                        throw new IOException("清理旧更新包失败");
+                    }
+                    if (!tempFile.renameTo(apkFile)) {
+                        throw new IOException("恢复已完成更新包失败");
+                    }
+                    emitUpdateState(version, "verifying", 100, "indeterminate", null, apkFile.getAbsolutePath());
+                    return;
+                }
+                if (!tempFile.delete() && tempFile.exists()) {
+                    throw new IOException("重置不可续传临时文件失败");
+                }
+                throw new IOException("服务端拒绝续传，临时包校验也未通过");
+            }
+
             if (responseCode < 200 || responseCode >= 300) {
                 throw new IOException("下载更新包失败，HTTP " + responseCode);
             }
 
-            int totalBytes = connection.getContentLength();
+            long totalBytes = resolveTotalBytes(connection, resumedBytes, responseCode);
             int lastPercent = -1;
-            long downloadedBytes = 0L;
+            long downloadedBytes = resumedBytes;
+            MessageDigest digest = checksum != null && !checksum.isEmpty()
+                ? MessageDigest.getInstance("SHA-256")
+                : null;
+
+            if (appendMode && digest != null) {
+                try (InputStream existingInput = new BufferedInputStream(new FileInputStream(tempFile))) {
+                    byte[] existingBuffer = new byte[BUFFER_SIZE];
+                    int existingRead;
+                    while ((existingRead = existingInput.read(existingBuffer)) != -1) {
+                        digest.update(existingBuffer, 0, existingRead);
+                    }
+                }
+            }
 
             try (
                 InputStream inputStream = new BufferedInputStream(connection.getInputStream());
-                FileOutputStream fileOutputStream = new FileOutputStream(tempFile);
+                FileOutputStream fileOutputStream = new FileOutputStream(tempFile, appendMode);
                 BufferedOutputStream outputStream = new BufferedOutputStream(fileOutputStream)
             ) {
                 byte[] buffer = new byte[BUFFER_SIZE];
@@ -241,6 +309,9 @@ public class AppUpdatePlugin extends Plugin {
                 while ((read = inputStream.read(buffer)) != -1) {
                     outputStream.write(buffer, 0, read);
                     downloadedBytes += read;
+                    if (digest != null) {
+                        digest.update(buffer, 0, read);
+                    }
 
                     if (totalBytes > 0) {
                         int percent = (int) Math.max(0, Math.min(100, Math.round((downloadedBytes * 100f) / totalBytes)));
@@ -263,15 +334,12 @@ public class AppUpdatePlugin extends Plugin {
             }
 
             emitUpdateState(version, "verifying", 100, "indeterminate", null, apkFile.getAbsolutePath());
-            if (!isChecksumMatch(apkFile, checksum)) {
+            if (digest != null && !checksum.equalsIgnoreCase(bytesToHex(digest.digest()))) {
                 throw new IOException("更新包校验失败，请重新下载");
             }
         } finally {
             if (connection != null) {
                 connection.disconnect();
-            }
-            if (tempFile.exists() && !tempFile.equals(apkFile)) {
-                tempFile.delete();
             }
         }
     }
@@ -301,6 +369,14 @@ public class AppUpdatePlugin extends Plugin {
 
     private File resolveApkFile(String version) {
         return new File(new File(getContext().getCacheDir(), ROOT_DIR), sanitizeFileSegment(version) + ".apk");
+    }
+
+    private File resolveTempApkFile(String version) {
+        return new File(new File(getContext().getCacheDir(), ROOT_DIR), sanitizeFileSegment(version) + TEMP_FILE_SUFFIX);
+    }
+
+    private File resolveStateFile(String version) {
+        return new File(new File(getContext().getCacheDir(), ROOT_DIR), STATE_FILE_PREFIX + sanitizeFileSegment(version) + ".json");
     }
 
     private String sanitizeFileSegment(String value) {
@@ -334,6 +410,7 @@ public class AppUpdatePlugin extends Plugin {
         String status,
         Integer progressPercent,
         String progressMode,
+        String errorCode,
         String errorMessage,
         String apkFilePath
     ) {
@@ -346,6 +423,9 @@ public class AppUpdatePlugin extends Plugin {
         if (progressMode != null && !progressMode.isEmpty()) {
             payload.put("progressMode", progressMode);
         }
+        if (errorCode != null && !errorCode.isEmpty()) {
+            payload.put("errorCode", errorCode);
+        }
         if (errorMessage != null && !errorMessage.isEmpty()) {
             payload.put("errorMessage", errorMessage);
         }
@@ -353,8 +433,46 @@ public class AppUpdatePlugin extends Plugin {
             payload.put("apkFilePath", apkFilePath);
         }
 
+        persistUpdateState(version, status, progressPercent, progressMode, errorCode, errorMessage, apkFilePath);
         Log.i(TAG, "emitUpdateState payload=" + payload.toString());
         mainHandler.post(() -> notifyListeners("updateStateChanged", payload));
+    }
+
+    private void emitUpdateState(
+        String version,
+        String status,
+        Integer progressPercent,
+        String progressMode,
+        String errorMessage,
+        String apkFilePath
+    ) {
+        emitUpdateState(version, status, progressPercent, progressMode, null, errorMessage, apkFilePath);
+    }
+
+    @PluginMethod
+    public void getPreparedUpdateState(PluginCall call) {
+        String version = normalizeNonEmpty(call.getString("version"));
+        if (version == null) {
+            call.reject("缺少 version");
+            return;
+        }
+
+        try {
+            JSONObject state = readPersistedState(resolveStateFile(version));
+            if (state == null) {
+                JSObject result = new JSObject();
+                result.put("exists", false);
+                call.resolve(result);
+                return;
+            }
+
+            JSObject result = jsonToJsObject(state);
+            result.put("exists", true);
+            call.resolve(result);
+        } catch (Exception error) {
+            Log.e(TAG, "getPreparedUpdateState failed version=" + version, error);
+            call.reject("读取更新任务状态失败", error);
+        }
     }
 
     private void resolveOnMainThread(PluginCall call, JSObject result) {
@@ -363,6 +481,122 @@ public class AppUpdatePlugin extends Plugin {
 
     private void rejectOnMainThread(PluginCall call, String message, Exception error) {
         mainHandler.post(() -> call.reject(message, error));
+    }
+
+    private long resolveTotalBytes(HttpURLConnection connection, long resumedBytes, int responseCode) {
+        long contentLength = connection.getContentLengthLong();
+        if (responseCode != HttpURLConnection.HTTP_PARTIAL) {
+            return contentLength;
+        }
+
+        String contentRange = connection.getHeaderField("Content-Range");
+        if (contentRange != null) {
+            int slashIndex = contentRange.lastIndexOf('/');
+            if (slashIndex >= 0 && slashIndex + 1 < contentRange.length()) {
+                String totalText = contentRange.substring(slashIndex + 1).trim();
+                try {
+                    long parsed = Long.parseLong(totalText);
+                    if (parsed > 0) {
+                        return parsed;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // fallback below
+                }
+            }
+        }
+
+        return contentLength > 0 ? resumedBytes + contentLength : contentLength;
+    }
+
+    private void persistUpdateState(
+        String version,
+        String status,
+        Integer progressPercent,
+        String progressMode,
+        String errorCode,
+        String errorMessage,
+        String apkFilePath
+    ) {
+        try {
+            JSONObject payload = new JSONObject();
+            payload.put("version", version);
+            payload.put("status", status);
+            payload.put("updatedAt", System.currentTimeMillis());
+            if (progressPercent != null) {
+                payload.put("progressPercent", progressPercent);
+            }
+            if (progressMode != null && !progressMode.isEmpty()) {
+                payload.put("progressMode", progressMode);
+            }
+            if (errorCode != null && !errorCode.isEmpty()) {
+                payload.put("errorCode", errorCode);
+            }
+            if (errorMessage != null && !errorMessage.isEmpty()) {
+                payload.put("errorMessage", errorMessage);
+            }
+            if (apkFilePath != null && !apkFilePath.isEmpty()) {
+                payload.put("apkFilePath", apkFilePath);
+            }
+            writePersistedState(resolveStateFile(version), payload);
+        } catch (Exception error) {
+            Log.w(TAG, "persistUpdateState failed version=" + version, error);
+        }
+    }
+
+    private JSONObject readPersistedState(File stateFile) throws IOException, JSONException {
+        if (!stateFile.exists()) {
+            return null;
+        }
+
+        StringBuilder builder = new StringBuilder();
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(stateFile), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                builder.append(line);
+            }
+        }
+
+        return builder.length() == 0 ? null : new JSONObject(builder.toString());
+    }
+
+    private void writePersistedState(File stateFile, JSONObject payload) throws IOException {
+        File parentDir = stateFile.getParentFile();
+        if (parentDir != null && !parentDir.exists() && !parentDir.mkdirs()) {
+            throw new IOException("创建更新状态目录失败");
+        }
+
+        try (FileOutputStream outputStream = new FileOutputStream(stateFile)) {
+            outputStream.write((payload.toString() + "\n").getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
+    private JSObject jsonToJsObject(JSONObject payload) {
+        JSObject result = new JSObject();
+        if (payload.has("version")) {
+            result.put("version", payload.optString("version", ""));
+        }
+        if (payload.has("status")) {
+            result.put("status", payload.optString("status", ""));
+        }
+        if (payload.has("progressPercent")) {
+            result.put("progressPercent", payload.optInt("progressPercent"));
+        }
+        if (payload.has("progressMode")) {
+            result.put("progressMode", payload.optString("progressMode", ""));
+        }
+        if (payload.has("errorCode")) {
+            result.put("errorCode", payload.optString("errorCode", ""));
+        }
+        if (payload.has("errorMessage")) {
+            result.put("errorMessage", payload.optString("errorMessage", ""));
+        }
+        if (payload.has("apkFilePath")) {
+            result.put("apkFilePath", payload.optString("apkFilePath", ""));
+        }
+        if (payload.has("updatedAt")) {
+            result.put("updatedAt", payload.optLong("updatedAt", 0L));
+        }
+        return result;
     }
 
     private String normalizeNonEmpty(String value) {
@@ -382,6 +616,43 @@ public class AppUpdatePlugin extends Plugin {
             return normalized.substring("sha256-".length());
         }
         return normalized;
+    }
+
+    private String classifyUpdateErrorCode(Exception error) {
+        if (error == null) {
+            return ERROR_UNKNOWN;
+        }
+
+        if (error instanceof SocketTimeoutException) {
+            return ERROR_NETWORK_TIMEOUT;
+        }
+
+        String message = error.getMessage() != null ? error.getMessage() : "";
+        String lowerMessage = message.toLowerCase();
+
+        if (lowerMessage.contains("http ")) {
+            return ERROR_HTTP;
+        }
+        if (message.contains("续传")) {
+            return ERROR_RESUME_NOT_SUPPORTED;
+        }
+        if (message.contains("校验")) {
+            return ERROR_CHECKSUM;
+        }
+        if (lowerMessage.contains("enospc") || lowerMessage.contains("no space left") || message.contains("空间不足")) {
+            return ERROR_INSUFFICIENT_STORAGE;
+        }
+        if (message.contains("取消")) {
+            return ERROR_CANCELLED;
+        }
+        if (message.contains("安装")) {
+            return ERROR_INSTALLER;
+        }
+        if (error instanceof IOException) {
+            return ERROR_FILE_IO;
+        }
+
+        return ERROR_UNKNOWN;
     }
 
     private String bytesToHex(byte[] bytes) {

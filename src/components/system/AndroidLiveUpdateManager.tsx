@@ -57,7 +57,7 @@ export const AndroidLiveUpdateManager = () => {
 
             if (result.status === 'incompatible') {
                 console.info('[OTA] 检测到不兼容更新，已跳过', result.reason);
-                requestAndroidNativeUpdateCheck({ interactive: false });
+                requestAndroidNativeUpdateCheck({ interactive: options?.interactive === true });
             }
         };
 
@@ -68,7 +68,7 @@ export const AndroidLiveUpdateManager = () => {
                     if (disposed) return;
                     setForceUpdateState(state);
                 },
-                applyMode: 'immediate',
+                applyMode: 'background',
             }).then((result) => {
                 handleResult(result);
             });

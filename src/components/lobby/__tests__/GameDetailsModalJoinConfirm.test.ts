@@ -243,6 +243,7 @@ vi.mock('../../../core', async (importOriginal) => {
 vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
     createNativeGamePackageInstallHandle: vi.fn(async () => null),
     listInstalledNativeGamePackages: vi.fn(async () => []),
+    readNativeGamePackageInstallState: vi.fn(async () => null),
 }));
 
 vi.mock('../../../features/mobile-packages/manifestClient', () => ({
@@ -1082,7 +1083,7 @@ describe('GameDetailsModal create room ai entry', () => {
         fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
 
         await waitFor(() => {
-            expect(screen.getByText('packageManager.retryAction')).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'packageManager.retryAction' })).toBeInTheDocument();
         });
         expect(screen.queryByText('packageManager.progress.label')).toBeNull();
 

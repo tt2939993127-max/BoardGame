@@ -19,6 +19,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
+import java.net.SocketTimeoutException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -31,6 +32,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
+import java.util.zip.ZipException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -43,8 +45,20 @@ public class GamePackagePlugin extends Plugin {
     private static final String STAGING_DIR = "staging";
     private static final String ASSETS_DIR = "assets";
     private static final String ARCHIVE_FILE = "package.zip";
+    private static final String ARCHIVE_PART_FILE = "package.zip.part";
     private static final String METADATA_FILE = "metadata.json";
+    private static final String STATE_FILE = "install-state.json";
+    private static final int HTTP_RANGE_NOT_SATISFIABLE = 416;
     private static final int BUFFER_SIZE = 16 * 1024;
+    private static final String ERROR_NETWORK_TIMEOUT = "network-timeout";
+    private static final String ERROR_HTTP = "http-error";
+    private static final String ERROR_RESUME_NOT_SUPPORTED = "resume-not-supported";
+    private static final String ERROR_CHECKSUM = "checksum-mismatch";
+    private static final String ERROR_INSUFFICIENT_STORAGE = "insufficient-storage";
+    private static final String ERROR_ARCHIVE_INVALID = "archive-invalid";
+    private static final String ERROR_FILE_IO = "file-io";
+    private static final String ERROR_CANCELLED = "cancelled";
+    private static final String ERROR_UNKNOWN = "unknown";
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
@@ -162,6 +176,41 @@ public class GamePackagePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getInstallState(PluginCall call) {
+        String gameId = normalizeNonEmpty(call.getString("gameId"));
+        if (gameId == null) {
+            call.reject("缺少 gameId");
+            return;
+        }
+
+        try {
+            JSONObject payload = readJsonFile(resolveStateFile(gameId));
+            JSObject result = new JSObject();
+            if (payload == null) {
+                result.put("exists", false);
+                call.resolve(result);
+                return;
+            }
+
+            result.put("exists", true);
+            copyJsonValue(payload, result, "gameId");
+            copyJsonValue(payload, result, "status");
+            copyJsonValue(payload, result, "progressPercent");
+            copyJsonValue(payload, result, "progressMode");
+            copyJsonValue(payload, result, "errorCode");
+            copyJsonValue(payload, result, "errorMessage");
+            copyJsonValue(payload, result, "assetPackVersion");
+            copyJsonValue(payload, result, "assetRootPath");
+            copyJsonValue(payload, result, "installedAt");
+            copyJsonValue(payload, result, "updatedAt");
+            call.resolve(result);
+        } catch (Exception error) {
+            Log.e(TAG, "getInstallState failed gameId=" + gameId, error);
+            call.reject("读取安装任务状态失败", error);
+        }
+    }
+
+    @PluginMethod
     public void installGamePackage(PluginCall call) {
         String gameId = normalizeNonEmpty(call.getString("gameId"));
         String runtimeChannel = normalizeNonEmpty(call.getString("runtimeChannel"));
@@ -201,12 +250,14 @@ public class GamePackagePlugin extends Plugin {
 
         executor.execute(() -> {
             File gameDir = new File(getRootDir(), gameId);
-            File stagingDir = new File(new File(gameDir, STAGING_DIR), resolvedAssetPackVersion + "-" + System.currentTimeMillis());
+            File stagingDir = new File(new File(gameDir, STAGING_DIR), sanitizeFileSegment(resolvedAssetPackVersion));
             File archiveFile = new File(stagingDir, ARCHIVE_FILE);
+            File archivePartFile = new File(stagingDir, ARCHIVE_PART_FILE);
             File stagingAssetsDir = new File(stagingDir, ASSETS_DIR);
             File currentDir = new File(gameDir, CURRENT_DIR);
             File currentAssetsDir = new File(currentDir, ASSETS_DIR);
             long installedAt = System.currentTimeMillis();
+            boolean installSucceeded = false;
 
             try {
                 Log.i(
@@ -215,17 +266,31 @@ public class GamePackagePlugin extends Plugin {
                         + " stagingDir=" + stagingDir.getAbsolutePath()
                         + " archiveFile=" + archiveFile.getAbsolutePath()
                 );
-                deleteRecursively(stagingDir);
-                if (!stagingAssetsDir.mkdirs() && !stagingAssetsDir.exists()) {
+                if (!stagingDir.exists() && !stagingDir.mkdirs()) {
+                    throw new IOException("创建临时目录失败");
+                }
+                if (!stagingAssetsDir.exists() && !stagingAssetsDir.mkdirs()) {
                     throw new IOException("创建临时目录失败");
                 }
 
                 emitInstallState(gameId, "queued", null, "indeterminate", null, resolvedAssetPackVersion, null, null);
                 emitInstallState(gameId, "manifest", null, "indeterminate", null, resolvedAssetPackVersion, null, null);
 
-                downloadArchive(assetPackUrl, archiveFile, assetPackChecksum, cancelFlag, gameId, resolvedAssetPackVersion);
+                downloadArchive(
+                    assetPackUrl,
+                    archiveFile,
+                    archivePartFile,
+                    assetPackChecksum,
+                    cancelFlag,
+                    gameId,
+                    resolvedAssetPackVersion
+                );
 
                 emitInstallState(gameId, "verifying", 100, "indeterminate", null, resolvedAssetPackVersion, null, null);
+                deleteRecursively(stagingAssetsDir);
+                if (!stagingAssetsDir.mkdirs() && !stagingAssetsDir.exists()) {
+                    throw new IOException("创建解压目录失败");
+                }
                 extractArchive(archiveFile, stagingAssetsDir, cancelFlag);
 
                 if (cancelFlag.get()) {
@@ -275,6 +340,7 @@ public class GamePackagePlugin extends Plugin {
                         + " installedAt=" + installedAt
                         + " currentAssetsDir=" + currentAssetsDir.getAbsolutePath()
                 );
+                installSucceeded = true;
                 resolveOnMainThread(call, result);
             } catch (Exception error) {
                 Log.e(TAG, "installGamePackage failed", error);
@@ -283,6 +349,7 @@ public class GamePackagePlugin extends Plugin {
                     "failed",
                     null,
                     null,
+                    classifyInstallErrorCode(error),
                     error.getMessage(),
                     resolvedAssetPackVersion,
                     null,
@@ -291,7 +358,9 @@ public class GamePackagePlugin extends Plugin {
                 rejectOnMainThread(call, error.getMessage() != null ? error.getMessage() : "安装失败", error);
             } finally {
                 cancelRegistry.remove(gameId);
-                deleteRecursively(stagingDir);
+                if (installSucceeded) {
+                    deleteRecursively(stagingDir);
+                }
             }
         });
     }
@@ -311,19 +380,53 @@ public class GamePackagePlugin extends Plugin {
     private void downloadArchive(
         String urlValue,
         File targetFile,
+        File partFile,
         String expectedChecksum,
         AtomicBoolean cancelFlag,
         String gameId,
         String assetPackVersion
     ) throws Exception {
+        if (targetFile.exists() && isChecksumMatch(targetFile, expectedChecksum)) {
+            emitInstallState(gameId, "downloading", 100, "determinate", null, assetPackVersion, null, null);
+            return;
+        }
+
         HttpURLConnection connection = (HttpURLConnection) new URL(urlValue).openConnection();
         connection.setConnectTimeout(15000);
         connection.setReadTimeout(30000);
         connection.setRequestProperty("Accept", "application/zip,application/octet-stream");
+        long resumedBytes = partFile.exists() ? partFile.length() : 0L;
+        if (resumedBytes > 0) {
+            connection.setRequestProperty("Range", "bytes=" + resumedBytes + "-");
+        }
         Log.i(TAG, "downloadArchive start gameId=" + gameId + " version=" + assetPackVersion + " url=" + urlValue);
 
         try {
             int responseCode = connection.getResponseCode();
+            boolean appendMode = false;
+            if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_PARTIAL) {
+                appendMode = true;
+            } else if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_OK) {
+                if (!partFile.delete() && partFile.exists()) {
+                    throw new IOException("重置续传文件失败");
+                }
+                resumedBytes = 0L;
+            } else if (resumedBytes > 0 && responseCode == HTTP_RANGE_NOT_SATISFIABLE) {
+                if (isChecksumMatch(partFile, expectedChecksum)) {
+                    if (targetFile.exists() && !targetFile.delete()) {
+                        throw new IOException("清理旧安装包失败");
+                    }
+                    if (!partFile.renameTo(targetFile)) {
+                        throw new IOException("恢复已完成资源包失败");
+                    }
+                    emitInstallState(gameId, "downloading", 100, "determinate", null, assetPackVersion, null, null);
+                    return;
+                }
+                if (!partFile.delete() && partFile.exists()) {
+                    throw new IOException("重置不可续传文件失败");
+                }
+                throw new IOException("服务端拒绝续传，且本地临时资源包校验失败");
+            }
             Log.i(
                 TAG,
                 "downloadArchive response gameId=" + gameId
@@ -335,15 +438,24 @@ public class GamePackagePlugin extends Plugin {
                 throw new IOException("下载失败，HTTP " + responseCode);
             }
 
-            long totalBytes = connection.getContentLengthLong();
+            long totalBytes = resolveTotalBytes(connection, resumedBytes, responseCode);
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            long downloadedBytes = 0L;
+            if (appendMode) {
+                try (InputStream existingInput = new BufferedInputStream(new FileInputStream(partFile))) {
+                    byte[] existingBuffer = new byte[BUFFER_SIZE];
+                    int existingRead;
+                    while ((existingRead = existingInput.read(existingBuffer)) != -1) {
+                        digest.update(existingBuffer, 0, existingRead);
+                    }
+                }
+            }
+            long downloadedBytes = resumedBytes;
             int lastPercent = -1;
             int lastLoggedBucket = -1;
 
             try (
                 InputStream rawInput = new BufferedInputStream(connection.getInputStream());
-                BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(targetFile))
+                BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(partFile, appendMode))
             ) {
                 byte[] buffer = new byte[BUFFER_SIZE];
                 int read;
@@ -383,6 +495,12 @@ public class GamePackagePlugin extends Plugin {
             String actualChecksum = bytesToHex(digest.digest());
             if (expectedChecksum != null && !expectedChecksum.equalsIgnoreCase(actualChecksum)) {
                 throw new IOException("下载包校验失败");
+            }
+            if (targetFile.exists() && !targetFile.delete()) {
+                throw new IOException("清理旧安装包失败");
+            }
+            if (!partFile.renameTo(targetFile)) {
+                throw new IOException("写入安装包失败");
             }
             Log.i(
                 TAG,
@@ -467,6 +585,9 @@ public class GamePackagePlugin extends Plugin {
     }
 
     private JSONObject readJsonFile(File file) throws IOException, JSONException {
+        if (file == null || !file.exists()) {
+            return null;
+        }
         StringBuilder builder = new StringBuilder();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(new FileInputStream(file), StandardCharsets.UTF_8))) {
             String line;
@@ -493,6 +614,7 @@ public class GamePackagePlugin extends Plugin {
         String status,
         Integer progressPercent,
         String progressMode,
+        String errorCode,
         String errorMessage,
         String assetPackVersion,
         String assetRootPath,
@@ -507,6 +629,9 @@ public class GamePackagePlugin extends Plugin {
         if (progressMode != null) {
             payload.put("progressMode", progressMode);
         }
+        if (errorCode != null && !errorCode.isEmpty()) {
+            payload.put("errorCode", errorCode);
+        }
         if (errorMessage != null && !errorMessage.isEmpty()) {
             payload.put("errorMessage", errorMessage);
         }
@@ -520,8 +645,23 @@ public class GamePackagePlugin extends Plugin {
             payload.put("installedAt", installedAt);
         }
 
+        payload.put("updatedAt", System.currentTimeMillis());
+        persistInstallState(gameId, payload);
         Log.i(TAG, "emitInstallState payload=" + payload.toString());
         mainHandler.post(() -> notifyListeners("installStateChanged", payload));
+    }
+
+    private void emitInstallState(
+        String gameId,
+        String status,
+        Integer progressPercent,
+        String progressMode,
+        String errorMessage,
+        String assetPackVersion,
+        String assetRootPath,
+        Long installedAt
+    ) {
+        emitInstallState(gameId, status, progressPercent, progressMode, null, errorMessage, assetPackVersion, assetRootPath, installedAt);
     }
 
     private void resolveOnMainThread(PluginCall call, JSObject result) {
@@ -557,6 +697,124 @@ public class GamePackagePlugin extends Plugin {
             builder.append(String.format("%02x", value));
         }
         return builder.toString();
+    }
+
+    private boolean isChecksumMatch(File file, String checksum) throws Exception {
+        if (!file.exists()) {
+            return false;
+        }
+        if (checksum == null || checksum.isEmpty()) {
+            return true;
+        }
+
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        try (InputStream inputStream = new BufferedInputStream(new FileInputStream(file))) {
+            byte[] buffer = new byte[BUFFER_SIZE];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                digest.update(buffer, 0, read);
+            }
+        }
+        return checksum.equalsIgnoreCase(bytesToHex(digest.digest()));
+    }
+
+    private long resolveTotalBytes(HttpURLConnection connection, long resumedBytes, int responseCode) {
+        long contentLength = connection.getContentLengthLong();
+        if (responseCode != HttpURLConnection.HTTP_PARTIAL) {
+            return contentLength;
+        }
+
+        String contentRange = connection.getHeaderField("Content-Range");
+        if (contentRange != null) {
+            int slashIndex = contentRange.lastIndexOf('/');
+            if (slashIndex >= 0 && slashIndex + 1 < contentRange.length()) {
+                String totalText = contentRange.substring(slashIndex + 1).trim();
+                try {
+                    long parsed = Long.parseLong(totalText);
+                    if (parsed > 0) {
+                        return parsed;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // fallback below
+                }
+            }
+        }
+
+        return contentLength > 0 ? resumedBytes + contentLength : contentLength;
+    }
+
+    private File resolveStateFile(String gameId) {
+        return new File(new File(getRootDir(), gameId), STATE_FILE);
+    }
+
+    private void persistInstallState(String gameId, JSONObject payload) {
+        try {
+            File stateFile = resolveStateFile(gameId);
+            File parent = stateFile.getParentFile();
+            if (parent != null && !parent.exists() && !parent.mkdirs()) {
+                throw new IOException("创建安装状态目录失败");
+            }
+            try (FileOutputStream outputStream = new FileOutputStream(stateFile)) {
+                outputStream.write((payload.toString() + "\n").getBytes(StandardCharsets.UTF_8));
+            }
+        } catch (Exception error) {
+            Log.w(TAG, "persistInstallState failed gameId=" + gameId, error);
+        }
+    }
+
+    private void copyJsonValue(JSONObject source, JSObject target, String key) {
+        if (!source.has(key) || source.isNull(key)) {
+            return;
+        }
+        target.put(key, source.opt(key));
+    }
+
+    private String sanitizeFileSegment(String value) {
+        return value.replaceAll("[^a-zA-Z0-9._-]", "_");
+    }
+
+    private String classifyInstallErrorCode(Exception error) {
+        if (error == null) {
+            return ERROR_UNKNOWN;
+        }
+
+        if (error instanceof SocketTimeoutException) {
+            return ERROR_NETWORK_TIMEOUT;
+        }
+        if (error instanceof ZipException) {
+            return ERROR_ARCHIVE_INVALID;
+        }
+
+        String message = error.getMessage() != null ? error.getMessage() : "";
+        String lowerMessage = message.toLowerCase();
+
+        if (lowerMessage.contains("http ")) {
+            return ERROR_HTTP;
+        }
+        if (message.contains("续传")) {
+            return ERROR_RESUME_NOT_SUPPORTED;
+        }
+        if (message.contains("校验")) {
+            return ERROR_CHECKSUM;
+        }
+        if (
+            lowerMessage.contains("enospc")
+            || lowerMessage.contains("no space left")
+            || message.contains("空间不足")
+        ) {
+            return ERROR_INSUFFICIENT_STORAGE;
+        }
+        if (message.contains("取消")) {
+            return ERROR_CANCELLED;
+        }
+        if (message.contains("压缩包") || message.contains("路径非法")) {
+            return ERROR_ARCHIVE_INVALID;
+        }
+        if (error instanceof IOException) {
+            return ERROR_FILE_IO;
+        }
+
+        return ERROR_UNKNOWN;
     }
 
     private void deleteRecursively(File target) {

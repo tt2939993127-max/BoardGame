@@ -2,6 +2,20 @@ import type { GameManifestMobileDelivery } from '../../games/manifest.types';
 
 export type GamePackageProgressMode = 'determinate' | 'indeterminate';
 
+export type GamePackageInstallErrorCode =
+    | 'network-timeout'
+    | 'http-error'
+    | 'resume-not-supported'
+    | 'checksum-mismatch'
+    | 'insufficient-storage'
+    | 'archive-invalid'
+    | 'file-io'
+    | 'cancelled'
+    | 'task-conflict'
+    | 'manifest-missing'
+    | 'unsupported-runtime'
+    | 'unknown';
+
 export type GamePackageInstallStatus =
     | 'not-installed'
     | 'queued'
@@ -47,6 +61,7 @@ export interface StoredGamePackageState {
     assetPackBytes?: number;
     installedVersion?: string;
     localAssetBaseUrl?: string;
+    errorCode?: GamePackageInstallErrorCode;
     errorMessage?: string;
     updatedAt: number;
 }
@@ -131,5 +146,6 @@ export const toGamePackageCardState = (state: StoredGamePackageState): GamePacka
     modulePackBytes: state.modulePackBytes,
     assetPackBytes: state.assetPackBytes,
     installedVersion: state.installedVersion,
+    errorCode: state.errorCode,
     errorMessage: state.errorMessage,
 });
