@@ -1348,6 +1348,85 @@ describe('cross hero battles', () => {
             expect(state.core.players['0'].abilityLevels['stand-tall']).toBe(1);
         });
 
+        it('bushido grants 1 honor to the starting samurai at game start', () => {
+            const state = createInitializedStateWithCharacters(
+                ['0', '1'],
+                fixedRandom,
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            expect(state.core.startingPlayerId).toBe('0');
+            expect(state.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(1);
+        });
+
+        it('bushido grants 1 honor at end of turn when offensive rolls are fewer than 3', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([1, 1, 6, 6, 4]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai bushido grants end-turn honor below three rolls',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'wakizashi' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                    activePlayerId: '1',
+                    pendingInteraction: null,
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.turnNumber).toBe(2);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(2);
+        });
+
+        it('bushido does not grant extra honor after exactly 3 offensive rolls', () => {
+            const runner = createCrossHeroRunner(
+                createQueuedRandom([
+                    1, 1, 6, 6, 4,
+                    1, 1, 6, 6, 4,
+                    1, 1, 6, 6, 4,
+                ]),
+                { '0': 'samurai', '1': 'monk' }
+            );
+
+            const result = runner.run({
+                name: 'samurai bushido skips end-turn honor at three rolls',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'wakizashi' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main1',
+                    activePlayerId: '1',
+                    pendingInteraction: null,
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.turnNumber).toBe(2);
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.HONOR]).toBe(1);
+        });
+
         it('wakizashi grants 1 back strike and 3 undefendable damage', () => {
             const runner = createCrossHeroRunner(
                 createQueuedRandom([1, 1, 6, 6, 4]),
@@ -1623,6 +1702,7 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '0'),
                     cmd('RESPONSE_PASS', '1'),
                     cmd('ADVANCE_PHASE', '1'),
+                    cmd('SKIP_TOKEN_RESPONSE', '0'),
                     cmd('SKIP_TOKEN_RESPONSE', '1'),
                 ],
                 expect: {

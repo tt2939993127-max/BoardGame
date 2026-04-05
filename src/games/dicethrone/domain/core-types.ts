@@ -5,6 +5,7 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../core';
+import type { CharacterBadgeDef } from '../../../core/ui';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
@@ -77,6 +78,7 @@ export type TeamId = 'A' | 'B';
 export interface CharacterDefinition {
     id: SelectableCharacterId;
     nameKey: string;
+    badges?: CharacterBadgeDef[];
 }
 
 export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
@@ -86,8 +88,16 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
-    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
-    { id: 'samurai', nameKey: 'characters.samurai' },
+    {
+        id: 'gunslinger',
+        nameKey: 'characters.gunslinger',
+        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+    },
+    {
+        id: 'samurai',
+        nameKey: 'characters.samurai',
+        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+    },
 ];
 
 /**
@@ -502,6 +512,13 @@ export interface DiceThroneCore {
      * TOKEN_GRANTED 时累加（仅 TAIJI），TURN_CHANGED 时清除
      */
     taijiGainedThisTurn?: Record<PlayerId, number>;
+    /**
+     * 本回合进攻掷骰尝试次数
+     * key: playerId, value: 当前回合进入 offensiveRoll 后执行过多少次 ROLL_DICE
+     * 仅在真正的进攻掷骰（pendingAttack 仍为空）时累加，TURN_CHANGED 时清除
+     * 供 Bushido 等“按本回合攻击掷骰次数结算”的规则复用
+     */
+    offensiveRollCountThisTurn?: Record<PlayerId, number>;
 }
 
 // ============================================================================

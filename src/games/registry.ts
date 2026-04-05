@@ -5,6 +5,7 @@ import { logMobileRuntime, logMobileRuntimeCritical } from '../lib/mobile/mobile
 import { isStaleChunkError, reloadForStaleChunkOnce } from '../lib/staleChunkReloadGuard';
 import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import { safeMatchMedia } from '../lib/mediaQuery';
+import { appendMatchLoadTrace, captureRecentMatchLoadResources } from '../lib/matchLoadTrace';
 import { isMobileViewport } from './mobileSupport';
 
 // 重新导出类型供外部使用
@@ -148,6 +149,10 @@ for (const entry of GAME_CLIENT_MANIFEST) {
 const ensureGameTutorialLoaded = async (gameId: string): Promise<void> => {
     const cached = runtimeCache.get(gameId);
     if (cached?.tutorial) {
+        appendMatchLoadTrace({
+            stage: 'game-tutorial-cache-hit',
+            gameId,
+        });
         return;
     }
 
@@ -158,28 +163,52 @@ const ensureGameTutorialLoaded = async (gameId: string): Promise<void> => {
 
     const existing = tutorialLoadingPromises.get(gameId);
     if (existing) {
+        appendMatchLoadTrace({
+            stage: 'game-tutorial-reuse-inflight',
+            gameId,
+        });
         await existing;
         return;
     }
 
-    const promise = loader().then((tutorial) => {
-        if (!tutorial) {
-            return;
-        }
-        const current = runtimeCache.get(gameId);
-        if (!current || current.tutorial === tutorial) {
-            return;
-        }
-        runtimeCache.set(gameId, {
-            ...current,
-            tutorial,
-        });
-        emitGameImplementationReady(gameId);
-    }).finally(() => {
-        if (tutorialLoadingPromises.get(gameId) === promise) {
-            tutorialLoadingPromises.delete(gameId);
-        }
+    appendMatchLoadTrace({
+        stage: 'game-tutorial-load-start',
+        gameId,
     });
+    const promise = loader()
+        .then((tutorial) => {
+            if (!tutorial) {
+                return;
+            }
+            const current = runtimeCache.get(gameId);
+            if (!current || current.tutorial === tutorial) {
+                return;
+            }
+            runtimeCache.set(gameId, {
+                ...current,
+                tutorial,
+            });
+            emitGameImplementationReady(gameId);
+            appendMatchLoadTrace({
+                stage: 'game-tutorial-load-success',
+                gameId,
+            });
+        })
+        .catch((error: unknown) => {
+            appendMatchLoadTrace({
+                stage: 'game-tutorial-load-failed',
+                gameId,
+                payload: {
+                    error: error instanceof Error ? error.message : String(error),
+                },
+            });
+            throw error;
+        })
+        .finally(() => {
+            if (tutorialLoadingPromises.get(gameId) === promise) {
+                tutorialLoadingPromises.delete(gameId);
+            }
+        });
 
     tutorialLoadingPromises.set(gameId, promise);
     await promise;
@@ -198,6 +227,14 @@ export const loadGameImplementation = async (
     // 1. 缓存命中
     const cached = runtimeCache.get(gameId);
     if (cached) {
+        appendMatchLoadTrace({
+            stage: 'game-runtime-cache-hit',
+            gameId,
+            payload: {
+                includeTutorial,
+                hasTutorial: Boolean(cached.tutorial),
+            },
+        });
         if (includeTutorial) {
             await ensureGameTutorialLoaded(gameId);
         }
@@ -209,6 +246,14 @@ export const loadGameImplementation = async (
     const existing = loadingPromises.get(gameId);
     if (existing) {
         const runtime = await existing;
+        appendMatchLoadTrace({
+            stage: 'game-runtime-reuse-inflight',
+            gameId,
+            payload: {
+                includeTutorial,
+                hasTutorial: Boolean(runtime?.tutorial),
+            },
+        });
         if (includeTutorial) {
             await ensureGameTutorialLoaded(gameId);
         }
@@ -227,11 +272,29 @@ export const loadGameImplementation = async (
     const startedAt = Date.now();
     const timeoutMs = resolveGameImplementationLoadTimeoutMs();
     const timeoutMessage = createGameImplementationTimeoutMessage(gameId, timeoutMs);
+    appendMatchLoadTrace({
+        stage: 'game-runtime-load-start',
+        gameId,
+        payload: {
+            includeTutorial,
+            timeoutMs,
+        },
+    });
     logMobileRuntime('GameRuntime', 'load-start', { gameId });
 
     const rawPromise = loader().then((runtime) => {
         runtimeCache.set(gameId, runtime);
         emitGameImplementationReady(gameId);
+        appendMatchLoadTrace({
+            stage: 'game-runtime-load-success',
+            gameId,
+            payload: {
+                includeTutorial,
+                durationMs: Date.now() - startedAt,
+                hasTutorial: Boolean(runtime.tutorial),
+                hasLatencyConfig: Boolean(runtime.latencyConfig),
+            },
+        });
         logMobileRuntime('GameRuntime', 'load-success', {
             gameId,
             durationMs: Date.now() - startedAt,
@@ -243,12 +306,25 @@ export const loadGameImplementation = async (
         .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             const isTimeout = message === timeoutMessage;
+            const resourceSnapshot = captureRecentMatchLoadResources();
             const payload = {
                 gameId,
                 error: message,
                 timeoutMs,
                 durationMs: Date.now() - startedAt,
+                ...resourceSnapshot,
             };
+            appendMatchLoadTrace({
+                stage: isTimeout ? 'game-runtime-load-timeout' : 'game-runtime-load-failed',
+                gameId,
+                payload: {
+                    includeTutorial,
+                    error: message,
+                    timeoutMs,
+                    durationMs: payload.durationMs,
+                    ...resourceSnapshot,
+                },
+            });
 
             logMobileRuntime(
                 'GameRuntime',

@@ -16,6 +16,7 @@ import {
     buildRuntimeInlineUnitValue,
 } from '../../../games/mobileSupport';
 import type {
+    CharacterBadgeDef,
     CharacterDef,
     CharacterSelectionCallbacks,
     CharacterAssets,
@@ -63,7 +64,7 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
     locale,
     i18nNamespace,
 }) => {
-    const { t } = useTranslation(i18nNamespace);
+    const { t } = useTranslation([i18nNamespace, 'common']);
     const isHost = currentPlayerId === hostPlayerId;
     const playerIds = Object.keys(playerNames);
     const inlineUnit = buildRuntimeInlineUnitValue;
@@ -123,6 +124,35 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
 
     // 放大预览状态
     const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
+
+    const getBadgeToneClassName = (badge: CharacterBadgeDef) => {
+        switch (badge.tone) {
+            case 'info':
+                return 'border-sky-300/55 bg-sky-500/85 text-white';
+            case 'success':
+                return 'border-emerald-300/55 bg-emerald-500/85 text-white';
+            case 'danger':
+                return 'border-rose-300/55 bg-rose-500/85 text-white';
+            case 'neutral':
+                return 'border-slate-200/45 bg-slate-500/80 text-white';
+            case 'warning':
+            default:
+                return 'border-slate-950/85 text-slate-950';
+        }
+    };
+
+    const getBadgeToneStyle = (badge: CharacterBadgeDef): React.CSSProperties | undefined => {
+        if (badge.tone !== 'warning') return undefined;
+
+        return {
+            backgroundColor: '#facc15',
+            backgroundImage: [
+                'linear-gradient(180deg, rgba(255,244,180,0.9) 0%, rgba(250,204,21,0.95) 100%)',
+                'repeating-linear-gradient(135deg, rgba(15,23,42,0.92) 0 6px, rgba(15,23,42,0) 6px 12px)',
+            ].join(', '),
+            boxShadow: '0 0 0 1px rgba(15,23,42,0.55), 0 6px 14px rgba(0,0,0,0.28), inset 0 1px 0 rgba(255,255,255,0.35)',
+        };
+    };
 
     if (!isOpen) return null;
 
@@ -203,6 +233,40 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                      style={assets.getPortraitStyle(char.id, locale)} />
                                 
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+
+                                {char.badges?.length ? (
+                                    <div
+                                        className="absolute left-0 z-20 flex flex-col items-start pointer-events-none"
+                                        style={{
+                                            top: inlineUnit(0.35),
+                                            left: inlineUnit(0.35),
+                                            gap: inlineUnit(0.24),
+                                            maxWidth: `calc(100% - ${inlineUnit(2.2)})`,
+                                        }}
+                                    >
+                                        {char.badges.map((badge) => (
+                                            <span
+                                                key={badge.id}
+                                                data-testid={`character-badge-${char.id}-${badge.id}`}
+                                                className={clsx(
+                                                    'rounded-full border font-black uppercase tracking-[0.14em] shadow-lg backdrop-blur-sm',
+                                                    getBadgeToneClassName(badge)
+                                                )}
+                                                style={{
+                                                    paddingLeft: inlineUnit(0.42),
+                                                    paddingRight: inlineUnit(0.42),
+                                                    paddingTop: inlineUnit(0.18),
+                                                    paddingBottom: inlineUnit(0.18),
+                                                    fontSize: inlineUnit(0.38),
+                                                    lineHeight: 1.1,
+                                                    ...getBadgeToneStyle(badge),
+                                                }}
+                                            >
+                                                {t(badge.labelKey)}
+                                            </span>
+                                        ))}
+                                    </div>
+                                ) : null}
                                 
                                 <div
                                     className="absolute"

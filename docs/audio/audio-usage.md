@@ -7,16 +7,17 @@
 ## 音频资源架构（强制）
 
 **三层架构**：
-1. **通用注册表**（`src/assets/audio/registry.json`，构建时从 `public/assets/common/audio/` 生成）：所有音效资源的唯一来源，包含 key 和物理路径映射。代码中通过静态 import 加载，Vite 会自动打包。
-2. **游戏配置**（`src/games/<gameId>/audio.config.ts`）：定义事件音效的映射规则（`feedbackResolver`），使用通用注册表中的 key。
-3. **FX 系统**（`src/games/<gameId>/ui/fxSetup.ts`）：直接使用通用注册表中的 key 定义 `FeedbackPack`，不依赖游戏配置常量。
+1. **全量注册表**（`src/assets/audio/registry.json`，由 `public/assets/common/audio/registry.json` 同步而来）：音频 key 与相对物理路径的完整真相源。`/dev/audio` 会动态加载这份全量表。
+2. **运行时精简注册表**（`src/assets/audio/registry-slim.json`）：从全量表中过滤出“当前代码实际引用”的条目，游戏运行时默认加载这份 slim 表，避免把 10000+ 条音频元数据都打进主链路。
+3. **游戏配置 / FX 系统**（`src/games/<gameId>/audio.config.ts`、`src/games/<gameId>/ui/fxSetup.ts`）：只引用 registry key，不声明音频路径。
 
 **核心原则**：
-- **禁止重复定义**：音效 key 只在通用注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
+- **禁止重复定义**：音效 key 只在注册表中定义一次，游戏层和 FX 层直接引用 key 字符串，不再定义常量。
 - **禁止**在游戏层定义音频资源（`audio.config.ts` 不得声明 `basePath/sounds`）。
 - **禁止**在 `src/games/<gameId>/` 下放音频文件或自建音频目录。
 - **禁止**使用旧短 key（如 `click` / `dice_roll` / `card_draw`）。
 - **必须**使用 registry 的完整 key（如 `ui.general....uiclick_dialog_choice_01_krst_none`）。
+- **必须区分“注册表 JSON”与“音频二进制资源”**：前者随前端构建打包；后者运行时通过 `VITE_ASSETS_BASE_URL` / 默认官方资源域名加载，生产通常落在 R2/CDN。
 
 ## 1. 目录与来源（强制）
 - **唯一音频资源目录**：`public/assets/common/audio/`
@@ -46,14 +47,34 @@ AUDIO_OGG_BITRATE=96k npm run compress:audio -- public/assets/common/audio
 node scripts/audio/generate_common_audio_registry.js
 ```
 
-- 产出：`public/assets/common/audio/registry.json`（生成后需复制到 `src/assets/audio/registry.json`）
+- 产出：`public/assets/common/audio/registry.json`（生成后需同步到 `src/assets/audio/registry.json`）
 - **注意**：生成脚本会优先使用 `compressed/` 变体；若同 key 同时存在原始与压缩版本，将自动保留压缩版本并跳过原始文件。
 - **部署说明**：
-  - 开发环境：代码从 `src/assets/audio/registry.json` 静态 import，修改后刷新即可生效
-  - 生产环境：Vite 构建时自动打包 JSON 到产物中
-  - 音频文件本身仍从 CDN 加载（通过 `VITE_ASSETS_BASE_URL` 配置）
+  - `/dev/audio`：动态加载 `src/assets/audio/registry.json` 全量表，便于检索和试听
+  - 游戏运行时：默认加载 `src/assets/audio/registry-slim.json`
+  - 音频文件本身不从 JSON 内联，而是运行时按 `VITE_ASSETS_BASE_URL` / 默认官方资源域名加载；生产通常是 R2/CDN，开发可走本地 `/assets`
 
-### 2.3 生成音频清单文档
+### 2.3 生成运行时 slim registry（强制）
+使用脚本：`scripts/audio/generate-slim-registry.mjs`
+
+```bash
+node scripts/audio/generate-slim-registry.mjs
+```
+
+- 产出：`src/assets/audio/registry-slim.json`
+- 规则：扫描 `src/**/*.ts(x)` 中实际引用的音频 key，再从全量表中过滤对应条目
+- 适用场景：只要新增了代码引用的音频 key，就必须重新生成 slim registry，否则 `/dev/audio` 能看到、运行时仍可能拿不到
+
+### 2.4 验证 slim registry（推荐）
+使用脚本：`scripts/audio/verify-slim-registry.mjs`
+
+```bash
+node scripts/audio/verify-slim-registry.mjs
+```
+
+- 作用：校验“代码中引用的 key 都在 slim registry 中”，并检查 slim 与全量表是否一致
+
+### 2.5 生成音频清单文档
 使用脚本：`scripts/audio/generate_audio_assets_md.js`
 
 ```bash
@@ -62,7 +83,7 @@ node scripts/audio/generate_audio_assets_md.js
 
 - 产出：`docs/audio/common-audio-assets.md`
 
-### 2.4 生成 AI 精简 registry（强烈推荐）
+### 2.6 生成 AI 精简 registry（强烈推荐）
 用于减少 AI 查找音效时的 token 消耗（不影响运行时）。
 
 > 说明：AI 在挑选/替换音效时**优先**使用精简 registry（`registry.ai*.json`）+ 语义目录（`audio-catalog.md`）定位候选 key。
@@ -82,7 +103,7 @@ node scripts/audio/generate_ai_audio_registry_dicethrone.js
 - 产出：`docs/audio/registry.ai.dicethrone.json`
 - 内容：仅包含 `src/games/dicethrone` 中实际使用的 key
 
-### 2.5 AI 查找/筛选音效（推荐流程）
+### 2.7 AI 查找/筛选音效（推荐流程）
 **目标**：在挑选音效时，用最小 token 成本定位合适 key。
 
 **首选方法：语义目录（强制执行，除非明确说明不需要）**
@@ -125,7 +146,7 @@ node scripts/audio/generate_audio_catalog.js
 }
 ```
 
-### 2.6 音效预览（/dev/audio）
+### 2.8 音效预览（/dev/audio）
 用于在浏览器内快速试听、复制 key、检查分类与翻译。
 
 **入口**：访问 `/dev/audio`。
@@ -137,13 +158,14 @@ node scripts/audio/generate_audio_catalog.js
 - 点击名称复制 key，点击播放按钮试听
 
 **注意事项**：
-- 预览依赖 `public/assets/common/audio/registry.json`，新增音效后需先重新生成 registry。
+- 预览依赖 `src/assets/audio/registry.json` 全量表；新增音效后需先重新生成并同步全量 registry。
 - 友好中文名来自 `public/assets/common/audio/phrase-mappings.zh-CN.json`，如翻译更新需同步生成并刷新页面。
 
 ## 3. 代码使用规范（强制）
 ### 3.1 使用 registry key
 - **必须**使用 `registry.json` 中的唯一 key。
 - **禁止**写 `compressed/` 路径，`getOptimizedAudioUrl()` 会自动处理。
+- **必须保证远端/本地资源路径上存在 `compressed/` 实际产物**。运行时 URL 会自动插入 `compressed/`，所以“registry 里有 key”不等于“音频一定能播”。
 
 示例：
 ```ts
@@ -248,9 +270,12 @@ AudioManager.preloadKeys(['ui.general.menu_click_01']);
 - [ ] 音频文件仅存在于 `public/assets/common/audio/`
 - [ ] 已执行 `compress:audio`
 - [ ] 已重新生成 `registry.json`
+- [ ] 已同步 `src/assets/audio/registry.json`
+- [ ] 已重新生成 `registry-slim.json`
 - [ ] 已更新 `common-audio-assets.md`
 - [ ] 代码中不出现 `compressed/`
 - [ ] 游戏层 `audio.config.ts` 不含 `basePath/sounds`
 - [ ] 音频播放代码不在 `ctx.resume()` 后同步检查 context 状态
 - [ ] BGM 播放不用 `isContextSuspended()` 拦截
+- [ ] 生产若走 R2/CDN，已确认对应 `compressed/` 音频文件和 registry 同步上传
 

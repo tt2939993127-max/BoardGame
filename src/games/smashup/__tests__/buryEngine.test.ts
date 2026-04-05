@@ -10,6 +10,10 @@ import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem'
 import { buildBuryCardEvents, buildBuriedCardReturnedToHandEvent } from '../domain/bury';
 import { SMASHUP_AUDIO_CONFIG } from '../audio.config';
 
+const CARD_SCROLL_KEY = 'card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001';
+const BURY_KEY = 'magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none';
+const CARD_DRAW_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_take_001';
+
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
@@ -26,15 +30,22 @@ describe('bury engine', () => {
             meta: {},
         } as any;
 
-        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+        const buriedSound = SMASHUP_AUDIO_CONFIG.feedbackResolver({
             type: SU_EVENTS.CARD_BURIED,
             payload: { defId: 'ancient_egyptians_mummy' },
-        } as any, context)).toBe('magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none');
+        } as any, context);
+        expect(buriedSound).toBe(BURY_KEY);
+        expect(buriedSound).not.toBe(CARD_SCROLL_KEY);
 
         expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
             type: SU_EVENTS.BURIED_CARD_UNCOVERED,
             payload: { defId: 'ancient_egyptians_mummy' },
-        } as any, context)).toBe('card.handling.decks_and_cards_sound_fx_pack.card_take_001');
+        } as any, context)).toBe(CARD_DRAW_KEY);
+
+        expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
+            type: SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND,
+            payload: { defId: 'ancient_egyptians_mummy' },
+        } as any, context)).toBe(CARD_DRAW_KEY);
 
         expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
             type: SU_EVENTS.MINION_PLAYED,

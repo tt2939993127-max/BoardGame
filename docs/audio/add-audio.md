@@ -111,6 +111,40 @@ node scripts/audio/generate_common_audio_registry.js \
 
 产出：`public/assets/common/audio/registry.json`
 
+### 3.1 同步前端全量 registry（强制）
+
+运行时和 `/dev/audio` 读取的是 `src/assets/audio/` 下的打包 JSON，不会直接去读 `public/assets/common/audio/registry.json`。
+
+因此生成全量表后，必须同步到：
+
+```bash
+Copy-Item public/assets/common/audio/registry.json src/assets/audio/registry.json -Force
+```
+
+> 若只更新了 `public` 下的全量 registry，没有同步到 `src/assets/audio/registry.json`，`/dev/audio` 和前端构建产物都会继续使用旧表。
+
+### 3.2 生成运行时 slim registry（强制）
+
+使用脚本：`scripts/audio/generate-slim-registry.mjs`
+
+```bash
+node scripts/audio/generate-slim-registry.mjs
+```
+
+- 产出：`src/assets/audio/registry-slim.json`
+- 规则：扫描 `src/**/*.ts(x)` 中实际引用的音频 key，再从全量 registry 中筛出运行时需要的条目
+- 何时必须执行：只要这次改动新增了代码中的音频 key 引用，就必须重新生成
+
+### 3.3 校验 slim registry（推荐）
+
+```bash
+node scripts/audio/verify-slim-registry.mjs
+```
+
+用于确认：
+- 代码里引用的 key 都在 slim registry 中
+- slim registry 中的条目都来自全量 registry
+
 ---
 
 ## 4. 更新中文友好名（强制）
@@ -197,11 +231,22 @@ node scripts/audio/generate_audio_catalog.js
 
 > 若缺失，优先检查：是否压缩、是否生成 registry、是否补翻译。
 
+### 7.1 远端资源验证（生产/R2 必做）
+
+如果当前环境音频二进制资源走 `VITE_ASSETS_BASE_URL` 指向的对象存储/CDN（默认官方资源域名）：
+
+- 必须确认新增音频对应的 `compressed/*.ogg` 已上传到 R2/CDN
+- 必须确认上传路径与 registry 中记录的相对路径一致
+- 必须确认不是只有本地 `public/assets/common/audio/.../compressed/` 存在，而远端桶里缺文件
+
+> 运行时会自动把 registry 中的相对路径改写为 `compressed/` 版本 URL。  
+> 所以“key 已进 registry”只说明注册成功，不代表远端实际可播。
+
 ---
 
 ## 8. 代码接入（强制）
 
-**原则**：只使用 `registry.json` 中的 key，禁止手写路径与 `compressed/`。
+**原则**：只使用 registry 中的 key，禁止手写路径与 `compressed/`。
 
 示例：
 ```ts
@@ -243,10 +288,13 @@ AudioManager.preloadKeys(['ui.general.menu_click_01']);
 - [ ] 原始音频已放入 `public/assets/common/audio/`
 - [ ] 已运行 `npm run compress:audio -- public/assets/common/audio`
 - [ ] 已生成 `public/assets/common/audio/registry.json`
+- [ ] 已同步 `src/assets/audio/registry.json`
+- [ ] 已生成 `src/assets/audio/registry-slim.json`
 - [ ] 已更新 `phrase-mappings.zh-CN.json`
 - [ ] 已生成 `docs/audio/common-audio-assets.md`
 - [ ] 已生成 `docs/audio/audio-catalog.md`
 - [ ] `/dev/audio` 可预览且显示中文
+- [ ] 若生产走 R2/CDN，已确认远端 `compressed/` 音频已上传
 - [ ] 代码中不出现 `compressed/`
 
 ---
@@ -260,8 +308,15 @@ AudioManager.preloadKeys(['ui.general.menu_click_01']);
 ### 10.2 registry 没更新
 - 是否忘记执行 `generate_common_audio_registry.js`
 - 是否指向了错误的 `--source` 路径
+- 是否忘记把 `public/assets/common/audio/registry.json` 同步到 `src/assets/audio/registry.json`
+- 是否忘记重新生成 `src/assets/audio/registry-slim.json`
 
 ### 10.3 中文名不生效
 - 是否遗漏 `phrase-mappings.zh-CN.json`
 - 是否没有刷新 `/dev/audio`
 - 是否在翻译中使用了错误的“英文词干”
+
+### 10.4 `/dev/audio` 能看到，但游戏里没声音
+- 先确认代码运行时引用的 key 是否已进入 `src/assets/audio/registry-slim.json`
+- 再确认远端 R2/CDN 是否已有对应 `compressed/*.ogg`
+- 最后再看浏览器网络请求是否命中了错误的 `VITE_ASSETS_BASE_URL`

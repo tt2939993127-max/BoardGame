@@ -61,6 +61,9 @@ const pendingAttackNeedsTargetingRoll = (core: DiceThroneCore): boolean => {
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
     event.type === 'CHOICE_REQUESTED' || event.type === 'INTERACTION_REQUESTED';
 
+const playerHasAbility = (core: DiceThroneCore, playerId: string, abilityId: string): boolean =>
+    core.players[playerId]?.abilities.some(ability => ability.id === abilityId) ?? false;
+
 /**
  * 计算玩家当前的眩晕层数（包含 core 中的和 events 中的）
  * 
@@ -1111,6 +1114,24 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
             }
 
+            if (playerHasAbility(core, activeId, 'bushido')) {
+                const offensiveRollCount = core.offensiveRollCountThisTurn?.[activeId] ?? 0;
+                if (offensiveRollCount < 3) {
+                    const currentHonor = core.players[activeId]?.tokens[TOKEN_IDS.HONOR] ?? 0;
+                    events.push({
+                        type: 'TOKEN_GRANTED',
+                        payload: {
+                            targetId: activeId,
+                            tokenId: TOKEN_IDS.HONOR,
+                            amount: 1,
+                            newTotal: currentHonor + 1,
+                        },
+                        sourceCommandType: command.type,
+                        timestamp,
+                    } as DiceThroneEvent);
+                }
+            }
+
             const nextPlayerId = getNextPlayerId(core);
             const turnEvent: TurnChangedEvent = {
                 type: 'TURN_CHANGED',
@@ -1249,6 +1270,26 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 : core;
             const activeId = phaseEnterCore.activePlayerId;
             const player = phaseEnterCore.players[activeId];
+
+            if (
+                phaseEnterCore.turnNumber === 1
+                && activeId === phaseEnterCore.startingPlayerId
+                && playerHasAbility(phaseEnterCore, activeId, 'bushido')
+            ) {
+                const currentHonor = player?.tokens[TOKEN_IDS.HONOR] ?? 0;
+                events.push({
+                    type: 'TOKEN_GRANTED',
+                    payload: {
+                        targetId: activeId,
+                        tokenId: TOKEN_IDS.HONOR,
+                        amount: 1,
+                        newTotal: currentHonor + 1,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                } as DiceThroneEvent);
+            }
+
             const phaseStartPassives = player?.abilities.filter((ability) => {
                 const trigger = ability.trigger as { type?: string; phase?: string } | undefined;
                 return ability.type === 'passive'

@@ -57,7 +57,22 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
         }
         return die;
     });
-    return { ...state, dice: newDice, rollCount: state.rollCount + 1, rollConfirmed: false };
+
+    const isOffensiveRollAttempt = state.pendingAttack === null;
+    const offensiveRollCountThisTurn = isOffensiveRollAttempt
+        ? {
+            ...(state.offensiveRollCountThisTurn || {}),
+            [state.activePlayerId]: (state.offensiveRollCountThisTurn?.[state.activePlayerId] ?? 0) + 1,
+        }
+        : state.offensiveRollCountThisTurn;
+
+    return {
+        ...state,
+        dice: newDice,
+        rollCount: state.rollCount + 1,
+        rollConfirmed: false,
+        offensiveRollCountThisTurn,
+    };
 };
 
 /**
@@ -561,6 +576,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
         turnNumber,
         lastResolvedAttackDamage: undefined,
         taijiGainedThisTurn: undefined, // 清除太极本回合获得量追踪
+        offensiveRollCountThisTurn: undefined,
     };
 };
 
