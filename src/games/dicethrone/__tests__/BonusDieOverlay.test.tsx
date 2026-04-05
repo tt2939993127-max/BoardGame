@@ -378,6 +378,68 @@ describe('BonusDieOverlay', () => {
         }
     });
 
+    it('升级牌的 CARD_PLAYED 与 ABILITY_REPLACED 不应被拆成两次卡牌特写', async () => {
+        const entries: EventStreamEntry[] = [
+            {
+                id: 1,
+                event: {
+                    type: 'CARD_PLAYED',
+                    payload: {
+                        playerId: '1',
+                        cardId: 'upgrade-deadeye-2',
+                    },
+                    timestamp: 1000,
+                },
+            },
+            {
+                id: 2,
+                event: {
+                    type: 'ABILITY_REPLACED',
+                    payload: {
+                        playerId: '1',
+                        oldAbilityId: 'deadeye',
+                        newAbilityDef: { id: 'deadeye' },
+                        cardId: 'upgrade-deadeye-2',
+                        newLevel: 2,
+                    },
+                    timestamp: 1000,
+                },
+            },
+        ];
+
+        function HookProbe({ streamEntries }: { streamEntries: EventStreamEntry[] }) {
+            const state = useCardSpotlight({
+                eventStreamEntries: streamEntries,
+                currentPlayerId: '0',
+                opponentName: '对手',
+                selectedCharacters: {
+                    '0': 'samurai',
+                    '1': 'gunslinger',
+                },
+            });
+
+            return (
+                <pre data-testid="upgrade-card-spotlight-state">
+                    {JSON.stringify(state.cardSpotlightQueue)}
+                </pre>
+            );
+        }
+
+        const view = render(<HookProbe streamEntries={[]} />);
+        view.rerender(<HookProbe streamEntries={entries} />);
+
+        await waitFor(() => {
+            const state = JSON.parse(screen.getByTestId('upgrade-card-spotlight-state').textContent ?? '[]');
+            expect(state).toHaveLength(1);
+            expect(state[0].id).toBe('upgrade-deadeye-2-1000');
+            expect(state[0].previewRef).toEqual({
+                type: 'atlas',
+                atlasId: 'dicethrone:gunslinger-cards',
+                index: 24,
+            });
+        });
+    });
+
     it('自己打出的 Volley 多骰事件应显示独立多骰特写，而不是卡牌特写或单骰特写', async () => {
         const entries: EventStreamEntry[] = [
             {

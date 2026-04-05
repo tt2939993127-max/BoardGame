@@ -80,6 +80,28 @@ const CARD_BONUS_BIND_THRESHOLD_MS = 1500;
 const spotlightLogger = createScopedLogger('DT_SPOTLIGHT');
 type SpotlightBonusDie = NonNullable<CardSpotlightItem['bonusDice']>[number];
 
+function findExistingCardSpotlightIndex(
+    queue: CardSpotlightItem[],
+    cardId: string,
+    playerId: PlayerId,
+    eventTimestamp: number,
+): number {
+    const normalizedPlayerId = normalizePlayerId(playerId);
+
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+        const item = queue[index];
+        const timeDiff = Math.abs(item.timestamp - eventTimestamp);
+        const playerMatch = normalizePlayerId(item.playerId) === normalizedPlayerId;
+        const cardMatch = item.id.startsWith(`${cardId}-`);
+
+        if (playerMatch && cardMatch && timeDiff <= CARD_BONUS_BIND_THRESHOLD_MS) {
+            return index;
+        }
+    }
+
+    return -1;
+}
+
 function countRelatedBonusDiceEvents(
     entries: EventStreamEntry[],
     cardPlayerId: string,
@@ -217,6 +239,22 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
 
                 // 自己打出的卡牌默认不显示特写；自方多骰改走独立多骰面板聚合
                 if (skipSelfCardSpotlight) continue;
+
+                const existingIndex = findExistingCardSpotlightIndex(
+                    nextCardSpotlightQueue,
+                    p.cardId,
+                    p.playerId,
+                    eventTimestamp,
+                );
+                if (existingIndex >= 0) {
+                    spotlightLogger.info('card-event-deduped', {
+                        eventType: type,
+                        cardId: p.cardId,
+                        playerId: p.playerId,
+                        existingIndex,
+                    });
+                    continue;
+                }
 
                 const previewRef = getDiceThroneCardPreviewRef(
                     p.cardId,
