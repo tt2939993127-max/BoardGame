@@ -28,6 +28,7 @@ type NativeGamePackagePlugin = {
         gameId: string;
     }): Promise<{
         exists?: boolean;
+        taskRunning?: boolean;
         gameId?: string;
         status?: StoredGamePackageState['status'];
         progressPercent?: number;
@@ -94,6 +95,11 @@ export interface NativeRemoteJsonResponse {
     status?: number;
     body?: string;
     contentType?: string;
+}
+
+export interface NativeGamePackageInstallStateSnapshot {
+    state: Partial<StoredGamePackageState>;
+    taskRunning: boolean;
 }
 
 let nativePluginLoader: NativeGamePackagePlugin | null | undefined;
@@ -244,7 +250,7 @@ export const fetchRemoteJsonThroughNativePlugin = async (
 
 export const readNativeGamePackageInstallState = async (
     gameId: string,
-): Promise<Partial<StoredGamePackageState> | null> => {
+): Promise<NativeGamePackageInstallStateSnapshot | null> => {
     const plugin = getNativePlugin();
     if (!plugin) {
         logMobileRuntime('NativeGamePackagePlugin', 'read-install-state-no-plugin', {
@@ -282,11 +288,17 @@ export const readNativeGamePackageInstallState = async (
                     : Date.now()),
         };
 
+        const snapshot: NativeGamePackageInstallStateSnapshot = {
+            state: normalizedState,
+            taskRunning: result.taskRunning === true,
+        };
+
         logMobileRuntimeCritical('NativeGamePackagePlugin', 'read-install-state-success', {
             gameId,
-            normalizedState,
+            normalizedState: snapshot.state,
+            taskRunning: snapshot.taskRunning,
         });
-        return normalizedState;
+        return snapshot;
     } catch (error) {
         logMobileRuntimeCritical('NativeGamePackagePlugin', 'read-install-state-failed', {
             gameId,

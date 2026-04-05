@@ -307,13 +307,22 @@ export const refreshGamePackageStateFromNativeTask = async (
     }
 
     fallbackCache.set(gameId, resolvedFallback);
-    const nativeState = await readNativeGamePackageInstallState(gameId);
-    if (nativeState) {
+    const nativeSnapshot = await readNativeGamePackageInstallState(gameId);
+    if (nativeSnapshot) {
         const mergedState = normalizeIncompleteInstalledState(
-            mergeGamePackageState(resolvedFallback, nativeState),
+            mergeGamePackageState(resolvedFallback, nativeSnapshot.state),
             resolvedFallback,
             'cache',
         );
+        if (
+            isInProgressStatus(mergedState.status)
+            && nativeSnapshot.taskRunning !== true
+            && !activeInstallRegistry.has(gameId)
+        ) {
+            const staleState = toStaleInProgressFailureState(resolvedFallback, mergedState);
+            emitState(staleState);
+            return staleState;
+        }
         emitState(mergedState);
         return mergedState;
     }

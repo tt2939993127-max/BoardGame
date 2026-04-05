@@ -26,13 +26,14 @@ import {
     getCardById,
 } from './test-utils';
 import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore } from '../domain/types';
-import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import type { MatchState, RandomFn } from '../../../engine/types';
 import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
 import { resolveLocalPregameControlledPlayerId } from '../../../engine/transport/followCurrentTurnPlayer';
 import { RESOURCE_IDS } from '../domain/resources';
 import type { InteractionDescriptor } from '../domain/core-types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
+import { diceThroneCheatModifier } from '../domain/cheatModifier';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -990,7 +991,7 @@ describe('AI legal actions', () => {
     });
 
     it('本地 AI 在致命伤害响应窗口应优先使用保命 token，而不是直接跳过响应', async () => {
-        let state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
         state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
         state.core.pendingDamage = {
@@ -1396,7 +1397,7 @@ describe('AI legal actions', () => {
             decide,
         });
 
-        let state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
         state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
         state.core.pendingDamage = {
@@ -1435,6 +1436,39 @@ describe('AI legal actions', () => {
         expect(resolution?.action.metadata).toMatchObject({
             tokenId: TOKEN_IDS.TAIJI,
         });
+    });
+});
+
+describe('作弊发牌共享 atlas 索引保护', () => {
+    const createSharedAtlasState = () => createHeroMatchup('gunslinger', 'monk', (core) => {
+        const player = core.players['0'];
+        player.hand = [];
+        player.discard = [];
+        player.deck = [
+            getCardById('upgrade-deadeye-2'),
+            getCardById('card-the-law'),
+            ...player.deck.filter((card) => !['upgrade-deadeye-2', 'card-the-law'].includes(card.id)),
+        ];
+    })(['0', '1'], fixedRandom);
+
+    it('共享图集索引命中多张候选牌时，不得模糊发牌', () => {
+        const state = createSharedAtlasState();
+        const nextCore = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 24);
+
+        expect(nextCore.players['0'].hand).toHaveLength(0);
+        expect(nextCore.players['0'].deck).toHaveLength(state.core.players['0'].deck.length);
+        expect(nextCore.players['0'].deck.slice(0, 2).map((card) => card.id)).toEqual([
+            'upgrade-deadeye-2',
+            'card-the-law',
+        ]);
+    });
+
+    it('精确 deckIndex 发牌仍可发出 slot 24 的指定卡', () => {
+        const state = createSharedAtlasState();
+        const nextCore = diceThroneCheatModifier.dealCardByIndex!(state.core, '0', 0);
+
+        expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-deadeye-2']);
+        expect(nextCore.players['0'].deck[0]?.id).toBe('card-the-law');
     });
 });
 

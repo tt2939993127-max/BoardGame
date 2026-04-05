@@ -108,13 +108,14 @@ export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
         const player = core.players[playerId];
         if (!player) return core;
 
-        // 在牌库中查找具有指定 atlasIndex 的卡牌
-        const deckIndex = player.deck.findIndex(
-            (card) => card.previewRef?.type === 'atlas' && card.previewRef.index === atlasIndex
-        );
-        if (deckIndex === -1) return core;
+        // 复合展示位可能共享 atlas 索引；命中多张时拒绝模糊发牌，避免把错误卡牌发到手里。
+        const matchedDeckEntries = player.deck
+            .map((card, deckIndex) => ({ card, deckIndex }))
+            .filter(({ card }) => card.previewRef?.type === 'atlas' && card.previewRef.index === atlasIndex);
+        if (matchedDeckEntries.length !== 1) return core;
 
         const newDeck = [...player.deck];
+        const [{ deckIndex }] = matchedDeckEntries;
         const [card] = newDeck.splice(deckIndex, 1);
 
         return {
