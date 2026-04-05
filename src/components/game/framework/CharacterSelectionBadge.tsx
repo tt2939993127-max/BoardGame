@@ -61,8 +61,8 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
     const clipPath = isOverlay
         ? 'polygon(3.5% 0, 100% 0, 96.5% 100%, 0 100%)'
         : 'polygon(7.5% 0, 100% 0, 92.5% 100%, 0 100%)';
-    const shadowOffsetX = inlineUnit(isOverlay ? 0.12 : 0.08);
-    const shadowOffsetY = inlineUnit(isOverlay ? 0.12 : 0.08);
+    const shadowOffsetX = inlineUnit(isOverlay ? 0.08 : 0.06);
+    const shadowOffsetY = inlineUnit(isOverlay ? 0.08 : 0.06);
 
     return (
         <span
@@ -73,11 +73,11 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
                 width: isOverlay ? '146%' : undefined,
             }}
         >
-            <span
-                aria-hidden="true"
-                className="absolute inset-0 bg-black"
-                style={{
-                    transform: `translate(${shadowOffsetX}, ${shadowOffsetY})`,
+                <span
+                    aria-hidden="true"
+                    className="absolute inset-0 bg-black"
+                    style={{
+                        transform: `translate(${shadowOffsetX}, ${shadowOffsetY})`,
                     clipPath,
                 }}
             />
@@ -104,18 +104,27 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
                     }}
                 />
                 <span
+                    aria-hidden="true"
+                    className="absolute inset-y-0 left-1/2 -translate-x-1/2"
+                    style={{
+                        width: isOverlay ? '52%' : '56%',
+                        backgroundColor: isOverlay ? 'rgba(55, 45, 14, 0.96)' : 'rgba(70, 57, 18, 0.94)',
+                        borderLeft: '2px solid #111111',
+                        borderRight: '2px solid #111111',
+                    }}
+                />
+                <span
                     className="relative z-10 text-center font-black uppercase"
                     style={{
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        minWidth: isOverlay ? '48%' : undefined,
-                        backgroundColor: isOverlay ? '#0f0f0f' : 'transparent',
+                        minWidth: isOverlay ? '52%' : '56%',
                         color: isOverlay ? '#facc15' : '#111111',
                         paddingLeft: inlineUnit(isOverlay ? 0.95 : 0.36),
                         paddingRight: inlineUnit(isOverlay ? 0.82 : 0.26),
-                        paddingTop: inlineUnit(isOverlay ? 0.18 : 0),
-                        paddingBottom: inlineUnit(isOverlay ? 0.18 : 0),
+                        paddingTop: inlineUnit(isOverlay ? 0.16 : 0),
+                        paddingBottom: inlineUnit(isOverlay ? 0.16 : 0),
                         fontSize: inlineUnit(isOverlay ? 0.58 : 0.41),
                         lineHeight: 1,
                         letterSpacing: inlineUnit(isOverlay ? 0.04 : 0.018),

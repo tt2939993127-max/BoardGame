@@ -14,6 +14,7 @@ import type { MatchState } from '../../../core/types';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../types';
 import { runCommand } from './testRunner';
 import { SU_COMMANDS } from '../domain/types';
+import { initAllAbilities } from '../abilities';
 
 /** 构造最小 SmashUpCore 用于测试 */
 function makeMinimalCore(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
@@ -965,6 +966,7 @@ describe('scoreBases 阶段自动推进', () => {
 
     it('盘旋机器人揭示的牌已不再位于牌库顶时，AI 应只保留 skip，不再尝试 stale play', async () => {
         registerGameAiRuntime(smashUpAiRuntime);
+        initAllAbilities();
 
         const initialState: MatchState<SmashUpCore> = {
             core: makeMinimalCore({

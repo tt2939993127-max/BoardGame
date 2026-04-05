@@ -4,6 +4,26 @@
     "cancel": "取消",
     "close": "关闭"
   },
+  "actions": {
+    "closePreview": "关闭预览"
+  },
+  "selection": {
+    "title": "选择角色",
+    "notSelected": "未选择",
+    "you": "你",
+    "ready": "准备",
+    "readyWaiting": "等待其他玩家准备",
+    "pressStart": "开始对局",
+    "waitingAll": "等待所有玩家就绪"
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "准备房间"
+    }
+  },
+  "characters": {
+    "placeholder": "角色"
+  },
   "category": {
     "all": "全部游戏",
     "card": "卡牌",

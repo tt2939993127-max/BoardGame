@@ -203,6 +203,7 @@ async function setupGunslingerShowdownCompareRollScene(game: GameTestContext): P
         gameId: 'dicethrone',
         player0: {
             resources: { CP: 2, HP: 50 },
+            tokens: { loaded: 0 },
         },
         player1: {
             resources: { CP: 2, HP: 50 },
@@ -308,6 +309,13 @@ test.describe('DiceThrone - 防御技能选择', () => {
 
     test('枪手 Duel 应展示双方对掷 UI，并在选择抵挡一半后结算', async ({ page, game }, testInfo) => {
         await setupGunslingerDuelCompareRollScene(game);
+
+        const showcaseContinue = page.getByRole('button', { name: /继续|continue/i });
+        await expect(showcaseContinue).toBeVisible({ timeout: 5000 });
+        await showcaseContinue.click();
+        await expect(showcaseContinue).toBeHidden({ timeout: 5000 });
+
+        await expect(page.locator('[data-tutorial-id="advance-phase-button"]')).toBeEnabled({ timeout: 5000 });
 
         await page.locator('[data-tutorial-id="advance-phase-button"]').click();
 

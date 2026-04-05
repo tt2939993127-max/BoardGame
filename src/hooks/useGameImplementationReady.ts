@@ -19,6 +19,27 @@ interface UseGameImplementationReadyOptions {
 
 const createMissingClientMessage = (gameId: string) => `未找到游戏客户端：${gameId}`;
 
+const isImplementationReady = (
+    gameId: string,
+    enabled: boolean,
+    includeTutorial: boolean,
+): boolean => {
+    if (!enabled) {
+        return true;
+    }
+
+    const implementation = getGameImplementation(gameId);
+    if (!implementation) {
+        return false;
+    }
+
+    if (!includeTutorial) {
+        return true;
+    }
+
+    return Boolean(implementation.tutorial) || !hasGameTutorialLoader(gameId);
+};
+
 export function useGameImplementationReady(
     gameId: string | undefined,
     options: UseGameImplementationReadyOptions = {},
@@ -29,17 +50,7 @@ export function useGameImplementationReady(
     const requestKey = enabled && gameId ? `${gameId}:${retryTick}:${includeTutorial ? 'tutorial' : 'runtime'}` : null;
     const hasLoadedImplementation = Boolean(
         gameId
-        && enabled
-        && (() => {
-            const implementation = getGameImplementation(gameId);
-            if (!implementation) {
-                return false;
-            }
-            if (!includeTutorial) {
-                return true;
-            }
-            return Boolean(implementation.tutorial) || !hasGameTutorialLoader(gameId);
-        })(),
+        && isImplementationReady(gameId, enabled, includeTutorial),
     );
     const [state, setState] = useState<GameImplementationState>(() => {
         if (!gameId || !enabled) {
@@ -47,7 +58,7 @@ export function useGameImplementationReady(
         }
         return {
             requestKey: null,
-            isReady: Boolean(getGameImplementation(gameId)),
+            isReady: isImplementationReady(gameId, enabled, includeTutorial),
             error: null,
         };
     });
@@ -64,6 +75,9 @@ export function useGameImplementationReady(
         let isActive = true;
         const unsubscribe = subscribeGameImplementationReady((resolvedGameId) => {
             if (!isActive || resolvedGameId !== gameId) {
+                return;
+            }
+            if (!isImplementationReady(gameId, enabled, includeTutorial)) {
                 return;
             }
             setState({ requestKey, isReady: true, error: null });
@@ -92,7 +106,7 @@ export function useGameImplementationReady(
             isActive = false;
             unsubscribe();
         };
-    }, [gameId, hasLoadedImplementation, includeTutorial, requestKey]);
+    }, [enabled, gameId, hasLoadedImplementation, includeTutorial, requestKey]);
 
     const resolvedState = (() => {
         if (!requestKey || !gameId || !enabled) {
