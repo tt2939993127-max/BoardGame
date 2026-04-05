@@ -144,6 +144,166 @@ async function waitForAiSeatCredential(
     await page.waitForTimeout(1200);
 }
 
+async function installSmashUpAiChoiceRejectPatch(
+    page: Page,
+    options: {
+        targetPlayerId?: string;
+    } = {},
+): Promise<void> {
+    const {
+        targetPlayerId = '1',
+    } = options;
+
+    await page.evaluate(async ({ aiPlayerId }) => {
+        const globalWindow = window as Window & {
+            __SU_AI_FORCE_SKIP_PATCH__?: {
+                installed: boolean;
+                aiPlayerId: string;
+                rejectedCount: number;
+                delegatedCount: number;
+                lastBatchId: string | null;
+                lastReason: string | null;
+                forceSkipDelegated: boolean;
+                latestInteractionKind: string | null;
+                latestInteractionSourceId: string | null;
+                latestInteractionPlayerId: string | null;
+            };
+        };
+        if (globalWindow.__SU_AI_FORCE_SKIP_PATCH__?.installed) {
+            return;
+        }
+
+        const transportModule = await import('/src/engine/transport/client.ts');
+        const proto = transportModule.GameTransportClient?.prototype as {
+            sendBatch?: (
+                this: unknown,
+                batchId: string,
+                commands: Array<{ type: string; payload: unknown }>,
+                onConfirmed?: (state: unknown) => void,
+                onRejected?: (reason: string) => void,
+            ) => void;
+            updateLatestState?: (
+                this: unknown,
+                state: unknown,
+            ) => void;
+        } | undefined;
+        if (!proto?.sendBatch) {
+            throw new Error('GameTransportClient.sendBatch not available');
+        }
+
+        const originalSendBatch = proto.sendBatch;
+        const originalUpdateLatestState = proto.updateLatestState;
+        globalWindow.__SU_AI_FORCE_SKIP_PATCH__ = {
+            installed: true,
+            aiPlayerId,
+            rejectedCount: 0,
+            delegatedCount: 0,
+            lastBatchId: null,
+            lastReason: null,
+            forceSkipDelegated: false,
+            latestInteractionKind: null,
+            latestInteractionSourceId: null,
+            latestInteractionPlayerId: null,
+        };
+
+        if (originalUpdateLatestState) {
+            proto.updateLatestState = function patchedUpdateLatestState(this: unknown, state: unknown) {
+                const tracker = globalWindow.__SU_AI_FORCE_SKIP_PATCH__;
+                const config = (this as { config?: { playerID?: string | null } }).config;
+                if (
+                    tracker
+                    && config?.playerID === tracker.aiPlayerId
+                    && state
+                    && typeof state === 'object'
+                ) {
+                    const interaction = (state as {
+                        sys?: {
+                            interaction?: {
+                                current?: {
+                                    kind?: string;
+                                    playerId?: string;
+                                    data?: { sourceId?: string };
+                                };
+                            };
+                        };
+                    }).sys?.interaction?.current;
+                    tracker.latestInteractionKind = interaction?.kind ?? null;
+                    tracker.latestInteractionSourceId = interaction?.data?.sourceId ?? null;
+                    tracker.latestInteractionPlayerId = interaction?.playerId ?? null;
+                }
+                return originalUpdateLatestState.call(this, state);
+            };
+        }
+
+        proto.sendBatch = function patchedSendBatch(
+            this: unknown,
+            batchId: string,
+            commands: Array<{ type: string; payload: unknown }>,
+            onConfirmed?: (state: unknown) => void,
+            onRejected?: (reason: string) => void,
+        ) {
+            const tracker = globalWindow.__SU_AI_FORCE_SKIP_PATCH__;
+            const config = (this as { config?: { playerID?: string | null } }).config;
+            const isForceSkip = batchId.includes('force-skip');
+
+            if (
+                tracker
+                && config?.playerID === tracker.aiPlayerId
+                && !isForceSkip
+            ) {
+                tracker.rejectedCount += 1;
+                tracker.lastBatchId = batchId;
+                tracker.lastReason = 'command_failed';
+                onRejected?.('command_failed');
+                return;
+            }
+
+            if (
+                tracker
+                && config?.playerID === tracker.aiPlayerId
+            ) {
+                tracker.delegatedCount += 1;
+                tracker.lastBatchId = batchId;
+                tracker.forceSkipDelegated = isForceSkip;
+            }
+
+            return originalSendBatch.call(this, batchId, commands, onConfirmed, onRejected);
+        };
+    }, {
+        aiPlayerId: targetPlayerId,
+    });
+}
+
+async function readSmashUpAiChoiceRejectPatchStatus(page: Page): Promise<{
+    installed: boolean;
+    aiPlayerId: string;
+    rejectedCount: number;
+    delegatedCount: number;
+    lastBatchId: string | null;
+    lastReason: string | null;
+    forceSkipDelegated: boolean;
+    latestInteractionKind: string | null;
+    latestInteractionSourceId: string | null;
+    latestInteractionPlayerId: string | null;
+} | null> {
+    return page.evaluate(() => {
+        return (window as Window & {
+            __SU_AI_FORCE_SKIP_PATCH__?: {
+                installed: boolean;
+                aiPlayerId: string;
+                rejectedCount: number;
+                delegatedCount: number;
+                lastBatchId: string | null;
+                lastReason: string | null;
+                forceSkipDelegated: boolean;
+                latestInteractionKind: string | null;
+                latestInteractionSourceId: string | null;
+                latestInteractionPlayerId: string | null;
+            };
+        }).__SU_AI_FORCE_SKIP_PATCH__ ?? null;
+    });
+}
+
 async function waitForTurnTracker(page: Page, side: 'YOU' | 'OPP'): Promise<void> {
     await expect(
         page.locator('[data-tutorial-id="su-turn-tracker"]').filter({ hasText: new RegExp(side, 'i') }),
@@ -461,6 +621,131 @@ function buildOnlineAiHiddenSacrificeState(baseState: any) {
                         label: '影舞者',
                         value: { minionUid: 'ai-sacrifice-target', baseIndex: 0 },
                     }],
+                },
+            },
+            queue: [],
+            isBlocked: true,
+        },
+        responseWindow: {
+            current: null,
+            history: [],
+        },
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return nextState;
+}
+
+function buildOnlineAiHiddenHoverbotState(baseState: any) {
+    const nextState = JSON.parse(JSON.stringify(baseState));
+    const existingPlayers = nextState.core?.players ?? {};
+    const existingBases = Array.isArray(nextState.core?.bases) ? nextState.core.bases : [];
+    const primaryBase = existingBases[0] ?? { defId: 'base_tortuga', minions: [], ongoingActions: [] };
+    const turnOrder = Array.isArray(nextState.core?.turnOrder) && nextState.core.turnOrder.length > 0
+        ? [...nextState.core.turnOrder]
+        : ['0', '1'];
+
+    nextState.core = {
+        ...nextState.core,
+        currentPlayerIndex: 1,
+        phase: 'playCards',
+        turnNumber: 3,
+        turnOrder,
+        factionSelection: undefined,
+        players: {
+            ...existingPlayers,
+            '0': {
+                ...(existingPlayers['0'] ?? {}),
+                hand: [],
+                deck: [],
+                discard: [],
+                factions: ['pirates', 'aliens'],
+                minionsPlayed: 0,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+            },
+            '1': {
+                ...(existingPlayers['1'] ?? {}),
+                hand: [],
+                deck: [
+                    { uid: 'ai-top-zapbot', defId: 'robot_zapbot', type: 'minion', owner: '1' },
+                    { uid: 'ai-next-minion', defId: 'robot_microbot_alpha', type: 'minion', owner: '1' },
+                ],
+                discard: [],
+                factions: ['robots', 'wizards'],
+                minionsPlayed: 1,
+                minionLimit: 1,
+                actionsPlayed: 0,
+                actionLimit: 1,
+                minionsPlayedPerBase: {},
+                sameNameMinionDefId: null,
+            },
+        },
+        bases: [
+            {
+                ...primaryBase,
+                defId: primaryBase.defId ?? 'base_tortuga',
+                minions: [{
+                    uid: 'ai-hoverbot-on-base',
+                    defId: 'robot_hoverbot',
+                    controller: '1',
+                    owner: '1',
+                    basePower: 1,
+                    powerCounters: 0,
+                    powerModifier: 0,
+                    tempPowerModifier: 0,
+                    talentUsed: false,
+                    playedThisTurn: true,
+                    attachedActions: [],
+                }],
+                ongoingActions: Array.isArray(primaryBase.ongoingActions) ? primaryBase.ongoingActions : [],
+            },
+        ],
+    };
+
+    nextState.sys = {
+        ...nextState.sys,
+        turnOrder,
+        currentPlayerIndex: 1,
+        phase: 'playCards',
+        turnNumber: 3,
+        flowHalted: false,
+        interaction: {
+            current: {
+                id: 'robot_hoverbot_hidden_choice',
+                playerId: '1',
+                kind: 'simple-choice',
+                data: {
+                    title: '牌库顶是 cards.robot_zapbot.name（力量 2），是否作为额外随从打出？',
+                    sourceId: 'robot_hoverbot',
+                    targetType: 'generic',
+                    responseValidationMode: 'live',
+                    continuationContext: {
+                        cardUid: 'ai-top-zapbot',
+                        defId: 'robot_zapbot',
+                        power: 2,
+                    },
+                    options: [
+                        {
+                            id: 'play',
+                            label: '打出 cards.robot_zapbot.name',
+                            value: { cardUid: 'ai-top-zapbot', defId: 'robot_zapbot', power: 2 },
+                            displayMode: 'card',
+                        },
+                        {
+                            id: 'skip',
+                            label: '放回牌库顶',
+                            value: { skip: true },
+                            displayMode: 'button',
+                        },
+                    ],
                 },
             },
             queue: [],
@@ -1340,6 +1625,123 @@ test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', asy
         }, { timeout: 8000 }).toBe(0);
 
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hidden-choice-after-resolve');
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
+test('在线 AI 的盘旋机器人隐藏交互卡住时，应显示强制跳过 toast 并在点击后恢复对局', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+        await installSmashUpAiChoiceRejectPatch(hostPage, { targetPlayerId: '1' });
+
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenHoverbotState);
+        await waitForSmashUpUI(hostPage);
+
+        const injectedState = await getMatchState(matchId, hostPage);
+        expect(injectedState.sys?.interaction?.current?.playerId).toBe('1');
+        expect(injectedState.sys?.interaction?.current?.data?.sourceId).toBe('robot_hoverbot');
+        expect(injectedState.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid)).toEqual(['ai-hoverbot-on-base']);
+        await expect(hostPage.getByText('牌库顶是 cards.robot_zapbot.name（力量 2），是否作为额外随从打出？')).toHaveCount(0);
+
+        await expect.poll(async () => {
+            return hostPage.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return {
+                    interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                    isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                    baseMinions: state?.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid) ?? [],
+                };
+            });
+        }, {
+            timeout: 10000,
+            message: '等待房主视角进入“隐藏交互阻塞但无可见 prompt”状态',
+        }).toEqual({
+            interactionPlayerId: null,
+            isBlocked: true,
+            baseMinions: ['ai-hoverbot-on-base'],
+        });
+
+        await expect.poll(async () => {
+            const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
+            return {
+                latestInteractionKind: status?.latestInteractionKind ?? null,
+                latestInteractionSourceId: status?.latestInteractionSourceId ?? null,
+                latestInteractionPlayerId: status?.latestInteractionPlayerId ?? null,
+            };
+        }, {
+            timeout: 10000,
+            message: '等待 AI seat latestState 暴露出隐藏的 hoverbot simple-choice',
+        }).toEqual({
+            latestInteractionKind: 'simple-choice',
+            latestInteractionSourceId: 'robot_hoverbot',
+            latestInteractionPlayerId: '1',
+        });
+
+        const forceSkipToast = hostPage.getByText('AI 响应超时').locator('..');
+        await expect(forceSkipToast).toBeVisible({ timeout: 12000 });
+        await expect(hostPage.getByRole('button', { name: '强制跳过' })).toBeVisible({ timeout: 5000 });
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-toast');
+
+        const patchStatusBeforeClick = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
+        expect(patchStatusBeforeClick?.rejectedCount ?? 0).toBeGreaterThan(0);
+        expect(patchStatusBeforeClick?.forceSkipDelegated).toBe(false);
+
+        await hostPage.getByRole('button', { name: '强制跳过' }).click();
+
+        await expect.poll(async () => {
+            const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                delegatedCount: status?.delegatedCount ?? 0,
+                forceSkipDelegated: status?.forceSkipDelegated ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                baseMinions: state.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid) ?? [],
+                deckTop: state.core?.players?.['1']?.deck?.[0]?.defId ?? null,
+            };
+        }, {
+            timeout: 20000,
+            message: '等待强制跳过提交成功并解除房主阻塞',
+        }).toEqual({
+            delegatedCount: 1,
+            forceSkipDelegated: true,
+            interactionSourceId: null,
+            interactionPlayerId: null,
+            baseMinions: ['ai-hoverbot-on-base'],
+            deckTop: 'robot_zapbot',
+        });
+
+        await expect.poll(async () => {
+            return hostPage.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return {
+                    interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                    isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                    toastVisible: Array.from(document.querySelectorAll('h4')).some((node) =>
+                        node.textContent?.trim() === 'AI 响应超时'),
+                };
+            });
+        }, {
+            timeout: 10000,
+            message: '等待强制跳过后房主解除阻塞并收起超时 toast',
+        }).toEqual({
+            interactionPlayerId: null,
+            isBlocked: false,
+            toastVisible: false,
+        });
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-after-resolve');
     } finally {
         await setup.hostContext.close();
     }
