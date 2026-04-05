@@ -175,11 +175,11 @@ const MagnifyUpgradeOverlay: React.FC<{
                         className="absolute"
                         style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
                     >
-                        <div className="absolute inset-0">
+                        <div className="absolute inset-0 flex items-center justify-center">
                             <CardPreview
                                 previewRef={previewRef}
                                 locale={locale}
-                                className="w-full h-full rounded-lg"
+                                className="h-full aspect-[0.61] rounded-lg"
                             />
                         </div>
                     </div>

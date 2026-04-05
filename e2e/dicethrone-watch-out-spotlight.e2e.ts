@@ -822,6 +822,18 @@ async function saveLocatorEvidenceScreenshot(
     return path;
 }
 
+async function savePageEvidenceScreenshot(
+    page: Page,
+    testInfo: Parameters<typeof getEvidenceScreenshotPath>[0],
+    name: string,
+    filename: string,
+): Promise<string> {
+    const path = getEvidenceScreenshotPath(testInfo, name, { filename });
+    await mkdir(dirname(path), { recursive: true });
+    await page.screenshot({ path, fullPage: false });
+    return path;
+}
+
 async function injectHeroHandScreenshotScene(
     page: Page,
     options: {
@@ -2062,7 +2074,6 @@ test('opponent common-card spotlight should match actual effect for samurai and 
         await ensureDebugPanelClosed(hostPage);
         await ensureDebugPanelClosed(guestPage);
 
-        const hostOpponentHeader = hostPage.getByTestId('dt-top-header-1');
         const hostSpotlight = hostPage.locator('[data-testid="card-spotlight-overlay"]');
 
         const applySceneAndPlay = async (options: {
@@ -2073,8 +2084,8 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             expectedShield: number;
             overlayName: string;
             overlayFilename: string;
-            headerName: string;
-            headerFilename: string;
+            stateName: string;
+            stateFilename: string;
         }) => {
             const coreState = await readCoreState(hostPage) as Record<string, any>;
             const injectedCore = buildOnlineCommonCardSceneCore(coreState, {
@@ -2104,13 +2115,33 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             await expect(cardInHand).toBeVisible({ timeout: 10000 });
             await cardInHand.click();
 
-            await expect(hostSpotlight).toBeVisible({ timeout: 15000 });
-            await saveLocatorEvidenceScreenshot(
-                hostSpotlight,
+            await guestPage.waitForFunction(({ actorCardId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
+                return !handIds.includes(actorCardId)
+                    && entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId);
+            }, {
+                actorCardId: options.actorCardId,
+            }, { timeout: 10000, polling: 200 });
+
+            await hostPage.waitForFunction(({ actorCardId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                return entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId);
+            }, {
+                actorCardId: options.actorCardId,
+            }, { timeout: 15000, polling: 200 });
+
+            await expect(hostSpotlight).toBeVisible({ timeout: 5000 });
+            await savePageEvidenceScreenshot(
+                hostPage,
                 testInfo,
                 options.overlayName,
                 options.overlayFilename,
             );
+            await hostPage.waitForTimeout(250);
+            await hostSpotlight.click();
 
             await guestPage.waitForFunction(({ actorCardId, expectedCp, expectedShield }) => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
@@ -2150,12 +2181,12 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             expect(finalState.lastEventTypes).toContain('CARD_PLAYED');
 
             await expect(hostSpotlight).toBeHidden({ timeout: 6000 });
-            await expect(hostOpponentHeader).toBeVisible({ timeout: 10000 });
-            await saveLocatorEvidenceScreenshot(
-                hostOpponentHeader,
+            await guestPage.waitForTimeout(500);
+            await savePageEvidenceScreenshot(
+                guestPage,
                 testInfo,
-                options.headerName,
-                options.headerFilename,
+                options.stateName,
+                options.stateFilename,
             );
         };
 
@@ -2167,8 +2198,8 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             expectedShield: 0,
             overlayName: '20-samurai-boss-generous-spotlight',
             overlayFilename: '20-samurai-boss-generous-spotlight.png',
-            headerName: '21-samurai-boss-generous-header',
-            headerFilename: '21-samurai-boss-generous-header.png',
+            stateName: '21-samurai-boss-generous-state',
+            stateFilename: '21-samurai-boss-generous-state.png',
         });
 
         await applySceneAndPlay({
@@ -2179,8 +2210,8 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             expectedShield: 6,
             overlayName: '30-gunslinger-next-time-spotlight',
             overlayFilename: '30-gunslinger-next-time-spotlight.png',
-            headerName: '31-gunslinger-next-time-header',
-            headerFilename: '31-gunslinger-next-time-header.png',
+            stateName: '31-gunslinger-next-time-state',
+            stateFilename: '31-gunslinger-next-time-state.png',
         });
     } finally {
         await guestContext.close();

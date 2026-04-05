@@ -27,6 +27,7 @@ import { GamePackageInstallConfirmModal } from './GamePackageInstallConfirmModal
 import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 import { logger } from '../../lib/logger';
 import { logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
+import { appendMatchLoadTrace, startMatchLoadTrace } from '../../lib/matchLoadTrace';
 import { UI_Z_INDEX } from '../../core';
 import {
     normalizeLocalMatchPreferences,
@@ -736,6 +737,18 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 ...(hasSetupSelections ? { setupSelections: normalizedSetupSelections } : {}),
                 ...(enableAi ? { enableAi: true, seatControllers: normalizedSeatControllers } : {}),
             };
+            startMatchLoadTrace({
+                source: 'create-room',
+                stage: 'create-room-submit',
+                gameId,
+                payload: {
+                    numPlayers,
+                    enableAi,
+                    hasPassword: Boolean(password),
+                    hasSetupSelections,
+                    seatControllerCount: Object.keys(normalizedSeatControllers).length,
+                },
+            });
             const result = await matchApi.createMatch(
                     gameId,
                     { numPlayers, setupData, playerName: user?.username || getGuestName() },
@@ -748,6 +761,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
                 return;
             }
+            appendMatchLoadTrace({
+                stage: 'create-room-api-success',
+                gameId,
+                matchId: matchID,
+                payload: {
+                    ownerPlayerID: result.ownerPlayerID ?? '0',
+                    hasOwnerCredentials: Boolean(result.ownerCredentials),
+                },
+            });
 
             const ownerPlayerName = user?.username || getGuestName();
             const ownerCredentials = result.ownerCredentials;
@@ -813,11 +835,28 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 enableAi,
                 seatControllerCount: Object.keys(normalizedSeatControllers).length,
             });
+            appendMatchLoadTrace({
+                stage: 'create-room-navigate-match',
+                gameId,
+                matchId: matchID,
+                payload: {
+                    enableAi,
+                    seatControllerCount: Object.keys(normalizedSeatControllers).length,
+                    targetPath: `/play/${gameId}/match/${matchID}?playerID=0`,
+                },
+            });
             onNavigate?.();
             navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
             shouldPreserveLoading = true;
         } catch (error) {
             console.error('Failed to create match:', error);
+            appendMatchLoadTrace({
+                stage: 'create-room-api-failed',
+                gameId,
+                payload: {
+                    error: error instanceof Error ? error.message : String(error),
+                },
+            });
             const message = error instanceof Error ? error.message : String(error);
             // 解析 ACTIVE_MATCH_EXISTS — 支持 JSON 响应和旧的冒号分隔格式
             let existingGameName: string | undefined;

@@ -17,6 +17,17 @@ export interface CharacterDef {
     descriptionKey?: string;
     /** 是否可选（用于禁用未实现的角色） */
     selectable?: boolean;
+    /** 角色状态标签（如“施工中”） */
+    badges?: CharacterBadgeDef[];
+}
+
+export interface CharacterBadgeDef {
+    /** 标签唯一 ID */
+    id: string;
+    /** 标签文案 i18n key */
+    labelKey: string;
+    /** 标签视觉语气 */
+    tone?: 'neutral' | 'info' | 'warning' | 'success' | 'danger';
 }
 
 /**

@@ -49,6 +49,7 @@ import { preloadWarmImages } from '../core';
 import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
+import { appendMatchLoadTrace } from '../lib/matchLoadTrace';
 import { logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import { resolveCommandError } from '../engine/transport/errorI18n';
@@ -501,6 +502,18 @@ export const MatchRoom = () => {
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
     useEffect(() => {
+        appendMatchLoadTrace({
+            stage: 'match-room-mounted',
+            gameId,
+            matchId,
+            payload: {
+                playerID: searchParams.get('playerID'),
+                spectate: searchParams.get('spectate'),
+                isTutorialRoute,
+            },
+        });
+    }, [gameId, isTutorialRoute, matchId, searchParams]);
+    useEffect(() => {
         setOnlineTransportError(null);
     }, [gameId, matchId, isTutorialRoute]);
 
@@ -548,6 +561,33 @@ export const MatchRoom = () => {
         includeTutorial: isTutorialRoute,
     });
     const gameImplReady = isGameImplementationReady;
+
+    useEffect(() => {
+        if (gameImplementationError) {
+            appendMatchLoadTrace({
+                stage: 'match-room-client-error',
+                gameId,
+                matchId,
+                payload: {
+                    error: gameImplementationError,
+                    isTutorialRoute,
+                },
+            });
+        }
+    }, [gameId, gameImplementationError, isTutorialRoute, matchId]);
+
+    useEffect(() => {
+        if (gameImplReady) {
+            appendMatchLoadTrace({
+                stage: 'match-room-client-ready',
+                gameId,
+                matchId,
+                payload: {
+                    isTutorialRoute,
+                },
+            });
+        }
+    }, [gameId, gameImplReady, isTutorialRoute, matchId]);
 
     // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
     // 联机模式仅在首次进入对局时阻塞并显示真实素材进度，首轮完成后恢复后台预加载，
