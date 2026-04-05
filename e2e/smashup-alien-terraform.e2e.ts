@@ -2123,6 +2123,10 @@ test.describe('Smash Up - Alien Terraform', () => {
 
         const titanRail = page.getByTestId('su-titan-rail');
         await expect(titanRail).toBeVisible();
+        const railTitanBadge = page.getByTestId('su-rail-titan-badge-titan-cthulhu');
+        await expect(railTitanBadge).toHaveText('泰坦能力');
+        await expect(page.locator('[data-testid="su-rail-titan-titan-cthulhu"] .absolute.inset-x-0.top-0.h-1\\.5')).toHaveCount(0);
+        await saveEvidenceLocatorScreenshot(page, titanRail, testInfo, 'smashup-titan-rail', 'cthulhu-titan-rail-badge-ready');
         await game.screenshot('cthulhu-titan-rail-ready', testInfo);
 
         await titanRail.locator('button').first().click();
