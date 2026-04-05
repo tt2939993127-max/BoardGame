@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, getFrameAspectRatio } from './cardAtlas';
-import { isImagePreloaded } from '../../../core/AssetLoader';
+import { isImagePreloaded, onImageReady } from '../../../core/AssetLoader';
 
 export interface CardSpriteProps {
   /** 精灵图源 ID */
@@ -42,7 +42,10 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
 
   // 预加载图片并监听加载状态
   useEffect(() => {
-    if (!source || isImagePreloaded(imageUrl)) {
+    if (!source) {
+      return;
+    }
+    if (isImagePreloaded(imageUrl)) {
       return;
     }
     let cancelled = false;
@@ -73,6 +76,19 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
     };
   }, [imageUrl, source]);
 
+  useEffect(() => {
+    if (!source) {
+      return;
+    }
+
+    return onImageReady((url) => {
+      if (url !== imageUrl || !isImagePreloaded(url)) {
+        return;
+      }
+      setLoadedImageUrl(url);
+    });
+  }, [imageUrl, source]);
+
   if (!source) {
     return <div className={`bg-slate-700 ${className}`} style={style} />;
   }
@@ -82,6 +98,10 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
 
   return (
     <div
+      data-card-sprite="true"
+      data-image-loaded={loaded ? 'true' : 'false'}
+      data-atlas-id={atlasId}
+      data-frame-index={frameIndex}
       className={className}
       style={{
         aspectRatio: `${aspectRatio}`,
