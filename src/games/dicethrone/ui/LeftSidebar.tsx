@@ -67,8 +67,11 @@ export const LeftSidebar = ({
     onAutoResponseToggle?: (enabled: boolean) => void;
 }) => {
     const inlineUnit = buildRuntimeInlineUnitValue;
+    const isTutorialMode = typeof window !== 'undefined'
+        && (window as Window & { __BG_GAME_MODE__?: string }).__BG_GAME_MODE__ === 'tutorial';
     const hasVisibleStatusTokens = Object.values(viewPlayer.tokens ?? {}).some((amount) => amount > 0)
         || Object.values(viewPlayer.statusEffects ?? {}).some((stacks) => stacks > 0);
+    const shouldReserveTutorialStatusSlot = isTutorialMode && !hasVisibleStatusTokens;
     return (
         <div
             className="absolute top-0 flex flex-col items-center pointer-events-auto"
@@ -102,9 +105,10 @@ export const LeftSidebar = ({
                         paddingLeft: inlineUnit(1.2),
                         paddingRight: inlineUnit(1.2),
                         gap: inlineUnit(0.3),
+                        minHeight: shouldReserveTutorialStatusSlot ? inlineUnit(2.9) : undefined,
                     }}
                     ref={selfBuffRef}
-                    data-tutorial-id={hasVisibleStatusTokens ? 'status-tokens' : undefined}
+                    data-tutorial-id="status-tokens"
                 >
                     <TokensContainer
                         tokens={viewPlayer.tokens ?? {}}
@@ -152,20 +156,6 @@ export const LeftSidebar = ({
                     data-tutorial-id="player-stats"
                 >
                     <div className="relative w-full flex flex-col" style={{ gap: inlineUnit(0.4) }}>
-                        {!hasVisibleStatusTokens && (
-                            <div
-                                aria-hidden="true"
-                                className="pointer-events-none absolute"
-                                data-tutorial-id="status-tokens"
-                                style={{
-                                    left: inlineUnit(0.2),
-                                    right: inlineUnit(0.2),
-                                    bottom: `calc(100% + ${inlineUnit(0.5)})`,
-                                    height: inlineUnit(2.9),
-                                    opacity: 0,
-                                }}
-                            />
-                        )}
                         <PlayerStats
                             player={viewPlayer}
                             hpRef={selfHpRef}
