@@ -151,6 +151,19 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
   - 哪些只是核对或生成过程中的临时中间产物
   - 三者的目录与引用规则
 
+#### 5.1 新角色必须做老角色共享契约对比
+
+录完新角色后，禁止只验证“这个角色自己能跑”。至少要挑 1 个成熟老角色，并把下面 6 条共享契约并排核一遍：
+
+- 升级卡状态落点：是否和老角色一样落在 `abilityLevels` / `upgradeCardByAbilityId`，而不是混进 `discard`
+- `previewRef` / atlas：是否仍沿用老角色手牌预览合同，而不是临时发明新的 atlas 语义
+- 通用卡索引：如果顺序和老角色不同，是否已有显式映射与专项 evidence
+- AI / 阶段门禁：响应牌、roll 牌、main 牌是否仍走共享验证函数
+- UI 消费链：技能槽升级展示、card spotlight、magnify overlay 是否仍吃同一组状态字段
+- 被动能力建模：该角色的被动是走 `player.passiveAbilities`、`ability.type = 'passive'`，还是额外的 `flowHooks` 特判；只要出现多条路径，就必须在规则文档和 evidence 里显式说明原因
+
+不满足上面这一步，不能对外说“新角色已经和老角色一致 / 已全部收口”。
+
 ### 6. 同步规则文档
 
 录入影响规则、文案或资源映射时，至少同步：

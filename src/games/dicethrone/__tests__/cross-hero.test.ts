@@ -1178,7 +1178,7 @@ describe('cross hero battles', () => {
                     turnPhase: 'main1',
                     pendingInteraction: null,
                     players: {
-                        '0': { hp: 50, cp: 0, discardSize: 1 },
+                        '0': { hp: 50, cp: 0, discardSize: 0 },
                         '1': { hp: 50 },
                     },
                 },
@@ -1359,7 +1359,7 @@ describe('cross hero battles', () => {
                     turnPhase: 'main1',
                     pendingInteraction: null,
                     players: {
-                        '0': { hp: 50, cp: 0, discardSize: 1 },
+                        '0': { hp: 50, cp: 0, discardSize: 0 },
                         '1': { hp: 50 },
                     },
                 },
@@ -1454,8 +1454,12 @@ describe('cross hero battles', () => {
             expect(handIds).not.toContain('upgrade-deadeye-2');
 
             const discardIds = result.finalState.core.players['0'].discard.map(card => card.id);
-            expect(discardIds).toContain('upgrade-deadeye-2');
             expect(discardIds).not.toContain('card-the-law');
+            expect(discardIds).not.toContain('upgrade-deadeye-2');
+            expect(result.finalState.core.players['0'].upgradeCardByAbilityId.deadeye).toEqual({
+                cardId: 'upgrade-deadeye-2',
+                cpCost: 2,
+            });
 
             const playedEvents = result.finalState.sys.eventStream?.entries
                 ?.map(entry => entry.event)
@@ -1899,7 +1903,7 @@ describe('cross hero battles', () => {
                     turnPhase: 'main2',
                     pendingInteraction: null,
                     players: {
-                        '0': { cp: 0, discardSize: 1 },
+                        '0': { cp: 0, discardSize: 0 },
                         '1': {},
                     },
                 },
@@ -1953,7 +1957,7 @@ describe('cross hero battles', () => {
                     turnPhase: 'main2',
                     pendingInteraction: null,
                     players: {
-                        '0': { hp: 50, cp: 0, discardSize: 1 },
+                        '0': { hp: 50, cp: 0, discardSize: 0 },
                         '1': { hp: 50 },
                     },
                 },

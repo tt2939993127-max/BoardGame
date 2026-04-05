@@ -14,6 +14,21 @@ type PluginListenerHandle = {
     remove(): Promise<void>;
 };
 
+export type NativeNotificationPermissionState =
+    | 'granted'
+    | 'prompt'
+    | 'prompt-with-rationale'
+    | 'denied';
+
+export interface NativeDownloadNotificationPermissionResult {
+    required: boolean;
+    granted: boolean;
+    canPrompt: boolean;
+    state: NativeNotificationPermissionState;
+    requested?: boolean;
+    message?: string;
+}
+
 type NativeGamePackagePlugin = {
     listInstalledPackages(): Promise<{
         packages: Array<{
@@ -48,12 +63,32 @@ type NativeGamePackagePlugin = {
         assetPackUrl: string;
         assetPackChecksum?: string;
     }): Promise<{
+        accepted?: boolean;
+        taskId?: string;
+        status?: StoredGamePackageState['status'];
         gameId: string;
         runtimeChannel?: string;
         installedAt?: number;
         assetPackVersion?: string;
         assetRootPath?: string;
     }>;
+    getNotificationPermissionStatus(): Promise<{
+        required?: boolean;
+        granted?: boolean;
+        canPrompt?: boolean;
+        requested?: boolean;
+        state?: NativeNotificationPermissionState;
+        message?: string;
+    }>;
+    ensureNotificationPermission(): Promise<{
+        required?: boolean;
+        granted?: boolean;
+        canPrompt?: boolean;
+        requested?: boolean;
+        state?: NativeNotificationPermissionState;
+        message?: string;
+    }>;
+    openNotificationSettings(): Promise<void>;
     fetchRemoteJson(options: {
         url: string;
     }): Promise<{
@@ -134,6 +169,7 @@ const isGamePackageInstallErrorCode = (value: string): value is GamePackageInsta
     || value === 'cancelled'
     || value === 'task-conflict'
     || value === 'manifest-missing'
+    || value === 'notification-permission-required'
     || value === 'unsupported-runtime'
     || value === 'unknown'
 );
@@ -157,6 +193,38 @@ const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMes
 export { normalizeNativeAssetRootPath } from './assetBaseUrl';
 
 const toAssetBaseUrl = (assetRootPath?: string) => normalizeGamePackageAssetBaseUrl(assetRootPath);
+
+const normalizeNotificationPermissionResult = (
+    result: Partial<NativeDownloadNotificationPermissionResult> | null | undefined,
+): NativeDownloadNotificationPermissionResult => {
+    const rawState = result?.state;
+    const state: NativeNotificationPermissionState = rawState === 'granted'
+        || rawState === 'prompt'
+        || rawState === 'prompt-with-rationale'
+        || rawState === 'denied'
+        ? rawState
+        : 'prompt';
+    const required = result?.required === true;
+    const granted = required ? result?.granted === true : true;
+    const canPrompt = required
+        ? (result?.canPrompt === true || state === 'prompt' || state === 'prompt-with-rationale')
+        : false;
+
+    return {
+        required,
+        granted,
+        canPrompt,
+        state: granted ? 'granted' : state,
+        requested: result?.requested === true,
+        message: typeof result?.message === 'string' && result.message.trim()
+            ? result.message.trim()
+            : (granted
+                ? undefined
+                : (canPrompt
+                    ? '请先允许通知权限，否则后台下载通知不会显示。'
+                    : '通知权限已被拒绝，请到系统设置中开启后再重试下载。')),
+    };
+};
 
 const getNativePlugin = (): NativeGamePackagePlugin | null => {
     if (nativePluginLoader !== undefined) {
@@ -308,6 +376,42 @@ export const readNativeGamePackageInstallState = async (
     }
 };
 
+export const ensureNativeDownloadNotificationPermission = async (): Promise<NativeDownloadNotificationPermissionResult | null> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return null;
+    }
+
+    try {
+        const result = await plugin.ensureNotificationPermission();
+        const normalized = normalizeNotificationPermissionResult(result);
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-result', normalized);
+        return normalized;
+    } catch (error) {
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
+export const openNativeDownloadNotificationSettings = async (): Promise<boolean> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return false;
+    }
+
+    try {
+        await plugin.openNotificationSettings();
+        return true;
+    } catch (error) {
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'open-notification-settings-failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+    }
+};
+
 const createNativeFailureHandle = (
     manifest: ResolvedGamePackageManifest,
     errorMessage: string,
@@ -363,9 +467,24 @@ export const createNativeGamePackageInstallHandle = async (
         return createNativeFailureHandle(manifest, '当前还没有可下载的游戏包，请先发布一版。', 'manifest-missing', options);
     }
 
+    const notificationPermission = await ensureNativeDownloadNotificationPermission();
+    if (notificationPermission?.granted === false) {
+        return createNativeFailureHandle(
+            manifest,
+            notificationPermission.message ?? '请先允许通知权限，否则后台下载通知不会显示。',
+            'notification-permission-required',
+            options,
+        );
+    }
+
     let cancelled = false;
     let currentState = buildBaseState(manifest);
     let listenerHandle: PluginListenerHandle | null = null;
+    let terminalResolved = false;
+    let resolveTerminalState: ((state: StoredGamePackageState) => void) | null = null;
+    const terminalStatePromise = new Promise<StoredGamePackageState>((resolve) => {
+        resolveTerminalState = resolve;
+    });
 
     const finished = (async () => {
         try {
@@ -412,6 +531,13 @@ export const createNativeGamePackageInstallHandle = async (
                             assetPackVersion: event.assetPackVersion,
                         });
                         options.onStateChange(currentState);
+                        if (
+                            !terminalResolved
+                            && (event.status === 'installed' || event.status === 'failed')
+                        ) {
+                            terminalResolved = true;
+                            resolveTerminalState?.(currentState);
+                        }
                     }),
                     2000,
                     'install listener registration timed out after 2000ms',
@@ -444,6 +570,29 @@ export const createNativeGamePackageInstallHandle = async (
                 result,
             });
 
+            const acknowledgedStatus = result.status;
+            if (acknowledgedStatus && acknowledgedStatus !== 'installed') {
+                currentState = mergeGamePackageState(currentState, {
+                    status: acknowledgedStatus,
+                    installedVersion: result.assetPackVersion?.trim() || currentState.installedVersion,
+                });
+                options.onStateChange(currentState);
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-native-call-acknowledged', {
+                    gameId: manifest.gameId,
+                    status: acknowledgedStatus,
+                    taskId: result.taskId,
+                    accepted: result.accepted === true,
+                });
+                const terminalState = await terminalStatePromise;
+                logMobileRuntimeCritical('NativeGamePackagePlugin', 'install-finished-from-events', {
+                    gameId: manifest.gameId,
+                    status: terminalState.status,
+                    installedVersion: terminalState.installedVersion,
+                    localAssetBaseUrl: terminalState.localAssetBaseUrl,
+                });
+                return terminalState;
+            }
+
             const assetBaseUrl = toAssetBaseUrl(result.assetRootPath);
             if (assetBaseUrl) {
                 options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
@@ -467,6 +616,10 @@ export const createNativeGamePackageInstallHandle = async (
                 localAssetBaseUrl: currentState.localAssetBaseUrl,
             });
             options.onStateChange(currentState);
+            if (!terminalResolved) {
+                terminalResolved = true;
+                resolveTerminalState?.(currentState);
+            }
             return currentState;
         } catch (error) {
             if (cancelled) {
@@ -492,6 +645,10 @@ export const createNativeGamePackageInstallHandle = async (
                 errorMessage: nextState.errorMessage,
             });
             options.onStateChange(nextState);
+            if (!terminalResolved) {
+                terminalResolved = true;
+                resolveTerminalState?.(nextState);
+            }
             return nextState;
         } finally {
             if (listenerHandle) {

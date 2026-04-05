@@ -13,6 +13,7 @@ export type GamePackageInstallErrorCode =
     | 'cancelled'
     | 'task-conflict'
     | 'manifest-missing'
+    | 'notification-permission-required'
     | 'unsupported-runtime'
     | 'unknown';
 

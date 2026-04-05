@@ -112,6 +112,10 @@ npm run test -- src/games/dicethrone/__tests__/token-execution.test.ts src/games
 - 武士：
   - `src/games/dicethrone/rule/武士录入核对.md` 中旧“无角色级 residual”结论曾被 `Bushido` 漏实装推翻。
   - 该缺口已在本轮补齐，但旧结论失效这件事必须保留在修订记录中，避免未来再次误用旧审计。
+- `2026-04-06` 追加修订：
+  - 本文档解决的是“运行时缺口是否已补齐”，不等于“新角色已经和老派系完全共享同一套抽象”。
+  - 后续对比审计发现：`Bushido` 目前虽然运行时正确，但仍是 `flowHooks` 中按 `abilityId` 的角色特判，没有像 `quick-draw` / `tithes` 那样落入统一可枚举的被动建模。
+  - 因此旧口径“枪手 / 武士已完全收口”仍然过宽；更准确的表述应是“主要运行时缺口已补齐，但武士被动建模仍有共享抽象分叉”。详见 `evidence/dicethrone-gunslinger-samurai-vs-legacy-audit-2026-04-06.md`。
 
 ## 未覆盖风险
 
