@@ -18,7 +18,18 @@ const CACHE_SCHEMA_VERSION = 2;
 const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const FAST_VITEST_ARGS = ['--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
-const CORE_TEST_TARGETS = ['src/core', 'src/components', 'src/hooks', 'src/lib', 'src/shared', 'src/engine', 'src/pages'];
+const PRE_PUSH_CORE_TARGET_GROUPS = [
+  {
+    label: 'Core changed tests (engine)',
+    reason: '核心源码改动，先跑 core/engine/shared/hooks/lib 增量测试',
+    targets: ['src/core', 'src/engine', 'src/shared', 'src/hooks', 'src/lib'],
+  },
+  {
+    label: 'Core changed tests (ui)',
+    reason: '核心源码改动，补跑 components/pages 增量测试',
+    targets: ['src/components', 'src/pages'],
+  },
+];
 const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -337,6 +348,10 @@ function buildVitestChangedArgs(baseRef, targets, options = {}) {
   return args;
 }
 
+function hasChangesForTargetGroup(files, targets) {
+  return hasAny(files, (file) => targets.some((target) => file.startsWith(`${target}/`) || file === target));
+}
+
 function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
   const lintFiles = files.filter(isLintTarget);
@@ -429,17 +444,31 @@ function collectCommands(files, baseRef, affectsTypecheck) {
 
   if (isPrePushMode) {
     if (coreSourceChanged) {
-      commands.push({
-        label: 'Core+Games changed tests',
-        reason: '核心源码改动，先跑核心 changed 测试集',
-        command: process.execPath,
-        args: buildVitestChangedArgs(baseRef, CORE_TEST_TARGETS),
-      });
-      commands.push({
-        label: 'Games changed tests',
-        reason: '核心源码改动，同时跑游戏 changed 测试集',
-        command: process.execPath,
-        args: buildVitestChangedArgs(baseRef, ['src/games'], { gameOnly: true }),
+      PRE_PUSH_CORE_TARGET_GROUPS
+        .filter((group) => hasChangesForTargetGroup(files, group.targets))
+        .forEach((group) => {
+          commands.push({
+            label: group.label,
+            reason: group.reason,
+            command: process.execPath,
+            args: buildVitestChangedArgs(baseRef, group.targets),
+          });
+        });
+
+      const changedGameTargets = gameSourceIds.length > 0
+        ? gameSourceIds.map((gameId) => `src/games/${gameId}`)
+        : ['src/games'];
+
+      changedGameTargets.forEach((target) => {
+        const gameId = target.split('/').at(-1);
+        commands.push({
+          label: target === 'src/games' ? 'Games changed tests' : `${gameId} changed tests`,
+          reason: target === 'src/games'
+            ? '核心源码改动，同时跑所有游戏增量测试'
+            : `${gameId} 源码改动，单独跑该游戏增量测试`,
+          command: process.execPath,
+          args: buildVitestChangedArgs(baseRef, [target], { gameOnly: true }),
+        });
       });
     } else {
       if (coreTestFiles.length > 0) {
