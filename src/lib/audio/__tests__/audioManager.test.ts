@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { setAssetsBaseUrl, setAudioAssetsBaseUrl } from '../../../core/AssetLoader';
+import { setAssetsBaseUrl, setAudioAssetsBaseUrl, setCommonAudioAssetBaseOverride } from '../../../core/AssetLoader';
 
 const howlInstances: Array<{ options: Record<string, any> }> = [];
 
@@ -45,6 +45,7 @@ describe('AudioManager', () => {
         AudioManager.unloadAll();
         setAssetsBaseUrl('/assets');
         setAudioAssetsBaseUrl('/assets');
+        setCommonAudioAssetBaseOverride(undefined);
         howlInstances.length = 0;
     });
 
@@ -81,6 +82,46 @@ describe('AudioManager', () => {
 
         expect(howlInstances).toHaveLength(1);
         expect(howlInstances[0].options.src).toEqual(['/assets/common/audio/sfx/ui/compressed/click.ogg']);
+
+        const firstLoadError = howlInstances[0].options.onloaderror as ((id: number, error: unknown) => void);
+        firstLoadError(1, 'Decoding audio data failed.');
+
+        expect(howlInstances).toHaveLength(2);
+        expect(howlInstances[1].options.src).toEqual(['https://assets.easyboardgame.top/official/common/audio/sfx/ui/compressed/click.ogg']);
+    });
+
+    it('公共音频包本地 override 会作为 registry 音效的首选基址', () => {
+        setAudioAssetsBaseUrl('https://assets.easyboardgame.top/official');
+        setCommonAudioAssetBaseOverride('/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/common-audio/current/assets');
+
+        const config: GameAudioConfig = {
+            sounds: {
+                click: { src: 'sfx/ui/click.ogg' },
+            },
+        };
+
+        AudioManager.registerAll(config, 'common/audio');
+        AudioManager.play('click');
+
+        expect(howlInstances).toHaveLength(1);
+        expect(howlInstances[0].options.src).toEqual(['/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/common-audio/current/assets/common/audio/sfx/ui/compressed/click.ogg']);
+    });
+
+    it('公共音频包本地 override 缺失时仍会回退到官方资源域名', () => {
+        setAudioAssetsBaseUrl('https://assets.easyboardgame.top/official');
+        setCommonAudioAssetBaseOverride('/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/common-audio/current/assets');
+
+        const config: GameAudioConfig = {
+            sounds: {
+                click: { src: 'sfx/ui/click.ogg' },
+            },
+        };
+
+        AudioManager.registerAll(config, 'common/audio');
+        AudioManager.play('click');
+
+        expect(howlInstances).toHaveLength(1);
+        expect(howlInstances[0].options.src).toEqual(['/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/common-audio/current/assets/common/audio/sfx/ui/compressed/click.ogg']);
 
         const firstLoadError = howlInstances[0].options.onloaderror as ((id: number, error: unknown) => void);
         firstLoadError(1, 'Decoding audio data failed.');
