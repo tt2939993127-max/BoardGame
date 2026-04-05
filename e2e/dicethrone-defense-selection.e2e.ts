@@ -1,62 +1,6 @@
 import { test, expect } from './framework';
 import type { GameTestContext } from './framework';
 
-async function setupDefenseEntryScene(
-    game: GameTestContext,
-    defenderCharacter: 'shadow_thief' | 'paladin',
-): Promise<void> {
-    await game.openTestGame('dicethrone');
-
-    await game.setupScene({
-        gameId: 'dicethrone',
-        player0: {
-            resources: { CP: 2, HP: 50 },
-        },
-        player1: {
-            resources: { CP: 2, HP: 50 },
-        },
-        currentPlayer: '0',
-        phase: 'offensiveRoll',
-        extra: {
-            selectedCharacters: { '0': 'monk', '1': defenderCharacter },
-            hostStarted: true,
-            rollCount: 1,
-            rollLimit: 3,
-            rollConfirmed: true,
-            dice: [
-                { id: 0, value: 1, isKept: false },
-                { id: 1, value: 2, isKept: false },
-                { id: 2, value: 3, isKept: false },
-                { id: 3, value: 4, isKept: false },
-                { id: 4, value: 5, isKept: false },
-            ],
-            pendingAttack: {
-                attackerId: '0',
-                defenderId: '1',
-                isDefendable: true,
-                damage: 5,
-                bonusDamage: 0,
-                sourceAbilityId: 'smash',
-            },
-        },
-    });
-
-    await expect.poll(async () => {
-        const state = await game.getState();
-        return {
-            phase: state?.sys?.phase ?? null,
-            defenderId: state?.core?.pendingAttack?.defenderId ?? null,
-            sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
-            rollConfirmed: state?.core?.rollConfirmed ?? null,
-        };
-    }, { timeout: 10000 }).toMatchObject({
-        phase: 'offensiveRoll',
-        defenderId: '1',
-        sourceAbilityId: 'smash',
-        rollConfirmed: true,
-    });
-}
-
 async function setupDefenseSelectionScene(
     game: GameTestContext,
     defenderCharacter: 'shadow_thief' | 'paladin',
