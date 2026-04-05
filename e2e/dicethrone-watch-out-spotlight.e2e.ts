@@ -8,7 +8,10 @@ import { dirname } from 'node:path';
 import { test, expect } from './framework';
 import type { Locator, Page } from '@playwright/test';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
+import { initHeroState } from '../src/games/dicethrone/domain/characters';
 import { BARBARIAN_CARDS } from '../src/games/dicethrone/heroes/barbarian/cards';
+import { GUNSLINGER_CARDS } from '../src/games/dicethrone/heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../src/games/dicethrone/heroes/samurai/cards';
 import {
     advanceToOffensiveRoll,
     applyCoreStateDirect,
@@ -25,6 +28,75 @@ import { setChineseLocale, waitForTestHarness } from './helpers/common';
 const DICETHRONE_OPEN_TIMEOUT_MS = 180000;
 const DICETHRONE_TEST_TIMEOUT_MS = 300000;
 const DICETHRONE_ONLINE_TEST_TIMEOUT_MS = 240000;
+const FIXED_RANDOM = {
+    random: () => 0.5,
+    d: (max: number) => Math.min(max, 1),
+    range: (min: number) => min,
+    shuffle: <T,>(array: T[]) => [...array],
+};
+
+function cloneJson<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function buildOnlineCommonCardSceneCore(
+    baseCore: Record<string, any>,
+    options: {
+        actorCharacter: 'samurai' | 'gunslinger';
+        actorCardId: 'card-boss-generous' | 'card-next-time';
+        actorCp: number;
+    },
+) {
+    const viewerBase = initHeroState('0', 'monk', FIXED_RANDOM as any);
+    const actorBase = initHeroState('1', options.actorCharacter, FIXED_RANDOM as any);
+    const actorCards = options.actorCharacter === 'samurai' ? SAMURAI_CARDS : GUNSLINGER_CARDS;
+    const actorCard = actorCards.find((card) => card.id === options.actorCardId);
+    if (!actorCard) {
+        throw new Error(`Card ${options.actorCardId} not found for ${options.actorCharacter}`);
+    }
+
+    const nextCore = cloneJson(baseCore);
+    nextCore.activePlayerId = '1';
+    nextCore.hostStarted = true;
+    nextCore.selectedCharacters = {
+        ...(nextCore.selectedCharacters ?? {}),
+        '0': 'monk',
+        '1': options.actorCharacter,
+    };
+    nextCore.readyPlayers = {
+        ...(nextCore.readyPlayers ?? {}),
+        '0': true,
+        '1': true,
+    };
+    nextCore.players = {
+        ...(nextCore.players ?? {}),
+        '0': {
+            ...viewerBase,
+            hand: [],
+            discard: [],
+            resources: {
+                ...viewerBase.resources,
+                cp: 2,
+                hp: 50,
+            },
+        },
+        '1': {
+            ...actorBase,
+            hand: [cloneJson(actorCard)],
+            discard: [],
+            resources: {
+                ...actorBase.resources,
+                cp: options.actorCp,
+                hp: 50,
+            },
+        },
+    };
+    nextCore.pendingAttack = null;
+    nextCore.pendingDamage = undefined;
+    nextCore.rollCount = Math.max(nextCore.rollCount ?? 0, 1);
+    nextCore.rollConfirmed = true;
+    return nextCore;
+}
 
 async function expectMinBoundingBox(locator: Locator, label: string, minWidth: number, minHeight: number): Promise<void> {
     const box = await locator.boundingBox();
@@ -1958,6 +2030,157 @@ test('opponent lucky card should only show card spotlight for viewer', async ({ 
         await hostPage.screenshot({
             path: testInfo.outputPath('05-p0-after-p1-play-lucky-no-duplicate-overlay.png'),
             fullPage: false,
+        });
+    } finally {
+        await guestContext.close();
+        await hostContext.close();
+    }
+});
+
+test('opponent common-card spotlight should match actual effect for samurai and gunslinger', async ({ browser }, testInfo) => {
+    test.setTimeout(DICETHRONE_ONLINE_TEST_TIMEOUT_MS);
+
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupDTOnlineMatch(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'online setup unavailable in current environment');
+        return;
+    }
+
+    const { hostPage, guestPage, hostContext, guestContext } = setup;
+
+    try {
+        await selectCharacter(hostPage, 'monk');
+        await selectCharacter(guestPage, 'samurai');
+        await readyAndStartGame(hostPage, guestPage);
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+        await waitForTestHarness(hostPage, 10000);
+        await waitForTestHarness(guestPage, 10000);
+        await ensureDebugPanelClosed(hostPage);
+        await ensureDebugPanelClosed(guestPage);
+
+        const hostOpponentHeader = hostPage.getByTestId('dt-top-header-1');
+        const hostSpotlight = hostPage.locator('[data-testid="card-spotlight-overlay"]');
+
+        const applySceneAndPlay = async (options: {
+            actorCharacter: 'samurai' | 'gunslinger';
+            actorCardId: 'card-boss-generous' | 'card-next-time';
+            actorCp: number;
+            expectedCp: number;
+            expectedShield: number;
+            overlayName: string;
+            overlayFilename: string;
+            headerName: string;
+            headerFilename: string;
+        }) => {
+            const coreState = await readCoreState(hostPage) as Record<string, any>;
+            const injectedCore = buildOnlineCommonCardSceneCore(coreState, {
+                actorCharacter: options.actorCharacter,
+                actorCardId: options.actorCardId,
+                actorCp: options.actorCp,
+            });
+
+            await applyCoreStateDirect(hostPage, injectedCore);
+            await ensureDebugPanelClosed(hostPage);
+            await ensureDebugPanelClosed(guestPage);
+
+            await guestPage.waitForFunction(({ actorCharacter, actorCardId, actorCp }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.core?.activePlayerId === '1'
+                    && state?.core?.selectedCharacters?.['1'] === actorCharacter
+                    && state?.core?.players?.['1']?.resources?.cp === actorCp
+                    && state?.core?.players?.['1']?.hand?.length === 1
+                    && state?.core?.players?.['1']?.hand?.[0]?.id === actorCardId;
+            }, {
+                actorCharacter: options.actorCharacter,
+                actorCardId: options.actorCardId,
+                actorCp: options.actorCp,
+            }, { timeout: 15000, polling: 200 });
+
+            const cardInHand = guestPage.locator(`[data-card-id="${options.actorCardId}"]`).first();
+            await expect(cardInHand).toBeVisible({ timeout: 10000 });
+            await cardInHand.click();
+
+            await expect(hostSpotlight).toBeVisible({ timeout: 15000 });
+            await saveLocatorEvidenceScreenshot(
+                hostSpotlight,
+                testInfo,
+                options.overlayName,
+                options.overlayFilename,
+            );
+
+            await guestPage.waitForFunction(({ actorCardId, expectedCp, expectedShield }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const shields = state?.core?.players?.['1']?.damageShields ?? [];
+                const discardIds = state?.core?.players?.['1']?.discard?.map((card: any) => card.id) ?? [];
+                const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
+                const shieldTotal = shields.reduce((sum: number, shield: any) => sum + (shield?.value ?? 0), 0);
+                return !handIds.includes(actorCardId)
+                    && discardIds.includes(actorCardId)
+                    && (state?.core?.players?.['1']?.resources?.cp ?? 0) === expectedCp
+                    && shieldTotal === expectedShield
+                    && entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED');
+            }, {
+                actorCardId: options.actorCardId,
+                expectedCp: options.expectedCp,
+                expectedShield: options.expectedShield,
+            }, { timeout: 15000, polling: 200 });
+
+            const finalState = await guestPage.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const shields = state?.core?.players?.['1']?.damageShields ?? [];
+                return {
+                    handIds: state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [],
+                    discardIds: state?.core?.players?.['1']?.discard?.map((card: any) => card.id) ?? [],
+                    cp: state?.core?.players?.['1']?.resources?.cp ?? 0,
+                    shieldTotal: shields.reduce((sum: number, shield: any) => sum + (shield?.value ?? 0), 0),
+                    lastEventTypes: entries.slice(-6).map((entry: any) => entry.event?.type),
+                };
+            });
+
+            expect(finalState.handIds).not.toContain(options.actorCardId);
+            expect(finalState.discardIds).toContain(options.actorCardId);
+            expect(finalState.cp).toBe(options.expectedCp);
+            expect(finalState.shieldTotal).toBe(options.expectedShield);
+            expect(finalState.lastEventTypes).toContain('CARD_PLAYED');
+
+            await expect(hostSpotlight).toBeHidden({ timeout: 6000 });
+            await expect(hostOpponentHeader).toBeVisible({ timeout: 10000 });
+            await saveLocatorEvidenceScreenshot(
+                hostOpponentHeader,
+                testInfo,
+                options.headerName,
+                options.headerFilename,
+            );
+        };
+
+        await applySceneAndPlay({
+            actorCharacter: 'samurai',
+            actorCardId: 'card-boss-generous',
+            actorCp: 1,
+            expectedCp: 3,
+            expectedShield: 0,
+            overlayName: '20-samurai-boss-generous-spotlight',
+            overlayFilename: '20-samurai-boss-generous-spotlight.png',
+            headerName: '21-samurai-boss-generous-header',
+            headerFilename: '21-samurai-boss-generous-header.png',
+        });
+
+        await applySceneAndPlay({
+            actorCharacter: 'gunslinger',
+            actorCardId: 'card-next-time',
+            actorCp: 2,
+            expectedCp: 1,
+            expectedShield: 6,
+            overlayName: '30-gunslinger-next-time-spotlight',
+            overlayFilename: '30-gunslinger-next-time-spotlight.png',
+            headerName: '31-gunslinger-next-time-header',
+            headerFilename: '31-gunslinger-next-time-header.png',
         });
     } finally {
         await guestContext.close();
