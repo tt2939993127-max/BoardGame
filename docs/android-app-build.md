@@ -1,5 +1,7 @@
 # Android App 构建自动化
 
+日常发布速查请先看 [docs/mobile-release.md](./mobile-release.md)；这份文档保留完整底层说明。
+
 ## GitHub Actions 配置口径（先看这里）
 
 - Android Release / OTA workflow 默认优先读取与 `.env.example` 一致的同名配置。
