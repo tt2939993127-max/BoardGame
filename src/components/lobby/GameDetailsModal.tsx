@@ -1564,8 +1564,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                 data-testid="game-details-mobile-package-toggle"
                                 onClick={() => setIsMobilePackageCardExpanded((current) => !current)}
                                 aria-expanded={isMobilePackageCardExpanded}
+                                aria-hidden={isMobilePackageCardExpanded}
                                 aria-label={mobilePackageToggleMeta.label}
                                 title={mobilePackageToggleMeta.label}
+                                tabIndex={isMobilePackageCardExpanded ? -1 : 0}
                                 className={clsx(
                                     'pointer-events-auto absolute bottom-0 left-0 inline-flex h-11 w-11 items-center justify-center rounded-full border shadow-[0_14px_28px_rgba(56,41,22,0.18)] backdrop-blur-sm transition-all duration-200 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-parchment-base-text/25',
                                     mobilePackageToggleMeta.buttonClassName,

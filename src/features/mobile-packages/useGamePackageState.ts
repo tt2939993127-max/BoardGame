@@ -76,7 +76,14 @@ export const useGamePackageState = ({
             modulePackBytes: delivery.modulePackBytes,
             assetPackBytes: delivery.assetPackBytes,
         } satisfies GameManifestMobileDelivery;
-    }, [delivery]);
+    }, [
+        delivery?.mode,
+        delivery?.runtimeChannel,
+        delivery?.modulePackId,
+        delivery?.assetPackId,
+        delivery?.modulePackBytes,
+        delivery?.assetPackBytes,
+    ]);
     const isPackageManaged = enabled && normalizedDelivery?.mode === 'package-managed';
     const fallbackState = useMemo(
         () => createDefaultGamePackageState(gameId, normalizedDelivery),
