@@ -1003,6 +1003,7 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const aliensCard = factionSelect.getByText(/Aliens|外星人/i).first();
         const piratesCard = factionSelect.getByText(/Pirates|海盗/i).first();
         const rotateBanner = page.getByText(/建议旋转至横屏|建议切换为竖屏/i);
+        const detailBackdrop = page.getByTestId('faction-detail-backdrop');
         const closeButton = page.getByTestId('faction-detail-close');
 
         await expect(factionHeading).toBeVisible({ timeout: 15000 });
@@ -1040,7 +1041,16 @@ test.describe('大杀四方移动端派系选择布局', () => {
 
         await game.screenshot('12-mobile-landscape-faction-detail-bottom', testInfo);
 
+        await expect(detailBackdrop).toBeVisible({ timeout: 5000 });
+        await detailBackdrop.click({ position: { x: 24, y: 24 } });
+        await expect(page.getByTestId('faction-detail-panel')).toHaveCount(0);
+        await game.screenshot('12a-mobile-landscape-faction-detail-blank-close', testInfo);
+
+        await piratesCard.click();
+        await expect(closeButton).toBeVisible({ timeout: 5000 });
         await closeButton.click();
+        await expect(page.getByTestId('faction-detail-panel')).toHaveCount(0);
+
         await aliensCard.click();
         await expect(page.getByTestId('faction-titan-empty')).toContainText(/该种族泰坦暂未接入|Titan/i);
         await game.screenshot('13-mobile-landscape-faction-detail-no-titan', testInfo);

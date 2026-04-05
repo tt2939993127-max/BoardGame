@@ -1038,7 +1038,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                   {/* 底部：手牌区 */}
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
+                  <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center pointer-events-none" data-tutorial-id="sw-hand-area">
                     <HandArea
                       cards={myHand}
                       phase={currentPhase}
@@ -1055,7 +1055,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
-                  />
+                      className="pointer-events-auto"
+                    />
                   </div>
                 </div>
                 </div>

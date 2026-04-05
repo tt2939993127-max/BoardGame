@@ -8,6 +8,7 @@ import {
     getCardDef,
     getBaseDef,
     getBasePodVariantId,
+    getTitanDef,
     isBasePodVariantSelected,
     resolveCardName,
     resolveCardText,
@@ -59,39 +60,80 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
         if (baseDef?.previewRef?.type === 'atlas') {
             return { originalAtlasId: baseDef.previewRef.atlasId, originalIndex: baseDef.previewRef.index };
         }
-        console.log('[SmashUpCardRenderer] No previewRef found:', { defId, cardDef: !!cardDef, baseDef: !!baseDef });
+        const titanDef = getTitanDef(defId);
+        if (titanDef?.previewRef?.type === 'atlas') {
+            return { originalAtlasId: titanDef.previewRef.atlasId, originalIndex: titanDef.previewRef.index };
+        }
+        console.log('[SmashUpCardRenderer] No previewRef found:', {
+            defId,
+            cardDef: !!cardDef,
+            baseDef: !!baseDef,
+            titanDef: !!titanDef,
+        });
         return { originalAtlasId: '', originalIndex: 0 };
     }, [defId]);
 
-    let finalAtlasId = originalAtlasId;
-    let finalIndex = originalIndex;
-    const baseDef = defId ? getBaseDef(defId) : undefined;
-    const isBase = !!baseDef;
-    const basePodVariantId = baseDef ? getBasePodVariantId(baseDef, selectedFactions) : undefined;
-    const isSelectedPodBase = baseDef ? isBasePodVariantSelected(baseDef, selectedFactions) : false;
-    const isPodVersion = defId ? (defId.endsWith('_pod') || isSelectedPodBase) : false;
-    const shouldUseEnglishAtlas = isBase && isSelectedPodBase;
-
-    // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
-    // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
-    // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集（兜底逻辑）
     const isEnglishVariant = effectiveLocale === 'en' || effectiveLocale === 'en-US';
-    
-    if (isEnglishVariant || isPodVersion || shouldUseEnglishAtlas || !originalAtlasId) {
-        // 对于基地卡，根据是否为 POD 版本选择不同的映射 key
-        let lookupKey = defId || '';
-        if (isBase && isPodVersion && basePodVariantId) {
-            lookupKey = basePodVariantId;
-        }
+    const {
+        finalAtlasId,
+        finalIndex,
+        baseDef,
+        isBase,
+        basePodVariantId,
+        isPodVersion,
+        shouldUseEnglishAtlas,
+    } = useMemo(() => {
+        const resolvedBaseDef = defId ? getBaseDef(defId) : undefined;
+        const resolvedIsBase = !!resolvedBaseDef;
+        const resolvedBasePodVariantId = resolvedBaseDef ? getBasePodVariantId(resolvedBaseDef, selectedFactions) : undefined;
+        const resolvedIsSelectedPodBase = resolvedBaseDef ? isBasePodVariantSelected(resolvedBaseDef, selectedFactions) : false;
+        const resolvedIsPodVersion = defId ? (defId.endsWith('_pod') || resolvedIsSelectedPodBase) : false;
+        const resolvedShouldUseEnglishAtlas = resolvedIsBase && resolvedIsSelectedPodBase;
 
-        if (lookupKey) {
-            const mapped = TTS_MAP[lookupKey];
-            if (mapped) {
-                finalAtlasId = mapped.atlasId;
-                finalIndex = mapped.index;
+        let resolvedAtlasId = originalAtlasId;
+        let resolvedIndex = originalIndex;
+
+        // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
+        // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
+        // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集（兜底逻辑）
+        if (isEnglishVariant || resolvedIsPodVersion || resolvedShouldUseEnglishAtlas || !originalAtlasId) {
+            let lookupKey = defId || '';
+            if (resolvedIsBase && resolvedIsPodVersion && resolvedBasePodVariantId) {
+                lookupKey = resolvedBasePodVariantId;
+            }
+
+            if (lookupKey) {
+                const mapped = TTS_MAP[lookupKey];
+                if (mapped) {
+                    resolvedAtlasId = mapped.atlasId;
+                    resolvedIndex = mapped.index;
+                }
             }
         }
-    }
+
+        // Pixie POD：同一 defId 有两张不同卡图（tts_atlas_6 第二排第 4/5 张：index 8/9）
+        // 当渲染器拿到了 cardUid（来自手牌/弃牌/展示等真实实例）时，按 uid 稳定分配两张图。
+        if (defId === 'trickster_pixie_pod') {
+            resolvedAtlasId = 'tts_atlas_6';
+            if (cardUid) {
+                const sum = cardUid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+                resolvedIndex = 8 + (sum % 2); // 8 或 9
+            } else {
+                resolvedIndex = 8;
+            }
+        }
+
+        return {
+            finalAtlasId: resolvedAtlasId,
+            finalIndex: resolvedIndex,
+            baseDef: resolvedBaseDef,
+            isBase: resolvedIsBase,
+            basePodVariantId: resolvedBasePodVariantId,
+            isSelectedPodBase: resolvedIsSelectedPodBase,
+            isPodVersion: resolvedIsPodVersion,
+            shouldUseEnglishAtlas: resolvedShouldUseEnglishAtlas,
+        };
+    }, [cardUid, defId, isEnglishVariant, originalAtlasId, originalIndex, selectedFactions]);
 
     useEffect(() => {
         if (!finalAtlasId) return;
@@ -100,24 +142,12 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
         }
     }, [finalAtlasId, forceAtlasRefresh]);
 
-    // Pixie POD：同一 defId 有两张不同卡图（tts_atlas_6 第二排第 4/5 张：index 8/9）
-    // 当渲染器拿到了 cardUid（来自手牌/弃牌/展示等真实实例）时，按 uid 稳定分配两张图。
-    if (defId === 'trickster_pixie_pod') {
-        finalAtlasId = 'tts_atlas_6';
-        if (cardUid) {
-            const sum = cardUid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-            finalIndex = 8 + (sum % 2); // 8 或 9
-        } else {
-            finalIndex = 8;
-        }
-    }
-
     // 获取当前语言的翻译用于覆盖层显示
     const { name, text } = useMemo(() => {
         if (!defId) return { name: '', text: '' };
         const cDef = getCardDef(defId);
         if (cDef) return { name: resolveCardName(cDef, t), text: resolveCardText(cDef, t) };
-        const bDef = getBaseDef(defId);
+        const bDef = baseDef ?? getBaseDef(defId);
         if (bDef) {
             const localizedBaseDef = basePodVariantId && basePodVariantId !== bDef.id
                 ? { ...bDef, id: basePodVariantId }
@@ -125,7 +155,7 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
             return { name: resolveCardName(localizedBaseDef, t), text: resolveCardText(localizedBaseDef, t) };
         }
         return { name: '', text: '' };
-    }, [basePodVariantId, defId, t]);
+    }, [baseDef, basePodVariantId, defId, t]);
     
     // Early returns after all hooks
     if (previewRef.type !== 'renderer' || !defId) {

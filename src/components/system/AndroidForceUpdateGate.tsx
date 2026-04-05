@@ -84,7 +84,6 @@ export const AndroidForceUpdateGate = ({
         >
             <div className="absolute inset-0 opacity-40" aria-hidden="true">
                 <div className="absolute inset-x-0 top-0 h-40 bg-[linear-gradient(180deg,_rgba(255,214,130,0.12),_transparent)]" />
-                <div className="absolute left-1/2 top-1/3 h-56 w-56 -translate-x-1/2 rounded-full bg-amber-500/10 blur-3xl" />
             </div>
 
             <div className="relative flex h-full min-h-0 items-center justify-center px-5 py-[max(1.5rem,env(safe-area-inset-top))]">

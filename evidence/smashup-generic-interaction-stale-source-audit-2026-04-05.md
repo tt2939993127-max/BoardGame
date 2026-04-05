@@ -84,21 +84,55 @@
   - `InteractionSystem` 新增 `hand_or_discard` 刷新语义。
   - 会优先根据 `value.zone / value.from / value.sourceZone` 判定应留在哪个区域。
 
-### B. 已审但暂不加 live 刷新的来源
+### B. 已审且已转为 live 失效校验的来源
 
-- 这类 sourceId 多数不是“活引用当前区域对象”，而是“静态快照 + continuationContext”模型：
-  - `robot_hoverbot`
+#### 1. 牌库顶单卡活引用
+
+- `robot_hoverbot`
+- 结论：
+  - 这不是纯“揭示快照”。
+  - 交互处理时真正消费的是“当前仍在牌库顶的那一张牌”。
+  - 如果牌库顶在响应前已被别的效果改写，旧的 `play` 选项必须失效，只能保留 `skip`。
+- 已收口方式：
+  - `responseValidationMode: 'live'`
+  - `optionsGenerator` 改为按当前 `deck[0]` 重建，而不是只信任 `continuationContext`
+- 已补回归：
+  - `src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
+  - `src/games/smashup/__tests__/robot-hoverbot-button-disabled.test.ts`
+
+#### 2. 牌库顶揭示块活引用
+
+- 已覆盖 sourceId：
+  - `vikings_cast_the_runes_order`
+  - `vikings_raiding_party_choice`
+  - `cowboys_gold_in_them_thar_hills`
+  - `cowboys_gold_in_them_thar_hills_order`
   - `wizard_mass_enchantment`
   - `wizard_portal_order`
   - `base_wizard_academy`
-  - `vikings_cast_the_runes_order`
-  - `vikings_raiding_party_choice`
-  - `cowboys_gold_in_them_thar_hills_order`
+- 结论：
+  - 这些交互虽然看起来像“揭示快照排序/选择”，但真正合法的候选只应该来自“当前仍连续位于牌库顶的那一段揭示块”。
+  - 如果前置 handler 已经改写牌库顶，旧快照里的牌不应继续保留在候选中，更不能在后续 `DECK_REORDERED` 里把当前真实牌库外的牌误带回去。
+  - `wizard_mass_enchantment` 还额外带有“按不同对手各自牌库顶取候选”的跨玩家上下文，不能只校验“牌还在 deck 任意位置”。
+- 已收口方式：
+  - `responseValidationMode: 'live'`
+  - `optionsGenerator` 改为按当前顶端揭示块重建，而不是继续信任 `remainingDeckUids / remainingCards`
+  - handler 也统一基于同一份 live 顶端揭示块落地，避免 stale choice 进入下一段链
+  - 共享层已新增顶部连续揭示块 helper，统一承载 deck / baseDeck 顶快照过滤语义，减少后续 sourceId 级复制实现
+- 已补回归：
+  - `src/games/smashup/__tests__/newFactionAbilities.test.ts`
+  - `src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
+  - `src/games/smashup/__tests__/query6Abilities.test.ts`
+  - `src/games/smashup/__tests__/baseAbilitiesPrompt.test.ts`
+
+### C. 已审但暂不加 live 刷新的来源
+
+- 这类 sourceId 多数不是“活引用当前区域对象”，而是“静态快照 + continuationContext”模型：
 - 当前判断：
   - 它们主要消费的是“揭示当下的快照”而不是“持续读取该区域的最新集合”。
-  - 因此本轮先保留 `generic + reason`，不强行套 `deck`。
+  - 因此目前仍不把它们统一抽象成共享 `deck` 刷新语义，而是保留 `generic + reason`。
 - 残留风险：
-  - 如果后续确认这些交互在“牌库已被重排/对象仍在牌库但已不在原快照语义位置”时也必须失效，需要增加新的共享语义，例如 `deck_top_snapshot` / `revealed_snapshot`，不能拿当前 `deck` 语义硬套。
+  - 虽然 `wizard_mass_enchantment`、`wizard_portal_order`、`base_wizard_academy` 已完成 source 级 live 过滤，但共享层仍未统一抽象成 `deck_top_snapshot / revealed_snapshot / base_deck_top_snapshot` 语义；如果后续出现更多同类链式交互，应该上收到共享层，而不是继续逐个 sourceId 手工兜。
 
 ## 审计文档登记补全
 
@@ -106,6 +140,7 @@
 - 新增 / 更新的重点包括：
   - 弃牌堆活引用类
   - 手牌+弃牌堆混合来源类
+  - 牌库顶揭示块 live 过滤类
   - 一批静态快照类 `generic` 的保留理由
 
 ## 验证证据
@@ -131,9 +166,28 @@ npx vitest run --config vitest.config.audit.ts src/games/smashup/__tests__/inter
 
 结果：
 
-- 本轮新增的 stale-source 登记项均已被审计文件识别。
-- 仍有 1 条既有失败，与本轮 stale-source 扩审无关：
+- 本轮新增的 `vikings_* / cowboys_*` live 登记已被审计文件识别。
+- 当前仍有 1 条仓库既有失败，与本轮 stale-source 扩审无关：
   - `base_the_asylum` 在审计期望中登记为 `button`，源码当前实际是 `hand`
+
+### 通过
+
+```powershell
+node scripts/infra/vitest-cli-safe.mjs run src/engine/systems/__tests__/InteractionSystem-auto-injection.test.ts --configLoader native
+node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/query6Abilities.test.ts --configLoader native
+node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/baseAbilitiesPrompt.test.ts --configLoader native
+```
+
+结果：
+
+- `InteractionSystem-auto-injection.test.ts`：`20 passed`
+- `query6Abilities.test.ts`：`28 passed`
+- `baseAbilitiesPrompt.test.ts`：`33 passed`
+- 新覆盖点：
+  - `InteractionSystem` 新增“顶部连续快照”共享 helper，并验证会按当前顶部顺序保留仍属于原揭示集合的连续块
+  - `wizard_mass_enchantment` 在对手牌库顶变化后不再保留旧行动卡候选
+  - `wizard_portal_order` 在牌库顶被插入新牌后不再继续暴露旧揭示排序项
+  - `base_wizard_academy` 在 baseDeck 顶变化后不再继续暴露旧的重排候选
 
 ### 相关已通过的真实业务 E2E
 
@@ -153,7 +207,7 @@ npx vitest run --config vitest.config.audit.ts src/games/smashup/__tests__/inter
 
 ## 未覆盖风险
 
-- 牌库顶静态快照类目前只做了人工分类和理由登记，尚未引入新的共享刷新语义。
+- 虽然 `robot_hoverbot`、`vikings_*`、`cowboys_*`、`wizard_mass_enchantment`、`wizard_portal_order`、`base_wizard_academy` 已完成按当前牌库顶 / baseDeck 顶 live 过滤，但共享层仍没有统一的 `deck_top_snapshot / revealed_snapshot / base_deck_top_snapshot` 语义；后续新增同类交互仍可能再次漏配。
 - `targetPlayerId` 指向他人牌堆/弃牌堆/手牌的 `generic` 交互，本轮没有统一扩展成“按目标玩家区域 live 校验”的共享能力。
 - `base_the_asylum` 属于仓库既有审计债务，不在本轮 stale-source 修复范围内。
 
@@ -163,3 +217,6 @@ npx vitest run --config vitest.config.audit.ts src/games/smashup/__tests__/inter
   - 从“只修埋葬牌 stale”扩展到 generic 可变引用源的系统性审计。
   - 新增 `hand_or_discard` 共享刷新语义。
   - 批量补齐弃牌堆活引用类 sourceId 的 `autoRefresh/live`。
+  - 复核后确认 `robot_hoverbot` 属于“当前牌库顶活引用”而非纯静态快照，调整为 live 失效校验。
+  - 继续扩审 `vikings_*` / `cowboys_*` 揭示块交互，确认它们同样需要按当前牌库顶 live 过滤候选与落地排序，并补齐回归。
+  - 再扩审 `wizard_mass_enchantment` / `wizard_portal_order` / `base_wizard_academy`，确认它们同样属于揭示块 live 引用，而不是可长期信任的静态快照。

@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Page } from '@playwright/test';
 import { test, expect } from './framework';
+import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import { setChineseLocale } from './helpers/common';
 
 const MOBILE_VIEWPORT = { width: 800, height: 450 } as const;
@@ -235,5 +236,43 @@ test.describe('SmashUp 派系选择页移动端等比缩放', () => {
 
     await page.screenshot({ path: join(evidenceDir, 'desktop-reference-1920x1080.png'), fullPage: false });
     await page.screenshot({ path: testInfo.outputPath('desktop-reference-1920x1080.png'), fullPage: false });
+  });
+
+  test('海盗派系详情中的泰坦预览应加载真实卡图', async ({ page, game }, testInfo) => {
+    await clearEvidenceScreenshotsForTest(testInfo);
+    await setChineseLocale(page.context());
+
+    await page.setViewportSize(DESKTOP_VIEWPORT);
+    await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+    await game.setupScene(buildFactionSelectionScene());
+    await waitForFactionSelectionReady(page);
+
+    const piratesOption = page.getByTestId('faction-option-pirates');
+    await expect(piratesOption).toBeVisible({ timeout: 10000 });
+    await piratesOption.click();
+
+    const titanSection = page.getByTestId('faction-titan-section');
+    await expect(titanSection).toBeVisible({ timeout: 10000 });
+    const titanCard = titanSection.getByTestId('faction-titan-card').first();
+    await expect(titanCard).toBeVisible({ timeout: 10000 });
+
+    await expect
+      .poll(
+        async () =>
+          titanCard.evaluate((node) => {
+            const previewNode = Array.from(node.querySelectorAll<HTMLElement>('div')).find((candidate) => {
+              const { backgroundImage } = window.getComputedStyle(candidate);
+              return backgroundImage.includes('url(') && !backgroundImage.includes('none');
+            });
+            return previewNode
+              ? window.getComputedStyle(previewNode).backgroundImage
+              : '';
+          }),
+        { timeout: 10000 },
+      )
+      .toContain('url(');
+
+    const evidencePath = getEvidenceScreenshotPath(testInfo, 'pirates-titan-preview-loaded');
+    await page.screenshot({ path: evidencePath, fullPage: false });
   });
 });

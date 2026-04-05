@@ -1572,36 +1572,33 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     // 额外骰子
                     bonusDie={bonusDie}
                     onBonusDieClose={() => {
-                        console.log('[onBonusDieClose] 被调用', {
-                            hasPendingSettlement: !!G.pendingBonusDiceSettlement,
-                            settlementAttackerId: G.pendingBonusDiceSettlement?.attackerId,
-                            rootPid,
-                            isAttacker: G.pendingBonusDiceSettlement?.attackerId === rootPid,
-                        });
-                        
                         handleBonusDieClose();
-                        
-                        // 如果有 pendingBonusDiceSettlement，需要发送 SKIP 命令清除
-                        if (G.pendingBonusDiceSettlement) {
-                            console.log('[onBonusDieClose] 发送 SKIP_BONUS_DICE_REROLL');
-                            engineMoves.skipBonusDiceReroll();
+
+                        const currentSettlement = G.pendingBonusDiceSettlement;
+                        if (!currentSettlement) {
+                            return;
                         }
-                        
-                        // 防御方/观察者关闭 displayOnly 面板时，记录已关闭的 settlement id
-                        if (G.pendingBonusDiceSettlement && G.pendingBonusDiceSettlement.attackerId !== rootPid) {
-                            setDismissedBonusDiceId(G.pendingBonusDiceSettlement.id);
+
+                        // 展示态奖励骰（例如顿悟）只需要本地关闭，不应误发 skip 命令。
+                        if (currentSettlement.displayOnly) {
+                            setDismissedBonusDiceId(currentSettlement.id);
+                            return;
                         }
+
+                        engineMoves.skipBonusDiceReroll();
                     }}
 
                     // 奖励骰重掷交互
                     // 只有攻击者才能操作重投；防御方/观察者以 displayOnly 模式展示
                     // 防御方关闭后不再重复弹出（dismissedBonusDiceId 记录已关闭的 settlement）
                     pendingBonusDiceSettlement={G.pendingBonusDiceSettlement
-                        ? G.pendingBonusDiceSettlement.attackerId === rootPid
-                            ? G.pendingBonusDiceSettlement
-                            : dismissedBonusDiceId === G.pendingBonusDiceSettlement.id || shouldHidePendingDisplayOnlyBonusOverlay
-                                ? undefined
-                                : { ...G.pendingBonusDiceSettlement, displayOnly: true }
+                        ? dismissedBonusDiceId === G.pendingBonusDiceSettlement.id
+                            ? undefined
+                            : G.pendingBonusDiceSettlement.attackerId === rootPid
+                                ? G.pendingBonusDiceSettlement
+                                : shouldHidePendingDisplayOnlyBonusOverlay
+                                    ? undefined
+                                    : { ...G.pendingBonusDiceSettlement, displayOnly: true }
                         : undefined}
                     canRerollBonusDie={Boolean(
                         G.pendingBonusDiceSettlement &&

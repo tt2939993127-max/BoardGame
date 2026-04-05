@@ -70,6 +70,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
     const titanWidth = compactLayout ? '5.6vw' : '4.8vw';
     const labelMinHeight = compactLayout ? '24px' : '20px';
     const labelFontSize = compactLayout ? '11px' : '10px';
+    const titanAbilityBadgeFontSize = compactLayout ? '10px' : '9px';
 
     // interaction 驱动的弃牌堆选择（僵尸领主等）：自动打开/关闭面板
     const prevAutoOpen = React.useRef(false);
@@ -175,22 +176,24 @@ export const DeckDiscardZone: React.FC<Props> = ({
                     <div className="relative aspect-[0.714]" style={{ width: stackWidth }}>
                         {clampedMadnessSupplyCount !== undefined && (
                             <div
-                                className="pointer-events-none absolute -top-6 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]"
+                                className="pointer-events-none absolute inset-x-0 -top-6 z-20 flex justify-center"
                                 data-testid="su-madness-supply"
                                 title={`疯狂牌剩余 ${clampedMadnessSupplyCount}`}
                             >
-                                <div className="h-8 w-[22px] overflow-hidden rounded-[3px]">
-                                    <CardPreview
-                                        previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: MADNESS_CARD_DEF_ID, cardUid: 'madness-supply-preview' } }}
-                                        className="h-full w-full"
-                                    />
+                                <div className="flex items-center gap-1 drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]">
+                                    <div className="h-8 w-[22px] overflow-hidden rounded-[3px]">
+                                        <CardPreview
+                                            previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: MADNESS_CARD_DEF_ID, cardUid: 'madness-supply-preview' } }}
+                                            className="h-full w-full"
+                                        />
+                                    </div>
+                                    <span
+                                        className="whitespace-nowrap text-[11px] font-black tabular-nums text-fuchsia-100"
+                                        data-testid="su-madness-supply-count"
+                                    >
+                                        x {clampedMadnessSupplyCount}
+                                    </span>
                                 </div>
-                                <span
-                                    className="whitespace-nowrap text-[11px] font-black tabular-nums text-fuchsia-100"
-                                    data-testid="su-madness-supply-count"
-                                >
-                                    x {clampedMadnessSupplyCount}
-                                </span>
                             </div>
                         )}
                         <div className="absolute inset-0 bg-slate-700 rounded-sm border border-slate-600 shadow-sm translate-x-1 -translate-y-1 rotate-1" />
@@ -247,7 +250,15 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                                 title={titanName}
                                             />
                                             {isActivatable && (
-                                                <div className="absolute inset-x-0 top-0 h-1.5 bg-amber-300/90" />
+                                                <div className="absolute bottom-1 inset-x-0 z-20 flex justify-center px-1 pointer-events-none">
+                                                    <div
+                                                        data-testid={`su-rail-titan-badge-${titan.uid}`}
+                                                        className="whitespace-nowrap rounded-sm border border-white bg-amber-300/95 px-1.5 py-[1px] font-black leading-none text-slate-900 shadow-md"
+                                                        style={{ fontSize: titanAbilityBadgeFontSize }}
+                                                    >
+                                                        {t('ui.titan_ability', { defaultValue: '泰坦能力' })}
+                                                    </div>
+                                                </div>
                                             )}
                                             {isSelected && (
                                                 <div className="absolute inset-0 border-2 border-purple-400 pointer-events-none" />

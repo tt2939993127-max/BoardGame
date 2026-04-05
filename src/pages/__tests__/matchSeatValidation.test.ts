@@ -829,6 +829,92 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
         });
     });
 
+    it('隐藏交互只剩 __emergency_skip__ 或 done 时，也应返回自动收口 resolution', () => {
+        const emergencyCandidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'empty-hidden',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    sourceId: 'base_inventors_salon',
+                                    options: [
+                                        { id: '__emergency_skip__', label: '跳过（无可用选项）', value: { __emergency_skip__: true } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        });
+
+        expect(emergencyCandidate?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: '__emergency_skip__' },
+        });
+
+        const doneCandidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'done-hidden',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    sourceId: 'zombie_lord_pick',
+                                    options: [
+                                        { id: 'done', label: '完成', value: { done: true } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        });
+
+        expect(doneCandidate?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'done' },
+        });
+    });
+
     it('可空选的隐藏 AI multi 交互时，应返回空选择的强制跳过 resolution', () => {
         const candidate = resolveForceSkippableHiddenAiInteraction({
             sharedState: {

@@ -150,6 +150,22 @@ describe('BonusDieOverlay', () => {
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('displayOnly 的 settlement 分支应允许首次点击立即关闭', () => {
+        const onClose = vi.fn();
+
+        render(
+            <BonusDieOverlay
+                isVisible
+                onClose={onClose}
+                bonusDice={buildBonusDice()}
+                displayOnly
+            />
+        );
+
+        fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
     it('扁平 bonusDie effect key 应解析为本地化文案', () => {
         const translated = resolveBonusDieText('bonusDie.effect.watchOut.bow', {
             t: (key) => key,

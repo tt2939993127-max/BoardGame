@@ -376,6 +376,137 @@ describe('Vikings abilities', () => {
         expect(resolved.finalState.core.players['1'].deck).toHaveLength(0);
     });
 
+    it('vikings_cast_the_runes_order 在揭示快照失效后不应改坏当前牌库顺序', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('runes-1', 'vikings_cast_the_runes', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    hand: [makeCard('victim-hand', 'robot_microbot_alpha', 'minion', '1')],
+                    deck: [
+                        makeCard('top-a', 'robot_microbot_beta', 'minion', '1'),
+                        makeCard('top-b', 'wizard_summon', 'action', '1'),
+                        makeCard('rest-1', 'robot_microbot_gamma', 'minion', '1'),
+                    ],
+                }),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'runes-1' } },
+            defaultTestRandom,
+        );
+        const playerPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const choosePlayer = playerPrompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const afterPlayer = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: choosePlayer.id } } as any,
+            defaultTestRandom,
+        );
+
+        const refreshedState = refreshInteractionOptions({
+            ...afterPlayer.finalState,
+            core: {
+                ...afterPlayer.finalState.core,
+                players: {
+                    ...afterPlayer.finalState.core.players,
+                    '1': {
+                        ...afterPlayer.finalState.core.players['1'],
+                        deck: [
+                            makeCard('intrude', 'robot_microbot_alpha', 'minion', '1'),
+                            makeCard('top-a', 'robot_microbot_beta', 'minion', '1'),
+                            makeCard('top-b', 'wizard_summon', 'action', '1'),
+                            makeCard('rest-1', 'robot_microbot_gamma', 'minion', '1'),
+                        ],
+                    },
+                },
+            },
+        });
+
+        const orderPrompt = getInteractionsFromMS(refreshedState)[0] as any;
+        expect(orderPrompt.data.options).toHaveLength(1);
+        expect(orderPrompt.data.options[0].id).toBe('__emergency_skip__');
+
+        const resolved = runCommand(
+            refreshedState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: '__emergency_skip__' } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['1'].deck.map(card => card.uid)).toEqual(['intrude', 'top-a', 'top-b', 'rest-1']);
+    });
+
+    it('vikings_raiding_party 的候选应随当前牌库顶快照刷新，避免继续引用已离开的旧揭示牌', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('rp-1', 'vikings_raiding_party', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [
+                        makeCard('top-minion', 'robot_microbot_alpha', 'minion', '1'),
+                        makeCard('top-action', 'wizard_summon', 'action', '1'),
+                        makeCard('top-extra', 'robot_microbot_alpha', 'minion', '1'),
+                        makeCard('rest-1', 'robot_microbot_gamma', 'minion', '1'),
+                    ],
+                }),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'rp-1' } },
+            defaultTestRandom,
+        );
+        const playerPrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const choosePlayer = playerPrompt.data.options.find((entry: any) => entry.value?.targetPlayerId === '1');
+        const afterPlayer = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: choosePlayer.id } } as any,
+            defaultTestRandom,
+        );
+
+        const refreshedState = refreshInteractionOptions({
+            ...afterPlayer.finalState,
+            core: {
+                ...afterPlayer.finalState.core,
+                players: {
+                    ...afterPlayer.finalState.core.players,
+                    '1': {
+                        ...afterPlayer.finalState.core.players['1'],
+                        deck: [
+                            makeCard('top-action', 'wizard_summon', 'action', '1'),
+                            makeCard('top-extra', 'robot_microbot_alpha', 'minion', '1'),
+                            makeCard('rest-1', 'robot_microbot_gamma', 'minion', '1'),
+                        ],
+                    },
+                },
+            },
+        });
+
+        const choicePrompt = getInteractionsFromMS(refreshedState)[0] as any;
+        const optionUids = choicePrompt.data.options
+            .map((entry: any) => entry.value?.cardUid)
+            .filter(Boolean);
+        expect(optionUids).toEqual(['top-action', 'top-extra']);
+        expect(optionUids).not.toContain('top-minion');
+
+        const chooseAction = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-action');
+        const resolved = runCommand(
+            refreshedState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseAction.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['1'].deck.map(card => card.uid)).toEqual(['top-extra', 'rest-1']);
+        expect(resolved.finalState.core.players['0'].discard.some(card => card.uid === 'top-action')).toBe(true);
+        expect(resolved.finalState.core.players['0'].discard.some(card => card.uid === 'top-minion')).toBe(false);
+    });
+
     it('vikings_raiding_party 选择需要基地的行动时会先选基地再作为额外行动打出', () => {
         const core = makeState({
             players: {
@@ -1206,6 +1337,81 @@ describe('Cowboys abilities', () => {
 
         expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-b')).toBe(true);
         expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).toEqual(['top-c', 'top-a', 'rest-1']);
+    });
+
+    it('cowboys_gold_in_them_thar_hills 的排序候选缩小后仍应按当前快照继续正常选择', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('gold-1', 'cowboys_gold_in_them_thar_hills', 'action', '0')],
+                    deck: [
+                        makeCard('top-a', 'robot_microbot_alpha', 'minion', '0'),
+                        makeCard('top-b', 'wizard_summon', 'action', '0'),
+                        makeCard('top-c', 'robot_microbot_beta', 'minion', '0'),
+                        makeCard('rest-1', 'robot_microbot_gamma', 'minion', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'gold-1' } },
+            defaultTestRandom,
+        );
+        const choicePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const chooseTopB = choicePrompt.data.options.find((entry: any) => entry.value?.cardUid === 'top-b');
+        const afterChoice = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopB.id } } as any,
+            defaultTestRandom,
+        );
+
+        const refreshedState = refreshInteractionOptions({
+            ...afterChoice.finalState,
+            core: {
+                ...afterChoice.finalState.core,
+                players: {
+                    ...afterChoice.finalState.core.players,
+                    '0': {
+                        ...afterChoice.finalState.core.players['0'],
+                        deck: [
+                            makeCard('top-b', 'wizard_summon', 'action', '0'),
+                            makeCard('top-c', 'robot_microbot_beta', 'minion', '0'),
+                            makeCard('rest-1', 'robot_microbot_gamma', 'minion', '0'),
+                        ],
+                    },
+                },
+            },
+        });
+
+        const orderPrompt = getInteractionsFromMS(refreshedState)[0] as any;
+        const orderUids = orderPrompt.data.options
+            .map((entry: any) => entry.value?.topCardUid)
+            .filter(Boolean);
+        expect(orderUids).toEqual(['top-c']);
+        expect(orderUids).not.toContain('top-a');
+
+        const chooseTopC = orderPrompt.data.options.find((entry: any) => entry.value?.topCardUid === 'top-c');
+        const afterOrder = runCommand(
+            refreshedState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseTopC.id } } as any,
+            defaultTestRandom,
+        );
+
+        const modePrompt = getInteractionsFromMS(afterOrder.finalState)[0] as any;
+        const keepOption = modePrompt.data.options.find((entry: any) => entry.value?.mode === 'hand');
+        const resolved = runCommand(
+            afterOrder.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: keepOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.players['0'].hand.some(card => card.uid === 'top-b')).toBe(true);
+        expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).toEqual(['top-c', 'rest-1']);
+        expect(resolved.finalState.core.players['0'].deck.map(card => card.uid)).not.toContain('top-a');
     });
 
     it('cowboys_gold_in_them_thar_hills 额外打出的行动卡不会把挂有烟雾弹的对手随从列为目标', () => {

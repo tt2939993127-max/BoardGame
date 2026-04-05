@@ -1,5 +1,5 @@
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, getCurrentTrackedCardTopSnapshot, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -66,6 +66,50 @@ type GoldPromptContext = {
     chosenCard: CardInstance;
     remainingCards: CardInstance[];
 };
+
+function getCurrentDeckTopSnapshotCards<T extends { uid: string; defId: string }>(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    trackedCards: T[],
+): T[] {
+    return getCurrentTrackedCardTopSnapshot(core.players[playerId]?.deck ?? [], trackedCards);
+}
+
+function buildGoldTopCardOptions(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    topCards: CardInstance[],
+) {
+    return getCurrentDeckTopSnapshotCards(core, playerId, topCards).map((card, index) => ({
+        id: `top-${index}`,
+        label: getCardDef(card.defId)?.name ?? card.defId,
+        value: { cardUid: card.uid, defId: card.defId },
+        _source: 'deck' as const,
+        displayMode: 'card' as const,
+    }));
+}
+
+function buildGoldOrderOptions(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    context: GoldPromptContext,
+) {
+    const snapshot = getCurrentDeckTopSnapshotCards(core, playerId, [context.chosenCard, ...context.remainingCards]);
+    const currentChosen = snapshot.find((card) => card.uid === context.chosenCard.uid);
+    if (!currentChosen) {
+        return [];
+    }
+    const remainingUidSet = new Set(context.remainingCards.map((card) => card.uid));
+    return snapshot
+        .filter((card) => remainingUidSet.has(card.uid))
+        .map((card, index) => ({
+            id: `gold-order-${index}`,
+            label: getCardDef(card.defId)?.name ?? card.defId,
+            value: { topCardUid: card.uid },
+            _source: 'static' as const,
+            displayMode: 'card' as const,
+        }));
+}
 
 function isDynamiteSurpriseDefId(defId: string): boolean {
     return defId === 'cowboys_dynamite_surprise' || defId === 'cowboys_dynamite_surprise_pod';
@@ -197,10 +241,14 @@ function cowboysGoldInThemTharHillsOnPlay(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '那山里有金子：从牌库顶三张牌中选择一张抓到手里',
         options,
-        { sourceId: 'cowboys_gold_in_them_thar_hills', targetType: 'generic' },
+        { sourceId: 'cowboys_gold_in_them_thar_hills', targetType: 'generic', responseValidationMode: 'live' },
     );
     (interaction.data as any).continuationContext = {
-        topCardUids: topCards.map(card => card.uid),
+        topCards,
+    };
+    (interaction.data as any).optionsGenerator = (nextState: MatchState<SmashUpCore>, data: any) => {
+        const topSnapshot = (data?.continuationContext as { topCards?: CardInstance[] } | undefined)?.topCards ?? [];
+        return buildGoldTopCardOptions(nextState.core, ctx.playerId, topSnapshot);
     };
     return {
         events: [inspectDeck(ctx.playerId, ctx.playerId, topCards.length, 'cowboys_gold_in_them_thar_hills', ctx.now)],
@@ -518,41 +566,43 @@ const handleRunEmOffEnemy = (state: MatchState<SmashUpCore>, _playerId: string, 
 
 const handleGoldInThemTharHills = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
     const selected = value as { cardUid?: string; defId?: string } | undefined;
-    const topCardUids = (data?.continuationContext as any)?.topCardUids as string[] | undefined;
-    const player = state.core.players[playerId];
-    if (!selected?.cardUid || !topCardUids || !player) return { state, events: [] };
-    const topCards = player.deck.slice(0, topCardUids.length);
+    const topCards = ((data?.continuationContext as any)?.topCards ?? []) as CardInstance[];
+    if (!selected?.cardUid || topCards.length === 0) return { state, events: [] };
+    const currentTopCards = getCurrentDeckTopSnapshotCards(state.core, playerId as PlayerId, topCards);
     const chosen = topCards.find(card => card.uid === selected.cardUid);
-    if (!chosen) return { state, events: [] };
-    const remaining = topCards.filter(card => card.uid !== chosen.uid);
+    const currentChosen = currentTopCards.find(card => card.uid === selected.cardUid);
+    if (!chosen || !currentChosen) return { state, events: [] };
+    const remaining = currentTopCards.filter(card => card.uid !== currentChosen.uid);
     if (remaining.length > 1) {
         const interaction = createSimpleChoice(
             `cowboys_gold_in_them_thar_hills_order_${now}`,
             playerId,
             '那山里有金子：选择其余牌放回牌库顶的顺序',
-            remaining.map((card, index) => ({
-                id: `gold-order-${index}`,
-                label: getCardDef(card.defId)?.name ?? card.defId,
-                value: { topCardUid: card.uid },
-                _source: 'static' as const,
-                displayMode: 'card' as const,
-            })),
-            { sourceId: 'cowboys_gold_in_them_thar_hills_order', targetType: 'generic' },
+            buildGoldOrderOptions(state.core, playerId as PlayerId, { chosenCard: currentChosen, remainingCards: remaining }),
+            { sourceId: 'cowboys_gold_in_them_thar_hills_order', targetType: 'generic', responseValidationMode: 'live' },
         );
-        (interaction.data as any).continuationContext = { chosenCard: chosen, remainingCards: remaining } satisfies GoldPromptContext;
+        (interaction.data as any).continuationContext = { chosenCard: currentChosen, remainingCards: remaining } satisfies GoldPromptContext;
+        (interaction.data as any).optionsGenerator = (nextState: MatchState<SmashUpCore>, interactionData: any) => {
+            const ctx = (interactionData?.continuationContext ?? {}) as GoldPromptContext;
+            return buildGoldOrderOptions(nextState.core, playerId as PlayerId, ctx);
+        };
         return { state: queueInteraction(state, interaction), events: [] };
     }
-    return queueGoldModePrompt(state, playerId, chosen, remaining, now);
+    return queueGoldModePrompt(state, playerId as PlayerId, currentChosen, remaining, now);
 };
 
 const handleGoldInThemTharHillsOrder = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
     const selected = value as GoldOrderChoice | undefined;
     const ctx = data?.continuationContext as GoldPromptContext | undefined;
     if (!selected?.topCardUid || !ctx) return { state, events: [] };
-    const topCard = ctx.remainingCards.find(card => card.uid === selected.topCardUid);
+    const snapshot = getCurrentDeckTopSnapshotCards(state.core, playerId as PlayerId, [ctx.chosenCard, ...ctx.remainingCards]);
+    const currentChosen = snapshot.find(card => card.uid === ctx.chosenCard.uid);
+    if (!currentChosen) return { state, events: [] };
+    const currentRemaining = snapshot.filter(card => card.uid !== ctx.chosenCard.uid);
+    const topCard = currentRemaining.find(card => card.uid === selected.topCardUid);
     if (!topCard) return { state, events: [] };
-    const orderedRemaining = [topCard, ...ctx.remainingCards.filter(card => card.uid !== selected.topCardUid)];
-    return queueGoldModePrompt(state, playerId, ctx.chosenCard, orderedRemaining, now);
+    const orderedRemaining = [topCard, ...currentRemaining.filter(card => card.uid !== selected.topCardUid)];
+    return queueGoldModePrompt(state, playerId as PlayerId, currentChosen, orderedRemaining, now);
 };
 
 const handleGoldInThemTharHillsMode = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, random: RandomFn, now: number) => {

@@ -99,17 +99,17 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
     return (
         <span
             data-testid={testId}
-            className="relative inline-flex items-center justify-center"
+            className="absolute left-1/2 top-1/2 block -translate-x-1/2 -translate-y-1/2"
             style={{
-                width: '152%',
-                transform: 'rotate(-12deg)',
+                width: '188%',
+                transform: 'rotate(-14deg)',
             }}
         >
             <span
-                className="relative inline-flex items-center justify-center overflow-hidden border-y-[3px] border-black font-black uppercase"
+                className="relative block overflow-hidden border-y-[3px] border-black"
                 style={{
                     width: '100%',
-                    minHeight: inlineUnit(1.78),
+                    minHeight: inlineUnit(1.74),
                     backgroundColor: '#facc15',
                 }}
             >
@@ -118,34 +118,23 @@ export const CharacterSelectionBadge: React.FC<CharacterSelectionBadgeProps> = (
                     className="absolute inset-0"
                     style={{
                         backgroundImage:
-                            'repeating-linear-gradient(135deg, rgba(12,12,12,0.95) 0 14px, rgba(12,12,12,0.95) 14px 20px, rgba(250,204,21,0) 20px 38px)',
+                            'repeating-linear-gradient(135deg, #111111 0 18px, #111111 18px 28px, #facc15 28px 48px)',
                     }}
                 />
                 <span
-                    aria-hidden="true"
-                    className="absolute inset-y-0 left-1/2 -translate-x-1/2"
+                    className="absolute inset-0 flex items-center justify-center text-center font-black uppercase"
                     style={{
-                        width: '50%',
-                        backgroundColor: 'rgba(74, 60, 18, 0.96)',
-                        borderLeft: '2px solid #111111',
-                        borderRight: '2px solid #111111',
-                    }}
-                />
-                <span
-                    className="relative z-10 text-center font-black uppercase"
-                    style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        minWidth: '50%',
-                        color: '#facc15',
-                        paddingLeft: inlineUnit(0.85),
-                        paddingRight: inlineUnit(0.85),
-                        paddingTop: inlineUnit(0.17),
-                        paddingBottom: inlineUnit(0.17),
-                        fontSize: inlineUnit(0.58),
+                        paddingLeft: inlineUnit(0.9),
+                        paddingRight: inlineUnit(0.9),
+                        fontSize: inlineUnit(0.56),
                         lineHeight: 1,
-                        letterSpacing: inlineUnit(0.04),
+                        letterSpacing: inlineUnit(0.03),
+                        color: 'transparent',
+                        backgroundImage:
+                            'repeating-linear-gradient(135deg, #facc15 0 18px, #facc15 18px 28px, #111111 28px 48px)',
+                        backgroundClip: 'text',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent',
                     }}
                 >
                     {label}

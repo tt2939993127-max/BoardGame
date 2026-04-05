@@ -30,6 +30,7 @@ import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { triggerBaseAbilityWithMS, getInteractionsFromResult, makeMatchState } from './helpers';
 import type { RandomFn } from '../../../engine/types';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 
 // ============================================================================
 // 初始化
@@ -872,6 +873,32 @@ describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
         }));
 
         expect(events).toHaveLength(0);
+    });
+
+    it('基地牌库顶变化后不应继续保留旧的重排候选', () => {
+        const result = triggerBaseAbilityWithMS('base_wizard_academy', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_wizard_academy')],
+                baseDeck: ['base_a', 'base_b', 'base_c', 'base_d'],
+            }),
+            baseDefId: 'base_wizard_academy',
+            rankings: [{ playerId: '0', power: 5, vp: 3 }],
+        }));
+
+        const refreshedState = refreshInteractionOptions({
+            ...result.matchState!,
+            core: {
+                ...result.matchState!.core,
+                baseDeck: ['intrude_base', ...result.matchState!.core.baseDeck],
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('base_wizard_academy');
+        const optionDefIds = (current?.data?.options ?? []).map((option: any) => option.value?.defId).filter(Boolean);
+        expect(optionDefIds).not.toContain('base_a');
+        expect(optionDefIds).not.toContain('base_b');
+        expect(optionDefIds).not.toContain('base_c');
     });
 });
 

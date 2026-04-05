@@ -480,6 +480,26 @@ const seedMobileActionLog = async (page: Page) => {
   }, nextState);
 };
 
+const readSummonerWarsHarnessState = async (page: Page) => (
+  page.evaluate(() => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    return harness.state.get();
+  })
+);
+
+const applySummonerWarsHarnessState = async (page: Page, state: unknown) => {
+  await page.evaluate((nextState) => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    harness.state.set(nextState);
+  }, state);
+};
+
 const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
   await page.addStyleTag({
     content: `
@@ -1274,6 +1294,77 @@ const waitForSummonerWarsVisualStable = async (page: Page) => {
   await page.waitForTimeout(120);
 };
 
+const waitForSummonerWarsHandStable = async (page: Page, allowMissing = false) => {
+  await expect.poll(async () => {
+    return page.evaluate((canBeMissing) => {
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      if (!handArea) {
+        return canBeMissing;
+      }
+
+      const cards = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'));
+      if (cards.length === 0) {
+        return canBeMissing;
+      }
+
+      const parseTranslate = (transform: string) => {
+        if (!transform || transform === 'none') {
+          return { x: 0, y: 0 };
+        }
+        const matrix3dMatch = transform.match(/^matrix3d\((.+)\)$/);
+        if (matrix3dMatch) {
+          const values = matrix3dMatch[1].split(',').map((value) => Number(value.trim()));
+          return {
+            x: values[12] ?? 0,
+            y: values[13] ?? 0,
+          };
+        }
+        const matrixMatch = transform.match(/^matrix\((.+)\)$/);
+        if (matrixMatch) {
+          const values = matrixMatch[1].split(',').map((value) => Number(value.trim()));
+          return {
+            x: values[4] ?? 0,
+            y: values[5] ?? 0,
+          };
+        }
+        return { x: Number.NaN, y: Number.NaN };
+      };
+
+      return cards.every((card) => {
+        const styles = window.getComputedStyle(card);
+        const opacity = Number(styles.opacity || '1');
+        const translate = parseTranslate(styles.transform);
+        return opacity >= 0.99
+          && Number.isFinite(translate.x)
+          && Number.isFinite(translate.y)
+          && Math.abs(translate.x) <= 1
+          && Math.abs(translate.y) <= 1;
+      });
+    }, allowMissing);
+  }, {
+    timeout: 5000,
+    message: '等待召唤师战争手牌动画收敛',
+  }).toBe(true);
+  await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandCount = async (page: Page, expectedCount: number) => {
+  await expect.poll(async () => {
+    const state = await readSummonerWarsHarnessState(page);
+    return state?.core?.players?.['0']?.hand?.length ?? 0;
+  }, {
+    timeout: 5000,
+    message: `等待 TestHarness 手牌数量变为 ${expectedCount}`,
+  }).toBe(expectedCount);
+
+  await expect.poll(async () => {
+    return page.locator('[data-testid="sw-hand-area"] [data-card-id]').count();
+  }, {
+    timeout: 5000,
+    message: `等待 DOM 手牌数量变为 ${expectedCount}`,
+  }).toBe(expectedCount);
+};
+
 const getCurrentPhase = async (page: Page) => {
   const phase = await page.getByTestId('sw-action-banner').getAttribute('data-phase');
   if (!phase) {
@@ -1373,7 +1464,9 @@ const prepareDeterministicCore = (coreState: any) => {
     return null;
   };
 
-  const unitCard = pickCard('unit') ?? pickCard('unit', () => true);
+  const unitCard = pickCard('unit', (card) => !(card.abilities ?? []).includes('fire_sacrifice_summon'))
+    ?? pickCard('unit')
+    ?? pickCard('unit', () => true);
   const structureCard = pickCard('structure') ?? pickCard('structure', () => true);
   const eventCard = pickCard('event', (card) => card.playPhase === 'summon' || card.playPhase === 'any')
     ?? pickCard('event');
@@ -1382,10 +1475,17 @@ const prepareDeterministicCore = (coreState: any) => {
     throw new Error('无法找到用于稳定流程的卡牌');
   }
 
+  const extraCards: any[] = [];
+  while (extraCards.length < 2) {
+    const nextExtra = handPool.shift() ?? deck.shift();
+    if (!nextExtra) break;
+    extraCards.push(nextExtra);
+  }
+
   next.players['0'] = {
     ...player,
     magic: 10,
-    hand: [unitCard, structureCard, eventCard],
+    hand: [unitCard, structureCard, eventCard, ...extraCards],
     deck,
     moveCount: 0,
     attackCount: 0,
@@ -1446,10 +1546,21 @@ const setupAttackState = (coreState: any) => {
   const next = cloneState(coreState);
   const board = next.board.map((row: any[]) => row.map((cell: any) => ({
     ...cell,
-    unit: cell.unit ? { ...cell.unit, position: { ...cell.unit.position } } : undefined,
+    unit: cell.unit ? {
+      ...cell.unit,
+      position: { ...cell.unit.position },
+      hasAttacked: false,
+    } : undefined,
     structure: cell.structure ? { ...cell.structure, position: { ...cell.structure.position } } : undefined,
   })));
   next.board = board;
+  if (next.players?.['0']) {
+    next.players['0'] = {
+      ...next.players['0'],
+      attackCount: 0,
+      hasAttackedEnemy: false,
+    };
+  }
 
   const directions = [
     { row: -1, col: 0 },
@@ -2564,6 +2675,256 @@ test.describe('SummonerWars', () => {
 
     await hostContext.close();
     await guestContext.close();
+  });
+
+  test('移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+    await hostContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(hostContext);
+    await mockSummonerWarsMapImage(hostContext);
+    await setChineseLocale(hostContext);
+    await disableAudio(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    await openSummonerWarsMobileEvidencePage(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow');
+    await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 5000 });
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+
+    const mobileViewport = hostPage.viewportSize();
+    const initialLayout = await hostPage.evaluate(() => ({
+      rootScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(initialLayout.rootScrollWidth).toBeLessThanOrEqual(initialLayout.innerWidth + 1);
+    expect(initialLayout.bodyScrollWidth).toBeLessThanOrEqual(initialLayout.innerWidth + 1);
+    expect(mobileViewport?.width).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.width);
+    expect(mobileViewport?.height).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.height);
+
+    let matchState = await readSummonerWarsHarnessState(hostPage);
+    let coreState = prepareDeterministicCore(matchState.core);
+    const expectedStartHandCount = coreState.players?.['0']?.hand?.length ?? 0;
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'summon');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedStartHandCount);
+    await waitForSummonerWarsHandStable(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow-start');
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-start', {
+        filename: '40-mobile-basic-flow-start.png',
+      }),
+      fullPage: false,
+    });
+
+    const unitCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-type="unit"][data-can-play="true"]')
+      .first();
+    await expect(unitCard).toBeVisible({ timeout: 8000 });
+    await unitCard.click();
+    expect.poll(() => hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]').count(), {
+      timeout: 3000,
+      message: '移动端单位牌点击后未进入选中态',
+    }).toBeGreaterThan(0);
+
+    const summonCell = hostPage.locator('[data-valid-summon="true"]').first();
+    await expect(summonCell).toBeVisible({ timeout: 8000 });
+    const summonRow = await summonCell.getAttribute('data-row');
+    const summonCol = await summonCell.getAttribute('data-col');
+    if (!summonRow || !summonCol) {
+      throw new Error('无法读取移动端召唤格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-summon="true"]');
+    await expect(hostPage.getByTestId(`sw-unit-${summonRow}-${summonCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'move');
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'move');
+    await waitForMyTurn(hostPage);
+
+    const movableUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"]:not([data-unit-class="summoner"])').first();
+    await expect(movableUnit).toBeVisible({ timeout: 8000 });
+    const movableUnitTestId = await movableUnit.getAttribute('data-testid');
+    if (!movableUnitTestId) {
+      throw new Error('无法读取移动单位 test id');
+    }
+    await clickBoardElement(hostPage, `[data-testid="${movableUnitTestId}"]`);
+
+    const moveCell = hostPage.locator('[data-valid-move="true"]').first();
+    await expect(moveCell).toBeVisible({ timeout: 8000 });
+    const moveRow = await moveCell.getAttribute('data-row');
+    const moveCol = await moveCell.getAttribute('data-col');
+    if (!moveRow || !moveCol) {
+      throw new Error('无法读取移动端移动格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-move="true"]');
+    await expect(hostPage.getByTestId(`sw-unit-${moveRow}-${moveCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'build');
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'build');
+    await waitForMyTurn(hostPage);
+
+    const structureCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-type="structure"][data-can-play="true"]')
+      .first();
+    await expect(structureCard).toBeVisible({ timeout: 8000 });
+    await structureCard.click();
+
+    const buildCell = hostPage.locator('[data-valid-build="true"]').first();
+    await expect(buildCell).toBeVisible({ timeout: 8000 });
+    const buildRow = await buildCell.getAttribute('data-row');
+    const buildCol = await buildCell.getAttribute('data-col');
+    if (!buildRow || !buildCol) {
+      throw new Error('无法读取移动端建造格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-build="true"]');
+    await expect(hostPage.getByTestId(`sw-structure-${buildRow}-${buildCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    const attackSetup = setupAttackState(matchState.core);
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: attackSetup.core,
+      sys: {
+        ...matchState.sys,
+        phase: attackSetup.core.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'attack');
+    await waitForMyTurn(hostPage);
+
+    await clickBoardElement(
+      hostPage,
+      `[data-testid="sw-unit-${attackSetup.attacker.row}-${attackSetup.attacker.col}"]`,
+    );
+    await expect.poll(async () => {
+      return hostPage.locator('[data-valid-attack="true"]').count();
+    }, {
+      timeout: 2000,
+      message: '等待移动端攻击目标出现',
+    }).toBeGreaterThan(0);
+
+    const targetCell = hostPage.getByTestId(`sw-cell-${attackSetup.target.row}-${attackSetup.target.col}`);
+    const isValidAttack = await targetCell.getAttribute('data-valid-attack').catch(() => null);
+    if (isValidAttack === 'true') {
+      await clickBoardElement(
+        hostPage,
+        `[data-testid="sw-cell-${attackSetup.target.row}-${attackSetup.target.col}"]`,
+      );
+    } else {
+      const anyValidTarget = hostPage.locator('[data-valid-attack="true"]').first();
+      await expect(anyValidTarget).toBeVisible({ timeout: 3000 });
+      const targetTestId = await anyValidTarget.getAttribute('data-testid');
+      if (!targetTestId) {
+        throw new Error('无法读取移动端攻击目标 test id');
+      }
+      await clickBoardElement(hostPage, `[data-testid="${targetTestId}"]`);
+    }
+
+    const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
+    await expect(diceOverlay).toBeVisible({ timeout: 10000 });
+    await diceOverlay.click({ force: true });
+    await expect(diceOverlay).toBeHidden({ timeout: 5000 });
+    await hostPage.waitForTimeout(1200);
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'magic');
+    const expectedMagicHandCountBeforeDiscard = coreState.players?.['0']?.hand?.length ?? 0;
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'magic');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountBeforeDiscard);
+
+    const discardCard = hostPage.getByTestId('sw-hand-area').locator('[data-card-id]').first();
+    await expect(discardCard).toBeVisible({ timeout: 8000 });
+    await discardCard.click();
+    const confirmDiscard = hostPage.getByTestId('sw-confirm-discard');
+    await expect(confirmDiscard).toBeVisible({ timeout: 5000 });
+    await confirmDiscard.click();
+    await expect(confirmDiscard).toBeHidden({ timeout: 5000 });
+    const expectedMagicHandCountAfterDiscard = Math.max(0, expectedMagicHandCountBeforeDiscard - 1);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountAfterDiscard);
+    await waitForSummonerWarsHandStable(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow-after-magic');
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '41-mobile-basic-flow-after-magic', {
+        filename: '41-mobile-basic-flow-after-magic.png',
+      }),
+      fullPage: false,
+    });
+
+    const finalLayout = await hostPage.evaluate(() => {
+      const root = document.documentElement;
+      const body = document.body;
+      const endPhase = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      const endPhaseRect = endPhase?.getBoundingClientRect();
+      const handAreaRect = handArea?.getBoundingClientRect();
+      return {
+        rootScrollWidth: root.scrollWidth,
+        bodyScrollWidth: body.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        endPhaseRect,
+        handAreaRect,
+      };
+    });
+    expect(finalLayout.rootScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.bodyScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.endPhaseRect?.right ?? 9999).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.endPhaseRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+    expect(finalLayout.handAreaRect).not.toBeNull();
+    expect(finalLayout.handAreaRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+
+    await hostContext.close();
   });
 
   test('移动横屏：长按放大与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {

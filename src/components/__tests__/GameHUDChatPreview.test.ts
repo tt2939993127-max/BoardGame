@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { MatchChatMessage } from '../../services/matchSocket';
 import { getLatestIncomingMessage, isSelfChatMessage, trimChatMessages } from '../game/framework/widgets/GameHUD';
 import { resolveFabSatellitesToRender, shouldTrackFabButtonRect } from '../system/FabMenu';
+import { resolveExpandedFabLayout } from '../system/fabLayout';
+import { resolveFabStoredPosition, serializeFabPositionPercent } from '../system/fabPosition';
 
 const buildMessage = (override: Partial<MatchChatMessage> = {}): MatchChatMessage => ({
     id: 'msg-1',
@@ -96,5 +98,83 @@ describe('FabMenu helpers', () => {
             isActive: false,
             hasContent: false,
         })).toBe(true);
+    });
+
+    it('恢复保存的越界百分比位置时会收回到视口内并要求回写存储', () => {
+        const resolved = resolveFabStoredPosition({
+            savedPosition: JSON.stringify({ leftPercent: 1.4, topPercent: -0.25 }),
+            legacyOffset: null,
+            viewportWidth: 100,
+            viewportHeight: 100,
+            basePosition: { left: 24, top: 24 },
+            normalizePosition: (target) => target,
+            clampPosition: (target) => ({
+                left: Math.min(Math.max(target.left, 12), 60),
+                top: Math.min(Math.max(target.top, 8), 72),
+            }),
+            resolvedButtonSize: 48,
+        });
+
+        expect(resolved.position).toEqual({ left: 60, top: 8 });
+        expect(resolved.percent).toEqual({ leftPercent: 0.6, topPercent: 0.08 });
+        expect(resolved.shouldPersist).toBe(true);
+        expect(resolved.clearLegacyOffset).toBe(false);
+    });
+
+    it('旧版 offset 恢复时也会收回到视口内并清理旧存储键', () => {
+        const resolved = resolveFabStoredPosition({
+            savedPosition: null,
+            legacyOffset: JSON.stringify({ x: 120, y: -80 }),
+            viewportWidth: 200,
+            viewportHeight: 120,
+            basePosition: { left: 40, top: 32 },
+            normalizePosition: (target) => target,
+            clampPosition: (target) => ({
+                left: Math.min(Math.max(target.left, 16), 120),
+                top: Math.min(Math.max(target.top, 10), 84),
+            }),
+            resolvedButtonSize: 48,
+        });
+
+        expect(resolved.position).toEqual({ left: 120, top: 10 });
+        expect(resolved.percent).toEqual(serializeFabPositionPercent({ left: 120, top: 10 }, 200, 120));
+        expect(resolved.shouldPersist).toBe(true);
+        expect(resolved.clearLegacyOffset).toBe(true);
+    });
+
+    it('展开态靠近底部时会整体上移，但保持主球与最近卫星按钮的固定间距', () => {
+        const layout = resolveExpandedFabLayout({
+            position: { left: 120, top: 130 },
+            alignment: { v: 'bottom', h: 'right' },
+            satelliteCount: 2,
+            buttonSize: 44,
+            buttonGap: 8,
+            viewportHeight: 160,
+            safeAreaTop: 0,
+            safeAreaBottom: 0,
+            getHorizontalAlignment: () => 'left',
+        });
+
+        expect(layout.position).toEqual({ left: 120, top: 116 });
+        expect(layout.listOffset).toEqual({ x: 0, y: 0 });
+        expect(layout.alignment).toEqual({ v: 'bottom', h: 'left' });
+    });
+
+    it('展开态靠近顶部时会整体下移，而不是只把卫星按钮单独推开', () => {
+        const layout = resolveExpandedFabLayout({
+            position: { left: 120, top: 6 },
+            alignment: { v: 'top', h: 'left' },
+            satelliteCount: 2,
+            buttonSize: 44,
+            buttonGap: 8,
+            viewportHeight: 180,
+            safeAreaTop: 12,
+            safeAreaBottom: 6,
+            getHorizontalAlignment: () => 'right',
+        });
+
+        expect(layout.position).toEqual({ left: 120, top: 12 });
+        expect(layout.listOffset).toEqual({ x: 0, y: 0 });
+        expect(layout.alignment).toEqual({ v: 'top', h: 'right' });
     });
 });
