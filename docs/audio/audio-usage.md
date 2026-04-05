@@ -156,6 +156,7 @@ return 'ui.general.khron_studio_rpg_interface_essentials_inventory_dialog_ucs_sy
 - **UI 点击音**：仅用于纯 UI 操作（面板/Tab 切换），通过 `GameButton`。
 - **操作拒绝音**：用户尝试不合法操作时（非自己回合、条件不满足等），通过 `playDeniedSound()` 播放（key: `puzzle.18.negative_pop_01`）。
 - **单一来源原则**：同一动作只能由"事件音"、"按钮音"或"拒绝音"其中之一触发，禁止重复。
+- **行为语义优先于素材类别**：埋葬、翻开埋葬牌、封印、召回、传送等特殊机制，优先选择能表达“行为结果”的 key，不能因为对象是卡牌就默认落到 `card.handling.*`。例如埋葬应优先用墓穴/封存/石化/沙埋一类语义音，而不是 `cards_scrolling_001` 这类纯翻牌/翻动音。
 
 示例：
 ```ts

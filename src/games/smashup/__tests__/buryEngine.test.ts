@@ -29,7 +29,7 @@ describe('bury engine', () => {
         expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
             type: SU_EVENTS.CARD_BURIED,
             payload: { defId: 'ancient_egyptians_mummy' },
-        } as any, context)).toBe('card.handling.decks_and_cards_sound_fx_pack.cards_scrolling_001');
+        } as any, context)).toBe('magic.general.spells_variations_vol_3.stonebound_summon.magspel_stonebound_summon_01_krst_none');
 
         expect(SMASHUP_AUDIO_CONFIG.feedbackResolver({
             type: SU_EVENTS.BURIED_CARD_UNCOVERED,
