@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { setAssetsBaseUrl } from '../../../core/AssetLoader';
+import { setAssetsBaseUrl, setAudioAssetsBaseUrl } from '../../../core/AssetLoader';
 
 const howlInstances: Array<{ options: Record<string, any> }> = [];
 
@@ -44,6 +44,7 @@ describe('AudioManager', () => {
     beforeEach(() => {
         AudioManager.unloadAll();
         setAssetsBaseUrl('/assets');
+        setAudioAssetsBaseUrl('/assets');
         howlInstances.length = 0;
     });
 

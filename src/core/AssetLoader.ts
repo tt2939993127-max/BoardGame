@@ -6,6 +6,7 @@
  * - 开发 / E2E：默认走本地 /assets
  * - 生产：默认走官方资源域名
  * - 显式配置 VITE_ASSETS_BASE_URL 时优先使用显式值
+ * - 音频可额外通过 VITE_AUDIO_ASSETS_BASE_URL 单独覆盖
  */
 
 import type { GameAssets, SpriteAtlasDefinition, CriticalImageResolverResult } from './types';
@@ -49,6 +50,7 @@ type AssetEnvLike = {
     DEV?: boolean | string;
     VITE_ASSETS_BASE_URL?: string;
     VITE_ASSET_SOURCE?: string;
+    VITE_AUDIO_ASSETS_BASE_URL?: string;
 };
 
 export function resolveAssetsBaseUrlFromEnv(env?: AssetEnvLike): string {
@@ -64,11 +66,18 @@ export function resolveAssetsBaseUrlFromEnv(env?: AssetEnvLike): string {
         : DEFAULT_ASSETS_BASE_URL;
 }
 
+export function resolveAudioAssetsBaseUrlFromEnv(env?: AssetEnvLike): string {
+    const explicitAudioBaseUrl = normalizeAssetsBaseUrl(env?.VITE_AUDIO_ASSETS_BASE_URL);
+    if (explicitAudioBaseUrl) return explicitAudioBaseUrl;
+    return resolveAssetsBaseUrlFromEnv(env);
+}
+
 /**
  * 资源基址。
  * 默认按环境自动选择，也允许通过 setAssetsBaseUrl 进行覆盖。
  */
 let assetsBaseUrl = resolveAssetsBaseUrlFromEnv(import.meta.env);
+let audioAssetsBaseUrl = resolveAudioAssetsBaseUrlFromEnv(import.meta.env);
 let assetHashes: Record<string, string> = typeof __ASSET_HASHES__ !== 'undefined' ? __ASSET_HASHES__ : {};
 const gameAssetBaseOverrides = new Map<string, string>();
 
@@ -78,6 +87,14 @@ export function setAssetsBaseUrl(value?: string): void {
 
 export function getAssetsBaseUrl(): string {
     return assetsBaseUrl;
+}
+
+export function setAudioAssetsBaseUrl(value?: string): void {
+    audioAssetsBaseUrl = normalizeAssetsBaseUrl(value) ?? resolveAudioAssetsBaseUrlFromEnv(import.meta.env);
+}
+
+export function getAudioAssetsBaseUrl(): string {
+    return audioAssetsBaseUrl;
 }
 
 export function setGameAssetBaseOverride(gameId: string, value?: string): void {
@@ -863,6 +880,12 @@ const stripKnownAssetPrefixes = (value: string) => {
     if (path.startsWith(`${assetsBaseUrl}/`)) {
         return path.slice(assetsBaseUrl.length + 1);
     }
+    if (path === audioAssetsBaseUrl) {
+        return '';
+    }
+    if (path.startsWith(`${audioAssetsBaseUrl}/`)) {
+        return path.slice(audioAssetsBaseUrl.length + 1);
+    }
     for (const overrideBase of gameAssetBaseOverrides.values()) {
         if (path === overrideBase) {
             return '';
@@ -898,6 +921,9 @@ const resolveAssetBaseUrlForPath = (value: string) => {
 };
 const isInternalAssetsUrl = (src: string) => {
     if (src.startsWith(assetsBaseUrl) || src.startsWith(`${assetsBaseUrl}/`)) {
+        return true;
+    }
+    if (src.startsWith(audioAssetsBaseUrl) || src.startsWith(`${audioAssetsBaseUrl}/`)) {
         return true;
     }
     for (const overrideBase of gameAssetBaseOverrides.values()) {
@@ -980,6 +1006,18 @@ export function assetsPath(path: string): string {
     return resolveVersionedAssetUrl(`${assetsBaseUrl}/${trimmed}`);
 }
 
+export function audioAssetsPath(path: string): string {
+    if (!isString(path)) return '';
+    if (isPassthroughSource(path)) return path;
+    if (!path) return audioAssetsBaseUrl;
+    if (path === audioAssetsBaseUrl || path.startsWith(`${audioAssetsBaseUrl}/`)) {
+        return resolveVersionedAssetUrl(path);
+    }
+    if (path.startsWith('/assets/')) return resolveVersionedAssetUrl(path);
+    const trimmed = path.startsWith('/') ? path.slice(1) : path;
+    return resolveVersionedAssetUrl(`${audioAssetsBaseUrl}/${trimmed}`);
+}
+
 /**
  * 获取优化图片 URL（webp）
  * 用于 <img> src
@@ -1031,7 +1069,7 @@ export function getOptimizedAudioUrl(src: string, basePath?: string): string {
     const normalizedBase = basePath ? basePath.replace(/\/+$/, '') : '';
     const trimmedSrc = src.startsWith('/') ? src.slice(1) : src;
     const fullPath = normalizedBase ? `${normalizedBase}/${trimmedSrc}` : trimmedSrc;
-    const normalized = assetsPath(fullPath);
+    const normalized = audioAssetsPath(fullPath);
     if (!normalized) return '';
 
     const { path } = splitUrlParts(normalized);

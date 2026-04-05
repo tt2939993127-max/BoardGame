@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { getOptimizedAudioUrl, setAssetHashesForTesting, setAssetsBaseUrl } from '../AssetLoader';
+import { getOptimizedAudioUrl, setAssetHashesForTesting, setAssetsBaseUrl, setAudioAssetsBaseUrl } from '../AssetLoader';
 
 describe('AssetLoader.getOptimizedAudioUrl', () => {
     beforeEach(() => {
         setAssetsBaseUrl('/assets');
+        setAudioAssetsBaseUrl('/assets');
         setAssetHashesForTesting({});
     });
 
@@ -32,5 +33,12 @@ describe('AssetLoader.getOptimizedAudioUrl', () => {
         });
         const url = getOptimizedAudioUrl('common/audio/dice/Dice_Roll_001.ogg');
         expect(url).toBe('/assets/common/audio/dice/compressed/Dice_Roll_001.ogg?v=1122aabb');
+    });
+
+    it('可为音频单独指定远端基址而不影响图片基址', () => {
+        setAssetsBaseUrl('/assets');
+        setAudioAssetsBaseUrl('https://assets.easyboardgame.top/official');
+        const url = getOptimizedAudioUrl('common/audio/dice/Dice_Roll_001.ogg');
+        expect(url).toBe('https://assets.easyboardgame.top/official/common/audio/dice/compressed/Dice_Roll_001.ogg');
     });
 });

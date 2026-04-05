@@ -5,7 +5,7 @@
 import { Howl, Howler } from 'howler';
 import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
-import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages, isCriticalImagesReady, resolveAssetsBaseUrlFromEnv } from '../../core/AssetLoader';
+import { audioAssetsPath, getOptimizedAudioUrl, waitForCriticalImages, isCriticalImagesReady, resolveAssetsBaseUrlFromEnv } from '../../core/AssetLoader';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -21,7 +21,7 @@ const normalizeBasePath = (basePath: string) => {
     if (isPassthroughSource(basePath)) {
         return ensureTrailingSlash(basePath);
     }
-    return ensureTrailingSlash(assetsPath(basePath));
+    return ensureTrailingSlash(audioAssetsPath(basePath));
 };
 
 const buildAudioSrc = (basePath: string, src: string) => {
