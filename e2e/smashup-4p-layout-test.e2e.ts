@@ -1046,12 +1046,20 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const viewportHeight = viewportSize?.height ?? 393;
         expect(
             detailPanelRect.width,
-            '移动端派系详情宽度不能再缩成中间小卡片，至少应占横屏视口宽度的 75%',
-        ).toBeGreaterThanOrEqual(viewportWidth * 0.75);
+            '移动端派系详情宽度不能明显小于 PC 同构效果，至少应占横屏视口宽度的 55%',
+        ).toBeGreaterThanOrEqual(viewportWidth * 0.55);
+        expect(
+            detailPanelRect.width,
+            '移动端派系详情宽度不能比 PC 同构效果更大，超过横屏视口宽度的 70% 视为放大过度',
+        ).toBeLessThanOrEqual(viewportWidth * 0.7);
         expect(
             detailPanelRect.height,
             '移动端派系详情高度不能再缩成小海报，至少应占横屏视口高度的 60%',
         ).toBeGreaterThanOrEqual(viewportHeight * 0.6);
+        expect(
+            detailPanelRect.height,
+            '移动端派系详情高度不能过高到接近铺满整屏，超过横屏视口高度的 90% 视为偏离 PC 主态',
+        ).toBeLessThanOrEqual(viewportHeight * 0.9);
         expect(detailPanelRect.left).toBeGreaterThanOrEqual(0);
         expect(detailPanelRect.right).toBeLessThanOrEqual(viewportWidth);
         expect(detailPanelRect.top).toBeGreaterThanOrEqual(0);

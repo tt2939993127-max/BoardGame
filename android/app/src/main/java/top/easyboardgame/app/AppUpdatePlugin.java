@@ -57,6 +57,7 @@ public class AppUpdatePlugin extends Plugin {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final AtomicBoolean taskRunning = new AtomicBoolean(false);
+    private volatile String runningTaskVersion = null;
 
     @PluginMethod
     public void getAppInfo(PluginCall call) {
@@ -107,6 +108,8 @@ public class AppUpdatePlugin extends Plugin {
         String version = normalizeNonEmpty(call.getString("version"));
         String downloadUrl = normalizeNonEmpty(call.getString("url"));
         String checksum = normalizeChecksum(call.getString("checksum"));
+        Boolean autoInstallValue = call.getBoolean("autoInstall");
+        boolean autoInstall = autoInstallValue == null ? true : autoInstallValue.booleanValue();
 
         if (version == null) {
             call.reject("缺少 version");
@@ -117,9 +120,18 @@ public class AppUpdatePlugin extends Plugin {
             return;
         }
         if (!taskRunning.compareAndSet(false, true)) {
-            call.reject("当前已有安装任务正在进行");
+            resolveRunningTaskOrReject(call, version);
             return;
         }
+
+        runningTaskVersion = version;
+        Log.i(
+            TAG,
+            "prepareUpdateInstall start version=" + version
+                + " url=" + downloadUrl
+                + " checksumEnabled=" + (checksum != null && !checksum.isEmpty())
+                + " autoInstall=" + autoInstall
+        );
 
         executor.execute(() -> {
             File apkFile = resolveApkFile(version);
@@ -135,6 +147,25 @@ public class AppUpdatePlugin extends Plugin {
                     downloadApk(downloadUrl, apkFile, checksum, version);
                 } else {
                     emitUpdateState(version, "verifying", 100, "indeterminate", null, apkFile.getAbsolutePath());
+                }
+
+                if (!autoInstall) {
+                    emitUpdateState(
+                        version,
+                        "prepared",
+                        100,
+                        "determinate",
+                        "更新已在后台下载完成，可在方便时继续安装。",
+                        apkFile.getAbsolutePath()
+                    );
+                    JSObject result = new JSObject();
+                    result.put("status", "prepared");
+                    result.put("version", version);
+                    result.put("progressPercent", 100);
+                    result.put("progressMode", "determinate");
+                    result.put("apkFilePath", apkFile.getAbsolutePath());
+                    resolveOnMainThread(call, result);
+                    return;
                 }
 
                 if (!canRequestPackageInstalls()) {
@@ -175,6 +206,7 @@ public class AppUpdatePlugin extends Plugin {
                 );
                 rejectOnMainThread(call, error.getMessage() != null ? error.getMessage() : "准备更新安装失败", error);
             } finally {
+                runningTaskVersion = null;
                 taskRunning.set(false);
             }
         });
@@ -242,6 +274,14 @@ public class AppUpdatePlugin extends Plugin {
         File tempFile = resolveTempApkFile(version);
         long resumedBytes = tempFile.exists() ? tempFile.length() : 0L;
 
+        Log.i(
+            TAG,
+            "downloadApk open version=" + version
+                + " resumedBytes=" + resumedBytes
+                + " tempExists=" + tempFile.exists()
+                + " tempPath=" + tempFile.getAbsolutePath()
+        );
+
         try {
             connection = (HttpURLConnection) new URL(downloadUrl).openConnection();
             connection.setConnectTimeout(15000);
@@ -253,14 +293,26 @@ public class AppUpdatePlugin extends Plugin {
 
             int responseCode = connection.getResponseCode();
             boolean appendMode = false;
+            String contentRange = connection.getHeaderField("Content-Range");
+
+            Log.i(
+                TAG,
+                "downloadApk response version=" + version
+                    + " code=" + responseCode
+                    + " resumedBytes=" + resumedBytes
+                    + " contentLength=" + connection.getContentLengthLong()
+                    + " contentRange=" + contentRange
+            );
 
             if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_PARTIAL) {
                 appendMode = true;
+                Log.i(TAG, "downloadApk resume-append version=" + version + " resumedBytes=" + resumedBytes);
             } else if (resumedBytes > 0 && responseCode == HttpURLConnection.HTTP_OK) {
                 if (!tempFile.delete() && tempFile.exists()) {
                     throw new IOException("重置续传临时文件失败");
                 }
                 resumedBytes = 0L;
+                Log.w(TAG, "downloadApk resume-reset version=" + version + " serverReturned=200");
             } else if (resumedBytes > 0 && responseCode == HTTP_RANGE_NOT_SATISFIABLE) {
                 if (isChecksumMatch(tempFile, checksum)) {
                     if (apkFile.exists() && !apkFile.delete()) {
@@ -270,11 +322,13 @@ public class AppUpdatePlugin extends Plugin {
                         throw new IOException("恢复已完成更新包失败");
                     }
                     emitUpdateState(version, "verifying", 100, "indeterminate", null, apkFile.getAbsolutePath());
+                    Log.i(TAG, "downloadApk resume-complete version=" + version + " source=416+checksum");
                     return;
                 }
                 if (!tempFile.delete() && tempFile.exists()) {
                     throw new IOException("重置不可续传临时文件失败");
                 }
+                Log.w(TAG, "downloadApk resume-rejected version=" + version + " source=416+checksum-miss");
                 throw new IOException("服务端拒绝续传，临时包校验也未通过");
             }
 
@@ -298,6 +352,14 @@ public class AppUpdatePlugin extends Plugin {
                     }
                 }
             }
+
+            Log.i(
+                TAG,
+                "downloadApk transfer-start version=" + version
+                    + " appendMode=" + appendMode
+                    + " totalBytes=" + totalBytes
+                    + " checksumEnabled=" + (digest != null)
+            );
 
             try (
                 InputStream inputStream = new BufferedInputStream(connection.getInputStream());
@@ -334,6 +396,12 @@ public class AppUpdatePlugin extends Plugin {
             }
 
             emitUpdateState(version, "verifying", 100, "indeterminate", null, apkFile.getAbsolutePath());
+            Log.i(
+                TAG,
+                "downloadApk transfer-finished version=" + version
+                    + " downloadedBytes=" + downloadedBytes
+                    + " finalPath=" + apkFile.getAbsolutePath()
+            );
             if (digest != null && !checksum.equalsIgnoreCase(bytesToHex(digest.digest()))) {
                 throw new IOException("更新包校验失败，请重新下载");
             }
@@ -459,6 +527,7 @@ public class AppUpdatePlugin extends Plugin {
 
         try {
             JSONObject state = readPersistedState(resolveStateFile(version));
+            Log.i(TAG, "getPreparedUpdateState version=" + version + " exists=" + (state != null));
             if (state == null) {
                 JSObject result = new JSObject();
                 result.put("exists", false);
@@ -473,6 +542,37 @@ public class AppUpdatePlugin extends Plugin {
             Log.e(TAG, "getPreparedUpdateState failed version=" + version, error);
             call.reject("读取更新任务状态失败", error);
         }
+    }
+
+    private void resolveRunningTaskOrReject(PluginCall call, String version) {
+        String activeVersion = runningTaskVersion;
+        if (activeVersion != null && activeVersion.equals(version)) {
+            try {
+                JSObject result = buildRunningTaskSnapshot(version);
+                Log.i(TAG, "prepareUpdateInstall attach-running-task version=" + version + " payload=" + result.toString());
+                call.resolve(result);
+                return;
+            } catch (Exception error) {
+                Log.w(TAG, "prepareUpdateInstall attach-running-task failed version=" + version, error);
+            }
+        }
+
+        Log.w(TAG, "prepareUpdateInstall task-conflict requestedVersion=" + version + " activeVersion=" + activeVersion);
+        call.reject("当前已有安装任务正在进行");
+    }
+
+    private JSObject buildRunningTaskSnapshot(String version) throws IOException, JSONException {
+        JSONObject persistedState = readPersistedState(resolveStateFile(version));
+        if (persistedState != null) {
+            return jsonToJsObject(persistedState);
+        }
+
+        JSObject result = new JSObject();
+        result.put("version", version);
+        result.put("status", "queued");
+        result.put("progressMode", "indeterminate");
+        result.put("apkFilePath", resolveApkFile(version).getAbsolutePath());
+        return result;
     }
 
     private void resolveOnMainThread(PluginCall call, JSObject result) {

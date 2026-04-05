@@ -919,10 +919,11 @@ describe('androidLiveUpdates', () => {
         });
     });
 
-    it('AndroidNativeUpdateManager 非强更自动检查不应直接拉起安装器，手动检查才允许进入安装链路', async () => {
+    it('AndroidNativeUpdateManager 非强更自动检查应后台预下载，但手动检查才允许进入安装链路', async () => {
         vi.resetModules();
 
         let requestListener: ((request: { interactive?: boolean }) => void) | null = null;
+        const preloadMock = vi.fn().mockResolvedValue({ status: 'prepared', version: '0.5.2', progressPercent: 100 });
         const prepareMock = vi.fn().mockResolvedValue({ status: 'installer-launched' });
 
         vi.doMock('../mobile/androidNativeUpdates', () => ({
@@ -954,6 +955,7 @@ describe('androidLiveUpdates', () => {
                 manifestUrl: 'https://example.com/latest.json',
                 channel: 'stable',
             })),
+            startAndroidNativeUpdatePreload: preloadMock,
             subscribeAndroidNativeUpdateRequests: vi.fn((listener) => {
                 requestListener = listener;
                 return () => undefined;
@@ -987,6 +989,7 @@ describe('androidLiveUpdates', () => {
 
         await waitFor(() => {
             expect(typeof requestListener).toBe('function');
+            expect(preloadMock).toHaveBeenCalledTimes(1);
         });
         expect(prepareMock).not.toHaveBeenCalled();
 
@@ -1069,7 +1072,7 @@ describe('androidLiveUpdates', () => {
     it('AndroidNativeUpdateManager 冷启动命中原生下载中状态时应自动续传但非强更不阻塞页面', async () => {
         vi.resetModules();
 
-        const prepareMock = vi.fn().mockResolvedValue({ status: 'installer-launched' });
+        const preloadMock = vi.fn().mockResolvedValue({ status: 'prepared' });
         const mapStateMock = vi.fn(() => ({
             phase: 'downloading',
             blocking: true,
@@ -1094,7 +1097,7 @@ describe('androidLiveUpdates', () => {
             continueAndroidNativeUpdateInstall: vi.fn(),
             mapNativeUpdateEventToState: mapStateMock,
             openAndroidUnknownSourcesSettings: vi.fn(),
-            prepareAndroidNativeUpdateInstall: prepareMock,
+            prepareAndroidNativeUpdateInstall: vi.fn(),
             readPreparedAndroidUpdateState: vi.fn().mockResolvedValue({
                 version: '0.5.2',
                 status: 'downloading',
@@ -1106,6 +1109,7 @@ describe('androidLiveUpdates', () => {
                 manifestUrl: 'https://example.com/latest.json',
                 channel: 'stable',
             })),
+            startAndroidNativeUpdatePreload: preloadMock,
             subscribeAndroidNativeUpdateRequests: vi.fn(() => () => undefined),
             subscribeAndroidNativeUpdateState: vi.fn().mockResolvedValue({
                 remove: async () => undefined,
@@ -1135,11 +1139,96 @@ describe('androidLiveUpdates', () => {
         render(createElement(AndroidNativeUpdateManager));
 
         await waitFor(() => {
-            expect(prepareMock).toHaveBeenCalledTimes(1);
+            expect(preloadMock).toHaveBeenCalledTimes(1);
         });
         expect(mapStateMock).toHaveBeenCalledWith(expect.objectContaining({
             status: 'downloading',
             progressPercent: 42,
+        }), expect.objectContaining({
+            blocking: false,
+        }));
+    });
+
+    it('AndroidNativeUpdateManager 命中同版本在途下载任务时，应继续显示下载态而不是掉回 checking/error', async () => {
+        vi.resetModules();
+
+        const preloadMock = vi.fn().mockResolvedValue({
+            version: '0.5.2',
+            status: 'downloading',
+            progressPercent: 68,
+            progressMode: 'determinate',
+        });
+        const mapStateMock = vi.fn(() => ({
+            phase: 'downloading',
+            blocking: false,
+            progressPercent: 68,
+        }));
+
+        vi.doMock('../mobile/androidNativeUpdates', () => ({
+            HIDDEN_ANDROID_NATIVE_UPDATE_STATE: {
+                phase: 'hidden',
+                blocking: false,
+            },
+            checkAndroidNativeUpdateAvailability: vi.fn().mockResolvedValue({
+                available: true,
+                manifest: {
+                    version: '0.5.2',
+                    url: 'https://example.com/app.apk',
+                    forceUpdate: false,
+                    forceUpdateTitle: '需要升级',
+                    forceUpdateMessage: '请安装新版应用',
+                },
+            }),
+            continueAndroidNativeUpdateInstall: vi.fn(),
+            mapNativeUpdateEventToState: mapStateMock,
+            openAndroidUnknownSourcesSettings: vi.fn(),
+            prepareAndroidNativeUpdateInstall: vi.fn(),
+            readPreparedAndroidUpdateState: vi.fn().mockResolvedValue({
+                version: '0.5.2',
+                status: 'downloading',
+                progressPercent: 42,
+            }),
+            requestAndroidNativeUpdateCheck: vi.fn(),
+            readAndroidNativeUpdateConfig: vi.fn(() => ({
+                enabled: true,
+                manifestUrl: 'https://example.com/latest.json',
+                channel: 'stable',
+            })),
+            startAndroidNativeUpdatePreload: preloadMock,
+            subscribeAndroidNativeUpdateRequests: vi.fn(() => () => undefined),
+            subscribeAndroidNativeUpdateState: vi.fn().mockResolvedValue({
+                remove: async () => undefined,
+            }),
+        }));
+        vi.doMock('../mobile/androidRuntime', () => ({
+            isNativeAndroidRuntime: () => true,
+        }));
+        vi.doMock('../../contexts/ToastContext', () => ({
+            useToast: () => ({
+                warning: vi.fn(),
+                success: vi.fn(),
+                info: vi.fn(),
+                error: vi.fn(),
+            }),
+        }));
+        vi.doMock('react-i18next', () => ({
+            useTranslation: () => ({
+                t: (key: string) => key,
+            }),
+        }));
+        vi.doMock('../../components/system/AndroidNativeUpdateGate', () => ({
+            AndroidNativeUpdateGate: () => null,
+        }));
+
+        const { AndroidNativeUpdateManager } = await import('../../components/system/AndroidNativeUpdateManager');
+        render(createElement(AndroidNativeUpdateManager));
+
+        await waitFor(() => {
+            expect(preloadMock).toHaveBeenCalledTimes(1);
+        });
+        expect(mapStateMock).toHaveBeenLastCalledWith(expect.objectContaining({
+            status: 'downloading',
+            progressPercent: 68,
         }), expect.objectContaining({
             blocking: false,
         }));
@@ -1222,6 +1311,92 @@ describe('androidLiveUpdates', () => {
         }), expect.objectContaining({
             blocking: true,
         }));
+    });
+
+    it('AndroidNativeUpdateManager 已后台预下载完成时，手动检查应直接继续安装而不是重新下载', async () => {
+        vi.resetModules();
+
+        let requestListener: ((request: { interactive?: boolean }) => void) | null = null;
+        const continueMock = vi.fn().mockResolvedValue({ status: 'installer-launched' });
+        const prepareMock = vi.fn();
+
+        vi.doMock('../mobile/androidNativeUpdates', () => ({
+            HIDDEN_ANDROID_NATIVE_UPDATE_STATE: {
+                phase: 'hidden',
+                blocking: false,
+            },
+            checkAndroidNativeUpdateAvailability: vi.fn().mockResolvedValue({
+                available: true,
+                manifest: {
+                    version: '0.5.2',
+                    url: 'https://example.com/app.apk',
+                    forceUpdate: false,
+                    forceUpdateTitle: '需要升级',
+                    forceUpdateMessage: '请安装新版应用',
+                },
+            }),
+            continueAndroidNativeUpdateInstall: continueMock,
+            mapNativeUpdateEventToState: vi.fn(() => ({
+                phase: 'hidden',
+                blocking: false,
+            })),
+            openAndroidUnknownSourcesSettings: vi.fn(),
+            prepareAndroidNativeUpdateInstall: prepareMock,
+            startAndroidNativeUpdatePreload: vi.fn(),
+            readPreparedAndroidUpdateState: vi.fn().mockResolvedValue({
+                version: '0.5.2',
+                status: 'prepared',
+                progressPercent: 100,
+            }),
+            requestAndroidNativeUpdateCheck: vi.fn(),
+            readAndroidNativeUpdateConfig: vi.fn(() => ({
+                enabled: true,
+                manifestUrl: 'https://example.com/latest.json',
+                channel: 'stable',
+            })),
+            subscribeAndroidNativeUpdateRequests: vi.fn((listener) => {
+                requestListener = listener;
+                return () => undefined;
+            }),
+            subscribeAndroidNativeUpdateState: vi.fn().mockResolvedValue({
+                remove: async () => undefined,
+            }),
+        }));
+        vi.doMock('../mobile/androidRuntime', () => ({
+            isNativeAndroidRuntime: () => true,
+        }));
+        vi.doMock('../../contexts/ToastContext', () => ({
+            useToast: () => ({
+                warning: vi.fn(),
+                success: vi.fn(),
+                info: vi.fn(),
+                error: vi.fn(),
+            }),
+        }));
+        vi.doMock('react-i18next', () => ({
+            useTranslation: () => ({
+                t: (key: string) => key,
+            }),
+        }));
+        vi.doMock('../../components/system/AndroidNativeUpdateGate', () => ({
+            AndroidNativeUpdateGate: () => null,
+        }));
+
+        const { AndroidNativeUpdateManager } = await import('../../components/system/AndroidNativeUpdateManager');
+        render(createElement(AndroidNativeUpdateManager));
+
+        await waitFor(() => {
+            expect(typeof requestListener).toBe('function');
+        });
+
+        await act(async () => {
+            requestListener?.({ interactive: true });
+        });
+
+        await waitFor(() => {
+            expect(continueMock).toHaveBeenCalledWith('0.5.2');
+        });
+        expect(prepareMock).not.toHaveBeenCalled();
     });
 
     it('AndroidNativeUpdateManager 已恢复错误态时，手动重试应重新发起 prepare', async () => {
