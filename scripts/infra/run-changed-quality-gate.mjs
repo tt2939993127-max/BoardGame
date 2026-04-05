@@ -33,6 +33,7 @@ const CACHE_DIR = path.join(repoRoot, 'temp', 'quality-gate-cache');
 const PRE_PUSH_CACHE_FILE = path.join(CACHE_DIR, 'pre-push.json');
 const COMMAND_CACHE_FILE = path.join(CACHE_DIR, 'command-results.json');
 const QUALITY_GATE_TYPECHECK_BUILD_INFO = path.join('temp', 'quality-gate-cache', 'typecheck.tsbuildinfo');
+const STABLE_VITEST_NODE_OPTIONS = '--max-old-space-size=8192';
 
 function runGit(args, options = {}) {
   try {
@@ -567,6 +568,23 @@ function commandToLine(command, args) {
   return [command, ...args].map(quoteArg).join(' ');
 }
 
+function mergeNodeOptions(extraOption, existingValue = process.env.NODE_OPTIONS) {
+  const trimmedExtra = extraOption?.trim();
+  const trimmedExisting = existingValue?.trim();
+  if (!trimmedExtra) return trimmedExisting;
+  if (!trimmedExisting) return trimmedExtra;
+  return trimmedExisting.includes(trimmedExtra)
+    ? trimmedExisting
+    : `${trimmedExisting} ${trimmedExtra}`;
+}
+
+function createVitestEnv() {
+  return {
+    ...process.env,
+    NODE_OPTIONS: mergeNodeOptions(STABLE_VITEST_NODE_OPTIONS),
+  };
+}
+
 function shouldDirectSpawnOnWindows(command) {
   if (process.platform !== 'win32') return true;
   const normalized = command.trim().toLowerCase();
@@ -586,13 +604,17 @@ function runCommand({ label, reason, command, args }) {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
-        env: process.env,
+        env: command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')
+          ? createVitestEnv()
+          : process.env,
       })
     : spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
-        env: process.env,
+        env: command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')
+          ? createVitestEnv()
+          : process.env,
       });
   const durationMs = Date.now() - startAt;
 

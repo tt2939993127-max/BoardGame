@@ -103,6 +103,9 @@
 5. `2026-04-05` 追加修正：本审计原先只核对了 `previewRef.index` 与图集卡位的一致性，但漏审了“共享 atlas 位的调试发牌契约”。
 6. 枪手 `slot-22 / 23 / 24` 虽然继续共用 `index` 是正确运行时规格，但调试面板曾错误地仅按 `atlasIndex` 发牌，导致点击 `upgrade-deadeye-2` 一行时可能把同槽位的 `card-the-law` 发进手牌。
 7. 已在 `src/games/dicethrone/domain/cheatModifier.ts` 增加“共享索引拒绝模糊发牌”保护，并在 `src/games/dicethrone/debug-config.tsx` 改为按精确 `deckIndex` 发牌；因此旧结论“复合位继续共用 atlas index 即可收口”不再完整，需连同调试入口一起审计。
+8. `2026-04-05` 再次修订：用户反馈的“正常对局里升级牌像是触发了子技能效果”并非领域层把 `upgrade-deadeye-2` 执行成了 `deadeye` 伤害，而是 UI 特写层把同一轮的 `CARD_PLAYED` 与 `ABILITY_REPLACED` 都当成“新打出一张牌”。
+9. 旧审计结论“正常对局无额外风险，只需关注 atlas 索引/调试发牌”因此失效；还必须审计升级事件在 `useCardSpotlight` 的消费契约，否则一次升级会被拆成两次卡牌特写，和真正技能结算信号混淆。
+10. 已在 `src/games/dicethrone/hooks/useCardSpotlight.ts` 增加升级事件去重：同一玩家、同一卡牌、同批次时间窗内的 `ABILITY_REPLACED` 不再重复入队；并在 `src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx` 补了正常对局事件链回归。
 
 ## 命中审计维度
 
@@ -123,10 +126,12 @@ npx vitest run --config vitest.config.audit.ts --configLoader native src/games/d
 - `criticalImageResolver.test.ts` 通过：确认 `setup/playing` 阶段不再预加载 `hand-cards-atlas`
 - `card-cross-audit.test.ts -t "枪手 / 武士卡图接线一致性"` 通过：确认两边 `previewRef` 都直接指向 `ability-cards` atlas
 - `basic-commands-coverage.test.ts -t "作弊发牌共享 atlas 索引保护"` 通过：确认 `slot-24` 这类共享索引不会再模糊发牌，且仍可按精确 `deckIndex` 发出 `upgrade-deadeye-2`
+- `cross-hero.test.ts -t "upgrade-deadeye-2 从正常牌库抽到手后，打出仍应走升级而不是其他效果"` 通过：确认正常对局领域链路仍是升级，不是真执行成 `deadeye` 子效果
+- `BonusDieOverlay.test.tsx -t "升级牌的 CARD_PLAYED 与 ABILITY_REPLACED 不应被拆成两次卡牌特写"` 通过：确认正常对局里升级牌不会再被 UI 特写层重复消费
 
 ## 最终结论
 
 - 当前正确规格不是“再做一套 hand atlas”或“给每张牌单独切运行时图”，而是和老角色一致，继续直接使用 `ability-cards` atlas。
-- 真正需要重新录入的是 atlas 索引映射，不是整套卡牌文本或效果数据。
+- 当前证据不支持“需要整批重录枪手/武士卡牌效果数据”。本轮命中的正常对局问题是升级事件展示契约，而不是 `upgrade-deadeye-2` 领域执行错成了 `deadeye` 子效果。
 - 枪手 `slot-22 / 23 / 24` 的复合展示位继续共用 atlas index 仍是预期行为；真正的 bug 是调试发牌入口把共享索引误当成“唯一卡标识”。
-- 本轮审计修订后，枪手 / 武士手牌预览链路与调试发牌链路都已回到统一 atlas 契约；现存风险只剩未来如果产品要“每张复合位都显示独立缩略图”，那将是新需求，不是当前缺陷。
+- 本轮审计修订后，枪手 / 武士手牌预览链路、调试发牌链路，以及升级牌正常对局的卡牌特写链路都已回到统一 atlas / 事件契约；现存风险只剩未来如果产品要“每张复合位都显示独立缩略图”，那将是新需求，不是当前缺陷。
