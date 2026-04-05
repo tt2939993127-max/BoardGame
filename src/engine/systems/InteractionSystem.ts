@@ -64,6 +64,7 @@ export interface PromptMultiConfig {
 export type SimpleChoiceAutoRefresh =
     | 'hand'
     | 'discard'
+    | 'hand_or_discard'
     | 'deck'
     | 'field'
     | 'base'
@@ -559,7 +560,7 @@ export function resolveInteraction<TCore>(
             freshOptions = data.optionsGenerator(state, data);
         } else {
             // 使用通用刷新逻辑（opt-in：只有显式声明了 autoRefresh 才刷新）
-            const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing' | undefined;
+            const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'hand_or_discard' | 'deck' | 'field' | 'base' | 'ongoing' | 'buried' | undefined;
             freshOptions = refreshOptionsGeneric(state, next, data.options, autoRefresh);
         }
         
@@ -665,9 +666,27 @@ function refreshOptionsGeneric<T>(
                 return player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false;
             }
             case 'discard': {
+                const player = state.core?.players?.[interaction.playerId];
+                if (val.cardUid) {
+                    return player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false;
+                }
+                if (val.defId) {
+                    return player?.discard?.some((c: any) => c.defId === val.defId) ?? false;
+                }
+                return true;
+            }
+            case 'hand_or_discard': {
                 if (!val.cardUid) return true;
                 const player = state.core?.players?.[interaction.playerId];
-                return player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false;
+                const zoneHint = val.zone ?? val.from ?? val.sourceZone;
+                if (zoneHint === 'hand') {
+                    return player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false;
+                }
+                if (zoneHint === 'discard') {
+                    return player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false;
+                }
+                return (player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false)
+                    || (player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false);
             }
             case 'deck': {
                 if (!val.cardUid) return true;
@@ -848,7 +867,7 @@ export function refreshInteractionOptions<TCore>(
         freshOptions = data.optionsGenerator(state, data);
     } else {
         // 使用通用刷新逻辑（opt-in：只有显式声明了 autoRefresh 才刷新）
-        const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing' | undefined;
+        const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'hand_or_discard' | 'deck' | 'field' | 'base' | 'ongoing' | 'buried' | undefined;
         freshOptions = refreshOptionsGeneric(state, currentInteraction, data.options, autoRefresh);
     }
     

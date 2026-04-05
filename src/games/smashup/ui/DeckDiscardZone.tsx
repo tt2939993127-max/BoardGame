@@ -232,9 +232,9 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                             }}
                                             className={`relative aspect-[0.714] w-full rounded-sm overflow-hidden shadow-lg border transition-all cursor-pointer ${
                                                 isSelected
-                                                    ? 'border-green-400 ring-2 ring-green-400 -translate-y-1 shadow-[0_0_18px_rgba(74,222,128,0.65)]'
+                                                    ? 'border-purple-400 ring-2 ring-purple-400 -translate-y-1 shadow-[0_0_18px_rgba(168,85,247,0.65)]'
                                                     : isActivatable
-                                                    ? 'border-amber-400 ring-1 ring-amber-300/90 hover:-translate-y-1 shadow-[0_0_12px_rgba(251,191,36,0.28)]'
+                                                    ? 'border-green-400 ring-1 ring-green-300/90 hover:-translate-y-1 shadow-[0_0_12px_rgba(74,222,128,0.28)]'
                                                     : 'border-slate-300 hover:-translate-y-1'
                                             }`}
                                             title={titanName}
@@ -250,7 +250,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                                 <div className="absolute inset-x-0 top-0 h-1.5 bg-amber-300/90" />
                                             )}
                                             {isSelected && (
-                                                <div className="absolute inset-0 border-2 border-green-400 pointer-events-none" />
+                                                <div className="absolute inset-0 border-2 border-purple-400 pointer-events-none" />
                                             )}
                                         </button>
                                         {showDesktopInspectButton && (
@@ -312,12 +312,12 @@ export const DeckDiscardZone: React.FC<Props> = ({
                     )}
                 </div>
                 <div
-                    className={`mt-2 px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-green-600/85 text-white animate-pulse' : showDiscard ? 'bg-green-700/85 text-green-50' : 'bg-black/60 text-white group-hover:text-green-300'}`}
+                    className={`mt-2 px-2 py-0.5 rounded font-bold uppercase tracking-wider flex items-center gap-1 transition-colors ${hasPlayableFromDiscard ? 'bg-green-600/85 text-white animate-pulse' : showDiscard ? 'bg-purple-700/85 text-purple-50' : 'bg-black/60 text-white group-hover:text-purple-300'}`}
                     style={{ minHeight: labelMinHeight, fontSize: labelFontSize }}
                 >
                     <Trash2 size={10} /> {t('ui.discard')} ({discard.length})
                     {hasPlayableFromDiscard && <span className="text-[9px] ml-1">⚡</span>}
-                    {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-green-300 text-[9px]">({t('ui.viewing')})</span>}
+                    {(!isMyTurn && !hasPlayableFromDiscard) && <span className="text-purple-300 text-[9px]">({t('ui.viewing')})</span>}
                 </div>
             </div>
 

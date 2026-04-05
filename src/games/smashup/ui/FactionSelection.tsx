@@ -122,10 +122,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
     const useDesktopLikeLandscapeLayout = isMobileLandscape;
     const selectionGridClassName = useDesktopLikeLandscapeLayout
-        ? 'mx-auto grid w-full max-w-none grid-cols-5 justify-items-center gap-3.5 pb-28'
+        ? 'mx-auto grid w-fit max-w-none grid-cols-[repeat(5,160px)] justify-center gap-x-4 gap-y-3.5 pb-28'
         : 'mx-auto grid w-full max-w-[920px] grid-cols-4 justify-items-center gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
     const selectionCardFrameClassName = useDesktopLikeLandscapeLayout
-        ? 'relative mb-1.5 w-full max-w-[160px] aspect-[0.727]'
+        ? 'relative mb-1.5 w-[160px] aspect-[0.727]'
         : 'relative mb-2.5 w-full max-w-[148px] lg:max-w-[192px] aspect-[0.727] xl:max-w-[208px]';
     const selectionCardSurfaceClassName = useDesktopLikeLandscapeLayout
         ? 'absolute inset-0 rounded-sm overflow-hidden shadow-[3px_3px_10px_rgba(0,0,0,0.38)] border-[4px] transition-all bg-white p-[3px]'
@@ -293,7 +293,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     );
     const playerSelectionRail = (
         <div
-            className={useDesktopLikeLandscapeLayout ? 'absolute bottom-[18px] inset-x-0 z-40 pointer-events-none' : 'absolute bottom-3 inset-x-0 z-40 pointer-events-none'}
+            className={useDesktopLikeLandscapeLayout ? 'absolute bottom-[17px] inset-x-0 z-40 pointer-events-none' : 'absolute bottom-3 inset-x-0 z-40 pointer-events-none'}
             data-testid="faction-selection-player-rail"
         >
             <div className={useDesktopLikeLandscapeLayout ? 'max-w-6xl mx-auto flex items-end justify-center gap-5 px-3' : 'max-w-7xl mx-auto flex items-end justify-center gap-3 px-3 lg:gap-8 lg:px-6'}>

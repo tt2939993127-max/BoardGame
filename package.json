@@ -31,6 +31,8 @@
     "clean:ports": "node scripts/infra/clean_ports.js",
     "generate:manifests": "node scripts/game/generate_game_manifests.js",
     "generate:locales": "node scripts/game/generate-card-locales.cjs",
+    "smashup:kb:export": "npx tsx scripts/export-smashup-kb.ts",
+    "smashup:wiki:crawl": "npx tsx scripts/crawl-smashup-wiki.ts",
     "assets:manifest": "node scripts/assets/generate_asset_manifests.js",
     "assets:validate": "node scripts/assets/generate_asset_manifests.js --validate",
     "preview": "node scripts/infra/vite-cli-safe.mjs preview --configLoader bundle",

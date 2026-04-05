@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getGamesByCategory, refreshUgcGames } from '../../config/games.config';
+import {
+    getGamesByCategory,
+    refreshUgcGames,
+    shouldIncludeManifestInRegistry,
+} from '../../config/games.config';
 
 const createResponse = (data: unknown) => ({
     ok: true,
@@ -7,6 +11,54 @@ const createResponse = (data: unknown) => ({
         get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
     },
     json: async () => data,
+});
+
+describe('games.config manifest registry gate', () => {
+    it('生产环境不应把内部 tool 清单暴露到首页注册表', () => {
+        expect(shouldIncludeManifestInRegistry({
+            id: 'archview',
+            type: 'tool',
+            enabled: true,
+            titleKey: 'games.archview.title',
+            descriptionKey: 'games.archview.description',
+            category: 'tools',
+            playersKey: 'games.archview.players',
+            ai: {
+                capture: false,
+                localAi: false,
+                remoteAi: false,
+            },
+            icon: '🏗️',
+            mobileProfile: 'none',
+            shellTargets: ['pwa'],
+        }, {
+            isNativeAndroidAppRuntime: false,
+            isDev: false,
+        })).toBe(false);
+    });
+
+    it('开发环境仍可保留 tool 清单入口', () => {
+        expect(shouldIncludeManifestInRegistry({
+            id: 'archview',
+            type: 'tool',
+            enabled: true,
+            titleKey: 'games.archview.title',
+            descriptionKey: 'games.archview.description',
+            category: 'tools',
+            playersKey: 'games.archview.players',
+            ai: {
+                capture: false,
+                localAi: false,
+                remoteAi: false,
+            },
+            icon: '🏗️',
+            mobileProfile: 'none',
+            shellTargets: ['pwa'],
+        }, {
+            isNativeAndroidAppRuntime: false,
+            isDev: true,
+        })).toBe(true);
+    });
 });
 
 // UGC 功能暂时跳过测试

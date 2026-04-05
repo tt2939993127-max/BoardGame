@@ -228,7 +228,7 @@ async function waitForSelectableMinion(page: Page, minionUid: string): Promise<v
             if (!(node instanceof HTMLElement)) return { exists: false, selectable: false, className: '' };
             return {
                 exists: true,
-                selectable: node.className.includes('ring-green-400') || node.className.includes('ring-green-300'),
+                selectable: node.className.includes('ring-purple-400') || node.className.includes('ring-purple-300'),
                 className: node.className,
             };
         }, minionUid);
@@ -907,6 +907,134 @@ test('Oops Ancient Egyptians 埋葬条带与翻开交互应在浏览器中可完
     }, { timeout: 8000 }).toBe(true);
 
     await saveEvidenceScreenshot(page, testInfo, 'oops-bury-strip-after-uncover');
+});
+
+test('Oops Sphinx 起始回合回收埋葬牌后，标准翻开阶段不应再出现刚消耗的埋葬牌', async ({ page, game }, testInfo) => {
+    test.setTimeout(60000);
+
+    await game.openTestGame('smashup');
+    await game.setupScene({
+        gameId: 'smashup',
+        player0: {
+            factions: ['ancient_egyptians', 'robots'],
+            hand: [],
+            deck: [
+                { uid: 'draw-1', defId: 'robot_microbot_alpha', type: 'minion' },
+                { uid: 'draw-2', defId: 'robot_zapbot', type: 'minion' },
+            ],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+        },
+        player1: {
+            factions: ['vikings', 'samurai'],
+            hand: [],
+            deck: [],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+        },
+        currentPlayer: '1',
+        phase: 'endTurn',
+        bases: [
+            { defId: 'base_pyramids' },
+            { defId: 'base_a' },
+        ],
+        extra: {
+            core: {
+                turnOrder: ['0', '1'],
+                turnNumber: 1,
+                nextUid: 7000,
+                bases: [
+                    {
+                        defId: 'base_pyramids',
+                        minions: [],
+                        ongoingActions: [],
+                        buriedCards: [
+                            {
+                                uid: 'sphinx-buried-return',
+                                defId: 'ancient_egyptians_lost_knowledge',
+                                trueOwnerId: '0',
+                                controllerId: '0',
+                                buriedFrom: 'hand',
+                            },
+                            {
+                                uid: 'sphinx-buried-keep',
+                                defId: 'ancient_egyptians_you_can_take_it_with_you',
+                                trueOwnerId: '0',
+                                controllerId: '0',
+                                buriedFrom: 'hand',
+                            },
+                        ],
+                    },
+                    {
+                        defId: 'base_a',
+                        minions: [],
+                        ongoingActions: [],
+                    },
+                ],
+                titans: [
+                    {
+                        uid: 'titan-sphinx-setaside',
+                        defId: 'sphinx',
+                        faction: 'ancient_egyptians',
+                        ownerId: '0',
+                        controllerId: '0',
+                        powerCounters: 0,
+                        talentUsed: false,
+                        location: { zone: 'setaside' },
+                    },
+                ],
+            },
+        },
+    });
+
+    await waitForSmashUpUI(page);
+    await expect(page.locator('[data-buried-count="2"]').first()).toBeVisible({ timeout: 8000 });
+
+    await dispatchHarnessCommand(page, '1', 'ADVANCE_PHASE', {});
+
+    await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null).toBe('titan_sphinx_start_turn');
+    await saveEvidenceScreenshot(page, testInfo, 'sphinx-real-start-turn-before-return');
+
+    const initialOptionUids = await page.evaluate(() => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const options = harness?.state?.get?.()?.sys?.interaction?.current?.data?.options ?? [];
+        return options
+            .map((option: any) => option?.value?.cardUid)
+            .filter((uid: unknown) => typeof uid === 'string');
+    });
+    expect(initialOptionUids).toEqual(['sphinx-buried-return', 'sphinx-buried-keep']);
+
+    const returnOption = await findCurrentInteractionOption(
+        page,
+        (option) => option?.value?.cardUid === 'sphinx-buried-return',
+    );
+    expect(returnOption?.id).toBeTruthy();
+    await respondCurrentInteraction(page, { optionId: returnOption.id });
+
+    await expect.poll(async () => (await getCurrentInteraction(page))?.data?.sourceId ?? null).toBe('bury_uncover_start_turn');
+
+    await expect.poll(async () => {
+        const interaction = await getCurrentInteraction(page);
+        const options = interaction?.data?.options ?? [];
+        return options
+            .map((option: any) => option?.value?.cardUid)
+            .filter((uid: unknown) => typeof uid === 'string');
+    }, { timeout: 8000 }).toEqual(['sphinx-buried-keep']);
+
+    await expect.poll(async () => {
+        const state = await game.getState();
+        return state.core.players['0'].hand.some((card: any) => card.uid === 'sphinx-buried-return');
+    }, { timeout: 8000 }).toBe(true);
+
+    await expect(page.locator('[data-buried-card-uid="sphinx-buried-return"]')).toHaveCount(0);
+    await expect(page.locator('[data-buried-card-uid="sphinx-buried-keep"]')).toHaveCount(1);
+    await saveEvidenceScreenshot(page, testInfo, 'sphinx-real-start-turn-after-return-before-uncover');
 });
 
 test('Oops Cowboys 决斗交互应按官方链路完成 Pinkerton/决斗牌/Deputy/结算', async ({ page, game }, testInfo) => {

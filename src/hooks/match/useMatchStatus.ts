@@ -709,16 +709,20 @@ export async function exitMatch(
 export async function rejoinMatch(
     gameName: string,
     matchID: string,
-    playerID: string,
+    playerID: string | undefined,
     playerName: string,
     options?: { guestId?: string }
-): Promise<{ success: boolean; credentials?: string }> {
+): Promise<{ success: boolean; credentials?: string; playerID?: string; error?: 'room_full' | 'unknown' }> {
     try {
-        const { playerCredentials } = await matchApi.joinMatch(gameName, matchID, {
+        const { playerCredentials, playerID: joinedPlayerID } = await matchApi.joinMatch(gameName, matchID, {
             playerID,
             playerName,
             data: options?.guestId ? { guestId: options.guestId } : undefined,
         });
+        const resolvedPlayerID = joinedPlayerID ?? playerID;
+        if (!resolvedPlayerID) {
+            throw new Error('join response missing playerID');
+        }
 
         // 保存新凭证
         const storageKey = `match_creds_${matchID}`;
@@ -735,17 +739,20 @@ export async function rejoinMatch(
 
         persistMatchCredentials(matchID, {
             ...(existing || {}),
-            playerID,
+            playerID: resolvedPlayerID,
             credentials: playerCredentials,
             matchID,
             gameName,
             playerName,
         });
 
-        return { success: true, credentials: playerCredentials };
+        return { success: true, credentials: playerCredentials, playerID: resolvedPlayerID };
     } catch (err) {
         console.error('重新加入房间失败:', err);
         clearMatchCredentials(matchID);
-        return { success: false };
+        return {
+            success: false,
+            error: String(err).includes('Room is full') ? 'room_full' : 'unknown',
+        };
     }
 }

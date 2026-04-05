@@ -3,122 +3,182 @@
 import type { GameClientManifestEntry, GameClientRuntimeModule } from './manifest.client.types';
 import { ManifestGameThumbnail } from '../components/lobby/thumbnails';
 
-import manifest0 from './cardia/manifest';
-import Thumbnail0 from './cardia/thumbnail';
+import manifest0 from './archview/manifest';
+import Thumbnail0 from './archview/thumbnail';
 
-import manifest1 from './dicethrone/manifest';
-import Thumbnail1 from './dicethrone/thumbnail';
+import manifest1 from './assetslicer/manifest';
+import Thumbnail1 from './assetslicer/thumbnail';
 
-import manifest2 from './smashup/manifest';
-import Thumbnail2 from './smashup/thumbnail';
+import manifest2 from './audiobrowser/manifest';
+import Thumbnail2 from './audiobrowser/thumbnail';
 
-import manifest3 from './summonerwars/manifest';
-import Thumbnail3 from './summonerwars/thumbnail';
+import manifest3 from './cardia/manifest';
+import Thumbnail3 from './cardia/thumbnail';
 
-import manifest4 from './tictactoe/manifest';
-import Thumbnail4 from './tictactoe/thumbnail';
+import manifest4 from './dicethrone/manifest';
+import Thumbnail4 from './dicethrone/thumbnail';
 
-const loadRuntime0 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule] = await Promise.all([
+import manifest5 from './fxpreview/manifest';
+import Thumbnail5 from './fxpreview/thumbnail';
+
+import manifest6 from './smashup/manifest';
+import Thumbnail6 from './smashup/thumbnail';
+
+import manifest7 from './summonerwars/manifest';
+import Thumbnail7 from './summonerwars/thumbnail';
+
+import manifest8 from './tictactoe/manifest';
+import Thumbnail8 from './tictactoe/thumbnail';
+
+import manifest9 from './ugcbuilder/manifest';
+import Thumbnail9 from './ugcbuilder/thumbnail';
+
+const loadRuntime3 = async (): Promise<GameClientRuntimeModule> => {
+    const [gameModule, boardModule] = await Promise.all([
         import('./cardia/game'),
         import('./cardia/Board'),
-        import('./cardia/tutorial'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
     };
 };
 
-const loadRuntime1 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+const loadTutorial3 = async () => {
+    const tutorialModule = await import('./cardia/tutorial');
+    return tutorialModule.default;
+};
+
+const loadRuntime4 = async (): Promise<GameClientRuntimeModule> => {
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./dicethrone/game'),
         import('./dicethrone/Board'),
-        import('./dicethrone/tutorial'),
         import('./dicethrone/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.diceThroneLatencyConfig,
     };
 };
 
-const loadRuntime2 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+const loadTutorial4 = async () => {
+    const tutorialModule = await import('./dicethrone/tutorial');
+    return tutorialModule.default;
+};
+
+const loadRuntime6 = async (): Promise<GameClientRuntimeModule> => {
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./smashup/game'),
         import('./smashup/Board'),
-        import('./smashup/tutorial'),
         import('./smashup/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.smashUpLatencyConfig,
     };
 };
 
-const loadRuntime3 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+const loadTutorial6 = async () => {
+    const tutorialModule = await import('./smashup/tutorial');
+    return tutorialModule.default;
+};
+
+const loadRuntime7 = async (): Promise<GameClientRuntimeModule> => {
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./summonerwars/game'),
         import('./summonerwars/Board'),
-        import('./summonerwars/tutorial'),
         import('./summonerwars/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.summonerWarsLatencyConfig,
     };
 };
 
-const loadRuntime4 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+const loadTutorial7 = async () => {
+    const tutorialModule = await import('./summonerwars/tutorial');
+    return tutorialModule.default;
+};
+
+const loadRuntime8 = async (): Promise<GameClientRuntimeModule> => {
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./tictactoe/game'),
         import('./tictactoe/Board'),
-        import('./tictactoe/tutorial'),
         import('./tictactoe/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.ticTacToeLatencyConfig,
     };
+};
+
+const loadTutorial8 = async () => {
+    const tutorialModule = await import('./tictactoe/tutorial');
+    return tutorialModule.default;
 };
 
 const entry0: GameClientManifestEntry = {
     manifest: manifest0,
     thumbnail: <Thumbnail0 />,
-    loadRuntime: loadRuntime0,
 };
 
 const entry1: GameClientManifestEntry = {
     manifest: manifest1,
     thumbnail: <Thumbnail1 />,
-    loadRuntime: loadRuntime1,
 };
 
 const entry2: GameClientManifestEntry = {
     manifest: manifest2,
     thumbnail: <Thumbnail2 />,
-    loadRuntime: loadRuntime2,
 };
 
 const entry3: GameClientManifestEntry = {
     manifest: manifest3,
     thumbnail: <Thumbnail3 />,
     loadRuntime: loadRuntime3,
+    loadTutorial: loadTutorial3,
 };
 
 const entry4: GameClientManifestEntry = {
     manifest: manifest4,
     thumbnail: <Thumbnail4 />,
     loadRuntime: loadRuntime4,
+    loadTutorial: loadTutorial4,
+};
+
+const entry5: GameClientManifestEntry = {
+    manifest: manifest5,
+    thumbnail: <Thumbnail5 />,
+};
+
+const entry6: GameClientManifestEntry = {
+    manifest: manifest6,
+    thumbnail: <Thumbnail6 />,
+    loadRuntime: loadRuntime6,
+    loadTutorial: loadTutorial6,
+};
+
+const entry7: GameClientManifestEntry = {
+    manifest: manifest7,
+    thumbnail: <Thumbnail7 />,
+    loadRuntime: loadRuntime7,
+    loadTutorial: loadTutorial7,
+};
+
+const entry8: GameClientManifestEntry = {
+    manifest: manifest8,
+    thumbnail: <Thumbnail8 />,
+    loadRuntime: loadRuntime8,
+    loadTutorial: loadTutorial8,
+};
+
+const entry9: GameClientManifestEntry = {
+    manifest: manifest9,
+    thumbnail: <Thumbnail9 />,
 };
 
 export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [
@@ -127,6 +187,11 @@ export const GAME_CLIENT_MANIFEST: GameClientManifestEntry[] = [
     entry2,
     entry3,
     entry4,
+    entry5,
+    entry6,
+    entry7,
+    entry8,
+    entry9,
 ];
 
 export const GAME_CLIENT_MANIFEST_BY_ID: Record<string, GameClientManifestEntry> = Object.fromEntries(

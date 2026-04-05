@@ -63,22 +63,59 @@
 ## 逐项结论
 
 - `src/games/smashup/ui/HandArea.tsx`
-  - 手牌卡牌外层容器承载 `ring`、`shadow`、`opacity` 等状态视觉；放大镜是其内部绝对定位子节点。
-  - 这是“按钮跟手牌状态一起跑”的直接结构原因。
+  - 旧结构里，手牌卡牌外层容器承载 `ring`、`shadow`、`opacity` 等状态视觉；放大镜是其内部绝对定位子节点。
+  - 2026-04-05 已修复：放大镜按钮改为卡框状态层外的兄弟节点，手牌 `ring / opacity / grayscale` 不再直接作用到按钮。
 - `src/games/smashup/ui/PromptOverlay.tsx`
-  - 交互卡牌项的外层 `group relative` 承载金色/白色 ring 与 hover 态；放大镜仍在同一 group 内。
-  - 这是“PromptOverlay 里按钮也像属于描边对象”的原因。
+  - 两处卡牌放大镜都在 `motion.div.group` 内，但实际 ring/highlight 承载层是其内部卡框节点。
+  - 2026-04-05 复查结论：`PromptOverlay` 的可见放大镜按钮已是卡框高亮层外的兄弟节点，本轮无须额外代码改动。
 - `src/games/smashup/ui/BaseZone.tsx`
-  - 基地放大镜这轮已移到卡框外层，但随从放大镜仍在随从容器状态层内。
-  - 随从的 selectable/expanded/activatable/used 等视觉态会影响用户对按钮颜色归属的感知。
+  - 基地放大镜在本轮之前已移到卡框外层。
+  - 2026-04-05 已修复两处剩余耦合：
+    - 场上泰坦放大镜改为 `group relative` 外层兄弟节点，不再挂在泰坦 `ring / shadow / used` 状态层内部。
+    - 随从放大镜虽然原本已在卡框外层，但 `opacity / grayscale` 挂在按钮父层；本轮把 dimmed 视觉下沉到卡框层，避免按钮随 dimmed 一起褪色。
 - `src/games/smashup/ui/DeckDiscardZone.tsx`
-  - 轨道/泰坦放大镜仍是实体容器内部绝对定位节点，属于同类风险点。
+  - 旧结构里，轨道泰坦放大镜仍是实体按钮容器内部绝对定位节点。
+  - 2026-04-05 已修复：轨道泰坦改成外层 `group relative` + 内层实体按钮 + 外层放大镜按钮，放大镜不再跟随轨道泰坦卡框状态层。
+
+## 修复落点
+
+- `src/games/smashup/ui/HandArea.tsx`
+  - 放大镜按钮从手牌卡框状态层中移出，定位仍锚定在卡牌右上角，但不再被手牌卡框的 `ring / opacity / grayscale` 直接吞进去。
+- `src/games/smashup/ui/BaseZone.tsx`
+  - 场上泰坦新增外层 `group relative` 包裹，放大镜按钮改为状态层外兄弟节点。
+  - 随从 dimmed 的 `opacity / grayscale` 从 `minionContainerClassName` 下沉到 `minionFrameClassName`，避免桌面放大镜跟随随从一起变灰。
+- `src/games/smashup/ui/DeckDiscardZone.tsx`
+  - 轨道泰坦新增外层 `group relative` 包裹，放大镜按钮不再放在实体按钮内部。
+- `src/games/smashup/ui/PromptOverlay.tsx`
+  - 复查后确认两处放大镜都已是卡框高亮层外兄弟节点，本轮保持不动。
+
+## 验证证据
+
+- 类型检查
+  - `npm run typecheck` 通过。
+- 标准 E2E
+  - `npm run test:e2e:ci:file -- e2e/smashup-local-gameplay.e2e.ts "本地模式：手机横屏保留常驻放大按钮，点击按钮只放大不触发出牌"` 通过。
+  - `npm run test:e2e:ci:file -- e2e/smashup-alien-terraform.e2e.ts "可视作行动打出的泰坦可通过牌库右侧泰坦栏按常规行动进场"` 通过。
+- 人工看图
+  - `test-results/evidence-screenshots/smashup-local-gameplay.e2e/本地模式：手机横屏保留常驻放大按钮，点击按钮只放大不触发出牌/smashup-mobile-inspect-button-preview.png`
+    - 能看到放大层已正常打开，原手牌仍留在底部手牌区，没有因为点放大镜误触发出牌。
+    - 放大层居中，手牌区与场上布局没有因放大镜操作产生错位。
+  - `test-results/evidence-screenshots/smashup-alien-terraform.e2e/alien_terraform-第三步可通过牌库右侧泰坦栏选择可视作随从打出的-set-aside-泰坦/terraform-titan-rail-magnify.png`
+    - 能看到轨道泰坦放大层正常打开，右侧轨道区域与场上基地保持独立，没有出现“放大镜本体被卡框描边吞进去”的额外边框。
+- 未计入通过的补充验证
+  - `npm run test:e2e:ci:file -- e2e/smashup-alien-terraform.e2e.ts "克苏鲁泰坦天赋可在分支选择后抽 1 张疯狂卡"` 本轮被仓库内另一条无关 E2E 重任务门禁拦截，未能作为标准通过证据计入。
+  - 之后尝试用 `PW_ALLOW_LEGACY_GLOBAL_BOOTSTRAP=true` 直跑该单用例时，又卡在 `GameTestContext.openTestGame()` 的 `__BG_TEST_HARNESS__` 注册超时；这条失败信号属于测试基础设施问题，不是本次放大镜结构改动直接报错，但也不能拿来冒充通过。
 
 ## 审计结论
 
 - 用户反馈成立：描边/状态表现的变化确实把问题放大了。
 - 根因不是单一颜色值，也不是单一白边，而是放大镜按钮与实体状态层耦合。
 - 正确修复方向不是继续调按钮颜色，而是把放大镜统一迁移为状态层外的独立悬浮兄弟节点。
+- 2026-04-05 当前收口结论：
+  - 手牌、基地泰坦、轨道泰坦这三条可见放大镜入口已经按“状态层外兄弟节点”修正。
+  - 基地与埋葬牌入口维持已正确结构。
+  - PromptOverlay 经复查无需额外改动。
+  - 随从入口已去掉 dimmed 对按钮的直接影响，但按钮仍跟随外层 `motion` 的位置/旋转动画；这属于“跟随实体移动”而非“跟随实体描边/变色”，本轮未再继续扩大改动面。
 
 ## 后续修复要求
 
@@ -90,3 +127,12 @@
 
 - 当前审计已覆盖 `smashup` 主要 inspect 入口，但未扩展到其他游戏。
 - 若后续在别的组件中继续复制“absolute 放大镜按钮挂在 group 内部”的模式，问题会再次出现。
+- 仓库当前存在其他并发 E2E 任务，导致部分标准回归在本轮受基础设施门禁影响；这不是功能通过证据，后续若要宣称“全入口标准 E2E 全绿”，仍需补跑基地泰坦那条单测。
+
+## 修订记录
+
+- 2026-04-05 初版
+  - 落地根因审计，确认用户反馈成立，根因是放大镜与状态层耦合。
+- 2026-04-05 修订
+  - 回写本轮结构性修复落点与验证结果。
+  - 明确记录：手牌 / 场上泰坦 / 轨道泰坦已修，PromptOverlay 复查无需改，随从入口完成 dimmed 隔离但未进一步拆离外层 motion 动画。

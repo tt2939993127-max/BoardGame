@@ -10,9 +10,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId, EventStreamEntry } from '../../../engine/types';
 import type { DieFace, CharacterId, BonusDieInfo } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
-import { findHeroCard } from '../heroes';
 import { useEventStreamCursor } from '../../../engine/hooks';
 import { createScopedLogger } from '../../../lib/logger';
+import { getDiceThroneCardPreviewRef } from '../ui/cardPreviewHelper';
 
 /**
  * 鍗＄墝鐗瑰啓閰嶇疆
@@ -36,6 +36,10 @@ const normalizePlayerId = (value: PlayerId | string | number | null | undefined)
     const match = raw.match(/(\d+)$/);
     return match ? match[1] : raw;
 };
+
+const resolveSelectableCharacterId = (characterId?: CharacterId) => (
+    characterId && characterId !== 'unselected' ? characterId : undefined
+);
 
 /**
  * 鍗＄墝鐗瑰啓鐘舵€?
@@ -214,13 +218,15 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 // 自己打出的卡牌默认不显示特写；自方多骰改走独立多骰面板聚合
                 if (skipSelfCardSpotlight) continue;
 
-                // 閫氳繃闈欐€佽〃瑙ｆ瀽 previewRef锛堟浛浠ｅ師 reducer 涓殑 findHeroCard 璋冪敤锛?
-                const heroCard = findHeroCard(p.cardId);
+                const previewRef = getDiceThroneCardPreviewRef(
+                    p.cardId,
+                    resolveSelectableCharacterId(selectedCharacters?.[p.playerId]),
+                );
 
                 const newItem: CardSpotlightItem = {
                     id: `${p.cardId}-${eventTimestamp}`,
                     timestamp: eventTimestamp,
-                    previewRef: heroCard?.previewRef,
+                    previewRef: previewRef ?? undefined,
                     playerId: p.playerId,
                     playerName: opponentName,
                 };

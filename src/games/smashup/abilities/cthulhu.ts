@@ -111,7 +111,7 @@ function cthulhuRecruitByForce(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<MinionCardChoiceValue | SkipChoiceValue>(
         `cthulhu_recruit_by_force_${ctx.now}`, ctx.playerId,
         '选择要放到牌库顶的随从（任意数量，可跳过）', promptOptions,
-        { sourceId: 'cthulhu_recruit_by_force', targetType: 'generic', multi: { min: 0, max: eligibleMinions.length } },
+        { sourceId: 'cthulhu_recruit_by_force', targetType: 'generic', multi: { min: 0, max: eligibleMinions.length }, autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -131,7 +131,7 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<CardChoiceValue | SkipChoiceValue>(
         `cthulhu_it_begins_again_${ctx.now}`, ctx.playerId,
         '选择要洗回牌库的战术（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }],
-        { sourceId: 'cthulhu_it_begins_again', targetType: 'generic', multi: { min: 0, max: actionsInDiscard.length } },
+        { sourceId: 'cthulhu_it_begins_again', targetType: 'generic', multi: { min: 0, max: actionsInDiscard.length }, autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     // 手动提供 optionsGenerator：从弃牌堆过滤行动卡（保留 skip 选项）
     interaction.data.optionsGenerator = state => {
@@ -612,7 +612,7 @@ function cthulhuServitor(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<CardChoiceValue>(
         `cthulhu_servitor_${ctx.now}`, ctx.playerId,
         '选择放回牌库顶的行动卡', options,
-        { sourceId: 'cthulhu_servitor', targetType: 'generic' },
+        { sourceId: 'cthulhu_servitor', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }

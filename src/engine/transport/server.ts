@@ -626,8 +626,18 @@ export class GameTransportServer {
 
             // 更新 metadata 连接状态
             if (match.metadata.players[playerID]) {
+                const wasConnected = match.metadata.players[playerID].isConnected === true;
                 match.metadata.players[playerID].isConnected = true;
-                await this.storage.setMetadata(matchID, match.metadata);
+                if (!wasConnected) {
+                    match.metadata.updatedAt = Date.now();
+                    this.storage.setMetadata(matchID, match.metadata).catch((error) => {
+                        logger.warn('[GameTransport] persist connected metadata failed', {
+                            matchID,
+                            playerID,
+                            error,
+                        });
+                    });
+                }
             }
         }
 

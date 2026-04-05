@@ -123,6 +123,15 @@ export interface PhaseCondition extends BaseCondition {
 }
 
 /**
+ * 阶段开始条件
+ * 用于角色板被动等非战斗技能（如枪手 quick-draw）
+ */
+export interface PhaseStartCondition extends BaseCondition {
+    type: 'phaseStart';
+    phase: string;
+}
+
+/**
  * 所有符号都存在条件（用于"禅武归一"、"武僧之路"等）
  */
 export interface AllSymbolsPresentCondition extends BaseCondition {
@@ -161,6 +170,7 @@ export type Condition =
     | DiceSetCondition
     | DiceStraightCondition
     | PhaseCondition
+    | PhaseStartCondition
     | AllSymbolsPresentCondition
     | RollSumCondition
     | DiceCountCondition
@@ -173,6 +183,7 @@ export type TriggerCondition =
     | DiceSetCondition
     | DiceStraightCondition
     | PhaseCondition
+    | PhaseStartCondition
     | ResourceCondition
     | HasStatusCondition
     | CompositeCondition

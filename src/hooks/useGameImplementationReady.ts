@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getGameImplementation, loadGameImplementation } from '../games/registry';
+import {
+    getGameImplementation,
+    hasGameTutorialLoader,
+    loadGameImplementation,
+    subscribeGameImplementationReady,
+} from '../games/registry';
 
 interface GameImplementationState {
     requestKey: string | null;
@@ -9,6 +14,7 @@ interface GameImplementationState {
 
 interface UseGameImplementationReadyOptions {
     enabled?: boolean;
+    includeTutorial?: boolean;
 }
 
 const createMissingClientMessage = (gameId: string) => `未找到游戏客户端：${gameId}`;
@@ -19,8 +25,22 @@ export function useGameImplementationReady(
 ) {
     const [retryTick, setRetryTick] = useState(0);
     const enabled = options.enabled ?? true;
-    const requestKey = enabled && gameId ? `${gameId}:${retryTick}` : null;
-    const hasLoadedImplementation = Boolean(gameId && enabled && getGameImplementation(gameId));
+    const includeTutorial = options.includeTutorial ?? false;
+    const requestKey = enabled && gameId ? `${gameId}:${retryTick}:${includeTutorial ? 'tutorial' : 'runtime'}` : null;
+    const hasLoadedImplementation = Boolean(
+        gameId
+        && enabled
+        && (() => {
+            const implementation = getGameImplementation(gameId);
+            if (!implementation) {
+                return false;
+            }
+            if (!includeTutorial) {
+                return true;
+            }
+            return Boolean(implementation.tutorial) || !hasGameTutorialLoader(gameId);
+        })(),
+    );
     const [state, setState] = useState<GameImplementationState>(() => {
         if (!gameId || !enabled) {
             return { requestKey: null, isReady: true, error: null };
@@ -42,8 +62,14 @@ export function useGameImplementationReady(
         }
 
         let isActive = true;
+        const unsubscribe = subscribeGameImplementationReady((resolvedGameId) => {
+            if (!isActive || resolvedGameId !== gameId) {
+                return;
+            }
+            setState({ requestKey, isReady: true, error: null });
+        });
 
-        loadGameImplementation(gameId)
+        loadGameImplementation(gameId, { includeTutorial })
             .then((implementation) => {
                 if (!isActive) return;
                 if (!implementation) {
@@ -64,8 +90,9 @@ export function useGameImplementationReady(
 
         return () => {
             isActive = false;
+            unsubscribe();
         };
-    }, [gameId, hasLoadedImplementation, requestKey]);
+    }, [gameId, hasLoadedImplementation, includeTutorial, requestKey]);
 
     const resolvedState = (() => {
         if (!requestKey || !gameId || !enabled) {

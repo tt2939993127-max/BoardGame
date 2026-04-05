@@ -196,12 +196,9 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
     entries.forEach((entry, index) => {
         if (entry.gameImport && entry.boardImport) {
             lines.push(`const loadRuntime${index} = async (): Promise<GameClientRuntimeModule> => {`);
-            lines.push(`    const [gameModule, boardModule${entry.tutorialImport ? ', tutorialModule' : ''}${entry.latencyConfigImport ? ', latencyModule' : ''}] = await Promise.all([`);
+            lines.push(`    const [gameModule, boardModule${entry.latencyConfigImport ? ', latencyModule' : ''}] = await Promise.all([`);
             lines.push(`        import('${entry.gameImport}'),`);
             lines.push(`        import('${entry.boardImport}'),`);
-            if (entry.tutorialImport) {
-                lines.push(`        import('${entry.tutorialImport}'),`);
-            }
             if (entry.latencyConfigImport) {
                 lines.push(`        import('${entry.latencyConfigImport}'),`);
             }
@@ -209,13 +206,17 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
             lines.push(`    return {`);
             lines.push(`        engineConfig: gameModule.engineConfig,`);
             lines.push(`        board: boardModule.default,`);
-            if (entry.tutorialImport) {
-                lines.push(`        tutorial: tutorialModule.default,`);
-            }
             if (entry.latencyConfigImport) {
                 lines.push(`        latencyConfig: latencyModule.${entry.latencyConfigExportName},`);
             }
             lines.push(`    };`);
+            lines.push(`};`);
+            lines.push('');
+        }
+        if (entry.tutorialImport) {
+            lines.push(`const loadTutorial${index} = async () => {`);
+            lines.push(`    const tutorialModule = await import('${entry.tutorialImport}');`);
+            lines.push(`    return tutorialModule.default;`);
             lines.push(`};`);
             lines.push('');
         }
@@ -231,6 +232,9 @@ const buildClientManifestFile = ({ entries, outputPath }) => {
         }
         if (entry.gameImport && entry.boardImport) {
             lines.push(`    loadRuntime: loadRuntime${index},`);
+        }
+        if (entry.tutorialImport) {
+            lines.push(`    loadTutorial: loadTutorial${index},`);
         }
         lines.push('};');
         lines.push('');
@@ -296,13 +300,14 @@ const buildAndroidOrientationMapFile = ({ entries, outputPath }) => {
 
 const run = async () => {
     const entries = await collectGameEntries();
-    const publicEntries = entries.filter((entry) => entry.type === 'game');
-    const serverEntries = publicEntries.filter((entry) => entry.gameImport);
+    const clientEntries = entries;
+    const serverEntries = entries.filter((entry) => entry.type === 'game' && entry.gameImport);
+    const androidEntries = entries.filter((entry) => entry.type === 'game');
 
-    const dataUpdated = await buildDataManifestFile({ entries: publicEntries, outputPath: outputFiles.data });
-    const clientUpdated = await buildClientManifestFile({ entries: publicEntries, outputPath: outputFiles.client });
+    const dataUpdated = await buildDataManifestFile({ entries: clientEntries, outputPath: outputFiles.data });
+    const clientUpdated = await buildClientManifestFile({ entries: clientEntries, outputPath: outputFiles.client });
     const serverUpdated = await buildServerManifestFile({ entries: serverEntries, outputPath: outputFiles.server });
-    const androidOrientationMapUpdated = await buildAndroidOrientationMapFile({ entries: publicEntries, outputPath: outputFiles.androidOrientationMap });
+    const androidOrientationMapUpdated = await buildAndroidOrientationMapFile({ entries: androidEntries, outputPath: outputFiles.androidOrientationMap });
 
     console.log('[Manifest] Generated manifests:');
     console.log(`- ${path.relative(process.cwd(), outputFiles.data)} ${dataUpdated ? '(updated)' : '(unchanged)'}`);

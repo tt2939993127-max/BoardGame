@@ -543,7 +543,10 @@ export const MatchRoom = () => {
         isGameImplementationReady,
         gameImplementationError,
         retryGameImplementationLoad,
-    } = useGameImplementationReady(gameId, { enabled: Boolean(gameId) });
+    } = useGameImplementationReady(gameId, {
+        enabled: Boolean(gameId),
+        includeTutorial: isTutorialRoute,
+    });
     const gameImplReady = isGameImplementationReady;
 
     // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
@@ -713,20 +716,13 @@ export const MatchRoom = () => {
         const tryJoin = async () => {
             if (cancelled) return;
             try {
-                const matchInfo = await matchApi.getMatch(gameId, matchId);
-                if (cancelled) return;
-                const openSeat = [...matchInfo.players]
-                    .sort((a, b) => a.id - b.id)
-                    .find(p => !p.name);
-                if (!openSeat) {
-                    if (!cancelled) {
-                        setAutoJoinError(t('error.roomFull'));
-                        setIsAutoJoining(false);
-                    }
-                    return;
-                }
-                const targetPlayerID = String(openSeat.id);
-                const { success } = await rejoinMatch(gameId, matchId, targetPlayerID, playerName, { guestId: user?.id ? undefined : guestId });
+                const { success, error } = await rejoinMatch(
+                    gameId,
+                    matchId,
+                    undefined,
+                    playerName,
+                    { guestId: user?.id ? undefined : guestId },
+                );
                 if (cancelled) return;
                 if (success) {
                     // rejoinMatch 内部已调用 persistMatchCredentials，
@@ -739,6 +735,11 @@ export const MatchRoom = () => {
                     setLocalStorageTick((t) => t + 1);
                     setIsAutoJoining(false);
                 } else {
+                    if (error === 'room_full') {
+                        setAutoJoinError(t('error.roomFull'));
+                        setIsAutoJoining(false);
+                        return;
+                    }
                     retryCount++;
                     if (retryCount < maxRetries) {
                         scheduleRetry(500);
@@ -763,8 +764,9 @@ export const MatchRoom = () => {
             }
         };
 
-        // 延迟 1 秒，等待房主完全加入
-        scheduleRetry(1000);
+        // 创建房间已改为“建房即房主持有 seat 0 凭据”，无需再人为等待 1 秒。
+        // 直接首试，失败时再按现有退避策略重试。
+        void tryJoin();
 
         return () => {
             cancelled = true;

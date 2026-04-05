@@ -55,7 +55,7 @@ export function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `steampunk_scrap_diving_${ctx.now}`, ctx.playerId,
-        '选择要从弃牌堆取回的行动卡', options as any[], { sourceId: 'steampunk_scrap_diving', targetType: 'generic' },
+        '选择要从弃牌堆取回的行动卡', options as any[], { sourceId: 'steampunk_scrap_diving', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }

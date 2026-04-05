@@ -777,6 +777,105 @@ describe('InteractionSystem - 通用刷新', () => {
         expect(result?.error).toBe('无效的选择');
     });
 
+    it('autoRefresh=discard 时，应保留弃牌堆中仍存在同名分组选项并剔除失效分组', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [],
+                        discard: [{ uid: 'discard-a', defId: 'minion-a' }],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'discard-defid-refresh',
+            'p1',
+            '选择弃牌堆中的分组',
+            [
+                { id: 'group-a', label: 'A', value: { defId: 'minion-a' } },
+                { id: 'group-b', label: 'B', value: { defId: 'minion-b' } },
+            ],
+            { sourceId: 'discard-defid-refresh', autoRefresh: 'discard', responseValidationMode: 'live' },
+        );
+
+        const current = createSimpleChoice(
+            'discard-placeholder',
+            'p1',
+            '占位',
+            [{ id: 'skip', label: '跳过', value: { skip: true } }],
+        );
+        state = queueInteraction(state, current);
+        state = queueInteraction(state, interaction);
+        state = resolveInteraction(state);
+
+        const options = (state.sys.interaction.current?.data as any)?.options ?? [];
+        expect(options.map((option: any) => option.id)).toEqual(['group-a']);
+    });
+
+    it('autoRefresh=hand_or_discard 且 live 校验时，应拒绝已离开指定来源区域的响应', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [],
+                        discard: [{ uid: 'discard-1', defId: 'card-1' }],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'mixed-refresh',
+            'p1',
+            '选择手牌或弃牌堆中的卡',
+            [
+                { id: 'discard-1', label: '弃牌', value: { cardUid: 'discard-1', zone: 'discard', defId: 'card-1' } },
+                { id: 'hand-1', label: '手牌', value: { cardUid: 'hand-1', zone: 'hand', defId: 'card-2' } },
+            ],
+            { sourceId: 'mixed-refresh', autoRefresh: 'hand_or_discard', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    ...state.core.players,
+                    p1: {
+                        ...state.core.players.p1,
+                        discard: [],
+                        hand: [{ uid: 'discard-1', defId: 'card-1' }],
+                    },
+                },
+            },
+        } as any;
+
+        const system = createSimpleChoiceSystem<TestCore>();
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: 'p1',
+                payload: { optionId: 'discard-1' },
+            } as any,
+            events: [],
+            random: dummyRandom as any,
+            playerIds: ['p1'],
+        });
+
+        expect(result?.halt).toBe(true);
+        expect(result?.error).toBe('无效的选择');
+    });
+
     it('紧急跳过选项被响应时，应取消交互而不是报无效选择', () => {
         let state: MatchState<TestCore> = {
             core: {

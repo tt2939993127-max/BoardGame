@@ -16,6 +16,7 @@ import { SAMURAI_CARDS, getSamuraiStartingDeck } from './samurai/cards';
 import { SAMURAI_ABILITIES } from './samurai/abilities';
 import type { AbilityCard } from '../types';
 import type { AbilityDef } from '../domain/combat';
+import type { SelectableCharacterId } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';
 
 export interface HeroData {
@@ -67,7 +68,16 @@ export const HEROES_DATA: Record<string, HeroData> = {
     },
 };
 
-export function findHeroCard(cardId: string): AbilityCard | undefined {
+export function findHeroCard(
+    cardId: string,
+    characterId?: SelectableCharacterId,
+): AbilityCard | undefined {
+    if (characterId) {
+        const hero = HEROES_DATA[characterId];
+        const found = hero?.cards.find(c => c.id === cardId);
+        if (found) return found;
+    }
+
     for (const hero of Object.values(HEROES_DATA)) {
         const found = hero.cards.find(c => c.id === cardId);
         if (found) return found;

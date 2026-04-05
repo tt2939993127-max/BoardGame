@@ -3,6 +3,10 @@ import { GUNSLINGER_DICE_FACE_IDS, STATUS_IDS, TOKEN_IDS } from '../../domain/id
 
 const FACE = GUNSLINGER_DICE_FACE_IDS;
 
+export const GUNSLINGER_SFX_SHOT = 'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_a_shoot_1';
+export const GUNSLINGER_SFX_HEAVY = 'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_b_shoot_2';
+export const GUNSLINGER_SFX_ULTIMATE = 'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_minigun_shoot_1';
+
 const damage = (value: number, description: string, opts?: { timing?: EffectTiming }): AbilityEffect => ({
     description,
     action: { type: 'damage', target: 'opponent', value },
@@ -48,6 +52,7 @@ const REVOLVER: AbilityDef = {
     name: '左轮手枪',
     type: 'offensive',
     description: '3/4/5 个子弹：分别造成 3/4/5 点伤害。',
+    sfxKey: GUNSLINGER_SFX_SHOT,
     variants: [
         {
             id: 'revolver-3',
@@ -75,6 +80,7 @@ export const REVOLVER_2: AbilityDef = {
     name: '左轮手枪 II',
     type: 'offensive',
     description: '3/4/5 个子弹：分别造成 4/5/6 点伤害。若至少有 4 颗骰子点数相同，则施加击倒。',
+    sfxKey: GUNSLINGER_SFX_SHOT,
     variants: [
         {
             id: 'revolver-2-3',
@@ -108,6 +114,7 @@ const BOUNTY_HUNTER: AbilityDef = {
     name: '赏金猎人',
     type: 'offensive',
     description: '施加 1 个赏金，并造成 1 点不可防御伤害。',
+    sfxKey: GUNSLINGER_SFX_SHOT,
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.BULLSEYE]: 2 } },
     effects: [
@@ -121,6 +128,7 @@ export const BOUNTY_HUNTER_2: AbilityDef = {
     name: '赏金猎人 II',
     type: 'offensive',
     description: '施加 1 个赏金，并造成 2 点不可防御伤害。',
+    sfxKey: GUNSLINGER_SFX_SHOT,
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.BULLSEYE]: 2 } },
     effects: [
@@ -156,6 +164,7 @@ const TAKE_COVER: AbilityDef = {
     name: '掩护射击',
     type: 'offensive',
     description: '获得 1 个闪避，并造成 5 点伤害。',
+    sfxKey: GUNSLINGER_SFX_SHOT,
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.DASH]: 3 } },
     effects: [
         grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
@@ -168,6 +177,7 @@ export const TAKE_COVER_2: AbilityDef = {
     name: '掩护射击 II',
     type: 'offensive',
     description: '获得 1 个闪避，并造成 6 点伤害。',
+    sfxKey: GUNSLINGER_SFX_SHOT,
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.DASH]: 3 } },
     effects: [
         grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
@@ -180,6 +190,7 @@ const SHOWDOWN: AbilityDef = {
     name: '摊到牌面',
     type: 'offensive',
     description: '双方各掷 1 颗骰子。若你的结果不小于对手，改为造成 7 点伤害；否则造成 5 点伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'smallStraight' },
     effects: [
         custom(
@@ -197,6 +208,7 @@ export const SHOWDOWN_2: AbilityDef = {
     name: '摊到牌面 II',
     type: 'offensive',
     description: '双方各掷 1 颗骰子。若你的结果不小于对手，改为造成 8 点伤害；否则造成 6 点伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'smallStraight' },
     effects: [
         custom(
@@ -214,6 +226,7 @@ export const SHOWDOWN_3: AbilityDef = {
     name: '摊到牌面 III',
     type: 'offensive',
     description: '双方各掷 1 颗骰子。若你的结果不小于对手，改为造成 9 点伤害；否则造成 6 点伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'smallStraight' },
     effects: [
         custom(
@@ -231,6 +244,7 @@ const DEADEYE: AbilityDef = {
     name: '死亡之眼',
     type: 'offensive',
     description: '施加击倒，并造成 6 点不可防御伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
     effects: [
@@ -244,6 +258,7 @@ export const DEADEYE_2: AbilityDef = {
     name: '死亡之眼 II',
     type: 'offensive',
     description: '施加击倒，并造成 8 点不可防御伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
     effects: [
@@ -257,6 +272,7 @@ const FAN_THE_HAMMER: AbilityDef = {
     name: '左轮速射',
     type: 'offensive',
     description: '获得 2 个闪避，并造成 7 点伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'largeStraight' },
     effects: [
         grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。', 'preDefense'),
@@ -269,6 +285,7 @@ export const FAN_THE_HAMMER_2: AbilityDef = {
     name: '左轮速射 II',
     type: 'offensive',
     description: '获得 2 个闪避，并造成 8 点伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'largeStraight' },
     effects: [
         grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。', 'preDefense'),
@@ -281,6 +298,7 @@ const DUEL: AbilityDef = {
     name: '对决',
     type: 'defensive',
     description: '防御掷骰：掷 1 颗骰子。你与攻击方各掷 1 颗骰并比较；若你的结果更大，可选择造成 3 点不可防御伤害，或抵挡 1/2 进攻伤害（向上取整）；若更小，则造成 1 点不可防御伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 1 },
     effects: [
         custom(
@@ -297,6 +315,7 @@ export const DUEL_2: AbilityDef = {
     name: '对决 II',
     type: 'defensive',
     description: '防御掷骰：掷 1 颗骰子。你与攻击方各掷 1 颗骰并比较；若你的结果大于或等于攻击方，可选择造成 3 点不可防御伤害，或抵挡 1/2 进攻伤害（向上取整）；若更小，则造成 1 点不可防御伤害。',
+    sfxKey: GUNSLINGER_SFX_HEAVY,
     trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 1 },
     effects: [
         custom(
@@ -314,6 +333,7 @@ const FILL_EM_WITH_LEAD: AbilityDef = {
     type: 'offensive',
     tags: ['ultimate'],
     description: '获得 1 个闪避，对手获得赏金与击倒，然后造成 10 点不可防御伤害。若你花费装填来增加伤害，可以重掷该骰 1 次。',
+    sfxKey: GUNSLINGER_SFX_ULTIMATE,
     trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 5 } },
     effects: [
         grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
