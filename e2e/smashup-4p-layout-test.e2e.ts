@@ -1013,6 +1013,7 @@ test.describe('大杀四方移动端派系选择布局', () => {
         await piratesCard.click();
 
         const confirmButton = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
+        const detailPanel = page.getByTestId('faction-detail-panel');
         const previewGrid = page.getByTestId('faction-preview-grid');
         const previewCards = page.getByTestId('faction-preview-card');
         const previewSection = previewGrid.locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
@@ -1020,12 +1021,41 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const titanCards = page.getByTestId('faction-titan-card');
 
         await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
         await expect(titanSection).toBeVisible({ timeout: 10000 });
         await expect(titanCards).toHaveCount(1);
         await expect(aliensCard).toBeVisible({ timeout: 10000 });
         const previewCardCount = await previewCards.count();
         expect(previewCardCount).toBeGreaterThan(8);
         await expect(previewSection).toBeVisible({ timeout: 10000 });
+
+        const detailPanelRect = await detailPanel.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            return {
+                width: rect.width,
+                height: rect.height,
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom,
+            };
+        });
+        const viewportSize = page.viewportSize();
+        expect(viewportSize).not.toBeNull();
+        const viewportWidth = viewportSize?.width ?? 852;
+        const viewportHeight = viewportSize?.height ?? 393;
+        expect(
+            detailPanelRect.width,
+            '移动端派系详情宽度不能再缩成中间小卡片，至少应占横屏视口宽度的 75%',
+        ).toBeGreaterThanOrEqual(viewportWidth * 0.75);
+        expect(
+            detailPanelRect.height,
+            '移动端派系详情高度不能再缩成小海报，至少应占横屏视口高度的 60%',
+        ).toBeGreaterThanOrEqual(viewportHeight * 0.6);
+        expect(detailPanelRect.left).toBeGreaterThanOrEqual(0);
+        expect(detailPanelRect.right).toBeLessThanOrEqual(viewportWidth);
+        expect(detailPanelRect.top).toBeGreaterThanOrEqual(0);
+        expect(detailPanelRect.bottom).toBeLessThanOrEqual(viewportHeight);
 
         const scrollMetrics = await previewSection.evaluate((node) => ({
             scrollHeight: node.scrollHeight,
