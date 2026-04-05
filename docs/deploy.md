@@ -226,15 +226,15 @@ SMTP_PASS=xxx
 发布命令：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --dry-run
-npm run mobile:android:ota:publish -- --channel stable --skip-latest
-npm run mobile:android:ota:publish -- --channel stable
+node scripts/mobile/release-android.mjs ota --channel stable --dry-run
+node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
+node scripts/mobile/release-android.mjs ota --channel stable
 ```
 
 强制约束：
 
 - Android OTA 发布不得把 `public/assets/i18n/**` 这类大体积运行时资源打进 OTA zip；这些资源应继续走 R2 / 游戏包链路，而不是 H5 OTA。
-- `scripts/mobile/publish-android-ota.mjs` 会自动排除 `dist/assets/i18n/**`，并只保留 `dist/locales/zh-CN/**`；禁止再依赖“先手工 build 再祈祷体积正常”的流程。
+- `scripts/mobile/publish-android-ota.mjs` 只接受显式命名参数，并要求 `dist/` 已经经过 Android 专用裁剪；若 `dist/` 中仍存在 `dist/assets/i18n/**` 或非 `dist/locales/zh-CN/**` 资源，脚本会直接失败，禁止继续发布。
 - 若最终 OTA zip 体积异常过大（当前门禁为 `20MB`），发布脚本必须直接失败，禁止继续覆盖 `latest.json`。
 
 GitHub Actions 自动化：
@@ -335,8 +335,8 @@ GitHub Actions 自动化：
 Android OTA 产物也走同一个对象存储桶，但前缀独立：
 
 1. 先执行 `npm run mobile:android:sync`，确保 `dist/` 与 Android embedded 资源同步
-2. 预演发布：`npm run mobile:android:ota:publish -- --channel gray --dry-run`
-3. 灰度上传但不切流：`npm run mobile:android:ota:publish -- --channel gray --skip-latest`
+2. 预演发布：`node scripts/mobile/release-android.mjs ota --channel gray --dry-run`
+3. 灰度上传但不切流：`node scripts/mobile/release-android.mjs ota --channel gray --skip-latest`
 4. 准备正式生效时，再执行不带 `--skip-latest` 的正式发布命令
 
 建议把 `stable`、`gray` 等 channel 作为独立发布轨道管理，不要把未验证 bundle 直接覆盖到 `stable/latest.json`

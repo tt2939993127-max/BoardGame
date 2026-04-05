@@ -247,6 +247,8 @@ describe('CustomAction categories 与 handler 输出一致性审计', () => {
             'pyro-blast-3-roll',
             // 圣骑士神圣祝福防御：只有致死伤害 + 有 Blessing token 时才触发，产生 DAMAGE_DEALT（将 HP 设为 1）
             'paladin-blessing-prevent',
+            // 神枪手决斗：当前 handler 只发起比较/选项交互，实际伤害在 choice-resolved handler 中落地
+            'gunslinger-duel-resolve',
         ]);
 
         for (const actionId of registeredIds) {

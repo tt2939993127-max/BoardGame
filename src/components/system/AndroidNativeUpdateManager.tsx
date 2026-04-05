@@ -10,6 +10,7 @@ import {
     prepareAndroidNativeUpdateInstall,
     readPreparedAndroidUpdateState,
     requestAndroidNativeUpdateCheck,
+    startAndroidNativeUpdatePreload,
     type AndroidPreparedUpdateState,
     type AndroidNativeUpdateManifest,
     type AndroidNativeUpdateState,
@@ -17,6 +18,7 @@ import {
     subscribeAndroidNativeUpdateRequests,
     subscribeAndroidNativeUpdateState,
 } from '../../lib/mobile/androidNativeUpdates';
+import { logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import { AndroidNativeUpdateGate } from './AndroidNativeUpdateGate';
 
@@ -38,6 +40,18 @@ const normalizeRecoveredPreparedUpdate = (state: AndroidPreparedUpdateState): An
         status: 'permission-required',
     };
 };
+
+const isPrepareResultTaskStatus = (
+    status: string | undefined,
+): status is AndroidPreparedUpdateState['status'] => (
+    status === 'queued'
+    || status === 'downloading'
+    || status === 'verifying'
+    || status === 'prepared'
+    || status === 'permission-required'
+    || status === 'installing'
+    || status === 'error'
+);
 
 export const AndroidNativeUpdateManager = () => {
     const toast = useToast();
@@ -99,11 +113,17 @@ export const AndroidNativeUpdateManager = () => {
                 return;
             }
 
-            const hasPreparedState = preparedState !== null;
             interactiveRef.current = interactive;
             const shouldBlock = availability.manifest.forceUpdate === true || interactive;
             const displayTitle = availability.manifest.forceUpdateTitle || undefined;
             const displayMessage = availability.manifest.forceUpdateMessage || undefined;
+
+            logMobileRuntimeCritical('NativeUpdate', 'manager-apply-check', {
+                interactive,
+                manifestVersion: availability.manifest.version,
+                forceUpdate: availability.manifest.forceUpdate === true,
+                preparedState,
+            });
 
             if (preparedState) {
                 const recoveredState = normalizeRecoveredPreparedUpdate(preparedState);
@@ -117,13 +137,38 @@ export const AndroidNativeUpdateManager = () => {
                     !shouldAutoResumePreparedUpdate(preparedState)
                     && !(interactive && preparedState.status === 'error')
                 ) {
+                    if (interactive && preparedState.status === 'prepared') {
+                        try {
+                            const installResult = await continueAndroidNativeUpdateInstall(availability.manifest.version);
+                            if (disposed) {
+                                return;
+                            }
+                            logMobileRuntimeCritical('NativeUpdate', 'manager-continue-install-result', {
+                                manifestVersion: availability.manifest.version,
+                                result: installResult,
+                            });
+                            return;
+                        } catch (error) {
+                            if (disposed) {
+                                return;
+                            }
+                            logMobileRuntimeCritical('NativeUpdate', 'manager-continue-install-failed', {
+                                manifestVersion: availability.manifest.version,
+                                error: error instanceof Error ? error.message : String(error),
+                            });
+                            setState({
+                                phase: 'error',
+                                blocking: shouldBlock,
+                                version: availability.manifest.version,
+                                reason: error instanceof Error ? error.message : String(error),
+                                title: displayTitle,
+                                message: displayMessage,
+                            });
+                            return;
+                        }
+                    }
                     return;
                 }
-            }
-
-            if (!interactive && availability.manifest.forceUpdate !== true && !hasPreparedState) {
-                setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
-                return;
             }
 
             setState({
@@ -135,9 +180,33 @@ export const AndroidNativeUpdateManager = () => {
             });
 
             try {
-                const result = await prepareAndroidNativeUpdateInstall(availability.manifest);
+                const result = interactive || availability.manifest.forceUpdate === true
+                    ? await prepareAndroidNativeUpdateInstall(availability.manifest, { autoInstall: true })
+                    : await startAndroidNativeUpdatePreload(availability.manifest);
                 if (disposed) {
                     return;
+                }
+                logMobileRuntimeCritical('NativeUpdate', 'manager-prepare-result', {
+                    manifestVersion: availability.manifest.version,
+                    result,
+                });
+                if (isPrepareResultTaskStatus(result.status)) {
+                    const recoveredLiveState = normalizeRecoveredPreparedUpdate({
+                        version: typeof result.version === 'string' && result.version.trim()
+                            ? result.version.trim()
+                            : availability.manifest.version,
+                        status: result.status,
+                        progressPercent: result.progressPercent,
+                        progressMode: result.progressMode,
+                        errorCode: result.errorCode,
+                        errorMessage: result.errorMessage,
+                        apkFilePath: result.apkFilePath,
+                    });
+                    setState(mapNativeUpdateEventToState(recoveredLiveState, {
+                        blocking: shouldBlock,
+                        title: displayTitle,
+                        message: displayMessage,
+                    }));
                 }
                 if (result.status === 'installer-launched' && availability.manifest.forceUpdate !== true) {
                     toastRef.current.info(tRef.current('nativeUpdate.toast.installerOpened'), '应用更新', {
@@ -149,6 +218,10 @@ export const AndroidNativeUpdateManager = () => {
                 if (disposed) {
                     return;
                 }
+                logMobileRuntimeCritical('NativeUpdate', 'manager-prepare-failed', {
+                    manifestVersion: availability.manifest.version,
+                    error: error instanceof Error ? error.message : String(error),
+                });
                 setState({
                     phase: 'error',
                     blocking: shouldBlock,

@@ -23,6 +23,24 @@ for (const file of ['.env', '.env.android', '.env.android.local', '.env.example'
 
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const args = process.argv.slice(2);
+const allowedValueArgs = new Set([
+    'channel',
+    'version',
+    'native-version',
+    'target-native-version',
+    'min-native-version',
+    'max-native-version',
+    'force-update-title',
+    'force-update-message',
+    'notes',
+]);
+const allowedBooleanArgs = new Set([
+    'force-update',
+    'no-force-update',
+    'dry-run',
+    'skip-latest',
+    'help',
+]);
 const helpText = `
 Android OTA 发布脚本
 
@@ -52,6 +70,46 @@ Android OTA 发布脚本
 - --skip-latest
 - --help
 `.trim();
+
+const validateArgs = (sourceArgs) => {
+    for (let index = 0; index < sourceArgs.length; index += 1) {
+        const current = sourceArgs[index];
+        if (current === '-h') {
+            continue;
+        }
+        if (!current.startsWith('--')) {
+            throw new Error(
+                `检测到不受支持的位置参数: ${current}。`
+                + ' Android OTA 发布脚本只接受 --channel 这类显式命名参数。'
+                + ' 若你是通过 npm 传参，请不要使用 `npm run mobile:android:ota:publish -- --channel stable` 这种形式；'
+                + ' 请改用 `node scripts/mobile/release-android.mjs ota --channel stable`'
+                + ' 或 `node scripts/mobile/publish-android-ota.mjs --channel stable`。',
+            );
+        }
+
+        const eqIndex = current.indexOf('=');
+        const rawName = eqIndex >= 0 ? current.slice(2, eqIndex) : current.slice(2);
+        if (allowedBooleanArgs.has(rawName)) {
+            continue;
+        }
+        if (allowedValueArgs.has(rawName)) {
+            if (eqIndex >= 0) {
+                continue;
+            }
+            const next = sourceArgs[index + 1];
+            if (!next || next.startsWith('--')) {
+                throw new Error(`参数 --${rawName} 缺少值。`);
+            }
+            index += 1;
+            continue;
+        }
+
+        throw new Error(`未知参数: ${current}`);
+    }
+};
+
+validateArgs(args);
+
 const readArgValue = (name, fallback = '') => {
     const prefix = `--${name}=`;
     const direct = args.find((arg) => arg.startsWith(prefix));
@@ -181,6 +239,15 @@ const {
     entries: otaEntries,
     stats: otaCollectionStats,
 } = collectFiles(distDir, distDir);
+if (otaCollectionStats.skippedFiles > 0) {
+    throw new Error(
+        `检测到当前 dist 含有不允许进入 OTA 的文件：skippedFiles=${otaCollectionStats.skippedFiles}, `
+        + `skippedBytes=${otaCollectionStats.skippedBytes}。`
+        + ' 这通常说明你没有走 `npm run mobile:android:sync` 这条 Android 专用裁剪链路，'
+        + ' 或 dist 混入了 `assets/i18n/**` / 非 `locales/zh-CN/**` 资源。'
+        + ' 为避免再次打出整包，发布已强制中止。',
+    );
+}
 const zipBuffer = Buffer.from(zipSync(otaEntries, { level: 9 }));
 if (zipBuffer.length > MAX_ANDROID_OTA_ZIP_BYTES) {
     throw new Error(

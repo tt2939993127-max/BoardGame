@@ -79,13 +79,13 @@ describe('FabMenu helpers', () => {
         ]);
     });
 
-    it('只有预览和 tooltip 需要持续追踪按钮锚点位置', () => {
+    it('预览、tooltip 和激活中的内容面板都需要持续追踪按钮锚点位置', () => {
         expect(shouldTrackFabButtonRect({
             showTooltip: false,
             showPreview: false,
             isActive: true,
             hasContent: true,
-        })).toBe(false);
+        })).toBe(true);
         expect(shouldTrackFabButtonRect({
             showTooltip: false,
             showPreview: false,

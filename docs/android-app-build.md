@@ -19,7 +19,7 @@
 - `npm run mobile:android:prepare-release`
 - `npm run mobile:android:init`
 - `npm run mobile:android:sync`
-- `npm run mobile:android:ota:publish -- --channel stable`
+- `node scripts/mobile/release-android.mjs ota --channel stable`
 - `npm run mobile:android:packages:publish -- --channel stable`
 - `npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
 - `npm run mobile:android:build:debug`
@@ -294,37 +294,37 @@ manifest 结构示例：
 3. 先预演一次发布：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --dry-run
+node scripts/mobile/release-android.mjs ota --channel stable --dry-run
 ```
 
 4. 如果只想先上传 bundle 和版本 manifest，不立刻切 `latest.json`：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --skip-latest
+node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
 ```
 
 5. 确认无误后再正式更新 channel 的 `latest.json`：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable
+node scripts/mobile/release-android.mjs ota --channel stable
 ```
 
 如果你确实要把这次 OTA 标记为“原生版本不兼容时必须先升级 App”，才显式加 `--force-update`：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+node scripts/mobile/release-android.mjs ota --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
 ```
 
 如果这次 OTA 只允许某个原生壳版本区间接收：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
+node scripts/mobile/release-android.mjs ota --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
 ```
 
 如果这次 OTA 既要求原生版本不兼容时阻断，又要求至少某个壳版本：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
+node scripts/mobile/release-android.mjs ota --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
 ```
 
 如果走 GitHub Actions 自动化：
@@ -442,7 +442,7 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 1. 兼容当前壳的 H5 修复：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --force-update --target-native-version 0.5.1 --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+node scripts/mobile/release-android.mjs ota --channel stable --force-update --target-native-version 0.5.1 --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
 ```
 
 2. 不兼容当前壳或需要修原生能力时，同时发布原生强更 manifest：

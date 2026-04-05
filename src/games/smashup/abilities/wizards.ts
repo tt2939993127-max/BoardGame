@@ -98,6 +98,20 @@ function buildWizardPortalOrderOptions(
     });
 }
 
+function buildWizardPortalOrderCardOptions(cards: { uid: string; defId: string }[]) {
+    return cards.map((card, index) => {
+        const def = getCardDef(card.defId);
+        const name = def?.name ?? card.defId;
+        return {
+            id: `card-${index}`,
+            label: name,
+            value: { cardUid: card.uid, defId: card.defId },
+            _source: 'static' as const,
+            displayMode: 'card' as const,
+        };
+    });
+}
+
 /** 时间法师 onPlay：额外打出一个行动*/
 function wizardChronomage(ctx: AbilityContext): AbilityResult {
     return { events: [grantExtraAction(ctx.playerId, 'wizard_chronomage', ctx.now)] };
@@ -1090,7 +1104,7 @@ export function registerWizardInteractionHandlers(): void {
             `wizard_portal_order_${timestamp}`,
             playerId,
             '传送：选择放回牌库顶的第一张牌（最先选的在最上面）',
-            buildWizardPortalOrderOptions(state.core, playerId, portalOrderContext),
+            buildWizardPortalOrderCardOptions(remaining),
             { sourceId: 'wizard_portal_order', targetType: 'generic', responseValidationMode: 'live' },
         );
         (next.data as { optionsGenerator?: unknown }).optionsGenerator = (

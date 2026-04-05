@@ -412,7 +412,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                     className="relative flex h-full items-center justify-center"
                                     style={isMobileLandscape
                                         ? {
-                                            width: '100%',
+                                            width: 'min(calc(var(--mobile-board-shell-design-width, 1500px) * 0.64), 80rem)',
                                             height: '100%',
                                         }
                                         : {

@@ -11,6 +11,7 @@ export type NativeAppUpdateTaskStatus =
     | 'queued'
     | 'downloading'
     | 'verifying'
+    | 'prepared'
     | 'permission-required'
     | 'installing'
     | 'error';
@@ -40,6 +41,10 @@ export interface NativeAppUpdateTaskSnapshot {
     updatedAt?: number;
 }
 
+export interface NativeAppUpdatePrepareResult extends NativeAppUpdateTaskSnapshot {
+    status?: NativeAppUpdateTaskStatus | 'installer-launched';
+}
+
 type NativeAppUpdatePlugin = {
     getAppInfo(): Promise<{
         packageName?: string;
@@ -51,11 +56,8 @@ type NativeAppUpdatePlugin = {
         version: string;
         url: string;
         checksum?: string;
-    }): Promise<{
-        status?: 'permission-required' | 'installer-launched';
-        version?: string;
-        apkFilePath?: string;
-    }>;
+        autoInstall?: boolean;
+    }): Promise<NativeAppUpdatePrepareResult>;
     installPreparedUpdate(options: {
         version: string;
     }): Promise<{
@@ -181,6 +183,7 @@ const isNativeTaskStatus = (value: string): value is NativeAppUpdateTaskStatus =
     value === 'queued'
     || value === 'downloading'
     || value === 'verifying'
+    || value === 'prepared'
     || value === 'permission-required'
     || value === 'installing'
     || value === 'error'
@@ -408,7 +411,24 @@ export const checkAndroidNativeUpdateAvailability = async (): Promise<AndroidNat
     };
 };
 
-export const prepareAndroidNativeUpdateInstall = async (manifest: AndroidNativeUpdateManifest) => {
+export const prepareAndroidNativeUpdateInstall = async (
+    manifest: AndroidNativeUpdateManifest,
+    options: { autoInstall?: boolean } = {},
+) => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        throw new Error('当前环境不支持原生更新安装');
+    }
+    const autoInstall = options.autoInstall ?? true;
+    return plugin.prepareUpdateInstall({
+        version: manifest.version,
+        url: manifest.url,
+        checksum: manifest.checksum,
+        autoInstall,
+    });
+};
+
+export const startAndroidNativeUpdatePreload = async (manifest: AndroidNativeUpdateManifest) => {
     const plugin = getNativePlugin();
     if (!plugin) {
         throw new Error('当前环境不支持原生更新安装');
@@ -417,6 +437,7 @@ export const prepareAndroidNativeUpdateInstall = async (manifest: AndroidNativeU
         version: manifest.version,
         url: manifest.url,
         checksum: manifest.checksum,
+        autoInstall: false,
     });
 };
 
@@ -508,6 +529,7 @@ export const mapNativeUpdateEventToState = (
         queued: 'checking',
         downloading: 'downloading',
         verifying: 'verifying',
+        prepared: 'hidden',
         'permission-required': 'permission-required',
         installing: 'installing',
         error: 'error',
