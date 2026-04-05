@@ -190,7 +190,7 @@ const createRoomLifecycleRoutes = ({
             return;
         }
 
-        const body = ctx.request.body as { numPlayers?: unknown; setupData?: unknown } | undefined;
+        const body = ctx.request.body as { numPlayers?: unknown; setupData?: unknown; playerName?: string } | undefined;
         const numPlayers = Number(body?.numPlayers ?? 2);
         const minPlayers = gameEngine.minPlayers ?? 2;
         const maxPlayers = gameEngine.maxPlayers ?? 2;
@@ -226,6 +226,19 @@ const createRoomLifecycleRoutes = ({
             status: 'waiting',
         };
 
+        const ownerName = typeof body?.playerName === 'string' && body.playerName.trim()
+            ? body.playerName.trim()
+            : undefined;
+        let ownerCredentials: string | undefined;
+        if (ownerName) {
+            ownerCredentials = `cred-${matchID}-0`;
+            metadata.players['0'] = {
+                ...metadata.players['0'],
+                name: ownerName,
+                credentials: ownerCredentials,
+            };
+        }
+
         await storage.createMatch(matchID, {
             initialState: {
                 G: setupResult.state,
@@ -236,15 +249,24 @@ const createRoomLifecycleRoutes = ({
             metadata,
         });
 
-        ctx.body = { matchID };
+        ctx.body = {
+            matchID,
+            ownerPlayerID: ownerCredentials ? '0' : undefined,
+            ownerCredentials,
+        };
     });
 
     router.post('/games/:name/:matchID/join', async (ctx) => {
         const matchID = String(ctx.params.matchID || '').trim();
         const body = ctx.request.body as { playerID?: string; playerName?: string } | undefined;
-        const playerID = body?.playerID;
-        if (!playerID) {
-            ctx.throw(403, 'playerID is required');
+        const requestedPlayerID = typeof body?.playerID === 'string' && body.playerID.trim()
+            ? body.playerID.trim()
+            : undefined;
+        const playerName = typeof body?.playerName === 'string' && body.playerName.trim()
+            ? body.playerName.trim()
+            : undefined;
+        if (!playerName) {
+            ctx.throw(403, 'playerName is required');
             return;
         }
 
@@ -254,16 +276,29 @@ const createRoomLifecycleRoutes = ({
             return;
         }
 
+        const playerID = requestedPlayerID
+            ?? Object.entries(result.metadata.players)
+                .sort(([a], [b]) => Number(a) - Number(b))
+                .find(([, player]) => !player.name && !player.credentials)?.[0];
+        if (!playerID) {
+            ctx.throw(409, 'Room is full');
+            return;
+        }
+
         const playerMeta = result.metadata.players[playerID];
         if (!playerMeta) {
             ctx.throw(404, `Player ${playerID} not found`);
+            return;
+        }
+        if (playerMeta.name || playerMeta.credentials) {
+            ctx.throw(409, `Seat ${playerID} is occupied`);
             return;
         }
 
         const credentials = `cred-${matchID}-${playerID}`;
         result.metadata.players[playerID] = {
             ...playerMeta,
-            name: body?.playerName,
+            name: playerName,
             credentials,
         };
         result.metadata.updatedAt = Date.now();
@@ -276,7 +311,7 @@ const createRoomLifecycleRoutes = ({
         await storage.setMetadata(matchID, result.metadata);
         gameTransport.updateMatchMetadata(matchID, result.metadata);
 
-        ctx.body = { playerCredentials: credentials };
+        ctx.body = { playerID, playerCredentials: credentials };
     });
 
     router.post('/games/:name/:matchID/leave', async (ctx) => {
@@ -971,6 +1006,70 @@ describe('Test Routes Integration', () => {
     });
 
     describe('room lifecycle integration', () => {
+        it('create 时返回房主 0 号位凭据，避免再走二次 claim-seat', async () => {
+            const response = await fetch(`${baseURL}/games/lifecycle-game/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ numPlayers: 2, playerName: 'Host Alice' }),
+            });
+
+            expect(response.status).toBe(200);
+            const data = await response.json() as {
+                matchID: string;
+                ownerPlayerID?: string;
+                ownerCredentials?: string;
+            };
+
+            expect(data.matchID).toContain('lifecycle-match-');
+            expect(data.ownerPlayerID).toBe('0');
+            expect(data.ownerCredentials).toBe(`cred-${data.matchID}-0`);
+
+            const matchResponse = await fetch(`${baseURL}/games/lifecycle-game/${data.matchID}`);
+            expect(matchResponse.status).toBe(200);
+            const match = await matchResponse.json() as {
+                status: string;
+                players: Array<{ id: number; name?: string }>;
+            };
+
+            expect(match.status).toBe('waiting');
+            expect(match.players.find((player) => player.id === 0)?.name).toBe('Host Alice');
+        });
+
+        it('join 在未指定 playerID 时由服务端自动分配空席，并拒绝覆盖已占席位', async () => {
+            const createResponse = await fetch(`${baseURL}/games/lifecycle-game/create`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ numPlayers: 2, playerName: 'Host Alice' }),
+            });
+            const { matchID } = await createResponse.json() as { matchID: string };
+
+            const joinResponse = await fetch(`${baseURL}/games/lifecycle-game/${matchID}/join`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ playerName: 'Bob' }),
+            });
+
+            expect(joinResponse.status).toBe(200);
+            const joinData = await joinResponse.json() as { playerID?: string; playerCredentials: string };
+            expect(joinData.playerID).toBe('1');
+            expect(joinData.playerCredentials).toBe(`cred-${matchID}-1`);
+
+            const overwriteResponse = await fetch(`${baseURL}/games/lifecycle-game/${matchID}/join`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ playerID: '0', playerName: 'Mallory' }),
+            });
+            expect(overwriteResponse.status).toBe(409);
+        });
+
         it('covers create -> join -> sync -> command -> leave through REST and /game socket', async () => {
             const sockets: ClientSocket[] = [];
             const closeSockets = async () => {

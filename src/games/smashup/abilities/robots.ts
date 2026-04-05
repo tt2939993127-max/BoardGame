@@ -131,6 +131,8 @@ function robotMicrobotReclaimer(ctx: AbilityContext): AbilityResult {
             sourceId: 'robot_microbot_reclaimer',
             targetType: 'generic',
             multi: { min: 0, max: microbotsInDiscard.length },
+            autoRefresh: 'discard',
+            responseValidationMode: 'live',
         },
     );
 

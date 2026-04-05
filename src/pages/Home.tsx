@@ -5,6 +5,7 @@ import packageJson from '../../package.json';
 import { CategoryPills, type Category } from '../components/layout/CategoryPills';
 import { GameList } from '../components/lobby/GameList';
 import { getGamesByCategory, getGameById, subscribeGameRegistry } from '../config/games.config';
+import { resolveToolRoute } from '../config/toolRoutes';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { useNavigate } from 'react-router-dom';
@@ -349,7 +350,33 @@ export const Home = () => {
         }
     }, [activeGameModalId]);
 
+    useEffect(() => {
+        if (!activeGameModalId) {
+            return;
+        }
+        const game = getGameById(activeGameModalId);
+        if (game?.type !== 'tool') {
+            return;
+        }
+        const toolRoute = resolveToolRoute(activeGameModalId);
+        if (!toolRoute) {
+            return;
+        }
+        gameUrlModal.navigateAwayRef.current();
+        navigate(toolRoute, { replace: true });
+    }, [activeGameModalId, gameUrlModal.navigateAwayRef, navigate]);
+
     const handleGameClick = (id: string) => {
+        const game = getGameById(id);
+        if (game?.type === 'tool') {
+            const toolRoute = resolveToolRoute(id);
+            if (toolRoute) {
+                gameUrlModal.navigateAwayRef.current();
+                navigate(toolRoute);
+            }
+            return;
+        }
+
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
             return;
@@ -363,6 +390,10 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
+        const game = getGameById(id);
+        if (game?.type === 'tool') {
+            return;
+        }
         void import('../components/lobby/GameDetailsModal').catch((error) => {
             console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
         });
@@ -670,20 +701,18 @@ export const Home = () => {
                     }
                 }
 
-                // 无凭证：尝试重新加入空位
-                const matchInfo = await matchApi.getMatch(gameId, activeMatch.matchID);
-                const player0 = matchInfo.players.find(p => p.id === 0);
-                const player1 = matchInfo.players.find(p => p.id === 1);
-                let targetPlayerID = '';
-                if (!player0?.name) targetPlayerID = '0';
-                else if (!player1?.name) targetPlayerID = '1';
-                else return;
-
+                // 无凭证：让服务端直接分配可用席位
                 const playerName = user?.username || getGuestName();
                 const guestId = user?.id ? undefined : getGuestId();
-                const { success } = await rejoinMatch(gameId, activeMatch.matchID, targetPlayerID, playerName, { guestId });
-                if (success) {
-                    navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${targetPlayerID}`);
+                const { success, playerID: assignedPlayerID } = await rejoinMatch(
+                    gameId,
+                    activeMatch.matchID,
+                    undefined,
+                    playerName,
+                    { guestId },
+                );
+                if (success && assignedPlayerID) {
+                    navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${assignedPlayerID}`);
                 }
             } catch {
                 // 忽略错误

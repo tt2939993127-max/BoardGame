@@ -3,6 +3,9 @@ import type { GameImplementation } from '../core/types';
 import type { GameClientRuntimeModule } from './manifest.client.types';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 import { isStaleChunkError, reloadForStaleChunkOnce } from '../lib/staleChunkReloadGuard';
+import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
+import { safeMatchMedia } from '../lib/mediaQuery';
+import { isMobileViewport } from './mobileSupport';
 
 // 重新导出类型供外部使用
 export type { GameImplementation } from '../core/types';
@@ -11,14 +14,107 @@ export type { GameImplementation } from '../core/types';
 const runtimeCache = new Map<string, GameClientRuntimeModule>();
 /** 正在加载中的 Promise，防止并发重复加载 */
 const loadingPromises = new Map<string, Promise<GameClientRuntimeModule>>();
+/** 教程模块加载中的 Promise，避免重复 import */
+const tutorialLoadingPromises = new Map<string, Promise<void>>();
+/** late success 通知，避免超时报错后模块实际加载完成却还卡在错误页 */
+const readyListeners = new Set<(gameId: string) => void>();
 
 /** 游戏 ID → loadRuntime 函数的映射 */
 const loaderMap = new Map<string, () => Promise<GameClientRuntimeModule>>();
+/** 游戏 ID → loadTutorial 函数的映射 */
+const tutorialLoaderMap = new Map<string, () => Promise<GameClientRuntimeModule['tutorial']>>();
 
 export const GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 15000;
+export const SLOW_DEVICE_GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS = 45000;
 
-const createGameImplementationTimeoutMessage = (gameId: string) => (
-    `游戏客户端加载超时：${gameId}（${GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS}ms）`
+type LoadGameImplementationOptions = {
+    includeTutorial?: boolean;
+};
+
+type NavigatorConnectionLike = {
+    effectiveType?: string;
+    saveData?: boolean;
+};
+
+type GameImplementationTimeoutRuntimeOptions = {
+    windowObject?: Pick<Window, 'innerWidth'> | undefined;
+    navigatorObject?: {
+        connection?: NavigatorConnectionLike;
+        deviceMemory?: number;
+        hardwareConcurrency?: number;
+    } | undefined;
+    isNativeAndroid?: boolean;
+    isCoarsePointer?: boolean;
+};
+
+const SLOW_NETWORK_TYPES = new Set(['slow-2g', '2g', '3g']);
+
+const emitGameImplementationReady = (gameId: string) => {
+    for (const listener of readyListeners) {
+        try {
+            listener(gameId);
+        } catch {
+            // 单个订阅者异常不能影响其他恢复链路
+        }
+    }
+};
+
+export const subscribeGameImplementationReady = (
+    listener: (gameId: string) => void,
+): (() => void) => {
+    readyListeners.add(listener);
+    return () => {
+        readyListeners.delete(listener);
+    };
+};
+
+export const resolveGameImplementationLoadTimeoutMs = (
+    options: GameImplementationTimeoutRuntimeOptions = {},
+): number => {
+    const runtimeWindow = options.windowObject ?? (
+        typeof window !== 'undefined'
+            ? window
+            : undefined
+    );
+    const runtimeNavigator = options.navigatorObject ?? (
+        typeof navigator !== 'undefined'
+            ? navigator
+            : undefined
+    );
+    const isNativeAndroid = options.isNativeAndroid ?? isNativeAndroidRuntime();
+    const isCoarsePointer = options.isCoarsePointer ?? safeMatchMedia('(pointer: coarse)').matches;
+    const isMobileWidth = typeof runtimeWindow?.innerWidth === 'number'
+        ? isMobileViewport(runtimeWindow.innerWidth)
+        : false;
+    const connection = runtimeNavigator?.connection;
+    const isSlowNetwork = connection?.effectiveType
+        ? SLOW_NETWORK_TYPES.has(connection.effectiveType)
+        : false;
+    const saveDataEnabled = connection?.saveData === true;
+    const lowMemoryDevice = typeof runtimeNavigator?.deviceMemory === 'number'
+        ? runtimeNavigator.deviceMemory <= 4
+        : false;
+    const lowCpuDevice = typeof runtimeNavigator?.hardwareConcurrency === 'number'
+        ? runtimeNavigator.hardwareConcurrency <= 4
+        : false;
+
+    if (
+        isNativeAndroid
+        || isCoarsePointer
+        || isMobileWidth
+        || isSlowNetwork
+        || saveDataEnabled
+        || lowMemoryDevice
+        || lowCpuDevice
+    ) {
+        return SLOW_DEVICE_GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS;
+    }
+
+    return GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS;
+};
+
+const createGameImplementationTimeoutMessage = (gameId: string, timeoutMs: number) => (
+    `游戏客户端模块加载超时：${gameId}（${timeoutMs}ms）`
 );
 
 const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
@@ -41,28 +137,83 @@ const withTimeout = async <T,>(promise: Promise<T>, timeoutMs: number, timeoutMe
 
 // 构建 loader 映射（同步，不触发实际加载）
 for (const entry of GAME_CLIENT_MANIFEST) {
-    const { manifest, loadRuntime } = entry;
+    const { manifest, loadRuntime, loadTutorial } = entry;
     if (manifest.type !== 'game' || !manifest.enabled || !loadRuntime) continue;
     loaderMap.set(manifest.id, loadRuntime);
+    if (loadTutorial) {
+        tutorialLoaderMap.set(manifest.id, loadTutorial);
+    }
 }
+
+const ensureGameTutorialLoaded = async (gameId: string): Promise<void> => {
+    const cached = runtimeCache.get(gameId);
+    if (cached?.tutorial) {
+        return;
+    }
+
+    const loader = tutorialLoaderMap.get(gameId);
+    if (!loader) {
+        return;
+    }
+
+    const existing = tutorialLoadingPromises.get(gameId);
+    if (existing) {
+        await existing;
+        return;
+    }
+
+    const promise = loader().then((tutorial) => {
+        if (!tutorial) {
+            return;
+        }
+        const current = runtimeCache.get(gameId);
+        if (!current || current.tutorial === tutorial) {
+            return;
+        }
+        runtimeCache.set(gameId, {
+            ...current,
+            tutorial,
+        });
+        emitGameImplementationReady(gameId);
+    }).finally(() => {
+        if (tutorialLoadingPromises.get(gameId) === promise) {
+            tutorialLoadingPromises.delete(gameId);
+        }
+    });
+
+    tutorialLoadingPromises.set(gameId, promise);
+    await promise;
+};
 
 /**
  * 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
  * 首次调用触发动态 import，后续调用返回缓存
  */
-export const loadGameImplementation = async (gameId: string): Promise<GameImplementation | null> => {
+export const loadGameImplementation = async (
+    gameId: string,
+    options: LoadGameImplementationOptions = {},
+): Promise<GameImplementation | null> => {
+    const includeTutorial = options.includeTutorial === true;
+
     // 1. 缓存命中
     const cached = runtimeCache.get(gameId);
     if (cached) {
+        if (includeTutorial) {
+            await ensureGameTutorialLoaded(gameId);
+        }
         logMobileRuntime('GameRuntime', 'load-cache-hit', { gameId });
-        return cached;
+        return runtimeCache.get(gameId) ?? cached;
     }
 
     // 2. 正在加载中，复用 Promise
     const existing = loadingPromises.get(gameId);
     if (existing) {
+        const runtime = await existing;
+        if (includeTutorial) {
+            await ensureGameTutorialLoaded(gameId);
+        }
         logMobileRuntime('GameRuntime', 'load-reuse-inflight', { gameId });
-        return existing;
+        return runtimeCache.get(gameId) ?? runtime;
     }
 
     // 3. 查找 loader
@@ -74,11 +225,13 @@ export const loadGameImplementation = async (gameId: string): Promise<GameImplem
 
     // 4. 发起加载
     const startedAt = Date.now();
-    const timeoutMessage = createGameImplementationTimeoutMessage(gameId);
+    const timeoutMs = resolveGameImplementationLoadTimeoutMs();
+    const timeoutMessage = createGameImplementationTimeoutMessage(gameId, timeoutMs);
     logMobileRuntime('GameRuntime', 'load-start', { gameId });
 
     const rawPromise = loader().then((runtime) => {
         runtimeCache.set(gameId, runtime);
+        emitGameImplementationReady(gameId);
         logMobileRuntime('GameRuntime', 'load-success', {
             gameId,
             durationMs: Date.now() - startedAt,
@@ -86,13 +239,14 @@ export const loadGameImplementation = async (gameId: string): Promise<GameImplem
         return runtime;
     });
 
-    const promise = withTimeout(rawPromise, GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS, timeoutMessage)
+    const promise = withTimeout(rawPromise, timeoutMs, timeoutMessage)
         .catch((error: unknown) => {
             const message = error instanceof Error ? error.message : String(error);
             const isTimeout = message === timeoutMessage;
             const payload = {
                 gameId,
                 error: message,
+                timeoutMs,
                 durationMs: Date.now() - startedAt,
             };
 
@@ -115,7 +269,11 @@ export const loadGameImplementation = async (gameId: string): Promise<GameImplem
         });
 
     loadingPromises.set(gameId, promise);
-    return promise;
+    const runtime = await promise;
+    if (includeTutorial) {
+        await ensureGameTutorialLoaded(gameId);
+    }
+    return runtimeCache.get(gameId) ?? runtime;
 };
 
 /**
@@ -131,6 +289,10 @@ export const getGameImplementation = (gameId: string): GameImplementation | null
  */
 export const hasGameImplementation = (gameId: string): boolean => {
     return loaderMap.has(gameId);
+};
+
+export const hasGameTutorialLoader = (gameId: string): boolean => {
+    return tutorialLoaderMap.has(gameId);
 };
 
 // ---- 向后兼容：保留 GAME_IMPLEMENTATIONS 供不方便改异步的地方使用 ----

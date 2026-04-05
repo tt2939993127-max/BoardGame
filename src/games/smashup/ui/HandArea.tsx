@@ -321,9 +321,9 @@ const HandCard: React.FC<HandCardProps> = ({
             <div className={`
                 w-full h-full relative rounded-md shadow-md transition-all duration-200
                 ${isDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
-                ${isSelected ? 'ring-4 ring-green-400 shadow-[0_0_20px_rgba(74,222,128,0.5)]' : 'shadow-black/30'}
-                ${isDiscardSelected ? 'ring-4 ring-green-500 shadow-[0_0_14px_rgba(34,197,94,0.4)]' : ''}
-                ${!isSelected && !isDiscardSelected && !isDisabled && !isOpponentView ? (isDiscardMode ? 'ring-2 ring-green-500/35' : 'hover:ring-2 hover:ring-green-200/85 hover:shadow-xl') : ''}
+                ${isSelected ? 'ring-4 ring-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.5)]' : 'shadow-black/30'}
+                ${isDiscardSelected ? 'ring-4 ring-purple-500 shadow-[0_0_14px_rgba(168,85,247,0.4)]' : ''}
+                ${!isSelected && !isDiscardSelected && !isDisabled && !isOpponentView ? (isDiscardMode ? 'ring-2 ring-purple-500/35' : 'hover:ring-2 hover:ring-purple-200/85 hover:shadow-xl') : ''}
             `}>
                 {/* Card Asset Preview */}
                 <div className="w-full h-full rounded-md overflow-hidden bg-[#f3f0e8] border border-slate-400/50 shadow-inner relative">

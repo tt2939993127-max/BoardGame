@@ -7,10 +7,10 @@ import { DICETHRONE_AUDIO_CONFIG } from '../audio.config';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 import { MONK_ABILITIES } from '../heroes/monk/abilities';
+import { GUNSLINGER_ABILITIES, GUNSLINGER_SFX_HEAVY, GUNSLINGER_SFX_SHOT, GUNSLINGER_SFX_ULTIMATE } from '../heroes/gunslinger/abilities';
+import { SAMURAI_ABILITIES, SAMURAI_SFX_DEFENSE, SAMURAI_SFX_HEAVY, SAMURAI_SFX_LIGHT, SAMURAI_SFX_ULTIMATE } from '../heroes/samurai/abilities';
 import type { AudioEvent } from '../../../lib/audio/types';
 
-const CP_GAIN_KEY = 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
-const CP_SPEND_KEY = 'status.general.player_status_sound_fx_pack.fantasy.fantasy_dispel_001';
 const DICE_ROLL_SINGLE_KEY = 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_001';
 const DICE_ROLL_MULTI_KEYS = [
     'dice.decks_and_cards_sound_fx_pack.few_dice_roll_001',
@@ -37,6 +37,13 @@ const ABILITY_SFX_KEYS = {
     transcendence: 'combat.general.fight_fury_vol_2.special_hit.fghtimpt_special_hit_02_krst',
     thunderStrike: 'combat.general.fight_fury_vol_2.versatile_punch_hit.fghtimpt_versatile_punch_hit_01_krst',
     taijiCombo: 'combat.general.mini_games_sound_effects_and_music_pack.kick_punch.sfx_fight_kick_swoosh_1',
+    revolver: GUNSLINGER_SFX_SHOT,
+    showdown: GUNSLINGER_SFX_HEAVY,
+    fillEmWithLead: GUNSLINGER_SFX_ULTIMATE,
+    katanaSlice: SAMURAI_SFX_LIGHT,
+    masamune: SAMURAI_SFX_HEAVY,
+    standTall: SAMURAI_SFX_DEFENSE,
+    samuraiUltimate: SAMURAI_SFX_ULTIMATE,
 } as const;
 
 describe('DiceThrone 音效配置', () => {
@@ -181,6 +188,46 @@ describe('DiceThrone 音效配置', () => {
             // 没有专属 sfxKey 的技能应返回默认技能音效
             const result = resolveKey(event, mockContext);
             expect(result).toBe('ui.general.modern_ui_sound_fx_pack_vol.menu_navigation.menu_navigation_select_001');
+        });
+    });
+
+    describe('新英雄技能音效配置', () => {
+        it('枪手核心技能应配置枪械主题音效', () => {
+            expect(GUNSLINGER_ABILITIES.find(a => a.id === 'revolver')?.sfxKey).toBe(ABILITY_SFX_KEYS.revolver);
+            expect(GUNSLINGER_ABILITIES.find(a => a.id === 'showdown')?.sfxKey).toBe(ABILITY_SFX_KEYS.showdown);
+            expect(GUNSLINGER_ABILITIES.find(a => a.id === 'fill-em-with-lead')?.sfxKey).toBe(ABILITY_SFX_KEYS.fillEmWithLead);
+        });
+
+        it('武士核心技能应配置刀剑主题音效', () => {
+            expect(SAMURAI_ABILITIES.find(a => a.id === 'katana-slice')?.sfxKey).toBe(ABILITY_SFX_KEYS.katanaSlice);
+            expect(SAMURAI_ABILITIES.find(a => a.id === 'masamune')?.sfxKey).toBe(ABILITY_SFX_KEYS.masamune);
+            expect(SAMURAI_ABILITIES.find(a => a.id === 'stand-tall')?.sfxKey).toBe(ABILITY_SFX_KEYS.standTall);
+            expect(SAMURAI_ABILITIES.find(a => a.id === 'samurai-ultimate')?.sfxKey).toBe(ABILITY_SFX_KEYS.samuraiUltimate);
+        });
+
+        it('选中枪手后应预热枪手专属技能音效', () => {
+            const keys = DICETHRONE_AUDIO_CONFIG.contextualPreloadKeys?.({
+                G: { selectedCharacters: { '0': 'gunslinger' } },
+                ctx: {},
+                meta: {},
+            } as never) ?? [];
+
+            expect(keys).toContain(GUNSLINGER_SFX_SHOT);
+            expect(keys).toContain(GUNSLINGER_SFX_HEAVY);
+            expect(keys).toContain(GUNSLINGER_SFX_ULTIMATE);
+        });
+
+        it('选中武士后应预热武士专属技能音效', () => {
+            const keys = DICETHRONE_AUDIO_CONFIG.contextualPreloadKeys?.({
+                G: { selectedCharacters: { '0': 'samurai' } },
+                ctx: {},
+                meta: {},
+            } as never) ?? [];
+
+            expect(keys).toContain(SAMURAI_SFX_LIGHT);
+            expect(keys).toContain(SAMURAI_SFX_HEAVY);
+            expect(keys).toContain(SAMURAI_SFX_DEFENSE);
+            expect(keys).toContain(SAMURAI_SFX_ULTIMATE);
         });
     });
 

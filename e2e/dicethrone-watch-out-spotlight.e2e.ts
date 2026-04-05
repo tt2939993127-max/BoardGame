@@ -65,6 +65,17 @@ async function expectMaxViewportWidthRatio(
     expect(box!.width / viewportWidth, `${label} width ratio`).toBeLessThanOrEqual(maxRatio);
 }
 
+async function expectMinViewportWidthRatio(
+    locator: Locator,
+    label: string,
+    viewportWidth: number,
+    minRatio: number,
+): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box, `${label} should have bounding box`).not.toBeNull();
+    expect(box!.width / viewportWidth, `${label} width ratio`).toBeGreaterThanOrEqual(minRatio);
+}
+
 async function expectCombinedHorizontalCenter(
     locators: Locator[],
     label: string,
@@ -2173,7 +2184,8 @@ test('desktop v2 player board should stay within normal gameplay width', async (
     await expectNoHorizontalOverflow(page);
     await expectElementInsideViewport(playerBoardSurface, 'desktop player board surface', viewport!.width, viewport!.height);
     await expectElementInsideViewport(tipBoardSurface, 'desktop tip board surface', viewport!.width, viewport!.height);
-    await expectMaxViewportWidthRatio(playerBoardSurface, 'desktop samurai player board surface', viewport!.width, 0.48);
+    await expectMinViewportWidthRatio(playerBoardSurface, 'desktop samurai player board surface', viewport!.width, 0.495);
+    await expectMaxViewportWidthRatio(playerBoardSurface, 'desktop samurai player board surface', viewport!.width, 0.515);
 
     const [playerBoardBox, tipBoardBox] = await Promise.all([
         playerBoardSurface.boundingBox(),
@@ -2181,8 +2193,9 @@ test('desktop v2 player board should stay within normal gameplay width', async (
     ]);
     expect(playerBoardBox, 'desktop player board should expose bounding box').not.toBeNull();
     expect(tipBoardBox, 'desktop tip board should expose bounding box').not.toBeNull();
-    expect(playerBoardBox!.x + playerBoardBox!.width, 'desktop player board should stop before tip board')
-        .toBeLessThanOrEqual(tipBoardBox!.x + 1);
+    const boardGapPx = tipBoardBox!.x - (playerBoardBox!.x + playerBoardBox!.width);
+    expect(boardGapPx, 'desktop v2 player board should keep a visible gap before tip board').toBeGreaterThan(0);
+    expect(boardGapPx, 'desktop v2 player board and tip board should only keep a tight gap').toBeLessThanOrEqual(8);
 
     await game.screenshot('15-desktop-v2-board-layout', testInfo);
 });

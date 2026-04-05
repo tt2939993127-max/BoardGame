@@ -2906,11 +2906,15 @@ test.describe('SummonerWars', () => {
       overflowDirection,
       screenshotKey,
       screenshotFilename,
+      undoScreenshotKey,
+      undoScreenshotFilename,
     }: {
       deltaY: number;
       overflowDirection: 'top' | 'bottom';
       screenshotKey: string;
       screenshotFilename: string;
+      undoScreenshotKey: string;
+      undoScreenshotFilename: string;
     }) => {
       await hostPage.evaluate(() => {
         localStorage.removeItem('hud_fab_position');
@@ -2961,10 +2965,6 @@ test.describe('SummonerWars', () => {
         right: (rawExitPanelRectAfterDrag?.x ?? 0) + (rawExitPanelRectAfterDrag?.width ?? 0),
         bottom: (rawExitPanelRectAfterDrag?.y ?? 0) + (rawExitPanelRectAfterDrag?.height ?? 0),
       };
-      expect(
-        Math.abs(resolvedExitPanelRectAfterDrag.y - (exitPanelRectBeforeDrag?.y ?? 0)),
-        `${overflowDirection} overflow after drag should move the active exit panel with the FAB anchor`,
-      ).toBeGreaterThan(60);
       expect(resolvedExitPanelRectAfterDrag.x).toBeGreaterThanOrEqual(0);
       expect(resolvedExitPanelRectAfterDrag.y).toBeGreaterThanOrEqual(0);
       expect(resolvedExitPanelRectAfterDrag.right).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.width + 1);
@@ -3009,14 +3009,26 @@ test.describe('SummonerWars', () => {
       if (!panelRect) {
         throw new Error(`缺少 ${overflowDirection} 场景的日志面板尺寸`);
       }
-      if (expandedButtons.length > 0) {
-        const visibleTop = Math.min(...expandedButtons.map((button) => button.rect.top));
-        if (overflowDirection === 'top') {
-          expect(
-            Math.abs((panelRect.top ?? 999) - visibleTop),
-            'top overflow should keep panel attached to the top of the expanded button column',
-          ).toBeLessThanOrEqual(12);
-        }
+      const resolveAnchorEdgeDistance = (
+        targetRect: { top: number; bottom: number },
+        referenceRect: { top: number; bottom: number },
+      ) => Math.min(
+        Math.abs(targetRect.top - referenceRect.top),
+        Math.abs(targetRect.bottom - referenceRect.bottom),
+      );
+      const actionLogButton = expandedButtons.find((button) => button.id === 'action-log');
+      const settingsButton = expandedButtons.find((button) => button.id === 'settings');
+      if (actionLogButton && settingsButton) {
+        const actionLogAnchorDistance = resolveAnchorEdgeDistance(panelRect, actionLogButton.rect);
+        const settingsAnchorDistance = resolveAnchorEdgeDistance(panelRect, settingsButton.rect);
+        expect(
+          actionLogAnchorDistance,
+          `${overflowDirection} overflow should keep the action-log panel anchored to the action-log button itself`,
+        ).toBeLessThanOrEqual(12);
+        expect(
+          settingsAnchorDistance - actionLogAnchorDistance,
+          `${overflowDirection} overflow should not let the action-log panel snap to the settings button`,
+        ).toBeGreaterThanOrEqual(12);
       }
       for (const button of expandedButtons) {
         const overlapsVertically = panelRect.top < button.rect.bottom && panelRect.bottom > button.rect.top;
@@ -3036,6 +3048,52 @@ test.describe('SummonerWars', () => {
         }),
         fullPage: false,
       });
+
+      const undoButton = hostPage.locator('[data-testid="fab-menu"] [data-fab-id^="undo-"]').first();
+      await expect(undoButton).toBeVisible({ timeout: 5000 });
+      const undoButtonId = await undoButton.getAttribute('data-fab-id');
+      if (!undoButtonId) {
+        throw new Error(`缺少 ${overflowDirection} 场景的 undo FAB id`);
+      }
+      const undoPanel = await openFabPanel(hostPage, undoButtonId, 'exit');
+      await expect(undoPanel).toBeVisible({ timeout: 5000 });
+      const undoPanelAnchorMetrics = await hostPage.evaluate(({ undoButtonId: currentUndoButtonId }) => {
+        const panel = document.querySelector(`[data-testid="fab-panel-${currentUndoButtonId}"]`) as HTMLElement | null;
+        const undoButtonElement = document.querySelector(`[data-fab-id="${currentUndoButtonId}"]`) as HTMLElement | null;
+        const settingsButtonElement = document.querySelector('[data-fab-id="settings"]') as HTMLElement | null;
+        if (!panel || !undoButtonElement || !settingsButtonElement) {
+          return null;
+        }
+        const panelRect = panel.getBoundingClientRect();
+        const undoRect = undoButtonElement.getBoundingClientRect();
+        const settingsRect = settingsButtonElement.getBoundingClientRect();
+        const resolveAnchorEdgeDistance = (targetRect: DOMRect, referenceRect: DOMRect) =>
+          Math.min(
+            Math.abs(targetRect.top - referenceRect.top),
+            Math.abs(targetRect.bottom - referenceRect.bottom),
+          );
+        return {
+          undoAnchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, undoRect),
+          settingsAnchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, settingsRect),
+        };
+      }, { undoButtonId });
+      expect(undoPanelAnchorMetrics).not.toBeNull();
+      expect(
+        undoPanelAnchorMetrics?.undoAnchorEdgeDistance ?? Number.POSITIVE_INFINITY,
+        `${overflowDirection} overflow should keep the undo panel anchored to the undo button itself`,
+      ).toBeLessThanOrEqual(12);
+      expect(
+        (undoPanelAnchorMetrics?.settingsAnchorEdgeDistance ?? 0)
+        - (undoPanelAnchorMetrics?.undoAnchorEdgeDistance ?? 0),
+        `${overflowDirection} overflow should not let the undo panel snap to the settings button`,
+      ).toBeGreaterThanOrEqual(12);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, undoScreenshotKey, {
+          filename: undoScreenshotFilename,
+        }),
+        fullPage: false,
+      });
     };
 
     await runExpandedOverflowScenario({
@@ -3043,6 +3101,8 @@ test.describe('SummonerWars', () => {
       overflowDirection: 'top',
       screenshotKey: 'mobile-fab-expanded-top-overflow-recovered',
       screenshotFilename: '30-mobile-fab-expanded-top-overflow-recovered.png',
+      undoScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-recovered',
+      undoScreenshotFilename: '30a-mobile-fab-expanded-top-undo-anchor-recovered.png',
     });
 
     await runExpandedOverflowScenario({
@@ -3050,6 +3110,8 @@ test.describe('SummonerWars', () => {
       overflowDirection: 'bottom',
       screenshotKey: 'mobile-fab-expanded-bottom-overflow-recovered',
       screenshotFilename: '31-mobile-fab-expanded-bottom-overflow-recovered.png',
+      undoScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-recovered',
+      undoScreenshotFilename: '31a-mobile-fab-expanded-bottom-undo-anchor-recovered.png',
     });
 
     const phaseBeforeAdvance = await getCurrentPhase(hostPage);

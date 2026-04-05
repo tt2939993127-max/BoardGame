@@ -588,23 +588,27 @@ export const GameDebugPanel: React.FC<DebugPanelProps> = ({ G, dispatch, events,
                                                 // 1. 创建新房间
                                                 const createResult = await matchApi.createMatch(
                                                     gameId,
-                                                    { numPlayers: 2, setupData: guestId ? { guestId } : undefined },
+                                                    {
+                                                        numPlayers: 2,
+                                                        setupData: guestId ? { guestId } : undefined,
+                                                        playerName,
+                                                    },
                                                     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
                                                 );
                                                 
                                                 console.log('[DebugPanel] 房间创建成功', { matchID: createResult.matchID });
-                                                
-                                                // 使用 claim-seat 而不是 joinMatch，因为 joinMatch 不支持传递认证信息
-                                                const { playerCredentials: newCredentials } = await matchApi.claimSeat(
-                                                    gameId,
-                                                    createResult.matchID,
-                                                    '0',
-                                                    {
-                                                        token,
-                                                        guestId: guestId,
-                                                        playerName,
-                                                    }
-                                                );
+                                                const newCredentials = createResult.ownerCredentials
+                                                    ? createResult.ownerCredentials
+                                                    : (await matchApi.claimSeat(
+                                                        gameId,
+                                                        createResult.matchID,
+                                                        '0',
+                                                        {
+                                                            token: token ?? undefined,
+                                                            guestId: guestId,
+                                                            playerName,
+                                                        }
+                                                    )).playerCredentials;
                                                 
                                                 console.log('[DebugPanel] 加入房间成功');
                                                 

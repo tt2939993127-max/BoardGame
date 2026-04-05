@@ -4,6 +4,11 @@ import { SAMURAI_DICE_FACE_IDS, TOKEN_IDS } from '../../domain/ids';
 
 const FACE = SAMURAI_DICE_FACE_IDS;
 
+export const SAMURAI_SFX_LIGHT = 'combat.general.forged_in_fury_vol_1.katana.katana_whoosh_type_a.dsgnwhsh_katana_whoosh_type_a_03_krst';
+export const SAMURAI_SFX_HEAVY = 'combat.general.forged_in_fury_vol_1.katana.katana_only_hit_layer_with_metal.fghtimpt_katana_only_hit_layer_with_metal_03_krst';
+export const SAMURAI_SFX_ULTIMATE = 'combat.general.forged_in_fury_vol_1.katana.double_katana_whoosh.dsgnwhsh_double_katana_whoosh_02_krst';
+export const SAMURAI_SFX_DEFENSE = 'fantasy.medieval_fantasy_sound_fx_pack_vol.armor.shield_impact_a';
+
 const damage = (
     value: number,
     description: string,
@@ -42,6 +47,7 @@ const KATANA_SLICE: AbilityDef = {
     name: abilityText('katana-slice', 'name'),
     type: 'offensive',
     description: abilityText('katana-slice', 'description'),
+    sfxKey: SAMURAI_SFX_LIGHT,
     variants: [
         {
             id: 'katana-slice-3',
@@ -69,6 +75,7 @@ export const KATANA_SLICE_2: AbilityDef = {
     name: abilityText('katana-slice-2', 'name'),
     type: 'offensive',
     description: abilityText('katana-slice-2', 'description'),
+    sfxKey: SAMURAI_SFX_LIGHT,
     variants: [
         {
             id: 'katana-slice-2-3',
@@ -105,6 +112,7 @@ export const KATANA_SLICE_3: AbilityDef = {
     name: abilityText('katana-slice-3', 'name'),
     type: 'offensive',
     description: abilityText('katana-slice-3', 'description'),
+    sfxKey: SAMURAI_SFX_LIGHT,
     variants: [
         {
             id: 'katana-slice-3-3',
@@ -142,6 +150,7 @@ const WAKIZASHI: AbilityDef = {
     type: 'offensive',
     tags: ['unblockable'],
     description: abilityText('wakizashi', 'description'),
+    sfxKey: SAMURAI_SFX_LIGHT,
     trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.RISING_SUN]: 2 } },
     effects: [
         grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。'),
@@ -155,6 +164,7 @@ export const WAKIZASHI_2: AbilityDef = {
     type: 'offensive',
     tags: ['unblockable'],
     description: abilityText('wakizashi-2', 'description'),
+    sfxKey: SAMURAI_SFX_LIGHT,
     trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.RISING_SUN]: 2 } },
     effects: [
         grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。'),
@@ -168,6 +178,7 @@ export const WAKIZASHI_3: AbilityDef = {
     type: 'offensive',
     tags: ['unblockable'],
     description: abilityText('wakizashi-3', 'description'),
+    sfxKey: SAMURAI_SFX_LIGHT,
     trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.RISING_SUN]: 2 } },
     effects: [
         grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。'),
@@ -189,6 +200,7 @@ const SOLEMNITY: AbilityDef = {
     name: abilityText('solemnity', 'name'),
     type: 'offensive',
     description: abilityText('solemnity', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.HELM]: 3 } },
     effects: [
         grantToken('opponent', TOKEN_IDS.SHAME, 1, '对手获得 1 层耻辱。'),
@@ -201,6 +213,7 @@ export const SOLEMNITY_2: AbilityDef = {
     name: abilityText('solemnity-2', 'name'),
     type: 'offensive',
     description: abilityText('solemnity-2', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.HELM]: 3 } },
     effects: [
         grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
@@ -213,6 +226,7 @@ const BUDO: AbilityDef = {
     name: abilityText('budo', 'name'),
     type: 'offensive',
     description: abilityText('budo', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'smallStraight' },
     effects: [
         grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
@@ -225,6 +239,7 @@ export const BUDO_2: AbilityDef = {
     name: abilityText('budo-2', 'name'),
     type: 'offensive',
     description: abilityText('budo-2', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'smallStraight' },
     effects: [
         grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
@@ -238,6 +253,7 @@ const SAMURAI_SLOT_06: AbilityDef = {
     type: 'offensive',
     tags: ['unblockable'],
     description: abilityText('samurai-slot-06', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'diceSet', faces: { [FACE.RISING_SUN]: 4 } },
     effects: [
         grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
@@ -253,6 +269,7 @@ export const SAMURAI_SLOT_06_2: AbilityDef = {
     type: 'offensive',
     tags: ['unblockable'],
     description: abilityText('samurai-slot-06-2', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'diceSet', faces: { [FACE.RISING_SUN]: 4 } },
     effects: [
         grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
@@ -267,6 +284,7 @@ const MASAMUNE: AbilityDef = {
     name: abilityText('masamune', 'name'),
     type: 'offensive',
     description: abilityText('masamune', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     trigger: { type: 'largeStraight' },
     effects: [
         damage(7, '造成 7 点伤害。'),
@@ -282,6 +300,7 @@ export const MASAMUNE_2: AbilityDef = {
     name: abilityText('masamune-2', 'name'),
     type: 'offensive',
     description: abilityText('masamune-2', 'description'),
+    sfxKey: SAMURAI_SFX_HEAVY,
     variants: [
         {
             id: 'masamune-2-large-straight',
@@ -313,6 +332,7 @@ const STAND_TALL: AbilityDef = {
     name: abilityText('stand-tall', 'name'),
     type: 'defensive',
     description: abilityText('stand-tall', 'description'),
+    sfxKey: SAMURAI_SFX_DEFENSE,
     trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 3 },
     effects: [
         custom(
@@ -327,6 +347,7 @@ export const STAND_TALL_2: AbilityDef = {
     name: abilityText('stand-tall-2', 'name'),
     type: 'defensive',
     description: abilityText('stand-tall-2', 'description'),
+    sfxKey: SAMURAI_SFX_DEFENSE,
     trigger: { type: 'phase', phaseId: 'defensiveRoll', diceCount: 4 },
     effects: [
         custom(
@@ -342,6 +363,7 @@ const SAMURAI_ULTIMATE: AbilityDef = {
     type: 'offensive',
     tags: ['ultimate', 'unblockable'],
     description: abilityText('samurai-ultimate', 'description'),
+    sfxKey: SAMURAI_SFX_ULTIMATE,
     trigger: { type: 'diceSet', faces: { [FACE.RISING_SUN]: 5 } },
     effects: [
         grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),

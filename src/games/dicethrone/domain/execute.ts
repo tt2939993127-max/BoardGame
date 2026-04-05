@@ -872,7 +872,11 @@ export function execute(
                 && resolvedPlayerIds.length === 1
                 && interaction.sourceCardId
             ) {
-                const card = findHeroCard(interaction.sourceCardId);
+                const playerCharacterId = state.players[interaction.playerId]?.characterId;
+                const card = findHeroCard(
+                    interaction.sourceCardId,
+                    playerCharacterId && playerCharacterId !== 'unselected' ? playerCharacterId : undefined,
+                );
                 const selectedTargetId = resolvedPlayerIds[0];
                 if (card && hasOpponentTargetEffect(card)) {
                     const stateAfterCardResolution = applyEvents(state, events, reduce);

@@ -253,6 +253,32 @@ export function GameProvider({
     // 用 ref 存储回调，避免回调引用变化导致 effect 重新执行（断开重连）
     const onErrorRef = useRef(onError);
     const onConnectionChangeRef = useRef(onConnectionChange);
+    const RECOVERABLE_COMMAND_ERRORS = useMemo(
+        () => new Set([
+            'command_failed',
+            'pipeline_error',
+            'invalid_phase',
+            'cannot_advance_phase',
+            'player_mismatch',
+        ]),
+        [],
+    );
+    const recoverFromRejectedCommand = useCallback((reason: string) => {
+        if (!RECOVERABLE_COMMAND_ERRORS.has(reason)) {
+            return;
+        }
+
+        if (optimisticEngineRef.current) {
+            optimisticEngineRef.current.reset();
+            setRollbackSignal(prev => ({
+                watermark: null,
+                seq: prev.seq + 1,
+                reconcileSeq: prev.reconcileSeq,
+            }));
+        }
+
+        clientRef.current?.resync();
+    }, [RECOVERABLE_COMMAND_ERRORS]);
 
     useEffect(() => {
         onErrorRef.current = onError;
@@ -299,7 +325,12 @@ export function GameProvider({
                 } else {
                     // 批量发送
                     const batchId = `b-${++batchSeqRef.current}`;
-                    client.sendBatch(batchId, commands);
+                    client.sendBatch(batchId, commands, undefined, (reason) => {
+                        recoverFromRejectedCommand(reason);
+                        if (reason !== 'command_failed') {
+                            onErrorRef.current?.(reason);
+                        }
+                    });
                 }
             },
         });
@@ -308,7 +339,7 @@ export function GameProvider({
             batcher.destroy();
             batcherRef.current = null;
         };
-    }, [latencyConfig]);
+    }, [latencyConfig, recoverFromRejectedCommand]);
 
     useEffect(() => {
         const client = new GameTransportClient({
@@ -408,6 +439,7 @@ export function GameProvider({
                 }
             },
             onError: (error) => {
+                recoverFromRejectedCommand(error);
                 onErrorRef.current?.(error);
             },
         });
@@ -419,7 +451,7 @@ export function GameProvider({
             client.disconnect();
             clientRef.current = null;
         };
-    }, [server, matchId, playerId, credentials]);
+    }, [server, matchId, playerId, credentials, recoverFromRejectedCommand]);
 
     // 页面可见性恢复时主动重新同步状态
     // 浏览器后台标签页会节流 timer / 冻结 JS 执行，导致：

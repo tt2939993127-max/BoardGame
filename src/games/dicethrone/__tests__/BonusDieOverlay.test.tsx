@@ -10,6 +10,12 @@ import { BonusDieOverlay } from '../ui/BonusDieOverlay';
 import { SpotlightContainer } from '../ui/SpotlightContainer';
 import { shouldSuppressPendingDisplayOnlyBonusOverlay } from '../ui/bonusDiceOverlayVisibility';
 import { shouldHighlightOpponentViewAbilities } from '../ui/abilityHighlightVisibility';
+import {
+    COMMON_CARDS,
+    GUNSLINGER_COMMON_ATLAS_INDEX,
+    SAMURAI_COMMON_ATLAS_INDEX,
+} from '../domain/commonCards';
+import { getDiceThroneCardPreviewRef } from '../ui/cardPreviewHelper';
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
@@ -207,6 +213,90 @@ describe('BonusDieOverlay', () => {
             expect(state.cardSpotlightQueue[0].bonusDice[1].value).toBe(3);
             expect(state.bonusDie.show).toBe(false);
         });
+    });
+
+    it('新角色通用卡特写应按角色解析 previewRef，而不是回退到旧角色默认索引', async () => {
+        const buildEntries = (): EventStreamEntry[] => [
+            {
+                id: 1,
+                event: {
+                    type: 'CARD_PLAYED',
+                    payload: {
+                        playerId: '1',
+                        cardId: 'card-next-time',
+                    },
+                    timestamp: 1000,
+                },
+            },
+        ];
+
+        function HookProbe({
+            streamEntries,
+            opponentCharacter,
+        }: {
+            streamEntries: EventStreamEntry[];
+            opponentCharacter: 'gunslinger' | 'samurai';
+        }) {
+            const state = useCardSpotlight({
+                eventStreamEntries: streamEntries,
+                currentPlayerId: '0',
+                opponentName: '对手',
+                selectedCharacters: {
+                    '0': 'monk',
+                    '1': opponentCharacter,
+                },
+            });
+
+            return (
+                <pre data-testid="common-card-spotlight-state">
+                    {JSON.stringify(state.cardSpotlightQueue)}
+                </pre>
+            );
+        }
+
+        const firstRender = render(<HookProbe streamEntries={[]} opponentCharacter="gunslinger" />);
+        firstRender.rerender(<HookProbe streamEntries={buildEntries()} opponentCharacter="gunslinger" />);
+
+        await waitFor(() => {
+            const state = JSON.parse(screen.getByTestId('common-card-spotlight-state').textContent ?? '[]');
+            expect(state).toHaveLength(1);
+            expect(state[0].previewRef).toEqual({
+                type: 'atlas',
+                atlasId: 'dicethrone:gunslinger-cards',
+                index: 9,
+            });
+        });
+
+        firstRender.unmount();
+
+        const secondRender = render(<HookProbe streamEntries={[]} opponentCharacter="samurai" />);
+        secondRender.rerender(<HookProbe streamEntries={buildEntries()} opponentCharacter="samurai" />);
+
+        await waitFor(() => {
+            const state = JSON.parse(screen.getByTestId('common-card-spotlight-state').textContent ?? '[]');
+            expect(state).toHaveLength(1);
+            expect(state[0].previewRef).toEqual({
+                type: 'atlas',
+                atlasId: 'dicethrone:samurai-cards',
+                index: 9,
+            });
+        });
+    });
+
+    it('新角色整组通用卡都应按角色解析各自的 atlas 索引', () => {
+        for (const card of COMMON_CARDS) {
+            expect(getDiceThroneCardPreviewRef(card.id, 'gunslinger')).toEqual({
+                type: 'atlas',
+                atlasId: 'dicethrone:gunslinger-cards',
+                index: GUNSLINGER_COMMON_ATLAS_INDEX[card.id],
+            });
+
+            expect(getDiceThroneCardPreviewRef(card.id, 'samurai')).toEqual({
+                type: 'atlas',
+                atlasId: 'dicethrone:samurai-cards',
+                index: SAMURAI_COMMON_ATLAS_INDEX[card.id],
+            });
+        }
     });
 
     it('自己打出的 Volley 多骰事件应显示独立多骰特写，而不是卡牌特写或单骰特写', async () => {

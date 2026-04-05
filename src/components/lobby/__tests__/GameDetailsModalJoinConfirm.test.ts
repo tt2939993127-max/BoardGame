@@ -685,12 +685,12 @@ describe('GameDetailsModal create room ai entry', () => {
 
     it('创建房间弹窗内直接配置 AI，不再显示独立对战 AI 入口', async () => {
         markGamePackageInstalled();
-        vi.spyOn(matchApi, 'createMatch').mockResolvedValueOnce({ matchID: 'match-ai-1' });
-        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-1' });
-        vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({
-            success: true,
-            credentials: 'host-cred',
+        vi.spyOn(matchApi, 'createMatch').mockResolvedValueOnce({
+            matchID: 'match-ai-1',
+            ownerPlayerID: '0',
+            ownerCredentials: 'host-cred',
         });
+        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-1' });
 
         render(createElement(GameDetailsModal, baseProps));
 
@@ -711,6 +711,7 @@ describe('GameDetailsModal create room ai entry', () => {
             'dicethrone',
             expect.objectContaining({
                 numPlayers: 2,
+                playerName: 'Guest',
                 setupData: expect.objectContaining({
                     enableAi: true,
                     seatControllers: expect.objectContaining({
@@ -721,6 +722,7 @@ describe('GameDetailsModal create room ai entry', () => {
             }),
             undefined,
         );
+        expect(matchStatus.claimSeat).not.toHaveBeenCalled();
         expect(matchApi.claimSeat).toHaveBeenCalledWith(
             'dicethrone',
             'match-ai-1',
@@ -729,6 +731,56 @@ describe('GameDetailsModal create room ai entry', () => {
                 guestId: 'guest-1',
             }),
         );
+    });
+
+    it('加入房间时直接让服务端分配席位，不再先 getMatch 猜空位', async () => {
+        markGamePackageInstalled();
+        vi.mocked(lobbySocket.subscribe).mockImplementationOnce((_gameId, callback) => {
+            callback([{
+                matchID: 'match-join-1',
+                players: [
+                    { id: 0, name: 'Host' },
+                    { id: 1, name: undefined },
+                ],
+                totalSeats: 2,
+                gameName: 'dicethrone',
+                roomName: '测试房间',
+                ownerKey: 'owner-2',
+                ownerType: 'guest',
+                isLocked: false,
+            }]);
+            return () => {};
+        });
+        const getMatchSpy = vi.spyOn(matchApi, 'getMatch');
+        const joinMatchSpy = vi.spyOn(matchApi, 'joinMatch').mockResolvedValueOnce({
+            playerID: '1',
+            playerCredentials: 'guest-seat-1',
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        await waitFor(() => {
+            expect(screen.getByText('actions.join')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('actions.join'));
+
+        await waitFor(() => {
+            expect(joinMatchSpy).toHaveBeenCalledWith(
+                'dicethrone',
+                'match-join-1',
+                expect.objectContaining({
+                    playerName: 'Guest',
+                    data: expect.objectContaining({
+                        guestId: 'guest-1',
+                    }),
+                }),
+            );
+        });
+        expect(joinMatchSpy.mock.calls[0]?.[2]).not.toHaveProperty('playerID');
+        expect(getMatchSpy).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-join-1?playerID=1');
+        });
     });
 
     it('未保存过 AI 偏好时，创建房间弹窗默认传入空偏好', async () => {
@@ -1230,11 +1282,10 @@ describe('GameDetailsModal create room ai entry', () => {
 
     it('创建房间时显示进入对局 loading', async () => {
         markGamePackageInstalled();
-        let resolveCreateMatch: ((value: { matchID: string }) => void) | null = null;
+        let resolveCreateMatch: ((value: { matchID: string; ownerPlayerID?: string; ownerCredentials?: string }) => void) | null = null;
         vi.spyOn(matchApi, 'createMatch').mockImplementationOnce(() => new Promise((resolve) => {
-            resolveCreateMatch = resolve as (value: { matchID: string }) => void;
+            resolveCreateMatch = resolve as (value: { matchID: string; ownerPlayerID?: string; ownerCredentials?: string }) => void;
         }));
-        vi.mocked(matchStatus.claimSeat).mockResolvedValueOnce({ success: true, credentials: 'seat-creds' } as never);
         vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-creds' });
 
         render(createElement(GameDetailsModal, baseProps));
@@ -1251,7 +1302,7 @@ describe('GameDetailsModal create room ai entry', () => {
             expect(screen.getByTestId('loading-screen-progress')).toHaveTextContent('matchRoom.loadingProgress.preparingRoom');
         });
 
-        resolveCreateMatch?.({ matchID: 'match-created' });
+        resolveCreateMatch?.({ matchID: 'match-created', ownerPlayerID: '0', ownerCredentials: 'seat-creds' });
 
         await waitFor(() => {
             expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-created?playerID=0');

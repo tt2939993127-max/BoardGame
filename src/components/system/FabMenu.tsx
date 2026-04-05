@@ -691,9 +691,7 @@ const Panel = ({
         width: buttonSize,
         height: buttonSize,
     };
-    const resolvedAnchor = isActive && item.content
-        ? logicalAnchor
-        : (anchorRect ?? logicalAnchor);
+    const resolvedAnchor = anchorRect ?? logicalAnchor;
     const resolvedReference = referenceRect ?? resolvedAnchor;
     const panelAnchorOffset = resolvedAnchor.width + panelGap;
     const isMobileSheetPanel = isMobileViewport && item.mobilePanelVariant === 'sheet';
@@ -714,23 +712,32 @@ const Panel = ({
         0,
         Math.floor(resolvedReference.bottom - safeAreaInsets.top - edgePadding),
     );
+    const anchorSpaceBelow = Math.max(
+        0,
+        Math.floor(viewportHeight - resolvedAnchor.top - safeAreaInsets.bottom - edgePadding),
+    );
+    const anchorSpaceAbove = Math.max(
+        0,
+        Math.floor(resolvedAnchor.bottom - safeAreaInsets.top - edgePadding),
+    );
 
     const horizontalPlacement: FabAlignment['h'] = referenceRect
         ? (spaceRight === spaceLeft ? alignment.h : (spaceRight >= spaceLeft ? 'right' : 'left'))
         : alignment.h;
-    const verticalPlacement: FabAlignment['v'] = referenceRect
-        ? (spaceBelow === spaceAbove ? alignment.v : (spaceBelow >= spaceAbove ? 'top' : 'bottom'))
-        : alignment.v;
+    const verticalPlacement: FabAlignment['v'] = anchorSpaceBelow === anchorSpaceAbove
+        ? alignment.v
+        : (anchorSpaceBelow >= anchorSpaceAbove ? 'top' : 'bottom');
+    const safeAvailableWidth = horizontalPlacement === 'right' ? spaceRight : spaceLeft;
+    const safeAvailableHeight = verticalPlacement === 'top' ? anchorSpaceBelow : anchorSpaceAbove;
     const panelContainerTopMin = safeAreaInsets.top;
     const panelContainerTopMax = Math.max(
         panelContainerTopMin,
         viewportHeight - safeAreaInsets.bottom - resolvedAnchor.height,
     );
-    const panelContainerTop = verticalPlacement === 'top'
-        ? Math.max(resolvedReference.top, panelContainerTopMin)
-        : Math.min(resolvedReference.bottom - resolvedAnchor.height, panelContainerTopMax);
-    const safeAvailableWidth = horizontalPlacement === 'right' ? spaceRight : spaceLeft;
-    const safeAvailableHeight = verticalPlacement === 'top' ? spaceBelow : spaceAbove;
+    const panelContainerTop = Math.min(
+        Math.max(resolvedAnchor.top, panelContainerTopMin),
+        panelContainerTopMax,
+    );
     const resolvedPanelWidth = safeAvailableWidth > 0 ? Math.min(panelWidth, safeAvailableWidth) : panelWidth;
     const panelMaxWidth = safeAvailableWidth > 0 ? `${safeAvailableWidth}px` : undefined;
     const panelMaxHeight = safeAvailableHeight > 0 ? `${safeAvailableHeight}px` : undefined;

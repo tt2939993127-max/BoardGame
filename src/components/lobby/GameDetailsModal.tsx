@@ -738,7 +738,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             };
             const result = await matchApi.createMatch(
                     gameId,
-                    { numPlayers, setupData },
+                    { numPlayers, setupData, playerName: user?.username || getGuestName() },
                     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
                 );
             const matchID = result.matchID;
@@ -749,13 +749,34 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 return;
             }
 
-            const claimResult = await tryClaimSeat(matchID, gameId, { navigateOnSuccess: false });
-            if (!claimResult.success) {
-                console.error('[handleCreateRoom] claim-seat 失败', { matchID, error: claimResult.error });
-                toast.error({ kind: 'i18n', key: 'error.roomCreatedButClaimFailed', ns: 'lobby' });
-                // 请求刷新大厅，让用户能看到已创建的房间
+            const ownerPlayerName = user?.username || getGuestName();
+            const ownerCredentials = result.ownerCredentials;
+            if (ownerCredentials) {
+                persistMatchCredentials(matchID, {
+                    playerID: result.ownerPlayerID || '0',
+                    credentials: ownerCredentials,
+                    matchID,
+                    gameName: gameId,
+                    playerName: ownerPlayerName,
+                });
+                setOwnerActiveMatch({
+                    matchID,
+                    gameName: gameId,
+                    ownerKey: getOwnerKey(),
+                    ownerType: getOwnerType(),
+                });
+                setLocalStorageTick((t) => t + 1);
+                setShowCreateRoomModal(false);
                 lobbySocket.requestRefresh(normalizedGameId);
-                return;
+            } else {
+                const claimResult = await tryClaimSeat(matchID, gameId, { navigateOnSuccess: false });
+                if (!claimResult.success) {
+                    console.error('[handleCreateRoom] claim-seat 失败', { matchID, error: claimResult.error });
+                    toast.error({ kind: 'i18n', key: 'error.roomCreatedButClaimFailed', ns: 'lobby' });
+                    // 请求刷新大厅，让用户能看到已创建的房间
+                    lobbySocket.requestRefresh(normalizedGameId);
+                    return;
+                }
             }
 
             if (enableAi) {
@@ -765,7 +786,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 for (const [playerId] of aiSeatEntries) {
                     try {
                         const response = await matchApi.claimSeat(gameId, matchID, playerId, {
-                            token,
+                            token: token ?? undefined,
                             guestId,
                             playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
                         });
@@ -923,39 +944,28 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             setMatchEntryLoadingPhase(null);
             return;
         }
-        let targetPlayerID = '';
-
-        try {
-            const matchInfo = await matchApi.getMatch(roomGameName, matchID);
-            const openSeat = [...matchInfo.players]
-                .sort((a, b) => a.id - b.id)
-                .find(p => !p.name);
-
-            // 新加入逻辑：找一个空位（以服务器最新数据为准）
-            if (!openSeat) {
-                toast.warning({ kind: 'i18n', key: 'error.roomFull', ns: 'lobby' });
-                return;
-            }
-            targetPlayerID = String(openSeat.id);
-        } catch (error) {
-            console.error('获取房间状态失败:', error);
-            toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
-            setMatchEntryLoadingPhase(null);
-            return;
-        }
-
         try {
             // 获取用户名或生成游客名
             const playerName = user?.username || getGuestName();
+            const joinData: Record<string, unknown> = {};
+            if (password) {
+                joinData.password = password;
+            }
+            if (!user?.id) {
+                joinData.guestId = getGuestId();
+            }
 
-            const { playerCredentials } = await matchApi.joinMatch(roomGameName, matchID, {
-                playerID: targetPlayerID,
+            const { playerCredentials, playerID } = await matchApi.joinMatch(roomGameName, matchID, {
                 playerName,
-                data: password ? { password } : undefined,
+                data: Object.keys(joinData).length > 0 ? joinData : undefined,
             });
+            const joinedPlayerID = playerID;
+            if (!joinedPlayerID) {
+                throw new Error('join response missing playerID');
+            }
 
             persistMatchCredentials(matchID, {
-                playerID: targetPlayerID,
+                playerID: joinedPlayerID,
                 credentials: playerCredentials,
                 matchID,
                 gameName: roomGameName,
@@ -965,11 +975,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             setLocalStorageTick(t => t + 1);
 
             onNavigate?.();
-            navigate(`/play/${roomGameName}/match/${matchID}?playerID=${targetPlayerID}`);
+            navigate(`/play/${roomGameName}/match/${matchID}?playerID=${joinedPlayerID}`);
             shouldPreserveLoading = true;
         } catch (error) {
             console.error('Join failed:', error);
-            toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
+            if (String(error).includes('Room is full')) {
+                toast.warning({ kind: 'i18n', key: 'error.roomFull', ns: 'lobby' });
+            } else {
+                toast.error({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
+            }
         } finally {
             if (!shouldPreserveLoading) {
                 setMatchEntryLoadingPhase(null);
@@ -1099,6 +1113,11 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 // 如果本地没有，尝试从房间列表查找
                 const room = roomsRef.current.find(r => r.matchID === matchID);
                 if (room?.gameName) gameName = room.gameName;
+            }
+
+            if (!myCredentials) {
+                toast.error({ kind: 'i18n', key: 'error.actionFailed', ns: 'lobby' });
+                return;
             }
 
             let result = await exitMatch(gameName, matchID, myPlayerID, myCredentials, isHost);
@@ -1253,8 +1272,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             let myCredentials: string | null = null;
 
             if (parsed && parsed.matchID === room.matchID) {
-                myPlayerID = parsed.playerID;
-                myCredentials = parsed.credentials;
+                myPlayerID = parsed.playerID ?? null;
+                myCredentials = parsed.credentials ?? null;
             }
 
             const canReconnect = !!myCredentials;

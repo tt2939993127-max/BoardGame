@@ -221,6 +221,7 @@ describe('cross hero battles', () => {
             expect(gunslingerAbilityIds).toContain('duel');
             expect(gunslingerAbilityIds).toContain('fill-em-with-lead');
             expect(state.core.players['0'].abilityLevels.duel).toBe(1);
+            expect(state.core.players['0'].tokens.loaded).toBe(1);
         });
 
         it('duel win creates choice and prevent-half branch works', () => {
@@ -922,6 +923,7 @@ describe('cross hero battles', () => {
         it('spin the chamber grants 1 loaded', () => {
             const spinTheChamberCard = GUNSLINGER_CARDS.find(card => card.id === 'card-spin-the-chamber');
             expect(spinTheChamberCard).toBeDefined();
+            let startingLoaded = 0;
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
@@ -937,6 +939,7 @@ describe('cross hero battles', () => {
                     state.core.players['0'].resources.cp = 1;
                     state.core.players['0'].hand = [{ ...spinTheChamberCard! }];
                     state.core.players['0'].deck = [];
+                    startingLoaded = state.core.players['0'].tokens.loaded ?? 0;
                     return state;
                 },
                 assertFn: assertState,
@@ -959,7 +962,7 @@ describe('cross hero battles', () => {
             });
 
             expect(result.assertionErrors).toEqual([]);
-            expect(result.finalState.core.players['0'].tokens.loaded).toBe(1);
+            expect(result.finalState.core.players['0'].tokens.loaded).toBe(startingLoaded + 1);
         });
 
         it('wanted applies 1 bounty to the target', () => {

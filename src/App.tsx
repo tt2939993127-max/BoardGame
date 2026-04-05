@@ -59,6 +59,9 @@ const DevToolsSlicer = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pag
 const DevToolsFxPreview = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
 const DevToolsAudioBrowser = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
 const DevToolsArchView = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
+const UgcBuilderPage = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./ugc/builder/pages/UnifiedBuilderWithAudio')) : null;
+const UgcSandboxPage = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./ugc/builder/pages/UGCSandbox')) : null;
+const UgcRuntimeViewPage = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./ugc/runtime/RuntimeViewPage')) : null;
 const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayout'));
 const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
 const UsersPage = React.lazy(() => import('./pages/admin/Users'));
@@ -153,6 +156,15 @@ const AppContent = () => {
                     )}
                     {ENABLE_INTERNAL_DEVTOOLS && DevToolsArchView && (
                       <Route path="/dev/arch" element={<React.Suspense fallback={null}><DevToolsArchView /></React.Suspense>} />
+                    )}
+                    {ENABLE_INTERNAL_DEVTOOLS && UgcBuilderPage && (
+                      <Route path="/dev/ugc" element={<React.Suspense fallback={null}><UgcBuilderPage /></React.Suspense>} />
+                    )}
+                    {ENABLE_INTERNAL_DEVTOOLS && UgcSandboxPage && (
+                      <Route path="/dev/ugc/sandbox" element={<React.Suspense fallback={null}><UgcSandboxPage /></React.Suspense>} />
+                    )}
+                    {ENABLE_INTERNAL_DEVTOOLS && UgcRuntimeViewPage && (
+                      <Route path="/dev/ugc/runtime-view" element={<React.Suspense fallback={null}><UgcRuntimeViewPage /></React.Suspense>} />
                     )}
                     {ENABLE_INTERNAL_DEVTOOLS && SmashUp4PLayoutTest && (
                       <Route path="/dev/smashup-4p-layout" element={<React.Suspense fallback={null}><SmashUp4PLayoutTest /></React.Suspense>} />

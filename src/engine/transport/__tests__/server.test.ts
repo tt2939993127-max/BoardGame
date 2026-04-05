@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GameTransportServer, type GameEngineConfig } from '../server';
 import type {
     CreateMatchData,
@@ -494,6 +494,46 @@ describe('GameTransportServer（离座与重连）', () => {
         await newSocket.clientEmit('sync', 'match-1', '0', 'new-cred');
         expect(hasEvent(newSocket, 'state:sync')).toBe(true);
         expect(hasEvent(newSocket, 'error', (args) => args[1] === 'unauthorized')).toBe(false);
+    });
+
+    it('sync should not wait for metadata persistence before emitting state:sync', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        await storage.createMatch('match-sync-fast', {
+            initialState: createStoredState(),
+            metadata: createMetadata('cred-fast'),
+        });
+
+        let resolvePersist: (() => void) | null = null;
+        const persistBlocked = new Promise<void>((resolve) => {
+            resolvePersist = resolve;
+        });
+        const setMetadataSpy = vi.spyOn(storage, 'setMetadata').mockImplementation(async (matchID, metadata) => {
+            await persistBlocked;
+            return InMemoryStorage.prototype.setMetadata.call(storage, matchID, metadata);
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const socket = new MockSocket('socket-sync-fast');
+        io.gameNamespace.connectSocket(socket);
+
+        const syncPromise = socket.clientEmit('sync', 'match-sync-fast', '0', 'cred-fast');
+        await nextTick();
+
+        expect(hasEvent(socket, 'state:sync')).toBe(true);
+        expect(setMetadataSpy).toHaveBeenCalledTimes(1);
+
+        resolvePersist?.();
+        await syncPromise;
     });
 
     it('离座后断开旧连接，使用新凭证可继续同一 seat 进度', async () => {

@@ -17,6 +17,8 @@ export interface GameClientManifestEntry {
     thumbnail: ReactNode;
     /** 懒加载游戏运行时实现（仅 type=game 时存在） */
     loadRuntime?: () => Promise<GameClientRuntimeModule>;
+    /** 懒加载教程清单（仅 tutorial.ts 存在时提供） */
+    loadTutorial?: () => Promise<TutorialManifest>;
 
     // ---- 以下字段已废弃，保留仅为向后兼容过渡 ----
     /** @deprecated 使用 loadRuntime() 替代 */

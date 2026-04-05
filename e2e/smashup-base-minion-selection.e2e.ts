@@ -132,13 +132,13 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         await expect(page.getByText('描边验收：选择基地')).toBeVisible({ timeout: 10000 });
         await page.waitForFunction(
-            () => document.querySelectorAll('[data-base-index] [class*="ring-green-400"]').length > 0,
+            () => document.querySelectorAll('[data-base-index] [class*="ring-purple-400"]').length > 0,
             { timeout: 5000 },
         );
 
         const baseHighlightStructure = await page.evaluate(() => {
             const base = document.querySelector('[data-base-index="0"]');
-            const highlight = base?.querySelector('[class*="ring-green-400"]');
+            const highlight = base?.querySelector('[class*="ring-purple-400"]');
             const token = base
                 ? Array.from(base.children).find((child) => (child.textContent ?? '').includes('/'))
                 : null;
@@ -190,13 +190,13 @@ test.describe('SmashUp Base/Minion Selection', () => {
 
         await expect(page.getByText('描边验收：选择随从')).toBeVisible({ timeout: 10000 });
         await page.waitForFunction(
-            () => document.querySelectorAll('[data-minion-uid] [class*="ring-green-400"]').length > 0,
+            () => document.querySelectorAll('[data-minion-uid] [class*="ring-purple-400"]').length > 0,
             { timeout: 5000 },
         );
 
         const minionHighlightStructure = await page.evaluate(() => {
             const minion = document.querySelector('[data-minion-uid="outlined-target-minion"]');
-            const highlight = minion?.querySelector('[class*="ring-green-400"]');
+            const highlight = minion?.querySelector('[class*="ring-purple-400"]');
             const outsideChildren = minion && highlight
                 ? Array.from(minion.children).filter((child) => child !== highlight && !highlight.contains(child)).length
                 : 0;

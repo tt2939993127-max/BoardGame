@@ -13,18 +13,37 @@ export interface GameConfig extends GameManifestEntry {
 const registrySubscribers = new Set<() => void>();
 const ugcGameIds = new Set<string>();
 
+export const shouldIncludeManifestInRegistry = (
+    manifest: GameManifestEntry,
+    options: {
+        isNativeAndroidAppRuntime: boolean;
+        isDev: boolean;
+    },
+) => {
+    if (manifest.type === 'tool' && !options.isDev) {
+        return false;
+    }
+
+    return options.isNativeAndroidAppRuntime
+        ? manifest.shellTargets.includes('app-webview')
+        : manifest.shellTargets.includes('pwa');
+};
+
 const buildGameRegistry = () => {
     const isNativeAndroidAppRuntime = isNativeAndroidRuntime();
     const registry: Record<string, GameConfig> = {};
     for (const entry of GAME_CLIENT_MANIFEST) {
         const { manifest, thumbnail } = entry;
-        if (manifest.type === 'tool') {
-            continue;
-        }
         if (!thumbnail) {
             throw new Error(`[GameManifest] 缺少缩略图配置: ${manifest.id}`);
         }
         const resolvedManifest = resolveGameManifestEntry(manifest);
+        if (!shouldIncludeManifestInRegistry(resolvedManifest, {
+            isNativeAndroidAppRuntime,
+            isDev: import.meta.env.DEV,
+        })) {
+            continue;
+        }
         registry[resolvedManifest.id] = {
             ...resolvedManifest,
             thumbnail,

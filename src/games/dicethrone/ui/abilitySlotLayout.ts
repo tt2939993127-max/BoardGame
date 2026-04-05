@@ -24,6 +24,9 @@ type PlayerBoardUiTuning = {
     shellTranslateX: number;
     playerBoardTranslateY: number;
     magnifyButtonTop: number;
+    playerBoardBaseHeightVw: number;
+    tipBoardHeightVw: number;
+    centerBoardGapVw: number;
 };
 
 const V1_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
@@ -85,11 +88,17 @@ const DICETHRONE_PLAYER_BOARD_UI_TUNING: Record<DiceThronePlayerBoardLayoutVersi
         shellTranslateX: 0,
         playerBoardTranslateY: 0,
         magnifyButtonTop: 0.48,
+        playerBoardBaseHeightVw: 35,
+        tipBoardHeightVw: 35,
+        centerBoardGapVw: 0.5,
     },
     v2: {
         shellTranslateX: 1.1,
-        playerBoardTranslateY: -1.45,
+        playerBoardTranslateY: -2.85,
         magnifyButtonTop: 1.85,
+        playerBoardBaseHeightVw: 35,
+        tipBoardHeightVw: 29.6,
+        centerBoardGapVw: 0.24,
     },
 };
 

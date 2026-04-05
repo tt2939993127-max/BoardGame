@@ -40,6 +40,7 @@ import { RESOURCE_IDS } from './resources';
 import { buildDrawEvents } from './deckEvents';
 import { reduce } from './reducer';
 import { getGameMode, applyEvents, getPendingAttackExpectedDamage } from './utils';
+import { resolveEffectsToEvents } from './effects';
 import type { ResponseWindowOpenedEvent } from './events';
 import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
@@ -1233,23 +1234,45 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         return undefined;
     },
 
-    onPhaseEnter: ({ state, from, to, command, random }): GameEvent[] | void => {
+    onPhaseEnter: ({ state, from, to, command, random, exitEvents }): GameEvent[] | void => {
         const core = state.core;
         const events: GameEvent[] = [];
         const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
         // ========== 进入 upkeep 阶段：结算维持阶段触发的状态效果 ==========
-        // 规则 §3.1：结算所有在"维持阶段"触发的状态效果或被动能力
-        // 注意：从 discard 进入 upkeep 时，TURN_CHANGED 事件尚未 reduce，
-        // core.activePlayerId 仍是上一个玩家。需要通过 from 判断并获取正确的活跃玩家。
-        // 从 setup 进入 upkeep 是游戏初始化转换，此时 HERO_INITIALIZED 尚未 reduce，
-        // 玩家状态不完整且不可能有状态效果，跳过结算。
-        if (to === 'upkeep' && from !== 'setup') {
-            // 从 discard 过来意味着换人了，活跃玩家是下一位
-            const activeId = from === 'discard'
-                ? getNextPlayerId(core)
-                : core.activePlayerId;
-            const player = core.players[activeId];
+        // 规则 §3.1：结算所有在"维持阶段"触发的状态效果或被动能力。
+        // 注意：onPhaseEnter 收到的 state.core 尚未应用 exitEvents（如 TURN_CHANGED / HERO_INITIALIZED），
+        // 因此这里先 apply exitEvents 得到真正的“进入 upkeep 时”状态，再做结算。
+        if (to === 'upkeep') {
+            const phaseEnterCore = exitEvents?.length
+                ? applyEvents(core, exitEvents as DiceThroneEvent[], reduce)
+                : core;
+            const activeId = phaseEnterCore.activePlayerId;
+            const player = phaseEnterCore.players[activeId];
+            const phaseStartPassives = player?.abilities.filter((ability) => {
+                const trigger = ability.trigger as { type?: string; phase?: string } | undefined;
+                return ability.type === 'passive'
+                    && trigger?.type === 'phaseStart'
+                    && trigger.phase === 'upkeep'
+                    && (ability.effects?.length ?? 0) > 0;
+            }) ?? [];
+
+            for (const passive of phaseStartPassives) {
+                events.push(...resolveEffectsToEvents(
+                    passive.effects ?? [],
+                    'immediate',
+                    {
+                        attackerId: activeId,
+                        defenderId: phaseEnterCore.pendingAttack?.defenderId ?? activeId,
+                        sourceAbilityId: passive.id,
+                        state: phaseEnterCore,
+                        damageDealt: 0,
+                        timestamp,
+                    },
+                    { random },
+                ));
+            }
+
             if (player?.statusEffects) {
                 // 0. 火焰精通冷却 — 维持阶段移除 1 个火焰精通
                 const fmCount = player.tokens?.[TOKEN_IDS.FIRE_MASTERY] ?? 0;
@@ -1275,7 +1298,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         source: { playerId: 'system', abilityId: 'upkeep-burn' },
                         target: { playerId: activeId },
                         baseDamage: 2,
-                        state: core,
+                        state: phaseEnterCore,
                         timestamp,
                     });
                     const damageEvents = damageCalc.toEvents();
@@ -1291,7 +1314,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         source: { playerId: 'system', abilityId: 'upkeep-poison' },
                         target: { playerId: activeId },
                         baseDamage: poisonStacks,
-                        state: core,
+                        state: phaseEnterCore,
                         timestamp,
                     });
                     const damageEvents = damageCalc.toEvents();

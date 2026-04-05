@@ -301,7 +301,7 @@ function registerVampirePodOngoingEffects(): void {
             destroyerId,
             '新生吸血鬼：你可以埋葬这张牌到任意基地',
             options,
-            { sourceId: 'vampire_fledgling_vampire_pod_bury_source', targetType: 'generic' },
+            { sourceId: 'vampire_fledgling_vampire_pod_bury_source', targetType: 'generic', autoRefresh: 'hand_or_discard', responseValidationMode: 'live' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState!, interaction) } as any;
     }, { optional: true, global: true });
@@ -650,7 +650,7 @@ function vampireCrackOfDusk(ctx: AbilityContext): AbilityResult {
     });
     return resolveOrPrompt(ctx, options, {
         id: 'vampire_crack_of_dusk', title: '从弃牌堆选择力量≤2的随从打出（+1指示物）',
-        sourceId: 'vampire_crack_of_dusk', targetType: 'generic' as const,
+        sourceId: 'vampire_crack_of_dusk', targetType: 'generic' as const, autoRefresh: 'discard', responseValidationMode: 'live',
     }, (val) => {
         // 选完随从后，创建基地选择交互
         return crackOfDuskCreateBaseSelect(ctx.matchState, ctx.playerId, val.cardUid, val.defId, ctx.now);
@@ -1348,7 +1348,7 @@ function vampireWolfPactPodActionOnPlay(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '狼之契约（战术）：选择弃牌堆的一张卡洗入牌库',
         options as any[],
-        { sourceId: 'vampire_wolf_pact_pod_action', targetType: 'generic' },
+        { sourceId: 'vampire_wolf_pact_pod_action', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }

@@ -1464,7 +1464,7 @@ function penguinsEmperorPenguinTalent(ctx: AbilityContext): AbilityResult {
             value: { cardUid: option.cardUid, defId: option.defId, zone: option.zone },
             displayMode: 'card' as const,
         })),
-        { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic' },
+        { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic', autoRefresh: 'hand_or_discard', responseValidationMode: 'live' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -3777,7 +3777,7 @@ export function registerTitanInteractionHandlers(): void {
             playerId,
             '奶油泡芙美人：选择要从弃牌堆额外打出的标准战术',
             actionOptions,
-            { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic' },
+            { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
         );
         (interaction.data as { optionsGenerator?: unknown; continuationContext?: unknown }).optionsGenerator = (nextState: AbilityContext['matchState']) =>
             buildCreampuffActionOptions(nextState, playerId);
