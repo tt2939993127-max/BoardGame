@@ -55,6 +55,11 @@
   "button": {
     "processing": "Processing..."
   },
+  "tutorial": {
+    "steps": {
+      "setup": "Preparing room"
+    }
+  },
   "activeMatch": {
     "notice": "You are currently in a match",
     "return": "Return to match (#{{id}})"
