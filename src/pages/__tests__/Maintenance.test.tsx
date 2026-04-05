@@ -708,6 +708,7 @@ describe('useGameImplementationReady', () => {
 
     it('超时报错后如果模块稍后实际加载完成，会自动恢复 ready', async () => {
         let readyListener: ((gameId: string) => void) | null = null;
+        let implementation: { engineConfig: object; board: () => null } | null = null;
         const mockSubscribeGameImplementationReady = vi.fn((listener: (gameId: string) => void) => {
             readyListener = listener;
             return () => {
@@ -716,7 +717,7 @@ describe('useGameImplementationReady', () => {
                 }
             };
         });
-        const mockGetGameImplementation = vi.fn(() => null);
+        const mockGetGameImplementation = vi.fn(() => implementation);
         const mockHasGameTutorialLoader = vi.fn(() => false);
         const mockLoadGameImplementation = vi.fn()
             .mockRejectedValueOnce(new Error('游戏客户端模块加载超时：smashup（45000ms）'));
@@ -736,6 +737,7 @@ describe('useGameImplementationReady', () => {
         });
 
         act(() => {
+            implementation = { engineConfig: {}, board: () => null };
             readyListener?.('smashup');
         });
 
@@ -769,6 +771,59 @@ describe('useGameImplementationReady', () => {
         });
 
         expect(mockLoadGameImplementation).toHaveBeenCalledWith('smashup', { includeTutorial: true });
+    });
+
+    it('教程路由收到 runtime ready 事件时不能在 tutorial 未加载前提前就绪', async () => {
+        let readyListener: ((gameId: string) => void) | null = null;
+        const implementationRef: {
+            current: { engineConfig: object; board: () => null; tutorial?: { id: string; steps: never[] } } | null;
+        } = {
+            current: null,
+        };
+        const mockSubscribeGameImplementationReady = vi.fn((listener: (gameId: string) => void) => {
+            readyListener = listener;
+            return vi.fn();
+        });
+        const mockGetGameImplementation = vi.fn(() => implementationRef.current);
+        const mockHasGameTutorialLoader = vi.fn(() => true);
+        const mockLoadGameImplementation = vi.fn(() => new Promise<typeof implementationRef.current>((resolve) => {
+            window.setTimeout(() => {
+                implementationRef.current = {
+                    engineConfig: {},
+                    board: () => null,
+                    tutorial: { id: 'smashup-basic', steps: [] },
+                };
+                resolve(implementationRef.current);
+            }, 50);
+        }));
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup', { includeTutorial: true }));
+
+        await waitFor(() => {
+            expect(mockLoadGameImplementation).toHaveBeenCalledWith('smashup', { includeTutorial: true });
+        });
+
+        act(() => {
+            implementationRef.current = {
+                engineConfig: {},
+                board: () => null,
+            };
+            readyListener?.('smashup');
+        });
+
+        expect(result.current.isGameImplementationReady).toBe(false);
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
     });
 });
 

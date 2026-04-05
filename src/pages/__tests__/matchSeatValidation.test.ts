@@ -9,7 +9,7 @@ import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
-import { resolveForceSkippableHiddenAiInteraction, submitOnlineAiResolution } from '../MatchRoom';
+import { resolveForceSkippableHiddenAiInteraction, submitOnlineAiResolution } from '../onlineAiForceSkip';
 import { resolveOnlineHudPresence } from '../matchHudPresence';
 
 type Player = { id: number; name?: string | null };

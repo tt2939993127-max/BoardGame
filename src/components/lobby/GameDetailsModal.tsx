@@ -878,14 +878,23 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
                     const aiClaimStartedAt = Date.now();
                     void Promise.allSettled(
-                        aiSeatEntries.map(async ([playerId]) => ({
-                            playerId,
-                            response: await matchApi.claimSeat(gameId, matchID, playerId, {
-                                token: token ?? undefined,
-                                guestId,
-                                playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
-                            }),
-                        })),
+                        aiSeatEntries.map(async ([playerId]) => {
+                            try {
+                                return {
+                                    playerId,
+                                    response: await matchApi.claimSeat(gameId, matchID, playerId, {
+                                        token: token ?? undefined,
+                                        guestId,
+                                        playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
+                                    }),
+                                };
+                            } catch (error) {
+                                throw {
+                                    playerId,
+                                    error,
+                                };
+                            }
+                        }),
                     ).then((results) => {
                         const aiSeatCredentials: Record<string, string> = {};
                         let failureCount = 0;
@@ -897,10 +906,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                             }
 
                             failureCount += 1;
+                            const failurePayload = result.reason as { playerId?: string; error?: unknown } | undefined;
                             logger.error('[GameDetailsModal] AI 座位占座失败', {
                                 gameId,
                                 matchID,
-                                error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+                                playerId: failurePayload?.playerId ?? 'unknown',
+                                error: failurePayload?.error instanceof Error
+                                    ? failurePayload.error.message
+                                    : String(failurePayload?.error ?? result.reason),
                             });
                         });
 
