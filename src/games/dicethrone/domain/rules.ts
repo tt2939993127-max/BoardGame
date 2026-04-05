@@ -652,7 +652,8 @@ export type CardPlayFailReason =
     | 'requireRollConfirmed'       // 卡牌需要骰面已确认（响应对手确认后）
     | 'requireNotRollConfirmed'    // 骰面已确认，不能再打出该卡
     | 'requireMinDamageDealt'      // 本回合未造成足够伤害
-    | 'noStatusOnBoard';           // 场上没有任何状态效果或 token
+    | 'noStatusOnBoard'            // 场上没有任何状态效果或 token
+    | 'requirePendingDamage';      // 需要处于待结算伤害响应窗口
 
 const getAttackModifierPlayFailureReason = (
     state: DiceThroneCore,
@@ -671,6 +672,35 @@ const getAttackModifierPlayFailureReason = (
         return 'attackModifierRequiresSelectedDefender';
     }
     return null;
+};
+
+const matchesPendingDamagePlayCondition = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    pendingDamageCondition: NonNullable<NonNullable<AbilityCard['playCondition']>['pendingDamage']>,
+): boolean => {
+    const pendingDamage = state.pendingDamage;
+    if (!pendingDamage) {
+        return false;
+    }
+
+    if (
+        pendingDamageCondition.responseType
+        && pendingDamage.responseType !== pendingDamageCondition.responseType
+    ) {
+        return false;
+    }
+
+    switch (pendingDamageCondition.role) {
+        case 'source':
+            return pendingDamage.sourcePlayerId === playerId;
+        case 'target':
+            return pendingDamage.targetPlayerId === playerId;
+        case 'responder':
+            return pendingDamage.responderId === playerId;
+        default:
+            return true;
+    }
 };
 
 /**
@@ -859,6 +889,10 @@ export const checkPlayCard = (
             if (!hasAny) {
                 return { ok: false, reason: 'noStatusOnBoard' };
             }
+        }
+
+        if (cond.pendingDamage && !matchesPendingDamagePlayCondition(state, playerId, cond.pendingDamage)) {
+            return { ok: false, reason: 'requirePendingDamage' };
         }
     }
     
@@ -1132,6 +1166,10 @@ export const isCardPlayableInResponseWindow = (
                 return false;
             }
         }
+
+        if (cond.pendingDamage && !matchesPendingDamagePlayCondition(state, playerId, cond.pendingDamage)) {
+            return false;
+        }
     }
     
     // ========== 响应窗口类型过滤规则 ==========
@@ -1182,11 +1220,18 @@ export const isCardPlayableInResponseWindow = (
         case 'afterAttackResolved':
             // 攻击结算后的响应窗口（防御结束后）
             // 目的：允许进攻方在造成足够伤害后打出条件卡（如 card-dizzy：造成 8 伤害后施加脑震荡）
-            // 限制：只允许 roll 卡且必须有 requireMinDamageDealt 条件
-            if (card.timing !== 'roll') {
-                return false;
+            // 也允许防御方在 beforeDamageReceived 窗口打出即时减伤牌（如 card-next-time）
+            if (cond?.pendingDamage) {
+                if (card.timing !== 'instant' && card.timing !== 'roll') {
+                    return false;
+                }
+                if (!hasAnyActionEffect(card)) {
+                    return false;
+                }
+                break;
             }
-            if (!cond?.requireMinDamageDealt) {
+            // 限制：默认只允许 roll 卡且必须有 requireMinDamageDealt 条件
+            if (card.timing !== 'roll' || !cond?.requireMinDamageDealt) {
                 return false;
             }
             break;

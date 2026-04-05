@@ -140,6 +140,9 @@ export function isForceMovePathClear(state: SummonerWarsCore, from: CellCoord, t
 
 /** 获取玩家的所有单位 */
 export function getPlayerUnits(state: SummonerWarsCore, playerId: PlayerId): BoardUnit[] {
+  if (!Array.isArray(state.board) || state.board.length === 0) {
+    return [];
+  }
   return collectOnGrid<BoardCell>(state.board, (cell) => !!cell.unit && cell.unit.owner === playerId)
     .map(r => r.cell.unit!);
 }

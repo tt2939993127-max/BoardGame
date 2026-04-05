@@ -116,6 +116,21 @@ export interface AndroidNativeUpdateAvailability {
     appInfo?: AndroidAppInfo;
 }
 
+export interface AndroidWebAppDownloadConfig {
+    directDownloadUrl: string;
+    manifestUrl: string;
+}
+
+export type AndroidWebAppDownloadResolution =
+    | {
+        url: string;
+        source: 'manifest' | 'direct';
+    }
+    | {
+        url: null;
+        reason: 'missing-config' | 'manifest-unavailable';
+    };
+
 export type AndroidNativeUpdatePhase =
     | 'hidden'
     | 'checking'
@@ -219,6 +234,15 @@ export const readAndroidNativeUpdateConfig = (env: Partial<ImportMetaEnv> = impo
     };
 };
 
+export const readAndroidWebAppDownloadConfig = (
+    env: Partial<ImportMetaEnv> = import.meta.env,
+): AndroidWebAppDownloadConfig => ({
+    directDownloadUrl: typeof env.VITE_ANDROID_APP_DOWNLOAD_URL === 'string'
+        ? env.VITE_ANDROID_APP_DOWNLOAD_URL.trim()
+        : '',
+    manifestUrl: readAndroidNativeUpdateConfig(env).manifestUrl,
+});
+
 export const readAndroidAppInfo = async (): Promise<AndroidAppInfo | null> => {
     const plugin = getNativePlugin();
     if (!plugin) {
@@ -249,13 +273,14 @@ export const readAndroidAppInfo = async (): Promise<AndroidAppInfo | null> => {
 
 export const fetchAndroidNativeUpdateManifest = async (
     manifestUrl: string,
+    fetchImpl: typeof fetch = fetch,
 ): Promise<AndroidNativeUpdateManifest | null> => {
     if (!isAbsoluteHttpUrl(manifestUrl)) {
         return null;
     }
 
     try {
-        const response = await fetch(manifestUrl, {
+        const response = await fetchImpl(manifestUrl, {
             method: 'GET',
             cache: 'no-store',
             headers: {
@@ -303,6 +328,47 @@ export const fetchAndroidNativeUpdateManifest = async (
         });
         return null;
     }
+};
+
+export const resolveAndroidWebAppDownload = async (
+    env: Partial<ImportMetaEnv> = import.meta.env,
+    fetchImpl: typeof fetch = fetch,
+): Promise<AndroidWebAppDownloadResolution> => {
+    const { directDownloadUrl, manifestUrl } = readAndroidWebAppDownloadConfig(env);
+
+    if (manifestUrl) {
+        const manifest = await fetchAndroidNativeUpdateManifest(manifestUrl, fetchImpl);
+        if (manifest?.url) {
+            return {
+                url: manifest.url,
+                source: 'manifest',
+            };
+        }
+
+        if (directDownloadUrl && isAbsoluteHttpUrl(directDownloadUrl)) {
+            return {
+                url: directDownloadUrl,
+                source: 'direct',
+            };
+        }
+
+        return {
+            url: null,
+            reason: 'manifest-unavailable',
+        };
+    }
+
+    if (directDownloadUrl && isAbsoluteHttpUrl(directDownloadUrl)) {
+        return {
+            url: directDownloadUrl,
+            source: 'direct',
+        };
+    }
+
+    return {
+        url: null,
+        reason: 'missing-config',
+    };
 };
 
 export const isAndroidNativeUpdateAvailable = (

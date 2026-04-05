@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { flushSync } from 'react-dom';
 import { motion, AnimatePresence, useMotionValue } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { PulseGlow } from '../common/animations/PulseGlow';
@@ -52,12 +53,14 @@ export const resolveFabSatellitesToRender = <T,>(items: T[]) => [...items].rever
 export const shouldTrackFabButtonRect = ({
     showTooltip,
     showPreview,
+    isActive,
+    hasContent,
 }: {
     showTooltip: boolean;
     showPreview: boolean;
     isActive: boolean;
     hasContent: boolean;
-}) => showTooltip || showPreview;
+}) => showTooltip || showPreview || (isActive && hasContent);
 
 export const FabMenu = ({
     items,
@@ -201,20 +204,22 @@ export const FabMenu = ({
     const handleDragEnd = (_: any, info: any) => {
         if (!fabPosition || viewportWidth <= 0 || viewportHeight <= 0) return;
         setIsDragging(false);
-        setLiveDragOffset({ x: 0, y: 0 });
         const next = normalizePosition({
             left: fabPosition.left + info.offset.x,
             top: fabPosition.top + info.offset.y,
         });
-        setFabPosition(next);
+        flushSync(() => {
+            setFabPosition(next);
+            setLiveDragOffset({ x: 0, y: 0 });
+            setAlignment(getAlignmentForPosition(next, dockedButtonSize));
+        });
+        dragX.set(0);
+        dragY.set(0);
         // 保存为百分比格式
         localStorage.setItem(
             HUD_FAB_POSITION_KEY,
             JSON.stringify(serializeFabPositionPercent(next, viewportWidth, viewportHeight)),
         );
-        dragX.set(0);
-        dragY.set(0);
-        setAlignment(getAlignmentForPosition(next, dockedButtonSize));
     };
 
     const handleDragStart = () => {
@@ -342,6 +347,7 @@ export const FabMenu = ({
 
         prevActiveItemIdRef.current = activeItemId;
     }, [activeItemId, items]);
+
     const getExpandedLayout = useCallback((target: FabPosition) => {
         const rawPosition = normalizePosition(target);
         return resolveExpandedFabLayout({
@@ -408,9 +414,14 @@ export const FabMenu = ({
             onDrag={handleDrag}
             onDragEnd={handleDragEnd}
             onPointerDownCapture={handlePointerDownCapture}
-            animate={{ left: renderPosition.left, top: renderPosition.top }}
-            transition={{ type: 'spring', stiffness: 480, damping: 36, mass: 0.7 }}
-            style={{ x: dragX, y: dragY, zIndex: zIndex + 2, touchAction: 'none' }}
+            style={{
+                left: renderPosition.left,
+                top: renderPosition.top,
+                x: dragX,
+                y: dragY,
+                zIndex: zIndex + 2,
+                touchAction: 'none',
+            }}
             data-testid="fab-menu"
         >
             {/* 主球：锚点，位置固定 */}

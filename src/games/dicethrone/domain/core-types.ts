@@ -159,6 +159,11 @@ export interface CardPlayCondition {
     requireMinDamageDealt?: number;
     /** 场上任意玩家必须有至少 1 个状态效果或 token（用于状态移除/转移类卡牌） */
     requireAnyStatusOnBoard?: boolean;
+    /** 必须存在待结算伤害，并满足指定的伤害响应角色/时机 */
+    pendingDamage?: {
+        role?: 'source' | 'target' | 'responder';
+        responseType?: 'beforeDamageDealt' | 'beforeDamageReceived';
+    };
 }
 
 /** 卡牌多语言文案 */

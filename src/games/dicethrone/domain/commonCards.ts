@@ -189,6 +189,12 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-next-time', 'description'),
+        playCondition: {
+            pendingDamage: {
+                role: 'target',
+                responseType: 'beforeDamageReceived',
+            },
+        },
         effects: [{ description: '防止6伤害', action: { type: 'grantDamageShield', target: 'self', value: 6 }, timing: 'immediate' }],
     },
     {

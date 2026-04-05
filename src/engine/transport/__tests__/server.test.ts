@@ -165,6 +165,10 @@ class InMemoryStorage implements MatchStorage {
         };
     }
 
+    async fetchAuthMetadata(matchID: string): Promise<MatchMetadata | undefined> {
+        return this.metadata.get(matchID);
+    }
+
     async wipe(matchID: string): Promise<void> {
         this.states.delete(matchID);
         this.metadata.delete(matchID);
@@ -494,6 +498,42 @@ describe('GameTransportServer（离座与重连）', () => {
         await newSocket.clientEmit('sync', 'match-1', '0', 'new-cred');
         expect(hasEvent(newSocket, 'state:sync')).toBe(true);
         expect(hasEvent(newSocket, 'error', (args) => args[1] === 'unauthorized')).toBe(false);
+    });
+
+    it('sync should prefer auth metadata provider for active matches', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        await storage.createMatch('match-auth-provider', {
+            initialState: createStoredState(),
+            metadata: createMetadata('cred-auth-provider'),
+        });
+
+        const fetchSpy = vi.spyOn(storage, 'fetch');
+        const authMetadataSpy = vi.spyOn(storage, 'fetchAuthMetadata');
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const socket = new MockSocket('socket-auth-provider');
+        io.gameNamespace.connectSocket(socket);
+        await socket.clientEmit('sync', 'match-auth-provider', '0', 'cred-auth-provider');
+
+        fetchSpy.mockClear();
+        authMetadataSpy.mockClear();
+        socket.sent.length = 0;
+
+        await socket.clientEmit('sync', 'match-auth-provider', '0', 'cred-auth-provider');
+
+        expect(authMetadataSpy).toHaveBeenCalledTimes(1);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(hasEvent(socket, 'state:sync')).toBe(true);
     });
 
     it('sync should not wait for metadata persistence before emitting state:sync', async () => {

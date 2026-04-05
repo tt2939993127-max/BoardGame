@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { MatchState } from '../../../engine/types';
 import type { DiceThroneCore } from '../domain/types';
 import { diceThroneCriticalImageResolver, _testExports } from '../criticalImageResolver';
+import { getPlayerBoardUiTuning } from '../ui/abilitySlotLayout';
 
 const {
     CHARACTER_ASSET_TYPES,
@@ -135,5 +136,15 @@ describe('diceThroneCriticalImageResolver', () => {
             'dice',
             'status-icons-atlas',
         ]);
+    });
+
+    it('玩家面板布局调参必须包含 CenterBoard 所需的尺寸字段', () => {
+        for (const characterId of ['monk', 'gunslinger', 'samurai'] as const) {
+            const tuning = getPlayerBoardUiTuning(characterId);
+
+            expect(tuning.playerBoardBaseHeightVw, `${characterId} 缺少 playerBoardBaseHeightVw`).toBeGreaterThan(0);
+            expect(tuning.tipBoardHeightVw, `${characterId} 缺少 tipBoardHeightVw`).toBeGreaterThan(0);
+            expect(tuning.centerBoardGapVw, `${characterId} 缺少 centerBoardGapVw`).toBeGreaterThanOrEqual(0);
+        }
     });
 });

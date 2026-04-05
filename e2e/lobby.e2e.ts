@@ -49,6 +49,7 @@ async function ensureLobbyReady(page: Page): Promise<void> {
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
 const ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME = '首页活跃房间浮层在桌面端居中且移动端不溢出';
+const WEB_APP_DOWNLOAD_ENTRY_TEST_NAME = '网页端下载 App 入口会读取 native update latest.json 并打开其中 APK 地址';
 
 async function createTicTacToeRoom(page: Page): Promise<string> {
     const gameServerBaseURL = getGameServerBaseURL();
@@ -175,6 +176,43 @@ test.describe('Lobby E2E', () => {
         expect(qrStates[1].currentSrc).toContain('/logos/zhifubao.jpg');
 
         await game.screenshot('lobby-about-modal-support-qr-visible', testInfo);
+    });
+
+    test(WEB_APP_DOWNLOAD_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {
+        const manifestUrl = 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json';
+        const apkUrl = 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.1.apk';
+
+        await page.route(manifestUrl, async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    version: '0.5.1',
+                    url: apkUrl,
+                    channel: 'stable',
+                }),
+            });
+        });
+
+        await page.evaluate(() => {
+            const openCalls: string[] = [];
+            (window as Window & { __testWindowOpenCalls__?: string[] }).__testWindowOpenCalls__ = openCalls;
+            window.open = ((url?: string | URL) => {
+                openCalls.push(typeof url === 'string' ? url : url?.toString() ?? '');
+                return {} as Window;
+            }) as typeof window.open;
+        });
+
+        await page.locator('[data-fab-id="settings"]').click();
+        await expect(page.locator('[data-fab-id="download-app"]')).toBeVisible();
+
+        await game.screenshot('lobby-download-app-entry-visible', testInfo);
+
+        await page.locator('[data-fab-id="download-app"]').click();
+
+        await expect.poll(async () => page.evaluate(() => (
+            (window as Window & { __testWindowOpenCalls__?: string[] }).__testWindowOpenCalls__ ?? []
+        ))).toEqual([apkUrl]);
     });
 
     test('移动端反馈弹窗应覆盖悬浮球面板，且输入区使用可编辑字号', async ({ browser }, testInfo) => {

@@ -189,4 +189,22 @@ describe('卡牌系统', () => {
             expect(result.assertionErrors).toEqual([]);
         });
     });
+
+    describe('防御瞬发牌限制', () => {
+        it('下次不算不能在主阶段预先打出', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: '下次不算需要待结算伤害',
+                setup: createSetupWithHand(['card-next-time'], { cp: 1 }),
+                commands: [
+                    cmd('PLAY_CARD', '0', { cardId: 'card-next-time' }),
+                ],
+                expect: {
+                    expectError: { command: 'PLAY_CARD', error: 'requirePendingDamage' },
+                    turnPhase: 'main1',
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+    });
 });

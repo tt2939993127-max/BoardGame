@@ -5,7 +5,8 @@ import { saveDiceThroneAbilityLayout } from '../../../api/layout';
 import { UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import {
-    DICETHRONE_PLAYER_BOARD_LAYOUTS,
+    DICETHRONE_ABILITY_SLOT_LAYOUTS,
+    DICETHRONE_PLAYER_BOARD_UI_TUNING,
     getAbilitySlotLayoutForCharacter,
     getPlayerBoardLayoutVersion,
     type DiceThronePlayerBoardLayoutVersion,
@@ -230,8 +231,8 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
             [characterId],
         );
         const [allLayouts, setAllLayouts] = React.useState(() => ({
-            v1: DICETHRONE_PLAYER_BOARD_LAYOUTS.v1.map(slot => ({ ...slot })),
-            v2: DICETHRONE_PLAYER_BOARD_LAYOUTS.v2.map(slot => ({ ...slot })),
+            v1: DICETHRONE_ABILITY_SLOT_LAYOUTS.v1.map(slot => ({ ...slot })),
+            v2: DICETHRONE_ABILITY_SLOT_LAYOUTS.v2.map(slot => ({ ...slot })),
         }));
         const slots = allLayouts[layoutVersion] ?? getAbilitySlotLayoutForCharacter(characterId);
         const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -250,10 +251,13 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         React.useImperativeHandle(ref, () => ({
             saveLayout: async () => {
                 try {
-                    const result = await saveDiceThroneAbilityLayout({ layouts: allLayouts });
+                    const result = await saveDiceThroneAbilityLayout({
+                        slotLayouts: allLayouts,
+                        uiTuning: DICETHRONE_PLAYER_BOARD_UI_TUNING,
+                    });
                     const hint = result.relativePath
-                        ? `已写入 ${result.relativePath}（${layoutVersion.toUpperCase()}）`
-                        : `已写入布局文件（${layoutVersion.toUpperCase()}）`;
+                        ? `已写入 ${result.relativePath}（${layoutVersion.toUpperCase()} 布局配置）`
+                        : `已写入布局配置文件（${layoutVersion.toUpperCase()}）`;
                     return { hint };
                 } catch (error) {
                     const message = error instanceof Error ? error.message : '保存失败';

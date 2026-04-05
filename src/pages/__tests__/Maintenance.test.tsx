@@ -1267,7 +1267,7 @@ describe('Home native runtime footer', () => {
         expect(screen.queryByText('OTA 未对齐')).toBeNull();
     });
 
-    it('仅在原生 Android 且快照确认后显示 Bundle/App 信息，不承担 OTA 提示职责', async () => {
+    it('仅在原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -1287,11 +1287,11 @@ describe('Home native runtime footer', () => {
         });
 
         expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
-        expect(screen.queryByText(/^Latest /)).toBeNull();
-        expect(screen.queryByText('OTA 未对齐')).toBeNull();
+        expect(screen.getByText('Latest 0.5.1')).toBeInTheDocument();
+        expect(screen.getByText('OTA 未对齐，点击立即更新')).toBeInTheDocument();
     });
 
-    it('原生 Android 版本角标只负责展开完整版本号，不触发 OTA 检查', async () => {
+    it('点击 OTA 未对齐角标时直接触发即时 OTA 检查', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -1307,18 +1307,21 @@ describe('Home native runtime footer', () => {
         render(<Home />);
 
         const footerButton = await screen.findByRole('button', {
-            name: /current bundle version 0\.5\.0, app version 0\.5\.1/i,
+            name: /versions are not aligned/i,
         });
 
         await act(async () => {
             footerButton.click();
         });
 
-        expect(mockRequestAndroidLiveUpdateCheck).not.toHaveBeenCalled();
-        expect(screen.getByText('Bundle 0.5.0-ota-2026-04-04')).toBeInTheDocument();
+        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
+            interactive: true,
+            applyMode: 'immediate',
+            initialImmediatePhase: 'downloading',
+        });
     });
 
-    it('原生 Android 版本已对齐时点击右下角只切换展开态，不触发 OTA 检查', async () => {
+    it('原生 Android 版本已对齐时点击右下角仍会触发即时 OTA 检查', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -1341,7 +1344,11 @@ describe('Home native runtime footer', () => {
             footerButton.click();
         });
 
-        expect(mockRequestAndroidLiveUpdateCheck).not.toHaveBeenCalled();
-        expect(screen.getByText('Bundle 0.5.1-ota-2026-04-04')).toBeInTheDocument();
+        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
+            interactive: true,
+            applyMode: 'immediate',
+            initialImmediatePhase: 'checking',
+        });
+        expect(screen.queryByText('Bundle 0.5.1-ota-2026-04-04')).toBeNull();
     });
 });

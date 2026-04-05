@@ -165,7 +165,8 @@
       "exitFailed": "Failed to exit fullscreen. Check browser status."
     },
     "download": {
-      "missingLink": "App download link is not configured yet. Add the Baidu Netdisk URL to the environment variable first."
+      "missingLink": "App download is not configured yet. Configure the native update manifest or an APK direct link first.",
+      "resolveFailed": "Unable to resolve the latest App download URL. Please try again later."
     },
     "toggle": {
       "collapse": "Collapse menu",

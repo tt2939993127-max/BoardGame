@@ -100,8 +100,8 @@ export const AndroidNativeUpdateManager = () => {
             }
 
             const hasPreparedState = preparedState !== null;
-            interactiveRef.current = interactive || hasPreparedState;
-            const shouldBlock = availability.manifest.forceUpdate === true || interactiveRef.current;
+            interactiveRef.current = interactive;
+            const shouldBlock = availability.manifest.forceUpdate === true || interactive;
             const displayTitle = availability.manifest.forceUpdateTitle || undefined;
             const displayMessage = availability.manifest.forceUpdateMessage || undefined;
 

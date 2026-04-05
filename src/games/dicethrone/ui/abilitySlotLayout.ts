@@ -20,7 +20,7 @@ type PlayerBoardDimensions = {
     height: number;
 };
 
-type PlayerBoardUiTuning = {
+export type PlayerBoardUiTuning = {
     shellTranslateX: number;
     playerBoardTranslateY: number;
     magnifyButtonTop: number;
@@ -43,23 +43,30 @@ const V1_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
 
 // v2 面板来自枪手 / 武士图片裁图坐标，顶部留白显著增加。
 const V2_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
-    { id: 'fist', x: 0.73, y: 27.27, w: 15.09, h: 29.23 },
-    { id: 'chi', x: 16.84, y: 26.29, w: 14.71, h: 30.99 },
-    { id: 'sky', x: 0.87, y: 59.55, w: 14.95, h: 30.36 },
-    { id: 'lotus', x: 16.69, y: 59.94, w: 15.44, h: 30.36 },
-    { id: 'combo', x: 67.38, y: 26.49, w: 16.02, h: 30.60 },
-    { id: 'lightning', x: 83.45, y: 26.68, w: 15.82, h: 30.99 },
-    { id: 'calm', x: 67.38, y: 59.94, w: 15.58, h: 30.36 },
-    { id: 'meditate', x: 84.02, y: 60.72, w: 15.25, h: 29.58 },
-    { id: 'ultimate', x: 33.78, y: 77.39, w: 32.27, h: 12.17 },
+    { id: 'fist', x: 0.58, y: 20.27, w: 15.69, h: 38.89 },
+    { id: 'chi', x: 16.69, y: 20.25, w: 16.04, h: 38.72 },
+    { id: 'sky', x: 0.57, y: 59.55, w: 15.54, h: 38.57 },
+    { id: 'lotus', x: 16.84, y: 60.42, w: 15.15, h: 38.09 },
+    { id: 'combo', x: 67.67, y: 21.41, w: 16.02, h: 38.33 },
+    { id: 'lightning', x: 83.75, y: 21.85, w: 15.68, h: 37.76 },
+    { id: 'calm', x: 67.53, y: 61.87, w: 15.87, h: 37.37 },
+    { id: 'meditate', x: 84.02, y: 60.96, w: 15.55, h: 38.76 },
+    { id: 'ultimate', x: 33.78, y: 83.91, w: 32.27, h: 13.86 },
 ];
 
-export const DICETHRONE_PLAYER_BOARD_LAYOUTS: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]> = {
+export type DiceThroneBoardShellTuningMap = Record<DiceThronePlayerBoardLayoutVersion, PlayerBoardUiTuning>;
+
+export type DiceThroneBoardLayoutConfig = {
+    slotLayouts: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]>;
+    uiTuning: DiceThroneBoardShellTuningMap;
+};
+
+export const DICETHRONE_ABILITY_SLOT_LAYOUTS: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]> = {
     v1: V1_ABILITY_SLOT_LAYOUT,
     v2: V2_ABILITY_SLOT_LAYOUT,
 };
 
-export const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = DICETHRONE_PLAYER_BOARD_LAYOUTS.v1;
+export const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = DICETHRONE_ABILITY_SLOT_LAYOUTS.v1;
 
 export const DICETHRONE_PLAYER_BOARD_DIMENSIONS: Record<string, PlayerBoardDimensions> = {
     barbarian: { width: 2048, height: 1675 },
@@ -83,23 +90,28 @@ export const DICETHRONE_PLAYER_BOARD_LAYOUT_VERSION_BY_CHARACTER: Record<string,
     samurai: 'v2',
 };
 
-const DICETHRONE_PLAYER_BOARD_UI_TUNING: Record<DiceThronePlayerBoardLayoutVersion, PlayerBoardUiTuning> = {
+export const DICETHRONE_PLAYER_BOARD_UI_TUNING: DiceThroneBoardShellTuningMap = {
     v1: {
         shellTranslateX: 0,
         playerBoardTranslateY: 0,
         magnifyButtonTop: 0.48,
         playerBoardBaseHeightVw: 35,
         tipBoardHeightVw: 35,
-        centerBoardGapVw: 0.5,
+        centerBoardGapVw: 0.50,
     },
     v2: {
-        shellTranslateX: 1.1,
-        playerBoardTranslateY: -2.85,
+        shellTranslateX: 1.10,
+        playerBoardTranslateY: -1.45,
         magnifyButtonTop: 1.85,
         playerBoardBaseHeightVw: 35,
-        tipBoardHeightVw: 29.6,
+        tipBoardHeightVw: 29.60,
         centerBoardGapVw: 0.24,
     },
+};
+
+export const DICETHRONE_BOARD_LAYOUT_CONFIG: DiceThroneBoardLayoutConfig = {
+    slotLayouts: DICETHRONE_ABILITY_SLOT_LAYOUTS,
+    uiTuning: DICETHRONE_PLAYER_BOARD_UI_TUNING,
 };
 
 export const getPlayerBoardLayoutVersion = (characterId?: string | null): DiceThronePlayerBoardLayoutVersion => (
@@ -107,7 +119,7 @@ export const getPlayerBoardLayoutVersion = (characterId?: string | null): DiceTh
 );
 
 export const getAbilitySlotLayoutByVersion = (version: DiceThronePlayerBoardLayoutVersion): AbilitySlotLayoutItem[] => (
-    DICETHRONE_PLAYER_BOARD_LAYOUTS[version]
+    DICETHRONE_ABILITY_SLOT_LAYOUTS[version]
 );
 
 export const getAbilitySlotLayoutForCharacter = (characterId?: CharacterId | string | null): AbilitySlotLayoutItem[] => (

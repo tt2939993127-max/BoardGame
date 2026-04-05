@@ -150,3 +150,18 @@ export interface MatchStorage {
     /** 列出对局 ID */
     listMatches(opts?: ListMatchesOpts): Promise<string[]>;
 }
+
+/**
+ * 可选能力：只读取 socket 鉴权所需的轻量 metadata。
+ *
+ * 用于 `/game sync` / `command` 的凭据校验，避免每次都把完整 setupData 一起拉回。
+ */
+export interface MatchAuthMetadataProvider {
+    fetchAuthMetadata(matchID: string): Promise<MatchMetadata | undefined>;
+}
+
+export const isMatchAuthMetadataProvider = (
+    storage: MatchStorage,
+): storage is MatchStorage & MatchAuthMetadataProvider => {
+    return typeof (storage as Partial<MatchAuthMetadataProvider>).fetchAuthMetadata === 'function';
+};

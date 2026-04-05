@@ -623,6 +623,7 @@
     "requireNotRollConfirmed": "Dice results already confirmed, cannot play this card",
     "requireMinDamageDealt": "Not enough damage dealt this attack to play this card",
     "noStatusOnBoard": "No status effects on the board, cannot play this card",
+    "requirePendingDamage": "This card requires pending damage to be played",
     "tutorial_manifest_invalid": "Tutorial configuration is invalid",
     "tutorial_command_blocked": "This action is blocked in the tutorial",
     "tutorial_step_locked": "The current step cannot be skipped",

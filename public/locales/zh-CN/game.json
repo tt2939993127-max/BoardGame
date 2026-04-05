@@ -165,7 +165,8 @@
       "exitFailed": "退出全屏失败，请检查浏览器权限或系统状态。"
     },
     "download": {
-      "missingLink": "下载链接待配置，先把百度网盘地址填到环境变量里。"
+      "missingLink": "下载入口未配置，请先配置原生更新 manifest 或 APK 直链。",
+      "resolveFailed": "未能获取最新 App 下载地址，请稍后重试。"
     },
     "toggle": {
       "collapse": "收起菜单",

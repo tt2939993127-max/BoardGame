@@ -7,6 +7,7 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
 import type {
     MatchStorage,
+    MatchAuthMetadataProvider,
     MatchMetadata,
     StoredMatchState,
     CreateMatchData,
@@ -133,7 +134,7 @@ const extractPlayersForOccupancy = (metadata: unknown): Record<string, PlayerSea
 /**
  * MongoDB 存储实现
  */
-export class MongoStorage implements MatchStorage {
+export class MongoStorage implements MatchStorage, MatchAuthMetadataProvider {
     private bootTimeMs = Date.now();
 
     async connect(): Promise<void> {
@@ -300,8 +301,19 @@ export class MongoStorage implements MatchStorage {
         matchID: string,
         opts: FetchOpts
     ): Promise<FetchResult> {
+        if (!opts.state && !opts.metadata) {
+            return {};
+        }
+
         const Match = getMatchModel();
-        const doc = await Match.findOne({ matchID }).lean();
+        const projection: Record<string, 0 | 1> = { _id: 0 };
+        if (opts.state) {
+            projection.state = 1;
+        }
+        if (opts.metadata) {
+            projection.metadata = 1;
+        }
+        const doc = await Match.findOne({ matchID }).select(projection).lean();
 
         if (!doc) {
             return {};
@@ -317,6 +329,22 @@ export class MongoStorage implements MatchStorage {
         }
 
         return result;
+    }
+
+    async fetchAuthMetadata(matchID: string): Promise<MatchMetadata | undefined> {
+        const Match = getMatchModel();
+        const doc = await Match.findOne({ matchID }).select({
+            _id: 0,
+            'metadata.gameName': 1,
+            'metadata.players': 1,
+            'metadata.createdAt': 1,
+            'metadata.updatedAt': 1,
+            'metadata.gameover': 1,
+            'metadata.disconnectedSince': 1,
+            'metadata.status': 1,
+        }).lean<{ metadata?: MatchMetadata } | null>();
+
+        return doc?.metadata;
     }
 
     async wipe(matchID: string): Promise<void> {
