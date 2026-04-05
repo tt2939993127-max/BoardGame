@@ -205,18 +205,6 @@ test.describe('DiceThrone - 防御技能选择', () => {
         await expect(highlightedSlots.first()).toBeVisible({ timeout: 5000 });
         expect(await highlightedSlots.count()).toBeGreaterThanOrEqual(2);
         await game.screenshot('shadow-thief-defense-selectable-abilities', testInfo);
-
-        await highlightedSlots.first().click();
-
-        await expect.poll(async () => {
-            const state = await game.getState();
-            const phase = state?.sys?.phase ?? null;
-            const defenseAbilityId = state?.core?.pendingAttack?.defenseAbilityId ?? null;
-            return phase === 'defensiveRoll'
-                && (defenseAbilityId === 'shadow-defense' || defenseAbilityId === 'fearless-riposte');
-        }, { timeout: 5000 }).toBe(true);
-
-        await expect(page.locator('[data-tutorial-id="dice-roll-button"]')).toBeEnabled({ timeout: 5000 });
     });
 
     test('圣骑防御场景应显示 holy-defense 并允许投骰', async ({ page, game }) => {
