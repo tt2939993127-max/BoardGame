@@ -581,6 +581,17 @@ function createVitestEnv() {
   };
 }
 
+function shouldUseStableVitestEnv(command, args) {
+  if (command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')) {
+    return true;
+  }
+
+  return command.trim().toLowerCase() === 'npm'
+    && args[0] === 'run'
+    && typeof args[1] === 'string'
+    && args[1].startsWith('test');
+}
+
 function shouldDirectSpawnOnWindows(command) {
   if (process.platform !== 'win32') return true;
   const normalized = command.trim().toLowerCase();
@@ -595,22 +606,21 @@ function runCommand({ label, reason, command, args }) {
   console.log(`[changed-quality-gate] 命令: ${commandToLine(command, args)}`);
 
   const startAt = Date.now();
+  const env = shouldUseStableVitestEnv(command, args)
+    ? createVitestEnv()
+    : process.env;
   const result = shouldDirectSpawnOnWindows(command)
     ? spawnSync(command, args, {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
-        env: command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')
-          ? createVitestEnv()
-          : process.env,
+        env,
       })
     : spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
-        env: command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')
-          ? createVitestEnv()
-          : process.env,
+        env,
       });
   const durationMs = Date.now() - startAt;
 
