@@ -342,6 +342,14 @@ function hasChangesForTargetGroup(files, targets) {
   return hasAny(files, (file) => targets.some((target) => file.startsWith(`${target}/`) || file === target));
 }
 
+function collectScopedVitestTargets(files, targets) {
+  return dedupeValues(
+    files
+      .filter((file) => targets.some((target) => file.startsWith(`${target}/`) || file === target))
+      .map((file) => (isTestFile(file) ? file : path.posix.dirname(file))),
+  );
+}
+
 function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
   const lintFiles = files.filter(isLintTarget);
@@ -437,11 +445,12 @@ function collectCommands(files, baseRef, affectsTypecheck) {
       PRE_PUSH_CORE_TARGET_GROUPS
         .filter((group) => hasChangesForTargetGroup(files, group.targets))
         .forEach((group) => {
+          const scopedTargets = collectScopedVitestTargets(files, group.targets);
           commands.push({
             label: group.label,
-            reason: group.reason,
+            reason: `${group.reason}（按本轮命中的子树/测试文件缩小批次）`,
             command: process.execPath,
-            args: [...VITEST_SAFE_ENTRY, 'run', ...group.targets, ...FAST_VITEST_ARGS],
+            args: [...VITEST_SAFE_ENTRY, 'run', ...scopedTargets, ...FAST_VITEST_ARGS],
           });
         });
 
