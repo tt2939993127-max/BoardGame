@@ -5,7 +5,11 @@ import {
 } from '../../core';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { runMockGamePackageInstall } from './mockInstallRunner';
-import { createNativeGamePackageInstallHandle, listInstalledNativeGamePackages } from './nativeGamePackagePlugin';
+import {
+    createNativeGamePackageInstallHandle,
+    listInstalledNativeGamePackages,
+    readNativeGamePackageInstallState,
+} from './nativeGamePackagePlugin';
 import { normalizeGamePackageAssetBaseUrl } from './assetBaseUrl';
 import { isSharedAudioPackGameId, SHARED_AUDIO_PACK_GAME_ID, SHARED_AUDIO_PACK_ID } from './sharedAudioPack';
 import {
@@ -130,6 +134,7 @@ const buildSharedAudioDependencyState = (
         status: sharedState.status,
         progressMode: sharedState.progressMode,
         progressPercent: sharedState.progressPercent,
+        errorCode: sharedState.status === 'failed' ? sharedState.errorCode : undefined,
         errorMessage: sharedState.status === 'failed'
             ? `公共音频包安装失败：${sharedState.errorMessage ?? '未知错误'}`
             : undefined,
@@ -236,6 +241,18 @@ const emitState = (state: StoredGamePackageState) => {
     listeners?.forEach((listener) => listener(normalizedState));
 };
 
+const toStaleInProgressFailureState = (
+    fallbackState: StoredGamePackageState,
+    currentState: StoredGamePackageState,
+): StoredGamePackageState => mergeGamePackageState(fallbackState, {
+    status: 'failed',
+    progressPercent: undefined,
+    progressMode: undefined,
+    errorCode: currentState.errorCode ?? 'unknown',
+    errorMessage: currentState.errorMessage ?? STALE_IN_PROGRESS_ERROR_MESSAGE,
+    updatedAt: currentState.updatedAt ?? Date.now(),
+});
+
 const getCurrentOrStoredState = (
     gameId: string,
     fallbackState: StoredGamePackageState,
@@ -247,15 +264,6 @@ const getCurrentOrStoredState = (
             fallbackState,
             'cache',
         );
-        if (isInProgressStatus(normalizedCached.status) && !activeInstallRegistry.has(gameId)) {
-            return mergeGamePackageState(fallbackState, {
-                status: 'failed',
-                progressPercent: undefined,
-                progressMode: undefined,
-                errorMessage: normalizedCached.errorMessage ?? STALE_IN_PROGRESS_ERROR_MESSAGE,
-                updatedAt: normalizedCached.updatedAt ?? Date.now(),
-            });
-        }
         return normalizedCached;
     }
 
@@ -287,6 +295,38 @@ export const syncGamePackageState = (
     const nextState = getCurrentOrStoredState(gameId, fallbackState);
     emitState(nextState);
     return nextState;
+};
+
+export const refreshGamePackageStateFromNativeTask = async (
+    gameId: string,
+    fallbackState?: StoredGamePackageState,
+): Promise<StoredGamePackageState> => {
+    const resolvedFallback = fallbackState ?? fallbackCache.get(gameId);
+    if (!resolvedFallback) {
+        throw new Error(`[MobilePackages] 缺少 ${gameId} 的 fallbackState`);
+    }
+
+    fallbackCache.set(gameId, resolvedFallback);
+    const nativeState = await readNativeGamePackageInstallState(gameId);
+    if (nativeState) {
+        const mergedState = normalizeIncompleteInstalledState(
+            mergeGamePackageState(resolvedFallback, nativeState),
+            resolvedFallback,
+            'cache',
+        );
+        emitState(mergedState);
+        return mergedState;
+    }
+
+    const currentState = getCurrentOrStoredState(gameId, resolvedFallback);
+    if (isInProgressStatus(currentState.status) && !activeInstallRegistry.has(gameId)) {
+        const staleState = toStaleInProgressFailureState(resolvedFallback, currentState);
+        emitState(staleState);
+        return staleState;
+    }
+
+    emitState(currentState);
+    return currentState;
 };
 
 export const subscribeGamePackageState = (
@@ -332,6 +372,7 @@ export const resetGamePackageState = (
         progressMode: undefined,
         installedVersion: undefined,
         localAssetBaseUrl: undefined,
+        errorCode: undefined,
         errorMessage: undefined,
         updatedAt: Date.now(),
     });
@@ -414,6 +455,7 @@ export const startGamePackageInstall = (
             status: 'failed',
             progressMode: undefined,
             progressPercent: undefined,
+            errorCode: 'manifest-missing',
             errorMessage: '当前还没有可下载的游戏包，请先发布一版。',
         });
         logMobileRuntimeCritical('PackageManagerService', 'start-install-missing-asset-pack-url', {
@@ -493,6 +535,7 @@ export const startGamePackageInstall = (
                         status: 'failed',
                         progressMode: undefined,
                         progressPercent: undefined,
+                        errorCode: 'unsupported-runtime',
                         errorMessage: failureMessage,
                         updatedAt: Date.now(),
                     };
@@ -518,6 +561,7 @@ export const startGamePackageInstall = (
                     status: 'failed',
                     progressMode: undefined,
                     progressPercent: undefined,
+                    errorCode: 'unknown',
                     errorMessage: error instanceof Error ? error.message : (failureMessage || '安装失败'),
                     updatedAt: Date.now(),
                 };

@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { registerPlugin } from '@capacitor/core';
 import { compareVersion } from './androidLiveUpdates';
 import { logMobileRuntime, logMobileRuntimeCritical } from './mobileRuntimeDebug';
 import { isNativeAndroidRuntime } from './androidRuntime';
@@ -6,6 +6,39 @@ import { isNativeAndroidRuntime } from './androidRuntime';
 type PluginListenerHandle = {
     remove(): Promise<void>;
 };
+
+export type NativeAppUpdateTaskStatus =
+    | 'queued'
+    | 'downloading'
+    | 'verifying'
+    | 'permission-required'
+    | 'installing'
+    | 'error';
+
+type NativeAppUpdateProgressMode = 'determinate' | 'indeterminate';
+
+export type NativeAppUpdateErrorCode =
+    | 'network-timeout'
+    | 'http-error'
+    | 'resume-not-supported'
+    | 'checksum-mismatch'
+    | 'insufficient-storage'
+    | 'file-io'
+    | 'cancelled'
+    | 'installer-launch-failed'
+    | 'task-conflict'
+    | 'unknown';
+
+export interface NativeAppUpdateTaskSnapshot {
+    version?: string;
+    status?: NativeAppUpdateTaskStatus;
+    progressPercent?: number;
+    progressMode?: NativeAppUpdateProgressMode;
+    errorCode?: NativeAppUpdateErrorCode;
+    errorMessage?: string;
+    apkFilePath?: string;
+    updatedAt?: number;
+}
 
 type NativeAppUpdatePlugin = {
     getAppInfo(): Promise<{
@@ -30,17 +63,23 @@ type NativeAppUpdatePlugin = {
         version?: string;
         apkFilePath?: string;
     }>;
+    getPreparedUpdateState(options: {
+        version: string;
+    }): Promise<{
+        exists?: boolean;
+        version?: string;
+        status?: NativeAppUpdateTaskStatus;
+        progressPercent?: number;
+        progressMode?: NativeAppUpdateProgressMode;
+        errorCode?: NativeAppUpdateErrorCode;
+        errorMessage?: string;
+        apkFilePath?: string;
+        updatedAt?: number;
+    }>;
     openUnknownSourcesSettings(): Promise<void>;
     addListener(
         eventName: 'updateStateChanged',
-        listenerFunc: (event: {
-            version?: string;
-            status?: 'queued' | 'downloading' | 'verifying' | 'permission-required' | 'installing' | 'error';
-            progressPercent?: number;
-            progressMode?: 'determinate' | 'indeterminate';
-            errorMessage?: string;
-            apkFilePath?: string;
-        }) => void,
+        listenerFunc: (event: NativeAppUpdateTaskSnapshot) => void,
     ): Promise<PluginListenerHandle>;
 };
 
@@ -93,7 +132,13 @@ export interface AndroidNativeUpdateState {
     progressPercent?: number;
     title?: string;
     message?: string;
+    errorCode?: NativeAppUpdateErrorCode;
     reason?: string;
+}
+
+export interface AndroidPreparedUpdateState extends NativeAppUpdateTaskSnapshot {
+    version: string;
+    status: NativeAppUpdateTaskStatus;
 }
 
 type NativeUpdateRequest = {
@@ -116,6 +161,28 @@ const clampPercent = (value: number | undefined) => {
     }
     return Math.max(0, Math.min(100, Math.round(value)));
 };
+
+const isNativeTaskStatus = (value: string): value is NativeAppUpdateTaskStatus => (
+    value === 'queued'
+    || value === 'downloading'
+    || value === 'verifying'
+    || value === 'permission-required'
+    || value === 'installing'
+    || value === 'error'
+);
+
+const isNativeErrorCode = (value: string): value is NativeAppUpdateErrorCode => (
+    value === 'network-timeout'
+    || value === 'http-error'
+    || value === 'resume-not-supported'
+    || value === 'checksum-mismatch'
+    || value === 'insufficient-storage'
+    || value === 'file-io'
+    || value === 'cancelled'
+    || value === 'installer-launch-failed'
+    || value === 'task-conflict'
+    || value === 'unknown'
+);
 
 const parseBooleanEnv = (value: string | boolean | undefined) => {
     if (typeof value === 'boolean') return value;
@@ -295,6 +362,56 @@ export const continueAndroidNativeUpdateInstall = async (version: string) => {
     return plugin.installPreparedUpdate({ version });
 };
 
+export const readPreparedAndroidUpdateState = async (version: string): Promise<AndroidPreparedUpdateState | null> => {
+    const normalizedVersion = version.trim();
+    if (!normalizedVersion) {
+        return null;
+    }
+
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return null;
+    }
+
+    try {
+        const result = await plugin.getPreparedUpdateState({ version: normalizedVersion });
+        if (result.exists !== true || typeof result.status !== 'string' || !isNativeTaskStatus(result.status)) {
+            return null;
+        }
+
+        const resolvedVersion = typeof result.version === 'string' && result.version.trim()
+            ? result.version.trim()
+            : normalizedVersion;
+
+        return {
+            version: resolvedVersion,
+            status: result.status,
+            progressPercent: clampPercent(result.progressPercent),
+            progressMode: result.progressMode === 'determinate' || result.progressMode === 'indeterminate'
+                ? result.progressMode
+                : undefined,
+            errorCode: typeof result.errorCode === 'string' && isNativeErrorCode(result.errorCode)
+                ? result.errorCode
+                : undefined,
+            errorMessage: typeof result.errorMessage === 'string' && result.errorMessage.trim()
+                ? result.errorMessage.trim()
+                : undefined,
+            apkFilePath: typeof result.apkFilePath === 'string' && result.apkFilePath.trim()
+                ? result.apkFilePath.trim()
+                : undefined,
+            updatedAt: typeof result.updatedAt === 'number' && Number.isFinite(result.updatedAt)
+                ? result.updatedAt
+                : undefined,
+        };
+    } catch (error) {
+        logMobileRuntimeCritical('NativeUpdate', 'prepared-state-read-failed', {
+            version: normalizedVersion,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
 export const openAndroidUnknownSourcesSettings = async () => {
     const plugin = getNativePlugin();
     if (!plugin) {
@@ -304,14 +421,7 @@ export const openAndroidUnknownSourcesSettings = async () => {
 };
 
 export const subscribeAndroidNativeUpdateState = async (
-    listener: (event: {
-        version?: string;
-        status?: 'queued' | 'downloading' | 'verifying' | 'permission-required' | 'installing' | 'error';
-        progressPercent?: number;
-        progressMode?: 'determinate' | 'indeterminate';
-        errorMessage?: string;
-        apkFilePath?: string;
-    }) => void,
+    listener: (event: NativeAppUpdateTaskSnapshot) => void,
 ): Promise<PluginListenerHandle | null> => {
     const plugin = getNativePlugin();
     if (!plugin) {
@@ -321,12 +431,7 @@ export const subscribeAndroidNativeUpdateState = async (
 };
 
 export const mapNativeUpdateEventToState = (
-    event: {
-        version?: string;
-        status?: 'queued' | 'downloading' | 'verifying' | 'permission-required' | 'installing' | 'error';
-        progressPercent?: number;
-        errorMessage?: string;
-    },
+    event: Pick<NativeAppUpdateTaskSnapshot, 'version' | 'status' | 'progressPercent' | 'errorCode' | 'errorMessage'>,
     options: {
         blocking: boolean;
         title?: string;
@@ -349,6 +454,7 @@ export const mapNativeUpdateEventToState = (
         progressPercent: clampPercent(event.progressPercent),
         title: options.title,
         message: options.message,
+        errorCode: event.errorCode,
         reason: event.errorMessage,
     };
 };

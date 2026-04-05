@@ -1,4 +1,4 @@
-import type { StoredGamePackageState } from './types';
+import type { GamePackageInstallErrorCode, StoredGamePackageState } from './types';
 import { mergeGamePackageState } from './types';
 import { normalizeGamePackageAssetBaseUrl } from './assetBaseUrl';
 
@@ -27,11 +27,20 @@ const isValidStatus = (value: unknown): value is StoredGamePackageState['status'
 const isValidProgressMode = (value: unknown): value is StoredGamePackageState['progressMode'] =>
     value === undefined || value === 'determinate' || value === 'indeterminate';
 
-const isInProgressStatus = (value: StoredGamePackageState['status']) =>
-    value === 'queued'
-    || value === 'manifest'
-    || value === 'downloading'
-    || value === 'verifying';
+const isValidErrorCode = (value: unknown): value is GamePackageInstallErrorCode =>
+    value === undefined
+    || value === 'network-timeout'
+    || value === 'http-error'
+    || value === 'resume-not-supported'
+    || value === 'checksum-mismatch'
+    || value === 'insufficient-storage'
+    || value === 'archive-invalid'
+    || value === 'file-io'
+    || value === 'cancelled'
+    || value === 'task-conflict'
+    || value === 'manifest-missing'
+    || value === 'unsupported-runtime'
+    || value === 'unknown';
 
 const sanitizeStoredState = (
     gameId: string,
@@ -46,7 +55,11 @@ const sanitizeStoredState = (
         return null;
     }
 
-    if (!isValidStatus(candidate.status) || !isValidProgressMode(candidate.progressMode)) {
+    if (
+        !isValidStatus(candidate.status)
+        || !isValidProgressMode(candidate.progressMode)
+        || !isValidErrorCode(candidate.errorCode)
+    ) {
         return null;
     }
 
@@ -78,6 +91,7 @@ const sanitizeStoredState = (
         localAssetBaseUrl: typeof candidate.localAssetBaseUrl === 'string' && candidate.localAssetBaseUrl.trim()
             ? normalizeGamePackageAssetBaseUrl(candidate.localAssetBaseUrl.trim())
             : undefined,
+        errorCode: candidate.errorCode,
         errorMessage: typeof candidate.errorMessage === 'string' && candidate.errorMessage.trim()
             ? candidate.errorMessage
             : undefined,
@@ -105,16 +119,6 @@ export const readStoredGamePackageState = (
         const parsed = sanitizeStoredState(gameId, JSON.parse(raw));
         if (!parsed) {
             return fallbackState;
-        }
-
-        if (parsed.status && isInProgressStatus(parsed.status)) {
-            return mergeGamePackageState(fallbackState, {
-                status: 'failed',
-                progressPercent: undefined,
-                progressMode: undefined,
-                errorMessage: parsed.errorMessage ?? STALE_IN_PROGRESS_ERROR_MESSAGE,
-                updatedAt: parsed.updatedAt ?? Date.now(),
-            });
         }
 
         return mergeGamePackageState(fallbackState, parsed);

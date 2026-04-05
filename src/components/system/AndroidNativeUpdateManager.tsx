@@ -8,7 +8,9 @@ import {
     mapNativeUpdateEventToState,
     openAndroidUnknownSourcesSettings,
     prepareAndroidNativeUpdateInstall,
+    readPreparedAndroidUpdateState,
     requestAndroidNativeUpdateCheck,
+    type AndroidPreparedUpdateState,
     type AndroidNativeUpdateManifest,
     type AndroidNativeUpdateState,
     readAndroidNativeUpdateConfig,
@@ -19,6 +21,23 @@ import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 import { AndroidNativeUpdateGate } from './AndroidNativeUpdateGate';
 
 let hasAutoStartedAndroidNativeUpdateCheck = false;
+
+const shouldAutoResumePreparedUpdate = (state: AndroidPreparedUpdateState) => (
+    state.status === 'queued'
+    || state.status === 'downloading'
+    || state.status === 'verifying'
+);
+
+const normalizeRecoveredPreparedUpdate = (state: AndroidPreparedUpdateState): AndroidPreparedUpdateState => {
+    if (state.status !== 'installing') {
+        return state;
+    }
+
+    return {
+        ...state,
+        status: 'permission-required',
+    };
+};
 
 export const AndroidNativeUpdateManager = () => {
     const toast = useToast();
@@ -47,6 +66,8 @@ export const AndroidNativeUpdateManager = () => {
             interactiveRef.current = interactive;
             const config = readAndroidNativeUpdateConfig();
             if (!config.enabled) {
+                pendingManifestRef.current = null;
+                interactiveRef.current = false;
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
                 if (interactive) {
                     toastRef.current.warning(tRef.current('nativeUpdate.toast.disabled'));
@@ -61,6 +82,7 @@ export const AndroidNativeUpdateManager = () => {
 
             if (!availability.available || !availability.manifest) {
                 pendingManifestRef.current = null;
+                interactiveRef.current = false;
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
                 if (interactive && availability.reason === 'up-to-date') {
                     toastRef.current.success(tRef.current('nativeUpdate.toast.upToDate'), '应用更新', {
@@ -72,9 +94,34 @@ export const AndroidNativeUpdateManager = () => {
             }
 
             pendingManifestRef.current = availability.manifest;
-            const shouldBlock = availability.manifest.forceUpdate === true || interactive;
+            const preparedState = await readPreparedAndroidUpdateState(availability.manifest.version);
+            if (disposed) {
+                return;
+            }
 
-            if (!interactive && availability.manifest.forceUpdate !== true) {
+            const hasPreparedState = preparedState !== null;
+            interactiveRef.current = interactive || hasPreparedState;
+            const shouldBlock = availability.manifest.forceUpdate === true || interactiveRef.current;
+            const displayTitle = availability.manifest.forceUpdateTitle || undefined;
+            const displayMessage = availability.manifest.forceUpdateMessage || undefined;
+
+            if (preparedState) {
+                const recoveredState = normalizeRecoveredPreparedUpdate(preparedState);
+                setState(mapNativeUpdateEventToState(recoveredState, {
+                    blocking: shouldBlock,
+                    title: displayTitle,
+                    message: displayMessage,
+                }));
+
+                if (
+                    !shouldAutoResumePreparedUpdate(preparedState)
+                    && !(interactive && preparedState.status === 'error')
+                ) {
+                    return;
+                }
+            }
+
+            if (!interactive && availability.manifest.forceUpdate !== true && !hasPreparedState) {
                 setState(HIDDEN_ANDROID_NATIVE_UPDATE_STATE);
                 return;
             }
@@ -83,8 +130,8 @@ export const AndroidNativeUpdateManager = () => {
                 phase: 'checking',
                 blocking: shouldBlock,
                 version: availability.manifest.version,
-                title: availability.manifest.forceUpdateTitle || undefined,
-                message: availability.manifest.forceUpdateMessage || undefined,
+                title: displayTitle,
+                message: displayMessage,
             });
 
             try {
@@ -107,8 +154,8 @@ export const AndroidNativeUpdateManager = () => {
                     blocking: shouldBlock,
                     version: availability.manifest.version,
                     reason: error instanceof Error ? error.message : String(error),
-                    title: availability.manifest.forceUpdateTitle || undefined,
-                    message: availability.manifest.forceUpdateMessage || undefined,
+                    title: displayTitle,
+                    message: displayMessage,
                 });
             }
         };

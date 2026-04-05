@@ -1,5 +1,10 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import type { GamePackageInstallHandle, ResolvedGamePackageManifest, StoredGamePackageState } from './types';
+import type {
+    GamePackageInstallErrorCode,
+    GamePackageInstallHandle,
+    ResolvedGamePackageManifest,
+    StoredGamePackageState,
+} from './types';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { mergeGamePackageState } from './types';
 import { normalizeGamePackageAssetBaseUrl, normalizeNativeAssetRootPath } from './assetBaseUrl';
@@ -18,6 +23,21 @@ type NativeGamePackagePlugin = {
             assetPackVersion?: string;
             assetRootPath?: string;
         }>;
+    }>;
+    getInstallState(options: {
+        gameId: string;
+    }): Promise<{
+        exists?: boolean;
+        gameId?: string;
+        status?: StoredGamePackageState['status'];
+        progressPercent?: number;
+        progressMode?: StoredGamePackageState['progressMode'];
+        errorCode?: GamePackageInstallErrorCode;
+        errorMessage?: string;
+        installedAt?: number;
+        assetPackVersion?: string;
+        assetRootPath?: string;
+        updatedAt?: number;
     }>;
     installGamePackage(options: {
         gameId: string;
@@ -48,6 +68,7 @@ type NativeGamePackagePlugin = {
             status?: StoredGamePackageState['status'];
             progressPercent?: number;
             progressMode?: StoredGamePackageState['progressMode'];
+            errorCode?: GamePackageInstallErrorCode;
             errorMessage?: string;
             installedAt?: number;
             assetPackVersion?: string;
@@ -95,6 +116,21 @@ const clampPercent = (value: number | undefined) => {
     }
     return Math.max(0, Math.min(100, Math.round(value)));
 };
+
+const isGamePackageInstallErrorCode = (value: string): value is GamePackageInstallErrorCode => (
+    value === 'network-timeout'
+    || value === 'http-error'
+    || value === 'resume-not-supported'
+    || value === 'checksum-mismatch'
+    || value === 'insufficient-storage'
+    || value === 'archive-invalid'
+    || value === 'file-io'
+    || value === 'cancelled'
+    || value === 'task-conflict'
+    || value === 'manifest-missing'
+    || value === 'unsupported-runtime'
+    || value === 'unknown'
+);
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -206,14 +242,70 @@ export const fetchRemoteJsonThroughNativePlugin = async (
     }
 };
 
+export const readNativeGamePackageInstallState = async (
+    gameId: string,
+): Promise<Partial<StoredGamePackageState> | null> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        logMobileRuntime('NativeGamePackagePlugin', 'read-install-state-no-plugin', {
+            gameId,
+        }, 'warn');
+        return null;
+    }
+
+    try {
+        const result = await plugin.getInstallState({ gameId });
+        if (result.exists !== true || !result.status) {
+            logMobileRuntime('NativeGamePackagePlugin', 'read-install-state-empty', {
+                gameId,
+                result,
+            });
+            return null;
+        }
+
+        const assetBaseUrl = toAssetBaseUrl(result.assetRootPath);
+        const normalizedState: Partial<StoredGamePackageState> = {
+            gameId,
+            status: result.status,
+            progressPercent: clampPercent(result.progressPercent),
+            progressMode: result.progressMode,
+            errorCode: typeof result.errorCode === 'string' && isGamePackageInstallErrorCode(result.errorCode)
+                ? result.errorCode
+                : undefined,
+            errorMessage: result.errorMessage?.trim() || undefined,
+            installedVersion: result.assetPackVersion?.trim() || undefined,
+            localAssetBaseUrl: assetBaseUrl,
+            updatedAt: typeof result.updatedAt === 'number' && Number.isFinite(result.updatedAt)
+                ? result.updatedAt
+                : (typeof result.installedAt === 'number' && Number.isFinite(result.installedAt)
+                    ? result.installedAt
+                    : Date.now()),
+        };
+
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'read-install-state-success', {
+            gameId,
+            normalizedState,
+        });
+        return normalizedState;
+    } catch (error) {
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'read-install-state-failed', {
+            gameId,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
 const createNativeFailureHandle = (
     manifest: ResolvedGamePackageManifest,
     errorMessage: string,
+    errorCode: GamePackageInstallErrorCode | undefined,
     options: NativeInstallRunnerOptions,
 ): GamePackageInstallHandle => {
     const baseState = buildBaseState(manifest);
     const failedState = mergeGamePackageState(baseState, {
         status: 'failed',
+        errorCode,
         errorMessage,
         progressMode: undefined,
         progressPercent: undefined,
@@ -256,7 +348,7 @@ export const createNativeGamePackageInstallHandle = async (
             assetPackVersion: manifest.assetPackVersion,
             hasModulePackUrl: Boolean(manifest.modulePackUrl),
         });
-        return createNativeFailureHandle(manifest, '当前还没有可下载的游戏包，请先发布一版。', options);
+        return createNativeFailureHandle(manifest, '当前还没有可下载的游戏包，请先发布一版。', 'manifest-missing', options);
     }
 
     let cancelled = false;
@@ -291,6 +383,9 @@ export const createNativeGamePackageInstallHandle = async (
                             status: event.status,
                             progressPercent: clampPercent(event.progressPercent),
                             progressMode: event.progressMode,
+                            errorCode: typeof event.errorCode === 'string' && isGamePackageInstallErrorCode(event.errorCode)
+                                ? event.errorCode
+                                : undefined,
                             errorMessage: event.errorMessage,
                             installedVersion: event.assetPackVersion?.trim() || undefined,
                             localAssetBaseUrl: assetBaseUrl,
@@ -300,6 +395,7 @@ export const createNativeGamePackageInstallHandle = async (
                             status: event.status,
                             progressMode: event.progressMode,
                             progressPercent: event.progressPercent,
+                            errorCode: event.errorCode,
                             errorMessage: event.errorMessage,
                             assetPackVersion: event.assetPackVersion,
                         });
@@ -345,6 +441,7 @@ export const createNativeGamePackageInstallHandle = async (
                 status: 'installed',
                 progressMode: undefined,
                 progressPercent: undefined,
+                errorCode: undefined,
                 errorMessage: undefined,
                 installedVersion: result.assetPackVersion?.trim() || manifest.assetPackVersion,
                 localAssetBaseUrl: assetBaseUrl,
@@ -372,6 +469,7 @@ export const createNativeGamePackageInstallHandle = async (
                 status: 'failed',
                 progressMode: undefined,
                 progressPercent: undefined,
+                errorCode: currentState.errorCode,
                 errorMessage: error instanceof Error ? error.message : String(error ?? '安装失败'),
             });
             currentState = nextState;

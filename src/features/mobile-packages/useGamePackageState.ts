@@ -2,12 +2,19 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameManifestMobileDelivery } from '../../games/manifest.types';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
+import { onAppVisible } from '../../lib/mobile/appVisibility';
 import {
     buildFallbackGamePackageManifest,
     hasRemoteGamePackageManifestEndpoint,
     resolveGamePackageManifest,
 } from './manifestClient';
-import { resetGamePackageState, startGamePackageInstall, subscribeGamePackageState, syncGamePackageState } from './packageManagerService';
+import {
+    refreshGamePackageStateFromNativeTask,
+    resetGamePackageState,
+    startGamePackageInstall,
+    subscribeGamePackageState,
+    syncGamePackageState,
+} from './packageManagerService';
 import type { GamePackageCardState, PendingGamePackageInstall, ResolvedGamePackageManifest } from './types';
 import { createDefaultGamePackageState, hasUsableInstalledGamePackageVersion, toGamePackageCardState } from './types';
 
@@ -69,14 +76,7 @@ export const useGamePackageState = ({
             modulePackBytes: delivery.modulePackBytes,
             assetPackBytes: delivery.assetPackBytes,
         } satisfies GameManifestMobileDelivery;
-    }, [
-        delivery?.assetPackBytes,
-        delivery?.assetPackId,
-        delivery?.mode,
-        delivery?.modulePackBytes,
-        delivery?.modulePackId,
-        delivery?.runtimeChannel,
-    ]);
+    }, [delivery]);
     const isPackageManaged = enabled && normalizedDelivery?.mode === 'package-managed';
     const fallbackState = useMemo(
         () => createDefaultGamePackageState(gameId, normalizedDelivery),
@@ -128,14 +128,34 @@ export const useGamePackageState = ({
         });
         setPendingInstall(null);
         setCardState(toGamePackageCardState(syncGamePackageState(gameId, fallbackState)));
+        void refreshGamePackageStateFromNativeTask(gameId, fallbackState).catch((error) => {
+            logMobileRuntime('UseGamePackageState', 'refresh-native-state-failed', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            }, 'warn');
+        });
 
-        return subscribeGamePackageState(gameId, (state) => {
+        const cleanupVisible = onAppVisible(() => {
+            void refreshGamePackageStateFromNativeTask(gameId, fallbackState).catch((error) => {
+                logMobileRuntime('UseGamePackageState', 'refresh-native-state-on-visible-failed', {
+                    gameId,
+                    error: error instanceof Error ? error.message : String(error),
+                }, 'warn');
+            });
+        });
+
+        const unsubscribeState = subscribeGamePackageState(gameId, (state) => {
             logMobileRuntime('UseGamePackageState', 'subscribe-state-changed', {
                 gameId,
                 state,
             });
             setCardState(toGamePackageCardState(state));
         });
+
+        return () => {
+            cleanupVisible();
+            unsubscribeState();
+        };
     }, [fallbackState, gameId, isPackageManaged]);
 
     useEffect(() => {
@@ -177,7 +197,7 @@ export const useGamePackageState = ({
         setPendingInstall(null);
         confirmInFlightRef.current = false;
         setIsConfirmingInstall(false);
-    }, [cardState.status, pendingInstall]);
+    }, [cardState.installedVersion, cardState.status, pendingInstall]);
 
     const displayCardState = useMemo(
         () => ({
