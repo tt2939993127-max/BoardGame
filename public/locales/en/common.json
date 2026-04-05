@@ -4,6 +4,26 @@
     "cancel": "Cancel",
     "close": "Close"
   },
+  "actions": {
+    "closePreview": "Close Preview"
+  },
+  "selection": {
+    "title": "Choose Character",
+    "notSelected": "Not Selected",
+    "you": "You",
+    "ready": "Ready",
+    "readyWaiting": "Waiting for other players",
+    "pressStart": "Start Match",
+    "waitingAll": "Waiting for everyone to be ready"
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "Preparing room"
+    }
+  },
+  "characters": {
+    "placeholder": "Character"
+  },
   "category": {
     "all": "All Games",
     "card": "Card",

@@ -863,29 +863,61 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             }
 
             if (enableAi) {
-                const aiSeatCredentials: Record<string, string> = {};
                 const aiSeatEntries = Object.entries(normalizedSeatControllers).filter(([, controller]) => controller.type !== 'human');
+                persistAiSeatCredentials(matchID, {});
 
-                for (const [playerId] of aiSeatEntries) {
-                    try {
-                        const response = await matchApi.claimSeat(gameId, matchID, playerId, {
-                            token: token ?? undefined,
-                            guestId,
-                            playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
-                        });
-                        aiSeatCredentials[playerId] = response.playerCredentials;
-                    } catch (error) {
-                        logger.error('[GameDetailsModal] AI 座位占座失败', {
-                            gameId,
-                            matchID,
+                if (aiSeatEntries.length > 0) {
+                    appendMatchLoadTrace({
+                        stage: 'create-room-ai-seat-claim-background-start',
+                        gameId,
+                        matchId: matchID,
+                        payload: {
+                            seatCount: aiSeatEntries.length,
+                        },
+                    });
+
+                    const aiClaimStartedAt = Date.now();
+                    void Promise.allSettled(
+                        aiSeatEntries.map(async ([playerId]) => ({
                             playerId,
-                            error: error instanceof Error ? error.message : String(error),
-                        });
-                        toast.warning({ kind: 'i18n', key: 'error.aiSeatClaimFailed', ns: 'lobby' });
-                    }
-                }
+                            response: await matchApi.claimSeat(gameId, matchID, playerId, {
+                                token: token ?? undefined,
+                                guestId,
+                                playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
+                            }),
+                        })),
+                    ).then((results) => {
+                        const aiSeatCredentials: Record<string, string> = {};
+                        let failureCount = 0;
 
-                persistAiSeatCredentials(matchID, aiSeatCredentials);
+                        results.forEach((result) => {
+                            if (result.status === 'fulfilled') {
+                                aiSeatCredentials[result.value.playerId] = result.value.response.playerCredentials;
+                                return;
+                            }
+
+                            failureCount += 1;
+                            logger.error('[GameDetailsModal] AI 座位占座失败', {
+                                gameId,
+                                matchID,
+                                error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+                            });
+                        });
+
+                        persistAiSeatCredentials(matchID, aiSeatCredentials);
+                        appendMatchLoadTrace({
+                            stage: 'create-room-ai-seat-claim-background-settled',
+                            gameId,
+                            matchId: matchID,
+                            payload: {
+                                seatCount: aiSeatEntries.length,
+                                successCount: Object.keys(aiSeatCredentials).length,
+                                failureCount,
+                                durationMs: Date.now() - aiClaimStartedAt,
+                            },
+                        });
+                    });
+                }
             } else {
                 persistAiSeatCredentials(matchID, {});
             }

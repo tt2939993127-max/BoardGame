@@ -842,6 +842,16 @@ export const MatchRoom = () => {
         includeTutorial: isTutorialRoute,
     });
     const gameImplReady = isGameImplementationReady;
+    const tutorialLoadingProgressText = useMemo(() => {
+        if (!isTutorialRoute) return undefined;
+        if (!gameId || !isGameNamespaceReady) {
+            return t('matchRoom.loadingProgress.loadingGameModule');
+        }
+        return t('tutorial.steps.setup', {
+            ns: `game-${gameId}`,
+            defaultValue: t('matchRoom.loadingProgress.preparingRoom'),
+        });
+    }, [gameId, isGameNamespaceReady, isTutorialRoute, t]);
 
     useEffect(() => {
         if (gameImplementationError) {
@@ -1777,17 +1787,34 @@ export const MatchRoom = () => {
                             {isTutorialRoute ? (
                                 <GameModeProvider mode="tutorial">
                                     {!gameImplReady ? (
-                                        <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                                        <LoadingScreen
+                                            anchor="container"
+                                            title={t('matchRoom.title.tutorial')}
+                                            description={t('matchRoom.loadingResources')}
+                                            progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                                        />
                                     ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                         <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                             <TutorialDispatchBridge>
                                                 {tutorialBoardBootstrapComplete ? (
                                                     <BoardBridge
                                                         board={WrappedBoard}
-                                                        loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
+                                                        loading={(
+                                                            <LoadingScreen
+                                                                anchor="container"
+                                                                title={t('matchRoom.title.tutorial')}
+                                                                description={t('matchRoom.loadingResources')}
+                                                                progressText={tutorialLoadingProgressText}
+                                                            />
+                                                        )}
                                                     />
                                                 ) : (
-                                                    <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
+                                                    <LoadingScreen
+                                                        anchor="container"
+                                                        title={t('matchRoom.title.tutorial')}
+                                                        description={t('matchRoom.loadingResources')}
+                                                        progressText={tutorialLoadingProgressText}
+                                                    />
                                                 )}
                                             </TutorialDispatchBridge>
                                         </LocalGameProvider>

@@ -130,6 +130,7 @@ describe('GamePageRescueGate helpers', () => {
             elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
             hasFriendlyScreen: false,
             hasLoadingScreen: false,
+            hasBootstrapLoader: false,
             viewportRect: { width: 960, height: 540 },
             shellRect: { width: 960, height: 540 },
             contentRect: { width: 0, height: 0 },
@@ -143,6 +144,7 @@ describe('GamePageRescueGate helpers', () => {
             elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
             hasFriendlyScreen: false,
             hasLoadingScreen: true,
+            hasBootstrapLoader: false,
             viewportRect: null,
             shellRect: null,
             contentRect: null,
@@ -154,6 +156,21 @@ describe('GamePageRescueGate helpers', () => {
             elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
             hasFriendlyScreen: true,
             hasLoadingScreen: false,
+            hasBootstrapLoader: false,
+            viewportRect: null,
+            shellRect: null,
+            contentRect: null,
+            meaningfulContentCount: 0,
+        })).toBeNull();
+    });
+
+    it('bootstrap loader 还在时不把首屏冷启动误判成救援页', () => {
+        expect(detectGamePageRescueSignal({
+            pathname: '/play/smashup/local',
+            elapsedMs: GAME_PAGE_RESCUE_GRACE_MS + 1,
+            hasFriendlyScreen: false,
+            hasLoadingScreen: false,
+            hasBootstrapLoader: true,
             viewportRect: null,
             shellRect: null,
             contentRect: null,

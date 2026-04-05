@@ -22,6 +22,7 @@ import { AndroidLiveUpdateManager } from './components/system/AndroidLiveUpdateM
 import { AndroidNativeUpdateManager } from './components/system/AndroidNativeUpdateManager';
 import { AndroidBackNavigationBridge } from './components/system/AndroidBackNavigationBridge';
 import { GamePageRescueGate } from './components/system/GamePageRescueGate';
+import { LoadingScreen } from './components/system/LoadingScreen';
 import { InteractionGuardProvider } from './components/game/framework/InteractionGuard';
 import AdminGuard from './components/auth/AdminGuard';
 import { MobileOrientationGuard } from './components/common/MobileOrientationGuard';
@@ -105,6 +106,13 @@ const AppContent = () => {
     </AdminGuard>
   );
 
+  const playRouteFallback = (
+    <LoadingScreen
+      description={t('matchRoom.loadingResources')}
+      progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+    />
+  );
+
   return (
     <CursorPreferenceProvider>
       <SocialProvider>
@@ -122,7 +130,7 @@ const AppContent = () => {
                     <Route
                       path="/play/:gameId/match/:matchId"
                       element={(
-                        <React.Suspense fallback={null}>
+                        <React.Suspense fallback={playRouteFallback}>
                           <MatchRoom />
                         </React.Suspense>
                       )}
@@ -130,7 +138,7 @@ const AppContent = () => {
                     <Route
                       path="/play/:gameId/local"
                       element={(
-                        <React.Suspense fallback={null}>
+                        <React.Suspense fallback={playRouteFallback}>
                           <LocalMatchRoom />
                         </React.Suspense>
                       )}
@@ -139,7 +147,7 @@ const AppContent = () => {
                     <Route
                       path="/play/:gameId"
                       element={(
-                        <React.Suspense fallback={null}>
+                        <React.Suspense fallback={playRouteFallback}>
                           <TestMatchRoom />
                         </React.Suspense>
                       )}
@@ -174,7 +182,7 @@ const AppContent = () => {
                     <Route
                       path="/play/:gameId/tutorial"
                       element={(
-                        <React.Suspense fallback={null}>
+                        <React.Suspense fallback={playRouteFallback}>
                           <TutorialMatchRoom />
                         </React.Suspense>
                       )}

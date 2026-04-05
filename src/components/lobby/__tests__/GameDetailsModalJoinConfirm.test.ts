@@ -731,7 +731,10 @@ describe('GameDetailsModal create room ai entry', () => {
             ownerPlayerID: '0',
             ownerCredentials: 'host-cred',
         });
-        vi.spyOn(matchApi, 'claimSeat').mockResolvedValueOnce({ playerCredentials: 'ai-seat-1' });
+        let resolveAiSeatClaim: ((value: { playerCredentials: string }) => void) | null = null;
+        vi.spyOn(matchApi, 'claimSeat').mockImplementationOnce(() => new Promise((resolve) => {
+            resolveAiSeatClaim = resolve;
+        }));
 
         render(createElement(GameDetailsModal, baseProps));
 
@@ -749,6 +752,7 @@ describe('GameDetailsModal create room ai entry', () => {
         await waitFor(() => {
             expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-ai-1?playerID=0');
         });
+        expect(matchStatus.persistAiSeatCredentials).toHaveBeenCalledWith('match-ai-1', {});
 
         expect(matchApi.createMatch).toHaveBeenCalledWith(
             'dicethrone',
@@ -779,6 +783,15 @@ describe('GameDetailsModal create room ai entry', () => {
             'zh-CN',
             'dicethrone',
         );
+
+        await act(async () => {
+            resolveAiSeatClaim?.({ playerCredentials: 'ai-seat-1' });
+            await Promise.resolve();
+        });
+
+        expect(matchStatus.persistAiSeatCredentials).toHaveBeenLastCalledWith('match-ai-1', {
+            '1': 'ai-seat-1',
+        });
     });
 
     it('加入房间时直接让服务端分配席位，不再先 getMatch 猜空位', async () => {
