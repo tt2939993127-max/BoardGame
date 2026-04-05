@@ -122,7 +122,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
     const useDesktopLikeLandscapeLayout = isMobileLandscape;
     const selectionGridClassName = useDesktopLikeLandscapeLayout
-        ? 'mx-auto grid w-fit max-w-none grid-cols-[repeat(5,160px)] justify-center gap-x-4 gap-y-3.5 pb-28'
+        ? 'mx-auto grid w-fit max-w-none grid-cols-[repeat(5,160px)] justify-center gap-x-6 gap-y-3.5 pb-28'
         : 'mx-auto grid w-full max-w-[920px] grid-cols-4 justify-items-center gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
     const selectionCardFrameClassName = useDesktopLikeLandscapeLayout
         ? 'relative mb-1.5 w-[160px] aspect-[0.727]'
