@@ -256,7 +256,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                                         className="whitespace-nowrap rounded-sm border border-white bg-amber-300/95 px-1.5 py-[1px] font-black leading-none text-slate-900 shadow-md"
                                                         style={{ fontSize: titanAbilityBadgeFontSize }}
                                                     >
-                                                        {t('ui.titan_ability', { defaultValue: '泰坦能力' })}
+                                                        {t('ui.titan_play_available', { defaultValue: '可打出' })}
                                                     </div>
                                                 </div>
                                             )}

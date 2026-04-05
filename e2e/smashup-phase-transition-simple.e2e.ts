@@ -148,13 +148,15 @@ async function installSmashUpAiChoiceRejectPatch(
     page: Page,
     options: {
         targetPlayerId?: string;
+        allowBatchKinds?: Array<'force-skip' | 'force-end-turn'>;
     } = {},
 ): Promise<void> {
     const {
         targetPlayerId = '1',
+        allowBatchKinds = ['force-skip'],
     } = options;
 
-    await page.evaluate(async ({ aiPlayerId }) => {
+    await page.evaluate(async ({ aiPlayerId, allowedFallbackKinds }) => {
         const globalWindow = window as Window & {
             __SU_AI_FORCE_SKIP_PATCH__?: {
                 installed: boolean;
@@ -164,6 +166,7 @@ async function installSmashUpAiChoiceRejectPatch(
                 lastBatchId: string | null;
                 lastReason: string | null;
                 forceSkipDelegated: boolean;
+                forceEndTurnDelegated: boolean;
                 latestInteractionKind: string | null;
                 latestInteractionSourceId: string | null;
                 latestInteractionPlayerId: string | null;
@@ -201,6 +204,7 @@ async function installSmashUpAiChoiceRejectPatch(
             lastBatchId: null,
             lastReason: null,
             forceSkipDelegated: false,
+            forceEndTurnDelegated: false,
             latestInteractionKind: null,
             latestInteractionSourceId: null,
             latestInteractionPlayerId: null,
@@ -244,12 +248,15 @@ async function installSmashUpAiChoiceRejectPatch(
         ) {
             const tracker = globalWindow.__SU_AI_FORCE_SKIP_PATCH__;
             const config = (this as { config?: { playerID?: string | null } }).config;
-            const isForceSkip = batchId.includes('force-skip');
+            const fallbackKind = batchId.includes('force-end-turn')
+                ? 'force-end-turn'
+                : (batchId.includes('force-skip') ? 'force-skip' : null);
+            const isAllowedFallback = fallbackKind !== null && allowedFallbackKinds.includes(fallbackKind);
 
             if (
                 tracker
                 && config?.playerID === tracker.aiPlayerId
-                && !isForceSkip
+                && !isAllowedFallback
             ) {
                 tracker.rejectedCount += 1;
                 tracker.lastBatchId = batchId;
@@ -264,13 +271,15 @@ async function installSmashUpAiChoiceRejectPatch(
             ) {
                 tracker.delegatedCount += 1;
                 tracker.lastBatchId = batchId;
-                tracker.forceSkipDelegated = isForceSkip;
+                tracker.forceSkipDelegated = fallbackKind === 'force-skip';
+                tracker.forceEndTurnDelegated = fallbackKind === 'force-end-turn';
             }
 
             return originalSendBatch.call(this, batchId, commands, onConfirmed, onRejected);
         };
     }, {
         aiPlayerId: targetPlayerId,
+        allowedFallbackKinds: allowBatchKinds,
     });
 }
 
@@ -282,6 +291,7 @@ async function readSmashUpAiChoiceRejectPatchStatus(page: Page): Promise<{
     lastBatchId: string | null;
     lastReason: string | null;
     forceSkipDelegated: boolean;
+    forceEndTurnDelegated: boolean;
     latestInteractionKind: string | null;
     latestInteractionSourceId: string | null;
     latestInteractionPlayerId: string | null;
@@ -296,6 +306,7 @@ async function readSmashUpAiChoiceRejectPatchStatus(page: Page): Promise<{
                 lastBatchId: string | null;
                 lastReason: string | null;
                 forceSkipDelegated: boolean;
+                forceEndTurnDelegated: boolean;
                 latestInteractionKind: string | null;
                 latestInteractionSourceId: string | null;
                 latestInteractionPlayerId: string | null;
@@ -1630,7 +1641,7 @@ test('在线 AI 持有隐藏交互时应自动 batch 响应并推进状态', asy
     }
 });
 
-test('在线 AI 的盘旋机器人隐藏交互卡住时，应显示强制跳过 toast 并在点击后恢复对局', async ({ browser }, testInfo) => {
+test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动跳过并恢复对局', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
 
     const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -1673,31 +1684,21 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应显示强制跳过 
         });
 
         await expect.poll(async () => {
-            const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
-            return {
-                latestInteractionKind: status?.latestInteractionKind ?? null,
-                latestInteractionSourceId: status?.latestInteractionSourceId ?? null,
-                latestInteractionPlayerId: status?.latestInteractionPlayerId ?? null,
-            };
+            return (await readSmashUpAiChoiceRejectPatchStatus(hostPage))?.rejectedCount ?? 0;
         }, {
             timeout: 10000,
-            message: '等待 AI seat latestState 暴露出隐藏的 hoverbot simple-choice',
-        }).toEqual({
-            latestInteractionKind: 'simple-choice',
-            latestInteractionSourceId: 'robot_hoverbot',
-            latestInteractionPlayerId: '1',
-        });
+            message: '等待 AI seat 至少尝试一次 hoverbot 隐藏交互',
+        }).toBeGreaterThan(0);
 
         const forceSkipToast = hostPage.getByText('AI 响应超时').locator('..');
         await expect(forceSkipToast).toBeVisible({ timeout: 12000 });
-        await expect(hostPage.getByRole('button', { name: '强制跳过' })).toBeVisible({ timeout: 5000 });
+        await expect(hostPage.getByText('AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。')).toBeVisible({ timeout: 5000 });
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-toast');
 
-        const patchStatusBeforeClick = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
-        expect(patchStatusBeforeClick?.rejectedCount ?? 0).toBeGreaterThan(0);
-        expect(patchStatusBeforeClick?.forceSkipDelegated).toBe(false);
-
-        await hostPage.getByRole('button', { name: '强制跳过' }).click();
+        const patchStatusAfterAutoSkip = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
+        expect(patchStatusAfterAutoSkip?.rejectedCount ?? 0).toBeGreaterThan(0);
+        expect(patchStatusAfterAutoSkip?.delegatedCount ?? 0).toBeGreaterThanOrEqual(1);
+        expect(patchStatusAfterAutoSkip?.forceSkipDelegated).toBe(true);
 
         await expect.poll(async () => {
             const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
@@ -1712,7 +1713,7 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应显示强制跳过 
             };
         }, {
             timeout: 20000,
-            message: '等待强制跳过提交成功并解除房主阻塞',
+            message: '等待 4 秒自动跳过提交成功并解除房主阻塞',
         }).toEqual({
             delegatedCount: 1,
             forceSkipDelegated: true,
@@ -1742,6 +1743,116 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应显示强制跳过 
         });
 
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-after-resolve');
+    } finally {
+        await setup.hostContext.close();
+    }
+});
+
+test('在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束当前回合', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupSmashUpOnlineAiRoom(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'SmashUp AI 联机房间创建失败');
+        return;
+    }
+
+    try {
+        const { hostPage, matchId } = setup;
+        await waitForAiSeatCredential(hostPage, matchId, '1');
+        await installSmashUpAiChoiceRejectPatch(hostPage, {
+            targetPlayerId: '1',
+            allowBatchKinds: ['force-end-turn'],
+        });
+
+        await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHiddenSacrificeState);
+        await waitForSmashUpUI(hostPage);
+
+        const injectedState = await getMatchState(matchId, hostPage);
+        expect(injectedState.sys?.interaction?.current?.playerId).toBe('1');
+        expect(injectedState.sys?.interaction?.current?.data?.sourceId).toBe('wizard_sacrifice');
+        expect(injectedState.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid)).toEqual(['ai-sacrifice-target']);
+        await expect(hostPage.getByText('选择要牺牲的随从（抽取等量力量的牌）')).toHaveCount(0);
+
+        await expect.poll(async () => {
+            return hostPage.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return {
+                    interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                    isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                    currentPlayerIndex: state?.core?.currentPlayerIndex ?? null,
+                    baseMinions: state?.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid) ?? [],
+                };
+            });
+        }, {
+            timeout: 10000,
+            message: '等待房主视角进入“隐藏交互阻塞但无可见 prompt”状态',
+        }).toEqual({
+            interactionPlayerId: null,
+            isBlocked: true,
+            currentPlayerIndex: 1,
+            baseMinions: ['ai-sacrifice-target'],
+        });
+
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-force-end-turn-before-timeout');
+
+        await expect.poll(async () => {
+            return (await readSmashUpAiChoiceRejectPatchStatus(hostPage))?.rejectedCount ?? 0;
+        }, {
+            timeout: 10000,
+            message: '等待 AI seat 至少尝试一次 wizard sacrifice 隐藏交互',
+        }).toBeGreaterThan(0);
+
+        const forceEndTurnToast = hostPage.getByText('AI 强制结束回合').locator('..');
+        await expect(forceEndTurnToast).toBeVisible({ timeout: 16000 });
+        await expect(hostPage.getByText('AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。')).toBeVisible({ timeout: 5000 });
+
+        await expect.poll(async () => {
+            const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
+            const state = await getMatchState(matchId, hostPage);
+            return {
+                delegatedCount: status?.delegatedCount ?? 0,
+                forceEndTurnDelegated: status?.forceEndTurnDelegated ?? false,
+                interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
+                interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                currentPlayerIndex: state.core?.currentPlayerIndex ?? null,
+                baseMinions: state.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid) ?? [],
+            };
+        }, {
+            timeout: 20000,
+            message: '等待 8 秒强制结束回合提交成功并切回房主',
+        }).toEqual({
+            delegatedCount: 1,
+            forceEndTurnDelegated: true,
+            interactionSourceId: null,
+            interactionPlayerId: null,
+            currentPlayerIndex: 0,
+            baseMinions: ['ai-sacrifice-target'],
+        });
+
+        await expect.poll(async () => {
+            return hostPage.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return {
+                    interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
+                    isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                    currentPlayerIndex: state?.core?.currentPlayerIndex ?? null,
+                };
+            });
+        }, {
+            timeout: 10000,
+            message: '等待房主过滤视角解除阻塞并接回当前回合',
+        }).toEqual({
+            interactionPlayerId: null,
+            isBlocked: false,
+            currentPlayerIndex: 0,
+        });
+
+        await expect(
+            hostPage.locator('[data-tutorial-id="su-turn-tracker"]').filter({ hasText: /你自己|YOU/i }),
+        ).toBeVisible({ timeout: 8000 });
+        await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-force-end-turn-after-resolve');
     } finally {
         await setup.hostContext.close();
     }

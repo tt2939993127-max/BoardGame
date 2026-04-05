@@ -1348,6 +1348,53 @@ const waitForSummonerWarsHandStable = async (page: Page, allowMissing = false) =
   await page.waitForTimeout(120);
 };
 
+const waitForSummonerWarsHandArtReady = async (page: Page, allowMissing = false) => {
+  await expect.poll(async () => {
+    try {
+      return await page.evaluate((canBeMissing) => {
+        const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+        if (!handArea) {
+          return canBeMissing;
+        }
+
+        const cards = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'));
+        if (cards.length === 0) {
+          return canBeMissing;
+        }
+
+        const visibleCards = cards.filter((card) => {
+          const rect = card.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        if (visibleCards.length === 0) {
+          return canBeMissing;
+        }
+
+        return visibleCards.every((card) => {
+          const sprite = card.querySelector<HTMLElement>('[data-card-sprite="true"]');
+          if (!sprite) {
+            return false;
+          }
+          const rect = sprite.getBoundingClientRect();
+          return rect.width > 0
+            && rect.height > 0
+            && sprite.dataset.imageLoaded === 'true';
+        });
+      }, allowMissing);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Execution context was destroyed') || message.includes('Target closed')) {
+        return false;
+      }
+      throw error;
+    }
+  }, {
+    timeout: 15000,
+    message: '等待召唤师战争手牌卡图真实渲染完成',
+  }).toBe(true);
+  await page.waitForTimeout(120);
+};
+
 const waitForSummonerWarsHandCount = async (page: Page, expectedCount: number) => {
   await expect.poll(async () => {
     const state = await readSummonerWarsHarnessState(page);
@@ -2732,6 +2779,7 @@ test.describe('SummonerWars', () => {
     await waitForMyTurn(hostPage);
     await waitForSummonerWarsHandCount(hostPage, expectedStartHandCount);
     await waitForSummonerWarsHandStable(hostPage);
+    await waitForSummonerWarsHandArtReady(hostPage);
     await assertHandAreaVisible(hostPage, 'mobile-basic-flow-start');
 
     await hostPage.screenshot({
@@ -2892,6 +2940,7 @@ test.describe('SummonerWars', () => {
     const expectedMagicHandCountAfterDiscard = Math.max(0, expectedMagicHandCountBeforeDiscard - 1);
     await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountAfterDiscard);
     await waitForSummonerWarsHandStable(hostPage);
+    await waitForSummonerWarsHandArtReady(hostPage);
     await assertHandAreaVisible(hostPage, 'mobile-basic-flow-after-magic');
 
     await hostPage.screenshot({
