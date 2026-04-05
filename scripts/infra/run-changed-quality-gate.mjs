@@ -446,11 +446,13 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         .filter((group) => hasChangesForTargetGroup(files, group.targets))
         .forEach((group) => {
           const scopedTargets = collectScopedVitestTargets(files, group.targets);
-          commands.push({
-            label: group.label,
-            reason: `${group.reason}（按本轮命中的子树/测试文件缩小批次）`,
-            command: process.execPath,
-            args: [...VITEST_SAFE_ENTRY, 'run', ...scopedTargets, ...FAST_VITEST_ARGS],
+          scopedTargets.forEach((target, index) => {
+            commands.push({
+              label: scopedTargets.length === 1 ? group.label : `${group.label} (${index + 1}/${scopedTargets.length})`,
+              reason: `${group.reason}（限定到 ${target}）`,
+              command: process.execPath,
+              args: [...VITEST_SAFE_ENTRY, 'run', target, ...FAST_VITEST_ARGS],
+            });
           });
         });
 
