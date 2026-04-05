@@ -78,17 +78,6 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     }, [activeFactionId, focusedFactionGroup, locale, mySelections]);
 
     const isMobileLandscape = viewportSize.width < 1024 && viewportSize.width > viewportSize.height;
-    const modalDesignWidth = 1120;
-    const modalDesignHeight = 760;
-    const modalPadding = isMobileLandscape ? 16 : 32;
-    const mobileLandscapeScale = isMobileLandscape
-        ? Math.min(
-            (viewportSize.width - modalPadding * 2) / modalDesignWidth,
-            (viewportSize.height - modalPadding * 2) / modalDesignHeight,
-            1,
-        )
-        : 1;
-    const useScaledLandscapeModal = isMobileLandscape && mobileLandscapeScale < 0.98;
     const focusedFactionMeta = resolvedActiveFactionId ? getFactionMeta(resolvedActiveFactionId) ?? null : null;
 
     if (!selectionState) return null;
@@ -421,10 +410,10 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                             <div className="pointer-events-auto flex h-full w-full justify-center">
                                 <div
                                     className="relative flex h-full items-center justify-center"
-                                    style={useScaledLandscapeModal
+                                    style={isMobileLandscape
                                         ? {
-                                            width: modalDesignWidth * mobileLandscapeScale,
-                                            height: modalDesignHeight * mobileLandscapeScale,
+                                            width: '100%',
+                                            height: '100%',
                                         }
                                         : {
                                             width: 'min(90vw, 80rem)',
@@ -433,14 +422,9 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                         }}
                                 >
                                     <div
-                                        className="relative"
-                                        style={useScaledLandscapeModal
-                                            ? {
-                                                width: modalDesignWidth,
-                                                height: modalDesignHeight,
-                                                transform: `scale(${mobileLandscapeScale})`,
-                                                transformOrigin: 'center center',
-                                            }
+                                        className="relative h-full w-full"
+                                        style={isMobileLandscape
+                                            ? undefined
                                             : {
                                                 width: '100%',
                                                 height: '100%',
@@ -449,14 +433,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                         <motion.div
                                             layoutId={focusedGroupId}
                                             className="relative h-full w-full min-h-0 bg-[#fdfdfd]/98 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.55)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged backdrop-blur-[2px]"
-                                            style={useScaledLandscapeModal
-                                                ? {
-                                                    width: modalDesignWidth,
-                                                    maxWidth: 'none',
-                                                    height: modalDesignHeight,
-                                                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
-                                                }
-                                                : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
+                                            style={{ backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
                                             initial={{ x: 32, opacity: 0, scale: 0.97 }}
                                             animate={{ x: 0, opacity: 1, scale: 1 }}
                                             exit={{ x: 32, opacity: 0, scale: 0.97 }}

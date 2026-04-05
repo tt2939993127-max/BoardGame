@@ -171,6 +171,7 @@ export interface AndroidLiveUpdateStartOptions {
 
 const DEFAULT_OTA_CHANNEL = 'stable';
 const DEFAULT_APP_READY_TIMEOUT_MS = 10000;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60000;
 const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
     phase: 'hidden',
     blocking: false,
@@ -202,6 +203,13 @@ const parseTimeoutEnv = (value: string | boolean | undefined) => {
     const parsed = Number.parseInt(value.trim(), 10);
     return Number.isFinite(parsed) && parsed >= 1000 ? parsed : DEFAULT_APP_READY_TIMEOUT_MS;
 };
+
+const resolveDownloadTimeoutMs = (appReadyTimeoutMs: number) => Math.max(
+    DEFAULT_DOWNLOAD_TIMEOUT_MS,
+    appReadyTimeoutMs * 6,
+);
+
+const isBundleReadyForActivation = (status: BundleStatus) => status === 'success' || status === 'pending';
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
 const isAbsoluteHttpUrl = (value: string) => /^https?:\/\//i.test(value);
@@ -753,10 +761,6 @@ export const subscribeAndroidLiveUpdateRequests = (
 export const startAndroidLiveUpdateBackgroundCheck = async (
     options: AndroidLiveUpdateStartOptions = {},
 ): Promise<AndroidLiveUpdateResult> => {
-    if (options.force) {
-        backgroundUpdatePromise = null;
-    }
-
     if (!backgroundUpdatePromise) {
         backgroundUpdatePromise = (async () => {
             const { onForceStateChange } = options;
@@ -825,6 +829,7 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
             }
 
             const nativeOperationTimeoutMs = Math.max(config.appReadyTimeoutMs, 8000);
+            const downloadTimeoutMs = resolveDownloadTimeoutMs(config.appReadyTimeoutMs);
 
             const updaterModule = await loadUpdater();
             if (!updaterModule) {
@@ -982,7 +987,9 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     nativeOperationTimeoutMs,
                     `OTA 校验超时：读取本地 bundle 列表超过 ${nativeOperationTimeoutMs}ms`,
                 );
-                const cachedBundle = bundleList.bundles.find((bundle) => bundle.version === manifest.version && bundle.status !== 'error');
+                const cachedBundle = bundleList.bundles.find(
+                    (bundle) => bundle.version === manifest.version && isBundleReadyForActivation(bundle.status),
+                );
                 if (cachedBundle) {
                     emitCriticalOtaLog('cached-bundle-hit', {
                         bundleId: cachedBundle.id,
@@ -1085,11 +1092,15 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                         stage: 'download-start',
                         manifestVersion: manifest.version,
                     });
-                    const downloadedBundle = await CapacitorUpdater.download({
-                        url: normalizeUrl(manifest.url),
-                        version: manifest.version,
-                        checksum: manifest.checksum,
-                    });
+                    const downloadedBundle = await withTimeout(
+                        CapacitorUpdater.download({
+                            url: normalizeUrl(manifest.url),
+                            version: manifest.version,
+                            checksum: manifest.checksum,
+                        }),
+                        downloadTimeoutMs,
+                        `OTA 下载超时：超过 ${downloadTimeoutMs}ms 未完成 bundle 下载`,
+                    );
                     emitCriticalOtaLog('download-finished', {
                         downloadedBundle,
                     });
@@ -1201,7 +1212,9 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     reason,
                 } as const;
             }
-        })();
+        })().finally(() => {
+            backgroundUpdatePromise = null;
+        });
     }
 
     return backgroundUpdatePromise;
