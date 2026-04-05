@@ -33,6 +33,7 @@ import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 import { applyEvents, triggerBaseAbilityWithMS, getInteractionsFromResult, getInteractionsFromMS, makeMatchState } from './helpers';
 import type { RandomFn } from '../../../engine/types';
 
@@ -116,19 +117,6 @@ function triggerExtendedBaseAbilityWithMS(baseDefId: string, timing: string, ctx
         ...ctx,
         matchState: ctx.matchState ?? makeMatchState(ctx.state),
     });
-}
-
-/** 检查 MatchState 是否包含指定 sourceId 的交互 */
-function hasInteraction(matchState: any, sourceId: string): boolean {
-    const queue = matchState?.sys?.interaction?.queue ?? [];
-    const current = matchState?.sys?.interaction?.current;
-    
-    // 检查队列中的交互
-    const inQueue = queue.some((i: any) => i.data?.sourceId === sourceId);
-    // 检查当前交互
-    const isCurrent = current?.data?.sourceId === sourceId;
-    
-    return inQueue || isCurrent;
 }
 
 // ============================================================================
@@ -399,6 +387,51 @@ describe('stale move regression: 扩展基地 Prompt 移动', () => {
             1800,
         );
         expect(resolved?.events ?? []).toHaveLength(0);
+    });
+
+    it('base_inventors_salon: 弃牌堆变空后应只保留 skip，避免 AI 持续拿旧行动卡', () => {
+        const result = triggerBaseAbilityWithMS('base_inventors_salon', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_inventors_salon')],
+                players: {
+                    '0': makePlayer('0', {
+                        discard: [makeCard('d1', 'pirate_full_sail', 'action')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            }),
+            baseDefId: 'base_inventors_salon',
+            rankings: [{ playerId: '0', power: 5, vp: 4 }],
+        }));
+
+        const interaction = getInteractionsFromResult(result)[0];
+        expect(interaction?.data?.sourceId).toBe('base_inventors_salon');
+        expect(interaction?.data?.autoRefresh).toBe('discard');
+        expect(interaction?.data?.responseValidationMode).toBe('live');
+
+        const staleCore = makeState({
+            bases: [makeBase('base_inventors_salon')],
+            players: {
+                '0': makePlayer('0', {
+                    discard: [],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const staleMs = makeMatchState(staleCore);
+        const refreshedState = refreshInteractionOptions({
+            ...staleMs,
+            sys: {
+                ...staleMs.sys,
+                interaction: {
+                    current: interaction,
+                    queue: [],
+                },
+            },
+        });
+
+        const current = refreshedState.sys.interaction?.current as { data?: { options?: Array<{ id: string }> } } | undefined;
+        expect(current?.data?.options?.map((option) => option.id)).toEqual(['skip']);
     });
 });
 

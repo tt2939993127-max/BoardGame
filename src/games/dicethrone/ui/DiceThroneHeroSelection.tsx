@@ -424,7 +424,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                                 {overlayBadge ? (
                                     <div className="absolute inset-0 z-20 pointer-events-none">
-                                        <div className="absolute inset-x-0 top-1/2 flex -translate-y-1/2 justify-center overflow-visible">
+                                        <div className="absolute inset-0 overflow-hidden">
                                             <CharacterSelectionBadge
                                                 badge={overlayBadge}
                                                 label={t(overlayBadge.labelKey)}

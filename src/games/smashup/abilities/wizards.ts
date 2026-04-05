@@ -17,17 +17,86 @@ import {
     revealDeckTop,
     buildAbilityFeedback,
     findCardInPlayerZone,
-    filterCardsPresentInPlayerZone,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, SmashUpEvent, DeckReorderedEvent, MinionCardDef, CardToDeckTopEvent, ActionCardDef, SmashUpCore } from '../domain/types';
 import { drawCards, getOpponentLabel } from '../domain/utils';
 import { registerTrigger } from '../domain/ongoingEffects';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, getCurrentTrackedCardTopSnapshot, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { appendResolvedActionAbility, getExternalActionEffectiveHandSize } from '../domain/externalActionPlay';
 import { validateActionPlaySemantics } from '../domain/playLegality';
+
+function getCurrentDeckTopSnapshotCards<T extends { uid: string; defId: string }>(
+    state: SmashUpCore,
+    playerId: string,
+    trackedCards: T[],
+): T[] {
+    return getCurrentTrackedCardTopSnapshot(state.players[playerId]?.deck ?? [], trackedCards);
+}
+
+type WizardMassEnchantmentCandidate = {
+    uid: string;
+    defId: string;
+    pid: string;
+    label: string;
+};
+
+function buildWizardMassEnchantmentOptions(
+    state: SmashUpCore,
+    trackedCandidates: WizardMassEnchantmentCandidate[],
+) {
+    return trackedCandidates
+        .filter((candidate) => {
+            const topCard = state.players[candidate.pid]?.deck[0];
+            return !!topCard && topCard.uid === candidate.uid && topCard.defId === candidate.defId && topCard.type === 'action';
+        })
+        .map((candidate, index) => ({
+            id: `card-${index}`,
+            label: candidate.label,
+            value: { cardUid: candidate.uid, defId: candidate.defId, pid: candidate.pid },
+            _source: 'static' as const,
+            displayMode: 'card' as const,
+        }));
+}
+
+type WizardPortalOrderContext = {
+    remaining: { uid: string; defId: string }[];
+    ordered: { uid: string; defId: string }[];
+};
+
+function resolveWizardPortalOrderSnapshot(
+    state: SmashUpCore,
+    playerId: string,
+    ctx: WizardPortalOrderContext,
+) {
+    const trackedCards = [...ctx.ordered, ...ctx.remaining];
+    const snapshot = getCurrentDeckTopSnapshotCards(state, playerId, trackedCards);
+    const orderedCount = Math.min(ctx.ordered.length, snapshot.length);
+    return {
+        ordered: snapshot.slice(0, orderedCount),
+        remaining: snapshot.slice(orderedCount),
+    };
+}
+
+function buildWizardPortalOrderOptions(
+    state: SmashUpCore,
+    playerId: string,
+    ctx: WizardPortalOrderContext,
+) {
+    return resolveWizardPortalOrderSnapshot(state, playerId, ctx).remaining.map((card, index) => {
+        const def = getCardDef(card.defId);
+        const name = def?.name ?? card.defId;
+        return {
+            id: `card-${index}`,
+            label: name,
+            value: { cardUid: card.uid, defId: card.defId },
+            _source: 'static' as const,
+            displayMode: 'card' as const,
+        };
+    });
+}
 
 /** 时间法师 onPlay：额外打出一个行动*/
 function wizardChronomage(ctx: AbilityContext): AbilityResult {
@@ -246,12 +315,19 @@ function wizardMassEnchantment(ctx: AbilityContext): AbilityResult {
     }
     if (actionCandidates.length === 0) return { events };
     // 交互选择
-    const options = actionCandidates.map((c, i) => ({ id: `card-${i}`, label: c.label, value: { cardUid: c.uid, defId: c.defId, pid: c.pid }, _source: 'static' as const, displayMode: 'card' as const }));
+    const options = buildWizardMassEnchantmentOptions(ctx.state, actionCandidates);
     const interaction = createSimpleChoice(
         `wizard_mass_enchantment_${ctx.now}`, ctx.playerId,
         '选择一张行动卡作为额外行动打出', options,
-        { sourceId: 'wizard_mass_enchantment', targetType: 'generic' },
+        { sourceId: 'wizard_mass_enchantment', targetType: 'generic', responseValidationMode: 'live' },
     );
+    (interaction.data as { continuationContext?: { candidates: WizardMassEnchantmentCandidate[] }; optionsGenerator?: unknown }).continuationContext = {
+        candidates: actionCandidates,
+    };
+    (interaction.data as { optionsGenerator?: unknown }).optionsGenerator = (
+        nextState: { core: SmashUpCore },
+        interactionData: { continuationContext?: { candidates?: WizardMassEnchantmentCandidate[] } } | undefined,
+    ) => buildWizardMassEnchantmentOptions(nextState.core, interactionData?.continuationContext?.candidates ?? []);
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -348,32 +424,23 @@ function wizardPortalOrderRemaining(
         };
     }
     // 多张：让玩家逐个选择放回顺序
-    const options = remaining.map((c, i) => {
-        const def = getCardDef(c.defId);
-        const name = def?.name ?? c.defId;
-        return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
-    });
+    const portalOrderContext: WizardPortalOrderContext = { remaining, ordered: [] };
     const interaction = createSimpleChoice(
-        `wizard_portal_order_${ctx.now}`, ctx.playerId,
-        '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options,
-        { sourceId: 'wizard_portal_order', targetType: 'generic' },
+        `wizard_portal_order_${ctx.now}`,
+        ctx.playerId,
+        '传送：选择放回牌库顶的第一张牌（最先选的在最上面）',
+        buildWizardPortalOrderOptions(ctx.state, ctx.playerId, portalOrderContext),
+        { sourceId: 'wizard_portal_order', targetType: 'generic', responseValidationMode: 'live' },
     );
-    const remainingUids = remaining.map(c => ({ uid: c.uid, defId: c.defId }));
-    // 手动提供 optionsGenerator：从 continuationContext.remaining 过滤
-    (interaction.data as any).optionsGenerator = (state: any, iData: any) => {
-        const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] } | undefined;
-        if (!ctx || !ctx.remaining) return [];
-        return ctx.remaining.map((c: any, i: number) => {
-            const def = getCardDef(c.defId);
-            const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
-        });
-    };
+    (interaction.data as { optionsGenerator?: unknown }).optionsGenerator = (
+        nextState: { core: SmashUpCore },
+        interactionData: { continuationContext?: WizardPortalOrderContext } | undefined,
+    ) => buildWizardPortalOrderOptions(nextState.core, ctx.playerId, interactionData?.continuationContext ?? portalOrderContext);
     return {
         events: drawEvents,
         matchState: queueInteraction(ctx.matchState, {
             ...interaction,
-            data: { ...interaction.data, continuationContext: { remaining: remainingUids, ordered: [] as { uid: string; defId: string }[] } },
+            data: { ...interaction.data, continuationContext: portalOrderContext },
         }),
     };
 }
@@ -983,10 +1050,9 @@ export function registerWizardInteractionHandlers(): void {
         const picks = Array.isArray(value) ? value as { cardUid?: string; defId?: string; skip?: boolean }[] : [value as { cardUid?: string; defId?: string; skip?: boolean }];
         // 过滤掉 skip 选项，只保留有 cardUid 的选项
         const pickedUids = new Set(picks.map(p => p.cardUid).filter((uid): uid is string => !!uid));
-        const currentTopCards = filterCardsPresentInPlayerZone(
+        const currentTopCards = getCurrentDeckTopSnapshotCards(
             state.core,
             playerId,
-            'deck',
             ctx.allTopCards,
         );
         const currentTopCardUids = new Set(currentTopCards.map(card => card.uid));
@@ -1019,28 +1085,20 @@ export function registerWizardInteractionHandlers(): void {
         }
 
         // 多张：进入排序流程
-        const options = remaining.map((c, i) => {
-            const def = getCardDef(c.defId);
-            const name = def?.name ?? c.defId;
-            return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
-        });
+        const portalOrderContext: WizardPortalOrderContext = { remaining, ordered: [] };
         const next = createSimpleChoice(
-            `wizard_portal_order_${timestamp}`, playerId,
-            '传送：选择放回牌库顶的第一张牌（最先选的在最上面）', options,
-            { sourceId: 'wizard_portal_order', targetType: 'generic' },
+            `wizard_portal_order_${timestamp}`,
+            playerId,
+            '传送：选择放回牌库顶的第一张牌（最先选的在最上面）',
+            buildWizardPortalOrderOptions(state.core, playerId, portalOrderContext),
+            { sourceId: 'wizard_portal_order', targetType: 'generic', responseValidationMode: 'live' },
         );
-        // 手动提供 optionsGenerator：从 continuationContext.remaining 过滤
-        (next.data as any).optionsGenerator = (state: any, iData: any) => {
-            const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] } | undefined;
-            if (!ctx || !ctx.remaining) return [];
-            return ctx.remaining.map((c: any, i: number) => {
-                const def = getCardDef(c.defId);
-                const name = def?.name ?? c.defId;
-                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
-            });
-        };
+        (next.data as { optionsGenerator?: unknown }).optionsGenerator = (
+            nextState: { core: SmashUpCore },
+            interactionData: { continuationContext?: WizardPortalOrderContext } | undefined,
+        ) => buildWizardPortalOrderOptions(nextState.core, playerId, interactionData?.continuationContext ?? portalOrderContext);
         return {
-            state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered: [] } } }),
+            state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: portalOrderContext } }),
             events,
         };
     });
@@ -1048,11 +1106,12 @@ export function registerWizardInteractionHandlers(): void {
     // 传送：逐个选择非随从牌放回牌库顶的顺序
     registerInteractionHandler('wizard_portal_order', (state, playerId, value, iData, _random, timestamp) => {
         const { cardUid, defId } = value as { cardUid: string; defId: string };
-        const ctx = (iData as any)?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] };
+        const ctx = (iData as any)?.continuationContext as WizardPortalOrderContext;
         if (!ctx) return undefined;
-        const currentRemaining = filterCardsPresentInPlayerZone(state.core, playerId, 'deck', ctx.remaining);
-        const currentOrdered = filterCardsPresentInPlayerZone(state.core, playerId, 'deck', ctx.ordered);
-        const selectedCard = findCardInPlayerZone(state.core, playerId, 'deck', cardUid, defId);
+        const snapshot = resolveWizardPortalOrderSnapshot(state.core, playerId, ctx);
+        const currentRemaining = snapshot.remaining;
+        const currentOrdered = snapshot.ordered;
+        const selectedCard = currentRemaining.find((card) => card.uid === cardUid && card.defId === defId);
         const ordered = selectedCard ? [...currentOrdered, { uid: cardUid, defId }] : currentOrdered;
         const remaining = currentRemaining.filter(c => c.uid !== cardUid);
         if (remaining.length <= 1) {
@@ -1076,20 +1135,16 @@ export function registerWizardInteractionHandlers(): void {
             return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
         });
         const next = createSimpleChoice(
-            `wizard_portal_order_${timestamp}`, playerId,
-            `传送：选择下一张放回牌库顶的牌（已选 ${ordered.length} 张）`, options,
-            { sourceId: 'wizard_portal_order', targetType: 'generic' },
+            `wizard_portal_order_${timestamp}`,
+            playerId,
+            `传送：选择下一张放回牌库顶的牌（已选 ${ordered.length} 张）`,
+            options,
+            { sourceId: 'wizard_portal_order', targetType: 'generic', responseValidationMode: 'live' },
         );
-        // 手动提供 optionsGenerator：从 continuationContext.remaining 过滤
-        (next.data as any).optionsGenerator = (state: any, iData: any) => {
-            const ctx = iData?.continuationContext as { remaining: { uid: string; defId: string }[]; ordered: { uid: string; defId: string }[] } | undefined;
-            if (!ctx || !ctx.remaining) return [];
-            return ctx.remaining.map((c: any, i: number) => {
-                const def = getCardDef(c.defId);
-                const name = def?.name ?? c.defId;
-                return { id: `card-${i}`, label: name, value: { cardUid: c.uid, defId: c.defId }, _source: 'static' as const, displayMode: 'card' as const };
-            });
-        };
+        (next.data as { optionsGenerator?: unknown }).optionsGenerator = (
+            nextState: { core: SmashUpCore },
+            interactionData: { continuationContext?: WizardPortalOrderContext } | undefined,
+        ) => buildWizardPortalOrderOptions(nextState.core, playerId, interactionData?.continuationContext ?? { remaining, ordered });
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { remaining, ordered } } }), events: [] };
     });
 

@@ -159,7 +159,7 @@ const OnlineAiSeatBridge = ({
     const forceSkipTrackerRef = useRef<{
         key: string;
         firstSeenAt: number;
-        toastId: string | null;
+        autoSubmittedAt: number | null;
         candidate: ForceSkippableHiddenAiInteraction | null;
     } | null>(null);
 
@@ -304,9 +304,6 @@ const OnlineAiSeatBridge = ({
         const candidateKey = candidate ? `${candidate.playerId}:${candidate.interactionId}` : null;
 
         if (!candidateKey) {
-            if (forceSkipTrackerRef.current?.toastId) {
-                toast.dismiss(forceSkipTrackerRef.current.toastId);
-            }
             forceSkipTrackerRef.current = null;
             return;
         }
@@ -314,13 +311,10 @@ const OnlineAiSeatBridge = ({
         const now = Date.now();
         const currentTracker = forceSkipTrackerRef.current;
         if (!currentTracker || currentTracker.key !== candidateKey) {
-            if (currentTracker?.toastId) {
-                toast.dismiss(currentTracker.toastId);
-            }
             forceSkipTrackerRef.current = {
                 key: candidateKey,
                 firstSeenAt: now,
-                toastId: null,
+                autoSubmittedAt: null,
                 candidate,
             };
             timer = setTimeout(() => {
@@ -334,7 +328,7 @@ const OnlineAiSeatBridge = ({
         }
 
         currentTracker.candidate = candidate;
-        if (currentTracker.toastId) {
+        if (currentTracker.autoSubmittedAt) {
             return;
         }
 
@@ -350,66 +344,50 @@ const OnlineAiSeatBridge = ({
             };
         }
 
-        const toastId = toast.warning(
-            '检测到 AI 在一个可选效果上响应超时。你可以强制跳过这次可选效果，继续对局。',
-            'AI 响应超时',
-            {
-                ttlMs: Infinity,
-                dedupeKey: `game.ai-force-skip.${candidateKey}`,
-                actions: [
-                    {
-                        label: '强制跳过',
-                        variant: 'primary',
-                        onClick: () => {
-                            const latestCandidate = forceSkipTrackerRef.current?.candidate;
-                            if (!latestCandidate) {
-                                return;
-                            }
-                            const targetClient = clientsRef.current[latestCandidate.playerId];
-                            if (!targetClient?.isConnected) {
-                                toast.warning('AI 座位尚未连接，暂时无法强制跳过。');
-                                return;
-                            }
+        const latestCandidate = forceSkipTrackerRef.current?.candidate;
+        if (!latestCandidate) {
+            return;
+        }
+        const targetClient = clientsRef.current[latestCandidate.playerId];
+        if (!targetClient?.isConnected) {
+            timer = setTimeout(() => {
+                setForceSkipCheckVersion((version) => version + 1);
+            }, 1000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
 
-                            forceSkipTrackerRef.current = {
-                                key: candidateKey,
-                                firstSeenAt: Date.now(),
-                                toastId: null,
-                                candidate: latestCandidate,
-                            };
-                            submitOnlineAiResolution({
-                                client: targetClient,
-                                resolution: latestCandidate.resolution,
-                                lastAiAttemptKeyRef,
-                                scheduleRetry: () => {
-                                    setAiRetryVersion((version) => version + 1);
-                                },
-                                onConfirmed: () => {
-                                    toast.success('已强制跳过 AI 的可选效果，对局继续。', '已恢复对局');
-                                },
-                                onRejected: (reason) => {
-                                    if (reason === 'unauthorized') {
-                                        toast.warning('AI 座位凭据已失效，无法强制跳过。');
-                                        return;
-                                    }
-                                    toast.warning('强制跳过未成功，系统会继续自动重试。');
-                                },
-                            });
-                        },
-                    },
-                    {
-                        label: '继续等待',
-                        variant: 'secondary',
-                    },
-                ],
+        currentTracker.autoSubmittedAt = now;
+        submitOnlineAiResolution({
+            client: targetClient,
+            resolution: latestCandidate.resolution,
+            lastAiAttemptKeyRef,
+            scheduleRetry: () => {
+                setAiRetryVersion((version) => version + 1);
             },
-        );
-
-        forceSkipTrackerRef.current = {
-            ...currentTracker,
-            toastId,
-            candidate,
-        };
+            onConfirmed: () => {
+                toast.warning(
+                    'AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。',
+                    'AI 响应超时',
+                    { dedupeKey: `game.ai-force-skip.resolved.${candidateKey}` },
+                );
+            },
+            onRejected: (reason) => {
+                const tracker = forceSkipTrackerRef.current;
+                if (tracker?.key === candidateKey) {
+                    tracker.autoSubmittedAt = null;
+                    tracker.firstSeenAt = Date.now();
+                }
+                if (reason === 'unauthorized') {
+                    toast.warning('AI 座位凭据已失效，无法自动跳过这次隐藏交互。');
+                    return;
+                }
+                toast.warning('自动跳过这次 AI 隐藏交互未成功，系统会继续重试。');
+            },
+        });
 
         return () => {
             if (timer) {
@@ -417,12 +395,6 @@ const OnlineAiSeatBridge = ({
             }
         };
     }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, seatControllers, state, toast]);
-
-    useEffect(() => () => {
-        if (forceSkipTrackerRef.current?.toastId) {
-            toast.dismiss(forceSkipTrackerRef.current.toastId);
-        }
-    }, [toast]);
 
     return null;
 };

@@ -1,5 +1,20 @@
 # DiceThrone Token 统一化修复
 
+## 修订（2026-04-05）
+
+- 旧结论失效：
+  - 文档原先把 `EVASIVE` 记为“已共享统一”
+  - 这与当前真实 runtime 不符，因为武僧、月精灵、枪手都走各自本地 `activeUse`
+- 失效原因：
+  - 历史上曾保留过一份共享 `EVASIVE.passiveTrigger`，但它没有真实消费者
+  - 继续把它当共享 token，会误导后续对被动与 token 运行时链路的审计
+- 本次修正：
+  - 已从 `src/games/dicethrone/domain/sharedTokens.ts` 删除共享 `EVASIVE`
+  - `shared-state-consistency.test.ts` 明确锁定 `monk / moon_elf / gunslinger` 的 `Evasive` 必须走本地 `activeUse`
+- 新裁决：
+  - 当前真正共享的 token 只有 `KNOCKDOWN` 与 `DAZE`
+  - `Evasive` 不是共享 runtime token，而是多个英雄各自维护、语义一致的本地定义
+
 ## 问题描述
 
 用户发现狂战士的 Daze（晕眩）token 和火法师的 Stun（眩晕）token 实际上是同一个效果，但代码中实现成了两个不同的 token。此外，还有其他角色重复定义了相同的 token（Knockdown、Evasive）。
@@ -11,7 +26,6 @@
 创建 `src/games/dicethrone/domain/sharedTokens.ts`，统一定义以下共享 token：
 
 - **KNOCKDOWN（击倒）** - 使用角色：火法师、武僧、枪手、武士
-- **EVASIVE（闪避）** - 使用角色：月精灵、武僧、枪手（注意：月精灵和武僧有 activeUse 配置，与共享版本不同）
 - **DAZE（晕眩）** - 使用角色：狂战士、火法师
 
 ### 2. 统一 STUN → DAZE
@@ -37,8 +51,8 @@
 - 保留自己的 EVASIVE 定义（有 activeUse 配置）
 
 #### 枪手（Gunslinger）
-- 移除 KNOCKDOWN 和 EVASIVE 的定义
-- 从 `sharedTokens` 导入
+- 移除 KNOCKDOWN 的定义
+- EVASIVE 保留本地定义（运行时走 activeUse）
 
 #### 武士（Samurai）
 - 移除 KNOCKDOWN 的定义
@@ -72,9 +86,9 @@
 - `actions: [{ type: 'extraAttack', target: 'self' }]`
 - 实际逻辑在 `flowHooks.ts` 的 `checkDazeExtraAttack` 函数中
 
-### 为什么月精灵和武僧保留自己的 EVASIVE？
+### 为什么 Evasive 不再作为共享 token 保留？
 
-月精灵和武僧的 EVASIVE 有 `activeUse` 配置（投掷判定），与共享版本的 `passiveTrigger` 不同：
+月精灵、武僧、枪手的 EVASIVE 都走本地 `activeUse`（投掷判定），共享版本没有真实运行时消费者：
 
 ```typescript
 // 月精灵/武僧的 EVASIVE
@@ -87,12 +101,6 @@ activeUse: {
     },
 }
 
-// 共享版本的 EVASIVE
-passiveTrigger: {
-    timing: 'onDefense',
-    removable: true,
-    actions: [{ type: 'evade' }],
-}
 ```
 
 ## 测试结果
@@ -108,6 +116,7 @@ passiveTrigger: {
 2. **DRY 原则**：相同的 token 应该统一定义，避免重复
 3. **面向百游戏设计**：共享的 token 应该提取到公共文件，方便复用
 4. **文档同步**：代码修改后必须同步更新测试和文档
+5. **共享定义必须有真实消费者**：没有运行时消费者的共享定义应删除，而不是继续挂在公共文件里误导审计
 
 ## 影响范围
 
@@ -116,9 +125,9 @@ passiveTrigger: {
 - 1 个 Wiki 快照文件
 - 1 个 flowHooks.ts 文件
 - 1 个 ids.ts 文件
-- 1 个新增的 sharedTokens.ts 文件
+- 1 个 sharedTokens.ts 文件
 - 1 个 AGENTS.md 文档
 
 ## 后续工作
 
-无。所有重复的 token 已统一，测试已通过。
+`EVASIVE` 的“共享统一”结论已废弃；当前应以本地 `activeUse` 裁决为准。

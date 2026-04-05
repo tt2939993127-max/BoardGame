@@ -5,7 +5,7 @@ import { GameTransportClient } from '../engine/transport/client';
 type HiddenSimpleChoiceOption = {
     id?: unknown;
     disabled?: unknown;
-    value?: { skip?: unknown; __cancel__?: unknown };
+    value?: { skip?: unknown; __cancel__?: unknown; done?: unknown; __emergency_skip__?: unknown };
 };
 
 type HiddenSimpleChoiceInteraction = {
@@ -54,7 +54,10 @@ function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId
         : [];
 
     const skipOption = enabledOptions.find((option) =>
-        option.id === 'skip' || option.value?.skip === true,
+        option.id === 'skip'
+        || option.value?.skip === true
+        || option.id === '__emergency_skip__'
+        || option.value?.__emergency_skip__ === true,
     );
     if (skipOption?.id) {
         return {
@@ -82,6 +85,18 @@ function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId
         return {
             interactionId: current.id,
             payload: { optionIds: [] },
+            sourceId: typeof data?.sourceId === 'string' ? data.sourceId : undefined,
+            title: typeof data?.title === 'string' ? data.title : undefined,
+        };
+    }
+
+    const doneOption = enabledOptions.find((option) =>
+        option.id === 'done' || option.value?.done === true,
+    );
+    if (doneOption?.id) {
+        return {
+            interactionId: current.id,
+            payload: { optionId: doneOption.id },
             sourceId: typeof data?.sourceId === 'string' ? data.sourceId : undefined,
             title: typeof data?.title === 'string' ? data.title : undefined,
         };

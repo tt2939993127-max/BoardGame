@@ -1149,8 +1149,12 @@ export function LocalGameProvider({
         // 注册状态访问器（本地模式可直接读写当前快照）
         // 本地模式没有 playerView 过滤，因此允许 TestHarness 直接注入状态。
         harness.state.register(
-            () => state,
-            (newState) => setState(newState as MatchState<unknown>),
+            () => stateRef.current,
+            (newState) => {
+                const nextState = newState as MatchState<unknown>;
+                stateRef.current = nextState;
+                setState(nextState);
+            },
         );
         
         // 注册命令分发器

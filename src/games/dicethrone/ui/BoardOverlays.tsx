@@ -114,7 +114,6 @@ export interface BoardOverlaysProps {
         characterId?: string;
     };
     onBonusDieClose: () => void;
-
     // 奖励骰重掷交互
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
     canRerollBonusDie: boolean;

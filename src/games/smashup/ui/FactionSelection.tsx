@@ -402,54 +402,66 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
             <AnimatePresence>
                 {focusedGroupId && focusedFactionGroup && focusedFactionMeta && (
-                    <div
-                        className="pointer-events-none fixed inset-x-2 top-[5.25rem] bottom-[5.5rem] sm:inset-x-3 sm:top-[5.75rem] sm:bottom-[5.75rem] md:inset-x-4 md:top-[6.25rem] md:bottom-[6rem] flex items-stretch justify-center"
-                        style={{ zIndex: UI_Z_INDEX.overlayRaised }}
-                    >
-                        <div className="pointer-events-auto flex h-full w-full justify-center">
-                            <div
-                                className="relative flex h-full items-center justify-center"
-                                style={useScaledLandscapeModal
-                                    ? {
-                                        width: modalDesignWidth * mobileLandscapeScale,
-                                        height: modalDesignHeight * mobileLandscapeScale,
-                                    }
-                                    : {
-                                        width: 'min(90vw, 80rem)',
-                                        maxWidth: '80rem',
-                                        height: '100%',
-                                    }}
-                            >
+                    <>
+                        <motion.button
+                            type="button"
+                            aria-label={t('ui.close_faction_details', { defaultValue: '关闭派系详情' })}
+                            className="fixed inset-0 bg-black/45 backdrop-blur-[2px]"
+                            style={{ zIndex: UI_Z_INDEX.overlayRaised - 1 }}
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={handleCloseDetails}
+                            data-testid="faction-detail-backdrop"
+                        />
+                        <div
+                            className="pointer-events-none fixed inset-x-2 top-[5.25rem] bottom-[5.5rem] sm:inset-x-3 sm:top-[5.75rem] sm:bottom-[5.75rem] md:inset-x-4 md:top-[6.25rem] md:bottom-[6rem] flex items-stretch justify-center"
+                            style={{ zIndex: UI_Z_INDEX.overlayRaised }}
+                        >
+                            <div className="pointer-events-auto flex h-full w-full justify-center">
                                 <div
-                                    className="relative"
+                                    className="relative flex h-full items-center justify-center"
                                     style={useScaledLandscapeModal
                                         ? {
-                                            width: modalDesignWidth,
-                                            height: modalDesignHeight,
-                                            transform: `scale(${mobileLandscapeScale})`,
-                                            transformOrigin: 'center center',
+                                            width: modalDesignWidth * mobileLandscapeScale,
+                                            height: modalDesignHeight * mobileLandscapeScale,
                                         }
                                         : {
-                                            width: '100%',
+                                            width: 'min(90vw, 80rem)',
+                                            maxWidth: '80rem',
                                             height: '100%',
                                         }}
                                 >
-                                    <motion.div
-                                        layoutId={focusedGroupId}
-                                        className="relative h-full w-full min-h-0 bg-[#fdfdfd]/98 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.55)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged backdrop-blur-[2px]"
+                                    <div
+                                        className="relative"
                                         style={useScaledLandscapeModal
                                             ? {
                                                 width: modalDesignWidth,
-                                                maxWidth: 'none',
                                                 height: modalDesignHeight,
-                                                backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
+                                                transform: `scale(${mobileLandscapeScale})`,
+                                                transformOrigin: 'center center',
                                             }
-                                            : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
-                                        initial={{ x: 32, opacity: 0, scale: 0.97 }}
-                                        animate={{ x: 0, opacity: 1, scale: 1 }}
-                                        exit={{ x: 32, opacity: 0, scale: 0.97 }}
-                                        data-testid="faction-detail-panel"
+                                            : {
+                                                width: '100%',
+                                                height: '100%',
+                                            }}
                                     >
+                                        <motion.div
+                                            layoutId={focusedGroupId}
+                                            className="relative h-full w-full min-h-0 bg-[#fdfdfd]/98 border-4 border-slate-800 shadow-[0_20px_50px_rgba(0,0,0,0.55)] rounded-sm overflow-hidden flex flex-col md:flex-row clip-path-jagged backdrop-blur-[2px]"
+                                            style={useScaledLandscapeModal
+                                                ? {
+                                                    width: modalDesignWidth,
+                                                    maxWidth: 'none',
+                                                    height: modalDesignHeight,
+                                                    backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)',
+                                                }
+                                                : { backgroundImage: 'repeating-linear-gradient(0deg, transparent, transparent 18px, #f1f5f9 18px, #f1f5f9 19px)' }}
+                                            initial={{ x: 32, opacity: 0, scale: 0.97 }}
+                                            animate={{ x: 0, opacity: 1, scale: 1 }}
+                                            exit={{ x: 32, opacity: 0, scale: 0.97 }}
+                                            data-testid="faction-detail-panel"
+                                        >
                                         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-40 h-8 bg-white/60 z-50 -translate-y-4" />
                                         <button
                                             onClick={handleCloseDetails}
@@ -664,11 +676,12 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                 ))}
                                             </div>
                                         </div>
-                                    </motion.div>
+                                        </motion.div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
-                    </div>
+                    </>
                 )}
             </AnimatePresence>
 

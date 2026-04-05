@@ -31,6 +31,23 @@ const clickNextOverlayStep = async (page: Parameters<typeof test>[0]['page']) =>
     );
 };
 
+const clickHandCardVisibleArea = async (
+    page: Parameters<typeof test>[0]['page'],
+    cardId: string,
+    yRatio = 0.82,
+) => {
+    const card = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
+    await expect(card).toBeVisible({ timeout: 10000 });
+    const box = await card.boundingBox();
+    if (!box) {
+        throw new Error(`未能获取手牌 ${cardId} 的点击区域`);
+    }
+    await page.mouse.click(
+        box.x + box.width / 2,
+        box.y + box.height * yRatio,
+    );
+};
+
 const readHighlightMetrics = async (page: Parameters<typeof test>[0]['page'], targetId: string) => page.evaluate((resolvedTargetId) => {
     const candidates = Array.from(
         document.querySelectorAll<HTMLElement>(`[data-tutorial-id="${resolvedTargetId}"]`),
@@ -342,5 +359,117 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
                 await clickNextOverlayStep(page);
             }
         }
+    });
+
+    test('顿悟后的奖励骰特写不应卡死手牌区', async ({ page }, testInfo) => {
+        test.setTimeout(180000);
+
+        await setChineseLocale(page);
+        await page.goto('/play/dicethrone/tutorial');
+        await waitForTutorialBoardReady(page, 60000);
+
+        const getTutorialStepId = async () => page
+            .locator('[data-tutorial-step]')
+            .first()
+            .getAttribute('data-tutorial-step')
+            .catch(() => null);
+
+        const advanceToStep = async (targetStep: string, timeout = 15000) => {
+            const deadline = Date.now() + timeout;
+            while (Date.now() < deadline) {
+                const stepId = await getTutorialStepId();
+                if (stepId === targetStep) return;
+                await clickNextOverlayStep(page);
+                await page.waitForTimeout(200);
+            }
+            throw new Error(`未能到达 ${targetStep} 步骤（最终步骤=${await getTutorialStepId()}）`);
+        };
+
+        while ((await getTutorialStepId()) !== 'sell-card-intro') {
+            await clickNextOverlayStep(page);
+        }
+
+        await dispatchLocalCommand(page, 'SELL_CARD', { cardId: 'card-deep-thought' });
+        await waitForTutorialStep(page, 'undo-sell-intro', 5000);
+        await clickNextOverlayStep(page);
+        await dispatchLocalCommand(page, 'UNDO_SELL_CARD', {});
+        await waitForTutorialStep(page, 'advance', 5000);
+
+        const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+        await advanceButton.click();
+        await page.waitForFunction(() => {
+            const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+            return stepId === 'dice-tray' || stepId === 'dice-roll' || stepId === 'play-six';
+        }, { timeout: 10000 });
+
+        if ((await getTutorialStepId()) === 'dice-tray') {
+            await clickNextOverlayStep(page);
+        }
+
+        const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
+        await expect(rollButton).toBeEnabled({ timeout: 10000 });
+        await rollButton.click();
+        await page.waitForTimeout(300);
+
+        if ((await getTutorialStepId()) === 'play-six') {
+            await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-play-six' });
+            await dispatchLocalCommand(page, 'MODIFY_DIE', { dieId: 0, newValue: 6 });
+            await waitForTutorialStep(page, 'dice-confirm', 10000);
+        }
+
+        if ((await getTutorialStepId()) === 'dice-confirm') {
+            const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]');
+            await expect(confirmButton).toBeEnabled({ timeout: 10000 });
+            await confirmButton.click();
+            await page.waitForTimeout(300);
+        }
+
+        if ((await getTutorialStepId()) === 'abilities') {
+            await dispatchLocalCommand(page, 'SELECT_ABILITY', { abilityId: 'fist-technique-4' });
+            await waitForTutorialStep(page, 'resolve-attack', 10000);
+        }
+
+        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
+        await advanceButton.click({ force: true });
+        await advanceToStep('main2-intro', 30000);
+        await clickNextOverlayStep(page);
+        await advanceToStep('enlightenment-play', 15000);
+
+        const enlightenmentCard = page
+            .locator('[data-testid="hand-area"] [data-card-id="card-enlightenment"]')
+            .first();
+        await expect(enlightenmentCard).toBeVisible({ timeout: 10000 });
+        await enlightenmentCard.click();
+        const bonusDieOverlay = page.getByTestId('bonus-die-overlay');
+        await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
+        await waitForTutorialStep(page, 'inner-peace', 10000);
+
+        await clickHandCardVisibleArea(page, 'card-inner-peace');
+        await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
+
+        const evidenceDir = join(
+            process.cwd(),
+            'test-results',
+            'evidence-screenshots',
+            'dicethrone-tutorial-simple.e2e',
+            'tutorial-enlightenment-hand-area',
+        );
+        mkdirSync(evidenceDir, { recursive: true });
+
+        await page.screenshot({
+            path: join(evidenceDir, 'tutorial-enlightenment-hand-area-after-close.png'),
+            fullPage: false,
+        });
+        await page.screenshot({
+            path: testInfo.outputPath('tutorial-enlightenment-hand-area-after-close.png'),
+            fullPage: false,
+        });
+
+        await clickHandCardVisibleArea(page, 'card-inner-peace');
+        await page.waitForFunction(() => {
+            const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+            return stepId === 'ai-turn-intro' || stepId === 'ai-turn';
+        }, { timeout: 10000 });
     });
 });

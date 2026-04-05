@@ -112,7 +112,6 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
         // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
         const isInteractive = !displayOnly && canReroll === true;
-
         bonusDieOverlayLogger.info('render-reroll', {
             total,
             bonusDiceCount: bonusDice.length,
@@ -133,9 +132,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 autoCloseDelay={displayOnly ? 5000 : 3000}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
-                // 教程链路里会在特写出现后立刻引导玩家继续点手牌，
-                // 第一击必须能先关掉展示态特写，不能再被点击保护吞掉。
-                closeClickGuardMs={0}
+                // 非交互态（displayOnly / 无资源可重投）不应吞掉首击。
+                closeClickGuardMs={isInteractive ? 180 : 0}
             >
                 <div className="flex flex-col items-center gap-[1.5vw]" data-testid="bonus-die-overlay">
                     {/* 提示文字 - DiceThrone 风格 */}

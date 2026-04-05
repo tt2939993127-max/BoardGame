@@ -13,6 +13,8 @@ import {
     INTERACTION_COMMANDS,
     INTERACTION_EVENTS,
     createInteractionSystem,
+    getCurrentTrackedCardTopSnapshot,
+    getCurrentTrackedIdTopSnapshot,
     createSimpleChoice,
     queueInteraction,
     resolveInteraction,
@@ -40,6 +42,50 @@ const dummyRandom = {
 };
 
 describe('InteractionSystem - 通用刷新', () => {
+    it('getCurrentTrackedCardTopSnapshot 只应保留当前仍连续位于顶部的揭示牌', () => {
+        const snapshot = getCurrentTrackedCardTopSnapshot(
+            [
+                { uid: 'intrude', defId: 'x' },
+                { uid: 'card-1', defId: 'a' },
+                { uid: 'card-2', defId: 'b' },
+            ],
+            [
+                { uid: 'card-1', defId: 'a', tag: 'tracked-1' },
+                { uid: 'card-2', defId: 'b', tag: 'tracked-2' },
+            ],
+        );
+
+        expect(snapshot).toEqual([]);
+    });
+
+    it('getCurrentTrackedCardTopSnapshot 应按当前顶部顺序返回仍属于原揭示集合的连续块', () => {
+        const snapshot = getCurrentTrackedCardTopSnapshot(
+            [
+                { uid: 'card-2', defId: 'b' },
+                { uid: 'card-1', defId: 'a' },
+                { uid: 'rest', defId: 'z' },
+            ],
+            [
+                { uid: 'card-1', defId: 'a', tag: 'tracked-1' },
+                { uid: 'card-2', defId: 'b', tag: 'tracked-2' },
+            ],
+        );
+
+        expect(snapshot).toEqual([
+            { uid: 'card-2', defId: 'b', tag: 'tracked-2' },
+            { uid: 'card-1', defId: 'a', tag: 'tracked-1' },
+        ]);
+    });
+
+    it('getCurrentTrackedIdTopSnapshot 只应保留当前仍连续位于顶部的字符串快照', () => {
+        const snapshot = getCurrentTrackedIdTopSnapshot(
+            ['base-a', 'base-b', 'base-c'],
+            ['base-a', 'base-b', 'base-x'],
+        );
+
+        expect(snapshot).toEqual(['base-a', 'base-b']);
+    });
+
     it('应该自动检测选项中的 cardUid 字段并刷新选项', () => {
         // 1. 创建初始状态：玩家有 3 张手牌
         let state: MatchState<TestCore> = {

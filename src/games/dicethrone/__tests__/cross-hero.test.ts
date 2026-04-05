@@ -22,10 +22,12 @@ import {
     cmd,
     testSystems,
     assertState,
+    advanceTo,
     type CommandInput,
 } from './test-utils';
 import { getAbilitySlotId } from '../ui/abilitySlotMapping';
 import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
+import { PALADIN_CARDS } from '../heroes/paladin/cards';
 import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 import {
     DEADEYE_2,
@@ -189,6 +191,58 @@ describe('cross hero battles', () => {
             });
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.pendingAttack?.defenseAbilityId).toBe('holy-defense');
+        });
+
+        it('tithes II 在激活包含 pray 面的技能时额外获得 1 CP', () => {
+            const random = createQueuedRandom([1, 1, 2, 6, 3]);
+            const tithesUpgrade = PALADIN_CARDS.find((card) => card.id === 'card-tithes-2');
+            expect(tithesUpgrade).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random,
+                setup: (playerIds: PlayerId[], r: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(playerIds, r, { '0': 'paladin', '1': 'monk' });
+                    const player = state.core.players['0'];
+                    player.resources[RESOURCE_IDS.CP] = 6;
+                    player.hand = [JSON.parse(JSON.stringify(tithesUpgrade!))];
+                    player.deck = player.deck.filter((card) => card.id !== 'card-tithes-2');
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'paladin tithes II pray trigger',
+                commands: [
+                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-tithes-2', targetAbilityId: 'tithes' }),
+                    ...advanceTo('offensiveRoll'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'blessing-of-might' }),
+                ],
+                expect: {
+                    turnPhase: 'offensiveRoll',
+                    players: {
+                        '0': {
+                            cp: 4,
+                            abilityLevels: { tithes: 2 },
+                        },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].passiveAbilities?.find((passive) => passive.id === 'tithes')?.trigger).toMatchObject({
+                on: 'abilityActivatedWithFace',
+                requiredFace: 'pray',
+                grantCp: 1,
+            });
         });
     });
 

@@ -100,16 +100,39 @@
   - 规则闭环：`Showdown` / `Duel` 已有基础执行链
   - UI 语义闭环：未完成，且属于共享抽象缺口
 
+## Addendum（2026-04-05）：compare-roll 交互已补齐
+
+- 上述“UI 语义闭环未完成”的结论在本轮实现后已失效。
+- 当前修复内容：
+  - 引擎层新增 `compare-roll-choice` 一等交互类型：
+    - `src/engine/systems/InteractionSystem.ts`
+    - `src/engine/systems/CompareRollChoiceSystem.ts`
+  - DiceThrone 领域层新增 `COMPARE_ROLL_REQUESTED` 事件并接入系统映射：
+    - `src/games/dicethrone/domain/events.ts`
+    - `src/games/dicethrone/domain/systems.ts`
+  - 枪手 `Showdown / Duel` 改为发 compare-roll 事件，不再分别退化成“纯数值后处理”或“普通 simple-choice”：
+    - `src/games/dicethrone/domain/customActions/gunslinger.ts`
+  - 前端新增 `CompareRollOverlay`，同时展示双方骰点、标题、结果语义，以及 `Duel` 的后续二选一：
+    - `src/games/dicethrone/ui/CompareRollOverlay.tsx`
+    - `src/games/dicethrone/ui/BoardOverlays.tsx`
+    - `src/games/dicethrone/Board.tsx`
+  - 本地化已补齐：
+    - `public/locales/zh-CN/game-dicethrone.json`
+    - `public/locales/en/game-dicethrone.json`
+  - E2E 已补：
+    - `e2e/dicethrone-defense-selection.e2e.ts`
+    - 证据见 `evidence/dicethrone-compare-roll-e2e-test.md`
+- 更新后的结论：
+  - `Showdown` / `Duel` 不再属于“规则已实现但 UI 语义未实现”。
+  - 当前这类“双方掷骰比较”交互已有共享抽象和真实 UI 承载层。
+
 ## 后续建议
 
-1. 在领域层新增统一的“compare-roll”结果模型，至少包含双方玩家、双方骰值、胜负结果、来源 abilityId。
-2. 前端新增专门承载“双骰对比”语义的 overlay，而不是继续塞进普通 `ChoiceModal`。
-3. `Duel` 的后续选择应挂在这类 compare UI 之后，而不是直接裸出两个按钮。
-4. 补一条 UI/E2E 级验证，至少证明：
-   - `Showdown` 能看到双方骰点与比较结果
-   - `Duel` 能看到双方骰点，再进入二选一结算
+1. 若未来其他英雄再接入“双方掷骰比较”类能力，必须直接复用 `compare-roll-choice`，不要再退回 `simple-choice` 或纯日志事件。
+2. 若后续要增强表现，可以继续为 compare-roll overlay 增补角色头像、胜负动效或更完整的结果帧截图，但不应改回每个技能各写一套 UI。
+3. 继续保留至少 1 条 UI/E2E 验证，防止后续回归把 compare-roll 再次降级成普通选择框。
 
 ## 未覆盖风险
 
-1. 本轮命中的“双方比较骰点”模式当前只在枪手源码中找到显式实例；若未来别的英雄再接入同类效果，仍会复现同一缺口。
-2. 本轮是源码复审，不包含真实 E2E 截图验收；因此结论是“抽象和 UI 入口缺失”，不是“已经完成修复”。
+1. 当前 E2E 截图属于过程帧，能证明 overlay 和双骰同屏出现；若未来要把它当“完整结果帧”证据，仍需补更稳定的取帧时机。
+2. 本轮显式落地的是枪手 `Showdown / Duel`；若后续其他英雄新增 compare-roll 语义，仍需单独补回归或复用现有场景。

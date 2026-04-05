@@ -421,6 +421,53 @@ export function createCompareRollChoice<T>(
     };
 }
 
+export function getCurrentTopSnapshotItems<TCurrent, TTracked, TKey>(
+    currentItems: readonly TCurrent[],
+    trackedItems: readonly TTracked[],
+    getCurrentKey: (currentItem: TCurrent) => TKey,
+    getTrackedKey: (trackedItem: TTracked) => TKey,
+    isCompatible?: (currentItem: TCurrent, trackedItem: TTracked) => boolean,
+): TTracked[] {
+    const trackedByKey = new Map(trackedItems.map((trackedItem) => [getTrackedKey(trackedItem), trackedItem] as const));
+    const snapshot: TTracked[] = [];
+
+    for (const currentItem of currentItems) {
+        const trackedItem = trackedByKey.get(getCurrentKey(currentItem));
+        if (!trackedItem) {
+            break;
+        }
+        if (isCompatible && !isCompatible(currentItem, trackedItem)) {
+            break;
+        }
+        snapshot.push(trackedItem);
+    }
+
+    return snapshot;
+}
+
+export function getCurrentTrackedCardTopSnapshot<
+    TTracked extends { uid: string; defId?: string },
+    TCurrent extends { uid: string; defId?: string },
+>(
+    currentCards: readonly TCurrent[],
+    trackedCards: readonly TTracked[],
+): TTracked[] {
+    return getCurrentTopSnapshotItems(
+        currentCards,
+        trackedCards,
+        (currentCard) => currentCard.uid,
+        (trackedCard) => trackedCard.uid,
+        (currentCard, trackedCard) => trackedCard.defId === undefined || currentCard.defId === trackedCard.defId,
+    );
+}
+
+export function getCurrentTrackedIdTopSnapshot<TTracked extends string>(
+    currentIds: readonly string[],
+    trackedIds: readonly TTracked[],
+): TTracked[] {
+    return getCurrentTopSnapshotItems(currentIds, trackedIds, (currentId) => currentId, (trackedId) => trackedId);
+}
+
 /**
  * multistep-choice 专用数据 — 多步调整 → 预览 → 确认
  *

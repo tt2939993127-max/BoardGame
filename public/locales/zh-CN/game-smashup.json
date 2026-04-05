@@ -1552,7 +1552,7 @@
     },
     "base_standing_stones": {
       "name": "巨石阵",
-      "abilityText": "你的回合中，你在这的一个随从可以使用其才能两次。"
+      "abilityText": "你的回合中，你在这的一个随从可以使用其天赋两次。"
     },
     "base_egg_chamber": {
       "name": "卵室",
