@@ -1415,6 +1415,59 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['0'].abilities.find(ability => ability.id === abilityId)).toMatchObject(expectedAbility);
         });
 
+        it('upgrade-deadeye-2 从正常牌库抽到手后，打出仍应走升级而不是其他效果', () => {
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: fixedRandom,
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger draw upgrade-deadeye-2 from normal deck and play it',
+                commands: [
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-deadeye-2' }),
+                ],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].abilityLevels.deadeye).toBe(2);
+            expect(result.finalState.core.players['0'].abilities.find(ability => ability.id === 'deadeye')).toMatchObject(DEADEYE_2);
+
+            const handIds = result.finalState.core.players['0'].hand.map(card => card.id);
+            expect(handIds).not.toContain('upgrade-deadeye-2');
+
+            const discardIds = result.finalState.core.players['0'].discard.map(card => card.id);
+            expect(discardIds).toContain('upgrade-deadeye-2');
+            expect(discardIds).not.toContain('card-the-law');
+
+            const playedEvents = result.finalState.sys.eventStream?.entries
+                ?.map(entry => entry.event)
+                .filter((event): event is { type: string; payload?: Record<string, unknown> } => event.type === 'CARD_PLAYED') ?? [];
+            expect(playedEvents.some(event => event.payload?.cardId === 'upgrade-deadeye-2')).toBe(true);
+
+            const replacedEvents = result.finalState.sys.eventStream?.entries
+                ?.map(entry => entry.event)
+                .filter((event): event is { type: string; payload?: Record<string, unknown> } => event.type === 'ABILITY_REPLACED') ?? [];
+            expect(replacedEvents.some(event => event.payload?.cardId === 'upgrade-deadeye-2')).toBe(true);
+        });
+
         it('upgrade quick-draw makes loaded enter rerollable bonus die settlement', () => {
             const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-quick-draw');
             expect(upgradeCard).toBeDefined();
