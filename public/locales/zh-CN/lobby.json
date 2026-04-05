@@ -55,6 +55,11 @@
   "button": {
     "processing": "处理中..."
   },
+  "tutorial": {
+    "steps": {
+      "setup": "准备房间"
+    }
+  },
   "activeMatch": {
     "notice": "您当前正在进行一场对局",
     "return": "返回当前对局 (#{{id}})"

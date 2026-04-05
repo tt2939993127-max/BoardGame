@@ -145,6 +145,7 @@
     "show_end_turn_controls": "Show end turn button and quota hints",
     "hide_end_turn_controls": "Hide end turn button and quota hints",
     "close": "Close",
+    "close_faction_details": "Close faction details",
     "reveal_your_hand_shown": "Your hand is being shown",
     "reveal_confirmed": "Confirmed",
     "reveal_queue_hint": "{{count}} reveals pending · click to continue",
@@ -164,6 +165,8 @@
     "play_as_minion": "Play as Minion",
     "play_as_action": "Play as Action",
     "tap_again_to_activate": "Tap again to activate",
+    "titan_ability": "Titan Ability",
+    "titan_play_available": "Playable",
     "no_valid_targets": "No valid targets"
   },
   "feedback": {
