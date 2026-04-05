@@ -1,14 +1,23 @@
 package top.easyboardgame.app;
 
+import android.Manifest;
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.util.Log;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.Plugin;
 import com.getcapacitor.PluginCall;
 import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
+import com.getcapacitor.annotation.Permission;
+import com.getcapacitor.annotation.PermissionCallback;
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
@@ -36,10 +45,16 @@ import java.util.zip.ZipException;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-@CapacitorPlugin(name = "GamePackage")
+@CapacitorPlugin(
+    name = "GamePackage",
+    permissions = {
+        @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = GamePackagePlugin.NOTIFICATION_PERMISSION_ALIAS),
+    }
+)
 public class GamePackagePlugin extends Plugin {
 
     private static final String TAG = "GamePackagePlugin";
+    static final String NOTIFICATION_PERMISSION_ALIAS = "notifications";
     private static final String ROOT_DIR = "game-packages";
     private static final String CURRENT_DIR = "current";
     private static final String STAGING_DIR = "staging";
@@ -60,10 +75,39 @@ public class GamePackagePlugin extends Plugin {
     private static final String ERROR_CANCELLED = "cancelled";
     private static final String ERROR_UNKNOWN = "unknown";
     private static final String STALE_IN_PROGRESS_ERROR_MESSAGE = "上次下载未完成，请重新发起。";
+    private static final String NOTIFICATION_PERMISSION_REQUIRED_MESSAGE = "请先允许通知权限，否则后台下载通知不会显示。";
+    private static final String NOTIFICATION_PERMISSION_DENIED_MESSAGE = "通知权限已被拒绝，请到系统设置中开启后再重试下载。";
 
     private final ExecutorService executor = Executors.newCachedThreadPool();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Map<String, AtomicBoolean> cancelRegistry = new ConcurrentHashMap<>();
+    private final GamePackageInstallEventHub.Listener installEventListener = payload -> mainHandler.post(() -> {
+        JSObject result = new JSObject();
+        copyJsonValue(payload, result, "gameId");
+        copyJsonValue(payload, result, "status");
+        copyJsonValue(payload, result, "progressPercent");
+        copyJsonValue(payload, result, "progressMode");
+        copyJsonValue(payload, result, "errorCode");
+        copyJsonValue(payload, result, "errorMessage");
+        copyJsonValue(payload, result, "assetPackVersion");
+        copyJsonValue(payload, result, "assetRootPath");
+        copyJsonValue(payload, result, "installedAt");
+        copyJsonValue(payload, result, "updatedAt");
+        notifyListeners("installStateChanged", result);
+    });
+    private AndroidDownloadTaskStore taskStore;
+
+    @Override
+    public void load() {
+        super.load();
+        taskStore = new AndroidDownloadTaskStore(getContext());
+        GamePackageInstallEventHub.register(installEventListener);
+    }
+
+    @Override
+    protected void handleOnDestroy() {
+        GamePackageInstallEventHub.unregister(installEventListener);
+        super.handleOnDestroy();
+    }
 
     @PluginMethod
     public void listInstalledPackages(PluginCall call) {
@@ -111,6 +155,53 @@ public class GamePackagePlugin extends Plugin {
         Log.i(TAG, "logDiagnostic invoked length=" + message.length());
         Log.i(TAG, "[JS-DIAG] " + message);
         call.resolve();
+    }
+
+    @PluginMethod
+    public void getNotificationPermissionStatus(PluginCall call) {
+        call.resolve(buildNotificationPermissionResult(false));
+    }
+
+    @PluginMethod
+    public void ensureNotificationPermission(PluginCall call) {
+        JSObject currentState = buildNotificationPermissionResult(false);
+        if (currentState.optBoolean("granted", false) || !currentState.optBoolean("required", false)) {
+            call.resolve(currentState);
+            return;
+        }
+
+        Log.w(TAG, "ensureNotificationPermission requesting POST_NOTIFICATIONS");
+        requestPermissionForAlias(NOTIFICATION_PERMISSION_ALIAS, call, "handleNotificationPermissionResult");
+    }
+
+    @PermissionCallback
+    private void handleNotificationPermissionResult(PluginCall call) {
+        JSObject result = buildNotificationPermissionResult(true);
+        Log.i(TAG, "handleNotificationPermissionResult result=" + result);
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void openNotificationSettings(PluginCall call) {
+        try {
+            Context context = getContext();
+            Intent intent;
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                intent = new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName());
+            } else {
+                intent = new Intent(
+                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                    Uri.fromParts("package", context.getPackageName(), null)
+                );
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            call.resolve();
+        } catch (Exception error) {
+            Log.e(TAG, "openNotificationSettings failed", error);
+            call.reject("打开通知设置失败", error);
+        }
     }
 
     @PluginMethod
@@ -168,10 +259,13 @@ public class GamePackagePlugin extends Plugin {
             return;
         }
 
-        AtomicBoolean cancelled = cancelRegistry.get(gameId);
-        if (cancelled != null) {
-            cancelled.set(true);
-            Log.w(TAG, "cancelInstall gameId=" + gameId);
+        AndroidDownloadTaskRecord record = taskStore.getLatestByTarget(AndroidDownloadTaskRecord.KIND_GAME_PACKAGE, gameId);
+        if (record != null && !record.isTerminal()) {
+            Log.w(TAG, "cancelInstall gameId=" + gameId + " taskId=" + record.taskId);
+            AndroidDownloadForegroundService.startManagedIntent(
+                getContext(),
+                AndroidDownloadForegroundService.buildCancelIntent(getContext(), record.taskId)
+            );
         }
         call.resolve();
     }
@@ -187,7 +281,8 @@ public class GamePackagePlugin extends Plugin {
         try {
             JSONObject payload = readJsonFile(resolveStateFile(gameId));
             JSObject result = new JSObject();
-            boolean taskRunning = isTaskRunning(gameId);
+            AndroidDownloadTaskRecord taskRecord = taskStore.getLatestByTarget(AndroidDownloadTaskRecord.KIND_GAME_PACKAGE, gameId);
+            boolean taskRunning = taskRecord != null && taskRecord.isActive();
             result.put("taskRunning", taskRunning);
             if (payload == null) {
                 Log.i(TAG, "getInstallState empty gameId=" + gameId + " taskRunning=" + taskRunning);
@@ -196,7 +291,7 @@ public class GamePackagePlugin extends Plugin {
                 return;
             }
 
-            payload = normalizeStaleInstallState(gameId, payload, taskRunning);
+            payload = normalizeStaleInstallState(gameId, payload, taskRunning, taskRecord);
 
             result.put("exists", true);
             copyJsonValue(payload, result, "gameId");
@@ -217,13 +312,17 @@ public class GamePackagePlugin extends Plugin {
         }
     }
 
-    private JSONObject normalizeStaleInstallState(String gameId, JSONObject payload, boolean taskRunning) {
+    private JSONObject normalizeStaleInstallState(String gameId, JSONObject payload, boolean taskRunning, AndroidDownloadTaskRecord taskRecord) {
         if (payload == null || taskRunning) {
             return payload;
         }
 
         String status = normalizeNonEmpty(payload.optString("status", null));
         if (!isInProgressStatus(status)) {
+            return payload;
+        }
+
+        if (taskRecord != null && !taskRecord.isTerminal()) {
             return payload;
         }
 
@@ -246,6 +345,30 @@ public class GamePackagePlugin extends Plugin {
 
     @PluginMethod
     public void installGamePackage(PluginCall call) {
+        JSObject notificationPermission = buildNotificationPermissionResult(false);
+        if (notificationPermission.optBoolean("required", false) && !notificationPermission.optBoolean("granted", false)) {
+            Log.w(TAG, "installGamePackage missing notification permission gameId=" + call.getString("gameId", ""));
+            requestPermissionForAlias(NOTIFICATION_PERMISSION_ALIAS, call, "handleInstallNotificationPermissionResult");
+            return;
+        }
+
+        enqueueInstallGamePackage(call);
+    }
+
+    @PermissionCallback
+    private void handleInstallNotificationPermissionResult(PluginCall call) {
+        JSObject permissionState = buildNotificationPermissionResult(true);
+        if (!permissionState.optBoolean("granted", false)) {
+            String message = permissionState.optString("message", NOTIFICATION_PERMISSION_REQUIRED_MESSAGE);
+            Log.w(TAG, "installGamePackage notification permission denied message=" + message);
+            call.reject(message);
+            return;
+        }
+
+        enqueueInstallGamePackage(call);
+    }
+
+    private void enqueueInstallGamePackage(PluginCall call) {
         String gameId = normalizeNonEmpty(call.getString("gameId"));
         String runtimeChannel = normalizeNonEmpty(call.getString("runtimeChannel"));
         String assetPackId = normalizeNonEmpty(call.getString("assetPackId"));
@@ -271,132 +394,48 @@ public class GamePackagePlugin extends Plugin {
             call.reject("缺少 assetPackUrl");
             return;
         }
-
-        AtomicBoolean cancelFlag = new AtomicBoolean(false);
-        AtomicBoolean previous = cancelRegistry.putIfAbsent(gameId, cancelFlag);
-        if (previous != null) {
-            call.reject("当前游戏已有安装任务正在进行");
-            return;
-        }
-
         String resolvedAssetPackId = assetPackId != null ? assetPackId : gameId;
         String resolvedAssetPackVersion = assetPackVersion != null ? assetPackVersion : "unknown";
-
-        executor.execute(() -> {
-            File gameDir = new File(getRootDir(), gameId);
-            File stagingDir = new File(new File(gameDir, STAGING_DIR), sanitizeFileSegment(resolvedAssetPackVersion));
-            File archiveFile = new File(stagingDir, ARCHIVE_FILE);
-            File archivePartFile = new File(stagingDir, ARCHIVE_PART_FILE);
-            File stagingAssetsDir = new File(stagingDir, ASSETS_DIR);
-            File currentDir = new File(gameDir, CURRENT_DIR);
-            File currentAssetsDir = new File(currentDir, ASSETS_DIR);
-            long installedAt = System.currentTimeMillis();
-            boolean installSucceeded = false;
-
-            try {
-                Log.i(
-                    TAG,
-                    "installGamePackage start gameId=" + gameId
-                        + " stagingDir=" + stagingDir.getAbsolutePath()
-                        + " archiveFile=" + archiveFile.getAbsolutePath()
-                );
-                if (!stagingDir.exists() && !stagingDir.mkdirs()) {
-                    throw new IOException("创建临时目录失败");
-                }
-                if (!stagingAssetsDir.exists() && !stagingAssetsDir.mkdirs()) {
-                    throw new IOException("创建临时目录失败");
-                }
-
-                emitInstallState(gameId, "queued", null, "indeterminate", null, resolvedAssetPackVersion, null, null);
-                emitInstallState(gameId, "manifest", null, "indeterminate", null, resolvedAssetPackVersion, null, null);
-
-                downloadArchive(
-                    assetPackUrl,
-                    archiveFile,
-                    archivePartFile,
-                    assetPackChecksum,
-                    cancelFlag,
-                    gameId,
-                    resolvedAssetPackVersion
-                );
-
-                emitInstallState(gameId, "verifying", 100, "indeterminate", null, resolvedAssetPackVersion, null, null);
-                deleteRecursively(stagingAssetsDir);
-                if (!stagingAssetsDir.mkdirs() && !stagingAssetsDir.exists()) {
-                    throw new IOException("创建解压目录失败");
-                }
-                extractArchive(archiveFile, stagingAssetsDir, cancelFlag);
-
-                if (cancelFlag.get()) {
-                    throw new IOException("安装已取消");
-                }
-
-                deleteRecursively(currentDir);
-                if (!currentDir.mkdirs() && !currentDir.exists()) {
-                    throw new IOException("创建安装目录失败");
-                }
-
-                Files.move(
-                    stagingAssetsDir.toPath(),
-                    currentAssetsDir.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING
-                );
-
-                writeMetadata(
-                    new File(currentDir, METADATA_FILE),
-                    gameId,
-                    resolvedRuntimeChannel,
-                    resolvedAssetPackId,
-                    resolvedAssetPackVersion,
-                    installedAt
-                );
-
-                JSObject result = new JSObject();
-                result.put("gameId", gameId);
-                result.put("runtimeChannel", resolvedRuntimeChannel);
-                result.put("installedAt", installedAt);
-                result.put("assetPackVersion", resolvedAssetPackVersion);
-                result.put("assetRootPath", buildAssetRootPath(currentAssetsDir));
-
-                emitInstallState(
-                    gameId,
-                    "installed",
-                    null,
-                    null,
-                    null,
-                    resolvedAssetPackVersion,
-                    buildAssetRootPath(currentAssetsDir),
-                    installedAt
-                );
-                Log.i(
-                    TAG,
-                    "installGamePackage success gameId=" + gameId
-                        + " installedAt=" + installedAt
-                        + " currentAssetsDir=" + currentAssetsDir.getAbsolutePath()
-                );
-                installSucceeded = true;
-                resolveOnMainThread(call, result);
-            } catch (Exception error) {
-                Log.e(TAG, "installGamePackage failed", error);
-                emitInstallState(
-                    gameId,
-                    "failed",
-                    null,
-                    null,
-                    classifyInstallErrorCode(error),
-                    error.getMessage(),
-                    resolvedAssetPackVersion,
-                    null,
-                    null
-                );
-                rejectOnMainThread(call, error.getMessage() != null ? error.getMessage() : "安装失败", error);
-            } finally {
-                cancelRegistry.remove(gameId);
-                if (installSucceeded) {
-                    deleteRecursively(stagingDir);
-                }
-            }
-        });
+        File gameDir = new File(getRootDir(), gameId);
+        File stagingDir = new File(new File(gameDir, STAGING_DIR), sanitizeFileSegment(resolvedAssetPackVersion));
+        File archiveFile = new File(stagingDir, ARCHIVE_FILE);
+        File archivePartFile = new File(stagingDir, ARCHIVE_PART_FILE);
+        AndroidDownloadForegroundService.startManagedIntent(
+            getContext(),
+            AndroidDownloadForegroundService.buildEnqueueIntent(
+                getContext(),
+                AndroidDownloadTaskRecord.KIND_GAME_PACKAGE,
+                gameId,
+                gameId,
+                resolvedRuntimeChannel,
+                resolvedAssetPackId,
+                resolvedAssetPackVersion,
+                assetPackUrl,
+                assetPackChecksum,
+                archiveFile.getAbsolutePath(),
+                archivePartFile.getAbsolutePath()
+            )
+        );
+        AndroidDownloadTaskRecord record = taskStore.enqueueOrReuse(
+            AndroidDownloadTaskRecord.KIND_GAME_PACKAGE,
+            gameId,
+            gameId,
+            resolvedRuntimeChannel,
+            resolvedAssetPackId,
+            resolvedAssetPackVersion,
+            assetPackUrl,
+            assetPackChecksum,
+            archiveFile.getAbsolutePath(),
+            archivePartFile.getAbsolutePath()
+        );
+        JSObject result = new JSObject();
+        result.put("accepted", true);
+        result.put("taskId", record.taskId);
+        result.put("status", record.status);
+        result.put("gameId", gameId);
+        result.put("runtimeChannel", resolvedRuntimeChannel);
+        result.put("assetPackVersion", resolvedAssetPackVersion);
+        call.resolve(result);
     }
 
     private File getRootDir() {
@@ -795,7 +834,8 @@ public class GamePackagePlugin extends Plugin {
     }
 
     private boolean isTaskRunning(String gameId) {
-        return cancelRegistry.containsKey(gameId);
+        AndroidDownloadTaskRecord record = taskStore.getLatestByTarget(AndroidDownloadTaskRecord.KIND_GAME_PACKAGE, gameId);
+        return record != null && record.isActive();
     }
 
     private boolean isInProgressStatus(String status) {
@@ -825,6 +865,34 @@ public class GamePackagePlugin extends Plugin {
             return;
         }
         target.put(key, source.opt(key));
+    }
+
+    private JSObject buildNotificationPermissionResult(boolean requested) {
+        JSObject result = new JSObject();
+        boolean required = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU;
+        result.put("required", required);
+        result.put("requested", requested);
+        if (!required) {
+            result.put("granted", true);
+            result.put("state", PermissionState.GRANTED.toString());
+            result.put("canPrompt", false);
+            return result;
+        }
+
+        PermissionState permissionState = getPermissionState(NOTIFICATION_PERMISSION_ALIAS);
+        if (permissionState == null) {
+            permissionState = PermissionState.PROMPT;
+        }
+        boolean granted = permissionState == PermissionState.GRANTED;
+        boolean canPrompt = permissionState == PermissionState.PROMPT
+            || permissionState == PermissionState.PROMPT_WITH_RATIONALE;
+        result.put("granted", granted);
+        result.put("state", permissionState.toString());
+        result.put("canPrompt", canPrompt);
+        if (!granted) {
+            result.put("message", canPrompt ? NOTIFICATION_PERMISSION_REQUIRED_MESSAGE : NOTIFICATION_PERMISSION_DENIED_MESSAGE);
+        }
+        return result;
     }
 
     private String sanitizeFileSegment(String value) {

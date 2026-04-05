@@ -2171,12 +2171,16 @@ describe('王权骰铸流程测试', () => {
                         '0': {
                             cp: INITIAL_CP - 2,
                             abilityLevels: { meditation: 2 },
-                            discardSize: 1,
+                            discardSize: 0,
                         },
                     },
                 },
             });
             expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].upgradeCardByAbilityId.meditation).toEqual({
+                cardId: 'card-meditation-2',
+                cpCost: 2,
+            });
         });
 
         it('升级拳法到 II 级', () => {

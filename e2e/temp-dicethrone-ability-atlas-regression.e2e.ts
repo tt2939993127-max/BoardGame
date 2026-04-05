@@ -203,21 +203,26 @@ test.describe('DiceThrone hand card preview regression', () => {
       return {
         reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
         phase: state?.sys?.phase ?? null,
-        deadeyeLevel: player?.abilityLevels?.deadeye ?? 0,
-        cp: player?.resources?.cp ?? null,
-        handIds: player?.hand?.map((card: any) => card.id) ?? [],
-        discardIds: player?.discard?.map((card: any) => card.id) ?? [],
-        lastEventTypes: (state?.sys?.eventStream?.entries ?? [])
-          .slice(-6)
-          .map((entry: any) => entry?.event?.type ?? null),
-      };
-    }, { timeout: 15000 }).toMatchObject({
+      deadeyeLevel: player?.abilityLevels?.deadeye ?? 0,
+      cp: player?.resources?.cp ?? null,
+      handIds: player?.hand?.map((card: any) => card.id) ?? [],
+      discardIds: player?.discard?.map((card: any) => card.id) ?? [],
+      upgradeCard: player?.upgradeCardByAbilityId?.deadeye ?? null,
+      lastEventTypes: (state?.sys?.eventStream?.entries ?? [])
+        .slice(-6)
+        .map((entry: any) => entry?.event?.type ?? null),
+    };
+  }, { timeout: 15000 }).toMatchObject({
       reject: null,
       phase: 'main1',
       deadeyeLevel: 2,
       cp: 8,
       handIds: [],
-      discardIds: ['upgrade-deadeye-2'],
+      discardIds: [],
+      upgradeCard: {
+        cardId: 'upgrade-deadeye-2',
+        cpCost: 2,
+      },
       lastEventTypes: ['CP_CHANGED', 'CARD_PLAYED', 'ABILITY_REPLACED'],
     });
 
