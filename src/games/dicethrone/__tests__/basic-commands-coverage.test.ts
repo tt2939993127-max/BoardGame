@@ -23,6 +23,7 @@ import {
     fixedRandom,
     type CommandInput,
     createHeroMatchup,
+    getCardById,
 } from './test-utils';
 import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
@@ -1035,6 +1036,100 @@ describe('AI legal actions', () => {
         expect(resolution?.action.metadata).toMatchObject({
             tokenId: TOKEN_IDS.TAIJI,
         });
+    });
+
+    it('本地 AI 不应在 main1 把下次不算当成主动出牌', async () => {
+        const state = createHeroMatchup('gunslinger', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].hand = [getCardById('card-next-time')];
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+        state.sys.phase = 'main1';
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) =>
+            action.kind === 'play-card'
+            && action.metadata?.cardId === 'card-next-time'
+        )).toBe(false);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).not.toBe('play-card');
+    });
+
+    it('本地 AI 在受伤响应窗口应能把下次不算作为 response-play-card 打出', async () => {
+        let state = createHeroMatchup('gunslinger', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].hand = [getCardById('card-next-time')];
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-next-time-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 6,
+            currentDamage: 6,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-next-time-response',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) =>
+            action.kind === 'response-play-card'
+            && action.metadata?.cardId === 'card-next-time'
+        )).toBe(true);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('response-play-card');
+        expect(resolution?.action.metadata).toMatchObject({
+            cardId: 'card-next-time',
+        });
+
+        for (const command of resolution!.action.commands) {
+            state = execCmd(
+                state,
+                cmd(command.type as CommandInput['type'], resolution!.playerId, command.payload ?? {}),
+            );
+        }
+
+        expect(state.core.players['0'].damageShields).toEqual([
+            expect.objectContaining({
+                sourceId: 'card-next-time',
+                value: 6,
+            }),
+        ]);
+        expect(state.core.players['0'].discard.map((card) => card.id)).toContain('card-next-time');
     });
 
     it('本地 AI 在 offensiveRoll 应先锁住高价值技能关键骰，再继续后续重投决策', async () => {

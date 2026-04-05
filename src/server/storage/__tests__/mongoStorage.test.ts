@@ -1,5 +1,6 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import mongoose from 'mongoose';
+import type { Query } from 'mongoose';
 import type { MatchMetadata, StoredMatchState, CreateMatchData } from '../../../engine/transport/storage';
 import { mongoStorage } from '../MongoStorage';
 import { runStartupCleanupTasks, type StartupCleanupTask } from '../startupCleanup';
@@ -258,6 +259,82 @@ describe('MongoStorage 行为', () => {
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
         expect(remaining).toHaveLength(2);
         expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-1', 'match-2']);
+    });
+
+    it('fetchAuthMetadata 只返回鉴权所需字段，不携带 setupData', async () => {
+        const setupData = {
+            ownerKey: 'user:auth-owner',
+            password: 'secret',
+            seatControllers: {
+                0: { type: 'human' },
+            },
+        };
+        await mongoStorage.createMatch('match-auth-meta', {
+            initialState: buildState(setupData),
+            metadata: {
+                ...buildMetadata(setupData),
+                status: 'waiting',
+                gameover: { winner: '0' },
+                disconnectedSince: 123,
+                players: {
+                    0: { name: 'P0', credentials: 'cred-0', isConnected: false },
+                    1: {},
+                },
+            },
+        });
+
+        const metadata = await mongoStorage.fetchAuthMetadata('match-auth-meta');
+
+        expect(metadata).toBeTruthy();
+        expect(metadata).toMatchObject({
+            gameName: 'tictactoe',
+            status: 'waiting',
+            gameover: { winner: '0' },
+            disconnectedSince: 123,
+            players: {
+                0: { name: 'P0', credentials: 'cred-0', isConnected: false },
+                1: {},
+            },
+        });
+        expect(metadata?.setupData).toBeUndefined();
+    });
+
+    it('fetch 仅请求 metadata 时应使用最小投影', async () => {
+        const Match = mongoose.model('Match');
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn(async () => ({
+            metadata: buildMetadata(undefined),
+        }));
+        const findOneSpy = vi.spyOn(Match, 'findOne').mockReturnValue({
+            select,
+            lean,
+        } as unknown as Query<unknown, unknown>);
+
+        const result = await mongoStorage.fetch('match-metadata-only', { metadata: true });
+
+        expect(select).toHaveBeenCalledWith({ _id: 0, metadata: 1 });
+        expect(result.metadata?.gameName).toBe('tictactoe');
+        findOneSpy.mockRestore();
+    });
+
+    it('fetch 同时请求 state 和 metadata 时应只选择必要字段', async () => {
+        const Match = mongoose.model('Match');
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn(async () => ({
+            state: buildState({}),
+            metadata: buildMetadata(undefined),
+        }));
+        const findOneSpy = vi.spyOn(Match, 'findOne').mockReturnValue({
+            select,
+            lean,
+        } as unknown as Query<unknown, unknown>);
+
+        const result = await mongoStorage.fetch('match-full-fetch', { state: true, metadata: true });
+
+        expect(select).toHaveBeenCalledWith({ _id: 0, state: 1, metadata: 1 });
+        expect(result.state?._stateID).toBe(0);
+        expect(result.metadata?.gameName).toBe('tictactoe');
+        findOneSpy.mockRestore();
     });
 
     it('不同 ownerKey 允许创建多个房间', async () => {

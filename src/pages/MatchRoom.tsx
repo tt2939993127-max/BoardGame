@@ -376,7 +376,7 @@ const OnlineAiSeatBridge = ({
             },
             onConfirmed: () => {
                 toast.warning(
-                    'AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。',
+                    'AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。建议通过反馈入口提交问题。',
                     'AI 响应超时',
                     { dedupeKey: `game.ai-force-skip.resolved.${candidateKey}` },
                 );
@@ -388,10 +388,10 @@ const OnlineAiSeatBridge = ({
                     tracker.firstSeenAt = Date.now();
                 }
                 if (reason === 'unauthorized') {
-                    toast.warning('AI 座位凭据已失效，无法自动跳过这次隐藏交互。');
+                    toast.warning('AI 座位凭据已失效，无法自动跳过这次隐藏交互。建议通过反馈入口提交问题。');
                     return;
                 }
-                toast.warning('自动跳过这次 AI 隐藏交互未成功，系统会继续重试。');
+                toast.warning('自动跳过这次 AI 隐藏交互未成功，系统会继续重试。建议通过反馈入口提交问题。');
             },
         });
 
@@ -484,7 +484,7 @@ const OnlineAiSeatBridge = ({
             },
             onConfirmed: () => {
                 toast.warning(
-                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。',
+                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
                     'AI 强制结束回合',
                     { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
                 );
@@ -496,10 +496,10 @@ const OnlineAiSeatBridge = ({
                     tracker.firstSeenAt = Date.now();
                 }
                 if (reason === 'unauthorized') {
-                    toast.warning('AI 座位凭据已失效，无法自动强制结束该 AI 回合。');
+                    toast.warning('AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。');
                     return;
                 }
-                toast.warning('强制结束 AI 回合未成功，系统会继续重试。');
+                toast.warning('强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。');
             },
         });
 

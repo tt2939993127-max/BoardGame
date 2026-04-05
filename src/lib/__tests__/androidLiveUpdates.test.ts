@@ -13,6 +13,7 @@ import {
 import {
     isAndroidNativeUpdateAvailable,
     readAndroidNativeUpdateConfig,
+    resolveAndroidWebAppDownload,
     type AndroidAppInfo,
 } from '../mobile/androidNativeUpdates';
 import { detectNativeAndroidRuntime } from '../mobile/androidRuntime';
@@ -51,6 +52,49 @@ describe('androidLiveUpdates', () => {
             VITE_ANDROID_OTA_ENABLED: 'true',
             VITE_ANDROID_OTA_MANIFEST_URL: '/relative.json',
         }).enabled).toBe(false);
+    });
+
+    it('网页端下载入口优先解析 native update latest.json 中的 APK 地址', async () => {
+        const result = await resolveAndroidWebAppDownload({
+            VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json',
+        }, vi.fn(async () => ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                version: '0.5.1',
+                url: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.1.apk',
+            }),
+        } as Response)));
+
+        expect(result).toEqual({
+            url: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.1.apk',
+            source: 'manifest',
+        });
+    });
+
+    it('latest.json 不可用时，网页端下载入口回退到显式 APK 直链', async () => {
+        const result = await resolveAndroidWebAppDownload({
+            VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json',
+            VITE_ANDROID_APP_DOWNLOAD_URL: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/manual.apk',
+        }, vi.fn(async () => ({
+            ok: false,
+            status: 503,
+            json: async () => ({}),
+        } as Response)));
+
+        expect(result).toEqual({
+            url: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/manual.apk',
+            source: 'direct',
+        });
+    });
+
+    it('缺少 manifest 和 APK 直链时，网页端下载入口返回 missing-config', async () => {
+        const result = await resolveAndroidWebAppDownload({});
+
+        expect(result).toEqual({
+            url: null,
+            reason: 'missing-config',
+        });
     });
 
     it('版本比较按数值段处理', () => {
@@ -819,7 +863,7 @@ describe('androidLiveUpdates', () => {
         });
     });
 
-    it('AndroidNativeUpdateManager 冷启动命中原生下载中状态时应自动续传并恢复阻塞态', async () => {
+    it('AndroidNativeUpdateManager 冷启动命中原生下载中状态时应自动续传但非强更不阻塞页面', async () => {
         vi.resetModules();
 
         const prepareMock = vi.fn().mockResolvedValue({ status: 'installer-launched' });
@@ -840,6 +884,85 @@ describe('androidLiveUpdates', () => {
                     version: '0.5.2',
                     url: 'https://example.com/app.apk',
                     forceUpdate: false,
+                    forceUpdateTitle: '需要升级',
+                    forceUpdateMessage: '请安装新版应用',
+                },
+            }),
+            continueAndroidNativeUpdateInstall: vi.fn(),
+            mapNativeUpdateEventToState: mapStateMock,
+            openAndroidUnknownSourcesSettings: vi.fn(),
+            prepareAndroidNativeUpdateInstall: prepareMock,
+            readPreparedAndroidUpdateState: vi.fn().mockResolvedValue({
+                version: '0.5.2',
+                status: 'downloading',
+                progressPercent: 42,
+            }),
+            requestAndroidNativeUpdateCheck: vi.fn(),
+            readAndroidNativeUpdateConfig: vi.fn(() => ({
+                enabled: true,
+                manifestUrl: 'https://example.com/latest.json',
+                channel: 'stable',
+            })),
+            subscribeAndroidNativeUpdateRequests: vi.fn(() => () => undefined),
+            subscribeAndroidNativeUpdateState: vi.fn().mockResolvedValue({
+                remove: async () => undefined,
+            }),
+        }));
+        vi.doMock('../mobile/androidRuntime', () => ({
+            isNativeAndroidRuntime: () => true,
+        }));
+        vi.doMock('../../contexts/ToastContext', () => ({
+            useToast: () => ({
+                warning: vi.fn(),
+                success: vi.fn(),
+                info: vi.fn(),
+                error: vi.fn(),
+            }),
+        }));
+        vi.doMock('react-i18next', () => ({
+            useTranslation: () => ({
+                t: (key: string) => key,
+            }),
+        }));
+        vi.doMock('../../components/system/AndroidNativeUpdateGate', () => ({
+            AndroidNativeUpdateGate: () => null,
+        }));
+
+        const { AndroidNativeUpdateManager } = await import('../../components/system/AndroidNativeUpdateManager');
+        render(createElement(AndroidNativeUpdateManager));
+
+        await waitFor(() => {
+            expect(prepareMock).toHaveBeenCalledTimes(1);
+        });
+        expect(mapStateMock).toHaveBeenCalledWith(expect.objectContaining({
+            status: 'downloading',
+            progressPercent: 42,
+        }), expect.objectContaining({
+            blocking: false,
+        }));
+    });
+
+    it('AndroidNativeUpdateManager 冷启动命中原生下载中状态时强更版本仍应保持阻塞态', async () => {
+        vi.resetModules();
+
+        const prepareMock = vi.fn().mockResolvedValue({ status: 'installer-launched' });
+        const mapStateMock = vi.fn(() => ({
+            phase: 'downloading',
+            blocking: true,
+            progressPercent: 42,
+        }));
+
+        vi.doMock('../mobile/androidNativeUpdates', () => ({
+            HIDDEN_ANDROID_NATIVE_UPDATE_STATE: {
+                phase: 'hidden',
+                blocking: false,
+            },
+            checkAndroidNativeUpdateAvailability: vi.fn().mockResolvedValue({
+                available: true,
+                manifest: {
+                    version: '0.5.2',
+                    url: 'https://example.com/app.apk',
+                    forceUpdate: true,
                     forceUpdateTitle: '需要升级',
                     forceUpdateMessage: '请安装新版应用',
                 },

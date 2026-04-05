@@ -656,6 +656,7 @@
     "requireNotRollConfirmed": "骰面已确认，无法再打出此卡",
     "requireMinDamageDealt": "本次攻击未造成足够伤害，无法打出此卡",
     "noStatusOnBoard": "场上没有任何状态效果，无法打出此卡",
+    "requirePendingDamage": "需要存在待结算伤害才能打出此卡",
     "tutorial_manifest_invalid": "教程配置无效",
     "tutorial_command_blocked": "教程中禁止该操作",
     "tutorial_step_locked": "当前步骤不能跳过",
@@ -2229,7 +2230,7 @@
       "description": "改变任意2颗骰子的数值。"
     },
     "card-next-time": {
-      "name": "下次一定！",
+      "name": "这次不算！",
       "description": "一名玩家防止6点即将受到的伤害。"
     },
     "card-boss-generous": {

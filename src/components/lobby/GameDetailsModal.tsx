@@ -40,6 +40,7 @@ import { LoadingScreen } from '../system/LoadingScreen';
 import { useGamePackageState } from '../../features/mobile-packages/useGamePackageState';
 import { hasUsableInstalledGamePackageVersion } from '../../features/mobile-packages/types';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
+import { prefetchOnlineMatchRoute } from '../../lib/prefetchPlayRoute';
 
 
 interface GameDetailsModalProps {
@@ -654,6 +655,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 error: error instanceof Error ? error.message : String(error),
             });
         });
+        void prefetchOnlineMatchRoute().catch((error: unknown) => {
+            logger.warn('[GameDetailsModal] 提前加载房间页路由失败', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
         try {
             if (!i18n.hasLoadedNamespace(namespace)) {
                 await i18n.loadNamespaces(namespace);
@@ -700,6 +707,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         // 通知大厅刷新，确保其他玩家能看到房间状态更新
         lobbySocket.requestRefresh(normalizedGameId);
         if (options?.navigateOnSuccess !== false) {
+            void prefetchOnlineMatchRoute().catch(() => {
+                // 失败不阻塞进房
+            });
             onNavigate?.();
             navigate(`/play/${gameName}/match/${matchID}?playerID=0`);
         }
@@ -951,6 +961,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     targetPath: `/play/${gameId}/match/${matchID}?playerID=0`,
                 },
             });
+            void prefetchOnlineMatchRoute().catch(() => {
+                // 失败不阻塞进房
+            });
             onNavigate?.();
             navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
             shouldPreserveLoading = true;
@@ -1047,6 +1060,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                         clearMatchCredentials(matchID);
                     } else {
                         // 直接重连：让服务端/客户端用凭据校验
+                        void prefetchOnlineMatchRoute().catch(() => {
+                            // 失败不阻塞进房
+                        });
                         onNavigate?.();
                         navigate(`/play/${roomGameName}/match/${matchID}?playerID=${data.playerID}`);
                         shouldPreserveLoading = true;
@@ -1119,6 +1135,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
             setLocalStorageTick(t => t + 1);
 
+            void prefetchOnlineMatchRoute().catch(() => {
+                // 失败不阻塞进房
+            });
             onNavigate?.();
             navigate(`/play/${roomGameName}/match/${matchID}?playerID=${joinedPlayerID}`);
             shouldPreserveLoading = true;
@@ -1220,6 +1239,9 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             });
         }
 
+        void prefetchOnlineMatchRoute().catch(() => {
+            // 失败不阻塞进房
+        });
         onNavigate?.();
         navigate(`/play/${roomGameName}/match/${matchID}?spectate=1`);
     };

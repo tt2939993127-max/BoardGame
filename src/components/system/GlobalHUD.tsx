@@ -12,6 +12,7 @@ import {
     requestAndroidLiveUpdateCheck,
     subscribeAndroidLiveUpdateActivityState,
 } from '../../lib/mobile/androidLiveUpdates';
+import { resolveAndroidWebAppDownload } from '../../lib/mobile/androidNativeUpdates';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
 
 const HUD_MODAL_NS = 'hud';
@@ -20,10 +21,6 @@ const LazyAudioControlSection = lazy(() => import('../game/framework/widgets/Aud
 const LazyFriendsChatModal = lazy(() => import('../social/FriendsChatModal').then(m => ({ default: m.FriendsChatModal })));
 const LazyAboutModal = lazy(() => import('./AboutModal').then(m => ({ default: m.AboutModal })));
 const LazyFeedbackModal = lazy(() => import('./FeedbackModal').then(m => ({ default: m.FeedbackModal })));
-
-const WEB_APP_DOWNLOAD_URL = typeof import.meta.env.VITE_ANDROID_APP_DOWNLOAD_URL === 'string'
-    ? import.meta.env.VITE_ANDROID_APP_DOWNLOAD_URL.trim()
-    : '';
 
 type LegacyFullscreenDocument = Document & {
     msExitFullscreen?: () => Promise<void> | void;
@@ -99,15 +96,21 @@ export const GlobalHUD = () => {
         }
     };
 
-    const handleOpenAppDownload = () => {
-        if (!WEB_APP_DOWNLOAD_URL) {
+    const handleOpenAppDownload = async () => {
+        const resolvedDownload = await resolveAndroidWebAppDownload();
+        if (!resolvedDownload.url) {
+            if (resolvedDownload.reason === 'manifest-unavailable') {
+                toast.error(t('hud.download.resolveFailed'));
+                return;
+            }
+
             toast.warning(t('hud.download.missingLink'));
             return;
         }
 
-        const openedWindow = window.open(WEB_APP_DOWNLOAD_URL, '_blank', 'noopener,noreferrer');
+        const openedWindow = window.open(resolvedDownload.url, '_blank', 'noopener,noreferrer');
         if (!openedWindow) {
-            window.location.assign(WEB_APP_DOWNLOAD_URL);
+            window.location.assign(resolvedDownload.url);
         }
     };
 

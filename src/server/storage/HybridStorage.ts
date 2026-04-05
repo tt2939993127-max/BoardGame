@@ -1,5 +1,6 @@
 import type {
     MatchStorage,
+    MatchAuthMetadataProvider,
     MatchMetadata,
     StoredMatchState,
     CreateMatchData,
@@ -87,6 +88,10 @@ class InMemoryStorage {
         return result;
     }
 
+    fetchAuthMetadata(matchID: string): MatchMetadata | undefined {
+        return this.metadataMap.get(matchID);
+    }
+
     wipe(matchID: string): void {
         this.stateMap.delete(matchID);
         this.metadataMap.delete(matchID);
@@ -115,7 +120,7 @@ class InMemoryStorage {
     }
 }
 
-export class HybridStorage implements MatchStorage {
+export class HybridStorage implements MatchStorage, MatchAuthMetadataProvider {
     private readonly mongo: MongoStorage;
     private readonly memory: InMemoryStorage;
     private readonly persistentEnabled: boolean;
@@ -225,6 +230,32 @@ export class HybridStorage implements MatchStorage {
         }
 
         return mongoResult;
+    }
+
+    async fetchAuthMetadata(matchID: string): Promise<MatchMetadata | undefined> {
+        if (!this.persistentEnabled) {
+            return this.memory.fetchAuthMetadata(matchID);
+        }
+
+        const target = this.matchStorage.get(matchID);
+        if (target === 'mongo') {
+            return await this.mongo.fetchAuthMetadata(matchID);
+        }
+        if (target === 'memory') {
+            return this.memory.fetchAuthMetadata(matchID);
+        }
+
+        const mongoMetadata = await this.mongo.fetchAuthMetadata(matchID);
+        if (mongoMetadata) {
+            this.matchStorage.set(matchID, 'mongo');
+            return mongoMetadata;
+        }
+
+        const memoryMetadata = this.memory.fetchAuthMetadata(matchID);
+        if (memoryMetadata) {
+            this.matchStorage.set(matchID, 'memory');
+        }
+        return memoryMetadata;
     }
 
     async wipe(matchID: string): Promise<void> {

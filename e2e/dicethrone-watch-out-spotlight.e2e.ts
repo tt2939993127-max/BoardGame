@@ -17,6 +17,7 @@ import {
     applyCoreStateDirect,
     disableFabMenu,
     ensureDebugPanelClosed,
+    ensureDebugStateTab,
     readyAndStartGame,
     readCoreState,
     selectCharacter,
@@ -39,12 +40,16 @@ function cloneJson<T>(value: T): T {
     return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function buildOnlineCommonCardSceneCore(
-    baseCore: Record<string, any>,
+function buildOnlineCommonCardSceneState(
+    baseState: Record<string, any>,
     options: {
         actorCharacter: 'samurai' | 'gunslinger';
         actorCardId: 'card-boss-generous' | 'card-next-time';
         actorCp: number;
+        responseScene?: {
+            pendingDamage: number;
+            responseWindowType: 'afterAttackResolved';
+        };
     },
 ) {
     const viewerBase = initHeroState('0', 'monk', FIXED_RANDOM as any);
@@ -55,47 +60,114 @@ function buildOnlineCommonCardSceneCore(
         throw new Error(`Card ${options.actorCardId} not found for ${options.actorCharacter}`);
     }
 
-    const nextCore = cloneJson(baseCore);
-    nextCore.activePlayerId = '1';
-    nextCore.hostStarted = true;
-    nextCore.selectedCharacters = {
-        ...(nextCore.selectedCharacters ?? {}),
-        '0': 'monk',
-        '1': options.actorCharacter,
-    };
-    nextCore.readyPlayers = {
-        ...(nextCore.readyPlayers ?? {}),
-        '0': true,
-        '1': true,
-    };
-    nextCore.players = {
-        ...(nextCore.players ?? {}),
-        '0': {
-            ...viewerBase,
-            hand: [],
-            discard: [],
-            resources: {
-                ...viewerBase.resources,
-                cp: 2,
-                hp: 50,
+    const nextState = cloneJson(baseState);
+    const isResponseScene = !!options.responseScene;
+
+    nextState.core = {
+        ...(nextState.core ?? {}),
+        activePlayerId: isResponseScene ? '0' : '1',
+        hostStarted: true,
+        selectedCharacters: {
+            ...(nextState.core?.selectedCharacters ?? {}),
+            '0': 'monk',
+            '1': options.actorCharacter,
+        },
+        readyPlayers: {
+            ...(nextState.core?.readyPlayers ?? {}),
+            '0': true,
+            '1': true,
+        },
+        players: {
+            ...(nextState.core?.players ?? {}),
+            '0': {
+                ...viewerBase,
+                hand: [],
+                discard: [],
+                resources: {
+                    ...viewerBase.resources,
+                    cp: 2,
+                    hp: 50,
+                },
+            },
+            '1': {
+                ...actorBase,
+                hand: [cloneJson(actorCard)],
+                discard: [],
+                resources: {
+                    ...actorBase.resources,
+                    cp: options.actorCp,
+                    hp: 50,
+                },
             },
         },
-        '1': {
-            ...actorBase,
-            hand: [cloneJson(actorCard)],
-            discard: [],
-            resources: {
-                ...actorBase.resources,
-                cp: options.actorCp,
-                hp: 50,
-            },
-        },
+        pendingAttack: isResponseScene
+            ? {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                sourceAbilityId: 'monk-test-attack',
+                damage: options.responseScene!.pendingDamage,
+                bonusDamage: 0,
+                attackModifierBonusDamage: 0,
+                damageResolved: false,
+                resolvedDamage: 0,
+                preDefenseResolved: false,
+                offensiveRollEndTokenResolved: false,
+            }
+            : null,
+        pendingDamage: isResponseScene
+            ? {
+                id: `common-card-${options.actorCardId}-pending-damage`,
+                sourcePlayerId: '0',
+                targetPlayerId: '1',
+                originalDamage: options.responseScene!.pendingDamage,
+                currentDamage: options.responseScene!.pendingDamage,
+                sourceAbilityId: 'monk-test-attack',
+                responseType: 'beforeDamageReceived',
+                responderId: '1',
+                isFullyEvaded: false,
+            }
+            : undefined,
+        rollCount: Math.max(nextState.core?.rollCount ?? 0, 1),
+        rollConfirmed: true,
     };
-    nextCore.pendingAttack = null;
-    nextCore.pendingDamage = undefined;
-    nextCore.rollCount = Math.max(nextCore.rollCount ?? 0, 1);
-    nextCore.rollConfirmed = true;
-    return nextCore;
+    nextState.sys = {
+        ...(nextState.sys ?? {}),
+        phase: 'main1',
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+        },
+        responseWindow: isResponseScene
+            ? {
+                current: {
+                    id: `common-card-${options.actorCardId}-response-window`,
+                    windowType: options.responseScene!.responseWindowType,
+                    responderQueue: ['1'],
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                },
+            }
+            : { current: undefined },
+    };
+    return nextState;
+}
+
+async function readMatchStateFromDebugPanel(page: Page): Promise<Record<string, any>> {
+    await ensureDebugStateTab(page);
+    const raw = await page.getByTestId('debug-state-json').innerText();
+    return JSON.parse(raw) as Record<string, any>;
+}
+
+async function applyFullStateDirect(page: Page, state: Record<string, any>): Promise<void> {
+    await ensureDebugStateTab(page);
+    const toggleBtn = page.getByTestId('debug-state-toggle-input');
+    await toggleBtn.click();
+    const input = page.getByTestId('debug-state-input');
+    await expect(input).toBeVisible({ timeout: 3000 });
+    await input.fill(JSON.stringify(state));
+    await page.getByTestId('debug-state-apply').click();
+    await expect(input).toBeHidden({ timeout: 5000 }).catch(() => {});
 }
 
 async function expectMinBoundingBox(locator: Locator, label: string, minWidth: number, minHeight: number): Promise<void> {
@@ -2082,38 +2154,55 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             actorCp: number;
             expectedCp: number;
             expectedShield: number;
+            responseScene?: {
+                pendingDamage: number;
+                responseWindowType: 'afterAttackResolved';
+            };
             overlayName: string;
             overlayFilename: string;
             stateName: string;
             stateFilename: string;
         }) => {
-            const coreState = await readCoreState(hostPage) as Record<string, any>;
-            const injectedCore = buildOnlineCommonCardSceneCore(coreState, {
+            const matchState = await readMatchStateFromDebugPanel(hostPage);
+            const injectedState = buildOnlineCommonCardSceneState(matchState, {
                 actorCharacter: options.actorCharacter,
                 actorCardId: options.actorCardId,
                 actorCp: options.actorCp,
+                responseScene: options.responseScene,
             });
 
-            await applyCoreStateDirect(hostPage, injectedCore);
+            await applyFullStateDirect(hostPage, injectedState);
             await ensureDebugPanelClosed(hostPage);
             await ensureDebugPanelClosed(guestPage);
 
-            await guestPage.waitForFunction(({ actorCharacter, actorCardId, actorCp }) => {
+            await guestPage.waitForFunction(({ actorCharacter, actorCardId, actorCp, isResponseScene, expectedWindowId }) => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-                return state?.core?.activePlayerId === '1'
+                const responseWindow = state?.sys?.responseWindow?.current;
+                return state?.core?.activePlayerId === (isResponseScene ? '0' : '1')
                     && state?.core?.selectedCharacters?.['1'] === actorCharacter
                     && state?.core?.players?.['1']?.resources?.cp === actorCp
                     && state?.core?.players?.['1']?.hand?.length === 1
-                    && state?.core?.players?.['1']?.hand?.[0]?.id === actorCardId;
+                    && state?.core?.players?.['1']?.hand?.[0]?.id === actorCardId
+                    && (isResponseScene
+                        ? responseWindow?.id === expectedWindowId
+                            && responseWindow?.windowType === 'afterAttackResolved'
+                            && state?.core?.pendingDamage?.id === `common-card-${actorCardId}-pending-damage`
+                        : !responseWindow);
             }, {
                 actorCharacter: options.actorCharacter,
                 actorCardId: options.actorCardId,
                 actorCp: options.actorCp,
+                isResponseScene: !!options.responseScene,
+                expectedWindowId: `common-card-${options.actorCardId}-response-window`,
             }, { timeout: 15000, polling: 200 });
 
             const cardInHand = guestPage.locator(`[data-card-id="${options.actorCardId}"]`).first();
             await expect(cardInHand).toBeVisible({ timeout: 10000 });
             await cardInHand.click();
+            const armedResponseButton = guestPage.getByRole('button', { name: /^可以响应$/ }).last();
+            if (await armedResponseButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+                await armedResponseButton.click();
+            }
 
             await guestPage.waitForFunction(({ actorCardId }) => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
@@ -2208,6 +2297,10 @@ test('opponent common-card spotlight should match actual effect for samurai and 
             actorCp: 2,
             expectedCp: 1,
             expectedShield: 6,
+            responseScene: {
+                pendingDamage: 6,
+                responseWindowType: 'afterAttackResolved',
+            },
             overlayName: '30-gunslinger-next-time-spotlight',
             overlayFilename: '30-gunslinger-next-time-spotlight.png',
             stateName: '31-gunslinger-next-time-state',

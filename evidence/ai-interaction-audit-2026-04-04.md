@@ -141,7 +141,7 @@
 - 旧结论：`未修复`
 - 新结论：`已修复`
 - 回归：
-  - `e2e/smashup-phase-transition-simple.e2e.ts:998`
+  - `e2e/smashup-phase-transition-simple.e2e.ts:1589`
 - 证据截图：
   - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\在线-AI-持有隐藏交互时应自动-batch-响应并推进状态\在线-AI-持有隐藏交互时应自动-batch-响应并推进状态-online-ai-hidden-choice-before-resolve.png`
   - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\在线-AI-持有隐藏交互时应自动-batch-响应并推进状态\在线-AI-持有隐藏交互时应自动-batch-响应并推进状态-online-ai-hidden-choice-after-resolve.png`
@@ -214,6 +214,28 @@
   - `after-third-attempt` 图里房主界面仍没有出现 AI 私有交互 UI，但右侧骰列已明显变化，说明第三次尝试已实际推进权威状态，而不是单纯把阻塞标记清空。
   - 同一条 E2E 还直接断言了补丁状态：`rejectLimit=2`、中间 `rejectedCount=2 delegatedCount=0`，最终 `delegatedCount=1 lastCommandCount=3`，并验证服务端交互清空、房主过滤视角恢复可交互。
 
+### 13. 联机 AI 超时兜底仍停留在“手动按钮”口径，缺少自动收口真实房间证据
+
+- 旧结论：`未修复`
+- 新结论：`已修复`
+- 影响范围：
+  - `SmashUp`
+  - `MatchRoom` 在线 AI 桥接层
+- 回归：
+  - `e2e/smashup-phase-transition-simple.e2e.ts:1644`
+  - `e2e/smashup-phase-transition-simple.e2e.ts:1751`
+- 证据文档：
+  - `evidence/smashup-online-ai-timeout-recovery-e2e-test.md`
+- 证据截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\在线-AI-的盘旋机器人隐藏交互卡住时，应在-4-秒后自动跳过并恢复对局\在线-AI-的盘旋机器人隐藏交互卡住时，应在-4-秒后自动跳过并恢复对局-online-ai-hoverbot-force-skip-toast.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\在线-AI-的盘旋机器人隐藏交互卡住时，应在-4-秒后自动跳过并恢复对局\在线-AI-的盘旋机器人隐藏交互卡住时，应在-4-秒后自动跳过并恢复对局-online-ai-hoverbot-force-skip-after-resolve.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\在线-AI-连续-8-秒没有任何实际进展时，应自动强制结束当前回合\在线-AI-连续-8-秒没有任何实际进展时，应自动强制结束当前回合-online-ai-force-end-turn-before-timeout.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-phase-transition-simple.e2e\在线-AI-连续-8-秒没有任何实际进展时，应自动强制结束当前回合\在线-AI-连续-8-秒没有任何实际进展时，应自动强制结束当前回合-online-ai-force-end-turn-after-resolve.png`
+- 人工观察：
+  - `4 秒自动跳过` 的真实房间截图里，房主依然看不到 AI 私有 prompt，但右上角只出现提示性 toast，没有“继续等待 / 强制跳过”按钮残留，说明收口已经从“人点按钮”升级成系统自动提交。
+  - `4 秒自动跳过完成后`，基地上的 `盘旋机器人` 保留在场、牌库顶仍是 `robot_zapbot`，说明系统只是跳过当前隐藏可选效果，没有错误结束 AI 整个回合。
+  - `8 秒强制结束回合` 的真实房间截图里，控制权从 `回合3 / 对手 / 出牌阶段` 切到 `回合4 / 你自己 / 出牌阶段`，同时 `影舞者` 仍在场上，证明系统走的是“取消卡住交互并直接收掉 AI 当前回合”，不是伪造一次原始选择。
+
 ## 仍然保留的风险
 
 ### 风险 1
@@ -229,7 +251,7 @@
 
 ### 风险 2
 
-- 旧表述失效：本地 AI 的“无进展才解锁重试”核心判定与 `LocalGameProvider` 的自动重试链路，现已由 `src/pages/__tests__/matchSeatValidation.test.ts:765` 与 `src/pages/__tests__/matchSeatValidation.test.ts:822` 覆盖。
+- 旧表述失效：本地 AI 的“无进展才解锁重试”核心判定与 `LocalGameProvider` 的自动重试链路，现已由 `src/pages/__tests__/matchSeatValidation.test.ts:783`、`src/pages/__tests__/matchSeatValidation.test.ts:1018` 与 `src/pages/__tests__/matchSeatValidation.test.ts:1169` 覆盖。
 - 新风险：
   - 目前还没有单独回归去覆盖“连续多轮 rejection / unmount 取消 / attemptKey 在不同 seat 间切换”这类更长的本地共享链路。
   - 这已经不是“第一次失败后直接卡死”的 blocker，而是更靠近资源清理与多轮重试稳定性的剩余风险。
@@ -250,7 +272,7 @@
 ## 本轮验证
 
 - `node scripts/infra/vitest-cli-safe.mjs run src/pages/__tests__/matchSeatValidation.test.ts --configLoader native`
-  - 结果：`31 passed`
+  - 结果：`42 passed`
 - `node scripts/infra/vitest-cli-safe.mjs run src/engine/transport/__tests__/patch.test.ts --configLoader native`
   - 结果：`24 passed`
 - `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --configLoader native`
@@ -267,6 +289,14 @@
   - 结果：`1 passed`
 - `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 BG_BYPASS_GLOBAL_HEAVY_BUDGET=1 npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online AI 连续两轮 batch 被拒后仍应自动重试并完成隐藏 multistep-choice"`
   - 结果：`1 passed`
+- `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 npm run test:e2e:ci:file -- e2e/smashup-phase-transition-simple.e2e.ts "在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动跳过并恢复对局"`
+  - 结果：`1 passed`
+- `BG_ALLOW_HEAVY_TASK_CONCURRENCY=1 npm run test:e2e:ci:file -- e2e/smashup-phase-transition-simple.e2e.ts "在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束当前回合"`
+  - 结果：`1 passed`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/expansionBaseAbilities.test.ts --configLoader native`
+  - 结果：`40 passed`
+- `node scripts/infra/vitest-cli-safe.mjs run src/pages/__tests__/matchSeatValidation.test.ts --configLoader native`
+  - 结果：`42 passed`
 - `npm run typecheck`
   - 结果：通过
 
@@ -276,6 +306,7 @@
 - 2026-04-04 修订：补齐在线 batch 提交、在线 attemptKey 回退、本地 attemptKey 无进展回退，并同步更新结论为已修复。
 - 2026-04-04 修订：补齐 `DiceThrone` / `SummonerWars` 的 `simple-choice multi` 组合枚举修复，并补对应回归测试。
 - 2026-04-04 修订：补齐 `DiceThrone` 多骰 `multistep-choice` 的批动作生成与评分，覆盖 `selectDie(2)` 和 `modifyDie copy(2)`。
+- 2026-04-05 修订：补齐 `SmashUp` 联机 AI 的 `4 秒自动跳过隐藏可选交互` 与 `8 秒无真实进展自动强制结束回合` 的真实房间 E2E，并把旧的“手动强制跳过”口径收敛为自动兜底。
 - 2026-04-04 修订：补齐 `SmashUp` 在线 AI 隐藏交互的真实房间 E2E，并用截图确认“人类不可见、AI 自动处理、基地状态已推进”。
 - 2026-04-04 修订：补齐 `SmashUp` 链式 `simple-choice` 的 remaining 刷新回归，以及 `responseWindow` 穿插三段主动选择链的 AI 决策回归。
 - 2026-04-04 修订：补齐 `LocalGameProvider` 的本地 AI 自动重试集成回归，确认命令被领域拒绝后仍会在 30ms 解锁后自动再跑一轮。

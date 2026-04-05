@@ -15,6 +15,7 @@ import type {
     StoredMatchState,
     MatchMetadata,
 } from './storage';
+import { isMatchAuthMetadataProvider } from './storage';
 import type {
     MatchPlayerInfo,
 } from './protocol';
@@ -396,6 +397,26 @@ export class GameTransportServer {
         active.metadata = metadata;
     }
 
+    private async readFreshAuthMetadata(
+        matchID: string,
+        fallback?: MatchMetadata,
+    ): Promise<MatchMetadata | undefined> {
+        if (isMatchAuthMetadataProvider(this.storage)) {
+            return (await this.storage.fetchAuthMetadata(matchID)) ?? fallback;
+        }
+        return (await this.storage.fetch(matchID, { metadata: true })).metadata ?? fallback;
+    }
+
+    private mergeActiveMetadata(matchID: string, metadata: MatchMetadata): void {
+        const active = this.activeMatches.get(matchID);
+        if (!active) return;
+        active.metadata = {
+            ...active.metadata,
+            ...metadata,
+            players: metadata.players,
+        };
+    }
+
     /**
      * 测试 / 管理接口：校验某个玩家是否有权访问指定对局。
      *
@@ -591,7 +612,7 @@ export class GameTransportServer {
         // 这里必须基于存储层最新 metadata 做校验，避免 leave/join 后内存缓存滞后。
         if (playerID !== null) {
             const authMetadata = reusedActiveMatch
-                ? (await this.storage.fetch(matchID, { metadata: true })).metadata ?? match.metadata
+                ? await this.readFreshAuthMetadata(matchID, match.metadata) ?? match.metadata
                 : match.metadata;
             const ok = await this.validateCommandAuth(matchID, playerID, credentials, authMetadata);
             if (!ok) {
@@ -1469,16 +1490,13 @@ export class GameTransportServer {
     ): Promise<boolean> {
         if (!this.authenticate) return true;
 
-        const resolvedMetadata = metadata ?? (await this.storage.fetch(matchID, { metadata: true })).metadata;
+        const resolvedMetadata = metadata ?? await this.readFreshAuthMetadata(matchID);
         if (!resolvedMetadata) return false;
 
         const ok = await this.authenticate(matchID, playerID, credentials, resolvedMetadata);
         if (!ok) return false;
 
-        const active = this.activeMatches.get(matchID);
-        if (active) {
-            active.metadata = resolvedMetadata;
-        }
+        this.mergeActiveMetadata(matchID, resolvedMetadata);
         return true;
     }
 }

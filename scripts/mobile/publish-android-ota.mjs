@@ -9,6 +9,11 @@ import {
 } from './ota-publish-config.mjs';
 
 const rootDir = process.cwd();
+const OTA_EXCLUDED_PREFIXES = [
+    'assets/i18n/',
+];
+const OTA_ALLOWED_LOCALE_PREFIX = 'locales/zh-CN/';
+const MAX_ANDROID_OTA_ZIP_BYTES = 20 * 1024 * 1024;
 
 for (const file of ['.env', '.env.android', '.env.android.local', '.env.example']) {
     const fullPath = path.join(rootDir, file);
@@ -132,21 +137,58 @@ const s3Client = new S3Client({
     },
 });
 
-const collectFiles = (dirPath, baseDir, entries = {}) => {
+const shouldIncludeOtaFile = (relativePath) => {
+    if (OTA_EXCLUDED_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {
+        return false;
+    }
+
+    if (relativePath.startsWith('locales/')) {
+        return relativePath.startsWith(OTA_ALLOWED_LOCALE_PREFIX);
+    }
+
+    return true;
+};
+
+const collectFiles = (dirPath, baseDir, entries = {}, stats = {
+    includedFiles: 0,
+    includedBytes: 0,
+    skippedFiles: 0,
+    skippedBytes: 0,
+}) => {
     for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-            collectFiles(fullPath, baseDir, entries);
+            collectFiles(fullPath, baseDir, entries, stats);
             continue;
         }
 
         const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
-        entries[relativePath] = new Uint8Array(readFileSync(fullPath));
+        const fileBuffer = new Uint8Array(readFileSync(fullPath));
+        if (!shouldIncludeOtaFile(relativePath)) {
+            stats.skippedFiles += 1;
+            stats.skippedBytes += fileBuffer.byteLength;
+            continue;
+        }
+        entries[relativePath] = fileBuffer;
+        stats.includedFiles += 1;
+        stats.includedBytes += fileBuffer.byteLength;
     }
-    return entries;
+
+    return { entries, stats };
 };
 
-const zipBuffer = Buffer.from(zipSync(collectFiles(distDir, distDir), { level: 9 }));
+const {
+    entries: otaEntries,
+    stats: otaCollectionStats,
+} = collectFiles(distDir, distDir);
+const zipBuffer = Buffer.from(zipSync(otaEntries, { level: 9 }));
+if (zipBuffer.length > MAX_ANDROID_OTA_ZIP_BYTES) {
+    throw new Error(
+        `Android OTA 包体异常过大：${zipBuffer.length} bytes。`
+        + ` 当前发布链路会自动排除 dist/assets/i18n/**，并只保留 dist/locales/zh-CN/**。`
+        + ' 请检查 dist 是否混入了不应进入 OTA 的大资源，禁止继续发布。',
+    );
+}
 const checksum = createHash('sha256').update(zipBuffer).digest('hex');
 const normalizedTargetNativeVersion = explicitTargetNativeVersion
     ? explicitTargetNativeVersion
@@ -206,6 +248,10 @@ console.log(`mode=${dryRun ? 'dry-run' : 'publish'}`);
 console.log(`forceUpdate=${forceUpdate ? 'true' : 'false'}`);
 console.log(`skipLatest=${skipLatest ? 'true' : 'false'}`);
 console.log(`zipBytes=${zipBuffer.length}`);
+console.log(`otaIncludedFiles=${otaCollectionStats.includedFiles}`);
+console.log(`otaIncludedBytes=${otaCollectionStats.includedBytes}`);
+console.log(`otaSkippedFiles=${otaCollectionStats.skippedFiles}`);
+console.log(`otaSkippedBytes=${otaCollectionStats.skippedBytes}`);
 console.log(`indexMtime=${distStats.mtime.toISOString()}`);
 console.log(`androidBuildBackendUrl=${androidBuildMeta.backendUrl}`);
 console.log(`androidBuildBuiltAt=${androidBuildMeta.builtAt || '(unknown)'}`);

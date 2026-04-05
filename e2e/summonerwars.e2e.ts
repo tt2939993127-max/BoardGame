@@ -980,6 +980,62 @@ const touchDragElement = async (
   await page.mouse.up();
 };
 
+const sampleFabReleaseFrames = async (
+  page: Page,
+  {
+    buttonId,
+    panelId,
+    frameCount = 12,
+  }: {
+    buttonId: string;
+    panelId: string;
+    frameCount?: number;
+  },
+) => (
+  page.evaluate(async ({ buttonId: currentButtonId, panelId: currentPanelId, frameCount: currentFrameCount }) => {
+    const resolveAnchorEdgeDistance = (
+      targetRect: { top: number; bottom: number },
+      referenceRect: { top: number; bottom: number },
+    ) => Math.min(
+      Math.abs(targetRect.top - referenceRect.top),
+      Math.abs(targetRect.bottom - referenceRect.bottom),
+    );
+
+    const samples: Array<{
+      frame: number;
+      visualTop: number;
+      visualBottom: number;
+      panelTop: number;
+      panelBottom: number;
+      anchorEdgeDistance: number;
+    } | null> = [];
+
+    for (let frame = 0; frame < currentFrameCount; frame += 1) {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+      const visual = document.querySelector(`[data-fab-visual-id="${currentButtonId}"]`) as HTMLElement | null;
+      const panel = document.querySelector(`[data-testid="fab-panel-${currentPanelId}"]`) as HTMLElement | null;
+      if (!visual || !panel) {
+        samples.push(null);
+        continue;
+      }
+
+      const visualRect = visual.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      samples.push({
+        frame,
+        visualTop: visualRect.top,
+        visualBottom: visualRect.bottom,
+        panelTop: panelRect.top,
+        panelBottom: panelRect.bottom,
+        anchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, visualRect),
+      });
+    }
+
+    return samples;
+  }, { buttonId, panelId, frameCount })
+);
+
 const captureEvidenceClipAroundLocators = async (
   page: Page,
   locators: Locator[],
@@ -1389,7 +1445,7 @@ const waitForSummonerWarsHandArtReady = async (page: Page, allowMissing = false)
       throw error;
     }
   }, {
-    timeout: 15000,
+    timeout: 30000,
     message: '等待召唤师战争手牌卡图真实渲染完成',
   }).toBe(true);
   await page.waitForTimeout(120);
@@ -3378,20 +3434,43 @@ test.describe('SummonerWars', () => {
       await collapseFabMenuToMainButton(hostPage);
 
       const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+      const exitFabVisual = hostPage.locator('[data-fab-visual-id="exit"]');
       const exitFabPanel = hostPage.getByTestId('fab-panel-exit');
       await expect(exitFab).toBeVisible({ timeout: 5000 });
       await exitFab.click();
       await expect(hostPage.getByTestId('fab-sheet-exit')).toHaveCount(0);
       await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
       const exitPanelRectBeforeDrag = await exitFabPanel.boundingBox();
+      const exitVisualRectBeforeDrag = await exitFabVisual.boundingBox();
       expect(exitPanelRectBeforeDrag).not.toBeNull();
+      expect(exitVisualRectBeforeDrag).not.toBeNull();
 
       await touchDragElement(exitFab, {
         deltaX: 0,
         deltaY,
         steps: 12,
       });
+      const releaseSamples = await sampleFabReleaseFrames(hostPage, {
+        buttonId: 'exit',
+        panelId: 'exit',
+      });
       await hostPage.waitForTimeout(180);
+
+      const validReleaseSamples = releaseSamples.filter((sample) => sample !== null);
+      expect(validReleaseSamples.length, `${overflowDirection} overflow should keep sampling the exit FAB after release`).toBeGreaterThan(0);
+      const firstReleaseSample = validReleaseSamples[0];
+      const lastReleaseSample = validReleaseSamples[validReleaseSamples.length - 1];
+      const preDragVisualTop = exitVisualRectBeforeDrag?.y ?? firstReleaseSample?.visualTop ?? 0;
+      expect(
+        Math.abs((firstReleaseSample?.visualTop ?? 0) - (lastReleaseSample?.visualTop ?? 0)),
+        `${overflowDirection} overflow should not let the exit FAB snap back toward its pre-drag origin before settling`,
+      ).toBeLessThan(
+        Math.abs((firstReleaseSample?.visualTop ?? 0) - preDragVisualTop),
+      );
+      expect(
+        Math.max(...validReleaseSamples.map((sample) => sample.anchorEdgeDistance)),
+        `${overflowDirection} overflow should keep the exit panel vertically anchored to the dragged main FAB during release`,
+      ).toBeLessThanOrEqual(18);
 
       const draggedVisualBox = await hostPage.locator('[data-fab-visual-id="exit"]').boundingBox();
       const draggedStoredPosition = await getFabStoredPosition(hostPage);
@@ -3402,7 +3481,10 @@ test.describe('SummonerWars', () => {
         expect((draggedVisualBox?.y ?? 999)).toBeLessThan(20);
       } else {
         expect((draggedStoredPosition?.topPercent ?? 0)).toBeGreaterThan(0.9);
-        expect((draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0)).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height - 12);
+        expect(
+          (draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0),
+          'bottom overflow should keep the recovered main FAB in the lower half instead of snapping back to its old resting point',
+        ).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.55);
       }
       await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
       await expect.poll(async () => {

@@ -231,6 +231,12 @@ npm run mobile:android:ota:publish -- --channel stable --skip-latest
 npm run mobile:android:ota:publish -- --channel stable
 ```
 
+强制约束：
+
+- Android OTA 发布不得把 `public/assets/i18n/**` 这类大体积运行时资源打进 OTA zip；这些资源应继续走 R2 / 游戏包链路，而不是 H5 OTA。
+- `scripts/mobile/publish-android-ota.mjs` 会自动排除 `dist/assets/i18n/**`，并只保留 `dist/locales/zh-CN/**`；禁止再依赖“先手工 build 再祈祷体积正常”的流程。
+- 若最终 OTA zip 体积异常过大（当前门禁为 `20MB`），发布脚本必须直接失败，禁止继续覆盖 `latest.json`。
+
 GitHub Actions 自动化：
 
 - workflow：`.github/workflows/android-ota-publish.yml`

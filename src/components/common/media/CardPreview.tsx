@@ -1,6 +1,14 @@
 import { useState, useEffect, useMemo, useReducer, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getLocalizedImageUrls, getPreloadedImageElement, isImagePreloaded, markImageLoaded, onImageReady, type CardPreviewRef } from '../../../core';
+import {
+    getAssetsBaseUrl,
+    getLocalizedImageUrls,
+    getPreloadedImageElement,
+    isImagePreloaded,
+    markImageLoaded,
+    onImageReady,
+    type CardPreviewRef,
+} from '../../../core';
 import { getOptimizedImageUrls, getLocalizedAssetPath, getLocalizedLocalAssetPath } from '../../../core/AssetLoader';
 import { OptimizedImage } from './OptimizedImage';
 import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
@@ -75,20 +83,64 @@ const isUsableAtlasUrlLoaded = (url: string): boolean => {
     return hasUsableAtlasImage(getPreloadedImageElement(url));
 };
 
+const REMOTE_ASSET_PREFIX_PATTERN = /^https?:\/\/[^/]+\/official\//i;
+const LOCAL_ASSET_PREFIX = '/assets/';
+
+const toAtlasRelativeImagePath = (image: string): string => {
+    const withoutQuery = image.split(/[?#]/, 1)[0] ?? image;
+    if (withoutQuery.startsWith(LOCAL_ASSET_PREFIX)) {
+        return withoutQuery.slice(LOCAL_ASSET_PREFIX.length);
+    }
+    if (REMOTE_ASSET_PREFIX_PATTERN.test(withoutQuery)) {
+        return withoutQuery.replace(REMOTE_ASSET_PREFIX_PATTERN, '');
+    }
+    return withoutQuery.replace(/^\/+/, '');
+};
+
+const toLocalizedCompressedRelativePath = (image: string, locale: string): string => {
+    const relative = toAtlasRelativeImagePath(image);
+    const localized = relative.startsWith(`i18n/${locale}/`)
+        ? relative
+        : `i18n/${locale}/${relative}`;
+    const base = localized.replace(/\.(webp|png|jpe?g)$/i, '');
+    const lastSlash = base.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? base.slice(0, lastSlash) : '';
+    const filename = lastSlash >= 0 ? base.slice(lastSlash + 1) : base;
+    if (dir.endsWith('/compressed') || dir === 'compressed') {
+        return `${base}.webp`;
+    }
+    return dir ? `${dir}/compressed/${filename}.webp` : `compressed/${filename}.webp`;
+};
+
 export function getCardAtlasCandidateUrls(image: string, locale: string): string[] {
     if (image.startsWith('data:')) {
         return [image];
     }
-    const localizedUrls = getLocalizedImageUrls(image, locale);
     const fallbackLocale = getFallbackLocale(locale);
+    const localizedUrls = getLocalizedImageUrls(image, locale);
     const localPrimary = getOptimizedImageUrls(getLocalizedLocalAssetPath(image, locale));
     const localFallback = getOptimizedImageUrls(getLocalizedLocalAssetPath(image, fallbackLocale));
+    const remoteBaseUrl = getAssetsBaseUrl();
+    const remotePrimaryRelative = toLocalizedCompressedRelativePath(image, locale);
+    const remoteFallbackRelative = toLocalizedCompressedRelativePath(image, fallbackLocale);
+    const remotePrimary = /^https?:\/\//i.test(remoteBaseUrl)
+        ? `${remoteBaseUrl}/${remotePrimaryRelative}`
+        : '';
+    const remoteFallback = /^https?:\/\//i.test(remoteBaseUrl)
+        ? `${remoteBaseUrl}/${remoteFallbackRelative}`
+        : '';
+    const publicPrimary = `${LOCAL_ASSET_PREFIX}${remotePrimaryRelative}`;
+    const publicFallback = `${LOCAL_ASSET_PREFIX}${remoteFallbackRelative}`;
 
     return [
         localizedUrls.primary.webp,
         localizedUrls.fallback.webp,
         localPrimary.webp,
         localFallback.webp,
+        remotePrimary,
+        remoteFallback,
+        publicPrimary,
+        publicFallback,
     ].filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index);
 }
 
