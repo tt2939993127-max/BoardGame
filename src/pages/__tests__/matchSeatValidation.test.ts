@@ -9,7 +9,7 @@ import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
-import { resolveForceSkippableHiddenAiInteraction, submitOnlineAiResolution } from '../onlineAiForceSkip';
+import { resolveForceEndTurnForStalledAi, resolveForceSkippableHiddenAiInteraction, submitOnlineAiResolution } from '../onlineAiForceSkip';
 import { resolveOnlineHudPresence } from '../matchHudPresence';
 
 type Player = { id: number; name?: string | null };
@@ -1012,6 +1012,157 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
                 } as MatchState<unknown>,
             },
         })).toBeNull();
+    });
+});
+
+describe('resolveForceEndTurnForStalledAi', () => {
+    it('隐藏交互卡住 8 秒后，应先收口交互再 ADVANCE_PHASE', () => {
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'hidden-skip',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    options: [
+                                        { id: 'skip', label: '跳过', value: { skip: true } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        });
+
+        expect(candidate?.reason).toBe('hidden-interaction');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'skip' } },
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
+    });
+
+    it('不可跳过的交互卡住时，应改为 CANCEL 后再 ADVANCE_PHASE', () => {
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: {
+                            id: 'visible-mandatory',
+                            playerId: '1',
+                            kind: 'simple-choice',
+                            data: {
+                                options: [
+                                    { id: 'only', label: '必须点', value: { cardUid: 'c1' } },
+                                ],
+                            },
+                        },
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('visible-interaction');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'SYS_INTERACTION_CANCEL', payload: {} },
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
+    });
+
+    it('响应窗口卡住时，应 RESPONSE_PASS 后再 ADVANCE_PHASE', () => {
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: {
+                            responderQueue: ['1'],
+                            currentResponderIndex: 0,
+                        },
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('response-window');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'RESPONSE_PASS', payload: {} },
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
+    });
+
+    it('无交互阻塞但轮到 AI 时，应直接 ADVANCE_PHASE', () => {
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                    turnNumber: 3,
+                    phase: 'playCards',
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('active-turn');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
     });
 });
 

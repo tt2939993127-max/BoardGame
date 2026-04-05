@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
 import { getGameImplementation } from '../games/registry';
-import { GameProvider, LocalGameProvider, BoardBridge, useGameClient } from '../engine/transport/react';
+import { GameProvider, LocalGameProvider, BoardBridge, buildAiProgressMarker, useGameClient } from '../engine/transport/react';
 import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
 import type { GameBoardProps } from '../engine/transport/protocol';
@@ -61,6 +61,7 @@ import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
+    resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
     type ForceSkippableHiddenAiInteraction,
@@ -161,6 +162,11 @@ const OnlineAiSeatBridge = ({
         firstSeenAt: number;
         autoSubmittedAt: number | null;
         candidate: ForceSkippableHiddenAiInteraction | null;
+    } | null>(null);
+    const forceEndTurnTrackerRef = useRef<{
+        key: string;
+        firstSeenAt: number;
+        autoSubmittedAt: number | null;
     } | null>(null);
 
     useEffect(() => {
@@ -395,6 +401,114 @@ const OnlineAiSeatBridge = ({
             }
         };
     }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, seatControllers, state, toast]);
+
+    useEffect(() => {
+        if (!state) {
+            forceEndTurnTrackerRef.current = null;
+            return;
+        }
+
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const seatStates = Object.fromEntries(
+            Object.entries(clientsRef.current).map(([playerId, client]) => {
+                const latestState = client.latestState;
+                return [playerId, latestState && typeof latestState === 'object' ? latestState as MatchState<unknown> : null];
+            }),
+        );
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: state as MatchState<unknown>,
+            seatControllers,
+            seatStates,
+        });
+        if (!candidate) {
+            forceEndTurnTrackerRef.current = null;
+            return;
+        }
+
+        const progressMarker = buildAiProgressMarker(state as MatchState<unknown>);
+        const trackerKey = progressMarker;
+        const now = Date.now();
+        const currentTracker = forceEndTurnTrackerRef.current;
+
+        if (!currentTracker || currentTracker.key !== trackerKey) {
+            forceEndTurnTrackerRef.current = {
+                key: trackerKey,
+                firstSeenAt: now,
+                autoSubmittedAt: null,
+            };
+            timer = setTimeout(() => {
+                setAiRetryVersion((version) => version + 1);
+            }, 8000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        if (currentTracker.autoSubmittedAt) {
+            return;
+        }
+
+        const elapsed = now - currentTracker.firstSeenAt;
+        if (elapsed < 8000) {
+            timer = setTimeout(() => {
+                setAiRetryVersion((version) => version + 1);
+            }, 8000 - elapsed);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        const targetClient = clientsRef.current[candidate.playerId];
+        if (!targetClient?.isConnected) {
+            timer = setTimeout(() => {
+                setAiRetryVersion((version) => version + 1);
+            }, 1000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        currentTracker.autoSubmittedAt = now;
+        submitOnlineAiResolution({
+            client: targetClient,
+            resolution: candidate.resolution,
+            lastAiAttemptKeyRef,
+            scheduleRetry: () => {
+                setAiRetryVersion((version) => version + 1);
+            },
+            onConfirmed: () => {
+                toast.warning(
+                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+            },
+            onRejected: (reason) => {
+                const tracker = forceEndTurnTrackerRef.current;
+                if (tracker?.key === trackerKey) {
+                    tracker.autoSubmittedAt = null;
+                    tracker.firstSeenAt = Date.now();
+                }
+                if (reason === 'unauthorized') {
+                    toast.warning('AI 座位凭据已失效，无法自动强制结束该 AI 回合。');
+                    return;
+                }
+                toast.warning('强制结束 AI 回合未成功，系统会继续重试。');
+            },
+        });
+
+        return () => {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        };
+    }, [aiRetryVersion, connectionVersion, seatControllers, state, toast]);
 
     return null;
 };
