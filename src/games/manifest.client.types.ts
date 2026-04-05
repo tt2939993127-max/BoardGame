@@ -3,6 +3,7 @@ import type { TutorialManifest } from '../contexts/TutorialContext';
 import type { GameManifestEntry } from './manifest.types';
 import type { GameEngineConfig } from '../engine/transport/server';
 import type { LatencyOptimizationConfig } from '../engine/transport/latency/types';
+import type { CriticalImageResolver } from '../core/types';
 
 /** 游戏运行时实现（Board/engineConfig/tutorial/latencyConfig），按需懒加载 */
 export interface GameClientRuntimeModule {
@@ -19,6 +20,8 @@ export interface GameClientManifestEntry {
     loadRuntime?: () => Promise<GameClientRuntimeModule>;
     /** 懒加载教程清单（仅 tutorial.ts 存在时提供） */
     loadTutorial?: () => Promise<TutorialManifest>;
+    /** 懒加载关键图片解析器（用于 runtime 之前的首屏预热） */
+    loadCriticalImageResolver?: () => Promise<CriticalImageResolver>;
 
     // ---- 以下字段已废弃，保留仅为向后兼容过渡 ----
     /** @deprecated 使用 loadRuntime() 替代 */

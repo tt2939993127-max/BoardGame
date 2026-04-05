@@ -10,6 +10,77 @@ import { test, expect } from '@playwright/test';
 import { setChineseLocale } from './helpers/common';
 import { dispatchLocalCommand, waitForTutorialBoardReady } from './helpers/dicethrone';
 
+const MOBILE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
+
+const waitForTutorialStep = async (page: Parameters<typeof test>[0]['page'], stepId: string, timeout = 15000) => {
+    await expect(page.locator(`[data-tutorial-step="${stepId}"]`)).toBeVisible({ timeout });
+};
+
+const clickNextOverlayStep = async (page: Parameters<typeof test>[0]['page']) => {
+    const nextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
+    const beforeStep = await page.locator('[data-tutorial-step]').first().getAttribute('data-tutorial-step');
+    await expect(nextButton).toBeVisible({ timeout: 5000 });
+    await nextButton.click({ force: true });
+    await page.waitForFunction(
+        (prev) => {
+            const el = document.querySelector('[data-tutorial-step]');
+            return el && el.getAttribute('data-tutorial-step') !== prev;
+        },
+        beforeStep,
+        { timeout: 5000 },
+    );
+};
+
+const readHighlightMetrics = async (page: Parameters<typeof test>[0]['page'], targetId: string) => page.evaluate((resolvedTargetId) => {
+    const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(`[data-tutorial-id="${resolvedTargetId}"]`),
+    );
+    const highlight = document.querySelector('[data-tutorial-step] > div.absolute.pointer-events-none') as HTMLElement | null;
+    if (candidates.length === 0 || !highlight) {
+        return null;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let targetRect: DOMRect | null = null;
+    let bestVisibleArea = -1;
+
+    for (const candidate of candidates) {
+        const style = getComputedStyle(candidate);
+        if (style.display === 'none' || style.visibility === 'hidden') {
+            continue;
+        }
+
+        const rect = candidate.getBoundingClientRect();
+        if (rect.width <= 1 || rect.height <= 1) {
+            continue;
+        }
+
+        const visibleWidth = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
+        const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+        const visibleArea = visibleWidth * visibleHeight;
+
+        if (visibleArea > bestVisibleArea) {
+            bestVisibleArea = visibleArea;
+            targetRect = rect;
+        }
+    }
+
+    if (!targetRect) {
+        return null;
+    }
+
+    const highlightRect = highlight.getBoundingClientRect();
+    return {
+        targetRect,
+        highlightRect,
+        deltaLeft: Math.abs(targetRect.left - (highlightRect.left + 4)),
+        deltaTop: Math.abs(targetRect.top - (highlightRect.top + 4)),
+        deltaWidth: Math.abs(targetRect.width - (highlightRect.width - 8)),
+        deltaHeight: Math.abs(targetRect.height - (highlightRect.height - 8)),
+    };
+}, targetId);
+
 test.describe('DiceThrone Tutorial (Simplified)', () => {
     test('Tutorial starts and shows initial steps', async ({ page }, testInfo) => {
         test.setTimeout(120000);
@@ -209,5 +280,67 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await page.screenshot({ path: testInfo.outputPath('tutorial-roll-visual-non-blocking.png'), fullPage: false });
 
         expect(await getTutorialStepId()).toBe('dice-confirm');
+    });
+
+    test('移动端教程蓝框应与目标元素对齐', async ({ page }, testInfo) => {
+        test.setTimeout(120000);
+
+        await setChineseLocale(page);
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.goto('/play/dicethrone/tutorial');
+        await waitForTutorialBoardReady(page, 60000);
+
+        const steps: Array<{ stepId: string; targetId: string }> = [
+            { stepId: 'stats', targetId: 'player-stats' },
+            { stepId: 'phases', targetId: 'phase-indicator' },
+            { stepId: 'player-board', targetId: 'player-board' },
+            { stepId: 'tip-board', targetId: 'tip-board' },
+            { stepId: 'hand', targetId: 'hand-area' },
+            { stepId: 'discard', targetId: 'discard-pile' },
+            { stepId: 'status-tokens', targetId: 'status-tokens' },
+        ];
+
+        while ((await page.locator('[data-tutorial-step]').first().getAttribute('data-tutorial-step')) !== 'stats') {
+            await clickNextOverlayStep(page);
+        }
+
+        const evidenceDir = join(
+            process.cwd(),
+            'test-results',
+            'evidence-screenshots',
+            'dicethrone-tutorial-simple.e2e',
+            'tutorial-highlight-mobile-alignment',
+        );
+        mkdirSync(evidenceDir, { recursive: true });
+
+        for (const { stepId, targetId } of steps) {
+            await waitForTutorialStep(page, stepId, 10000);
+            await page.waitForTimeout(300);
+            await expect.poll(
+                async () => readHighlightMetrics(page, targetId),
+                { timeout: 10000 },
+            ).not.toBeNull();
+
+            const metrics = await readHighlightMetrics(page, targetId);
+            console.log('tutorial-highlight-metrics', stepId, targetId, JSON.stringify(metrics));
+            expect(metrics).not.toBeNull();
+            expect(metrics?.deltaLeft ?? 99999).toBeLessThanOrEqual(4);
+            expect(metrics?.deltaTop ?? 99999).toBeLessThanOrEqual(4);
+            expect(metrics?.deltaWidth ?? 99999).toBeLessThanOrEqual(4);
+            expect(metrics?.deltaHeight ?? 99999).toBeLessThanOrEqual(4);
+
+            await page.screenshot({
+                path: testInfo.outputPath(`tutorial-highlight-${stepId}.png`),
+                fullPage: false,
+            });
+            await page.screenshot({
+                path: join(evidenceDir, `tutorial-highlight-${stepId}.png`),
+                fullPage: false,
+            });
+
+            if (stepId !== 'status-tokens') {
+                await clickNextOverlayStep(page);
+            }
+        }
     });
 });

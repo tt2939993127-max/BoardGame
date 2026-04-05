@@ -730,6 +730,26 @@
       "rising_sun": "Rising Sun"
     }
   },
+  "compareRoll": {
+    "confirming": "正在确认对掷结果...",
+    "rolled": "掷出 {{value}}",
+    "gunslinger": {
+      "showdown": {
+        "title": "摊到牌面",
+        "attackerLabel": "枪手",
+        "defenderLabel": "对手",
+        "win": "你赢下对掷，本次攻击伤害 +{{bonus}}。",
+        "lose": "你没赢下对掷，本次攻击保持基础伤害。"
+      },
+      "duel": {
+        "title": "对决",
+        "defenderLabel": "枪手",
+        "attackerLabel": "攻击方",
+        "win": "你赢下对决，请选择结算效果。",
+        "lose": "你输掉对决，对攻击方造成 1 点不可防御伤害。"
+      }
+    }
+  },
   "choices": {
     "title": "技能结算选择",
     "option": "选项 {{index}}",

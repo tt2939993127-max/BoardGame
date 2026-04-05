@@ -10,12 +10,18 @@ import { BonusDieOverlay } from '../ui/BonusDieOverlay';
 import { SpotlightContainer } from '../ui/SpotlightContainer';
 import { shouldSuppressPendingDisplayOnlyBonusOverlay } from '../ui/bonusDiceOverlayVisibility';
 import { shouldHighlightOpponentViewAbilities } from '../ui/abilityHighlightVisibility';
+import { resolveBonusDieText } from '../ui/bonusDieTranslation';
 import {
     COMMON_CARDS,
     GUNSLINGER_COMMON_ATLAS_INDEX,
     SAMURAI_COMMON_ATLAS_INDEX,
 } from '../domain/commonCards';
 import { getDiceThroneCardPreviewRef } from '../ui/cardPreviewHelper';
+
+const bonusDieEffectTranslations = {
+    'watchOut.bow': '弓🏹：伤害+2',
+    'volley.result': '{{bowCount}}个弓面：伤害+{{bonusDamage}}',
+};
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
@@ -25,6 +31,14 @@ vi.mock('react-i18next', () => ({
                 .map(([paramKey, value]) => `${paramKey}=${value}`)
                 .join(',');
             return `${key}:${params}`;
+        },
+        i18n: {
+            resolvedLanguage: 'zh-CN',
+            language: 'zh-CN',
+            exists: () => false,
+            getResource: (_language: string, _namespace: string, key: string) => (
+                key === 'bonusDie.effect' ? bonusDieEffectTranslations : undefined
+            ),
         },
     }),
     initReactI18next: { type: '3rdParty', init: () => {} },
@@ -117,6 +131,55 @@ describe('BonusDieOverlay', () => {
         expect(html).toContain('bonusDie.diceResult');
         expect(html).not.toContain('bonusDie.continue');
         expect(html).not.toContain('bonusDie.confirmDamage');
+    });
+
+    it('奖励骰展示态特写应允许首次点击立即关闭', () => {
+        const onClose = vi.fn();
+
+        render(
+            <BonusDieOverlay
+                isVisible
+                onClose={onClose}
+                value={4}
+                face="lotus"
+                autoCloseDelay={10000}
+            />
+        );
+
+        fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
+        expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('扁平 bonusDie effect key 应解析为本地化文案', () => {
+        const translated = resolveBonusDieText('bonusDie.effect.watchOut.bow', {
+            t: (key) => key,
+            i18n: {
+                resolvedLanguage: 'zh-CN',
+                language: 'zh-CN',
+                exists: () => false,
+                getResource: (_language, _namespace, key) => (
+                    key === 'bonusDie.effect' ? bonusDieEffectTranslations : undefined
+                ),
+            },
+        });
+
+        expect(translated).toBe('弓🏹：伤害+2');
+    });
+
+    it('多骰汇总文案也应支持扁平 effect key 解析', () => {
+        const html = renderToStaticMarkup(
+            <BonusDieOverlay
+                isVisible
+                onClose={vi.fn()}
+                bonusDice={buildBonusDice()}
+                displayOnly
+                summaryEffectKey="bonusDie.effect.volley.result"
+                summaryEffectParams={{ bowCount: 2, bonusDamage: 2 }}
+            />
+        );
+
+        expect(html).toContain('2个弓面：伤害+2');
+        expect(html).not.toContain('bonusDie.effect.volley.result');
     });
 
     it('同批卡牌与额外骰事件会把骰子绑定到卡牌特写，而不是直接丢失', async () => {

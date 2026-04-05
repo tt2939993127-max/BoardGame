@@ -78,17 +78,147 @@ function buildAiBatchId(playerId: string, attemptKey: string): string {
     return `ai-${playerId}-${normalizedAttemptKey}`;
 }
 
+type ForceSkippableHiddenAiInteraction = {
+    playerId: string;
+    interactionId: string;
+    sourceId?: string;
+    title?: string;
+    resolution: AiResolution;
+};
+
+function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId: string): {
+    interactionId: string;
+    payload: { optionId?: string; optionIds?: string[] };
+    sourceId?: string;
+    title?: string;
+} | null {
+    const current = (state.sys as { interaction?: { current?: unknown } } | undefined)?.interaction?.current as
+        | {
+            id?: unknown;
+            playerId?: unknown;
+            kind?: unknown;
+            data?: {
+                title?: unknown;
+                sourceId?: unknown;
+                multi?: { min?: unknown };
+                options?: Array<{
+                    id?: unknown;
+                    disabled?: unknown;
+                    value?: { skip?: unknown; __cancel__?: unknown };
+                }>;
+            };
+        }
+        | undefined;
+
+    if (!current || String(current.playerId) !== playerId || current.kind !== 'simple-choice' || typeof current.id !== 'string') {
+        return null;
+    }
+
+    const data = current.data;
+    const enabledOptions = Array.isArray(data?.options)
+        ? data.options.filter((option) => option && option.disabled !== true && typeof option.id === 'string')
+        : [];
+
+    const skipOption = enabledOptions.find((option) =>
+        option.id === 'skip' || option.value?.skip === true,
+    );
+    if (skipOption?.id) {
+        return {
+            interactionId: current.id,
+            payload: { optionId: skipOption.id },
+            sourceId: typeof data?.sourceId === 'string' ? data.sourceId : undefined,
+            title: typeof data?.title === 'string' ? data.title : undefined,
+        };
+    }
+
+    const cancelOption = enabledOptions.find((option) =>
+        option.id === '__cancel__' || option.value?.__cancel__ === true,
+    );
+    if (cancelOption?.id) {
+        return {
+            interactionId: current.id,
+            payload: { optionId: cancelOption.id },
+            sourceId: typeof data?.sourceId === 'string' ? data.sourceId : undefined,
+            title: typeof data?.title === 'string' ? data.title : undefined,
+        };
+    }
+
+    const minCount = typeof data?.multi?.min === 'number' ? data.multi.min : 1;
+    if (minCount === 0) {
+        return {
+            interactionId: current.id,
+            payload: { optionIds: [] },
+            sourceId: typeof data?.sourceId === 'string' ? data.sourceId : undefined,
+            title: typeof data?.title === 'string' ? data.title : undefined,
+        };
+    }
+
+    return null;
+}
+
+export function resolveForceSkippableHiddenAiInteraction(args: {
+    sharedState: MatchState<unknown> | null | undefined;
+    seatControllers: Record<string, AiSeatController>;
+    seatStates: Record<string, MatchState<unknown> | null | undefined>;
+}): ForceSkippableHiddenAiInteraction | null {
+    const sharedInteraction = args.sharedState?.sys?.interaction as { current?: unknown; isBlocked?: unknown } | undefined;
+    if (!sharedInteraction || sharedInteraction.current || sharedInteraction.isBlocked !== true) {
+        return null;
+    }
+
+    for (const [playerId, controller] of Object.entries(args.seatControllers)) {
+        if (controller.type === 'human') {
+            continue;
+        }
+        const seatState = args.seatStates[playerId];
+        if (!seatState) {
+            continue;
+        }
+        const forceSkipPayload = buildForceSkipPayloadFromSeatState(seatState, playerId);
+        if (!forceSkipPayload) {
+            continue;
+        }
+
+        return {
+            playerId,
+            interactionId: forceSkipPayload.interactionId,
+            sourceId: forceSkipPayload.sourceId,
+            title: forceSkipPayload.title,
+            resolution: {
+                playerId,
+                attemptKey: `force-skip:${playerId}:${forceSkipPayload.interactionId}`,
+                source: 'local-ai',
+                action: {
+                    actionId: `force-skip:${forceSkipPayload.interactionId}`,
+                    kind: 'interaction-choice',
+                    label: '强制跳过 AI 可选效果',
+                    commands: [{
+                        type: 'SYS_INTERACTION_RESPOND',
+                        payload: forceSkipPayload.payload,
+                    }],
+                },
+            },
+        };
+    }
+
+    return null;
+}
+
 export function submitOnlineAiResolution(args: {
     client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState'>;
     resolution: AiResolution;
     lastAiAttemptKeyRef: { current: string | null };
     scheduleRetry: () => void;
+    onConfirmed?: (authoritativeState: unknown) => void;
+    onRejected?: (reason: string) => void;
 }): void {
     const {
         client,
         resolution,
         lastAiAttemptKeyRef,
         scheduleRetry,
+        onConfirmed,
+        onRejected,
     } = args;
 
     lastAiAttemptKeyRef.current = resolution.attemptKey;
@@ -102,6 +232,7 @@ export function submitOnlineAiResolution(args: {
             if (authoritativeState && typeof authoritativeState === 'object') {
                 client.updateLatestState(authoritativeState);
             }
+            onConfirmed?.(authoritativeState);
         },
         (reason) => {
             if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
@@ -110,6 +241,7 @@ export function submitOnlineAiResolution(args: {
             if (reason !== 'unauthorized') {
                 scheduleRetry();
             }
+            onRejected?.(reason);
         },
     );
 }
@@ -187,10 +319,18 @@ const OnlineAiSeatBridge = ({
     seatCredentials: Record<string, string>;
 }) => {
     const { state } = useGameClient();
+    const toast = useToast();
     const clientsRef = useRef<Record<string, GameTransportClient>>({});
     const [connectionVersion, setConnectionVersion] = useState(0);
     const [aiRetryVersion, setAiRetryVersion] = useState(0);
+    const [forceSkipCheckVersion, setForceSkipCheckVersion] = useState(0);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
+    const forceSkipTrackerRef = useRef<{
+        key: string;
+        firstSeenAt: number;
+        toastId: string | null;
+        candidate: ForceSkippableHiddenAiInteraction | null;
+    } | null>(null);
 
     useEffect(() => {
         const nextClientKeys = new Set(
@@ -315,6 +455,143 @@ const OnlineAiSeatBridge = ({
             }
         };
     }, [aiRetryVersion, connectionVersion, engineConfig, matchId, seatControllers, state]);
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const seatStates = Object.fromEntries(
+            Object.entries(clientsRef.current).map(([playerId, client]) => {
+                const latestState = client.latestState;
+                return [playerId, latestState && typeof latestState === 'object' ? latestState as MatchState<unknown> : null];
+            }),
+        );
+
+        const candidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: state as MatchState<unknown> | null | undefined,
+            seatControllers,
+            seatStates,
+        });
+        const candidateKey = candidate ? `${candidate.playerId}:${candidate.interactionId}` : null;
+
+        if (!candidateKey) {
+            if (forceSkipTrackerRef.current?.toastId) {
+                toast.dismiss(forceSkipTrackerRef.current.toastId);
+            }
+            forceSkipTrackerRef.current = null;
+            return;
+        }
+
+        const now = Date.now();
+        const currentTracker = forceSkipTrackerRef.current;
+        if (!currentTracker || currentTracker.key !== candidateKey) {
+            if (currentTracker?.toastId) {
+                toast.dismiss(currentTracker.toastId);
+            }
+            forceSkipTrackerRef.current = {
+                key: candidateKey,
+                firstSeenAt: now,
+                toastId: null,
+                candidate,
+            };
+            timer = setTimeout(() => {
+                setForceSkipCheckVersion((version) => version + 1);
+            }, 4000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        currentTracker.candidate = candidate;
+        if (currentTracker.toastId) {
+            return;
+        }
+
+        const elapsed = now - currentTracker.firstSeenAt;
+        if (elapsed < 4000) {
+            timer = setTimeout(() => {
+                setForceSkipCheckVersion((version) => version + 1);
+            }, 4000 - elapsed);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        const toastId = toast.warning(
+            '检测到 AI 在一个可选效果上响应超时。你可以强制跳过这次可选效果，继续对局。',
+            'AI 响应超时',
+            {
+                ttlMs: Infinity,
+                dedupeKey: `game.ai-force-skip.${candidateKey}`,
+                actions: [
+                    {
+                        label: '强制跳过',
+                        variant: 'primary',
+                        onClick: () => {
+                            const latestCandidate = forceSkipTrackerRef.current?.candidate;
+                            if (!latestCandidate) {
+                                return;
+                            }
+                            const targetClient = clientsRef.current[latestCandidate.playerId];
+                            if (!targetClient?.isConnected) {
+                                toast.warning('AI 座位尚未连接，暂时无法强制跳过。');
+                                return;
+                            }
+
+                            forceSkipTrackerRef.current = {
+                                key: candidateKey,
+                                firstSeenAt: Date.now(),
+                                toastId: null,
+                                candidate: latestCandidate,
+                            };
+                            submitOnlineAiResolution({
+                                client: targetClient,
+                                resolution: latestCandidate.resolution,
+                                lastAiAttemptKeyRef,
+                                scheduleRetry: () => {
+                                    setAiRetryVersion((version) => version + 1);
+                                },
+                                onConfirmed: () => {
+                                    toast.success('已强制跳过 AI 的可选效果，对局继续。', '已恢复对局');
+                                },
+                                onRejected: (reason) => {
+                                    if (reason === 'unauthorized') {
+                                        toast.warning('AI 座位凭据已失效，无法强制跳过。');
+                                        return;
+                                    }
+                                    toast.warning('强制跳过未成功，系统会继续自动重试。');
+                                },
+                            });
+                        },
+                    },
+                    {
+                        label: '继续等待',
+                        variant: 'secondary',
+                    },
+                ],
+            },
+        );
+
+        forceSkipTrackerRef.current = {
+            ...currentTracker,
+            toastId,
+            candidate,
+        };
+
+        return () => {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        };
+    }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, seatControllers, state, toast]);
+
+    useEffect(() => () => {
+        if (forceSkipTrackerRef.current?.toastId) {
+            toast.dismiss(forceSkipTrackerRef.current.toastId);
+        }
+    }, [toast]);
 
     return null;
 };
@@ -476,6 +753,7 @@ export const MatchRoom = () => {
     const { t, i18n } = useTranslation('lobby');
     const { user, token } = useAuth();
     const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
+    const [hasEverReceivedOnlineState, setHasEverReceivedOnlineState] = useState(false);
     const renderLogKeyRef = useRef<string | null>(null);
 
     const renderLogKey = `${gameId ?? 'unknown'}:${matchId ?? 'unknown'}:${searchParams.get('playerID') ?? 'no-player'}`;
@@ -515,6 +793,9 @@ export const MatchRoom = () => {
     }, [gameId, isTutorialRoute, matchId, searchParams]);
     useEffect(() => {
         setOnlineTransportError(null);
+    }, [gameId, matchId, isTutorialRoute]);
+    useEffect(() => {
+        setHasEverReceivedOnlineState(false);
     }, [gameId, matchId, isTutorialRoute]);
 
     // 在线模式：命令被服务端拒绝时的统一反馈
@@ -1175,6 +1456,7 @@ export const MatchRoom = () => {
 
     useEffect(() => {
         if (isTutorialRoute || !matchId || !lobbyPresence.isMissing) return;
+        if (hasEverReceivedOnlineState) return;
         // 自动加入过程中不检查房间是否缺失（lobby 快照可能尚未包含该房间）
         if (shouldAutoJoin || isAutoJoining || autoJoinGraceRef.current) return;
         // 如果 matchStatus 没有报错，说明房间仍然存在（可能只是游戏结束后从大厅列表移除了）
@@ -1189,7 +1471,7 @@ export const MatchRoom = () => {
             { dedupeKey: `matchRoom.missing.${matchId}` }
         );
         navigateBackToLobby();
-    }, [clearMatchLocalState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.error, navigateBackToLobby, shouldAutoJoin, toast]);
+    }, [clearMatchLocalState, hasEverReceivedOnlineState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.error, navigateBackToLobby, shouldAutoJoin, toast]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();
@@ -1313,13 +1595,17 @@ export const MatchRoom = () => {
             setShouldShowMatchError(false);
             return;
         }
+        if (hasEverReceivedOnlineState) {
+            setShouldShowMatchError(false);
+            return;
+        }
         if (!matchStatus.error) {
             setShouldShowMatchError(false);
             return;
         }
         // 404 错误立即显示，无需延迟
         setShouldShowMatchError(true);
-    }, [isTutorialRoute, matchStatus.error]);
+    }, [hasEverReceivedOnlineState, isTutorialRoute, matchStatus.error]);
 
     // 如果房间不存在，显示错误并自动跳转
     useEffect(() => {
@@ -1526,6 +1812,10 @@ export const MatchRoom = () => {
                                                 engineConfig={engineConfig ?? undefined}
                                                 latencyConfig={latencyConfig}
                                                 onError={handleGameError}
+                                                onStateReady={() => {
+                                                    setHasEverReceivedOnlineState(true);
+                                                    setOnlineTransportError(null);
+                                                }}
                                                 onConnectionChange={(connected) => {
                                                     if (connected) {
                                                         setOnlineTransportError(null);

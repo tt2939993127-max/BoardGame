@@ -138,6 +138,17 @@ test.describe('角色选择系统', () => {
         await expect(samuraiBadge).toContainText('施工中');
         await expect(monkBadge).toHaveCount(0);
 
+        const [gunslingerCardBox, gunslingerBadgeBox] = await Promise.all([
+            page.locator('[data-character-id="gunslinger"]').boundingBox(),
+            gunslingerBadge.boundingBox(),
+        ]);
+        expect(gunslingerCardBox, '枪手角色卡应存在边界框').not.toBeNull();
+        expect(gunslingerBadgeBox, '枪手施工中标签应存在边界框').not.toBeNull();
+        const cardCenterY = gunslingerCardBox!.y + (gunslingerCardBox!.height / 2);
+        const badgeCenterY = gunslingerBadgeBox!.y + (gunslingerBadgeBox!.height / 2);
+        expect(Math.abs(badgeCenterY - cardCenterY), '施工中标签应位于角色卡中部而不是角落').toBeLessThan(gunslingerCardBox!.height * 0.18);
+        expect(gunslingerBadgeBox!.width, '施工中标签宽度应明显大于角标样式').toBeGreaterThan(gunslingerCardBox!.width * 0.5);
+
         await page.screenshot({ path: evidencePath, fullPage: false });
     });
 

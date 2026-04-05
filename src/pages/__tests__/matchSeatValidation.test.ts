@@ -9,7 +9,7 @@ import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
-import { submitOnlineAiResolution } from '../MatchRoom';
+import { resolveForceSkippableHiddenAiInteraction, submitOnlineAiResolution } from '../MatchRoom';
 import { resolveOnlineHudPresence } from '../matchHudPresence';
 
 type Player = { id: number; name?: string | null };
@@ -741,6 +741,191 @@ describe('submitOnlineAiResolution', () => {
         rejectHandler?.('unauthorized');
         expect(lastAiAttemptKeyRef.current).toBeNull();
         expect(retry).toHaveBeenCalledTimes(1);
+    });
+
+    it('confirmed / rejected 回调应透传给调用方', () => {
+        const onConfirmed = vi.fn();
+        const onRejected = vi.fn();
+        let rejectHandler: ((reason: string) => void) | undefined;
+        const sendBatch = vi.fn((_batchId, _commands, confirmed, rejected) => {
+            confirmed?.({ sys: { phase: 'playCards' } });
+            rejectHandler = rejected;
+        });
+
+        submitOnlineAiResolution({
+            client: {
+                sendBatch,
+                updateLatestState: vi.fn(),
+            },
+            resolution: {
+                playerId: '1',
+                attemptKey: 'attempt-callbacks',
+                source: 'local-ai',
+                action: {
+                    actionId: 'respond-choice',
+                    kind: 'interaction-choice',
+                    label: '响应',
+                    commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'skip' } }],
+                },
+            },
+            lastAiAttemptKeyRef: { current: null },
+            scheduleRetry: vi.fn(),
+            onConfirmed,
+            onRejected,
+        });
+
+        expect(onConfirmed).toHaveBeenCalledWith({ sys: { phase: 'playCards' } });
+        rejectHandler?.('command_failed');
+        expect(onRejected).toHaveBeenCalledWith('command_failed');
+    });
+});
+
+describe('resolveForceSkippableHiddenAiInteraction', () => {
+    it('隐藏的 AI simple-choice 带 skip 选项时，应返回强制跳过 resolution', () => {
+        const candidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'hoverbot-hidden',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    sourceId: 'robot_hoverbot',
+                                    title: '盘旋机器人',
+                                    options: [
+                                        { id: 'play', label: '打出', value: { cardUid: 'c1' } },
+                                        { id: 'skip', label: '跳过', value: { skip: true } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        });
+
+        expect(candidate?.playerId).toBe('1');
+        expect(candidate?.interactionId).toBe('hoverbot-hidden');
+        expect(candidate?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'skip' },
+        });
+    });
+
+    it('可空选的隐藏 AI multi 交互时，应返回空选择的强制跳过 resolution', () => {
+        const candidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'optional-hidden',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    multi: { min: 0, max: 2 },
+                                    options: [
+                                        { id: 'pick-1', label: '选项 1', value: { id: 1 } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        });
+
+        expect(candidate?.resolution.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionIds: [] },
+        });
+    });
+
+    it('非阻塞态或不可跳过的交互时，不应返回强制跳过 resolution', () => {
+        expect(resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: false,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        })).toBeNull();
+
+        expect(resolveForceSkippableHiddenAiInteraction({
+            sharedState: {
+                core: {},
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: true,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {
+                '1': {
+                    core: {},
+                    sys: {
+                        interaction: {
+                            current: {
+                                id: 'mandatory-hidden',
+                                playerId: '1',
+                                kind: 'simple-choice',
+                                data: {
+                                    options: [
+                                        { id: 'only', label: '必须点', value: { id: 1 } },
+                                    ],
+                                },
+                            },
+                            queue: [],
+                        },
+                    },
+                } as MatchState<unknown>,
+            },
+        })).toBeNull();
     });
 });
 

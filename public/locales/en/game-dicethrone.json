@@ -737,6 +737,26 @@
       }
     }
   },
+  "compareRoll": {
+    "confirming": "Confirming the face-off...",
+    "rolled": "Rolled {{value}}",
+    "gunslinger": {
+      "showdown": {
+        "title": "Showdown",
+        "attackerLabel": "Gunslinger",
+        "defenderLabel": "Opponent",
+        "win": "You win the face-off. This attack gains +{{bonus}} damage.",
+        "lose": "You lose the face-off. The attack stays at its base damage."
+      },
+      "duel": {
+        "title": "Duel",
+        "defenderLabel": "Gunslinger",
+        "attackerLabel": "Attacker",
+        "win": "You win the duel. Choose the resolution.",
+        "lose": "You lose the duel and deal 1 undefendable damage to the attacker."
+      }
+    }
+  },
   "choices": {
     "title": "Ability Resolution Choice",
     "option": "Option {{index}}",

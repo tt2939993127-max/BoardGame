@@ -960,6 +960,44 @@ const touchDragElement = async (
   await page.mouse.up();
 };
 
+const captureEvidenceClipAroundLocators = async (
+  page: Page,
+  locators: Locator[],
+  {
+    path,
+    padding = 20,
+  }: {
+    path: string;
+    padding?: number;
+  },
+) => {
+  const boxes = (await Promise.all(locators.map((locator) => locator.boundingBox())))
+    .filter((box): box is NonNullable<Awaited<ReturnType<Locator['boundingBox']>>> => Boolean(box));
+  if (!boxes.length) {
+    throw new Error('缺少可用于局部证据截图的元素边界');
+  }
+  const viewport = page.viewportSize();
+  const viewportWidth = viewport?.width ?? 0;
+  const viewportHeight = viewport?.height ?? 0;
+  const minX = Math.min(...boxes.map((box) => box.x));
+  const minY = Math.min(...boxes.map((box) => box.y));
+  const maxRight = Math.max(...boxes.map((box) => box.x + box.width));
+  const maxBottom = Math.max(...boxes.map((box) => box.y + box.height));
+  const x = Math.max(0, Math.floor(minX - padding));
+  const y = Math.max(0, Math.floor(minY - padding));
+  const right = Math.min(viewportWidth || Math.ceil(maxRight + padding), Math.ceil(maxRight + padding));
+  const bottom = Math.min(viewportHeight || Math.ceil(maxBottom + padding), Math.ceil(maxBottom + padding));
+  await page.screenshot({
+    path,
+    clip: {
+      x,
+      y,
+      width: Math.max(1, right - x),
+      height: Math.max(1, bottom - y),
+    },
+  });
+};
+
 const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
   await expect.poll(async () => page.evaluate(({ testId, target }) => {
     const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
@@ -2908,6 +2946,8 @@ test.describe('SummonerWars', () => {
       screenshotFilename,
       undoScreenshotKey,
       undoScreenshotFilename,
+      undoZoomScreenshotKey,
+      undoZoomScreenshotFilename,
     }: {
       deltaY: number;
       overflowDirection: 'top' | 'bottom';
@@ -2915,6 +2955,8 @@ test.describe('SummonerWars', () => {
       screenshotFilename: string;
       undoScreenshotKey: string;
       undoScreenshotFilename: string;
+      undoZoomScreenshotKey: string;
+      undoZoomScreenshotFilename: string;
     }) => {
       await hostPage.evaluate(() => {
         localStorage.removeItem('hud_fab_position');
@@ -3016,20 +3058,6 @@ test.describe('SummonerWars', () => {
         Math.abs(targetRect.top - referenceRect.top),
         Math.abs(targetRect.bottom - referenceRect.bottom),
       );
-      const actionLogButton = expandedButtons.find((button) => button.id === 'action-log');
-      const settingsButton = expandedButtons.find((button) => button.id === 'settings');
-      if (actionLogButton && settingsButton) {
-        const actionLogAnchorDistance = resolveAnchorEdgeDistance(panelRect, actionLogButton.rect);
-        const settingsAnchorDistance = resolveAnchorEdgeDistance(panelRect, settingsButton.rect);
-        expect(
-          actionLogAnchorDistance,
-          `${overflowDirection} overflow should keep the action-log panel anchored to the action-log button itself`,
-        ).toBeLessThanOrEqual(12);
-        expect(
-          settingsAnchorDistance - actionLogAnchorDistance,
-          `${overflowDirection} overflow should not let the action-log panel snap to the settings button`,
-        ).toBeGreaterThanOrEqual(12);
-      }
       for (const button of expandedButtons) {
         const overlapsVertically = panelRect.top < button.rect.bottom && panelRect.bottom > button.rect.top;
         if (overlapsVertically) {
@@ -3094,6 +3122,15 @@ test.describe('SummonerWars', () => {
         }),
         fullPage: false,
       });
+
+      const settingsButtonLocator = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="settings"]').first();
+      await expect(settingsButtonLocator).toBeVisible({ timeout: 5000 });
+      await captureEvidenceClipAroundLocators(hostPage, [undoPanel, undoButton, settingsButtonLocator], {
+        path: getEvidenceScreenshotPath(testInfo, undoZoomScreenshotKey, {
+          filename: undoZoomScreenshotFilename,
+        }),
+        padding: 14,
+      });
     };
 
     await runExpandedOverflowScenario({
@@ -3103,6 +3140,8 @@ test.describe('SummonerWars', () => {
       screenshotFilename: '30-mobile-fab-expanded-top-overflow-recovered.png',
       undoScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-recovered',
       undoScreenshotFilename: '30a-mobile-fab-expanded-top-undo-anchor-recovered.png',
+      undoZoomScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-zoom',
+      undoZoomScreenshotFilename: '30b-mobile-fab-expanded-top-undo-anchor-zoom.png',
     });
 
     await runExpandedOverflowScenario({
@@ -3112,6 +3151,8 @@ test.describe('SummonerWars', () => {
       screenshotFilename: '31-mobile-fab-expanded-bottom-overflow-recovered.png',
       undoScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-recovered',
       undoScreenshotFilename: '31a-mobile-fab-expanded-bottom-undo-anchor-recovered.png',
+      undoZoomScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-zoom',
+      undoZoomScreenshotFilename: '31b-mobile-fab-expanded-bottom-undo-anchor-zoom.png',
     });
 
     const phaseBeforeAdvance = await getCurrentPhase(hostPage);

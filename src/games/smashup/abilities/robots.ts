@@ -147,6 +147,49 @@ export function resetRobotHoverbotCounter(): void {
     robotHoverbotCounter = 0;
 }
 
+type RobotHoverbotChoiceValue =
+    | { cardUid: string; defId: string; power: number }
+    | { skip: true };
+
+function buildRobotHoverbotChoiceOptions(
+    state: AbilityContext['state'],
+    playerId: string,
+    continuationContext?: { cardUid: string; defId: string; power: number },
+): PromptOption<RobotHoverbotChoiceValue>[] {
+    const skipOption: PromptOption<RobotHoverbotChoiceValue> = {
+        id: 'skip',
+        label: '放回牌库顶',
+        value: { skip: true },
+        displayMode: 'button',
+    };
+
+    if (!continuationContext) {
+        return [skipOption];
+    }
+
+    const currentTopCard = state.players[playerId]?.deck[0];
+    if (!currentTopCard
+        || currentTopCard.uid !== continuationContext.cardUid
+        || currentTopCard.defId !== continuationContext.defId) {
+        return [skipOption];
+    }
+
+    return [
+        {
+            id: 'play',
+            label: `打出 cards.${continuationContext.defId}.name`,
+            value: {
+                cardUid: continuationContext.cardUid,
+                defId: continuationContext.defId,
+                power: continuationContext.power,
+            },
+            displayMode: 'card',
+            _source: 'static' as const,
+        },
+        skipOption,
+    ];
+}
+
 /** 盘旋机器人 onPlay：展示牌库顶，如果是随从“你可以”将其作为额外随从打出 */
 function robotHoverbot(ctx: AbilityContext): AbilityResult {
     const peek = peekDeckTop(
@@ -160,57 +203,26 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
     if (peek.card.type === 'minion') {
         const def = getCardDef(peek.card.defId) as MinionCardDef | undefined;
         const power = def?.power ?? 0;
-
-        const initialOptions: PromptOption<
-            { cardUid: string; defId: string; power: number } | { skip: true }
-        >[] = [
-            {
-                id: 'play',
-                label: `打出 cards.${peek.card.defId}.name`,
-                value: { cardUid: peek.card.uid, defId: peek.card.defId, power },
-                displayMode: 'card' as const,
-                _source: 'static' as const,
-            },
-            {
-                id: 'skip',
-                label: '放回牌库顶',
-                value: { skip: true },
-                displayMode: 'button' as const,
-            },
-        ];
-
-        const interaction = createSimpleChoice<{ cardUid: string; defId: string; power: number } | { skip: true }>(
-            `robot_hoverbot_${robotHoverbotCounter++}`,
-            ctx.playerId,
-            `牌库顶是 cards.${peek.card.defId}.name（力量 ${power}），是否作为额外随从打出？`,
-            initialOptions,
-            { sourceId: 'robot_hoverbot', targetType: 'generic' },
-        );
-
-        const interactionData = interaction.data as any;
-        interactionData.continuationContext = {
+        const continuationContext = {
             cardUid: peek.card.uid,
             defId: peek.card.defId,
             power,
         };
 
-        interactionData.optionsGenerator = (_state: any, iData: any) => {
+        const interaction = createSimpleChoice<RobotHoverbotChoiceValue>(
+            `robot_hoverbot_${robotHoverbotCounter++}`,
+            ctx.playerId,
+            `牌库顶是 cards.${peek.card.defId}.name（力量 ${power}），是否作为额外随从打出？`,
+            buildRobotHoverbotChoiceOptions(ctx.state, ctx.playerId, continuationContext),
+            { sourceId: 'robot_hoverbot', targetType: 'generic', responseValidationMode: 'live' },
+        );
+
+        const interactionData = interaction.data as any;
+        interactionData.continuationContext = continuationContext;
+
+        interactionData.optionsGenerator = (state: AbilityContext['matchState'], iData: any) => {
             const c = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
-            if (!c) {
-                return [
-                    { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
-                ];
-            }
-            return [
-                {
-                    id: 'play',
-                    label: `打出 cards.${c.defId}.name`,
-                    value: { cardUid: c.cardUid, defId: c.defId, power: c.power },
-                    displayMode: 'card' as const,
-                    _source: 'static' as const,
-                },
-                { id: 'skip', label: '放回牌库顶', value: { skip: true }, displayMode: 'button' as const },
-            ];
+            return buildRobotHoverbotChoiceOptions(state.core, ctx.playerId, c);
         };
 
         return { events, matchState: queueInteraction(ctx.matchState, interaction) };

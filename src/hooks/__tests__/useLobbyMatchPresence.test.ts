@@ -3,7 +3,9 @@ import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { LobbyMatch } from '../../services/lobbySocket';
 import { socketHealthChecker } from '../../services/socketHealthCheck';
+import * as matchApi from '../../services/matchApi';
 import { getTimeUntilExpiry, parseToken } from '../useTokenRefresh';
+import { useMatchStatus } from '../match/useMatchStatus';
 import { useLobbyMatchPresence } from '../useLobbyMatchPresence';
 
 const subscribeMock = vi.fn();
@@ -25,13 +27,22 @@ vi.mock('../../services/lobbySocket', () => ({
     },
 }));
 
+vi.mock('../../services/matchApi', () => ({
+    getMatch: vi.fn(),
+}));
+
 describe('useLobbyMatchPresence', () => {
     beforeEach(() => {
         subscribeMock.mockClear();
         lastHandler = null;
+        vi.useFakeTimers();
     });
 
-    it('does not mark missing before the match is seen', () => {
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('does not mark missing before the match is seen', async () => {
         const { result } = renderHook(() =>
             useLobbyMatchPresence({
                 gameId: 'tictactoe',
@@ -41,6 +52,10 @@ describe('useLobbyMatchPresence', () => {
             })
         );
 
+        await act(async () => {
+            vi.runAllTimers();
+            await Promise.resolve();
+        });
         expect(subscribeMock).toHaveBeenCalledWith('tictactoe');
         act(() => {
             lastHandler?.([]);
@@ -52,7 +67,7 @@ describe('useLobbyMatchPresence', () => {
         expect(result.current.isMissing).toBe(false);
     });
 
-    it('marks missing after the match disappears', () => {
+    it('marks missing after the match disappears', async () => {
         const { result } = renderHook(() =>
             useLobbyMatchPresence({
                 gameId: 'tictactoe',
@@ -61,6 +76,11 @@ describe('useLobbyMatchPresence', () => {
                 requireSeen: true,
             })
         );
+
+        await act(async () => {
+            vi.runAllTimers();
+            await Promise.resolve();
+        });
 
         const match: LobbyMatch = {
             matchID: 'm1',
@@ -85,7 +105,7 @@ describe('useLobbyMatchPresence', () => {
         expect(result.current.isMissing).toBe(true);
     });
 
-    it('resets hasSeen when matchId changes', () => {
+    it('resets hasSeen when matchId changes', async () => {
         const { result, rerender } = renderHook(
             ({ matchId }: { matchId: string }) =>
                 useLobbyMatchPresence({
@@ -96,6 +116,11 @@ describe('useLobbyMatchPresence', () => {
                 }),
             { initialProps: { matchId: 'm1' } }
         );
+
+        await act(async () => {
+            vi.runAllTimers();
+            await Promise.resolve();
+        });
 
         act(() => {
             lastHandler?.([
@@ -133,6 +158,85 @@ describe('useLobbyMatchPresence', () => {
         });
 
         expect(result.current.isMissing).toBe(true);
+    });
+});
+
+describe('useMatchStatus', () => {
+    const getMatchMock = vi.mocked(matchApi.getMatch);
+
+    beforeEach(() => {
+        vi.useFakeTimers();
+        getMatchMock.mockReset();
+        localStorage.clear();
+    });
+
+    afterEach(() => {
+        vi.useRealTimers();
+    });
+
+    it('does not expose error on the first initial 404', async () => {
+        getMatchMock.mockRejectedValueOnce(new Error('404: Match m1 not found'));
+
+        const { result } = renderHook(() => useMatchStatus('smashup', 'm1', '0'));
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(result.current.error).toBeNull();
+        expect(localStorage.getItem('match_creds_m1')).toBeNull();
+    });
+
+    it('confirms missing room after two initial 404 responses', async () => {
+        localStorage.setItem('match_creds_m1', 'creds');
+        getMatchMock.mockRejectedValue(new Error('404: Match m1 not found'));
+
+        const { result } = renderHook(() => useMatchStatus('smashup', 'm1', '0'));
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(result.current.error).toBeNull();
+        expect(localStorage.getItem('match_creds_m1')).toBe('creds');
+
+        await act(async () => {
+            vi.advanceTimersByTime(3000);
+            await Promise.resolve();
+        });
+
+        expect(result.current.error).toBe('房间不存在或已被删除');
+        expect(localStorage.getItem('match_creds_m1')).toBeNull();
+    });
+
+    it('still fails immediately after the room was loaded once', async () => {
+        localStorage.setItem('match_creds_m1', 'creds');
+        getMatchMock
+            .mockResolvedValueOnce({
+                matchID: 'm1',
+                gameName: 'smashup',
+                players: [
+                    { id: 0, name: 'P1', isConnected: true },
+                    { id: 1, name: 'P2', isConnected: true },
+                ],
+            })
+            .mockRejectedValue(new Error('404: Match m1 not found'));
+
+        const { result } = renderHook(() => useMatchStatus('smashup', 'm1', '0'));
+
+        await act(async () => {
+            await Promise.resolve();
+        });
+
+        expect(result.current.error).toBeNull();
+
+        await act(async () => {
+            vi.advanceTimersByTime(3000);
+            await Promise.resolve();
+        });
+
+        expect(result.current.error).toBe('房间不存在或已被删除');
+        expect(localStorage.getItem('match_creds_m1')).toBeNull();
     });
 });
 

@@ -94,6 +94,7 @@ export const DT_EVENTS = defineEvents({
   
   CHOICE_REQUESTED: { audio: 'immediate', sound: CHOICE_REQUEST_KEY },
   CHOICE_RESOLVED: { audio: 'immediate', sound: CHOICE_RESOLVE_KEY },
+  COMPARE_ROLL_REQUESTED: { audio: 'immediate', sound: CHOICE_REQUEST_KEY },
   
   RESPONSE_WINDOW_OPENED: { audio: 'immediate', sound: RESPONSE_WINDOW_OPEN_KEY },
   RESPONSE_WINDOW_CLOSED: { audio: 'immediate', sound: RESPONSE_WINDOW_CLOSE_KEY },
@@ -615,6 +616,38 @@ export interface ChoiceResolvedEvent extends GameEvent<'CHOICE_RESOLVED'> {
     };
 }
 
+export interface CompareRollRequestedEvent extends GameEvent<'COMPARE_ROLL_REQUESTED'> {
+    payload: {
+        playerId: PlayerId;
+        sourceAbilityId: string;
+        titleKey: string;
+        contestants: Array<{
+            playerId?: PlayerId;
+            labelKey?: string;
+            labelParams?: Record<string, string | number>;
+            roll: number;
+            face?: DieFace;
+            characterId?: string;
+            effectKey?: string;
+            effectParams?: Record<string, string | number>;
+        }>;
+        resultKey?: string;
+        resultParams?: Record<string, string | number>;
+        resultTone?: 'neutral' | 'success' | 'warning' | 'danger';
+        options?: Array<{
+            value: number;
+            customId?: string;
+            labelKey?: string;
+            disabled?: boolean;
+        }>;
+        confirmValue?: {
+            value: number;
+            customId?: string;
+        };
+        autoConfirmDelayMs?: number;
+    };
+}
+
 /** 回合切换事件 */
 export interface TurnChangedEvent extends GameEvent<'TURN_CHANGED'> {
     payload: {
@@ -875,6 +908,7 @@ export type DiceThroneEvent =
     | AttackMadeUndefendableEvent
     | ChoiceRequestedEvent
     | ChoiceResolvedEvent
+    | CompareRollRequestedEvent
     | TurnChangedEvent
     | AbilityReplacedEvent
     | ResponseWindowOpenedEvent

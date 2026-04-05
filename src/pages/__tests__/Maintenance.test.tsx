@@ -862,6 +862,98 @@ describe('loadGameImplementation lazy tutorial loading', () => {
         expect(loadRuntime).toHaveBeenCalledTimes(1);
         expect(loadTutorial).toHaveBeenCalledTimes(1);
     });
+
+    it('runtime 预取不会提前占用正式加载的超时窗口', async () => {
+        vi.useFakeTimers();
+        try {
+            const runtime = {
+                engineConfig: {},
+                board: () => null,
+            };
+            let resolveRuntime: ((value: typeof runtime) => void) | null = null;
+            const loadRuntime = vi.fn(() => new Promise<typeof runtime>((resolve) => {
+                resolveRuntime = resolve;
+            }));
+
+            vi.doMock('../../games/manifest.client', () => ({
+                GAME_CLIENT_MANIFEST: [
+                    {
+                        manifest: {
+                            id: 'smashup',
+                            type: 'game',
+                            enabled: true,
+                        },
+                        loadRuntime,
+                    },
+                ],
+            }));
+
+            const { prefetchGameImplementation, loadGameImplementation } = await import('../../games/registry');
+
+            const prefetchPromise = prefetchGameImplementation('smashup');
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(16000);
+
+            const blockingPromise = loadGameImplementation('smashup');
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(1000);
+
+            resolveRuntime?.(runtime);
+            await Promise.resolve();
+
+            await expect(blockingPromise).resolves.toEqual(runtime);
+            await expect(prefetchPromise).resolves.toEqual(runtime);
+            expect(loadRuntime).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('ensureGameCriticalImageResolverLoaded', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/manifest.client');
+        vi.doUnmock('../../core');
+        vi.resetModules();
+    });
+
+    it('可在 runtime 之前单独懒加载 critical image resolver', async () => {
+        const mockResolver = vi.fn(() => ({ critical: ['smashup/cards/cards1'], warm: [] }));
+        const registerCriticalImageResolver = vi.fn();
+        const getCriticalImageResolver = vi.fn(() => undefined);
+        const loadCriticalImageResolver = vi.fn().mockResolvedValue(mockResolver);
+
+        vi.doMock('../../games/manifest.client', () => ({
+            GAME_CLIENT_MANIFEST: [
+                {
+                    manifest: {
+                        id: 'smashup',
+                        type: 'game',
+                        enabled: true,
+                    },
+                    loadRuntime: vi.fn(),
+                    loadCriticalImageResolver,
+                },
+            ],
+        }));
+
+        vi.doMock('../../core', () => ({
+            getCriticalImageResolver,
+            registerCriticalImageResolver,
+        }));
+
+        const { ensureGameCriticalImageResolverLoaded } = await import('../../games/registry');
+
+        await ensureGameCriticalImageResolverLoaded('smashup');
+
+        expect(loadCriticalImageResolver).toHaveBeenCalledTimes(1);
+        expect(registerCriticalImageResolver).toHaveBeenCalledTimes(1);
+        expect(registerCriticalImageResolver).toHaveBeenCalledWith('smashup', mockResolver);
+    });
 });
 
 describe('resolveGameImplementationLoadTimeoutMs', () => {
@@ -1120,7 +1212,7 @@ describe('Home native runtime footer', () => {
         expect(screen.queryByText('OTA 未对齐')).toBeNull();
     });
 
-    it('仅在原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {
+    it('仅在原生 Android 且快照确认后显示 Bundle/App 信息，不承担 OTA 提示职责', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -1140,11 +1232,11 @@ describe('Home native runtime footer', () => {
         });
 
         expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
-        expect(screen.getByText('Latest 0.5.1')).toBeInTheDocument();
-        expect(screen.getByText('OTA 未对齐')).toBeInTheDocument();
+        expect(screen.queryByText(/^Latest /)).toBeNull();
+        expect(screen.queryByText('OTA 未对齐')).toBeNull();
     });
 
-    it('点击 OTA 未对齐角标时只展开完整版本号，不触发 OTA 检查', async () => {
+    it('原生 Android 版本角标只负责展开完整版本号，不触发 OTA 检查', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
@@ -1160,7 +1252,7 @@ describe('Home native runtime footer', () => {
         render(<Home />);
 
         const footerButton = await screen.findByRole('button', {
-            name: /versions are not aligned/i,
+            name: /current bundle version 0\.5\.0, app version 0\.5\.1/i,
         });
 
         await act(async () => {

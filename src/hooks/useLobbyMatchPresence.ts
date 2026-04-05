@@ -72,12 +72,16 @@ export const useLobbyMatchPresence = ({
                 setHasSeen(true);
             }
         };
-
-        const unsubscribe = lobbySocket.subscribe(gameId, updateHandler);
+        let unsubscribe: (() => void) | null = null;
+        const subscribeTimer = window.setTimeout(() => {
+            if (!isActive) return;
+            unsubscribe = lobbySocket.subscribe(gameId, updateHandler);
+        }, 0);
 
         return () => {
             isActive = false;
-            unsubscribe();
+            window.clearTimeout(subscribeTimer);
+            unsubscribe?.();
         };
     }, [enabled, gameId]);
 

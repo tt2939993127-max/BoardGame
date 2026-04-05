@@ -28,7 +28,8 @@ import { resolveGameAuthorName, resolveGameDescription, resolveGameDisplayName }
 import { logger } from '../../lib/logger';
 import { logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { appendMatchLoadTrace, startMatchLoadTrace } from '../../lib/matchLoadTrace';
-import { UI_Z_INDEX } from '../../core';
+import { UI_Z_INDEX, preloadWarmImages, resolveCriticalImages } from '../../core';
+import { ensureGameCriticalImageResolverLoaded, prefetchGameImplementation } from '../../games/registry';
 import {
     normalizeLocalMatchPreferences,
     readStoredLocalMatchPreferences,
@@ -641,6 +642,18 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
         const namespace = `game-${gameId}`;
         setIsPreparingCreateRoom(true);
+        void ensureGameCriticalImageResolverLoaded(gameId).catch((error: unknown) => {
+            logger.warn('[GameDetailsModal] 提前加载 critical image resolver 失败', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
+        void prefetchGameImplementation(gameId, { includeTutorial: false }).catch((error: unknown) => {
+            logger.warn('[GameDetailsModal] 提前加载游戏 runtime 失败', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
         try {
             if (!i18n.hasLoadedNamespace(namespace)) {
                 await i18n.loadNamespaces(namespace);
@@ -749,6 +762,13 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     seatControllerCount: Object.keys(normalizedSeatControllers).length,
                 },
             });
+            const criticalImageResolverReadyPromise = ensureGameCriticalImageResolverLoaded(gameId);
+            void criticalImageResolverReadyPromise.catch(() => {
+                // 具体失败链路由 ensureGameCriticalImageResolverLoaded 内部日志记录
+            });
+            void prefetchGameImplementation(gameId, { includeTutorial: false }).catch(() => {
+                // 具体失败链路由 prefetchGameImplementation 内部日志记录
+            });
             const result = await matchApi.createMatch(
                     gameId,
                     { numPlayers, setupData, playerName: user?.username || getGuestName() },
@@ -770,6 +790,47 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     hasOwnerCredentials: Boolean(result.ownerCredentials),
                 },
             });
+            void criticalImageResolverReadyPromise
+                .then(() => {
+                    const initialResolvedImages = resolveCriticalImages(gameId, undefined, i18n.language);
+                    const initialPrewarmPaths = [...new Set(initialResolvedImages.critical)];
+                    if (initialPrewarmPaths.length === 0) {
+                        appendMatchLoadTrace({
+                            stage: 'create-room-asset-prewarm-empty',
+                            gameId,
+                            matchId: matchID,
+                            payload: {
+                                locale: i18n.language,
+                                phaseKey: initialResolvedImages.phaseKey ?? null,
+                            },
+                        });
+                        return;
+                    }
+
+                    preloadWarmImages(initialPrewarmPaths, i18n.language, gameId);
+                    appendMatchLoadTrace({
+                        stage: 'create-room-asset-prewarm-start',
+                        gameId,
+                        matchId: matchID,
+                        payload: {
+                            locale: i18n.language,
+                            pathCount: initialPrewarmPaths.length,
+                            phaseKey: initialResolvedImages.phaseKey ?? null,
+                            samplePaths: initialPrewarmPaths.slice(0, 4),
+                        },
+                    });
+                })
+                .catch((prewarmError: unknown) => {
+                    appendMatchLoadTrace({
+                        stage: 'create-room-asset-prewarm-failed',
+                        gameId,
+                        matchId: matchID,
+                        payload: {
+                            locale: i18n.language,
+                            error: prewarmError instanceof Error ? prewarmError.message : String(prewarmError),
+                        },
+                    });
+                });
 
             const ownerPlayerName = user?.username || getGuestName();
             const ownerCredentials = result.ownerCredentials;

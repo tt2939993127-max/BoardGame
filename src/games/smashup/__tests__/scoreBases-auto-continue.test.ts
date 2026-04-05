@@ -12,6 +12,8 @@ import { smashUpFlowHooks } from '../domain/index';
 import { buildSmashUpAiLegalActions, smashUpAiRuntime } from '../ai';
 import type { MatchState } from '../../../core/types';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../types';
+import { runCommand } from './testRunner';
+import { SU_COMMANDS } from '../domain/types';
 
 /** 构造最小 SmashUpCore 用于测试 */
 function makeMinimalCore(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
@@ -959,6 +961,100 @@ describe('scoreBases 阶段自动推进', () => {
         expect(step3Resolution?.playerId).toBe('0');
         expect(step3Resolution?.action.kind).toBe('interaction-choice');
         expect((step3Resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId).toBe('trigger-0');
+    });
+
+    it('盘旋机器人揭示的牌已不再位于牌库顶时，AI 应只保留 skip，不再尝试 stale play', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const initialState: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                        hand: [{
+                            uid: 'hoverbot-1',
+                            defId: 'robot_hoverbot',
+                            type: 'minion',
+                            owner: '0',
+                        }] as any,
+                        deck: [
+                            {
+                                uid: 'hoverbot-2',
+                                defId: 'robot_hoverbot',
+                                type: 'minion',
+                                owner: '0',
+                            },
+                            {
+                                uid: 'zapbot-1',
+                                defId: 'robot_zapbot',
+                                type: 'minion',
+                                owner: '0',
+                            },
+                        ] as any,
+                        factions: ['robots', 'wizards'] as any,
+                    } as any,
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                    } as any,
+                } as any,
+                bases: [makeBase('base_great_library', [])],
+            }),
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const played = runCommand(initialState as any, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'hoverbot-1', baseIndex: 0 },
+            timestamp: 1,
+        } as any);
+
+        expect(played.success).toBe(true);
+        expect((played.finalState.sys.interaction?.current?.data as any)?.sourceId).toBe('robot_hoverbot');
+
+        const staleTopState: MatchState<SmashUpCore> = {
+            ...played.finalState,
+            core: {
+                ...played.finalState.core,
+                players: {
+                    ...played.finalState.core.players,
+                    '0': {
+                        ...played.finalState.core.players['0'],
+                        deck: [{
+                            uid: 'zapbot-1',
+                            defId: 'robot_zapbot',
+                            type: 'minion',
+                            owner: '0',
+                        }] as any,
+                    },
+                },
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: staleTopState as any,
+        });
+
+        expect(legalActions).toHaveLength(1);
+        expect(legalActions[0]?.kind).toBe('interaction-choice');
+        expect((legalActions[0]?.commands[0]?.payload as { optionId?: string } | undefined)?.optionId).toBe('skip');
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: staleTopState as any,
+            matchId: 'smashup-hoverbot-stale-top-ai',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId).toBe('skip');
     });
 
     it('AI 在计分阶段仅存在可激活的泰坦 special 时也不应暴露 advance-phase', () => {

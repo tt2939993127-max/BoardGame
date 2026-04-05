@@ -80,6 +80,7 @@ let assetsBaseUrl = resolveAssetsBaseUrlFromEnv(import.meta.env);
 let audioAssetsBaseUrl = resolveAudioAssetsBaseUrlFromEnv(import.meta.env);
 let assetHashes: Record<string, string> = typeof __ASSET_HASHES__ !== 'undefined' ? __ASSET_HASHES__ : {};
 const gameAssetBaseOverrides = new Map<string, string>();
+let commonAudioAssetBaseOverride: string | undefined;
 
 export function setAssetsBaseUrl(value?: string): void {
     assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? resolveAssetsBaseUrlFromEnv(import.meta.env);
@@ -95,6 +96,14 @@ export function setAudioAssetsBaseUrl(value?: string): void {
 
 export function getAudioAssetsBaseUrl(): string {
     return audioAssetsBaseUrl;
+}
+
+export function setCommonAudioAssetBaseOverride(value?: string): void {
+    commonAudioAssetBaseOverride = normalizeAssetsBaseUrl(value) ?? undefined;
+}
+
+export function getCommonAudioAssetBaseOverride(): string | undefined {
+    return commonAudioAssetBaseOverride;
 }
 
 export function setGameAssetBaseOverride(gameId: string, value?: string): void {
@@ -205,7 +214,7 @@ export function getAudioPath(gameId: string, key: string): string {
         return '';
     }
 
-    return assetsPath(assets.audio[key]);
+    return audioAssetsPath(assets.audio[key]);
 }
 
 /**
@@ -886,6 +895,14 @@ const stripKnownAssetPrefixes = (value: string) => {
     if (path.startsWith(`${audioAssetsBaseUrl}/`)) {
         return path.slice(audioAssetsBaseUrl.length + 1);
     }
+    if (commonAudioAssetBaseOverride) {
+        if (path === commonAudioAssetBaseOverride) {
+            return '';
+        }
+        if (path.startsWith(`${commonAudioAssetBaseOverride}/`)) {
+            return path.slice(commonAudioAssetBaseOverride.length + 1);
+        }
+    }
     for (const overrideBase of gameAssetBaseOverrides.values()) {
         if (path === overrideBase) {
             return '';
@@ -919,11 +936,21 @@ const resolveAssetBaseUrlForPath = (value: string) => {
     const gameId = resolveGameIdFromAssetRelativePath(value);
     return gameId ? gameAssetBaseOverrides.get(gameId) : undefined;
 };
+const resolveAudioAssetBaseUrlForPath = (value: string) => {
+    const trimmed = stripKnownAssetPrefixes(value);
+    if (trimmed === 'common/audio' || trimmed.startsWith('common/audio/')) {
+        return commonAudioAssetBaseOverride;
+    }
+    return resolveAssetBaseUrlForPath(trimmed);
+};
 const isInternalAssetsUrl = (src: string) => {
     if (src.startsWith(assetsBaseUrl) || src.startsWith(`${assetsBaseUrl}/`)) {
         return true;
     }
     if (src.startsWith(audioAssetsBaseUrl) || src.startsWith(`${audioAssetsBaseUrl}/`)) {
+        return true;
+    }
+    if (commonAudioAssetBaseOverride && (src.startsWith(commonAudioAssetBaseOverride) || src.startsWith(`${commonAudioAssetBaseOverride}/`))) {
         return true;
     }
     for (const overrideBase of gameAssetBaseOverrides.values()) {
@@ -1009,7 +1036,15 @@ export function assetsPath(path: string): string {
 export function audioAssetsPath(path: string): string {
     if (!isString(path)) return '';
     if (isPassthroughSource(path)) return path;
-    if (!path) return audioAssetsBaseUrl;
+    const overrideBaseUrl = resolveAudioAssetBaseUrlForPath(path);
+    if (!path) return overrideBaseUrl || audioAssetsBaseUrl;
+    if (overrideBaseUrl) {
+        const relativePath = stripKnownAssetPrefixes(path);
+        if (!relativePath) {
+            return resolveVersionedAssetUrl(overrideBaseUrl);
+        }
+        return resolveVersionedAssetUrl(`${overrideBaseUrl}/${relativePath}`);
+    }
     if (path === audioAssetsBaseUrl || path.startsWith(`${audioAssetsBaseUrl}/`)) {
         return resolveVersionedAssetUrl(path);
     }

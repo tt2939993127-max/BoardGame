@@ -5,13 +5,14 @@
 
 import type { GameEvent } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
-import { INTERACTION_EVENTS, queueInteraction, resolveInteraction, createSimpleChoice, createMultistepChoice } from '../../../engine/systems/InteractionSystem';
+import { INTERACTION_EVENTS, queueInteraction, resolveInteraction, createSimpleChoice, createCompareRollChoice, createMultistepChoice } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor as EngineInteractionDescriptor, SimpleChoiceData, PromptOption, MultistepChoiceData } from '../../../engine/systems/InteractionSystem';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
     ChoiceRequestedEvent,
     ChoiceResolvedEvent,
+    CompareRollRequestedEvent,
     InteractionRequestedEvent,
     TokenResponseRequestedEvent,
     BonusDiceRerollRequestedEvent,
@@ -232,6 +233,77 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         (interaction.data as SimpleChoiceData & { slider?: unknown }).slider = payload.slider;
                     }
                     
+                    newState = queueInteraction(newState, interaction);
+                }
+
+                if (dtEvent.type === 'COMPARE_ROLL_REQUESTED') {
+                    const payload = (dtEvent as CompareRollRequestedEvent).payload;
+                    const eventTimestamp = typeof dtEvent.timestamp === 'number' ? dtEvent.timestamp : 0;
+                    const compareOptions: PromptOption<{
+                        value: number;
+                        customId?: string;
+                        disabled?: boolean;
+                    }>[] = (payload.options ?? []).map((opt, index) => ({
+                        id: `option-${index}`,
+                        label: opt.labelKey ?? `choices.option-${index}`,
+                        value: {
+                            value: opt.value,
+                            customId: opt.customId,
+                            disabled: opt.disabled,
+                        },
+                        disabled: opt.disabled,
+                        displayMode: 'button',
+                    }));
+
+                    const contestants = payload.contestants.slice(0, 2).map((contestant, index) => ({
+                        playerId: contestant.playerId,
+                        label: contestant.labelKey ?? `compareRoll.contestant.${index}`,
+                        labelKey: contestant.labelKey,
+                        labelParams: contestant.labelParams,
+                        roll: contestant.roll,
+                        face: contestant.face,
+                        characterId: contestant.characterId,
+                        effectKey: contestant.effectKey,
+                        effectParams: contestant.effectParams,
+                    })) as [{
+                        playerId?: string;
+                        label: string;
+                        labelKey?: string;
+                        labelParams?: Record<string, string | number>;
+                        roll: number;
+                        face?: string;
+                        characterId?: string;
+                        effectKey?: string;
+                        effectParams?: Record<string, string | number>;
+                    }, {
+                        playerId?: string;
+                        label: string;
+                        labelKey?: string;
+                        labelParams?: Record<string, string | number>;
+                        roll: number;
+                        face?: string;
+                        characterId?: string;
+                        effectKey?: string;
+                        effectParams?: Record<string, string | number>;
+                    }];
+
+                    const interaction = createCompareRollChoice(
+                        `compare-roll-${payload.sourceAbilityId}-${eventTimestamp}`,
+                        payload.playerId,
+                        {
+                            title: payload.titleKey,
+                            sourceId: payload.sourceAbilityId,
+                            contestants,
+                            resultText: payload.resultKey ?? 'compareRoll.result',
+                            resultTextKey: payload.resultKey,
+                            resultTextParams: payload.resultParams,
+                            resultTone: payload.resultTone,
+                            options: compareOptions,
+                            confirmValue: payload.confirmValue,
+                            autoConfirmDelayMs: payload.autoConfirmDelayMs,
+                        }
+                    );
+
                     newState = queueInteraction(newState, interaction);
                 }
 

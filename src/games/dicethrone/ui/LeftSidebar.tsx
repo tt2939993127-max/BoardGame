@@ -67,6 +67,8 @@ export const LeftSidebar = ({
     onAutoResponseToggle?: (enabled: boolean) => void;
 }) => {
     const inlineUnit = buildRuntimeInlineUnitValue;
+    const hasVisibleStatusTokens = Object.values(viewPlayer.tokens ?? {}).some((amount) => amount > 0)
+        || Object.values(viewPlayer.statusEffects ?? {}).some((stacks) => stacks > 0);
     return (
         <div
             className="absolute top-0 flex flex-col items-center pointer-events-auto"
@@ -102,7 +104,7 @@ export const LeftSidebar = ({
                         gap: inlineUnit(0.3),
                     }}
                     ref={selfBuffRef}
-                    data-tutorial-id="status-tokens"
+                    data-tutorial-id={hasVisibleStatusTokens ? 'status-tokens' : undefined}
                 >
                     <TokensContainer
                         tokens={viewPlayer.tokens ?? {}}
@@ -149,7 +151,21 @@ export const LeftSidebar = ({
                     }}
                     data-tutorial-id="player-stats"
                 >
-                    <div className="w-full flex flex-col" style={{ gap: inlineUnit(0.4) }}>
+                    <div className="relative w-full flex flex-col" style={{ gap: inlineUnit(0.4) }}>
+                        {!hasVisibleStatusTokens && (
+                            <div
+                                aria-hidden="true"
+                                className="pointer-events-none absolute"
+                                data-tutorial-id="status-tokens"
+                                style={{
+                                    left: inlineUnit(0.2),
+                                    right: inlineUnit(0.2),
+                                    bottom: `calc(100% + ${inlineUnit(0.5)})`,
+                                    height: inlineUnit(2.9),
+                                    opacity: 0,
+                                }}
+                            />
+                        )}
                         <PlayerStats
                             player={viewPlayer}
                             hpRef={selfHpRef}
