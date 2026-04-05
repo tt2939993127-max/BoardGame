@@ -11,8 +11,12 @@ const mode = modeInput === 'prepush' ? 'pre-push' : modeInput;
 const isPrePushMode = mode === 'pre-push';
 const CACHE_SCHEMA_VERSION = 2;
 
-const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
-const FAST_VITEST_ARGS = ['--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
+// pre-push changed test runs touch a large cross-section of suites and can emit
+// huge log payloads. `threads` has been unstable on Windows here because worker
+// result serialization can fail with DataCloneError / OOM before assertions do.
+// `forks` is slower but materially more reliable for the local gate.
+const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
+const FAST_VITEST_ARGS = ['--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
 const CORE_TEST_TARGETS = ['src/core', 'src/components', 'src/hooks', 'src/lib', 'src/shared', 'src/engine', 'src/pages'];
 const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];

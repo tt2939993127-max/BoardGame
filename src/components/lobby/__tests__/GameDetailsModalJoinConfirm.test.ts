@@ -1094,6 +1094,35 @@ describe('GameDetailsModal create room ai entry', () => {
         }));
     });
 
+    it('冷启动读到原生 downloading 但任务已不存在时，回退为可重试失败态', async () => {
+        vi.mocked(nativeGamePackagePlugin.readNativeGamePackageInstallState).mockResolvedValueOnce({
+            state: {
+                gameId: 'dicethrone',
+                status: 'downloading',
+                progressMode: 'determinate',
+                progressPercent: 3,
+                installedVersion: 'test-asset-pack-v1',
+                updatedAt: Date.now(),
+            },
+            taskRunning: false,
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'packageManager.retryAction' })).toBeInTheDocument();
+        });
+        expect(screen.queryByText('packageManager.progress.label')).toBeNull();
+
+        const stored = JSON.parse(window.localStorage.getItem('mobile-package-state:dicethrone') ?? '{}');
+        expect(stored).toEqual(expect.objectContaining({
+            status: 'failed',
+            errorMessage: '上次下载未完成，请重新发起。',
+        }));
+    });
+
     it('原生安装器创建卡住时，3 秒内失败而不是无限停留 queued', async () => {
         vi.useFakeTimers();
         vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle).mockImplementationOnce(

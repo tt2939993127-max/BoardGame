@@ -186,6 +186,7 @@ public class GamePackagePlugin extends Plugin {
         try {
             JSONObject payload = readJsonFile(resolveStateFile(gameId));
             JSObject result = new JSObject();
+            result.put("taskRunning", isTaskRunning(gameId));
             if (payload == null) {
                 result.put("exists", false);
                 call.resolve(result);
@@ -745,6 +746,10 @@ public class GamePackagePlugin extends Plugin {
 
     private File resolveStateFile(String gameId) {
         return new File(new File(getRootDir(), gameId), STATE_FILE);
+    }
+
+    private boolean isTaskRunning(String gameId) {
+        return cancelRegistry.containsKey(gameId);
     }
 
     private void persistInstallState(String gameId, JSONObject payload) {

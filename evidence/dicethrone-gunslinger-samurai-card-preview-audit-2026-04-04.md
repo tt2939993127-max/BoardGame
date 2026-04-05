@@ -100,6 +100,9 @@
    - `upgrade-masamune-2.webp`
    - `upgrade-slot-06-2.webp`
    已从 `public/assets/i18n/zh-CN/dicethrone/images/samurai/crops/ability-cards/` 及 `compressed/` 子目录删除，并重新生成 `assets-manifest.json`。
+5. `2026-04-05` 追加修正：本审计原先只核对了 `previewRef.index` 与图集卡位的一致性，但漏审了“共享 atlas 位的调试发牌契约”。
+6. 枪手 `slot-22 / 23 / 24` 虽然继续共用 `index` 是正确运行时规格，但调试面板曾错误地仅按 `atlasIndex` 发牌，导致点击 `upgrade-deadeye-2` 一行时可能把同槽位的 `card-the-law` 发进手牌。
+7. 已在 `src/games/dicethrone/domain/cheatModifier.ts` 增加“共享索引拒绝模糊发牌”保护，并在 `src/games/dicethrone/debug-config.tsx` 改为按精确 `deckIndex` 发牌；因此旧结论“复合位继续共用 atlas index 即可收口”不再完整，需连同调试入口一起审计。
 
 ## 命中审计维度
 
@@ -119,10 +122,11 @@ npx vitest run --config vitest.config.audit.ts --configLoader native src/games/d
 
 - `criticalImageResolver.test.ts` 通过：确认 `setup/playing` 阶段不再预加载 `hand-cards-atlas`
 - `card-cross-audit.test.ts -t "枪手 / 武士卡图接线一致性"` 通过：确认两边 `previewRef` 都直接指向 `ability-cards` atlas
+- `basic-commands-coverage.test.ts -t "作弊发牌共享 atlas 索引保护"` 通过：确认 `slot-24` 这类共享索引不会再模糊发牌，且仍可按精确 `deckIndex` 发出 `upgrade-deadeye-2`
 
 ## 最终结论
 
 - 当前正确规格不是“再做一套 hand atlas”或“给每张牌单独切运行时图”，而是和老角色一致，继续直接使用 `ability-cards` atlas。
 - 真正需要重新录入的是 atlas 索引映射，不是整套卡牌文本或效果数据。
-- 枪手 `slot-22 / 23 / 24` 的复合展示位继续共用 atlas index 是预期行为，不是 bug。
-- 本轮审计后，枪手 / 武士手牌预览链路已收回到统一 atlas 契约；现存风险只剩未来如果产品要“每张复合位都显示独立缩略图”，那将是新需求，不是当前缺陷。
+- 枪手 `slot-22 / 23 / 24` 的复合展示位继续共用 atlas index 仍是预期行为；真正的 bug 是调试发牌入口把共享索引误当成“唯一卡标识”。
+- 本轮审计修订后，枪手 / 武士手牌预览链路与调试发牌链路都已回到统一 atlas 契约；现存风险只剩未来如果产品要“每张复合位都显示独立缩略图”，那将是新需求，不是当前缺陷。
