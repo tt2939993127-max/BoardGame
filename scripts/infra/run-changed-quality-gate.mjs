@@ -18,18 +18,6 @@ const CACHE_SCHEMA_VERSION = 2;
 const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const FAST_VITEST_ARGS = ['--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
-const PRE_PUSH_CORE_TARGET_GROUPS = [
-  {
-    label: 'Core changed tests (engine)',
-    reason: '核心源码改动，先跑 core/engine/shared/hooks/lib 增量测试',
-    targets: ['src/core', 'src/engine', 'src/shared', 'src/hooks', 'src/lib'],
-  },
-  {
-    label: 'Core changed tests (ui)',
-    reason: '核心源码改动，补跑 components/pages 增量测试',
-    targets: ['src/components', 'src/pages'],
-  },
-];
 const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -338,20 +326,6 @@ function collectGameIds(files, { sourceOnly = false } = {}) {
   return [...ids];
 }
 
-function buildVitestChangedArgs(baseRef, targets, options = {}) {
-  const { gameOnly = false } = options;
-  const stableArgs = gameOnly ? GAME_VITEST_ARGS : FAST_VITEST_ARGS;
-  const args = [...VITEST_SAFE_ENTRY, 'run', '--changed', baseRef, ...stableArgs];
-  if (targets.length > 0) {
-    args.push('--', ...targets);
-  }
-  return args;
-}
-
-function hasChangesForTargetGroup(files, targets) {
-  return hasAny(files, (file) => targets.some((target) => file.startsWith(`${target}/`) || file === target));
-}
-
 function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
   const lintFiles = files.filter(isLintTarget);
@@ -444,30 +418,25 @@ function collectCommands(files, baseRef, affectsTypecheck) {
 
   if (isPrePushMode) {
     if (coreSourceChanged) {
-      PRE_PUSH_CORE_TARGET_GROUPS
-        .filter((group) => hasChangesForTargetGroup(files, group.targets))
-        .forEach((group) => {
-          commands.push({
-            label: group.label,
-            reason: group.reason,
-            command: process.execPath,
-            args: buildVitestChangedArgs(baseRef, group.targets),
-          });
-        });
+      commands.push({
+        label: 'Core tests',
+        reason: '核心源码改动，pre-push 直接跑完整 core 测试集，避免 --changed 在长分支上失控',
+        command: 'npm',
+        args: ['run', 'test:core'],
+      });
 
-      const changedGameTargets = gameSourceIds.length > 0
-        ? gameSourceIds.map((gameId) => `src/games/${gameId}`)
-        : ['src/games'];
+      const targetGameIds = gameSourceIds.length > 0
+        ? gameSourceIds
+        : [...KNOWN_GAME_IDS];
 
-      changedGameTargets.forEach((target) => {
-        const gameId = target.split('/').at(-1);
+      targetGameIds.forEach((gameId) => {
         commands.push({
-          label: target === 'src/games' ? 'Games changed tests' : `${gameId} changed tests`,
-          reason: target === 'src/games'
-            ? '核心源码改动，同时跑所有游戏增量测试'
-            : `${gameId} 源码改动，单独跑该游戏增量测试`,
+          label: `${gameId} tests`,
+          reason: gameSourceIds.length > 0
+            ? `${gameId} 源码改动，单独跑该游戏完整测试集`
+            : '核心源码改动，需要逐游戏回归完整测试集',
           command: process.execPath,
-          args: buildVitestChangedArgs(baseRef, [target], { gameOnly: true }),
+          args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
         });
       });
     } else {
@@ -480,15 +449,13 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         });
       }
       if (gameSourceIds.length > 0) {
-        commands.push({
-          label: 'Changed game source tests',
-          reason: `${gameSourceIds.join(', ')} 源码改动，合并运行 changed 测试集`,
-          command: process.execPath,
-          args: buildVitestChangedArgs(
-            baseRef,
-            gameSourceIds.map((gameId) => `src/games/${gameId}`),
-            { gameOnly: true },
-          ),
+        gameSourceIds.forEach((gameId) => {
+          commands.push({
+            label: `${gameId} tests`,
+            reason: `${gameId} 源码改动，跑该游戏完整测试集`,
+            command: process.execPath,
+            args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+          });
         });
       } else if (gameTestFiles.length > 0) {
         commands.push({
