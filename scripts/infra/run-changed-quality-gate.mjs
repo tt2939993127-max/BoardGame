@@ -18,6 +18,18 @@ const CACHE_SCHEMA_VERSION = 2;
 const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const FAST_VITEST_ARGS = ['--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
+const PRE_PUSH_CORE_TARGET_GROUPS = [
+  {
+    label: 'Core tests (engine)',
+    reason: '核心源码改动，回归 core/engine/shared/hooks/lib 完整测试集',
+    targets: ['src/core', 'src/engine', 'src/shared', 'src/hooks', 'src/lib'],
+  },
+  {
+    label: 'Core tests (ui)',
+    reason: '核心源码改动，回归 components/pages 完整测试集',
+    targets: ['src/components', 'src/pages'],
+  },
+];
 const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
@@ -326,6 +338,10 @@ function collectGameIds(files, { sourceOnly = false } = {}) {
   return [...ids];
 }
 
+function hasChangesForTargetGroup(files, targets) {
+  return hasAny(files, (file) => targets.some((target) => file.startsWith(`${target}/`) || file === target));
+}
+
 function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
   const lintFiles = files.filter(isLintTarget);
@@ -418,12 +434,16 @@ function collectCommands(files, baseRef, affectsTypecheck) {
 
   if (isPrePushMode) {
     if (coreSourceChanged) {
-      commands.push({
-        label: 'Core tests',
-        reason: '核心源码改动，pre-push 直接跑完整 core 测试集，避免 --changed 在长分支上失控',
-        command: 'npm',
-        args: ['run', 'test:core'],
-      });
+      PRE_PUSH_CORE_TARGET_GROUPS
+        .filter((group) => hasChangesForTargetGroup(files, group.targets))
+        .forEach((group) => {
+          commands.push({
+            label: group.label,
+            reason: group.reason,
+            command: process.execPath,
+            args: [...VITEST_SAFE_ENTRY, 'run', ...group.targets, ...FAST_VITEST_ARGS],
+          });
+        });
 
       const targetGameIds = gameSourceIds.length > 0
         ? gameSourceIds
