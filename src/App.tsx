@@ -28,6 +28,7 @@ import AdminGuard from './components/auth/AdminGuard';
 import { MobileOrientationGuard } from './components/common/MobileOrientationGuard';
 import { installGlobalErrorContextCapture } from './lib/feedback/errorContext';
 import { isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
+import { AdminShellSkeleton } from './pages/admin/components/AdminSkeletons';
 
 import { Home } from './pages/Home';
 import { NotFound } from './pages/NotFound';
@@ -192,7 +193,7 @@ const AppContent = () => {
                     {/* Admin Routes */}
                     <Route path="/admin" element={
                       <AdminGuard allowedRoles={['admin', 'developer']}>
-                        <React.Suspense fallback={null}>
+                        <React.Suspense fallback={<AdminShellSkeleton />}>
                           <AdminLayout />
                         </React.Suspense>
                       </AdminGuard>

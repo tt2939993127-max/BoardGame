@@ -163,6 +163,7 @@ type NativeUpdateRequest = {
 };
 
 const DEFAULT_NATIVE_UPDATE_CHANNEL = 'stable';
+const DEFAULT_NATIVE_UPDATE_MANIFEST_BASE_URL = 'https://assets.easyboardgame.top/official/native-app-updates/android';
 const nativeUpdateRequestListeners = new Set<(request: NativeUpdateRequest) => void>();
 const nativePlugin = registerPlugin<NativeAppUpdatePlugin>('AppUpdate');
 let nativePluginLoader: NativeAppUpdatePlugin | null | undefined;
@@ -209,6 +210,16 @@ const parseBooleanEnv = (value: string | boolean | undefined) => {
 
 const isAbsoluteHttpUrl = (value: string) => /^https?:\/\//i.test(value);
 
+const resolveAndroidNativeUpdateChannel = (env: Partial<ImportMetaEnv>) => (
+    typeof env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL === 'string' && env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL.trim()
+        ? env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL.trim()
+        : DEFAULT_NATIVE_UPDATE_CHANNEL
+);
+
+const buildDefaultAndroidNativeUpdateManifestUrl = (channel: string) => (
+    `${DEFAULT_NATIVE_UPDATE_MANIFEST_BASE_URL}/${channel}/latest.json`
+);
+
 const getNativePlugin = (): NativeAppUpdatePlugin | null => {
     if (nativePluginLoader !== undefined) {
         return nativePluginLoader;
@@ -227,13 +238,12 @@ export const readAndroidNativeUpdateConfig = (env: Partial<ImportMetaEnv> = impo
     const manifestUrl = typeof env.VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL === 'string'
         ? env.VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL.trim()
         : '';
+    const channel = resolveAndroidNativeUpdateChannel(env);
 
     return {
         enabled: parseBooleanEnv(env.VITE_ANDROID_NATIVE_UPDATE_ENABLED) && isAbsoluteHttpUrl(manifestUrl),
         manifestUrl,
-        channel: typeof env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL === 'string' && env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL.trim()
-            ? env.VITE_ANDROID_NATIVE_UPDATE_CHANNEL.trim()
-            : DEFAULT_NATIVE_UPDATE_CHANNEL,
+        channel,
     };
 };
 
@@ -243,7 +253,7 @@ export const readAndroidWebAppDownloadConfig = (
     directDownloadUrl: typeof env.VITE_ANDROID_APP_DOWNLOAD_URL === 'string'
         ? env.VITE_ANDROID_APP_DOWNLOAD_URL.trim()
         : '',
-    manifestUrl: readAndroidNativeUpdateConfig(env).manifestUrl,
+    manifestUrl: readAndroidNativeUpdateConfig(env).manifestUrl || buildDefaultAndroidNativeUpdateManifestUrl(resolveAndroidNativeUpdateChannel(env)),
 });
 
 export const readAndroidAppInfo = async (): Promise<AndroidAppInfo | null> => {

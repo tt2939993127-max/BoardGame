@@ -273,6 +273,16 @@ html[data-keyboard-visible="true"] .modal-base-container {
     }
 }
 
+@keyframes skeleton-shimmer {
+    0% {
+        transform: translateX(-100%);
+    }
+
+    100% {
+        transform: translateX(100%);
+    }
+}
+
 /* 鍥剧墖鍗犱綅 shimmer锛堟按骞虫壂鍏夛紝鐢ㄤ簬 OptimizedImage / CardPreview锛?*/
 @keyframes img-shimmer {
     0% {
