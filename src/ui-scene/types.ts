@@ -7,6 +7,7 @@ export type UISceneAssetSourceMode = 'managed' | 'remote';
 export type UISceneAssetUploadMode = 'managed' | 'local-only' | 'remote-only';
 export type UIScenePreloadMode = 'critical' | 'warm';
 export type UISceneContentMode = 'contain' | 'cover' | 'fill';
+export type UISceneFlowAlign = 'auto' | 'start' | 'center' | 'end' | 'stretch';
 
 export interface UISceneRect {
     x: number;
@@ -20,6 +21,15 @@ export interface UISceneInsets {
     right: number;
     bottom: number;
     left: number;
+}
+
+export interface UISceneFlowLayoutSource {
+    width?: number;
+    height?: number;
+    grow?: number;
+    shrink?: number;
+    alignSelf?: UISceneFlowAlign;
+    justifySelf?: UISceneFlowAlign;
 }
 
 export interface UISceneBackgroundSource {
@@ -105,6 +115,7 @@ export interface UISceneNodeBaseSource {
     visibleIn?: UISceneVisibilityState[];
     zoneRef?: string;
     rect?: UISceneRect;
+    layout?: UISceneFlowLayoutSource;
     skin?: string;
     style?: string;
     children?: UISceneNodeSource[];
@@ -120,6 +131,8 @@ export interface UISceneStackNodeSource extends UISceneNodeBaseSource {
     gap?: number;
     align?: string;
     justify?: string;
+    padding?: UISceneInsets;
+    clipContent?: boolean;
 }
 
 export interface UISceneGridNodeSource extends UISceneNodeBaseSource {
@@ -127,6 +140,10 @@ export interface UISceneGridNodeSource extends UISceneNodeBaseSource {
     columns?: number;
     rows?: number;
     gap?: number;
+    align?: string;
+    justify?: string;
+    padding?: UISceneInsets;
+    clipContent?: boolean;
 }
 
 export interface UISceneTextNodeSource extends UISceneNodeBaseSource {
@@ -235,6 +252,7 @@ export interface UISceneCompiledNodeBase {
     visibleIn?: UISceneVisibilityState[];
     zoneRef?: string;
     rect?: UISceneRect;
+    layout?: UISceneFlowLayoutSource;
     skinId?: string;
     styleId?: string;
     children: UISceneCompiledNode[];
@@ -250,6 +268,8 @@ export interface UISceneCompiledStackNode extends UISceneCompiledNodeBase {
     gap: number;
     align?: string;
     justify?: string;
+    padding: UISceneInsets;
+    clipContent: boolean;
 }
 
 export interface UISceneCompiledGridNode extends UISceneCompiledNodeBase {
@@ -257,6 +277,10 @@ export interface UISceneCompiledGridNode extends UISceneCompiledNodeBase {
     columns?: number;
     rows?: number;
     gap: number;
+    align?: string;
+    justify?: string;
+    padding: UISceneInsets;
+    clipContent: boolean;
 }
 
 export interface UISceneCompiledTextNode extends UISceneCompiledNodeBase {

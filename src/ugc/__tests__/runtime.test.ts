@@ -166,5 +166,13 @@ describe('UGC Runtime', () => {
                 ]),
             ).toThrow('重复的 prefab 注册: image');
         });
+
+        it('应将首页详情与返回概览的翻页资源方向对调', () => {
+            const flipToDetail = HOME_V2_BOOK_SCENE.nodes.find((node) => node.id === 'home-v2-page-flip-to-detail');
+            const flipToOverview = HOME_V2_BOOK_SCENE.nodes.find((node) => node.id === 'home-v2-page-flip-to-overview');
+
+            expect(flipToDetail?.props?.sequence?.frames?.[0]).toContain('/page-flip-left/');
+            expect(flipToOverview?.props?.sequence?.frames?.[0]).toContain('/page-flip-right/');
+        });
     });
 });

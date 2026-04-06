@@ -4,6 +4,7 @@ import type {
     UISceneCompiledArtifact,
     UISceneCompiledGridNode,
     UISceneCompiledNode,
+    UISceneRect,
     UISceneCompiledSkin,
     UISceneCompiledStackNode,
     UISceneTextStyleSkinCompiled,
@@ -19,6 +20,7 @@ export interface CompiledSceneRendererProps {
     className?: string;
     slots?: Record<string, React.ReactNode>;
     actionHandlers?: Record<string, () => void>;
+    rectOverrides?: Record<string, UISceneRect>;
     children?: React.ReactNode;
 }
 
@@ -42,14 +44,64 @@ function isNodeVisible(node: UISceneCompiledNode, activeState?: string) {
     return node.visibleIn.includes(activeState);
 }
 
-function resolveRectStyle(scene: UISceneCompiledArtifact, node: UISceneCompiledNode, parentMode: LayoutMode): React.CSSProperties {
-    if (node.rect) {
+function resolveFlexAlign(value?: string): React.CSSProperties['alignItems'] {
+    if (value === 'start') {
+        return 'flex-start';
+    }
+    if (value === 'end') {
+        return 'flex-end';
+    }
+    if (value === 'center' || value === 'stretch' || value === 'space-between') {
+        return value as React.CSSProperties['alignItems'];
+    }
+    return undefined;
+}
+
+function resolveFlexJustify(value?: string): React.CSSProperties['justifyContent'] {
+    if (value === 'start') {
+        return 'flex-start';
+    }
+    if (value === 'end') {
+        return 'flex-end';
+    }
+    if (value === 'center' || value === 'stretch' || value === 'space-between') {
+        return value as React.CSSProperties['justifyContent'];
+    }
+    return undefined;
+}
+
+function resolveSelfAlign(value?: string): React.CSSProperties['alignSelf'] {
+    if (value === 'start') {
+        return 'start';
+    }
+    if (value === 'end') {
+        return 'end';
+    }
+    if (value === 'center' || value === 'stretch' || value === 'auto') {
+        return value as React.CSSProperties['alignSelf'];
+    }
+    return undefined;
+}
+
+function resolveNodeRect(node: UISceneCompiledNode, rectOverrides: Record<string, UISceneRect>): UISceneRect | undefined {
+    return rectOverrides[node.id] ?? node.rect;
+}
+
+function resolveRectStyle(
+    scene: UISceneCompiledArtifact,
+    node: UISceneCompiledNode,
+    parentMode: LayoutMode,
+    rectOverrides: Record<string, UISceneRect>,
+): React.CSSProperties {
+    const rect = resolveNodeRect(node, rectOverrides);
+
+    if (rect) {
         return {
             position: 'absolute',
-            left: toPercent(node.rect.x, scene.artboard.width),
-            top: toPercent(node.rect.y, scene.artboard.height),
-            width: toPercent(node.rect.width, scene.artboard.width),
-            height: toPercent(node.rect.height, scene.artboard.height),
+            left: toPercent(rect.x, scene.artboard.width),
+            top: toPercent(rect.y, scene.artboard.height),
+            width: toPercent(rect.width, scene.artboard.width),
+            height: toPercent(rect.height, scene.artboard.height),
         };
     }
 
@@ -58,6 +110,12 @@ function resolveRectStyle(scene: UISceneCompiledArtifact, node: UISceneCompiledN
             position: 'relative',
             minWidth: 0,
             minHeight: 0,
+            width: node.layout?.width,
+            height: node.layout?.height,
+            flexGrow: node.layout?.grow,
+            flexShrink: node.layout?.shrink,
+            alignSelf: resolveSelfAlign(node.layout?.alignSelf),
+            justifySelf: resolveSelfAlign(node.layout?.justifySelf),
         };
     }
 
@@ -99,13 +157,19 @@ function resolveContainerStyle(node: UISceneCompiledStackNode | UISceneCompiledG
             display: 'flex',
             flexDirection: node.direction === 'horizontal' ? 'row' : 'column',
             gap: node.gap,
-            alignItems: node.align as React.CSSProperties['alignItems'],
-            justifyContent: node.justify as React.CSSProperties['justifyContent'],
+            alignItems: resolveFlexAlign(node.align),
+            justifyContent: resolveFlexJustify(node.justify),
             position: 'relative',
             width: '100%',
             height: '100%',
             minWidth: 0,
             minHeight: 0,
+            paddingTop: node.padding.top,
+            paddingRight: node.padding.right,
+            paddingBottom: node.padding.bottom,
+            paddingLeft: node.padding.left,
+            overflow: node.clipContent ? 'hidden' : 'visible',
+            boxSizing: 'border-box',
         };
     }
 
@@ -119,6 +183,16 @@ function resolveContainerStyle(node: UISceneCompiledStackNode | UISceneCompiledG
         height: '100%',
         minWidth: 0,
         minHeight: 0,
+        alignItems: resolveSelfAlign(node.align),
+        justifyItems: resolveSelfAlign(node.justify),
+        alignContent: resolveSelfAlign(node.align),
+        justifyContent: resolveFlexJustify(node.justify),
+        paddingTop: node.padding.top,
+        paddingRight: node.padding.right,
+        paddingBottom: node.padding.bottom,
+        paddingLeft: node.padding.left,
+        overflow: node.clipContent ? 'hidden' : 'visible',
+        boxSizing: 'border-box',
     };
 }
 
@@ -129,6 +203,7 @@ function RenderNode({
     parentMode,
     slots,
     actionHandlers,
+    rectOverrides,
 }: {
     node: UISceneCompiledNode;
     scene: UISceneCompiledArtifact;
@@ -136,6 +211,7 @@ function RenderNode({
     parentMode: LayoutMode;
     slots: Record<string, React.ReactNode>;
     actionHandlers: Record<string, () => void>;
+    rectOverrides: Record<string, UISceneRect>;
 }) {
     const { t } = useTranslation(['lobby', 'common']);
 
@@ -145,7 +221,7 @@ function RenderNode({
 
     const skin = node.skinId ? scene.skins[node.skinId] : undefined;
     const styleSkin = node.styleId ? scene.skins[node.styleId] : undefined;
-    const shellStyle = resolveRectStyle(scene, node, parentMode);
+    const shellStyle = resolveRectStyle(scene, node, parentMode, rectOverrides);
     const textStyle = resolveTextStyle(styleSkin);
 
     switch (node.type) {
@@ -165,6 +241,7 @@ function RenderNode({
                                 parentMode="absolute"
                                 slots={slots}
                                 actionHandlers={actionHandlers}
+                                rectOverrides={rectOverrides}
                             />
                         ))}
                     </SkinSurface>
@@ -189,6 +266,7 @@ function RenderNode({
                                 parentMode={layoutMode}
                                 slots={slots}
                                 actionHandlers={actionHandlers}
+                                rectOverrides={rectOverrides}
                             />
                         ))}
                     </SkinSurface>
@@ -276,12 +354,14 @@ function NodeTree({
     activeState,
     slots,
     actionHandlers,
+    rectOverrides,
 }: {
     node: UISceneCompiledNode;
     scene: UISceneCompiledArtifact;
     activeState?: string;
     slots: Record<string, React.ReactNode>;
     actionHandlers: Record<string, () => void>;
+    rectOverrides: Record<string, UISceneRect>;
 }) {
     if (!isNodeVisible(node, activeState)) {
         return null;
@@ -295,6 +375,7 @@ function NodeTree({
             parentMode="absolute"
             slots={slots}
             actionHandlers={actionHandlers}
+            rectOverrides={rectOverrides}
         />
     );
 }
@@ -305,6 +386,7 @@ export function CompiledSceneRenderer({
     className,
     slots = {},
     actionHandlers = {},
+    rectOverrides = {},
     children,
 }: CompiledSceneRendererProps) {
     const backgroundUrl = resolveCompiledAssetUrl(scene.artboard.background);
@@ -328,6 +410,7 @@ export function CompiledSceneRenderer({
                 activeState={activeState}
                 slots={slots}
                 actionHandlers={actionHandlers}
+                rectOverrides={rectOverrides}
             />
             {children}
         </div>

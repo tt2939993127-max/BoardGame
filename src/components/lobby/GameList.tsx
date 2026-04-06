@@ -43,23 +43,25 @@ export const GameListCard = ({
                 onMouseEnter={() => onGameIntent?.(game.id)}
                 onFocus={() => onGameIntent?.(game.id)}
                 onPointerDown={() => onGameIntent?.(game.id)}
-                className={`group relative block w-full max-w-none aspect-square cursor-pointer no-underline ${className ?? ''}`}
+                className={`group relative flex w-full flex-col items-center justify-start cursor-pointer no-underline ${className ?? ''}`}
                 style={{
                     animation: 'game-card-fade-in 360ms ease-out both',
                     animationDelay: `${Math.min(index, 8) * 45}ms`,
                     ...style,
                 }}
             >
-                <div
-                    className="relative flex h-full w-full flex-col bg-center bg-no-repeat"
-                    style={{
-                        backgroundImage: `url(${HOME_V2_HOLDER_BG})`,
-                        backgroundSize: '100% 100%',
-                    }}
-                >
-                    <div className="flex h-full w-full flex-col px-[17%] pb-[17%] pt-[16%]">
-                        <div className="relative w-full shrink-0 overflow-hidden rounded-sm bg-slate-900 ring-1 ring-black/5" style={{ aspectRatio: '4 / 3' }}>
-                            <div className="h-full w-full transition-transform duration-500 group-hover:scale-[1.02]">
+                <div className="relative flex w-full justify-center">
+                    <div
+                        className="relative w-full bg-center bg-no-repeat transition-transform duration-200 group-hover:-translate-y-[1px]"
+                        style={{
+                            aspectRatio: '1 / 1',
+                            backgroundImage: `url(${HOME_V2_HOLDER_BG})`,
+                            backgroundSize: '100% 100%',
+                            backgroundPosition: 'center',
+                        }}
+                    >
+                        <div className="absolute inset-[11%] overflow-hidden rounded-[4px] bg-[#ead9ba]">
+                            <div className="h-full w-full transition-transform duration-300 group-hover:scale-[1.03]">
                                 {game.thumbnail ? (
                                     game.thumbnail
                                 ) : (
@@ -69,13 +71,11 @@ export const GameListCard = ({
                                 )}
                             </div>
                         </div>
-                        <div className="flex min-h-0 flex-1 items-center justify-center px-[7%] pb-[2%] pt-[10%]">
-                            <h3 className="line-clamp-2 text-center text-[clamp(10px,0.92vw,13px)] font-serif font-bold leading-[1.12] text-[#4a2f1d]">
-                                {title}
-                            </h3>
-                        </div>
                     </div>
                 </div>
+                <h3 className="mt-[6%] line-clamp-3 max-w-[122%] text-center text-[clamp(10px,0.92vw,14px)] font-medium leading-[1.08] text-[#f7e6bc] [text-shadow:0_1px_2px_rgba(66,38,19,0.45)]">
+                    {title}
+                </h3>
             </a>
         );
     }

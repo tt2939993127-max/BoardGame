@@ -5,22 +5,40 @@
     "height": 720,
     "zones": {
       "left_page": {
-        "x": 94,
-        "y": 98,
+        "x": 149,
+        "y": 202,
         "width": 280,
-        "height": 498
+        "height": 355
       },
       "right_page": {
-        "x": 520,
-        "y": 98,
+        "x": 468,
+        "y": 202,
         "width": 280,
-        "height": 498
+        "height": 355
       },
-      "left_page_overview": {
-        "x": 78,
-        "y": 74,
-        "width": 316,
-        "height": 548
+      "overview_left_page": {
+        "x": 158,
+        "y": 216,
+        "width": 248,
+        "height": 312
+      },
+      "overview_right_page": {
+        "x": 487,
+        "y": 216,
+        "width": 248,
+        "height": 312
+      },
+      "detail_left_inner": {
+        "x": 160,
+        "y": 218,
+        "width": 244,
+        "height": 318
+      },
+      "detail_right_inner": {
+        "x": 489,
+        "y": 218,
+        "width": 244,
+        "height": 318
       },
       "tab_lobby": {
         "x": 806.4,
@@ -73,14 +91,31 @@
         "visibleIn": [
           "overview"
         ],
-        "zoneRef": "left_page_overview",
+        "zoneRef": "overview_left_page",
         "rect": {
-          "x": 78,
-          "y": 74,
-          "width": 316,
-          "height": 548
+          "x": 158,
+          "y": 216,
+          "width": 248,
+          "height": 312
         },
         "slotId": "overview_left_page",
+        "children": []
+      },
+      {
+        "id": "overview_right_page",
+        "type": "slot",
+        "visible": true,
+        "visibleIn": [
+          "overview"
+        ],
+        "zoneRef": "overview_right_page",
+        "rect": {
+          "x": 487,
+          "y": 216,
+          "width": 248,
+          "height": 312
+        },
+        "slotId": "overview_right_page",
         "children": []
       },
       {
@@ -90,12 +125,12 @@
         "visibleIn": [
           "detail"
         ],
-        "zoneRef": "left_page",
+        "zoneRef": "detail_left_inner",
         "rect": {
-          "x": 94,
-          "y": 98,
-          "width": 280,
-          "height": 498
+          "x": 160,
+          "y": 218,
+          "width": 244,
+          "height": 318
         },
         "slotId": "detail_left_page",
         "children": []
@@ -107,12 +142,12 @@
         "visibleIn": [
           "detail"
         ],
-        "zoneRef": "right_page",
+        "zoneRef": "detail_right_inner",
         "rect": {
-          "x": 520,
-          "y": 98,
-          "width": 280,
-          "height": 498
+          "x": 489,
+          "y": 218,
+          "width": 244,
+          "height": 318
         },
         "slotId": "detail_right_page",
         "children": []

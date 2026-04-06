@@ -1,30 +1,42 @@
-# Change: YAML 低代码 UI Scene Authoring
+# Change: 引擎式页面内 UI 场景编辑重构
 
 ## Why
-当前首页 V2 已经证明，单靠页面内硬编码 JSX、散落的绝对定位和局部样式微调，无法稳定支撑“AI 先搭稿、人工微调、AI 再持续改”的图片化 UI 工作流。
+当前首页 V2 已经做出了第一版 YAML 场景原型，但这版原型本质上仍是“页面上拖一下，立刻回写 YAML 文本，再整页重新编译”的轻量补丁。它能证明方向对，但做不成真正像游戏引擎或成熟低代码平台那样的编辑体验，核心问题有三类：
 
-现有 `add-ui-scene-authoring-foundation` 提案方向是对的，但 scope 过大，混入了 Builder 模式扩展、UGC 方向抽象和更重的 prefab/editor 规划。对首页 V2 当前阶段来说，更需要一套更小、更稳、更适合 AI 共编的作者协议：以 YAML 作为作者格式，以类型化运行时制品作为消费格式，并把图片皮肤（尤其九宫格）纳入正式 UI 皮肤能力。
+- 拖拽链路不对，交互热路径直接绑在 YAML 文本同步与重新编译上，无法保证真正跟手。
+- 场景结构不对，当前更像“区域矩形编辑”，没有正式的容器树、重排、插入、重挂载语义。
+- 作者 UI 不对，当前只有技术原型面板，还不是可长期使用的中文辅助 UI。
+
+用户当前要的不是“继续补一个 YAML 原型”，而是把这套能力重构成真正可实施的“引擎式页面内 UI 编辑模式”：
+
+- 直接打开真实页面编辑
+- 拖拽、缩放、吸附、重排要跟手
+- 必须支持容器与层级树
+- YAML 仍然是长期真源，但不能卡在交互热路径上
+- 辅助 UI 必须直接用中文
+- 资源必须统一支持本地、R2、上传后继续引用
 
 ## What Changes
-- 新增 `ui-scene-authoring` 能力，定义 YAML-first 的 UI 场景作者协议。
-- 定义 `artboard + skin + node tree` 三层模型，收缩旧提案中的更重 Builder / prefab 方向。
-- 明确 `.ui.yaml` / `.skin.yaml` 作为作者格式，运行时只消费编译后的类型化制品。
-- 将图片皮肤纳入正式协议，支持九宫格（nine-slice）、背景图、图标和文本样式 token。
-- 明确 AI 协作边界：AI 默认编辑 YAML/schema 或 patch，不直接把 React 页面源码当作长期真源。
-- 明确作者主入口是直接打开目标页面进入编辑态，在真实页面上调整布局并同步 YAML，而不是维护一套独立编辑器壳。
-- 将首页 V2 作为首个 adopter，但保持该能力对未来其他图片化 UI 场景可复用。
-- 本 change 显式取代 `add-ui-scene-authoring-foundation`，后者不再继续推进。
+- 将现有 `add-yaml-ui-scene-authoring` 重写为“引擎式页面内 UI 场景编辑”方案，不再以轻量 YAML patch 原型作为最终架构。
+- 引入“运行时场景文档 + 编辑会话态 + 持久化 YAML”的三层模型，明确热路径与持久化链路分离。
+- 将场景正式建模为可编辑的场景树，支持容器节点、层级树、节点插入、节点重挂载和布局容器。
+- 将拖拽/缩放/吸附改为编辑会话态中的高频交互，要求指针捕获、坐标转换、逐帧渲染和提交式持久化，保证跟手。
+- 将作者辅助 UI 正式纳入范围，要求层级树、属性面板、资源面板、工具条、YAML 面板全部使用中文。
+- 将资源管理正式纳入作者模式，支持本地素材、已上传 R2 素材和上传后继续复用同一 `assetRef`。
+- 保留“真实页面内编辑、正式态与编辑态复用同一渲染器”的原则，不走独立编辑器壳。
+- 将首页 V2 作为首个 adopter，但现有 `src/ui-scene/**` 只视为可迁移原型，后续按新架构重构。
 
 ## Impact
 - Affected specs:
   - `ui-scene-authoring`
 - Affected code:
-  - `src/ugc/runtime/ui-scene/**`
-  - `src/components/home-v2/**`
+  - `src/ui-scene/**`
   - `src/pages/HomeV2Draft.tsx`
-  - `src/core/AssetLoader.ts`
-  - 后续新增的 YAML loader、validator、scene compiler、skin registry、nine-slice renderer
-- Affected assets:
-  - `public/assets/common/**`
-  - `public/assets/i18n/**`
-  - 后续首页 V2 与其他图片化 UI 所需的皮肤素材目录
+  - `src/ui-scenes/home-v2/**`
+  - `apps/api/src/modules/layout/**`
+  - 后续新增的 authoring session、scene graph、container layout、asset browser、upload flow 模块
+- Affected UX:
+  - `?author=1` 作者模式
+  - 层级树 / 属性 / 资源 / YAML / 保存 等辅助 UI
+- Migration note:
+  - 当前已落地的 YAML 编译与页面内编辑原型不视为最终方案，后续实现需按本 proposal 进行结构性重构，而不是继续在现有热路径上堆功能。

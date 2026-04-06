@@ -22,6 +22,17 @@ export const uiSceneInsetsSchema = z.object({
     left: z.number().finite(),
 });
 
+const uiSceneFlowAlignSchema = z.enum(['auto', 'start', 'center', 'end', 'stretch']);
+
+export const uiSceneFlowLayoutSchema = z.object({
+    width: z.number().positive().optional(),
+    height: z.number().positive().optional(),
+    grow: z.number().finite().optional(),
+    shrink: z.number().finite().optional(),
+    alignSelf: uiSceneFlowAlignSchema.optional(),
+    justifySelf: uiSceneFlowAlignSchema.optional(),
+});
+
 export const uiSceneAssetEntrySchema = z.object({
     type: z.literal('image'),
     path: safeRelativeAssetPath.optional(),
@@ -95,6 +106,7 @@ const nodeBaseSchema = z.object({
     visibleIn: z.array(nonEmptyString).optional(),
     zoneRef: nonEmptyString.optional(),
     rect: uiSceneRectSchema.optional(),
+    layout: uiSceneFlowLayoutSchema.optional(),
     skin: nonEmptyString.optional(),
     style: nonEmptyString.optional(),
 });
@@ -132,6 +144,8 @@ const nodeSchema: z.ZodType<NodeOutput, z.ZodTypeDef, NodeInput> = z.lazy(() => 
         gap: z.number().finite().optional(),
         align: nonEmptyString.optional(),
         justify: nonEmptyString.optional(),
+        padding: uiSceneInsetsSchema.optional(),
+        clipContent: z.boolean().optional(),
         children: z.array(nodeSchema).optional(),
     }),
     nodeBaseSchema.extend({
@@ -139,6 +153,10 @@ const nodeSchema: z.ZodType<NodeOutput, z.ZodTypeDef, NodeInput> = z.lazy(() => 
         columns: z.number().int().positive().optional(),
         rows: z.number().int().positive().optional(),
         gap: z.number().finite().optional(),
+        align: nonEmptyString.optional(),
+        justify: nonEmptyString.optional(),
+        padding: uiSceneInsetsSchema.optional(),
+        clipContent: z.boolean().optional(),
         children: z.array(nodeSchema).optional(),
     }),
     nodeBaseSchema.extend({

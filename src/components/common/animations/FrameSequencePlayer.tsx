@@ -42,6 +42,7 @@ export const FrameSequencePlayer = ({
     ...imgProps
 }: FrameSequencePlayerProps) => {
     const prefersReducedMotion = usePrefersReducedMotion();
+    const onCompleteRef = React.useRef(onComplete);
     const resolvedFrames = React.useMemo(
         () => sequence.frames.map((frame) => getOptimizedImageUrls(frame).webp),
         [sequence.frames],
@@ -49,8 +50,12 @@ export const FrameSequencePlayer = ({
     const frameCount = resolvedFrames.length;
     const lastFrameIndex = Math.max(frameCount - 1, 0);
     const reducedMotionFrameIndex = sequence.reducedMotionBehavior === 'first-frame' ? 0 : lastFrameIndex;
-    const [frameIndex, setFrameIndex] = React.useState(reducedMotionFrameIndex);
+    const [frameIndex, setFrameIndex] = React.useState(() => (prefersReducedMotion ? reducedMotionFrameIndex : 0));
     const completedPlaybackKeyRef = React.useRef<string | number | undefined>(undefined);
+
+    React.useEffect(() => {
+        onCompleteRef.current = onComplete;
+    }, [onComplete]);
 
     React.useEffect(() => {
         resolvedFrames.forEach((frame) => {
@@ -71,7 +76,7 @@ export const FrameSequencePlayer = ({
             setFrameIndex(reducedMotionFrameIndex);
             if (completedPlaybackKeyRef.current !== playbackKey) {
                 completedPlaybackKeyRef.current = playbackKey;
-                onComplete?.();
+                onCompleteRef.current?.();
             }
             return;
         }
@@ -104,7 +109,7 @@ export const FrameSequencePlayer = ({
                 done = true;
                 if (completedPlaybackKeyRef.current !== playbackKey) {
                     completedPlaybackKeyRef.current = playbackKey;
-                    onComplete?.();
+                    onCompleteRef.current?.();
                 }
                 return;
             }
@@ -122,7 +127,6 @@ export const FrameSequencePlayer = ({
     }, [
         frameCount,
         lastFrameIndex,
-        onComplete,
         playbackKey,
         playing,
         prefersReducedMotion,

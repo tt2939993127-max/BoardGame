@@ -10,25 +10,65 @@ import compiledHomeV2Scene from '../ui-scenes/home-v2/home-v2.compiled.json';
 import assetRegistryYamlRaw from '../ui-scenes/home-v2/asset-registry.yaml?raw';
 import homeV2SceneYamlRaw from '../ui-scenes/home-v2/home-v2.ui.yaml?raw';
 import homeV2SkinYamlRaw from '../ui-scenes/home-v2/home-v2.skin.yaml?raw';
+import homeV2AuthoringMetaYamlRaw from '../ui-scenes/home-v2/home-v2.authoring.yaml?raw';
 import {
+    AssetLibraryPanel,
+    ComponentLibraryPanel,
     CompiledSceneRenderer,
+    createNodeTemplate,
+    EditorHeaderBar,
+    findNodeById,
+    getAuthoringNodeName,
+    HierarchyPanel,
     InspectorPanel,
     InPageAuthoringOverlay,
+    isContainerNode,
+    isFlowContainerNode,
+    moveSceneNode,
+    parseAuthoringMetaYaml,
     UISceneCompileError,
+    appendChildNode,
     createAuthoringDocument,
     saveUiSceneAuthoring,
+    serializeAssetRegistryYaml,
     serializeSceneYaml,
-    updateSceneZoneRect,
+    serializeSkinYaml,
+    updateNineSliceSkin,
+    updateSceneImageAssetRef,
+    updateSceneGridProps,
+    updateSceneNodeLayout,
+    updateSceneNodeRect,
+    updateSceneStackProps,
     YamlSyncPanel,
     type UISceneAuthoringDocument,
     type UISceneCompiledArtifact,
     type UISceneRect,
+    type YamlSyncDocumentId,
+    type UISceneInsets,
+    type UISceneFlowAlign,
+    type UISceneNodeMovePosition,
 } from '../ui-scene';
 
 const HOME_V2_BOOK_DESK = getOptimizedImageUrls('/assets/common/images/home-v2/book-desk/1.png').webp;
 const HOME_V2_COMPILED_SCENE = compiledHomeV2Scene as UISceneCompiledArtifact;
 const HOME_V2_SCENE_ID = 'home-v2';
 type HomeV2TabId = 'lobby' | 'rooms' | 'leaderboard' | 'changelog' | 'about';
+const HOME_V2_OVERVIEW_LEFT_PAGE_CAPACITY = 9;
+const LEFT_DRAWER_MIN_WIDTH = 300;
+const LEFT_DRAWER_MAX_WIDTH = 520;
+const RIGHT_DRAWER_MIN_WIDTH = 320;
+const RIGHT_DRAWER_MAX_WIDTH = 560;
+const SOURCE_DRAWER_MIN_HEIGHT = 260;
+const SOURCE_DRAWER_MAX_HEIGHT = 560;
+
+type DrawerResizeTarget = 'left' | 'right' | 'bottom';
+
+type DrawerResizeSession = {
+    target: DrawerResizeTarget;
+    startClientX: number;
+    startClientY: number;
+    startSize: number;
+};
 
 function HomeV2TabPlaceholder({ title, description }: { title: string; description: string }) {
     return (
@@ -60,7 +100,7 @@ function formatAuthoringError(error: unknown): string {
     return 'YAML 编译失败';
 }
 
-function clampZoneRect(scene: UISceneCompiledArtifact, rect: UISceneRect): UISceneRect {
+function clampNodeRect(scene: UISceneCompiledArtifact, rect: UISceneRect): UISceneRect {
     const width = Math.max(24, rect.width);
     const height = Math.max(24, rect.height);
     const x = Math.min(Math.max(0, rect.x), scene.artboard.width - width);
@@ -72,6 +112,24 @@ function clampZoneRect(scene: UISceneCompiledArtifact, rect: UISceneRect): UISce
         width: Math.min(width, scene.artboard.width - x),
         height: Math.min(height, scene.artboard.height - y),
     };
+}
+
+function clampValue(value: number, min: number, max: number) {
+    return Math.min(max, Math.max(min, value));
+}
+
+function normalizeSelection(nodeIds: string[], primaryNodeId?: string | null) {
+    const uniqueIds = Array.from(new Set(nodeIds.filter(Boolean)));
+    if (!uniqueIds.length) {
+        return [];
+    }
+    if (!primaryNodeId || !uniqueIds.includes(primaryNodeId)) {
+        return uniqueIds;
+    }
+    return [
+        primaryNodeId,
+        ...uniqueIds.filter((nodeId) => nodeId !== primaryNodeId),
+    ];
 }
 
 export const HomeV2Draft = () => {
@@ -87,21 +145,84 @@ export const HomeV2Draft = () => {
     const isAuthorMode = wantsAuthorMode && isAuthorAllowed;
     const [compiledContentScene, setCompiledContentScene] = React.useState<UISceneCompiledArtifact>(HOME_V2_COMPILED_SCENE);
     const [authoringDocument, setAuthoringDocument] = React.useState<UISceneAuthoringDocument | null>(null);
+    const [assetRegistryYamlDraft, setAssetRegistryYamlDraft] = React.useState(assetRegistryYamlRaw);
+    const [skinYamlDraft, setSkinYamlDraft] = React.useState(homeV2SkinYamlRaw);
     const [sceneYamlDraft, setSceneYamlDraft] = React.useState(homeV2SceneYamlRaw);
     const [authoringError, setAuthoringError] = React.useState<string | null>(null);
-    const [selectedZoneId, setSelectedZoneId] = React.useState<string | null>('left_page_overview');
+    const [selectedNodeIds, setSelectedNodeIds] = React.useState<string[]>(['overview_left_page']);
     const [overlayVisible, setOverlayVisible] = React.useState(true);
-    const [yamlPanelOpen, setYamlPanelOpen] = React.useState(wantsAuthorMode);
-    const [inspectorOpen, setInspectorOpen] = React.useState(wantsAuthorMode);
+    const [leftDrawerOpen, setLeftDrawerOpen] = React.useState(false);
+    const [inspectorOpen, setInspectorOpen] = React.useState(false);
+    const [sourcePanelOpen, setSourcePanelOpen] = React.useState(false);
+    const [activeSourceDocument, setActiveSourceDocument] = React.useState<YamlSyncDocumentId>('scene');
     const [isSaving, setIsSaving] = React.useState(false);
     const [saveMessage, setSaveMessage] = React.useState<string | null>(null);
+    const [leftTab, setLeftTab] = React.useState<'图层' | '组件' | '资源'>('图层');
+    const [previewRects, setPreviewRects] = React.useState<Record<string, UISceneRect>>({});
+    const [leftDrawerWidth, setLeftDrawerWidth] = React.useState(320);
+    const [inspectorWidth, setInspectorWidth] = React.useState(360);
+    const [sourcePanelHeight, setSourcePanelHeight] = React.useState(320);
+    const drawerResizeSessionRef = React.useRef<DrawerResizeSession | null>(null);
+    const homeVisibilityReplayArmedRef = React.useRef(typeof document !== 'undefined' ? document.hidden : false);
 
-    const featuredGames = React.useMemo(
-        () => getAllGames().filter((game) => game.enabled && game.type === 'game').slice(0, 4),
+    const selectedNodeId = selectedNodeIds[0] ?? null;
+
+    const overviewGames = React.useMemo(
+        () => getAllGames().filter((game) => game.enabled && game.type === 'game'),
         [],
     );
+    const authoringMeta = React.useMemo(() => parseAuthoringMetaYaml(homeV2AuthoringMetaYamlRaw), []);
     const selectedGame = selectedGameId ? getGameById(selectedGameId) ?? null : null;
     const isPageFlipping = sceneState === 'flippingToDetail' || sceneState === 'flippingToOverview';
+    const selectedSourceNode = React.useMemo(
+        () => (authoringDocument && selectedNodeId ? findNodeById(authoringDocument.sceneDocument.scene.root, selectedNodeId) : null),
+        [authoringDocument, selectedNodeId],
+    );
+    const selectedParentId = React.useMemo(() => {
+        if (!authoringDocument) {
+            return 'root';
+        }
+        if (selectedSourceNode && isContainerNode(selectedSourceNode)) {
+            return selectedSourceNode.id;
+        }
+        return authoringDocument.sceneDocument.scene.root.id;
+    }, [authoringDocument, selectedSourceNode]);
+    const selectedParentLabel = React.useMemo(
+        () => getAuthoringNodeName(authoringMeta, selectedParentId),
+        [authoringMeta, selectedParentId],
+    );
+    const toggleLeftDrawer = React.useCallback((tab: '图层' | '组件' | '资源') => {
+        if (leftDrawerOpen && leftTab === tab) {
+            setLeftDrawerOpen(false);
+            return;
+        }
+        setLeftTab(tab);
+        setLeftDrawerOpen(true);
+    }, [leftDrawerOpen, leftTab]);
+    const handleSelectNode = React.useCallback((nodeId: string, options?: { additive?: boolean; toggle?: boolean }) => {
+        setSelectedNodeIds((current) => {
+            if (options?.additive) {
+                const exists = current.includes(nodeId);
+                if (options.toggle && exists) {
+                    return current.filter((id) => id !== nodeId);
+                }
+                return normalizeSelection([...current, nodeId], nodeId);
+            }
+            return [nodeId];
+        });
+        setInspectorOpen(true);
+    }, []);
+    const handleSelectNodes = React.useCallback((nodeIds: string[], options?: { additive?: boolean; primaryNodeId?: string | null }) => {
+        setSelectedNodeIds((current) => {
+            if (options?.additive) {
+                return normalizeSelection([...current, ...nodeIds], options.primaryNodeId ?? current[0] ?? nodeIds[0] ?? null);
+            }
+            return normalizeSelection(nodeIds, options?.primaryNodeId ?? nodeIds[0] ?? null);
+        });
+        if (nodeIds.length > 0 || options?.additive) {
+            setInspectorOpen(true);
+        }
+    }, []);
 
     const handleGameOpen = React.useCallback((gameId: string) => {
         if (sceneState !== 'overview' || isPageFlipping) {
@@ -142,24 +263,35 @@ export const HomeV2Draft = () => {
         }
     }, [sceneState]);
 
-    const buildAuthoringDocument = React.useCallback((sceneYaml: string) => createAuthoringDocument({
+    const buildAuthoringDocument = React.useCallback((drafts: {
+        assetRegistryYaml: string;
+        skinYaml: string;
+        sceneYaml: string;
+    }) => createAuthoringDocument({
         sceneId: HOME_V2_SCENE_ID,
         assetRegistryFile: 'src/ui-scenes/home-v2/asset-registry.yaml',
-        assetRegistryYaml: assetRegistryYamlRaw,
+        assetRegistryYaml: drafts.assetRegistryYaml,
         skinFile: 'src/ui-scenes/home-v2/home-v2.skin.yaml',
-        skinYaml: homeV2SkinYamlRaw,
+        skinYaml: drafts.skinYaml,
         sceneFile: 'src/ui-scenes/home-v2/home-v2.ui.yaml',
-        sceneYaml,
+        sceneYaml: drafts.sceneYaml,
     }), []);
 
-    const applySceneYamlDraft = React.useCallback((nextSceneYaml: string) => {
-        setSceneYamlDraft(nextSceneYaml);
+    const applyAuthoringDrafts = React.useCallback((drafts: {
+        assetRegistryYaml: string;
+        skinYaml: string;
+        sceneYaml: string;
+    }) => {
+        setAssetRegistryYamlDraft(drafts.assetRegistryYaml);
+        setSkinYamlDraft(drafts.skinYaml);
+        setSceneYamlDraft(drafts.sceneYaml);
         setSaveMessage(null);
         try {
-            const nextDocument = buildAuthoringDocument(nextSceneYaml);
+            const nextDocument = buildAuthoringDocument(drafts);
             setAuthoringDocument(nextDocument);
             setCompiledContentScene(nextDocument.compiled);
             setAuthoringError(null);
+            setPreviewRects({});
         } catch (error) {
             setAuthoringError(formatAuthoringError(error));
         }
@@ -173,17 +305,443 @@ export const HomeV2Draft = () => {
             return;
         }
 
-        applySceneYamlDraft(homeV2SceneYamlRaw);
-    }, [applySceneYamlDraft, isAuthorMode]);
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlRaw,
+            skinYaml: homeV2SkinYamlRaw,
+            sceneYaml: homeV2SceneYamlRaw,
+        });
+    }, [applyAuthoringDrafts, isAuthorMode]);
 
-    const handleZoneChange = React.useCallback((zoneId: string, rect: UISceneRect) => {
+    React.useEffect(() => {
+        if (!isAuthorMode || !authoringDocument) {
+            return;
+        }
+
+        setSelectedNodeIds((current) => current.filter((nodeId) => Boolean(findNodeById(authoringDocument.sceneDocument.scene.root, nodeId))));
+    }, [authoringDocument, isAuthorMode]);
+
+    React.useEffect(() => {
+        const handleResizeMove = (clientX: number, clientY: number) => {
+            const session = drawerResizeSessionRef.current;
+            if (!session) {
+                return;
+            }
+
+            if (session.target === 'left') {
+                setLeftDrawerWidth(clampValue(
+                    session.startSize + (clientX - session.startClientX),
+                    LEFT_DRAWER_MIN_WIDTH,
+                    LEFT_DRAWER_MAX_WIDTH,
+                ));
+                return;
+            }
+
+            if (session.target === 'right') {
+                setInspectorWidth(clampValue(
+                    session.startSize + (session.startClientX - clientX),
+                    RIGHT_DRAWER_MIN_WIDTH,
+                    RIGHT_DRAWER_MAX_WIDTH,
+                ));
+                return;
+            }
+
+            setSourcePanelHeight(clampValue(
+                session.startSize + (session.startClientY - clientY),
+                SOURCE_DRAWER_MIN_HEIGHT,
+                SOURCE_DRAWER_MAX_HEIGHT,
+            ));
+        };
+
+        const handlePointerMove = (event: PointerEvent) => {
+            handleResizeMove(event.clientX, event.clientY);
+        };
+
+        const handleMouseMove = (event: MouseEvent) => {
+            handleResizeMove(event.clientX, event.clientY);
+        };
+
+        const handlePointerUp = () => {
+            drawerResizeSessionRef.current = null;
+        };
+
+        const handleMouseUp = () => {
+            drawerResizeSessionRef.current = null;
+        };
+
+        window.addEventListener('pointermove', handlePointerMove);
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('mousemove', handleMouseMove);
+        window.addEventListener('mouseup', handleMouseUp);
+        return () => {
+            window.removeEventListener('pointermove', handlePointerMove);
+            window.removeEventListener('pointerup', handlePointerUp);
+            window.removeEventListener('mousemove', handleMouseMove);
+            window.removeEventListener('mouseup', handleMouseUp);
+        };
+    }, []);
+
+    React.useEffect(() => {
+        if (typeof document === 'undefined') {
+            return;
+        }
+
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                homeVisibilityReplayArmedRef.current = true;
+                return;
+            }
+
+            if (!homeVisibilityReplayArmedRef.current) {
+                return;
+            }
+
+            homeVisibilityReplayArmedRef.current = false;
+            pendingGameIdRef.current = null;
+            setSelectedGameId(null);
+            setSceneState('open');
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
+    const handleNodeRectChange = React.useCallback((nodeId: string, rect: UISceneRect) => {
         if (!authoringDocument) {
             return;
         }
 
-        const nextSceneDocument = updateSceneZoneRect(authoringDocument.sceneDocument, zoneId, () => clampZoneRect(compiledContentScene, rect));
-        applySceneYamlDraft(serializeSceneYaml(nextSceneDocument));
-    }, [applySceneYamlDraft, authoringDocument, compiledContentScene]);
+        const nextSceneDocument = updateSceneNodeRect(
+            authoringDocument.sceneDocument,
+            compiledContentScene,
+            nodeId,
+            () => clampNodeRect(compiledContentScene, rect),
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, compiledContentScene, skinYamlDraft]);
+
+    const handlePreviewRectsChange = React.useCallback((nextPreviewRects: Record<string, UISceneRect>) => {
+        setPreviewRects(nextPreviewRects);
+    }, []);
+
+    const handleNodeRectsCommit = React.useCallback((rects: Record<string, UISceneRect>) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        let nextSceneDocument = authoringDocument.sceneDocument;
+        Object.entries(rects).forEach(([nodeId, rect]) => {
+            nextSceneDocument = updateSceneNodeRect(
+                nextSceneDocument,
+                compiledContentScene,
+                nodeId,
+                () => clampNodeRect(compiledContentScene, rect),
+            );
+        });
+
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, compiledContentScene, skinYamlDraft]);
+
+    const handleNodeLayoutChange = React.useCallback((nodeId: string, layout: {
+        width?: number;
+        height?: number;
+        grow?: number;
+        shrink?: number;
+        alignSelf?: UISceneFlowAlign;
+        justifySelf?: UISceneFlowAlign;
+    }) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneNodeLayout(authoringDocument.sceneDocument, nodeId, () => ({
+            width: layout.width,
+            height: layout.height,
+            grow: layout.grow,
+            shrink: layout.shrink,
+            alignSelf: layout.alignSelf,
+            justifySelf: layout.justifySelf,
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleStackDirectionChange = React.useCallback((nodeId: string, direction: 'absolute' | 'horizontal' | 'vertical') => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneStackProps(authoringDocument.sceneDocument, nodeId, (node) => ({
+            ...node,
+            direction,
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleStackGapChange = React.useCallback((nodeId: string, gap: number) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneStackProps(authoringDocument.sceneDocument, nodeId, (node) => ({
+            ...node,
+            gap,
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleGridGapChange = React.useCallback((nodeId: string, gap: number) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({
+            ...node,
+            gap,
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleGridColumnsChange = React.useCallback((nodeId: string, columns: number) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({
+            ...node,
+            columns: Math.max(1, Math.round(columns)),
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleGridRowsChange = React.useCallback((nodeId: string, rows: number) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({
+            ...node,
+            rows: rows <= 0 ? undefined : Math.max(1, Math.round(rows)),
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleContainerAlignChange = React.useCallback((nodeId: string, align?: string) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneStackProps(
+            updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({ ...node, align })),
+            nodeId,
+            (node) => ({ ...node, align }),
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleContainerJustifyChange = React.useCallback((nodeId: string, justify?: string) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneStackProps(
+            updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({ ...node, justify })),
+            nodeId,
+            (node) => ({ ...node, justify }),
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleContainerPaddingChange = React.useCallback((nodeId: string, padding: UISceneInsets) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneStackProps(
+            updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({ ...node, padding })),
+            nodeId,
+            (node) => ({ ...node, padding }),
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleContainerClipChange = React.useCallback((nodeId: string, clipContent: boolean) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneStackProps(
+            updateSceneGridProps(authoringDocument.sceneDocument, nodeId, (node) => ({ ...node, clipContent })),
+            nodeId,
+            (node) => ({ ...node, clipContent }),
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, skinYamlDraft]);
+
+    const handleNineSliceSliceChange = React.useCallback((nodeId: string, slice: UISceneInsets) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const node = selectedNodeId === nodeId ? selectedSourceNode : findNodeById(authoringDocument.sceneDocument.scene.root, nodeId);
+        if (!node?.skin) {
+            return;
+        }
+
+        const nextSkinCollection = updateNineSliceSkin(authoringDocument.skinCollection, node.skin, (skin) => ({
+            ...skin,
+            slice,
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: serializeSkinYaml(nextSkinCollection),
+            sceneYaml: sceneYamlDraft,
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, sceneYamlDraft, selectedNodeId, selectedSourceNode]);
+
+    const handleNineSliceContentPaddingChange = React.useCallback((nodeId: string, padding: UISceneInsets) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const node = selectedNodeId === nodeId ? selectedSourceNode : findNodeById(authoringDocument.sceneDocument.scene.root, nodeId);
+        if (!node?.skin) {
+            return;
+        }
+
+        const nextSkinCollection = updateNineSliceSkin(authoringDocument.skinCollection, node.skin, (skin) => ({
+            ...skin,
+            contentPadding: padding,
+        }));
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: serializeSkinYaml(nextSkinCollection),
+            sceneYaml: sceneYamlDraft,
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, sceneYamlDraft, selectedNodeId, selectedSourceNode]);
+
+    const handleInsertTemplate = React.useCallback((kind: 'panel' | 'stack-vertical' | 'stack-horizontal' | 'grid' | 'text' | 'button' | 'image') => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const parentNode = findNodeById(authoringDocument.sceneDocument.scene.root, selectedParentId);
+        const templateNode = createNodeTemplate(kind, {
+            flowChild: Boolean(parentNode && isFlowContainerNode(parentNode)),
+        });
+        const nextSceneDocument = appendChildNode(
+            authoringDocument.sceneDocument,
+            selectedParentId,
+            templateNode,
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+        setSelectedNodeIds([templateNode.id]);
+        setInspectorOpen(true);
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, selectedParentId, skinYamlDraft]);
+
+    const handleMoveNode = React.useCallback((nodeId: string, targetId: string, position: UISceneNodeMovePosition) => {
+        if (!authoringDocument) {
+            return;
+        }
+
+        const nextSceneDocument = moveSceneNode(
+            authoringDocument.sceneDocument,
+            compiledContentScene,
+            nodeId,
+            targetId,
+            position,
+        );
+
+        if (nextSceneDocument === authoringDocument.sceneDocument) {
+            return;
+        }
+
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+        setSelectedNodeIds([nodeId]);
+        setLeftDrawerOpen(true);
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, compiledContentScene, skinYamlDraft]);
+
+    const handleApplyAsset = React.useCallback((assetRef: string) => {
+        if (!authoringDocument || !selectedNodeId) {
+            return;
+        }
+
+        const nextSceneDocument = updateSceneImageAssetRef(
+            authoringDocument.sceneDocument,
+            selectedNodeId,
+            assetRef,
+        );
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, selectedNodeId, skinYamlDraft]);
+
+    const handleSourceDocumentChange = React.useCallback((documentId: YamlSyncDocumentId, value: string) => {
+        applyAuthoringDrafts({
+            assetRegistryYaml: documentId === 'assetRegistry' ? value : assetRegistryYamlDraft,
+            skinYaml: documentId === 'skin' ? value : skinYamlDraft,
+            sceneYaml: documentId === 'scene' ? value : sceneYamlDraft,
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, sceneYamlDraft, skinYamlDraft]);
 
     const handleSave = React.useCallback(async () => {
         if (!isAuthorMode || authoringError) {
@@ -195,17 +753,17 @@ export const HomeV2Draft = () => {
         try {
             await saveUiSceneAuthoring(HOME_V2_SCENE_ID, {
                 sceneId: HOME_V2_SCENE_ID,
-                assetRegistryYaml: assetRegistryYamlRaw,
-                skinYaml: homeV2SkinYamlRaw,
+                assetRegistryYaml: assetRegistryYamlDraft,
+                skinYaml: skinYamlDraft,
                 sceneYaml: sceneYamlDraft,
             });
-            setSaveMessage('已写回 src/ui-scenes/home-v2/home-v2.ui.yaml');
+            setSaveMessage('已写回 scene / skin / asset-registry 三份 YAML');
         } catch (error) {
             setAuthoringError(formatAuthoringError(error));
         } finally {
             setIsSaving(false);
         }
-    }, [authoringError, isAuthorMode, sceneYamlDraft]);
+    }, [assetRegistryYamlDraft, authoringError, isAuthorMode, sceneYamlDraft, skinYamlDraft]);
 
     const sceneContext = React.useMemo(() => ({
         activeTab,
@@ -227,42 +785,50 @@ export const HomeV2Draft = () => {
     }), [handleTabChange]);
 
     const sceneSlots = React.useMemo(() => {
-        const slots: Record<string, React.ReactNode> = {
-            overview_left_page: activeTab === 'lobby'
-                ? (
-                    <LobbyDirectory.Overview
-                        games={featuredGames}
-                        onGameClick={handleGameOpen}
-                    />
-                )
-                : activeTab === 'rooms'
-                    ? (
-                        <HomeV2TabPlaceholder
-                            title="房间目录"
-                            description="这里会接入按页签组织的房间列表和房间筛选。当前先保留书页容器与 authoring 对位能力。"
-                        />
-                    )
-                    : activeTab === 'leaderboard'
-                        ? (
-                            <HomeV2TabPlaceholder
-                                title="排行榜"
-                                description="这里会接入胜场排行、近期战绩和玩家概览。当前先打通真实页面上的 scene authoring 链路。"
-                            />
-                        )
-                        : activeTab === 'changelog'
-                            ? (
-                                <HomeV2TabPlaceholder
-                                    title="更新日志"
-                                    description="这里会接入按日期编排的版本日志与置顶公告。当前先保留书页真实版式和 YAML 真源。"
-                                />
-                            )
-                            : (
-                                <HomeV2TabPlaceholder
-                                    title="关于"
-                                    description="这里会接入首页 V2 的项目说明、作者信息和入口说明。当前占位用于验证 tab actionId 宿主映射。"
-                                />
-                            ),
-        };
+        const slots: Record<string, React.ReactNode> = {};
+
+        if (activeTab === 'lobby') {
+            slots.overview_left_page = (
+                <LobbyDirectory.Left
+                    games={overviewGames.slice(0, HOME_V2_OVERVIEW_LEFT_PAGE_CAPACITY)}
+                    onGameClick={handleGameOpen}
+                />
+            );
+            slots.overview_right_page = (
+                <LobbyDirectory.Right
+                    games={overviewGames.slice(HOME_V2_OVERVIEW_LEFT_PAGE_CAPACITY)}
+                    onGameClick={handleGameOpen}
+                />
+            );
+        } else if (activeTab === 'rooms') {
+            slots.overview_left_page = (
+                <HomeV2TabPlaceholder
+                    title="房间目录"
+                    description="这里会接入按页签组织的房间列表和房间筛选。当前先保留书页容器与 authoring 对位能力。"
+                />
+            );
+        } else if (activeTab === 'leaderboard') {
+            slots.overview_left_page = (
+                <HomeV2TabPlaceholder
+                    title="排行榜"
+                    description="这里会接入胜场排行、近期战绩和玩家概览。当前先打通真实页面上的 scene authoring 链路。"
+                />
+            );
+        } else if (activeTab === 'changelog') {
+            slots.overview_left_page = (
+                <HomeV2TabPlaceholder
+                    title="更新日志"
+                    description="这里会接入按日期编排的版本日志与置顶公告。当前先保留书页真实版式和 YAML 真源。"
+                />
+            );
+        } else {
+            slots.overview_left_page = (
+                <HomeV2TabPlaceholder
+                    title="关于"
+                    description="这里会接入首页 V2 的项目说明、作者信息和入口说明。当前占位用于验证 tab actionId 宿主映射。"
+                />
+            );
+        }
 
         if (sceneState === 'detail') {
             slots.detail_left_page = (
@@ -275,7 +841,71 @@ export const HomeV2Draft = () => {
         }
 
         return slots;
-    }, [activeTab, featuredGames, handleBackToOverview, handleGameOpen, sceneState, selectedGame]);
+    }, [activeTab, handleBackToOverview, handleGameOpen, overviewGames, sceneState, selectedGame]);
+
+    const stage = (
+        <div className="relative flex h-full items-center justify-center overflow-hidden">
+            <img
+                src={HOME_V2_BOOK_DESK}
+                alt=""
+                className="absolute inset-0 h-full w-full object-cover opacity-90"
+            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,216,160,0.16)_0%,_rgba(0,0,0,0)_40%),linear-gradient(180deg,_rgba(20,11,7,0.2)_0%,_rgba(9,5,4,0.46)_100%)]" />
+            <div className="relative flex h-full w-full items-center justify-center">
+                <div
+                    data-testid="home-v2-shell-ready"
+                    className="relative h-[100%] max-w-full aspect-[896/720] overflow-visible"
+                >
+                    <HomeSceneRenderer
+                        testId="home-v2-book-stage"
+                        debugRegions={debugRegions}
+                        sceneState={sceneState}
+                        sceneContext={sceneContext}
+                        onIntroOpenComplete={() => setSceneState('tabs')}
+                        onIntroTabsComplete={() => setSceneState('overview')}
+                        onSceneEvent={handleSceneEvent}
+                    >
+                        <CompiledSceneRenderer
+                            scene={compiledContentScene}
+                            activeState={sceneState}
+                            slots={sceneSlots}
+                            actionHandlers={actionHandlers}
+                            rectOverrides={previewRects}
+                        >
+                            {isAuthorMode && authoringDocument && overlayVisible ? (
+                                <InPageAuthoringOverlay
+                                    scene={compiledContentScene}
+                                    visible={sceneState === 'overview' || sceneState === 'detail'}
+                                    activeState={sceneState}
+                                    meta={authoringMeta}
+                                    selectedNodeId={selectedNodeId}
+                                    selectedNodeIds={selectedNodeIds}
+                                    rectOverrides={previewRects}
+                                    onSelectNode={handleSelectNode}
+                                    onSelectNodes={handleSelectNodes}
+                                    onPreviewRectsChange={handlePreviewRectsChange}
+                                    onCommitRects={handleNodeRectsCommit}
+                                    onMoveNode={handleMoveNode}
+                                />
+                            ) : null}
+                        </CompiledSceneRenderer>
+                    </HomeSceneRenderer>
+                </div>
+            </div>
+        </div>
+    );
+
+    if (!isAuthorMode) {
+        return (
+            <main
+                data-testid="home-v2-draft-root"
+                data-bg-friendly-screen="true"
+                className="h-screen overflow-hidden bg-[linear-gradient(180deg,_#1f130d_0%,_#120b07_100%)]"
+            >
+                {stage}
+            </main>
+        );
+    }
 
     return (
         <main
@@ -283,92 +913,207 @@ export const HomeV2Draft = () => {
             data-bg-friendly-screen="true"
             className="h-screen overflow-hidden bg-[linear-gradient(180deg,_#1f130d_0%,_#120b07_100%)]"
         >
-            <div className="relative flex h-full items-center justify-center overflow-hidden">
-                <img
-                    src={HOME_V2_BOOK_DESK}
-                    alt=""
-                    className="absolute inset-0 h-full w-full object-cover opacity-90"
-                />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(255,216,160,0.16)_0%,_rgba(0,0,0,0)_40%),linear-gradient(180deg,_rgba(20,11,7,0.2)_0%,_rgba(9,5,4,0.46)_100%)]" />
-                <div className="relative flex h-full w-full items-center justify-center">
-                    <div
-                        data-testid="home-v2-shell-ready"
-                        className="relative h-[100%] max-w-full aspect-[896/720] overflow-visible"
-                    >
-                        <HomeSceneRenderer
-                            testId="home-v2-book-stage"
-                            debugRegions={debugRegions}
-                            sceneState={sceneState}
-                            sceneContext={sceneContext}
-                            onIntroOpenComplete={() => setSceneState('tabs')}
-                            onIntroTabsComplete={() => setSceneState('overview')}
-                            onSceneEvent={handleSceneEvent}
-                        >
-                            <CompiledSceneRenderer
-                                scene={compiledContentScene}
-                                activeState={sceneState}
-                                slots={sceneSlots}
-                                actionHandlers={actionHandlers}
-                            >
-                                {isAuthorMode && authoringDocument && overlayVisible ? (
-                                    <InPageAuthoringOverlay
-                                        scene={compiledContentScene}
-                                        visible={sceneState === 'overview' || sceneState === 'detail'}
-                                        selectedZoneId={selectedZoneId}
-                                        onSelectZone={setSelectedZoneId}
-                                        onChangeZone={handleZoneChange}
-                                    />
-                                ) : null}
-                            </CompiledSceneRenderer>
-                        </HomeSceneRenderer>
-                    </div>
+            {stage}
+            <div className="pointer-events-none fixed inset-x-0 top-4 z-[2300] flex justify-center px-4">
+                <div className="pointer-events-auto w-full max-w-[1120px]">
+                    <EditorHeaderBar
+                        sceneName={authoringMeta.scene?.名称 ?? '首页 V2 内容层'}
+                        leftTab={leftTab}
+                        leftDrawerOpen={leftDrawerOpen}
+                        inspectorOpen={inspectorOpen}
+                        sourceOpen={sourcePanelOpen}
+                        overlayVisible={overlayVisible}
+                        isSaving={isSaving}
+                        saveDisabled={Boolean(authoringError)}
+                        onToggleLeftTab={toggleLeftDrawer}
+                        onToggleInspector={() => setInspectorOpen((current) => !current)}
+                        onToggleOverlay={() => setOverlayVisible((current) => !current)}
+                        onToggleSource={() => setSourcePanelOpen((current) => !current)}
+                        onSave={handleSave}
+                    />
                 </div>
             </div>
-            {isAuthorMode ? (
-                <>
-                    <InspectorPanel
-                        open={inspectorOpen}
-                        scene={compiledContentScene}
-                        selectedZoneId={selectedZoneId}
-                        onSelectZone={setSelectedZoneId}
-                        onChangeZone={handleZoneChange}
-                        onToggle={() => setInspectorOpen(false)}
+
+            <div
+                data-testid="home-v2-left-drawer"
+                data-state={leftDrawerOpen ? 'open' : 'closed'}
+                className="pointer-events-none fixed left-4 top-24 bottom-28 z-[2240] transition-transform duration-300"
+                style={{
+                    width: leftDrawerWidth,
+                    transform: leftDrawerOpen ? 'translateX(0)' : 'translateX(calc(-100% - 1.5rem))',
+                }}
+            >
+                <div className="pointer-events-auto relative h-full">
+                    {leftTab === '图层' && authoringDocument ? (
+                        <HierarchyPanel
+                            embedded
+                            open
+                            sceneDocument={authoringDocument.sceneDocument}
+                            meta={authoringMeta}
+                            selectedNodeId={selectedNodeId}
+                            selectedNodeIds={selectedNodeIds}
+                            onSelectNode={handleSelectNode}
+                            onMoveNode={handleMoveNode}
+                            onToggle={() => setLeftDrawerOpen(false)}
+                        />
+                    ) : null}
+                    {leftTab === '组件' ? (
+                        <ComponentLibraryPanel
+                            selectedParentLabel={selectedParentLabel}
+                            onInsert={handleInsertTemplate}
+                        />
+                    ) : null}
+                    {leftTab === '资源' && authoringDocument ? (
+                        <AssetLibraryPanel
+                            assetRegistry={authoringDocument.assetRegistry}
+                            selectedNodeSupportsAsset={selectedSourceNode?.type === 'image'}
+                            onApplyAsset={handleApplyAsset}
+                        />
+                    ) : null}
+                    <button
+                        type="button"
+                        aria-label="调整左侧抽屉宽度"
+                        data-testid="home-v2-left-drawer-resize"
+                        className="absolute right-1 top-2 bottom-2 z-10 w-4 cursor-ew-resize rounded-full border border-white/10 bg-amber-200/16"
+                        onPointerDown={(event) => {
+                            event.preventDefault();
+                            drawerResizeSessionRef.current = {
+                                target: 'left',
+                                startClientX: event.clientX,
+                                startClientY: event.clientY,
+                                startSize: leftDrawerWidth,
+                            };
+                        }}
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            drawerResizeSessionRef.current = {
+                                target: 'left',
+                                startClientX: event.clientX,
+                                startClientY: event.clientY,
+                                startSize: leftDrawerWidth,
+                            };
+                        }}
                     />
+                </div>
+            </div>
+
+            <div
+                data-testid="home-v2-right-drawer"
+                data-state={inspectorOpen ? 'open' : 'closed'}
+                className="pointer-events-none fixed top-24 right-4 bottom-28 z-[2240] transition-transform duration-300"
+                style={{
+                    width: inspectorWidth,
+                    transform: inspectorOpen ? 'translateX(0)' : 'translateX(calc(100% + 1.5rem))',
+                }}
+            >
+                <div className="pointer-events-auto relative h-full">
+                    {authoringDocument ? (
+                        <InspectorPanel
+                            embedded
+                            open
+                            scene={compiledContentScene}
+                            sceneDocument={authoringDocument.sceneDocument}
+                            meta={authoringMeta}
+                            selectedNodeId={selectedNodeId}
+                            selectedNodeIds={selectedNodeIds}
+                            onSelectNode={handleSelectNode}
+                            onChangeNodeRect={handleNodeRectChange}
+                            onChangeNodeLayout={handleNodeLayoutChange}
+                            onChangeStackDirection={handleStackDirectionChange}
+                            onChangeStackGap={handleStackGapChange}
+                            onChangeGridGap={handleGridGapChange}
+                            onChangeGridColumns={handleGridColumnsChange}
+                            onChangeGridRows={handleGridRowsChange}
+                            onChangeContainerAlign={handleContainerAlignChange}
+                            onChangeContainerJustify={handleContainerJustifyChange}
+                            onChangeContainerPadding={handleContainerPaddingChange}
+                            onChangeContainerClip={handleContainerClipChange}
+                            onChangeNineSliceSlice={handleNineSliceSliceChange}
+                            onChangeNineSliceContentPadding={handleNineSliceContentPaddingChange}
+                            onToggle={() => setInspectorOpen(false)}
+                        />
+                    ) : null}
+                    <button
+                        type="button"
+                        aria-label="调整属性抽屉宽度"
+                        data-testid="home-v2-right-drawer-resize"
+                        className="absolute left-1 top-2 bottom-2 z-10 w-4 cursor-ew-resize rounded-full border border-white/10 bg-amber-200/16"
+                        onPointerDown={(event) => {
+                            event.preventDefault();
+                            drawerResizeSessionRef.current = {
+                                target: 'right',
+                                startClientX: event.clientX,
+                                startClientY: event.clientY,
+                                startSize: inspectorWidth,
+                            };
+                        }}
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            drawerResizeSessionRef.current = {
+                                target: 'right',
+                                startClientX: event.clientX,
+                                startClientY: event.clientY,
+                                startSize: inspectorWidth,
+                            };
+                        }}
+                    />
+                </div>
+            </div>
+
+            <div
+                data-testid="home-v2-source-drawer"
+                data-state={sourcePanelOpen ? 'open' : 'closed'}
+                className="pointer-events-none fixed left-4 right-4 bottom-4 z-[2240] transition-transform duration-300"
+                style={{ transform: sourcePanelOpen ? 'translateY(0)' : 'translateY(calc(100% + 1.5rem))' }}
+            >
+                <div
+                    data-testid="home-v2-source-drawer-body"
+                    className="pointer-events-auto relative mx-auto max-w-[1120px]"
+                    style={{ height: sourcePanelHeight }}
+                >
                     <YamlSyncPanel
-                        open={yamlPanelOpen}
-                        yaml={sceneYamlDraft}
+                        embedded
+                        open
+                        documents={{
+                            scene: sceneYamlDraft,
+                            skin: skinYamlDraft,
+                            assetRegistry: assetRegistryYamlDraft,
+                        }}
+                        activeDocument={activeSourceDocument}
                         error={authoringError}
                         isSaving={isSaving}
                         saveMessage={saveMessage}
-                        onChange={applySceneYamlDraft}
+                        onChangeDocument={handleSourceDocumentChange}
+                        onChangeActiveDocument={setActiveSourceDocument}
                         onSave={handleSave}
-                        onToggle={() => setYamlPanelOpen(false)}
+                        onToggle={() => setSourcePanelOpen(false)}
                     />
-                    <div className="pointer-events-auto fixed bottom-5 right-5 z-[2200] flex items-center gap-2">
-                        <button
-                            type="button"
-                            onClick={() => setOverlayVisible((current) => !current)}
-                            className="rounded-full bg-[#17100b]/92 px-4 py-2 text-[12px] font-semibold text-amber-100 shadow-[0_18px_40px_rgba(0,0,0,0.35)]"
-                        >
-                            {overlayVisible ? '隐藏选区' : '显示选区'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setInspectorOpen((current) => !current)}
-                            className="rounded-full bg-[#17100b]/92 px-4 py-2 text-[12px] font-semibold text-amber-100 shadow-[0_18px_40px_rgba(0,0,0,0.35)]"
-                        >
-                            {inspectorOpen ? '收起 Inspector' : '打开 Inspector'}
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setYamlPanelOpen((current) => !current)}
-                            className="rounded-full bg-amber-200 px-4 py-2 text-[12px] font-semibold text-[#3f2a17] shadow-[0_18px_40px_rgba(0,0,0,0.35)]"
-                        >
-                            {yamlPanelOpen ? '收起 YAML' : '打开 YAML'}
-                        </button>
-                    </div>
-                </>
-            ) : null}
+                    <button
+                        type="button"
+                        aria-label="调整源码抽屉高度"
+                        data-testid="home-v2-source-drawer-resize"
+                        className="absolute left-1/2 top-2 z-10 h-4 w-36 -translate-x-1/2 cursor-ns-resize rounded-full border border-white/10 bg-amber-200/16"
+                        onPointerDown={(event) => {
+                            event.preventDefault();
+                            drawerResizeSessionRef.current = {
+                                target: 'bottom',
+                                startClientX: event.clientX,
+                                startClientY: event.clientY,
+                                startSize: sourcePanelHeight,
+                            };
+                        }}
+                        onMouseDown={(event) => {
+                            event.preventDefault();
+                            drawerResizeSessionRef.current = {
+                                target: 'bottom',
+                                startClientX: event.clientX,
+                                startClientY: event.clientY,
+                                startSize: sourcePanelHeight,
+                            };
+                        }}
+                    />
+                </div>
+            </div>
         </main>
     );
 };

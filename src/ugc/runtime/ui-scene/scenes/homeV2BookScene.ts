@@ -26,17 +26,17 @@ export const HOME_V2_BOOK_SCENE: UISceneDefinition = {
     id: 'home-v2-book-scene',
     presentation: {
         scaleMultiplier: 1.56,
-        offsetYPct: -6,
+        offsetYPct: 1,
     },
     artboard: {
         id: 'home-v2-book-artboard',
         baseWidth: ARTBOARD_WIDTH,
         baseHeight: ARTBOARD_HEIGHT,
         safeZones: {
-            leftPage: { x: 94, y: 98, width: 280, height: 498, label: '左页安全区' },
-            rightPage: { x: 520, y: 98, width: 280, height: 498, label: '右页安全区' },
-            leftPageOverview: { x: 78, y: 74, width: 316, height: 548, label: '左页总览区' },
-            spreadBody: { x: 94, y: 144, width: 620, height: 405, label: '首页总览区域' },
+            leftPage: { x: 149, y: 202, width: 280, height: 355, label: '左页安全区' },
+            rightPage: { x: 468, y: 202, width: 280, height: 355, label: '右页安全区' },
+            leftPageOverview: { x: 158, y: 216, width: 248, height: 312, label: '左页总览区' },
+            spreadBody: { x: 158, y: 216, width: 577, height: 312, label: '首页总览区域' },
         },
         slots: {
             tabStrip: { x: 738, y: 0, width: 158, height: 720, label: '书签槽位' },
@@ -197,7 +197,7 @@ export const HOME_V2_BOOK_SCENE: UISceneDefinition = {
             zIndex: 60,
             visibleInStates: ['flippingToDetail'],
             props: {
-                sequence: createFrameSequence(`${HOME_V2_LOCAL_ASSET_ROOT}/page-flip-right`, 8, {
+                sequence: createFrameSequence(`${HOME_V2_LOCAL_ASSET_ROOT}/page-flip-left`, 8, {
                     fps: 18,
                     holdLastFrame: true,
                     reducedMotionBehavior: 'last-frame',
@@ -213,7 +213,7 @@ export const HOME_V2_BOOK_SCENE: UISceneDefinition = {
             zIndex: 60,
             visibleInStates: ['flippingToOverview'],
             props: {
-                sequence: createFrameSequence(`${HOME_V2_LOCAL_ASSET_ROOT}/page-flip-left`, 8, {
+                sequence: createFrameSequence(`${HOME_V2_LOCAL_ASSET_ROOT}/page-flip-right`, 8, {
                     fps: 18,
                     holdLastFrame: true,
                     reducedMotionBehavior: 'last-frame',

@@ -154,7 +154,7 @@ export const UISceneRenderer = ({
     const presentationScale = scene.presentation?.scaleMultiplier ?? 1;
     const presentationOffsetXPx = ((scene.presentation?.offsetXPct ?? 0) / 100) * stageSize.width;
     const presentationOffsetYPx = ((scene.presentation?.offsetYPct ?? 0) / 100) * stageSize.height;
-
+    const presentationTransform = `translate(-50%, -50%) scale(${presentationScale})`;
     return (
         <div
             ref={ref}
@@ -170,7 +170,7 @@ export const UISceneRenderer = ({
                         height: stageSize.height,
                         left: `calc(50% + ${presentationOffsetXPx}px)`,
                         top: `calc(50% + ${presentationOffsetYPx}px)`,
-                        transform: `translate(-50%, -50%) scale(${presentationScale})`,
+                        transform: presentationTransform,
                         transformOrigin: 'center center',
                     }}
                 >
@@ -231,7 +231,8 @@ export const UISceneRenderer = ({
                         height: stageSize.height,
                         left: `calc(50% + ${presentationOffsetXPx}px)`,
                         top: `calc(50% + ${presentationOffsetYPx}px)`,
-                        transform: 'translate(-50%, -50%)',
+                        transform: presentationTransform,
+                        transformOrigin: 'center center',
                     }}
                 >
                     {scaledContentRegions.map(({ regionId, content, rect }) => (

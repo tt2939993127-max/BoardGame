@@ -50,6 +50,7 @@ const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推�
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
 const ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME = '首页活跃房间浮层在桌面端居中且移动端不溢出';
 const MOBILE_HOME_V2_DRAFT_TEST_NAME = 'Home v2 草稿在移动横屏下显示全屏背景与逐帧书本壳';
+const HOME_V2_AUTHORING_FLOW_TEST_NAME = 'Home v2 作者态按真实画布流程工作：选中即开属性、同抽屉切换与尺寸拖拽';
 
 async function createTicTacToeRoom(page: Page): Promise<string> {
     const gameServerBaseURL = getGameServerBaseURL();
@@ -113,6 +114,7 @@ test.describe('Lobby E2E', () => {
             testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME
             || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME
             || testInfo.title === MOBILE_HOME_V2_DRAFT_TEST_NAME
+            || testInfo.title === HOME_V2_AUTHORING_FLOW_TEST_NAME
         ) {
             return;
         }
@@ -440,6 +442,15 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByTestId('home-v2-opening')).toHaveCount(0, { timeout: 6000 });
         await expect(page.getByTestId('home-v2-shell-ready')).toBeVisible({ timeout: 6000 });
         await expect(page.getByTestId('home-v2-book-stage')).toBeVisible();
+        await expect(page.locator('[data-game-id="smashup"]').first()).toBeVisible({ timeout: 6000 });
+
+        await page.reload({ waitUntil: 'domcontentloaded' });
+        await expect(page.getByTestId('home-v2-draft-root')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('home-v2-opening')).toBeVisible();
+        await expect(page.getByTestId('home-v2-opening')).toHaveCount(0, { timeout: 6000 });
+        await expect(page.getByTestId('home-v2-shell-ready')).toBeVisible({ timeout: 6000 });
+        await expect(page.getByTestId('home-v2-book-stage')).toBeVisible();
+        await expect(page.locator('[data-game-id="smashup"]').first()).toBeVisible({ timeout: 6000 });
 
         const hasHorizontalOverflow = await page.evaluate(() => {
             const maxScrollWidth = Math.max(
@@ -453,6 +464,382 @@ test.describe('Lobby E2E', () => {
         expect(hasHorizontalOverflow).toBeFalsy();
 
         await game.screenshot('lobby-home-v2-draft-shell-mobile', testInfo);
+
+        await page.locator('[data-game-id="smashup"]').first().click();
+        await expect(page.getByRole('button', { name: /返回目录/i })).toBeVisible({ timeout: 6000 });
+        await game.screenshot('lobby-home-v2-draft-detail-mobile', testInfo);
+
+        await page.evaluate(() => {
+            let hidden = true;
+            Object.defineProperty(document, 'hidden', {
+                configurable: true,
+                get: () => hidden,
+            });
+
+            document.dispatchEvent(new Event('visibilitychange'));
+            hidden = false;
+            document.dispatchEvent(new Event('visibilitychange'));
+        });
+
+        await expect(page.getByTestId('home-v2-opening')).toBeVisible({ timeout: 6000 });
+        await game.screenshot('lobby-home-v2-draft-resume-opening-mobile', testInfo);
+        await expect(page.getByTestId('home-v2-opening')).toHaveCount(0, { timeout: 6000 });
+        await expect(page.locator('[data-game-id="smashup"]').first()).toBeVisible({ timeout: 6000 });
+        await game.screenshot('lobby-home-v2-draft-catalog-mobile', testInfo);
+    });
+
+    test(HOME_V2_AUTHORING_FLOW_TEST_NAME, async ({ page, game }, testInfo) => {
+        const dragResizeHandle = async (
+            testId: string,
+            deltaX: number,
+            deltaY: number,
+            modifiers?: { shiftKey?: boolean; altKey?: boolean },
+        ) => {
+            await page.evaluate(({ testId: handleTestId, dx, dy, modifierState }) => {
+                const handle = document.querySelector<HTMLElement>(`[data-testid="${handleTestId}"]`);
+                if (!handle) {
+                    throw new Error(`未找到拖拽把手: ${handleTestId}`);
+                }
+
+                const rect = handle.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+
+                handle.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: startX,
+                    clientY: startY,
+                    buttons: 1,
+                    shiftKey: Boolean(modifierState?.shiftKey),
+                    altKey: Boolean(modifierState?.altKey),
+                }));
+                window.dispatchEvent(new MouseEvent('mousemove', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: startX + dx,
+                    clientY: startY + dy,
+                    buttons: 1,
+                    shiftKey: Boolean(modifierState?.shiftKey),
+                    altKey: Boolean(modifierState?.altKey),
+                }));
+                window.dispatchEvent(new MouseEvent('mouseup', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: startX + dx,
+                    clientY: startY + dy,
+                    buttons: 0,
+                    shiftKey: Boolean(modifierState?.shiftKey),
+                    altKey: Boolean(modifierState?.altKey),
+                }));
+            }, { testId, dx: deltaX, dy: deltaY, modifierState: modifiers });
+            await page.waitForTimeout(250);
+        };
+        const dragOverlayNodeToNode = async (sourceTestId: string, targetTestId: string) => {
+            await page.evaluate(({ sourceId, targetId }) => {
+                const source = document.querySelector<HTMLElement>(`[data-testid="${sourceId}"]`);
+                const target = document.querySelector<HTMLElement>(`[data-testid="${targetId}"]`);
+                if (!source || !target) {
+                    throw new Error(`画布拖拽缺少节点: ${sourceId} -> ${targetId}`);
+                }
+
+                const sourceRect = source.getBoundingClientRect();
+                const targetRect = target.getBoundingClientRect();
+                const startX = sourceRect.left + sourceRect.width / 2;
+                const startY = sourceRect.top + sourceRect.height / 2;
+                const endX = targetRect.left + targetRect.width / 2;
+                const endY = targetRect.top + targetRect.height / 2;
+
+                source.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: startX,
+                    clientY: startY,
+                    buttons: 1,
+                }));
+                window.dispatchEvent(new MouseEvent('mousemove', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: endX,
+                    clientY: endY,
+                    buttons: 1,
+                }));
+
+                (window as Window & { __homeV2SyntheticDrag?: { x: number; y: number } }).__homeV2SyntheticDrag = {
+                    x: endX,
+                    y: endY,
+                };
+            }, { sourceId: sourceTestId, targetId: targetTestId });
+            await page.waitForTimeout(200);
+        };
+        const dragOverlayNodeByOffset = async (sourceTestId: string, offsetX: number, offsetY: number) => {
+            await page.evaluate(({ sourceId, offsetX, offsetY }) => {
+                const source = document.querySelector<HTMLElement>(`[data-testid="${sourceId}"]`);
+                if (!source) {
+                    throw new Error(`画布拖拽缺少节点: ${sourceId}`);
+                }
+
+                const sourceRect = source.getBoundingClientRect();
+                const startX = sourceRect.left + sourceRect.width / 2;
+                const startY = sourceRect.top + sourceRect.height / 2;
+                const endX = startX + offsetX;
+                const endY = startY + offsetY;
+
+                source.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: startX,
+                    clientY: startY,
+                    buttons: 1,
+                }));
+                window.dispatchEvent(new MouseEvent('mousemove', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: endX,
+                    clientY: endY,
+                    buttons: 1,
+                }));
+
+                (window as Window & { __homeV2SyntheticDrag?: { x: number; y: number } }).__homeV2SyntheticDrag = {
+                    x: endX,
+                    y: endY,
+                };
+            }, { sourceId: sourceTestId, offsetX, offsetY });
+            await page.waitForTimeout(200);
+        };
+        const dragMarqueeAcrossNodes = async (targetTestIds: string[]) => {
+            await page.evaluate(({ targetIds }) => {
+                const background = document.querySelector<HTMLElement>('[data-testid="home-v2-overlay-background"]');
+                if (!background) {
+                    throw new Error('作者态画布背景不存在，无法进行框选');
+                }
+
+                const rects = targetIds.map((targetId) => {
+                    const element = document.querySelector<HTMLElement>(`[data-testid="${targetId}"]`);
+                    if (!element) {
+                        throw new Error(`框选缺少节点: ${targetId}`);
+                    }
+                    return element.getBoundingClientRect();
+                });
+
+                const minX = Math.min(...rects.map((rect) => rect.left)) - 16;
+                const minY = Math.min(...rects.map((rect) => rect.top)) - 16;
+                const maxX = Math.max(...rects.map((rect) => rect.right)) + 16;
+                const maxY = Math.max(...rects.map((rect) => rect.bottom)) + 16;
+
+                background.dispatchEvent(new MouseEvent('mousedown', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: minX,
+                    clientY: minY,
+                    buttons: 1,
+                }));
+                window.dispatchEvent(new MouseEvent('mousemove', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: maxX,
+                    clientY: maxY,
+                    buttons: 1,
+                }));
+                window.dispatchEvent(new MouseEvent('mouseup', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX: maxX,
+                    clientY: maxY,
+                    buttons: 0,
+                }));
+            }, { targetIds: targetTestIds });
+            await page.waitForTimeout(300);
+        };
+        const finishOverlayDrag = async () => {
+            await page.evaluate(() => {
+                const state = (window as Window & { __homeV2SyntheticDrag?: { x: number; y: number } }).__homeV2SyntheticDrag;
+                const clientX = state?.x ?? 0;
+                const clientY = state?.y ?? 0;
+                window.dispatchEvent(new MouseEvent('mouseup', {
+                    bubbles: true,
+                    cancelable: true,
+                    clientX,
+                    clientY,
+                    buttons: 0,
+                }));
+                delete (window as Window & { __homeV2SyntheticDrag?: { x: number; y: number } }).__homeV2SyntheticDrag;
+            });
+            await page.waitForTimeout(250);
+        };
+        const readTabHierarchyOrder = async () => page.locator('[data-testid^="home-v2-hierarchy-item-tab_button_"]').evaluateAll((nodes) => {
+            return nodes.map((node) => node.getAttribute('data-testid') ?? '');
+        });
+
+        await page.setViewportSize({ width: 1600, height: 980 });
+        await page.goto('/?homeV2Draft=1&author=1', { waitUntil: 'domcontentloaded' });
+
+        await expect(page.getByTestId('home-v2-draft-root')).toBeVisible({ timeout: 15000 });
+        await expect(page.getByTestId('home-v2-shell-ready')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('home-v2-editor-tab-layers')).toBeVisible({ timeout: 10000 });
+
+        const leftDrawer = page.getByTestId('home-v2-left-drawer');
+        const rightDrawer = page.getByTestId('home-v2-right-drawer');
+        const sourceDrawer = page.getByTestId('home-v2-source-drawer');
+
+        await expect(leftDrawer).toHaveAttribute('data-state', 'closed');
+        await expect(rightDrawer).toHaveAttribute('data-state', 'closed');
+        await expect(sourceDrawer).toHaveAttribute('data-state', 'closed');
+
+        await page.getByTestId('home-v2-overlay-node-tab_button_changelog').click();
+
+        await expect(rightDrawer).toHaveAttribute('data-state', 'open');
+        const inspectorPanel = page.getByTestId('home-v2-inspector-panel');
+        await expect(inspectorPanel).toHaveAttribute('data-selected-node', 'tab_button_changelog');
+        await expect(inspectorPanel.getByText('更新日志页签按钮', { exact: true })).toBeVisible();
+        await expect(page.locator('[data-testid^="home-v2-overlay-handle-tab_button_changelog-"]')).toHaveCount(8);
+
+        const widthField = inspectorPanel.getByRole('spinbutton', { name: '宽度' });
+        const widthBeforeResize = Number(await widthField.inputValue());
+        await dragResizeHandle('home-v2-overlay-handle-tab_button_changelog-e', 40, 0);
+        const widthAfterResize = Number(await widthField.inputValue());
+        expect(widthAfterResize).toBeGreaterThan(widthBeforeResize);
+
+        await page.getByTestId('home-v2-editor-tab-layers').click();
+        await expect(leftDrawer).toHaveAttribute('data-state', 'open');
+        await expect(page.getByTestId('home-v2-hierarchy-item-tab_button_changelog')).toHaveAttribute('data-selected', 'true');
+        const hierarchyOrderBeforeMove = await readTabHierarchyOrder();
+        await page.getByTestId('home-v2-hierarchy-item-tab_button_about').dragTo(
+            page.getByTestId('home-v2-hierarchy-item-tab_button_rooms'),
+            { targetPosition: { x: 24, y: 4 } },
+        );
+        await page.waitForTimeout(300);
+        const hierarchyOrderAfterMove = await readTabHierarchyOrder();
+        expect(hierarchyOrderBeforeMove.indexOf('home-v2-hierarchy-item-tab_button_about')).toBeGreaterThan(
+            hierarchyOrderBeforeMove.indexOf('home-v2-hierarchy-item-tab_button_rooms'),
+        );
+        expect(hierarchyOrderAfterMove.indexOf('home-v2-hierarchy-item-tab_button_about')).toBeLessThan(
+            hierarchyOrderAfterMove.indexOf('home-v2-hierarchy-item-tab_button_rooms'),
+        );
+
+        const roomsOverlay = page.getByTestId('home-v2-overlay-node-tab_button_rooms');
+        const leaderboardOverlay = page.getByTestId('home-v2-overlay-node-tab_button_leaderboard');
+        const roomsBoxBeforeGroupMove = await roomsOverlay.boundingBox();
+        const leaderboardBoxBeforeGroupMove = await leaderboardOverlay.boundingBox();
+        expect(roomsBoxBeforeGroupMove).not.toBeNull();
+        expect(leaderboardBoxBeforeGroupMove).not.toBeNull();
+        if (!roomsBoxBeforeGroupMove || !leaderboardBoxBeforeGroupMove) {
+            throw new Error('框选前未能读取页签节点位置');
+        }
+
+        await dragMarqueeAcrossNodes([
+            'home-v2-overlay-node-tab_button_rooms',
+            'home-v2-overlay-node-tab_button_leaderboard',
+        ]);
+        await expect(page.getByTestId('home-v2-overlay-selection-summary')).toBeVisible();
+        await expect(roomsOverlay).toHaveAttribute('data-selected', 'true');
+        await expect(leaderboardOverlay).toHaveAttribute('data-selected', 'true');
+        await expect(inspectorPanel).toHaveAttribute('data-selected-count', /[2-9]/);
+
+        await dragOverlayNodeByOffset('home-v2-overlay-node-tab_button_rooms', 42, 26);
+        await finishOverlayDrag();
+
+        const roomsBoxAfterGroupMove = await roomsOverlay.boundingBox();
+        const leaderboardBoxAfterGroupMove = await leaderboardOverlay.boundingBox();
+        expect(roomsBoxAfterGroupMove).not.toBeNull();
+        expect(leaderboardBoxAfterGroupMove).not.toBeNull();
+        if (!roomsBoxAfterGroupMove || !leaderboardBoxAfterGroupMove) {
+            throw new Error('群组移动后未能读取页签节点位置');
+        }
+
+        const roomsDeltaX = roomsBoxAfterGroupMove.x - roomsBoxBeforeGroupMove.x;
+        const roomsDeltaY = roomsBoxAfterGroupMove.y - roomsBoxBeforeGroupMove.y;
+        const leaderboardDeltaX = leaderboardBoxAfterGroupMove.x - leaderboardBoxBeforeGroupMove.x;
+        const leaderboardDeltaY = leaderboardBoxAfterGroupMove.y - leaderboardBoxBeforeGroupMove.y;
+        expect(roomsDeltaX).toBeGreaterThan(20);
+        expect(roomsDeltaY).toBeGreaterThan(10);
+        expect(Math.abs(roomsDeltaX - leaderboardDeltaX)).toBeLessThan(6);
+        expect(Math.abs(roomsDeltaY - leaderboardDeltaY)).toBeLessThan(6);
+
+        await page.getByTestId('home-v2-editor-tab-components').click();
+        await expect(page.getByTestId('home-v2-component-panel')).toBeVisible();
+        await page.getByTestId('home-v2-component-insert-panel').click();
+
+        const insertedPanelOverlay = page.locator('[data-testid^="home-v2-overlay-node-panel_"]').first();
+        await expect(insertedPanelOverlay).toBeVisible();
+
+        const insertedPanelTestId = await insertedPanelOverlay.getAttribute('data-testid');
+        expect(insertedPanelTestId).toBeTruthy();
+        if (!insertedPanelTestId) {
+            throw new Error('新插入的容器没有 data-testid，无法继续验证画布拖入容器');
+        }
+
+        const insertedPanelNodeId = insertedPanelTestId.replace('home-v2-overlay-node-', '');
+        const insertedHierarchyItem = page.getByTestId(`home-v2-hierarchy-item-${insertedPanelNodeId}`);
+        await expect(inspectorPanel).toHaveAttribute('data-selected-node', insertedPanelNodeId);
+
+        const panelXField = inspectorPanel.getByRole('spinbutton', { name: 'X' });
+        const panelWidthField = inspectorPanel.getByRole('spinbutton', { name: '宽度' });
+        const panelHeightField = inspectorPanel.getByRole('spinbutton', { name: '高度' });
+        const panelWidthBeforeShift = Number(await panelWidthField.inputValue());
+        const panelHeightBeforeShift = Number(await panelHeightField.inputValue());
+        const panelRatioBeforeShift = panelWidthBeforeShift / panelHeightBeforeShift;
+        await dragResizeHandle(`home-v2-overlay-handle-${insertedPanelNodeId}-se`, 80, 10, { shiftKey: true });
+        const panelWidthAfterShift = Number(await panelWidthField.inputValue());
+        const panelHeightAfterShift = Number(await panelHeightField.inputValue());
+        const panelRatioAfterShift = panelWidthAfterShift / panelHeightAfterShift;
+
+        expect(panelWidthAfterShift).toBeGreaterThan(panelWidthBeforeShift);
+        expect(panelHeightAfterShift).toBeGreaterThan(panelHeightBeforeShift);
+        expect(Math.abs(panelRatioAfterShift - panelRatioBeforeShift)).toBeLessThan(0.03);
+
+        const panelXBeforeAlt = Number(await panelXField.inputValue());
+        const panelWidthBeforeAlt = Number(await panelWidthField.inputValue());
+        await dragResizeHandle(`home-v2-overlay-handle-${insertedPanelNodeId}-e`, 30, 0, { altKey: true });
+        const panelXAfterAlt = Number(await panelXField.inputValue());
+        const panelWidthAfterAlt = Number(await panelWidthField.inputValue());
+        const panelWidthDeltaAlt = panelWidthAfterAlt - panelWidthBeforeAlt;
+        const panelCenterOffsetAlt = panelXBeforeAlt - panelXAfterAlt;
+
+        expect(panelWidthDeltaAlt).toBeGreaterThan(20);
+        expect(panelCenterOffsetAlt).toBeGreaterThan(10);
+        expect(Math.abs(panelWidthDeltaAlt - panelCenterOffsetAlt * 2)).toBeLessThan(6);
+
+        await page.getByTestId('home-v2-editor-tab-inspector').click();
+        await expect(rightDrawer).toHaveAttribute('data-state', 'closed');
+
+        await dragOverlayNodeToNode('home-v2-overlay-node-tab_button_about', insertedPanelTestId);
+        await expect(page.getByTestId(`home-v2-overlay-drop-target-${insertedPanelNodeId}`)).toBeVisible();
+        await finishOverlayDrag();
+
+        await page.getByTestId('home-v2-editor-tab-layers').click();
+        await expect(insertedHierarchyItem).toBeVisible();
+        const aboutHierarchyItem = page.getByTestId('home-v2-hierarchy-item-tab_button_about');
+        await expect(aboutHierarchyItem).toBeVisible();
+        await expect(page.getByTestId('home-v2-inspector-panel')).toContainText(`父容器：${insertedPanelNodeId}`);
+
+        await page.getByTestId('home-v2-editor-tab-assets').click();
+        await expect(page.getByTestId('home-v2-asset-panel')).toBeVisible();
+
+        const leftWidthBefore = (await leftDrawer.boundingBox())?.width ?? 0;
+        await dragResizeHandle('home-v2-left-drawer-resize', 120, 0);
+        const leftWidthAfter = (await leftDrawer.boundingBox())?.width ?? 0;
+        expect(leftWidthAfter).toBeGreaterThan(leftWidthBefore + 60);
+
+        const rightWidthBefore = (await rightDrawer.boundingBox())?.width ?? 0;
+        await dragResizeHandle('home-v2-right-drawer-resize', -120, 0);
+        const rightWidthAfter = (await rightDrawer.boundingBox())?.width ?? 0;
+        expect(rightWidthAfter).toBeGreaterThan(rightWidthBefore + 60);
+
+        await page.getByTestId('home-v2-editor-tab-source').click();
+        await expect(sourceDrawer).toHaveAttribute('data-state', 'open');
+        await expect(page.getByTestId('home-v2-source-panel')).toBeVisible();
+
+        const sourceDrawerBody = page.getByTestId('home-v2-source-drawer-body');
+        const sourceHeightBefore = (await sourceDrawerBody.boundingBox())?.height ?? 0;
+        await dragResizeHandle('home-v2-source-drawer-resize', 0, -100);
+        const sourceHeightAfter = (await sourceDrawerBody.boundingBox())?.height ?? 0;
+        expect(sourceHeightAfter).toBeGreaterThan(sourceHeightBefore + 60);
+
+        await game.screenshot('lobby-home-v2-authoring-figma-flow', testInfo);
+
+        await page.getByTestId('home-v2-editor-tab-source').click();
+        await expect(sourceDrawer).toHaveAttribute('data-state', 'closed');
     });
 
     test('Dice Throne 更新日志 tab 会请求公开接口并结束 loading', async ({ page }) => {

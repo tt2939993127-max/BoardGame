@@ -221,6 +221,7 @@ function compileNode(
         visibleIn: node.visibleIn,
         zoneRef: node.zoneRef,
         rect,
+        layout: node.layout,
         skinId: node.skin,
         styleId: node.style,
         children: (node.children ?? []).map((child, index) => compileNode(
@@ -246,6 +247,8 @@ function compileNode(
                 gap: node.gap ?? 0,
                 align: node.align,
                 justify: node.justify,
+                padding: node.padding ?? ZERO_INSETS,
+                clipContent: node.clipContent ?? false,
             };
         case 'grid':
             return {
@@ -254,6 +257,10 @@ function compileNode(
                 columns: node.columns,
                 rows: node.rows,
                 gap: node.gap ?? 0,
+                align: node.align,
+                justify: node.justify,
+                padding: node.padding ?? ZERO_INSETS,
+                clipContent: node.clipContent ?? false,
             };
         case 'text':
             return {

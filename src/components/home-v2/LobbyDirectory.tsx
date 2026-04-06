@@ -8,17 +8,28 @@ function BookGamePage({
     games: GameConfig[];
     onSelect: (id: string) => void;
 }) {
+    const slots = Array.from({ length: 9 }, (_, index) => games[index] ?? null);
+
     return (
-        <div className="grid h-full w-full grid-cols-2 grid-rows-2 gap-[4.5%] px-[2.8%] py-[2.8%] pointer-events-auto">
-            {games.map((game, index) => (
+        <div
+            className="grid h-full w-full place-items-center gap-x-[3.5%] gap-y-[5%] px-[4.5%] py-[5%] pointer-events-auto"
+            style={{
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gridTemplateRows: 'repeat(3, minmax(0, 1fr))',
+            }}
+        >
+            {slots.map((game, index) => (game ? (
                 <GameListCard
                     key={game.id}
                     game={game}
                     index={index}
                     onGameClick={onSelect}
-                    className="h-full"
+                    variant="homeV2Compact"
+                    className="max-w-[62px]"
                 />
-            ))}
+            ) : (
+                <div key={`placeholder-${index}`} className="h-full w-full" aria-hidden="true" />
+            )))}
         </div>
     );
 }
@@ -31,18 +42,7 @@ export interface OverviewProps {
 export const Overview = ({ games, onGameClick }: OverviewProps) => {
     return (
         <div className="h-full w-full pointer-events-auto">
-            <div className="grid h-full w-full grid-cols-2 grid-rows-2 place-items-center gap-x-[2%] gap-y-[2.4%] px-[1.4%] py-[1.8%]">
-                {games.map((game, index) => (
-                    <GameListCard
-                        key={game.id}
-                        game={game}
-                        index={index}
-                        onGameClick={onGameClick}
-                        variant="homeV2Compact"
-                        className="max-w-none sm:max-w-none"
-                    />
-                ))}
-            </div>
+            <BookGamePage games={games} onSelect={onGameClick} />
         </div>
     );
 };
