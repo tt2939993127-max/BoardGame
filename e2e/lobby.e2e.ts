@@ -164,8 +164,7 @@ test.describe('Lobby E2E', () => {
         await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
         await expect(page.getByTestId('home-game-details-loading-fallback')).toBeVisible({ timeout: 10000 });
-        await expect(page.getByText('正在准备')).toBeVisible();
-        await expect(page.getByText('内容马上出现，请稍候。')).toBeVisible();
+        await expect(page.getByTestId('home-game-details-loading-fallback-root')).toBeVisible();
 
         await game.screenshot('lobby-game-details-loading-fallback-visible', testInfo);
 

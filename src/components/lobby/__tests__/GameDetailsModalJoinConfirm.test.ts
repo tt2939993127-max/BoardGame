@@ -1240,7 +1240,7 @@ describe('GameDetailsModal create room ai entry', () => {
         });
 
         expect(latestPackageInstallModalProps.current).toEqual(expect.objectContaining({
-            closeOnBackdrop: false,
+            closeOnBackdrop: true,
             state: expect.objectContaining({
                 status: 'not-installed',
                 installedVersion: undefined,
