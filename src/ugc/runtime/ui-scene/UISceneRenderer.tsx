@@ -42,12 +42,14 @@ function useElementSize<T extends HTMLElement>() {
 export interface UISceneRendererProps {
     scene: UISceneDefinition;
     activeState?: string;
+    sceneContext?: Record<string, unknown>;
     registry?: UIScenePrefabRegistry;
     className?: string;
     testId?: string;
     onNodeEvent?: (event: UISceneNodeEvent) => void;
     debugRegions?: boolean;
     children?: React.ReactNode;
+    contentRegions?: Record<string, React.ReactNode>;
 }
 
 const DEBUG_REGION_STYLES = {
@@ -60,12 +62,14 @@ const DEBUG_REGION_STYLES = {
 export const UISceneRenderer = ({
     scene,
     activeState,
+    sceneContext,
     registry = defaultUIScenePrefabRegistry,
     className,
     testId,
     onNodeEvent,
     debugRegions = false,
     children,
+    contentRegions,
 }: UISceneRendererProps) => {
     const { artboard } = scene;
     const { ref, size } = useElementSize<HTMLDivElement>();
@@ -113,6 +117,27 @@ export const UISceneRenderer = ({
             .sort((left, right) => (left.node.zIndex ?? 0) - (right.node.zIndex ?? 0));
     }, [activeState, artboard, registry, scale, scene.nodes, stageSize]);
 
+    const scaledContentRegions = React.useMemo(() => {
+        if (!scale || !contentRegions) {
+            return [];
+        }
+
+        return Object.entries(contentRegions)
+            .map(([regionId, content]) => {
+                const region = resolveArtboardRegion(artboard, regionId);
+                if (!region || content == null) {
+                    return null;
+                }
+
+                return {
+                    regionId,
+                    content,
+                    rect: scaleArtboardRect(region, scale),
+                };
+            })
+            .filter((entry): entry is { regionId: string; content: React.ReactNode; rect: { x: number; y: number; width: number; height: number } } => Boolean(entry));
+    }, [artboard, contentRegions, scale]);
+
     const emit = React.useCallback(
         (nodeId: string, prefabId: string, eventId: string, payload?: unknown) => {
             onNodeEvent?.({
@@ -127,6 +152,8 @@ export const UISceneRenderer = ({
     );
 
     const presentationScale = scene.presentation?.scaleMultiplier ?? 1;
+    const presentationOffsetXPx = ((scene.presentation?.offsetXPct ?? 0) / 100) * stageSize.width;
+    const presentationOffsetYPx = ((scene.presentation?.offsetYPct ?? 0) / 100) * stageSize.height;
 
     return (
         <div
@@ -141,6 +168,8 @@ export const UISceneRenderer = ({
                     style={{
                         width: stageSize.width,
                         height: stageSize.height,
+                        left: `calc(50% + ${presentationOffsetXPx}px)`,
+                        top: `calc(50% + ${presentationOffsetYPx}px)`,
                         transform: `translate(-50%, -50%) scale(${presentationScale})`,
                         transformOrigin: 'center center',
                     }}
@@ -160,6 +189,7 @@ export const UISceneRenderer = ({
                                     regionRect,
                                     clipRect,
                                     activeState,
+                                    sceneContext,
                                     emit: (eventId, payload) => emit(node.id, node.prefabId, eventId, payload),
                                 })}
                             </React.Fragment>
@@ -191,6 +221,36 @@ export const UISceneRenderer = ({
                         )
                         : null}
                     {children}
+                </div>
+            ) : null}
+            {scale ? (
+                <div
+                    className="pointer-events-none absolute left-1/2 top-1/2"
+                    style={{
+                        width: stageSize.width,
+                        height: stageSize.height,
+                        left: `calc(50% + ${presentationOffsetXPx}px)`,
+                        top: `calc(50% + ${presentationOffsetYPx}px)`,
+                        transform: 'translate(-50%, -50%)',
+                    }}
+                >
+                    {scaledContentRegions.map(({ regionId, content, rect }) => (
+                        <div
+                            key={`content:${regionId}`}
+                            data-scene-region={regionId}
+                            className="absolute overflow-hidden pointer-events-none @container"
+                            style={{
+                                left: rect.x,
+                                top: rect.y,
+                                width: rect.width,
+                                height: rect.height,
+                                containerType: 'size',
+                                zIndex: 40,
+                            }}
+                        >
+                            {content}
+                        </div>
+                    ))}
                 </div>
             ) : null}
         </div>

@@ -188,6 +188,17 @@ shellTargets?: Array<'pwa' | 'app-webview' | 'mini-program-webview'>;
 - `tablet-only` 游戏提示使用平板或 PC
 - `none` 游戏提示当前不推荐手机端
 
+### 4.1 App 壳方向控制是“双层链路”（强制）
+
+- Android / App WebView 下，页面方向控制不是只看前端 `MobileOrientationGuard`。
+- **原生 `MainActivity` 的 `setRequestedOrientation(...)` 是第一层，也是更高优先级**；前端 `MobileOrientationGuard` 只能作为补充与重试，不能替代原生声明。
+- 当前游戏页之所以能稳定横竖屏切换，是因为原生层会识别 `/play/:gameId`，再读取 `game-orientation-map.json` 先把 Activity 切到对应方向。
+- 因此，任何**非游戏页**如果也要求固定方向（例如首页 V2 要求横屏），都必须满足下列至少一条：
+  - 原生层能显式识别该路由并直接返回目标方向；
+  - 或者构建产物中提供可被原生层读取的页面方向元数据，再由 `MainActivity` 决定方向。
+- **禁止只在 H5 层加 `ScreenOrientation.lock(...)` 就宣称 App 壳已支持该页面横屏**；如果原生层仍把 Activity 默认成竖屏，这种实现不算完成。
+- 首页、启动页、教程页、活动页等根路由页面，如果不是 `/play/*`，默认都必须先检查原生层是否认识这条路由，再决定是否能宣称“已强制横屏”。
+
 ### 5. CSS fallback
 
 - `src/index.css`

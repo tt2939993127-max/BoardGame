@@ -46,6 +46,7 @@
     "playAi": "Play AI",
     "tutorial": "Tutorial",
     "createRoom": "Create Room",
+    "backToDirectory": "Back to Directory",
     "confirm": "Confirm",
     "cancel": "Cancel"
   },
@@ -60,6 +61,7 @@
     "return": "Return to match (#{{id}})"
   },
   "rooms": {
+    "title": "Game Rooms",
     "loading": "Loading rooms...",
     "empty": "No active rooms",
     "matchTitle": "Match #{{id}}",

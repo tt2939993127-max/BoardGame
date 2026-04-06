@@ -152,6 +152,12 @@ const getBannerMessage = (bannerKind: GameMobileBannerKind) => {
     }
 };
 
+const isHomeV2DraftRoute = (pathname: string, search: string) => {
+    if (pathname !== '/') return false;
+    const searchParams = new URLSearchParams(search);
+    return searchParams.get('homeV2Draft') === '1' || import.meta.env.VITE_HOME_V2_DRAFT === '1';
+};
+
 export function MobileOrientationGuard({ children }: { children: React.ReactNode }) {
     const location = useLocation();
     const viewport = useRuntimeViewport({ syncCssVars: true });
@@ -160,14 +166,17 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     const [dynamicGameConfig, setDynamicGameConfig] = useState<GameMobileEntry | undefined>(undefined);
 
     const gameId = extractGameIdFromPlayPath(location.pathname);
+    const isHomeV2Route = isHomeV2DraftRoute(location.pathname, location.search);
     const builtInGameConfig = gameId ? GAME_MANIFEST_BY_ID[gameId] : undefined;
     const gameConfig = builtInGameConfig ?? dynamicGameConfig;
     const preferredOrientation = gameId
         ? resolveGameMobileSupport(gameConfig).preferredOrientation
         : undefined;
-    const targetOrientation: 'landscape' | 'portrait' = gameId
+    const targetOrientation: 'landscape' | 'portrait' | null = gameId
         ? (preferredOrientation === 'landscape' ? 'landscape' : 'portrait')
-        : 'portrait';
+        : isHomeV2Route
+            ? 'landscape'
+            : null;
     const bannerKind = getGameMobileBannerKind(gameConfig, viewport.width, viewport.height);
     const bannerKey = bannerKind ? `${location.pathname}:${bannerKind}` : null;
     const shouldSuppressBannerInAppShell = nativeAppShell && Boolean(gameId);
@@ -235,7 +244,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     }, [bannerKey]);
 
     useEffect(() => {
-        if (!nativeAppShell) return;
+        if (!nativeAppShell || !targetOrientation) return;
 
         let disposed = false;
         const timeoutIds: number[] = [];

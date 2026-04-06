@@ -1,11 +1,22 @@
 import { Injectable } from '@nestjs/common';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
+import { createAuthoringDocument } from '../../../../../src/ui-scene/compiler';
+import type { UISceneAuthoringSavePayload } from '../../../../../src/ui-scene/types';
 
 export type LayoutSaveResult = {
     filePath: string;
     relativePath: string;
     bytes: number;
+};
+
+export type UISceneAuthoringSceneId = 'home-v2';
+
+export type UISceneAuthoringSaveResult = LayoutSaveResult & {
+    sceneId: UISceneAuthoringSceneId;
+    compiledFilePath: string;
+    compiledRelativePath: string;
+    compiledBytes: number;
 };
 
 export type AbilitySlotLayoutItem = {
@@ -28,6 +39,7 @@ export class LayoutService {
     private readonly fileName = 'summonerwars.layout.json';
     private readonly repoRoot: string;
     private readonly abilityLayoutPath: string;
+    private readonly uiSceneRootPath: string;
 
     constructor() {
         const cwd = process.cwd();
@@ -44,6 +56,10 @@ export class LayoutService {
         this.abilityLayoutPath = envAbilityPath
             ? resolve(cwd, envAbilityPath)
             : resolve(this.repoRoot, 'src/games/dicethrone/ui/abilitySlotLayout.ts');
+        const envUiSceneRootPath = process.env.UI_SCENE_ROOT_PATH?.trim();
+        this.uiSceneRootPath = envUiSceneRootPath
+            ? resolve(cwd, envUiSceneRootPath)
+            : resolve(this.repoRoot, 'src/ui-scenes');
     }
 
     async saveSummonerWarsLayout(config: Record<string, unknown>): Promise<LayoutSaveResult> {
@@ -72,6 +88,39 @@ export class LayoutService {
             filePath: this.abilityLayoutPath,
             relativePath: this.toRelativePath(this.abilityLayoutPath),
             bytes: Buffer.byteLength(content, 'utf8'),
+        };
+    }
+
+    async saveUiSceneAuthoring(
+        sceneId: UISceneAuthoringSceneId,
+        payload: UISceneAuthoringSavePayload,
+    ): Promise<UISceneAuthoringSaveResult> {
+        const files = this.resolveUiSceneFiles(sceneId);
+        const authoringDocument = createAuthoringDocument({
+            sceneId,
+            assetRegistryFile: files.assetRegistryRelativePath,
+            assetRegistryYaml: payload.assetRegistryYaml,
+            skinFile: files.skinRelativePath,
+            skinYaml: payload.skinYaml,
+            sceneFile: files.sceneRelativePath,
+            sceneYaml: payload.sceneYaml,
+        });
+
+        const compiledJson = `${JSON.stringify(authoringDocument.compiled, null, 2)}\n`;
+        await mkdir(files.directoryPath, { recursive: true });
+        await writeFile(files.assetRegistryPath, payload.assetRegistryYaml, 'utf8');
+        await writeFile(files.skinPath, payload.skinYaml, 'utf8');
+        await writeFile(files.scenePath, payload.sceneYaml, 'utf8');
+        await writeFile(files.compiledPath, compiledJson, 'utf8');
+
+        return {
+            sceneId,
+            filePath: files.scenePath,
+            relativePath: files.sceneRelativePath,
+            bytes: Buffer.byteLength(payload.sceneYaml, 'utf8'),
+            compiledFilePath: files.compiledPath,
+            compiledRelativePath: files.compiledRelativePath,
+            compiledBytes: Buffer.byteLength(compiledJson, 'utf8'),
         };
     }
 
@@ -207,5 +256,29 @@ export const getPlayerBoardUiTuning = (characterId?: CharacterId | string | null
             return filePath.slice(root.length + 1);
         }
         return filePath;
+    }
+
+    private resolveUiSceneFiles(sceneId: UISceneAuthoringSceneId) {
+        if (sceneId !== 'home-v2') {
+            throw new Error(`uiScene.unsupported:${sceneId}`);
+        }
+
+        const directoryPath = resolve(this.uiSceneRootPath, sceneId);
+        const assetRegistryPath = resolve(directoryPath, 'asset-registry.yaml');
+        const skinPath = resolve(directoryPath, `${sceneId}.skin.yaml`);
+        const scenePath = resolve(directoryPath, `${sceneId}.ui.yaml`);
+        const compiledPath = resolve(directoryPath, `${sceneId}.compiled.json`);
+
+        return {
+            directoryPath,
+            assetRegistryPath,
+            skinPath,
+            scenePath,
+            compiledPath,
+            assetRegistryRelativePath: this.toRelativePath(assetRegistryPath),
+            skinRelativePath: this.toRelativePath(skinPath),
+            sceneRelativePath: this.toRelativePath(scenePath),
+            compiledRelativePath: this.toRelativePath(compiledPath),
+        };
     }
 }

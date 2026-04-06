@@ -26,6 +26,7 @@ import org.json.JSONObject;
 public class MainActivity extends BridgeActivity {
 
     private static final String ORIENTATION_MAP_ASSET = "game-orientation-map.json";
+    private static final String ANDROID_BUILD_META_ASSET = "public/android-build-meta.json";
     private static final long URL_POLL_INTERVAL_MS = 400L;
     private static final String PLAY_SEGMENT = "play";
     private static final String ORIENTATION_LANDSCAPE = "landscape";
@@ -55,13 +56,15 @@ public class MainActivity extends BridgeActivity {
     };
 
     private int lastRequestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
-    private boolean lastIsGamePage = false;
+    private boolean lastNeedsImmersiveWindow = false;
     private boolean orientationPolling = false;
+    private boolean homeV2DraftEnabledByBuild = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         WebView.setWebContentsDebuggingEnabled(true);
         gameOrientations.putAll(loadOrientationMap());
+        homeV2DraftEnabledByBuild = loadHomeV2DraftFlag();
         registerPlugin(GamePackagePlugin.class);
         bridgeBuilder.addWebViewListener(
             new WebViewListener() {
@@ -109,7 +112,7 @@ public class MainActivity extends BridgeActivity {
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
         if (hasFocus) {
-            applyWindowMode(lastIsGamePage);
+            applyWindowMode(lastNeedsImmersiveWindow);
         }
     }
 
@@ -139,22 +142,28 @@ public class MainActivity extends BridgeActivity {
 
     private void syncOrientation(String url) {
         final boolean isGamePage = extractGameId(url) != null;
+        final boolean isHomeV2Page = isHomeV2Route(url);
+        final boolean needsImmersiveWindow = isGamePage || isHomeV2Page;
         final int requestedOrientation = resolveRequestedOrientation(url);
-        if (requestedOrientation == lastRequestedOrientation && isGamePage == lastIsGamePage) {
+        if (requestedOrientation == lastRequestedOrientation && needsImmersiveWindow == lastNeedsImmersiveWindow) {
             return;
         }
         lastRequestedOrientation = requestedOrientation;
-        lastIsGamePage = isGamePage;
+        lastNeedsImmersiveWindow = needsImmersiveWindow;
         runOnUiThread(() -> {
             setRequestedOrientation(requestedOrientation);
-            applyWindowMode(isGamePage);
+            applyWindowMode(needsImmersiveWindow);
         });
     }
 
     private int resolveRequestedOrientation(String url) {
+        if (isHomeV2Route(url)) {
+            return ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
+        }
+
         String gameId = extractGameId(url);
         if (gameId == null) {
-            return ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+            return ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
         }
 
         String orientation = gameOrientations.getOrDefault(gameId, ORIENTATION_PORTRAIT);
@@ -162,6 +171,26 @@ public class MainActivity extends BridgeActivity {
             return ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE;
         }
         return ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
+    }
+
+    private boolean isHomeV2Route(String url) {
+        if (url == null || url.isEmpty()) {
+            return false;
+        }
+
+        android.net.Uri uri = android.net.Uri.parse(url);
+        List<String> segments = uri.getPathSegments();
+        boolean isRootPath = segments.isEmpty() || (segments.size() == 1 && "index.html".equals(segments.get(0)));
+        if (!isRootPath) {
+            return false;
+        }
+
+        String explicitFlag = uri.getQueryParameter("homeV2Draft");
+        if ("1".equals(explicitFlag)) {
+            return true;
+        }
+
+        return homeV2DraftEnabledByBuild;
     }
 
     private String extractGameId(String url) {
@@ -193,6 +222,16 @@ public class MainActivity extends BridgeActivity {
             // Fallback to portrait when the generated map is unavailable.
         }
         return map;
+    }
+
+    private boolean loadHomeV2DraftFlag() {
+        try (InputStream inputStream = getAssets().open(ANDROID_BUILD_META_ASSET)) {
+            String raw = readAll(inputStream);
+            JSONObject json = new JSONObject(raw);
+            return json.optBoolean("homeV2DraftEnabled", false);
+        } catch (IOException | JSONException ignored) {
+            return false;
+        }
     }
 
     private String readAll(InputStream inputStream) throws IOException {

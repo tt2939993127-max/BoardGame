@@ -21,3 +21,13 @@ declare const __LOCALE_HASHES__: Record<string, string>;
 declare const __ASSET_HASHES__: Record<string, string>;
 /** 构建时注入的 public 根目录静态文件 content hash 映射（fonts/logos/game-data） */
 declare const __PUBLIC_FILE_HASHES__: Record<string, string>;
+
+declare module '*.yaml?raw' {
+    const content: string;
+    export default content;
+}
+
+declare module '*.yml?raw' {
+    const content: string;
+    export default content;
+}

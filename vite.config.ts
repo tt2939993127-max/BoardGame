@@ -43,7 +43,7 @@ const readCliFlag = (flagName: string): string | undefined => {
   return undefined
 }
 
-const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string) => ({
+const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string, homeV2DraftEnabled: boolean) => ({
   name: 'android-build-meta',
   apply: 'build' as const,
   generateBundle() {
@@ -56,6 +56,7 @@ const createAndroidBuildMetaPlugin = (mode: string, backendUrl: string) => ({
         {
           mode,
           backendUrl,
+          homeV2DraftEnabled,
           builtAt: new Date().toISOString(),
         },
         null,
@@ -116,6 +117,7 @@ const createAndroidDistPrunePlugin = (mode: string) => ({
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const homeV2DraftEnabled = env.VITE_HOME_V2_DRAFT === '1'
   const forceInlineVite = env.BG_VITE_FORCE_INLINE === '1'
     || process.env.BG_VITE_FORCE_INLINE === '1'
   const disableViteWatch = process.env.PW_SERVER_WATCH === 'false'
@@ -177,7 +179,7 @@ export default defineConfig(({ mode }) => {
       assetHashPlugin(),
       publicFileHashPlugin(),
       readyCheckPlugin(),
-      createAndroidBuildMetaPlugin(mode, backendUrl),
+      createAndroidBuildMetaPlugin(mode, backendUrl, homeV2DraftEnabled),
       createAndroidDistPrunePlugin(mode),
     ],
     esbuild: forceInlineVite ? false : undefined,

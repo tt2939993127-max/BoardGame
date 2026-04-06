@@ -1,0 +1,215 @@
+{
+  "id": "home_v2_content",
+  "artboard": {
+    "width": 896,
+    "height": 720,
+    "zones": {
+      "left_page": {
+        "x": 94,
+        "y": 98,
+        "width": 280,
+        "height": 498
+      },
+      "right_page": {
+        "x": 520,
+        "y": 98,
+        "width": 280,
+        "height": 498
+      },
+      "left_page_overview": {
+        "x": 78,
+        "y": 74,
+        "width": 316,
+        "height": 548
+      },
+      "tab_lobby": {
+        "x": 806.4,
+        "y": 108,
+        "width": 53.76,
+        "height": 72
+      },
+      "tab_rooms": {
+        "x": 806.4,
+        "y": 187.2,
+        "width": 53.76,
+        "height": 72
+      },
+      "tab_leaderboard": {
+        "x": 806.4,
+        "y": 266.4,
+        "width": 53.76,
+        "height": 72
+      },
+      "tab_changelog": {
+        "x": 806.4,
+        "y": 345.6,
+        "width": 53.76,
+        "height": 72
+      },
+      "tab_about": {
+        "x": 806.4,
+        "y": 424.8,
+        "width": 53.76,
+        "height": 72
+      },
+      "spread_body": {
+        "x": 94,
+        "y": 144,
+        "width": 620,
+        "height": 405
+      }
+    }
+  },
+  "skins": {},
+  "root": {
+    "id": "root",
+    "type": "stack",
+    "visible": true,
+    "children": [
+      {
+        "id": "overview_left_page",
+        "type": "slot",
+        "visible": true,
+        "visibleIn": [
+          "overview"
+        ],
+        "zoneRef": "left_page_overview",
+        "rect": {
+          "x": 78,
+          "y": 74,
+          "width": 316,
+          "height": 548
+        },
+        "slotId": "overview_left_page",
+        "children": []
+      },
+      {
+        "id": "detail_left_page",
+        "type": "slot",
+        "visible": true,
+        "visibleIn": [
+          "detail"
+        ],
+        "zoneRef": "left_page",
+        "rect": {
+          "x": 94,
+          "y": 98,
+          "width": 280,
+          "height": 498
+        },
+        "slotId": "detail_left_page",
+        "children": []
+      },
+      {
+        "id": "detail_right_page",
+        "type": "slot",
+        "visible": true,
+        "visibleIn": [
+          "detail"
+        ],
+        "zoneRef": "right_page",
+        "rect": {
+          "x": 520,
+          "y": 98,
+          "width": 280,
+          "height": 498
+        },
+        "slotId": "detail_right_page",
+        "children": []
+      },
+      {
+        "id": "tab_button_lobby",
+        "type": "button",
+        "visible": true,
+        "visibleIn": [
+          "overview",
+          "detail"
+        ],
+        "zoneRef": "tab_lobby",
+        "rect": {
+          "x": 806.4,
+          "y": 108,
+          "width": 53.76,
+          "height": 72
+        },
+        "actionId": "openLobbyTab",
+        "children": []
+      },
+      {
+        "id": "tab_button_rooms",
+        "type": "button",
+        "visible": true,
+        "visibleIn": [
+          "overview",
+          "detail"
+        ],
+        "zoneRef": "tab_rooms",
+        "rect": {
+          "x": 806.4,
+          "y": 187.2,
+          "width": 53.76,
+          "height": 72
+        },
+        "actionId": "openRoomsTab",
+        "children": []
+      },
+      {
+        "id": "tab_button_leaderboard",
+        "type": "button",
+        "visible": true,
+        "visibleIn": [
+          "overview",
+          "detail"
+        ],
+        "zoneRef": "tab_leaderboard",
+        "rect": {
+          "x": 806.4,
+          "y": 266.4,
+          "width": 53.76,
+          "height": 72
+        },
+        "actionId": "openLeaderboardTab",
+        "children": []
+      },
+      {
+        "id": "tab_button_changelog",
+        "type": "button",
+        "visible": true,
+        "visibleIn": [
+          "overview",
+          "detail"
+        ],
+        "zoneRef": "tab_changelog",
+        "rect": {
+          "x": 806.4,
+          "y": 345.6,
+          "width": 53.76,
+          "height": 72
+        },
+        "actionId": "openChangelogTab",
+        "children": []
+      },
+      {
+        "id": "tab_button_about",
+        "type": "button",
+        "visible": true,
+        "visibleIn": [
+          "overview",
+          "detail"
+        ],
+        "zoneRef": "tab_about",
+        "rect": {
+          "x": 806.4,
+          "y": 424.8,
+          "width": 53.76,
+          "height": 72
+        },
+        "actionId": "openAboutTab",
+        "children": []
+      }
+    ],
+    "direction": "absolute",
+    "gap": 0
+  },
+  "assetDependencies": []
+}

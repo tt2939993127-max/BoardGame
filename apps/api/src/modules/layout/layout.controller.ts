@@ -1,11 +1,13 @@
-import { Body, Controller, Post, Req, Res, Inject } from '@nestjs/common';
+import { Body, Controller, Inject, Param, Post, Req, Res } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { LayoutService } from './layout.service';
 import type {
     AbilitySlotLayoutItem,
     DiceThroneAbilityLayoutVersion,
     DiceThroneAbilityLayoutsPayload,
+    UISceneAuthoringSceneId,
 } from './layout.service';
+import type { UISceneAuthoringSavePayload } from '../../../../../src/ui-scene/types';
 
 @Controller('layout')
 export class LayoutController {
@@ -55,6 +57,36 @@ export class LayoutController {
         } catch (error) {
             const message = error instanceof Error ? error.message : '未知错误';
             return res.status(400).json({ error: '布局保存失败', message, path: req.path });
+        }
+    }
+
+    @Post('ui-scene/:sceneId')
+    async saveUiSceneAuthoring(
+        @Param('sceneId') sceneId: string,
+        @Body() body: unknown,
+        @Req() req: Request,
+        @Res() res: Response,
+    ) {
+        if (process.env.NODE_ENV === 'production' && process.env.LAYOUT_SAVE_ALLOW !== '1') {
+            return res.status(403).json({ error: '布局保存已禁用' });
+        }
+
+        try {
+            const payload = this.normalizeUiSceneAuthoringPayload(body);
+            if (!payload) {
+                return res.status(400).json({ error: 'Scene 保存失败', message: 'sceneAuthoring.invalid', path: req.path });
+            }
+
+            const normalizedSceneId = this.normalizeUiSceneSceneId(sceneId);
+            if (!normalizedSceneId) {
+                return res.status(400).json({ error: 'Scene 保存失败', message: 'sceneAuthoring.unsupported', path: req.path });
+            }
+
+            const result = await this.layoutService.saveUiSceneAuthoring(normalizedSceneId, payload);
+            return res.status(201).json(result);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : '未知错误';
+            return res.status(400).json({ error: 'Scene 保存失败', message, path: req.path });
         }
     }
 
@@ -124,5 +156,41 @@ export class LayoutController {
             normalized.push({ id, x: x as number, y: y as number, w: w as number, h: h as number });
         }
         return normalized.length > 0 ? normalized : null;
+    }
+
+    private normalizeUiSceneSceneId(value: string): UISceneAuthoringSceneId | null {
+        if (value === 'home-v2') {
+            return value;
+        }
+
+        return null;
+    }
+
+    private normalizeUiSceneAuthoringPayload(body: unknown): UISceneAuthoringSavePayload | null {
+        const payload = this.normalizeBody(body);
+        if (!payload) {
+            return null;
+        }
+
+        const assetRegistryYaml = payload.assetRegistryYaml;
+        const skinYaml = payload.skinYaml;
+        const sceneYaml = payload.sceneYaml;
+        const sceneId = payload.sceneId;
+
+        if (
+            typeof assetRegistryYaml !== 'string'
+            || typeof skinYaml !== 'string'
+            || typeof sceneYaml !== 'string'
+            || typeof sceneId !== 'string'
+        ) {
+            return null;
+        }
+
+        return {
+            sceneId,
+            assetRegistryYaml,
+            skinYaml,
+            sceneYaml,
+        };
     }
 }

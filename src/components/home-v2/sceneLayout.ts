@@ -35,6 +35,21 @@ export const HOME_V2_PAGE_ZONE_STYLES = {
     right: createRegionStyle('rightPage'),
 } as const;
 
+export const HOME_V2_BOOK_BODY_STYLES = {
+    leftPage: {
+        left: '10.49%',
+        top: '13.61%',
+        width: '31.25%',
+        height: '69.17%',
+    } satisfies CSSProperties,
+    rightPage: {
+        left: '58.04%',
+        top: '13.61%',
+        width: '31.25%',
+        height: '69.17%',
+    } satisfies CSSProperties,
+} as const;
+
 export function getHomeV2TabStyle(tabId: HomeV2TabId): CSSProperties {
     return createRegionStyle(HOME_V2_TAB_REGION_IDS[tabId]);
 }

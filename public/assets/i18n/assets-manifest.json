@@ -1,0 +1,134 @@
+{
+  "manifestVersion": 1,
+  "scope": "official",
+  "id": "i18n",
+  "basePrefix": "official/i18n/",
+  "files": {
+    "en/smashup/cards/compressed/tts_atlas_54": {
+      "variants": {
+        "webp": {
+          "sha256": "2af4da3c2ef1cd17e7654bb4c8bb1278b0126100d0dcc1a8715dca67b92883a2",
+          "bytes": 834300,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "en/smashup/cards/compressed/tts_atlas_55": {
+      "variants": {
+        "webp": {
+          "sha256": "bc1c6059de8b28044efcdca9e4af642b66d43cdaaec46df79ae20458c827f7e5",
+          "bytes": 810126,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "en/smashup/cards/compressed/tts_atlas_56": {
+      "variants": {
+        "webp": {
+          "sha256": "222fbaf7ce22397d1f4aa3fd345b484660fdf98a1ad3070f3a7a661d667c6793",
+          "bytes": 868466,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "en/smashup/cards/compressed/tts_atlas_78": {
+      "variants": {
+        "webp": {
+          "sha256": "60822d7f429baac61498e3f95c6fdded8dae08d76a5a137ffae3b9db0d1f7593",
+          "bytes": 291734,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "en/smashup/cards/compressed/tts_atlas_79": {
+      "variants": {
+        "webp": {
+          "sha256": "c7dcf1c9e4f0d4aee2c18357d491974a2cff469d0af44094341314a335c804ba",
+          "bytes": 960678,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "en/smashup/cards/compressed/tts_atlas_8789f47742": {
+      "variants": {
+        "webp": {
+          "sha256": "e21bf2e15a921afe5a7a6cd38b263a6c0388454b585d70b4d45d5eac72755034",
+          "bytes": 2677026,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/barbarian/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "baa5a13a59d359c46081928bfa497b0bb1dd39853b497829c6e137d0ebc4dfe1",
+          "bytes": 387,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/gunslinger/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "98476906a2f6f6de26740f75586292f6a7d431feebe8963e6922bf370010e5a1",
+          "bytes": 738,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/monk/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "d2cbd24524ddca7becefaa1f989710752858c5a28097b01be2eceef31fd4b36e",
+          "bytes": 640,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/moon_elf/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "e8282362dd899ff5ca19dc68dfa78e374ec556ebc131005975e35e778e434650",
+          "bytes": 642,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/paladin/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "962e361650a870db0f66ae4f482a8c1fda062d66722f96cf1ce3446d7b4c3d44",
+          "bytes": 797,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/pyromancer/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "755f2ea1a75ede21e635bd6db6bb70e24c8b7816681904c62d1d6cc18c5a5d72",
+          "bytes": 664,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/samurai/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "aec1b6413c51c921105ad70e33fc216ac736b73c995315353d707ae09e01eb7f",
+          "bytes": 622,
+          "mime": "application/json"
+        }
+      }
+    },
+    "zh-CN/dicethrone/images/shadow_thief/status-icons-atlas.json": {
+      "variants": {
+        "json": {
+          "sha256": "2d4cbca373c695e16c4e46bb6024125db882443ee94ba4a7e55e36f8f3ce955a",
+          "bytes": 521,
+          "mime": "application/json"
+        }
+      }
+    }
+  }
+}

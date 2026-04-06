@@ -25,6 +25,8 @@ export interface UISceneArtboardDefinition {
 
 export interface UIScenePresentationDefinition {
     scaleMultiplier?: number;
+    offsetXPct?: number;
+    offsetYPct?: number;
 }
 
 export type UISceneState = string;
@@ -65,6 +67,7 @@ export interface UIScenePrefabRenderContext<TProps extends UISceneNodeProps = UI
     regionRect: UISceneRect | null;
     clipRect: UISceneRect | null;
     activeState?: UISceneState;
+    sceneContext?: Record<string, unknown>;
     emit: (eventId: string, payload?: unknown) => void;
 }
 

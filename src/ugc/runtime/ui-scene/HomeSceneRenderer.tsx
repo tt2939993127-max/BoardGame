@@ -1,18 +1,19 @@
 import React from 'react';
 import { UISceneRenderer, type UISceneRendererProps } from './UISceneRenderer';
-import { HOME_V2_BOOK_SCENE, type HomeV2IntroStage } from './scenes/homeV2BookScene';
+import { HOME_V2_BOOK_SCENE, type HomeV2SceneState } from './scenes/homeV2BookScene';
 import type { UISceneNodeEvent } from './types';
 
 export interface HomeSceneRendererProps extends Omit<UISceneRendererProps, 'scene' | 'activeState' | 'onNodeEvent'> {
-    introStage: HomeV2IntroStage;
+    sceneState: HomeV2SceneState;
+    sceneContext?: Record<string, unknown>;
     onIntroOpenComplete: () => void;
     onIntroTabsComplete: () => void;
     onSceneEvent?: (event: UISceneNodeEvent) => void;
-    children?: React.ReactNode;
 }
 
 export const HomeSceneRenderer = ({
-    introStage,
+    sceneState,
+    sceneContext,
     onIntroOpenComplete,
     onIntroTabsComplete,
     onSceneEvent,
@@ -38,7 +39,8 @@ export const HomeSceneRenderer = ({
         <UISceneRenderer
             {...rendererProps}
             scene={HOME_V2_BOOK_SCENE}
-            activeState={introStage}
+            activeState={sceneState}
+            sceneContext={sceneContext}
             onNodeEvent={handleNodeEvent}
         >
             {rendererProps.children}

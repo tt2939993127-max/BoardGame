@@ -8,7 +8,7 @@ export {
     type UIHotspotPrefabProps,
     type UIImagePrefabProps,
 } from './prefabs';
-export { HOME_V2_BOOK_SCENE, type HomeV2IntroStage } from './scenes/homeV2BookScene';
+export { HOME_V2_BOOK_SCENE, type HomeV2SceneState } from './scenes/homeV2BookScene';
 export type {
     UISceneArtboardDefinition,
     UISceneArtboardRegion,

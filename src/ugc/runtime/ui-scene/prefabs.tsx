@@ -5,6 +5,7 @@ import type {
     UISceneNodeProps,
     UIScenePrefabDefinition,
 } from './types';
+import clsx from 'clsx';
 
 export interface UIImagePrefabProps extends UISceneNodeProps {
     image: string;
@@ -23,6 +24,11 @@ export interface UIHotspotPrefabProps extends UISceneNodeProps {
     label: string;
     eventId: string;
     debugFill?: boolean;
+}
+
+export interface UIBookTabPrefabProps extends UISceneNodeProps {
+    tabId: string;
+    eventId: string;
 }
 
 export interface UIScenePrefabRegistry {
@@ -103,7 +109,7 @@ const imagePrefab: UIScenePrefabDefinition<UIImagePrefabProps> = {
     displayName: '静态图片',
     render: ({ clipRect, node, rect }) => {
         const props = node.props;
-        const src = getOptimizedImageUrls(props.image).webp;
+        const src = getOptimizedImageUrls(props.image || '').webp;
 
         return renderVisualLayer(
             <img
@@ -140,7 +146,7 @@ const frameSequencePrefab: UIScenePrefabDefinition<UIFrameSequencePrefabProps> =
             <FrameSequencePlayer
                 sequence={props.sequence}
                 playbackKey={`${node.id}:${activeState ?? 'default'}`}
-                onComplete={props.eventId ? () => emit(props.eventId) : undefined}
+                onComplete={props.eventId ? () => emit(props.eventId!) : undefined}
                 className="h-full w-full"
                 style={{ objectFit: props.fit ?? 'contain' }}
             />,
@@ -175,8 +181,53 @@ const hotspotPrefab: UIScenePrefabDefinition<UIHotspotPrefabProps> = {
     },
 };
 
-export function createUIScenePrefabRegistry(prefabs: UIScenePrefabDefinition[]): UIScenePrefabRegistry {
-    const registry = new Map<string, UIScenePrefabDefinition>();
+const bookTabPrefab: UIScenePrefabDefinition<UIBookTabPrefabProps> = {
+    prefabId: 'book-tab',
+    version: '1.0.0',
+    displayName: '书本书签',
+    render: ({ emit, node, rect, regionRect, sceneContext }) => {
+        const targetRect = regionRect ?? rect;
+        if (!targetRect) {
+            return null;
+        }
+
+        const props = node.props;
+        const isActive = sceneContext?.activeTab === props.tabId;
+
+        // Note: Translation would typically be handled by passing the translated string via props or context
+        // For now we'll use a placeholder or assume it's passed in sceneContext
+        const label = (sceneContext?.tabLabels as Record<string, string>)?.[props.tabId] ?? props.tabId;
+
+        return (
+            <button
+                key={node.id}
+                className={clsx(
+                    'absolute group flex items-center justify-center pointer-events-auto cursor-pointer transition-all duration-200',
+                    isActive ? 'opacity-100 translate-x-[-2px]' : 'opacity-80 hover:opacity-100 hover:translate-x-[-1px]',
+                )}
+                style={buildAbsoluteStyle(targetRect)}
+                onClick={() => emit(props.eventId, { tabId: props.tabId })}
+                aria-label={label}
+                data-testid={node.testId}
+            >
+                <div
+                    className={clsx(
+                        'writing-vertical-rl text-[10px] md:text-xs font-bold tracking-widest',
+                        isActive ? 'text-[#4a3525]' : 'text-[#7a6555] group-hover:text-[#5a4535]',
+                    )}
+                    style={{
+                        textShadow: isActive ? '0 1px 2px rgba(255,255,255,0.8)' : 'none',
+                    }}
+                >
+                    {label}
+                </div>
+            </button>
+        );
+    },
+};
+
+export function createUIScenePrefabRegistry(prefabs: UIScenePrefabDefinition<any>[]): UIScenePrefabRegistry {
+    const registry = new Map<string, UIScenePrefabDefinition<any>>();
 
     prefabs.forEach((prefab) => {
         if (registry.has(prefab.prefabId)) {
@@ -196,4 +247,5 @@ export const defaultUIScenePrefabRegistry = createUIScenePrefabRegistry([
     frameSequencePrefab,
     hotspotPrefab,
     bookTabStripPrefab,
+    bookTabPrefab,
 ]);
