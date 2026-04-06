@@ -88,12 +88,32 @@ describe('androidLiveUpdates', () => {
         });
     });
 
-    it('缺少 manifest 和 APK 直链时，网页端下载入口返回 missing-config', async () => {
-        const result = await resolveAndroidWebAppDownload({});
+    it('网页端下载入口在未显式配置时默认回退到官方 stable manifest', async () => {
+        const result = await resolveAndroidWebAppDownload({}, vi.fn(async (input) => ({
+            ok: true,
+            status: 200,
+            json: async () => ({
+                version: '0.5.2',
+                url: String(input).replace('latest.json', 'packages/0.5.2.apk'),
+            }),
+        } as Response)));
+
+        expect(result).toEqual({
+            url: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.2.apk',
+            source: 'manifest',
+        });
+    });
+
+    it('默认 manifest 也不可用且没有 APK 直链时，网页端下载入口返回 manifest-unavailable', async () => {
+        const result = await resolveAndroidWebAppDownload({}, vi.fn(async () => ({
+            ok: false,
+            status: 404,
+            json: async () => ({}),
+        } as Response)));
 
         expect(result).toEqual({
             url: null,
-            reason: 'missing-config',
+            reason: 'manifest-unavailable',
         });
     });
 

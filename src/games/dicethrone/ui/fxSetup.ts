@@ -57,12 +57,14 @@ const IMPACT_SFX = {
 } as const;
 
 /** 状态效果冲击音效解析（获得/移除） */
-export function resolveStatusImpactKey(isRemove: boolean): string {
+export function resolveStatusImpactKey(isRemove: boolean, customKey?: string): string {
+  if (!isRemove && customKey) return customKey;
   return isRemove ? IMPACT_SFX.STATUS_REMOVE : IMPACT_SFX.STATUS_GAIN;
 }
 
 /** Token 冲击音效解析（获得/移除） */
-export function resolveTokenImpactKey(isRemove: boolean): string {
+export function resolveTokenImpactKey(isRemove: boolean, customKey?: string): string {
+  if (!isRemove && customKey) return customKey;
   return isRemove ? IMPACT_SFX.TOKEN_REMOVE : IMPACT_SFX.TOKEN_GAIN;
 }
 

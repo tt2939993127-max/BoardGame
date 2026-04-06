@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth, type UserRole } from '../../contexts/AuthContext';
+import { AdminShellSkeleton } from '../../pages/admin/components/AdminSkeletons';
 
 type AdminGuardProps = {
     children: ReactNode;
@@ -17,11 +18,7 @@ export default function AdminGuard({
     const location = useLocation();
 
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-screen bg-zinc-50">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
-            </div>
-        );
+        return <AdminShellSkeleton />;
     }
 
     if (!user || !allowedRoles.includes(user.role)) {

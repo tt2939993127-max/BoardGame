@@ -56,6 +56,17 @@ describe('StatusEffectsIcons', () => {
 
         expect(meta?.frameId).toBe(TOKEN_IDS.BOUNTY);
         expect(meta?.iconPath).toBe('dicethrone/images/gunslinger/icons/赏金');
+        expect(meta?.sfxKey).toBe('ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a');
+    });
+
+    it('武士 token 视觉元数据应暴露专属 sfxKey，供动画冲击音优先使用', () => {
+        const honor = getVisualMetaById(TOKEN_IDS.HONOR);
+        const shame = getVisualMetaById(TOKEN_IDS.SHAME);
+        const retribution = getVisualMetaById(TOKEN_IDS.SAMURAI_RETRIBUTION);
+
+        expect(honor?.sfxKey).toBe('magic.general.simple_magic_sound_fx_pack_vol.light.heavenly_flame');
+        expect(shame?.sfxKey).toBe('fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion');
+        expect(retribution?.sfxKey).toBe('fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_lightning');
     });
 
     it('无 atlas 时应回退到单图 iconPath', () => {

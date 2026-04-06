@@ -489,7 +489,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: info.color,
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentBuff.current),
-                    soundKey: resolveStatusImpactKey(false),
+                    soundKey: resolveStatusImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -503,7 +503,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.opponentBuff.current),
                     isRemove: true,
-                    soundKey: resolveStatusImpactKey(true),
+                    soundKey: resolveStatusImpactKey(true, info.sfxKey),
                 });
             }
         });
@@ -527,7 +527,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: info.color,
                     startPos: getEffectStartPos(currentPlayerId),
                     endPos: getElementCenter(refs.selfBuff.current),
-                    soundKey: resolveStatusImpactKey(false),
+                    soundKey: resolveStatusImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -541,7 +541,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.selfBuff.current),
                     isRemove: true,
-                    soundKey: resolveStatusImpactKey(true),
+                    soundKey: resolveStatusImpactKey(true, info.sfxKey),
                 });
             }
         });
@@ -567,7 +567,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: info.color,
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentBuff.current),
-                    soundKey: resolveTokenImpactKey(false),
+                    soundKey: resolveTokenImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -581,7 +581,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.opponentBuff.current),
                     isRemove: true,
-                    soundKey: resolveTokenImpactKey(true),
+                    soundKey: resolveTokenImpactKey(true, info.sfxKey),
                 });
             }
         });
@@ -605,7 +605,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: info.color,
                     startPos: getEffectStartPos(currentPlayerId),
                     endPos: getElementCenter(refs.selfBuff.current),
-                    soundKey: resolveTokenImpactKey(false),
+                    soundKey: resolveTokenImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -619,7 +619,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.selfBuff.current),
                     isRemove: true,
-                    soundKey: resolveTokenImpactKey(true),
+                    soundKey: resolveTokenImpactKey(true, info.sfxKey),
                 });
             }
         });

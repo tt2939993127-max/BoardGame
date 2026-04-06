@@ -11,6 +11,7 @@ export type StatusEffectMeta = {
     frameId?: string;
     atlasId?: string;
     iconPath?: string;
+    sfxKey?: string;
 };
 
 /**
@@ -31,6 +32,7 @@ function buildVisualMeta(): {
             atlasId: def.atlasId,
             color: def.colorTheme,
             iconPath: def.iconPath,
+            sfxKey: def.sfxKey,
         };
 
         if (def.category === 'debuff') {

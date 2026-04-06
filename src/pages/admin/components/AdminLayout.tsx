@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../../../contexts/AuthContext';
 import { useModalStack } from '../../../contexts/ModalStackContext';
 import { cn } from '../../../lib/utils';
+import { AdminListPageSkeleton } from './AdminSkeletons';
 
 type NavItem = {
     icon: typeof LayoutDashboard;
@@ -153,7 +154,7 @@ export default function AdminLayout() {
             </aside>
 
             <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-50">
-                <Suspense fallback={<div className="flex h-full items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600"></div></div>}>
+                <Suspense fallback={<AdminListPageSkeleton rows={3} />}>
                     <Outlet />
                 </Suspense>
             </main>

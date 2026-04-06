@@ -9,6 +9,7 @@ import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 import { MONK_ABILITIES } from '../heroes/monk/abilities';
 import { GUNSLINGER_ABILITIES, GUNSLINGER_SFX_HEAVY, GUNSLINGER_SFX_SHOT, GUNSLINGER_SFX_ULTIMATE } from '../heroes/gunslinger/abilities';
 import { SAMURAI_ABILITIES, SAMURAI_SFX_DEFENSE, SAMURAI_SFX_HEAVY, SAMURAI_SFX_LIGHT, SAMURAI_SFX_ULTIMATE } from '../heroes/samurai/abilities';
+import { SAMURAI_TOKEN_SFX_HONOR, SAMURAI_TOKEN_SFX_RETRIBUTION, SAMURAI_TOKEN_SFX_SHAME } from '../heroes/samurai/tokens';
 import type { AudioEvent } from '../../../lib/audio/types';
 
 const DICE_ROLL_SINGLE_KEY = 'dice.decks_and_cards_sound_fx_pack.dice_roll_velvet_001';
@@ -228,6 +229,50 @@ describe('DiceThrone 音效配置', () => {
             expect(keys).toContain(SAMURAI_SFX_HEAVY);
             expect(keys).toContain(SAMURAI_SFX_DEFENSE);
             expect(keys).toContain(SAMURAI_SFX_ULTIMATE);
+        });
+    });
+
+    describe('枪手 / 武士手牌音效配置', () => {
+        it('枪手打出主题手牌时应返回卡牌级专属音效', () => {
+            const gunslingerShotCard: AudioEvent = {
+                type: 'CARD_PLAYED',
+                payload: { playerId: '0', cardId: 'card-high-noon', cpCost: 1 },
+            };
+            const gunslingerUltimateCard: AudioEvent = {
+                type: 'CARD_PLAYED',
+                payload: { playerId: '0', cardId: 'card-eat-my-lead', cpCost: 2 },
+            };
+
+            expect(resolveKey(gunslingerShotCard)).toBe(GUNSLINGER_SFX_SHOT);
+            expect(resolveKey(gunslingerUltimateCard)).toBe(GUNSLINGER_SFX_ULTIMATE);
+        });
+
+        it('武士打出主题手牌时应返回卡牌级专属音效', () => {
+            const samuraiHonorCard: AudioEvent = {
+                type: 'CARD_PLAYED',
+                payload: { playerId: '0', cardId: 'card-samurai-honor', cpCost: 1 },
+            };
+            const samuraiAttackModifier: AudioEvent = {
+                type: 'CARD_PLAYED',
+                payload: { playerId: '0', cardId: 'card-zanshin', cpCost: 2 },
+            };
+
+            expect(resolveKey(samuraiHonorCard)).toBe(SAMURAI_TOKEN_SFX_HONOR);
+            expect(resolveKey(samuraiAttackModifier)).toBe(SAMURAI_SFX_ULTIMATE);
+        });
+    });
+
+    describe('武士 token 专属音效配置', () => {
+        it('选中武士后应预热武士 token 的专属音效', () => {
+            const keys = DICETHRONE_AUDIO_CONFIG.contextualPreloadKeys?.({
+                G: { selectedCharacters: { '0': 'samurai' } },
+                ctx: {},
+                meta: {},
+            } as never) ?? [];
+
+            expect(keys).toContain(SAMURAI_TOKEN_SFX_HONOR);
+            expect(keys).toContain(SAMURAI_TOKEN_SFX_SHAME);
+            expect(keys).toContain(SAMURAI_TOKEN_SFX_RETRIBUTION);
         });
     });
 
