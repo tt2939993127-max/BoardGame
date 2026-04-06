@@ -23,6 +23,7 @@ describe('mobile support manifest contract', () => {
         expect(games.length).toBeGreaterThan(0);
         for (const game of games) {
             expect(game.mobileProfile).toBeDefined();
+            expect(game.mobileBattlefieldZoom).toBeDefined();
             expect(game.shellTargets?.length ?? 0).toBeGreaterThan(0);
             expect(game.mobileDelivery?.mode).toBeDefined();
         }
@@ -34,6 +35,7 @@ describe('mobile support manifest contract', () => {
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
         expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(game?.mobileBattlefieldZoom).toBe('game-owned');
         expect(game?.shellTargets).toEqual(
             expect.arrayContaining(['pwa', 'app-webview', 'mini-program-webview']),
         );
@@ -51,6 +53,7 @@ describe('mobile support manifest contract', () => {
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
         expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(game?.mobileBattlefieldZoom).toBe('none');
         expect(
             getGameMobileBannerKind(
                 {
@@ -70,6 +73,7 @@ describe('mobile support manifest contract', () => {
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
         expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(game?.mobileBattlefieldZoom).toBe('none');
         expect(
             shouldUseBoardShellScale(
                 {
@@ -90,6 +94,7 @@ describe('mobile support helpers', () => {
             mobileProfile: 'landscape-adapted',
             preferredOrientation: 'landscape',
             mobileLayoutPreset: 'board-shell',
+            mobileBattlefieldZoom: 'none',
             shellTargets: ['pwa'],
             mobileDelivery: {
                 mode: 'builtin',
@@ -172,6 +177,7 @@ describe('mobile support helpers', () => {
             mobileProfile: 'landscape-adapted',
             preferredOrientation: 'landscape',
             mobileLayoutPreset: 'board-shell',
+            mobileBattlefieldZoom: 'shell-pinch-pan',
             shellTargets: ['pwa', 'app-webview'],
         });
 
@@ -180,6 +186,7 @@ describe('mobile support helpers', () => {
         expect(attrs['data-mobile-profile']).toBe('landscape-adapted');
         expect(attrs['data-preferred-orientation']).toBe('landscape');
         expect(attrs['data-mobile-layout-preset']).toBe('board-shell');
+        expect(attrs['data-mobile-battlefield-zoom']).toBe('shell-pinch-pan');
         expect(attrs['data-shell-targets']).toBe('pwa,app-webview');
     });
 
@@ -192,12 +199,14 @@ describe('mobile support helpers', () => {
             'data-game-id': 'dicethrone',
             'data-mobile-profile': 'landscape-adapted',
             'data-mobile-layout-preset': 'board-shell',
+            'data-mobile-battlefield-zoom': 'game-owned',
         });
 
         expect(document.documentElement.getAttribute('data-game-page')).toBe('true');
         expect(document.documentElement.getAttribute('data-game-id')).toBe('dicethrone');
         expect(document.body.getAttribute('data-mobile-profile')).toBe('landscape-adapted');
         expect(document.body.getAttribute('data-mobile-layout-preset')).toBe('board-shell');
+        expect(document.body.getAttribute('data-mobile-battlefield-zoom')).toBe('game-owned');
 
         cleanup();
 
@@ -205,6 +214,7 @@ describe('mobile support helpers', () => {
         expect(document.documentElement.getAttribute('data-game-id')).toBe('previous-root');
         expect(document.body.getAttribute('data-mobile-profile')).toBe('previous-body-profile');
         expect(document.body.getAttribute('data-mobile-layout-preset')).toBeNull();
+        expect(document.body.getAttribute('data-mobile-battlefield-zoom')).toBeNull();
     });
 
     it('only landscape board-shell games enable legacy scale fallback', () => {

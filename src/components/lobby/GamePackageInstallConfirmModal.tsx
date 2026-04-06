@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, HardDriveDownload, LoaderCircle, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Download, HardDriveDownload, RefreshCw, X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { ModalBase } from '../common/overlays/ModalBase';
 import type { GamePackageCardState } from '../../features/mobile-packages/types';
@@ -16,7 +16,8 @@ interface GamePackageInstallConfirmModalProps {
     assetPackBytes?: number;
     onConfirm: () => void | Promise<void>;
     onRetry?: () => void | Promise<void>;
-    onCancel: () => void;
+    onClose: () => void | Promise<void>;
+    onCancel: () => void | Promise<void>;
     isLoading?: boolean;
     closeOnBackdrop?: boolean;
 }
@@ -33,6 +34,7 @@ export const GamePackageInstallConfirmModal = ({
     assetPackBytes,
     onConfirm,
     onRetry,
+    onClose,
     onCancel,
     isLoading = false,
     closeOnBackdrop = true,
@@ -100,17 +102,17 @@ export const GamePackageInstallConfirmModal = ({
             : isInstalled
                 ? t('packageManager.installedHint', { game: gameName })
                 : t(`packageManager.progress.${state.status === 'queued' ? 'queuedHint' : state.status === 'manifest' ? 'manifestHint' : state.status === 'downloading' ? 'downloadHint' : 'verifyHint'}`);
-    const PrimaryIcon = isFailed ? RefreshCw : isInProgress ? LoaderCircle : Download;
+    const PrimaryIcon = isInProgress ? X : isFailed ? RefreshCw : Download;
     const primaryActionLabel = isInProgress
-        ? modalTitle
+        ? t('packageManager.cancelAction')
         : isFailed
             ? t('packageManager.retryAction')
             : t('packageManager.confirmAction');
-    const isPrimaryDisabled = isLoading || isInProgress;
+    const isPrimaryDisabled = !isInProgress && isLoading;
 
     return (
         <ModalBase
-            onClose={onCancel}
+            onClose={onClose}
             closeOnBackdrop={closeOnBackdrop}
             overlayClassName="bg-[#2b2114]/30"
             containerClassName="p-4 sm:p-6"
@@ -209,17 +211,20 @@ export const GamePackageInstallConfirmModal = ({
                 <div className="mt-5 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <button
                         type="button"
-                        onClick={onCancel}
-                        disabled={isLoading}
-                        className="touch-target-min rounded-[4px] border border-parchment-card-border/50 bg-parchment-card-bg px-4 py-2 text-xs font-bold uppercase tracking-wider text-parchment-base-text transition-colors hover:bg-parchment-base-bg disabled:cursor-not-allowed disabled:opacity-60"
+                        onClick={() => {
+                            void onClose();
+                        }}
+                        disabled={false}
+                        className="touch-target-min rounded-[4px] border border-parchment-card-border/50 bg-parchment-card-bg px-4 py-2 text-xs font-bold uppercase tracking-wider text-parchment-base-text transition-colors hover:bg-parchment-base-bg"
                     >
-                        {t('actions.cancel')}
+                        {t('common:close')}
                     </button>
                     {!isInstalled && (
                         <button
                             type="button"
                             onClick={() => {
                                 if (isInProgress) {
+                                    void onCancel();
                                     return;
                                 }
                                 if (isFailed) {
@@ -231,9 +236,14 @@ export const GamePackageInstallConfirmModal = ({
                             }}
                             disabled={isPrimaryDisabled}
                             aria-busy={isLoading}
-                            className="touch-target-min inline-flex items-center justify-center gap-2 rounded-[4px] bg-parchment-base-text px-4 py-2 text-xs font-bold uppercase tracking-wider text-parchment-card-bg transition-colors hover:bg-parchment-brown disabled:cursor-not-allowed disabled:opacity-60"
+                            className={[
+                                'touch-target-min inline-flex items-center justify-center gap-2 rounded-[4px] px-4 py-2 text-xs font-bold uppercase tracking-wider transition-colors disabled:cursor-not-allowed disabled:opacity-60',
+                                isInProgress
+                                    ? 'border border-amber-800/25 bg-amber-50/92 text-amber-900 hover:bg-amber-100'
+                                    : 'bg-parchment-base-text text-parchment-card-bg hover:bg-parchment-brown',
+                            ].join(' ')}
                         >
-                            <PrimaryIcon size={14} className={isInProgress ? 'animate-spin' : ''} />
+                            <PrimaryIcon size={14} />
                             <span>{primaryActionLabel}</span>
                         </button>
                     )}

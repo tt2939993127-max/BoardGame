@@ -1,4 +1,5 @@
 import type {
+    GameMobileBattlefieldZoom,
     GameManifestMobileDelivery,
     GameManifestEntry,
     GameMobileLayoutPreset,
@@ -19,6 +20,7 @@ export interface ResolvedGameMobileSupport {
     mobileProfile: GameMobileProfile;
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
+    mobileBattlefieldZoom: GameMobileBattlefieldZoom;
     shellTargets: GameShellTarget[];
     mobileDelivery: GameManifestMobileDelivery;
 }
@@ -61,6 +63,7 @@ const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
     'data-mobile-profile',
     'data-preferred-orientation',
     'data-mobile-layout-preset',
+    'data-mobile-battlefield-zoom',
     'data-shell-targets',
 ] as const;
 
@@ -149,7 +152,7 @@ export const buildRuntimeBlockUnitValue = (multiplier: number, fallback = '1vh')
 export const resolveGameMobileSupport = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets' | 'mobileDelivery'
     > | null,
 ): ResolvedGameMobileSupport => {
     const mobileProfile = entry?.mobileProfile ?? 'none';
@@ -165,6 +168,7 @@ export const resolveGameMobileSupport = (
             : mobileProfile === 'portrait-adapted'
                 ? 'portrait-simple'
                 : undefined);
+    const mobileBattlefieldZoom = entry?.mobileBattlefieldZoom ?? 'none';
     const shellTargets = entry?.shellTargets?.length
         ? [...entry.shellTargets]
         : [...DEFAULT_SHELL_TARGETS];
@@ -191,6 +195,7 @@ export const resolveGameMobileSupport = (
         mobileProfile,
         preferredOrientation,
         mobileLayoutPreset,
+        mobileBattlefieldZoom,
         shellTargets,
         mobileDelivery,
     };
@@ -208,7 +213,7 @@ export const getGamePageDataAttributes = (
     gameId?: string,
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets' | 'mobileDelivery'
     > | null,
 ) => {
     const attributes: Record<string, string> = {
@@ -224,6 +229,7 @@ export const getGamePageDataAttributes = (
 
     const support = resolveGameMobileSupport(entry);
     attributes['data-mobile-profile'] = support.mobileProfile;
+    attributes['data-mobile-battlefield-zoom'] = support.mobileBattlefieldZoom;
     attributes['data-shell-targets'] = support.shellTargets.join(',');
     if (support.preferredOrientation) {
         attributes['data-preferred-orientation'] = support.preferredOrientation;
@@ -280,7 +286,7 @@ export const syncGamePageDocumentAttributes = (
 export const getGameMobileBannerKind = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets'
         | 'mobileDelivery'
     > | null,
     width = 0,
@@ -308,7 +314,7 @@ export const getGameMobileBannerKind = (
 export const shouldUseBoardShellScale = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets' | 'mobileDelivery'
     > | null,
     width = 0,
     height = 0,

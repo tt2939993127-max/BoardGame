@@ -74,6 +74,112 @@ async function clickCenter(locator: any, page: any) {
     await locator.dispatchEvent('click');
 }
 
+async function pinchZoomTouch(locator: any, page: any, options?: {
+    startDistance?: number;
+    endDistance?: number;
+    steps?: number;
+    durationMs?: number;
+}) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    await locator.evaluate(async (element: HTMLElement, rawOptions?: {
+        startDistance?: number;
+        endDistance?: number;
+        steps?: number;
+        durationMs?: number;
+    }) => {
+        const startDistance = rawOptions?.startDistance ?? 120;
+        const endDistance = rawOptions?.endDistance ?? 250;
+        const steps = rawOptions?.steps ?? 6;
+        const durationMs = rawOptions?.durationMs ?? 140;
+        const rect = element.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const dispatch = (type: 'pointerdown' | 'pointermove' | 'pointerup', pointerId: number, clientX: number, clientY: number) => {
+            element.dispatchEvent(new PointerEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                pointerId,
+                pointerType: 'touch',
+                isPrimary: pointerId === 1,
+                clientX,
+                clientY,
+            }));
+        };
+        const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+        const startHalf = startDistance / 2;
+        const endHalf = endDistance / 2;
+
+        dispatch('pointerdown', 1, centerX - startHalf, centerY);
+        dispatch('pointerdown', 2, centerX + startHalf, centerY);
+
+        for (let step = 1; step <= steps; step += 1) {
+            const progress = step / steps;
+            const currentHalf = startHalf + (endHalf - startHalf) * progress;
+            dispatch('pointermove', 1, centerX - currentHalf, centerY);
+            dispatch('pointermove', 2, centerX + currentHalf, centerY);
+            await wait(durationMs / steps);
+        }
+
+        dispatch('pointerup', 1, centerX - endHalf, centerY);
+        dispatch('pointerup', 2, centerX + endHalf, centerY);
+    }, options);
+    await page.waitForTimeout(180);
+}
+
+async function panTouch(locator: any, page: any, options?: {
+    deltaX?: number;
+    deltaY?: number;
+    steps?: number;
+    durationMs?: number;
+    startXRatio?: number;
+    startYRatio?: number;
+    pointerId?: number;
+}) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    await locator.evaluate(async (element: HTMLElement, rawOptions?: {
+        deltaX?: number;
+        deltaY?: number;
+        steps?: number;
+        durationMs?: number;
+        startXRatio?: number;
+        startYRatio?: number;
+        pointerId?: number;
+    }) => {
+        const deltaX = rawOptions?.deltaX ?? -120;
+        const deltaY = rawOptions?.deltaY ?? 0;
+        const steps = rawOptions?.steps ?? 6;
+        const durationMs = rawOptions?.durationMs ?? 140;
+        const startXRatio = rawOptions?.startXRatio ?? 0.5;
+        const startYRatio = rawOptions?.startYRatio ?? 0.46;
+        const pointerId = rawOptions?.pointerId ?? 11;
+        const rect = element.getBoundingClientRect();
+        const startX = rect.left + rect.width * startXRatio;
+        const startY = rect.top + rect.height * startYRatio;
+        const dispatch = (type: 'pointerdown' | 'pointermove' | 'pointerup', clientX: number, clientY: number) => {
+            element.dispatchEvent(new PointerEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                pointerId,
+                pointerType: 'touch',
+                isPrimary: true,
+                clientX,
+                clientY,
+            }));
+        };
+        const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+        dispatch('pointerdown', startX, startY);
+        for (let step = 1; step <= steps; step += 1) {
+            const progress = step / steps;
+            dispatch('pointermove', startX + deltaX * progress, startY + deltaY * progress);
+            await wait(durationMs / steps);
+        }
+        dispatch('pointerup', startX + deltaX, startY + deltaY);
+    }, options);
+    await page.waitForTimeout(180);
+}
+
 const INITIAL_BASE_IDS = ['base_the_jungle', 'base_dread_lookout', 'base_tsars_palace'] as const;
 const REPLACEMENT_BASE_DECK = [
     'base_central_brain',
@@ -518,7 +624,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await game.screenshot('03-final-four-player-state', testInfo);
     });
 
-    test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌', async ({ page, game }, testInfo) => {
+    test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌与战场拖拽放大', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
@@ -560,6 +666,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         const scoreBoard = page.locator('[data-tutorial-id="su-scoreboard"]');
         const handArea = page.locator('[data-testid="su-hand-area"]');
+        const battlefieldViewport = page.locator('[data-testid="su-battlefield-viewport"]');
         const deckStack = page.locator('[data-testid="su-deck-stack"]');
         const discardToggle = page.locator('[data-testid="su-discard-toggle"]');
         const endTurnButton = page.locator('[data-tutorial-id="su-end-turn-btn"]');
@@ -594,6 +701,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(endTurnActionQuota).toBeVisible({ timeout: 15000 });
         await expect(firstBase).toBeVisible({ timeout: 15000 });
         await expect(secondBase).toBeVisible({ timeout: 15000 });
+        await expect(battlefieldViewport).toBeVisible({ timeout: 15000 });
         await expect(handCard).toBeVisible({ timeout: 15000 });
         await expect(exitFabButton).toBeVisible({ timeout: 15000 });
         await expect(exitFabVisual).toBeVisible({ timeout: 15000 });
@@ -657,6 +765,41 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         expect(exitFabBox!.height).toBeLessThanOrEqual(42);
 
         await game.screenshot('04-mobile-landscape-layout', testInfo);
+
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-zoom-enabled', 'true');
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'native-pan');
+        const inlineSecondBaseBox = await secondBase.boundingBox();
+        const endTurnButtonBoxBeforeZoom = await endTurnActionButton.boundingBox();
+        expect(inlineSecondBaseBox, '战场缩放前的基地应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxBeforeZoom, '缩放前的结束回合按钮应提供尺寸').not.toBeNull();
+
+        await pinchZoomTouch(battlefieldViewport, page, { startDistance: 120, endDistance: 260 });
+
+        await expect
+            .poll(async () => Number(await battlefieldViewport.getAttribute('data-battlefield-zoom-scale')), {
+                timeout: 5000,
+                message: '双指缩放后战场视口应进入大于 1 的缩放态',
+            })
+            .toBeGreaterThan(1.15);
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'gesture-lock');
+
+        const zoomedSecondBaseBox = await secondBase.boundingBox();
+        const endTurnButtonBoxAfterZoom = await endTurnActionButton.boundingBox();
+        expect(zoomedSecondBaseBox, '战场缩放后的基地应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxAfterZoom, '战场缩放后的结束回合按钮应提供尺寸').not.toBeNull();
+        expect(zoomedSecondBaseBox!.width, '双指缩放后基地宽度应明显大于默认态').toBeGreaterThan((inlineSecondBaseBox?.width ?? 0) * 1.15);
+        expect(Math.abs((endTurnButtonBoxAfterZoom?.x ?? 0) - (endTurnButtonBoxBeforeZoom?.x ?? 0)), '结束回合按钮不应跟随战场一起横向漂移').toBeLessThan(4);
+        expect(Math.abs((endTurnButtonBoxAfterZoom?.y ?? 0) - (endTurnButtonBoxBeforeZoom?.y ?? 0)), '结束回合按钮不应跟随战场一起纵向漂移').toBeLessThan(4);
+        await game.screenshot('04d-mobile-battlefield-pinch-zoom', testInfo);
+
+        await panTouch(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
+        const pannedSecondBaseBox = await secondBase.boundingBox();
+        expect(pannedSecondBaseBox, '战场平移后的基地应提供尺寸').not.toBeNull();
+        expect(
+            Math.abs((pannedSecondBaseBox?.x ?? 0) - (zoomedSecondBaseBox?.x ?? 0)),
+            '拖拽平移后基地在屏幕中的横向位置应明显变化',
+        ).toBeGreaterThan(20);
+        await game.screenshot('04e-mobile-battlefield-panned', testInfo);
 
         await endTurnVisibilityToggle.click();
         await expect(endTurnActionButton).toHaveCount(0);
@@ -786,6 +929,8 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             polling: 100,
         });
         await waitForSmashUpMainUiReady(page);
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-zoom-enabled', 'false');
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'native-pan');
 
         const desktopViewport = page.viewportSize();
         expect(desktopViewport).not.toBeNull();

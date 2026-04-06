@@ -55,8 +55,13 @@ import { AudioManager } from '../lib/audio/AudioManager';
 import { prefetchOnlineMatchRoute } from '../lib/prefetchPlayRoute';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
-const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
+const HOME_GAME_DETAILS_MODAL_IDLE_TIMEOUT_MS = 1500;
+const HOME_GAME_DETAILS_MODAL_WARMUP_DELAY_MS = 120;
+const loadGameDetailsModalModule = () => import('../components/lobby/GameDetailsModal');
+const LazyGameDetailsModal = lazy(() => loadGameDetailsModalModule().then((m) => ({ default: m.GameDetailsModal })));
 const toShortVersionLabel = (version: string) => version.replace(/^v/i, '').split('-')[0] || version.replace(/^v/i, '');
+
+type IdleSchedulerHost = Pick<Window, 'setTimeout' | 'clearTimeout'> & Partial<Pick<Window, 'requestIdleCallback' | 'cancelIdleCallback'>>;
 
 type HomeModalErrorBoundaryProps = {
     children: ReactNode;
@@ -94,6 +99,137 @@ class HomeModalErrorBoundary extends Component<HomeModalErrorBoundaryProps, Home
         return this.props.children;
     }
 }
+
+export const scheduleHomeGameDetailsModalWarmup = (
+    warmup: () => Promise<unknown> | void,
+    host: IdleSchedulerHost | undefined = typeof window !== 'undefined' ? window : undefined,
+) => {
+    if (!host) {
+        return () => undefined;
+    }
+
+    let cancelled = false;
+    const runWarmup = () => {
+        if (cancelled) {
+            return;
+        }
+
+        void Promise.resolve(warmup()).catch((error) => {
+            console.warn('[Home] 空闲预热 GameDetailsModal 失败，忽略并在显式打开时重试', error);
+        });
+    };
+
+    if (typeof host.requestIdleCallback === 'function') {
+        const idleHandle = host.requestIdleCallback(
+            () => {
+                runWarmup();
+            },
+            { timeout: HOME_GAME_DETAILS_MODAL_IDLE_TIMEOUT_MS },
+        );
+
+        return () => {
+            cancelled = true;
+            host.cancelIdleCallback?.(idleHandle);
+        };
+    }
+
+    const timeoutHandle = host.setTimeout(() => {
+        runWarmup();
+    }, HOME_GAME_DETAILS_MODAL_WARMUP_DELAY_MS);
+
+    return () => {
+        cancelled = true;
+        host.clearTimeout(timeoutHandle);
+    };
+};
+
+const HomeGameDetailsModalFallback = ({
+    onClose,
+    closeOnBackdrop,
+}: {
+    onClose: () => void;
+    closeOnBackdrop: boolean;
+}) => (
+    <>
+        <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeOnBackdrop ? onClose : undefined}
+        />
+        <div
+            data-testid="home-game-details-loading-fallback"
+            className="fixed inset-0 flex items-center justify-center px-4 py-6 pointer-events-none"
+        >
+            <div
+                data-testid="home-game-details-loading-fallback-root"
+                className="
+                    bg-parchment-card-bg pointer-events-auto
+                    w-[96vw] md:w-full max-w-[28.8rem] md:max-w-[50.4rem]
+                    h-[60vh] md:h-[33rem] max-h-[60vh] md:max-h-[95vh]
+                    rounded-sm shadow-parchment-card-hover
+                    flex flex-col md:flex-row
+                    border border-parchment-card-border/30 relative
+                    overflow-hidden
+                "
+                aria-hidden="true"
+            >
+                <div className="absolute top-2 left-2 h-3 w-3 border-t border-l border-parchment-card-border/60" />
+                <div className="absolute top-2 right-2 h-3 w-3 border-t border-r border-parchment-card-border/60" />
+                <div className="absolute bottom-2 left-2 h-3 w-3 border-b border-l border-parchment-card-border/60" />
+                <div className="absolute bottom-2 right-2 h-3 w-3 border-b border-r border-parchment-card-border/60" />
+
+                <div className="relative w-full shrink-0 overflow-hidden border-b border-parchment-card-border/30 bg-parchment-base-bg/50 md:w-2/5 md:border-b-0 md:border-r">
+                    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3 md:items-center md:p-8">
+                        <div className="hidden h-20 w-20 shrink-0 rounded-[4px] border border-parchment-card-border/30 bg-parchment-cream/60 animate-pulse md:flex md:mb-6" />
+                        <div className="mb-4 flex w-full shrink-0 items-start justify-between gap-3 md:mb-0 md:flex-col md:items-center">
+                            <div className="min-w-0 flex-1 space-y-2 md:flex-none md:w-full md:text-center">
+                                <div className="h-6 w-32 rounded-sm bg-parchment-cream/70 animate-pulse md:mx-auto md:h-8 md:w-40" />
+                                <div className="h-3 w-20 rounded-sm bg-parchment-cream/55 animate-pulse md:mx-auto" />
+                            </div>
+                            <div className="h-4 w-14 shrink-0 rounded-sm bg-parchment-cream/55 animate-pulse md:hidden" />
+                            <div className="hidden h-px w-12 bg-parchment-card-border/50 opacity-30 md:block" />
+                        </div>
+                        <div className="hidden min-h-0 flex-1 space-y-2 overflow-hidden md:block md:w-full md:pr-1">
+                            <div className="h-3 w-full rounded-sm bg-parchment-cream/55 animate-pulse" />
+                            <div className="h-3 w-[92%] rounded-sm bg-parchment-cream/55 animate-pulse" />
+                            <div className="h-3 w-[84%] rounded-sm bg-parchment-cream/55 animate-pulse" />
+                            <div className="h-3 w-[88%] rounded-sm bg-parchment-cream/45 animate-pulse" />
+                            <div className="h-3 w-[72%] rounded-sm bg-parchment-cream/45 animate-pulse" />
+                        </div>
+                        <div className="hidden shrink-0 space-y-2 md:mt-6 md:block md:w-full">
+                            <div className="mx-auto h-3 w-24 rounded-sm bg-parchment-cream/45 animate-pulse" />
+                            <div className="flex items-center justify-center gap-2">
+                                <div className="h-8 w-8 rounded-[4px] bg-parchment-cream/65 animate-pulse" />
+                                <div className="h-8 w-8 rounded-[4px] bg-parchment-cream/5 animate-pulse" />
+                                <div className="h-8 w-8 rounded-[4px] bg-parchment-cream/45 animate-pulse" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col p-3 md:p-6">
+                    <div className="mb-4 flex items-center gap-2 border-b border-parchment-card-border/20 pb-3 md:mb-5">
+                        <div className="h-8 flex-1 rounded-sm bg-parchment-cream/65 animate-pulse" />
+                        <div className="h-8 w-8 rounded-sm bg-parchment-cream/55 animate-pulse" />
+                        <div className="h-8 w-8 rounded-sm bg-parchment-cream/45 animate-pulse" />
+                    </div>
+                    <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
+                        <div className="min-h-0 space-y-3 overflow-hidden">
+                            <div className="h-11 rounded-sm bg-parchment-cream/60 animate-pulse" />
+                            <div className="h-11 rounded-sm bg-parchment-cream/52 animate-pulse" />
+                            <div className="h-11 rounded-sm bg-parchment-cream/44 animate-pulse" />
+                            <div className="h-11 rounded-sm bg-parchment-cream/38 animate-pulse" />
+                        </div>
+                        <div className="min-h-0 space-y-3 overflow-hidden">
+                            <div className="h-24 rounded-sm bg-parchment-cream/36 animate-pulse" />
+                            <div className="h-16 rounded-sm bg-parchment-cream/32 animate-pulse" />
+                            <div className="h-16 rounded-sm bg-parchment-cream/28 animate-pulse" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </>
+);
 
 export const Home = () => {
     useGlobalCursor();
@@ -329,7 +465,17 @@ export const Home = () => {
                             gameModalNavigateAwayBridgeRef.current();
                         }}
                     >
-                        <Suspense fallback={null}>
+                        <Suspense
+                            fallback={(
+                                <HomeGameDetailsModalFallback
+                                    onClose={close}
+                                    closeOnBackdrop={closeOnBackdrop}
+                                    eyebrow={t('lobby:home.gameDetailsLoadingEyebrow', { defaultValue: '正在准备' })}
+                                    title={t('lobby:home.gameDetailsLoadingTitle', { defaultValue: '游戏详情' })}
+                                    description={t('lobby:home.gameDetailsLoadingDescription', { defaultValue: '内容马上出现，请稍候。' })}
+                                />
+                            )}
+                        >
                             <LazyGameDetailsModal
                                 isOpen
                                 onClose={close}
@@ -350,6 +496,8 @@ export const Home = () => {
     gameModalNavigateAwayBridgeRef.current = () => {
         gameUrlModal.navigateAwayRef.current();
     };
+
+    useEffect(() => scheduleHomeGameDetailsModalWarmup(loadGameDetailsModalModule), []);
 
     useEffect(() => {
         const unsubscribe = subscribeGameRegistry(() => {
@@ -397,6 +545,10 @@ export const Home = () => {
             return;
         }
 
+        void loadGameDetailsModalModule().catch((error) => {
+            console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
+        });
+
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
             return;
@@ -414,7 +566,7 @@ export const Home = () => {
         if (game?.type === 'tool') {
             return;
         }
-        void import('../components/lobby/GameDetailsModal').catch((error) => {
+        void loadGameDetailsModalModule().catch((error) => {
             console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
         });
     }, []);

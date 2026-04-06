@@ -101,6 +101,7 @@ public class GamePackagePlugin extends Plugin {
         super.load();
         taskStore = new AndroidDownloadTaskStore(getContext());
         GamePackageInstallEventHub.register(installEventListener);
+        maybeRecoverPendingForegroundDownloads("plugin-load");
     }
 
     @Override
@@ -279,6 +280,7 @@ public class GamePackagePlugin extends Plugin {
         }
 
         try {
+            maybeRecoverPendingForegroundDownloads("get-install-state:" + gameId);
             JSONObject payload = readJsonFile(resolveStateFile(gameId));
             JSObject result = new JSObject();
             AndroidDownloadTaskRecord taskRecord = taskStore.getLatestByTarget(AndroidDownloadTaskRecord.KIND_GAME_PACKAGE, gameId);
@@ -893,6 +895,18 @@ public class GamePackagePlugin extends Plugin {
             result.put("message", canPrompt ? NOTIFICATION_PERMISSION_REQUIRED_MESSAGE : NOTIFICATION_PERMISSION_DENIED_MESSAGE);
         }
         return result;
+    }
+
+    private void maybeRecoverPendingForegroundDownloads(String reason) {
+        if (taskStore == null || !taskStore.hasUnfinishedTasks()) {
+            return;
+        }
+
+        Log.i(TAG, "maybeRecoverPendingForegroundDownloads reason=" + reason);
+        AndroidDownloadForegroundService.startManagedIntent(
+            getContext(),
+            AndroidDownloadForegroundService.buildReconcileIntent(getContext())
+        );
     }
 
     private String sanitizeFileSegment(String value) {

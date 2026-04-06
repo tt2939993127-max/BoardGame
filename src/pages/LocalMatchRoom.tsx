@@ -189,7 +189,7 @@ export const LocalMatchRoom = () => {
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
             <SmashUpOverlayProvider>
                 <GameHUD mode="local" gameId={gameId} localModeLabel={hasAiSeat ? t('actions.playAi') : t('actions.singleDevice')} />
-                <MobileBoardShell>
+                <MobileBoardShell battlefieldZoomMode={gameConfig?.mobileBattlefieldZoom}>
                     <div
                         className="w-full h-full"
                         style={{

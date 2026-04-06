@@ -161,6 +161,8 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 - AI / 阶段门禁：响应牌、roll 牌、main 牌是否仍走共享验证函数
 - UI 消费链：技能槽升级展示、card spotlight、magnify overlay 是否仍吃同一组状态字段
 - 被动能力建模：该角色的被动是走 `player.passiveAbilities`、`ability.type = 'passive'`，还是额外的 `flowHooks` 特判；只要出现多条路径，就必须在规则文档和 evidence 里显式说明原因
+- 被动定义自洽性：如果某个 `ability.type = 'passive'` 只是展示壳，缺少 `trigger/effects`，却靠别处硬编码触发，必须直接记为未收口；若旁路链也不存在，则按未实现重大 bug 处理
+- 槽位展示与能力执行分离：如果某个技能条目只是为了占据棋盘槽位、提供名称/描述或支撑 `abilityLevels` / 升级展示，不能继续把它伪装成完整 `AbilityDef`。要么补齐真实执行合同，要么拆成 display-only 槽位元数据并在文档里显式登记
 
 不满足上面这一步，不能对外说“新角色已经和老角色一致 / 已全部收口”。
 

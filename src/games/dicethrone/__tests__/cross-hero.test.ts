@@ -26,6 +26,7 @@ import {
     type CommandInput,
 } from './test-utils';
 import { getAbilitySlotId } from '../ui/abilitySlotMapping';
+import { getPendingAttackExpectedDamage } from '../domain/utils';
 import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
 import { PALADIN_CARDS } from '../heroes/paladin/cards';
 import { SAMURAI_CARDS } from '../heroes/samurai/cards';
@@ -1472,6 +1473,116 @@ describe('cross hero battles', () => {
             expect(replacedEvents.some(event => event.payload?.cardId === 'upgrade-deadeye-2')).toBe(true);
         });
 
+        it('upgrade-fan-the-hammer-2 从正常牌库抽到手后，打出仍应走升级而不是同槽位其他卡效果', () => {
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: fixedRandom,
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger draw upgrade-fan-the-hammer-2 from normal deck and play it',
+                commands: [
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('DRAW_CARD', '0'),
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-fan-the-hammer-2' }),
+                ],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].abilityLevels['fan-the-hammer']).toBe(2);
+            expect(result.finalState.core.players['0'].abilities.find(ability => ability.id === 'fan-the-hammer')).toMatchObject(FAN_THE_HAMMER_2);
+
+            const handIds = result.finalState.core.players['0'].hand.map(card => card.id);
+            expect(handIds).not.toContain('upgrade-fan-the-hammer-2');
+
+            const discardIds = result.finalState.core.players['0'].discard.map(card => card.id);
+            expect(discardIds).not.toContain('upgrade-fan-the-hammer-2');
+            expect(discardIds).not.toContain('card-pistol-whip');
+            expect(result.finalState.core.players['0'].upgradeCardByAbilityId['fan-the-hammer']).toEqual({
+                cardId: 'upgrade-fan-the-hammer-2',
+                cpCost: 2,
+            });
+
+            const playedEvents = result.finalState.sys.eventStream?.entries
+                ?.map(entry => entry.event)
+                .filter((event): event is { type: string; payload?: Record<string, unknown> } => event.type === 'CARD_PLAYED') ?? [];
+            expect(playedEvents.some(event => event.payload?.cardId === 'upgrade-fan-the-hammer-2')).toBe(true);
+
+            const replacedEvents = result.finalState.sys.eventStream?.entries
+                ?.map(entry => entry.event)
+                .filter((event): event is { type: string; payload?: Record<string, unknown> } => event.type === 'ABILITY_REPLACED') ?? [];
+            expect(replacedEvents.some(event => event.payload?.cardId === 'upgrade-fan-the-hammer-2')).toBe(true);
+        });
+
+        it('upgrade-fan-the-hammer-2 升级后，实际选择左轮速射应造成 8 点伤害', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-fan-the-hammer-2');
+            expect(upgradeCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 2, 3, 4, 5]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
+                    state.core.players['0'].deck = [];
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger upgrade fan-the-hammer then select upgraded attack',
+                commands: [
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-fan-the-hammer-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fan-the-hammer' }),
+                ],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.sys.phase).toBe('offensiveRoll');
+            expect(result.finalState.core.players['0'].abilityLevels['fan-the-hammer']).toBe(2);
+            expect(result.finalState.core.players['0'].abilities.find(ability => ability.id === 'fan-the-hammer')).toMatchObject(FAN_THE_HAMMER_2);
+            expect(result.finalState.core.pendingAttack).toMatchObject({
+                attackerId: '0',
+                defenderId: '1',
+                sourceAbilityId: 'fan-the-hammer',
+            });
+            expect(result.finalState.core.pendingAttack).not.toBeNull();
+            expect(getPendingAttackExpectedDamage(
+                result.finalState.core,
+                result.finalState.core.pendingAttack!,
+            )).toBe(8);
+        });
+
         it('upgrade quick-draw makes loaded enter rerollable bonus die settlement', () => {
             const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-quick-draw');
             expect(upgradeCard).toBeDefined();
@@ -1540,6 +1651,11 @@ describe('cross hero battles', () => {
             expect(samuraiAbilityIds).toContain('samurai-ultimate');
             expect(state.core.players['0'].abilityLevels['katana-slice']).toBe(1);
             expect(state.core.players['0'].abilityLevels['stand-tall']).toBe(1);
+
+            const bushido = state.core.players['0'].abilities.find(a => a.id === 'bushido');
+            expect(bushido?.type).toBe('passive');
+            expect(bushido?.variants?.map(variant => variant.trigger.type)).toEqual(['phaseStart', 'phaseEnd']);
+            expect(bushido?.variants?.map(variant => variant.effects[0]?.action?.type)).toEqual(['custom', 'custom']);
         });
 
         it('bushido grants 1 honor to the starting samurai at game start', () => {

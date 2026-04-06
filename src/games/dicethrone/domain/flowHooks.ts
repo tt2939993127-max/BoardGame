@@ -6,7 +6,7 @@
  * sys.phase 是阶段的单一权威来源，所有阶段副作用通过 FlowHooks 实现
  */
 
-import type { GameEvent } from '../../../engine/types';
+import type { GameEvent, RandomFn } from '../../../engine/types';
 import type { FlowHooks, PhaseExitResult } from '../../../engine';
 import type {
     DiceThroneCore,
@@ -24,6 +24,8 @@ import type {
 import { STATUS_IDS, TOKEN_IDS } from './ids';
 import {
     canAdvancePhase,
+    getActiveDice,
+    getFaceCounts,
     getNextPhase,
     getNextPlayerId,
     getPlayerDieFace,
@@ -46,6 +48,7 @@ import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
 import { getPlayerAbilityBaseDamage, playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
 import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
+import { evaluateTriggerCondition } from './combat';
 
 const pendingAttackNeedsTargetingRoll = (core: DiceThroneCore): boolean => {
     const pendingAttack = core.pendingAttack;
@@ -63,8 +66,60 @@ const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
     || event.type === 'COMPARE_ROLL_REQUESTED'
     || event.type === 'INTERACTION_REQUESTED';
 
-const playerHasAbility = (core: DiceThroneCore, playerId: string, abilityId: string): boolean =>
-    core.players[playerId]?.abilities.some(ability => ability.id === abilityId) ?? false;
+function resolvePassivePhaseTriggerEvents(args: {
+    state: DiceThroneCore;
+    playerId: string;
+    phase: TurnPhase;
+    triggerType: 'phaseStart' | 'phaseEnd';
+    timestamp: number;
+    random?: RandomFn;
+}): DiceThroneEvent[] {
+    const player = args.state.players[args.playerId];
+    if (!player) return [];
+
+    const activeDice = getActiveDice(args.state);
+    const triggerCtx = {
+        currentPhase: args.phase,
+        resources: player.resources,
+        statusEffects: player.statusEffects,
+        diceValues: activeDice.map(die => die.value),
+        faceCounts: getFaceCounts(activeDice),
+    };
+
+    const events: DiceThroneEvent[] = [];
+    const resolvePassiveEffects = (sourceAbilityId: string, effects: typeof player.abilities[number]['effects']) => {
+        if (!effects?.length) return;
+        events.push(...resolveEffectsToEvents(
+            effects,
+            'immediate',
+            {
+                attackerId: args.playerId,
+                defenderId: args.state.pendingAttack?.defenderId ?? args.playerId,
+                sourceAbilityId,
+                state: args.state,
+                damageDealt: 0,
+                timestamp: args.timestamp,
+            },
+            { random: args.random },
+        ));
+    };
+
+    for (const ability of player.abilities) {
+        if (ability.type !== 'passive') continue;
+
+        if (ability.trigger?.type === args.triggerType && evaluateTriggerCondition(ability.trigger, triggerCtx)) {
+            resolvePassiveEffects(ability.id, ability.effects);
+        }
+
+        for (const variant of ability.variants ?? []) {
+            if (variant.trigger.type !== args.triggerType) continue;
+            if (!evaluateTriggerCondition(variant.trigger, triggerCtx)) continue;
+            resolvePassiveEffects(ability.id, variant.effects);
+        }
+    }
+
+    return events;
+}
 
 /**
  * 计算玩家当前的眩晕层数（包含 core 中的和 events 中的）
@@ -1116,23 +1171,14 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
             }
 
-            if (playerHasAbility(core, activeId, 'bushido')) {
-                const offensiveRollCount = core.offensiveRollCountThisTurn?.[activeId] ?? 0;
-                if (offensiveRollCount < 3) {
-                    const currentHonor = core.players[activeId]?.tokens[TOKEN_IDS.HONOR] ?? 0;
-                    events.push({
-                        type: 'TOKEN_GRANTED',
-                        payload: {
-                            targetId: activeId,
-                            tokenId: TOKEN_IDS.HONOR,
-                            amount: 1,
-                            newTotal: currentHonor + 1,
-                        },
-                        sourceCommandType: command.type,
-                        timestamp,
-                    } as DiceThroneEvent);
-                }
-            }
+            events.push(...resolvePassivePhaseTriggerEvents({
+                state: core,
+                playerId: activeId,
+                phase: 'discard',
+                triggerType: 'phaseEnd',
+                timestamp,
+                random,
+            }));
 
             const nextPlayerId = getNextPlayerId(core);
             const turnEvent: TurnChangedEvent = {
@@ -1273,48 +1319,14 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
             const activeId = phaseEnterCore.activePlayerId;
             const player = phaseEnterCore.players[activeId];
 
-            if (
-                phaseEnterCore.turnNumber === 1
-                && activeId === phaseEnterCore.startingPlayerId
-                && playerHasAbility(phaseEnterCore, activeId, 'bushido')
-            ) {
-                const currentHonor = player?.tokens[TOKEN_IDS.HONOR] ?? 0;
-                events.push({
-                    type: 'TOKEN_GRANTED',
-                    payload: {
-                        targetId: activeId,
-                        tokenId: TOKEN_IDS.HONOR,
-                        amount: 1,
-                        newTotal: currentHonor + 1,
-                    },
-                    sourceCommandType: command.type,
-                    timestamp,
-                } as DiceThroneEvent);
-            }
-
-            const phaseStartPassives = player?.abilities.filter((ability) => {
-                const trigger = ability.trigger as { type?: string; phase?: string } | undefined;
-                return ability.type === 'passive'
-                    && trigger?.type === 'phaseStart'
-                    && trigger.phase === 'upkeep'
-                    && (ability.effects?.length ?? 0) > 0;
-            }) ?? [];
-
-            for (const passive of phaseStartPassives) {
-                events.push(...resolveEffectsToEvents(
-                    passive.effects ?? [],
-                    'immediate',
-                    {
-                        attackerId: activeId,
-                        defenderId: phaseEnterCore.pendingAttack?.defenderId ?? activeId,
-                        sourceAbilityId: passive.id,
-                        state: phaseEnterCore,
-                        damageDealt: 0,
-                        timestamp,
-                    },
-                    { random },
-                ));
-            }
+            events.push(...resolvePassivePhaseTriggerEvents({
+                state: phaseEnterCore,
+                playerId: activeId,
+                phase: 'upkeep',
+                triggerType: 'phaseStart',
+                timestamp,
+                random,
+            }));
 
             if (player?.statusEffects) {
                 // 0. 火焰精通冷却 — 维持阶段移除 1 个火焰精通

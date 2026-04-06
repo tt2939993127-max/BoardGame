@@ -6,6 +6,7 @@ import {
 import { logMobileRuntime, logMobileRuntimeCritical } from '../../lib/mobile/mobileRuntimeDebug';
 import { runMockGamePackageInstall } from './mockInstallRunner';
 import {
+    cancelNativeGamePackageInstall,
     createNativeGamePackageInstallHandle,
     listInstalledNativeGamePackages,
     readNativeGamePackageInstallState,
@@ -421,6 +422,26 @@ export const resetGamePackageState = (
     });
     emitState(nextState);
     return nextState;
+};
+
+export const cancelGamePackageInstall = async (
+    gameId: string,
+    fallbackState?: StoredGamePackageState,
+): Promise<StoredGamePackageState> => {
+    logMobileRuntimeCritical('PackageManagerService', 'cancel-install-entered', {
+        gameId,
+        hasExplicitFallbackState: Boolean(fallbackState),
+        hasActiveInstallHandle: activeInstallRegistry.has(gameId),
+    });
+    const resolvedFallback = fallbackState ?? fallbackCache.get(gameId);
+    if (!resolvedFallback) {
+        throw new Error(`[MobilePackages] 缺少 ${gameId} 的 fallbackState`);
+    }
+
+    fallbackCache.set(gameId, resolvedFallback);
+    stopActiveInstall(gameId);
+    await cancelNativeGamePackageInstall(gameId);
+    return refreshGamePackageStateFromNativeTask(gameId, resolvedFallback);
 };
 
 export const hydrateInstalledNativeGamePackages = async () => {
