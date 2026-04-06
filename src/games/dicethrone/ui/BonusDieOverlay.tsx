@@ -132,8 +132,6 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 autoCloseDelay={displayOnly ? 5000 : 3000}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
-                // 非交互态（displayOnly / 无资源可重投）不应吞掉首击。
-                closeClickGuardMs={isInteractive ? 180 : 0}
             >
                 <div className="flex flex-col items-center gap-[1.5vw]" data-testid="bonus-die-overlay">
                     {/* 提示文字 - DiceThrone 风格 */}
@@ -264,8 +262,6 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             onClose={onClose}
             autoCloseDelay={autoCloseDelay}
             zIndex={UI_Z_INDEX.overlayRaised + 100}
-            // 奖励骰展示态需要允许首击立即关闭，否则教程下一步会被特写挡住。
-            closeClickGuardMs={0}
         >
             <div data-testid="bonus-die-overlay">
                 <BonusDieSpotlightContent

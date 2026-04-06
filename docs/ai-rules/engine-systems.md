@@ -199,7 +199,7 @@ Flow / Interaction / Undo / Log / EventStream / ResponseWindow / Tutorial / Rema
 | `attribute.ts` | base + ModifierStack → current（min/max 钳制） | `createAttributeSet` / `getBase` / `setBase` / `getCurrent` / `addAttributeModifier` / `tickAttributeModifiers` |
 | `uiHints.ts` | 可交互实体查询接口 | `UIHint` / `UIHintProvider<TCore>` / `filterUIHints` / `groupUIHintsByType` / `extractPositions` |
 | `visual.ts` | 基于 atlasId 的视觉资源解析器 | `VisualResolver` |
-| `spriteAtlas.ts` | 精灵图集注册/裁切/查询（网格式） | `SpriteAtlasRegistry` / `globalSpriteAtlasRegistry` / `computeSpriteStyle` / `computeSpriteAspectRatio` / `generateUniformAtlasConfig` / `isSpriteAtlasConfig` |
+| `spriteAtlas.ts` | 精灵图集注册/裁切/查询（网格或精确 frame） | `SpriteAtlasRegistry` / `globalSpriteAtlasRegistry` / `computeSpriteStyle` / `computeSpriteAspectRatio` / `generateUniformAtlasConfig` / `isSpriteAtlasConfig` |
 | `actionRegistry.ts` | actionId → handler 注册表 | `ActionHandlerRegistry` |
 | `actionLogHelpers.ts` | ActionLog 通用伤害来源格式化（跨游戏复用） | `buildDamageBreakdownSegment` / `buildDamageSourceAnnotation` / `DamageSourceResolver` |
 | `condition.ts` / `effects.ts` / `dice.ts` / `resources.ts` / `target.ts` / `zones.ts` / `expression.ts` | 其他引擎原语 | — |
@@ -235,7 +235,7 @@ fxBus.pushSequence([
 
 引擎层提供统一的精灵图集原语，类似 Unity SpriteAtlas / Phaser TextureAtlas：
 
-- **`SpriteAtlasConfig`** — 网格裁切配置（imageW/imageH/cols/rows/colStarts/colWidths/rowStarts/rowHeights）
+- **`SpriteAtlasConfig`** — 图集裁切配置：要么是网格配置（`imageW/imageH/cols/rows/colStarts/colWidths/rowStarts/rowHeights`），要么是精确 frame 配置（`imageW/imageH/frames[]`）
 - **`SpriteAtlasRegistry`** — 注册表（`register` / `getSource` / `resolve`）
 - **`globalSpriteAtlasRegistry`** — 全局单例，游戏层注册，UI 层查询
 - **纯函数** — `computeSpriteStyle(index, config)` / `computeSpriteAspectRatio(index, config)` / `generateUniformAtlasConfig` / `isSpriteAtlasConfig`

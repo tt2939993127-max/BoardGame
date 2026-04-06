@@ -227,6 +227,21 @@
         "When your HP drops to 0, remove this token and set HP to 1. This token cannot be removed, transferred, or stolen. Does not stack."
       ]
     },
+    "loaded": {
+      "name": "Loaded",
+      "description": [
+        "At the end of your Offensive Roll Phase, you may spend 1 Loaded and roll 1 die.",
+        "Add half the result, rounded up, as bonus damage to this attack."
+      ]
+    },
+    "bounty": {
+      "name": "Bounty",
+      "description": [
+        "A player with Bounty takes +1 damage from incoming attacks.",
+        "The attacker gains 1 additional CP.",
+        "Bounty does not remove itself automatically."
+      ]
+    },
     "honor": {
       "name": "Honor",
       "description": [

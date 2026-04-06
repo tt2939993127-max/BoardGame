@@ -299,7 +299,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                             <input
                                 type="number"
                                 min="0"
-                                max={32}
+                                max={39}
                                 value={deckIndex}
                                 onChange={(e) => setDeckIndex(e.target.value)}
                                 className="flex-1 px-2 py-1.5 text-xs border border-green-300 rounded bg-white text-center text-gray-900"

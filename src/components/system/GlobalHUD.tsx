@@ -36,6 +36,14 @@ type LegacyFullscreenElement = HTMLElement & {
 
 const LEGACY_KEYBOARD_INPUT_ALLOWED = 1;
 
+const openExternalUrlInNewTab = (url: string) => {
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    anchor.click();
+};
+
 export const GlobalHUD = () => {
     const isNativeAndroid = isNativeAndroidRuntime();
     const { t } = useTranslation('game');
@@ -108,10 +116,7 @@ export const GlobalHUD = () => {
             return;
         }
 
-        const openedWindow = window.open(resolvedDownload.url, '_blank', 'noopener,noreferrer');
-        if (!openedWindow) {
-            window.location.assign(resolvedDownload.url);
-        }
+        openExternalUrlInNewTab(resolvedDownload.url);
     };
 
     const handleCheckAppUpdate = () => {

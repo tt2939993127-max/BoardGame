@@ -24,9 +24,15 @@
 
 ### 2.2 图集配置
 
-- 卡牌 atlas 配置：`src/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json`
-- 当前实现是“所有英雄共享同一份能力卡 atlas 网格配置，不同英雄只换图片”。
-- 如果未来新英雄的能力卡版式真的和现有模板不同，先拿真相源和旧英雄逐格对照，再决定是更新公共配置还是引入新配置；禁止没证据就新建一份 per-hero atlas json。
+- 默认卡牌 atlas 配置：`src/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json`
+- 当前例外配置：`src/assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json`
+- 当前实现不是“所有英雄永远共享同一份配置”，而是：
+  - 大多数老派系与武士继续复用公共网格配置
+  - 枪手因 `slot-22 / 23 / 24` 原图是复合展示位，改为使用逐 frame 精确配置
+- 裁决规则：
+  - 默认优先复用公共 atlas 配置
+  - 只有在真相源明确证明公共网格无法正确表达正式运行时卡面时，才允许引入 per-hero atlas json
+  - 引入后也仍然属于 atlas 合同，不得回退成单卡 `image` 运行时方案
 
 ### 2.3 路径帮助函数
 
@@ -67,32 +73,53 @@
 
 ## 4. 枪手 / 武士新增规则
 
-### 4.1 复合展示位允许一图多卡
+### 4.1 先区分三层对象，再谈索引
 
-Dice Throne 允许运行时出现“一张正式卡图对应多个运行时对象”的情况。
+Dice Throne 新英雄录入时，至少要区分下面三层，禁止混写：
 
-当前已确认的枪手复合位：
+- `物理卡 / 手牌卡`：玩家真正抽到、打出、弃掉的卡对象；`card.id` 与 `previewRef` 都服务这一层。
+- `技能槽 / 基础技能`：玩家面板上的基础能力槽位；升级卡的 `targetAbilityId` 只允许指向这一层的基础技能 ID。
+- `技能变体 / 技能子集`：同一基础技能下的 `variants`、分支触发、阈值档位；它们属于能力执行合同，不会生成新的手牌卡图索引。
 
-- `slot-22`: `upgrade-fan-the-hammer-2` / `card-pistol-whip`
-- `slot-23`: `upgrade-take-cover-2` / `card-mark-the-target`
-- `slot-24`: `upgrade-deadeye-2` / `card-the-law`
+强制约束：
 
-处理规则：
+- 一张升级卡可以替换一个基础技能定义，并且该技能定义内部可以包含多个 `variants`。
+- 但这不代表“一张升级卡存在多个手牌对象”或“一个技能变体要占一个新 card index”。
+- `targetAbilityId` 必须始终是基础技能 ID；`newAbilityDef.id` 也必须与该基础技能 ID 一致。
 
-- `cards.ts` 里两张卡可以共用同一个 `previewRef.index`
-- 可以为人工核对额外导出单卡裁图
-- 这些单卡裁图不能进入正式运行时资源合同
-- 不能因为看到复合排版，就把它强拆成单独 runtime atlas
+老派系基线，必须按这个口径对新角色逐张比：
 
-### 4.2 调试 / 作弊入口不能把 atlasIndex 当唯一 ID
+- `monk/card-thrust-punch-2`、`barbarian/upgrade-slap-3`：升级后虽然内部按档位拆 `variants`，但升级目标仍是基础技能。
+- `paladin/upgrade-righteous-combat-2/3`：II / III 两张升级卡都指向同一个基础技能 ID。
+- `paladin/upgrade-holy-defense-2`、`paladin/upgrade-tithes-2`：防御/偏被动技能升级也不例外，仍只替换基础技能。
 
-- 共享 atlas 位不等于共享卡对象。
-- 调试发牌、索引速查、测试注入这类入口，如果只传 `atlasIndex`，会把复合位发错牌。
-- 当前实现已经修正为：
-  - 共享索引命中多张牌时，`dealCardByAtlasIndex` 拒绝模糊发牌
-  - 调试面板改为按精确 `deckIndex` 发牌
+### 4.2 武士：标准 full-card atlas
 
-后续如果再做调试工具，继续沿用这个约束，不要回退。
+- 武士的 `ability-cards.webp` 继续沿用标准 full-card atlas 语义。
+- `slot-18 ~ slot-31` 一张正式卡对应一个运行时 `previewRef.index`。
+- `slot-00 ~ slot-17` 是反向排列的通用卡区，不得回退到老角色默认顺序。
+
+### 4.3 枪手：原图 slot 与运行时 frame 不是同一概念
+
+- 枪手的 `ability-cards.webp` 里，`slot-22 / slot-23 / slot-24` 是原图上的复合展示区。
+- 这些原图 slot 不能再被解释成“一个 runtime index 对两张牌”。
+- 正式运行时合同应写成：
+  - 原图 slot：真相源定位与人工核对单位
+  - atlas frame：运行时预览单位
+- 因此枪手运行时改为使用独立 atlas frame 配置：
+  - `upgrade-fan-the-hammer-2` → `index 22`
+  - `card-pistol-whip` → `index 23`
+  - `upgrade-take-cover-2` → `index 24`
+  - `card-mark-the-target` → `index 25`
+  - `upgrade-deadeye-2` → `index 26`
+  - `card-the-law` → `index 27`
+- 其余枪手专属卡顺延到 `index 34`，不再存在共享 runtime index。
+
+### 4.4 调试 / 作弊入口仍不能把原图 slot 当成唯一事实
+
+- 调试发牌、索引速查、测试注入只认运行时 `previewRef.index`。
+- 不要再拿原图 `slot-22 / 23 / 24` 这种人工核对定位去推断 card identity。
+- 只要 atlas 合同正确，`dealCardByAtlasIndex` 就必须能精确发出唯一卡牌；不需要再保留“共享索引命中多张时拒绝发牌”的特殊口径。
 
 ## 5. 运行时加载链路
 
@@ -103,7 +130,8 @@ Dice Throne 允许运行时出现“一张正式卡图对应多个运行时对�
 - 注册逻辑：
   - 遍历 `DICETHRONE_CARD_ATLAS_IDS`
   - 用 `ASSETS.CARDS_ATLAS(charId)` 作为图片路径
-  - 统一绑定 `ability-cards-common.atlas.json`
+  - 大多数英雄绑定 `ability-cards-common.atlas.json`
+  - `gunslinger` 绑定 `ability-cards-gunslinger.atlas.json`
 
 ### 5.2 状态图标 atlas
 
@@ -145,9 +173,10 @@ Dice Throne 允许运行时出现“一张正式卡图对应多个运行时对�
 
 - 先按整图逐格编号
 - 再把 `cards.ts` 的 `previewRef.index` 与逐格图一一对应
-- 如遇复合位：
-  - 先确认这是不是“同一正式图服务多张运行时卡”
-  - 写进对应英雄的 `rule/*卡牌录入核对.md`
+- 如遇复合排版：
+  - 先区分“原图 slot”与“运行时 frame”
+  - 判断是否需要精确 frame 配置，而不是默认让多张卡共享一个 `previewRef.index`
+  - 把结论写进对应英雄的 `rule/*卡牌录入核对.md`
   - 补审计文档，不要只在代码里默许
 
 ## 7. 审计与验证
@@ -158,14 +187,14 @@ Dice Throne 允许运行时出现“一张正式卡图对应多个运行时对�
 - 通用卡是否走统一注入，而不是手写散落
 - 新英雄是否错误复用了别的英雄通用牌索引
 - 是否残留 `hand-cards-atlas`、单卡运行时裁图或过期路径
-- 若存在复合位，调试/测试入口是否仍可精确区分到具体卡
+- 若存在复合排版，是否已经拆成精确 runtime frame，而不是继续共享索引
 
 ### 7.2 建议验证命令
 
 ```powershell
 npx vitest run --config vitest.config.audit.ts --configLoader native src/games/dicethrone/__tests__/card-cross-audit.test.ts
 npx vitest run src/games/dicethrone/__tests__/criticalImageResolver.test.ts
-node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --configLoader native --maxWorkers 1 -t "作弊发牌共享 atlas 索引保护"
+node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --configLoader native --maxWorkers 1 -t "作弊发牌按枪手精确 atlas 索引发牌"
 ```
 
 如果本轮只改了某个英雄，也至少要补一条该英雄自己的索引/预览回归，不要只靠肉眼扫图。
@@ -177,7 +206,7 @@ node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-
 - 禁止按代码顺序猜 atlas 索引
 - 禁止给通用卡逐张手写 `previewRef`
 - 禁止在新 UI 里只按 `cardId` 反查通用卡预览，却不传 `characterId`
-- 禁止把共享 atlas 位当成“唯一卡 ID”
+- 禁止把原图 slot、技能子集或技能变体误当成手牌卡图索引
 
 ## 9. 文档落点要求
 
