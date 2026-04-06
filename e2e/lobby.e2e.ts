@@ -48,6 +48,7 @@ async function ensureLobbyReady(page: Page): Promise<void> {
 
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
+const GAME_DETAILS_LOADING_FALLBACK_TEST_NAME = '首次打开游戏详情时会先显示加载骨架，避免只剩路由跳转';
 const ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME = '首页活跃房间浮层在桌面端居中且移动端不溢出';
 const WEB_APP_DOWNLOAD_ENTRY_TEST_NAME = '网页端下载 App 入口会读取 native update latest.json 并打开其中 APK 地址';
 
@@ -109,7 +110,11 @@ test.describe('Lobby E2E', () => {
 
     test.beforeEach(async ({ page }, testInfo) => {
         await setChineseLocale(page);
-        if (testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME) {
+        if (
+            testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME
+            || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME
+            || testInfo.title === GAME_DETAILS_LOADING_FALLBACK_TEST_NAME
+        ) {
             return;
         }
         await ensureLobbyReady(page);
@@ -130,8 +135,9 @@ test.describe('Lobby E2E', () => {
     test('游戏详情弹窗会显示当前中文动作入口', async ({ page }) => {
         await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
+        await expect(page.getByTestId('game-details-modal-root').last()).toBeVisible({ timeout: 15000 });
 
-        await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible({ timeout: 15000 });
         await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '对战AI' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '本地对战设置' })).toHaveCount(0);
@@ -140,6 +146,30 @@ test.describe('Lobby E2E', () => {
         await page.getByRole('button', { name: '排行榜' }).click();
         await expect(page.getByRole('heading', { name: '胜场排行', level: 4 })).toBeVisible({ timeout: 10000 });
         await expect(page.getByText('加载中...')).toHaveCount(0, { timeout: 10000 });
+    });
+
+    test(GAME_DETAILS_LOADING_FALLBACK_TEST_NAME, async ({ page, game }, testInfo) => {
+        let releaseModalModuleRequest: (() => void) | null = null;
+        const allowModalModuleRequest = new Promise<void>((resolve) => {
+            releaseModalModuleRequest = resolve;
+        });
+
+        await page.route('**/src/components/lobby/GameDetailsModal.tsx*', async (route) => {
+            await allowModalModuleRequest;
+            await route.continue();
+        });
+
+        await ensureLobbyReady(page);
+
+        await page.getByRole('heading', { name: '井字棋' }).click();
+        await expect(page).toHaveURL(/game=tictactoe/);
+        await expect(page.getByTestId('home-game-details-loading-fallback')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText('正在准备')).toBeVisible();
+        await expect(page.getByText('内容马上出现，请稍候。')).toBeVisible();
+
+        await game.screenshot('lobby-game-details-loading-fallback-visible', testInfo);
+
+        releaseModalModuleRequest?.();
     });
 
     test('关于弹窗赞助二维码会显示 public logos 静态图', async ({ page, game }, testInfo) => {

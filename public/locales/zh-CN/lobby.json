@@ -3,6 +3,9 @@
     "title": "易桌游",
     "subtitle": "桌游教程、联机与原型制作平台",
     "logoAlt": "桌游平台 Logo",
+    "gameDetailsLoadingEyebrow": "正在准备",
+    "gameDetailsLoadingTitle": "游戏详情",
+    "gameDetailsLoadingDescription": "内容马上出现，请稍候。",
     "audio": {
       "mute": "静音",
       "unmute": "取消静音"
@@ -133,6 +136,7 @@
     "failedTitle": "下载失败",
     "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",
     "retryAction": "重新发起",
+    "cancelAction": "取消下载",
     "pending": "该游戏的移动端包管理正在接入，入口位置和状态骨架已预留。",
     "updateRequiredEyebrow": "需要更新 App",
     "updateRequiredBadge": "更新后可玩",
@@ -143,8 +147,8 @@
       "label": "当前进度",
       "percent": "{{percent}}%",
       "pendingPercent": "等待中",
-      "queuedTitle": "准备下载",
-      "queuedHint": "正在整理当前游戏需要的下载任务。",
+      "queuedTitle": "排队中",
+      "queuedHint": "当前设备同一时间只处理一个游戏下载任务，轮到后会自动开始。",
       "manifestTitle": "读取清单",
       "manifestHint": "正在读取当前游戏的发布清单。",
       "downloadTitle": "下载中",

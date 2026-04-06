@@ -139,6 +139,59 @@ async function setupHeroScene(
   await waitForHandReady(page, hand.length);
 }
 
+async function injectOffensiveRollDice(
+  page: Page,
+  game: TestGameController,
+  values: number[],
+  playerId = '0',
+  definitionId = 'gunslinger-dice',
+) {
+  await page.evaluate(async ({ values, playerId, definitionId }) => {
+    const harness = (window as any).__BG_TEST_HARNESS__;
+    const state = harness?.state?.get?.();
+    if (!harness || !state) {
+      throw new Error('TestHarness state not ready');
+    }
+
+    const { getDieFaceByValue } = await import('/src/games/dicethrone/domain/diceRegistry.ts');
+    const nextDice = values.map((value, index) => {
+      const face = getDieFaceByValue(definitionId, value);
+      return {
+        id: index,
+        definitionId,
+        value,
+        symbol: face?.symbol ?? null,
+        symbols: face?.symbols ?? (face?.symbol ? [face.symbol] : []),
+        isKept: false,
+      };
+    });
+
+    harness.state.set({
+      ...state,
+      sys: {
+        ...state.sys,
+        phase: 'offensiveRoll',
+        interaction: {
+          current: undefined,
+          queue: [],
+        },
+      },
+      core: {
+        ...state.core,
+        activePlayerId: playerId,
+        dice: nextDice,
+        rollCount: 1,
+        rollConfirmed: true,
+        pendingAttack: null,
+        pendingDamage: undefined,
+      },
+    });
+    (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+  }, { values, playerId, definitionId });
+
+  await game.waitForPhase('offensiveRoll', 10000);
+}
+
 test.describe('DiceThrone hand card preview regression', () => {
   test('samurai and gunslinger hand cards should use ability atlas without shimmer', async ({ page, game }) => {
     test.setTimeout(120000);
@@ -229,5 +282,124 @@ test.describe('DiceThrone hand card preview regression', () => {
     await expect(page.locator('[data-testid="card-spotlight-overlay"]')).toBeHidden({ timeout: 1000 });
     await expect(page.locator('[data-testid="bonus-die-overlay"]')).toBeHidden({ timeout: 1000 });
     await game.screenshot('gunslinger-deadeye-upgrade-after-play', testInfo);
+  });
+
+  test('gunslinger fan-the-hammer upgrade should resolve as upgrade in normal play', async ({ page, game }, testInfo) => {
+    test.setTimeout(120000);
+
+    await setupHeroScene(page, game, 'gunslinger', [
+      'upgrade-fan-the-hammer-2',
+    ]);
+
+    const handDiag = await collectHandDiag(page, {
+      'upgrade-fan-the-hammer-2': 'ability-cards.webp',
+    });
+    expect(handDiag).toMatchObject({ missing: false, shimmerCount: 0 });
+    expect(handDiag.cards?.some((card) => card.cardId === 'upgrade-fan-the-hammer-2' && card.hasExpectedAsset)).toBe(true);
+    await game.screenshot('gunslinger-fan-the-hammer-upgrade-hand-before-play', testInfo);
+
+    const handCard = page.locator('[data-testid="hand-area"] [data-card-id="upgrade-fan-the-hammer-2"]').first();
+    await expect(handCard).toBeVisible({ timeout: 10000 });
+    await handCard.click();
+
+    await expect.poll(async () => {
+      const state = await (game as any).getState();
+      const player = state?.core?.players?.['0'];
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        fanTheHammerLevel: player?.abilityLevels?.['fan-the-hammer'] ?? 0,
+        cp: player?.resources?.cp ?? null,
+        handIds: player?.hand?.map((card: any) => card.id) ?? [],
+        discardIds: player?.discard?.map((card: any) => card.id) ?? [],
+        upgradeCard: player?.upgradeCardByAbilityId?.['fan-the-hammer'] ?? null,
+        lastEventTypes: (state?.sys?.eventStream?.entries ?? [])
+          .slice(-6)
+          .map((entry: any) => entry?.event?.type ?? null),
+      };
+    }, { timeout: 15000 }).toMatchObject({
+      reject: null,
+      phase: 'main1',
+      fanTheHammerLevel: 2,
+      cp: 8,
+      handIds: [],
+      discardIds: [],
+      upgradeCard: {
+        cardId: 'upgrade-fan-the-hammer-2',
+        cpCost: 2,
+      },
+      lastEventTypes: ['CP_CHANGED', 'CARD_PLAYED', 'ABILITY_REPLACED'],
+    });
+
+    await expect(page.locator('[data-testid="card-spotlight-overlay"]')).toBeHidden({ timeout: 1000 });
+    await expect(page.locator('[data-testid="bonus-die-overlay"]')).toBeHidden({ timeout: 1000 });
+    await game.screenshot('gunslinger-fan-the-hammer-upgrade-after-play', testInfo);
+  });
+
+  test('gunslinger fan-the-hammer upgraded slot should still deal 8 damage when selected in UI', async ({ page, game }, testInfo) => {
+    test.setTimeout(120000);
+
+    await setupHeroScene(page, game, 'gunslinger', [
+      'upgrade-fan-the-hammer-2',
+    ]);
+
+    const handCard = page.locator('[data-testid="hand-area"] [data-card-id="upgrade-fan-the-hammer-2"]').first();
+    await expect(handCard).toBeVisible({ timeout: 10000 });
+    await handCard.click();
+
+    await expect.poll(async () => {
+      const state = await (game as any).getState();
+      const player = state?.core?.players?.['0'];
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        fanTheHammerLevel: player?.abilityLevels?.['fan-the-hammer'] ?? 0,
+      };
+    }, { timeout: 15000 }).toMatchObject({
+      reject: null,
+      phase: 'main1',
+      fanTheHammerLevel: 2,
+    });
+
+    await injectOffensiveRollDice(page, game, [1, 2, 3, 4, 5]);
+    await game.screenshot('gunslinger-fan-the-hammer-upgraded-slot-before-select', testInfo);
+
+    const upgradedSlot = page.locator('[data-ability-slot="calm"]').first();
+    await expect(upgradedSlot).toBeVisible({ timeout: 10000 });
+    await upgradedSlot.click();
+
+    await expect.poll(async () => {
+      const state = await (game as any).getState();
+      const expectedDamage = await page.evaluate(async () => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!state?.core?.pendingAttack) return null;
+        const { getPendingAttackExpectedDamage } = await import('/src/games/dicethrone/domain/utils.ts');
+        return getPendingAttackExpectedDamage(state.core, state.core.pendingAttack);
+      });
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        pendingAttack: state?.core?.pendingAttack
+          ? {
+            sourceAbilityId: state.core.pendingAttack.sourceAbilityId ?? null,
+            expectedDamage,
+            attackerId: state.core.pendingAttack.attackerId ?? null,
+            defenderId: state.core.pendingAttack.defenderId ?? null,
+          }
+          : null,
+      };
+    }, { timeout: 15000 }).toMatchObject({
+      reject: null,
+      phase: 'offensiveRoll',
+      pendingAttack: {
+        sourceAbilityId: 'fan-the-hammer',
+        expectedDamage: 8,
+        attackerId: '0',
+        defenderId: '1',
+      },
+    });
+
+    await game.screenshot('gunslinger-fan-the-hammer-upgraded-slot-after-select', testInfo);
   });
 });

@@ -9,6 +9,7 @@ import {
     resolveGamePackageManifest,
 } from './manifestClient';
 import {
+    cancelGamePackageInstall as cancelGamePackageInstallTask,
     refreshGamePackageStateFromNativeTask,
     resetGamePackageState,
     startGamePackageInstall,
@@ -31,7 +32,8 @@ interface UseGamePackageStateResult {
     pendingInstall: PendingGamePackageInstall | null;
     isConfirmingInstall: boolean;
     requestInstall: () => void;
-    cancelInstall: () => void;
+    dismissInstall: () => void;
+    cancelInstall: () => void | Promise<void>;
     confirmInstall: () => Promise<void>;
     retryInstall: () => void;
 }
@@ -55,6 +57,13 @@ const mergeManifestIntoCardState = (
         assetPackBytes: state.assetPackBytes ?? manifest.assetPackBytes,
     };
 };
+
+const isInProgressStatus = (status: GamePackageCardState['status']) => (
+    status === 'queued'
+    || status === 'manifest'
+    || status === 'downloading'
+    || status === 'verifying'
+);
 
 export const useGamePackageState = ({
     gameId,
@@ -299,14 +308,37 @@ export const useGamePackageState = ({
         });
     }, [fallbackManifest, gameId, gameName, isPackageManaged, normalizedDelivery, previewManifest]);
 
-    const cancelInstall = useCallback(() => {
+    const cancelInstall = useCallback(async () => {
         requestSerialRef.current += 1;
         logMobileRuntime('UseGamePackageState', 'cancel-install', {
             gameId,
             latestRequestSerial: requestSerialRef.current,
+            currentStatus: cardState.status,
         });
         setPendingInstall(null);
-    }, [gameId]);
+        if (!isInProgressStatus(cardState.status)) {
+            return;
+        }
+
+        try {
+            await cancelGamePackageInstallTask(gameId, fallbackState);
+        } catch (error) {
+            logMobileRuntimeCritical('UseGamePackageState', 'cancel-install-native-failed', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }, [cardState.status, fallbackState, gameId]);
+
+    const dismissInstall = useCallback(() => {
+        requestSerialRef.current += 1;
+        logMobileRuntime('UseGamePackageState', 'dismiss-install', {
+            gameId,
+            latestRequestSerial: requestSerialRef.current,
+            currentStatus: cardState.status,
+        });
+        setPendingInstall(null);
+    }, [cardState.status, gameId]);
 
     const confirmInstall = useCallback(async () => {
         logMobileRuntimeCritical('UseGamePackageState', 'confirm-install-clicked', {
@@ -422,6 +454,7 @@ export const useGamePackageState = ({
         pendingInstall,
         isConfirmingInstall,
         requestInstall,
+        dismissInstall,
         cancelInstall,
         confirmInstall,
         retryInstall,

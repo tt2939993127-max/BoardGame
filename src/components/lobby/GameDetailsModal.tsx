@@ -117,6 +117,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         pendingInstall: pendingPackageInstall,
         isConfirmingInstall: isConfirmingPackageInstall,
         requestInstall: requestGamePackageInstall,
+        dismissInstall: dismissGamePackageInstall,
         cancelInstall: cancelGamePackageInstall,
         confirmInstall: confirmGamePackageInstall,
         retryInstall: retryGamePackageInstall,
@@ -472,19 +473,36 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         requestGamePackageInstall,
     ]);
 
+    const handleDismissPackageInstall = useCallback(() => {
+        logger.info('[GameDetailsModal] 关闭安装游戏包弹窗', {
+            gameId,
+            gameName: gameDisplayName,
+            status: packageInstallCardState.status,
+        });
+        dismissGamePackageInstall();
+    }, [
+        dismissGamePackageInstall,
+        gameDisplayName,
+        gameId,
+        packageInstallCardState.status,
+    ]);
+
     const handleCancelPackageInstall = useCallback(() => {
-        if (isConfirmingPackageInstall) return;
         logger.info('[GameDetailsModal] 取消安装游戏包', {
             gameId,
             gameName: gameDisplayName,
             status: packageInstallCardState.status,
         });
-        cancelGamePackageInstall();
+        void Promise.resolve(cancelGamePackageInstall()).catch((error) => {
+            logMobileRuntimeCritical('GameDetailsModal', 'cancel-package-install-failed', {
+                gameId,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
     }, [
         cancelGamePackageInstall,
         gameDisplayName,
         gameId,
-        isConfirmingPackageInstall,
         packageInstallCardState.status,
     ]);
 
@@ -1592,6 +1610,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                         state={mobilePackageCardDisplayState}
                                         onInstall={handleOpenMobilePackageInstall}
                                         onRetry={handleRetryPackageInstall}
+                                        onCancel={handleCancelPackageInstall}
                                         onCollapse={() => setIsMobilePackageCardExpanded(false)}
                                         presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
                                         requiredAppVersion={gameManifest?.mobileDelivery?.requiredAppVersion}
@@ -1878,9 +1897,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     modulePackBytes={pendingPackageInstall.modulePackBytes}
                     assetPackBytes={pendingPackageInstall.assetPackBytes}
                     isLoading={isConfirmingPackageInstall}
-                    closeOnBackdrop={false}
+                    closeOnBackdrop
                     onConfirm={handleConfirmPackageInstall}
                     onRetry={handleRetryPackageInstall}
+                    onClose={handleDismissPackageInstall}
                     onCancel={handleCancelPackageInstall}
                 />
             )}

@@ -29,6 +29,17 @@ final class AndroidDownloadTaskStore {
         this.appContext = context.getApplicationContext();
     }
 
+    boolean hasUnfinishedTasks() {
+        synchronized (lock) {
+            for (AndroidDownloadTaskRecord record : readAllLocked()) {
+                if (!record.isTerminal()) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    }
+
     List<AndroidDownloadTaskRecord> readAll() {
         synchronized (lock) {
             return readAllLocked();

@@ -412,6 +412,25 @@ export const openNativeDownloadNotificationSettings = async (): Promise<boolean>
     }
 };
 
+export const cancelNativeGamePackageInstall = async (gameId: string): Promise<boolean> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return false;
+    }
+
+    try {
+        await plugin.cancelInstall({ gameId });
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'cancel-install-dispatched', { gameId });
+        return true;
+    } catch (error) {
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'cancel-install-failed', {
+            gameId,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return false;
+    }
+};
+
 const createNativeFailureHandle = (
     manifest: ResolvedGamePackageManifest,
     errorMessage: string,

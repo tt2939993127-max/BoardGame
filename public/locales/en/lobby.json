@@ -3,6 +3,9 @@
     "title": "Yi Board Game",
     "subtitle": "Platform for Tutorials, Online Play, and Prototyping",
     "logoAlt": "Board Game Platform Logo",
+    "gameDetailsLoadingEyebrow": "Preparing",
+    "gameDetailsLoadingTitle": "Game Details",
+    "gameDetailsLoadingDescription": "Content will appear shortly. Please wait.",
     "audio": {
       "mute": "Mute",
       "unmute": "Unmute"
@@ -133,6 +136,7 @@
     "failedTitle": "Download Failed",
     "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
     "retryAction": "Retry",
+    "cancelAction": "Cancel Download",
     "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",
     "updateRequiredEyebrow": "App Update Required",
     "updateRequiredBadge": "Update Needed",
@@ -143,8 +147,8 @@
       "label": "Progress",
       "percent": "{{percent}}%",
       "pendingPercent": "Pending",
-      "queuedTitle": "Preparing",
-      "queuedHint": "Preparing the package list for the current game.",
+      "queuedTitle": "Queued",
+      "queuedHint": "Only one game package download runs at a time on the device. This one starts automatically when its turn arrives.",
       "manifestTitle": "Reading Manifest",
       "manifestHint": "Loading the published manifest for this game.",
       "downloadTitle": "Downloading",

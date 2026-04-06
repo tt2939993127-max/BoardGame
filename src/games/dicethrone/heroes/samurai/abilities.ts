@@ -192,7 +192,22 @@ const BUSHIDO: AbilityDef = {
     name: abilityText('bushido', 'name'),
     type: 'passive',
     description: abilityText('bushido', 'description'),
-    effects: [],
+    variants: [
+        {
+            id: 'bushido-start-turn',
+            trigger: { type: 'phaseStart', phase: 'upkeep' },
+            effects: [
+                custom('samurai-bushido-start-turn', '若你是起始玩家，则游戏开始时获得 1 个荣誉指示物。', 'immediate'),
+            ],
+        },
+        {
+            id: 'bushido-end-turn',
+            trigger: { type: 'phaseEnd', phase: 'discard' },
+            effects: [
+                custom('samurai-bushido-end-turn', '若本回合进攻掷骰次数少于 3 次，则回合结束时获得 1 个荣誉指示物。', 'immediate'),
+            ],
+        },
+    ],
 };
 
 const SOLEMNITY: AbilityDef = {

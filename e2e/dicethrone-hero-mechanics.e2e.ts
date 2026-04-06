@@ -7,10 +7,13 @@
  * - 月精灵：迷影步防御、致盲/缠绕效果
  * - 圣骑士：神圣防御、神佑投掷
  * - 炎术士：炎爆术逐骰效果
+ * - 枪手 / 武士：新被动 Quick Draw / Bushido
  *
- * 使用在线双人对局模式，通过调试面板注入状态。
+ * 使用在线双人对局模式，通过真实开局链路与少量调试面板注入状态。
  */
 
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { STATUS_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
 import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
@@ -18,7 +21,12 @@ import {
     setupOnlineMatch,
     readCoreState,
     applyCoreStateDirect,
+    applyDiceValues,
     closeDebugPanelIfOpen,
+    maybePassResponse,
+    selectCharacter,
+    readyAndStartGame,
+    waitForGameBoard,
 } from './helpers/dicethrone';
 
 // ============================================================================
@@ -127,6 +135,36 @@ const getActivePlayer = async (hostPage: import('@playwright/test').Page, guestP
         inactiveId: hostIsActive ? '1' : '0',
     };
 };
+
+const passiveEvidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'dicethrone-new-passives');
+
+const getPassiveEvidencePath = (filename: string) => {
+    mkdirSync(passiveEvidenceDir, { recursive: true });
+    return join(passiveEvidenceDir, filename);
+};
+
+const startNamedOnlineMatch = async (
+    browser: Parameters<typeof setupOnlineMatch>[0],
+    baseURL: string | undefined,
+    hostHero: 'gunslinger' | 'samurai' | 'monk',
+    guestHero: 'gunslinger' | 'samurai' | 'monk',
+) => {
+    const match = await setupOnlineMatch(browser, baseURL);
+    if (!match) return null;
+
+    const { hostPage, guestPage } = match;
+    await selectCharacter(hostPage, hostHero);
+    await selectCharacter(guestPage, guestHero);
+    await readyAndStartGame(hostPage, guestPage);
+    await waitForGameBoard(hostPage);
+    await waitForGameBoard(guestPage);
+    await hostPage.waitForTimeout(1500);
+    await guestPage.waitForTimeout(1500);
+    return match;
+};
+
+const getSelfTokenArea = (page: import('@playwright/test').Page) =>
+    page.locator('[data-tutorial-id="status-tokens"]');
 
 // ============================================================================
 // 影子盗贼：偷取CP、暗影防御、恐惧反击、终极、与影共生
@@ -984,6 +1022,101 @@ test.describe('炎术士机制', () => {
             expect(getPlayerTokens(coreFinal, activeId)[TOKEN_IDS.FIRE_MASTERY], '重掷应消耗1火焰精通').toBe(2);
 
             await closeDebugPanelIfOpen(activePage);
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
+    });
+});
+
+test.describe('枪手与武士新被动真实链路', () => {
+    test('Quick Draw：枪手首回合真实 upkeep 后应获得 1 个装填', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+        const match = await startNamedOnlineMatch(browser, baseURL, 'gunslinger', 'monk');
+        if (!match) { test.skip(true, '游戏服务器不可用'); return; }
+        const { hostPage, hostContext, guestContext } = match;
+
+        try {
+            const core = await readCoreState(hostPage) as Record<string, unknown>;
+            expect(getPlayerTokens(core, '0')[TOKEN_IDS.LOADED], '枪手首回合 upkeep 后应已有 1 个装填').toBe(1);
+            expect(getPlayerTokens(core, '1')[TOKEN_IDS.LOADED] ?? 0, '对手不应错误获得装填').toBe(0);
+
+            await closeDebugPanelIfOpen(hostPage);
+            await expect(getSelfTokenArea(hostPage)).toBeVisible({ timeout: 5000 });
+            await getSelfTokenArea(hostPage).screenshot({
+                path: getPassiveEvidencePath('gunslinger-quick-draw-opening-loaded.png'),
+            });
+        } finally {
+            await hostContext.close();
+            await guestContext.close();
+        }
+    });
+
+    test('Bushido：武士首回合 upkeep 与回合末少于 3 次进攻掷骰时都应获得荣誉', async ({ browser }, testInfo) => {
+        test.setTimeout(180000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+        const match = await startNamedOnlineMatch(browser, baseURL, 'samurai', 'monk');
+        if (!match) { test.skip(true, '游戏服务器不可用'); return; }
+        const { hostPage, guestPage, hostContext, guestContext } = match;
+
+        try {
+            const openingCore = await readCoreState(hostPage) as Record<string, unknown>;
+            expect(getPlayerTokens(openingCore, '0')[TOKEN_IDS.HONOR], '武士首回合 upkeep 后应已有 1 个荣誉').toBe(1);
+
+            await closeDebugPanelIfOpen(hostPage);
+            await expect(getSelfTokenArea(hostPage)).toBeVisible({ timeout: 5000 });
+            await getSelfTokenArea(hostPage).screenshot({
+                path: getPassiveEvidencePath('samurai-bushido-opening-honor.png'),
+            });
+
+            const advanceButton = hostPage.locator('[data-tutorial-id="advance-phase-button"]');
+            await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+            await advanceButton.click();
+
+            const rollButton = hostPage.locator('[data-tutorial-id="dice-roll-button"]');
+            await expect(rollButton).toBeEnabled({ timeout: 5000 });
+            await rollButton.click();
+            await hostPage.waitForTimeout(300);
+
+            await applyDiceValues(hostPage, [1, 4, 4, 5, 5]);
+            await closeDebugPanelIfOpen(hostPage);
+
+            const confirmButton = hostPage.locator('[data-tutorial-id="dice-confirm-button"]');
+            await expect(confirmButton).toBeEnabled({ timeout: 5000 });
+            await confirmButton.click();
+            await hostPage.waitForTimeout(500);
+
+            await maybePassResponse(hostPage, 3000);
+            await maybePassResponse(guestPage, 3000);
+
+            await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+            await advanceButton.click();
+            await hostPage.waitForTimeout(500);
+
+            await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+            await advanceButton.click();
+            await hostPage.waitForTimeout(500);
+
+            await expect(advanceButton).toBeEnabled({ timeout: 5000 });
+            await advanceButton.click();
+
+            await hostPage.waitForFunction(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                return state?.core?.turnNumber === 2
+                    && state?.core?.activePlayerId === '1'
+                    && (state?.core?.players?.['0']?.tokens?.honor ?? 0) === 2;
+            }, undefined, { timeout: 15000, polling: 200 });
+
+            const finalCore = await readCoreState(hostPage) as Record<string, unknown>;
+            expect(getPlayerTokens(finalCore, '0')[TOKEN_IDS.HONOR], 'Bushido 回合末少于 3 次进攻掷骰时应再获得 1 个荣誉').toBe(2);
+            expect(finalCore.offensiveRollCountThisTurn, '回合切换后应清空本回合进攻掷骰计数').toBeUndefined();
+
+            await closeDebugPanelIfOpen(hostPage);
+            await expect(getSelfTokenArea(hostPage)).toBeVisible({ timeout: 5000 });
+            await getSelfTokenArea(hostPage).screenshot({
+                path: getPassiveEvidencePath('samurai-bushido-end-turn-honor.png'),
+            });
         } finally {
             await hostContext.close();
             await guestContext.close();

@@ -1693,7 +1693,7 @@ export const MatchRoom = () => {
                 )}
 
                 {/* 游戏棋盘 - 全屏 */}
-                <MobileBoardShell>
+                <MobileBoardShell battlefieldZoomMode={gameConfig?.mobileBattlefieldZoom}>
                     <div
                         className="w-full h-full"
                         style={{
