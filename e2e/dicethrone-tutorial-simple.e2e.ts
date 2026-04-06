@@ -445,6 +445,7 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
         await waitForTutorialStep(page, 'inner-peace', 10000);
 
+        await page.waitForTimeout(250);
         await clickHandCardVisibleArea(page, 'card-inner-peace');
         await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 

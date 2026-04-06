@@ -338,7 +338,19 @@ const extractLiteralKeysFromExpression = (expression: string): { keys: string[];
     return { keys, dynamic: false };
 };
 
-const resolveIdentifierKeys = (content: string, identifier: string, position: number): { keys: string[]; dynamic: boolean } => {
+type ResolvedIdentifierPattern = {
+    namespace?: string;
+    key: string;
+    patternSegments: Array<string | null>;
+};
+
+type ResolvedIdentifierKeys = {
+    keys: string[];
+    dynamic: boolean;
+    patterns?: ResolvedIdentifierPattern[];
+};
+
+const extractIdentifierExpression = (content: string, identifier: string, position: number): string | null => {
     const regex = new RegExp(`\\b(?:const|let|var)\\s+${identifier}\\s*=\\s*([\\s\\S]*?);`, 'g');
     let match: RegExpExecArray | null;
     let expression: string | null = null;
@@ -346,10 +358,87 @@ const resolveIdentifierKeys = (content: string, identifier: string, position: nu
         if (match.index > position) break;
         expression = match[1];
     }
+    return expression;
+};
+
+const parseTemplateLiteralPatternsFromExpression = (
+    expression: string,
+    content: string,
+    position: number,
+    knownNamespaces: Set<string>,
+): ResolvedIdentifierPattern[] => {
+    const trimmed = expression.trim();
+    const templateMatch = trimmed.match(/^`([\s\S]*)`$/);
+    if (!templateMatch) return [];
+
+    const rawValue = templateMatch[1];
+    if (!rawValue.includes('${')) return [];
+
+    const segments = rawValue.split('.');
+    const placeholderOnlyRegex = /^\$\{([A-Za-z_$][\w$]*)\}$/;
+    let variants: Array<Array<string | null>> = [[]];
+
+    for (const segment of segments) {
+        const placeholderMatch = segment.match(placeholderOnlyRegex);
+        if (!placeholderMatch) {
+            if (segment.includes('${')) {
+                return [];
+            }
+            variants = variants.map((variant) => [...variant, segment]);
+            continue;
+        }
+
+        const nestedIdentifier = placeholderMatch[1];
+        const resolved = resolveIdentifierKeys(content, nestedIdentifier, position, knownNamespaces);
+        if (resolved.keys.length > 0) {
+            const nextVariants: Array<Array<string | null>> = [];
+            for (const variant of variants) {
+                for (const key of resolved.keys) {
+                    if (key.includes('.')) {
+                        nextVariants.push([...variant, null]);
+                    } else {
+                        nextVariants.push([...variant, key]);
+                    }
+                }
+            }
+            variants = nextVariants;
+            continue;
+        }
+
+        variants = variants.map((variant) => [...variant, null]);
+    }
+
+    return variants
+        .filter((patternSegments) => patternSegments.length > 0 && patternSegments[0] !== null)
+        .map((patternSegments) => {
+            const normalizedKey = patternSegments.map((segment) => segment ?? '*').join('.');
+            const parsed = parseI18nKey(normalizedKey, knownNamespaces);
+            return {
+                namespace: parsed.namespace,
+                key: parsed.key,
+                patternSegments,
+            };
+        });
+};
+
+const resolveIdentifierKeys = (
+    content: string,
+    identifier: string,
+    position: number,
+    knownNamespaces: Set<string>,
+): ResolvedIdentifierKeys => {
+    const expression = extractIdentifierExpression(content, identifier, position);
     if (!expression) {
         return { keys: [], dynamic: true };
     }
-    return extractLiteralKeysFromExpression(expression);
+
+    const patterns = parseTemplateLiteralPatternsFromExpression(expression, content, position, knownNamespaces);
+    if (patterns.length > 0) {
+        return { keys: [], dynamic: false, patterns };
+    }
+
+    const literalResult = extractLiteralKeysFromExpression(expression);
+    return { keys: literalResult.keys, dynamic: literalResult.dynamic };
 };
 
 const findCallEnd = (content: string, startIndex: number): number => {
@@ -505,8 +594,23 @@ export const collectReferencesFromContent = (
             }
             
             // 尝试解析变量值
-            const resolved = resolveIdentifierKeys(content, identifier, match.index);
-            
+            const resolved = resolveIdentifierKeys(content, identifier, match.index, knownNamespaces);
+
+            if (resolved.patterns && resolved.patterns.length > 0) {
+                const callEnd = findCallEnd(content, match.index + match[0].length);
+                const snippet = content.slice(match.index, callEnd);
+                const overrideNamespaces = findNsOverride(snippet);
+
+                for (const pattern of resolved.patterns) {
+                    const namespaces = pattern.namespace
+                        ? [pattern.namespace]
+                        : (overrideNamespaces.length ? overrideNamespaces : resolveAliasNamespaces(aliasName, line, source));
+                    if (!namespaces.length) continue;
+                    pushReference(pattern.key, namespaces, line, source, pattern.patternSegments);
+                }
+                continue;
+            }
+
             if (resolved.dynamic || resolved.keys.length === 0) {
                 addWarning({ 
                     type: 'dynamic-key', 
@@ -596,9 +700,21 @@ export const collectReferencesFromContent = (
             keyDynamic = literal.dynamic;
             keyValues = literal.dynamic ? [] : [literal.value];
         } else if (keyIdentifierName) {
-            const resolved = resolveIdentifierKeys(content, keyIdentifierName, toastMatch.index);
+            const resolved = resolveIdentifierKeys(content, keyIdentifierName, toastMatch.index, knownNamespaces);
             keyDynamic = resolved.dynamic;
             keyValues = resolved.keys;
+            if (resolved.patterns && resolved.patterns.length > 0) {
+                keyDynamic = false;
+                keyValues = [];
+                const overrideNamespaces = findNsOverride(snippet);
+                for (const pattern of resolved.patterns) {
+                    const namespaces = pattern.namespace
+                        ? [pattern.namespace]
+                        : (overrideNamespaces.length ? overrideNamespaces : [defaultNamespace]);
+                    pushReference(pattern.key, namespaces, line, source, pattern.patternSegments);
+                }
+                continue;
+            }
         } else {
             keyDynamic = true;
         }

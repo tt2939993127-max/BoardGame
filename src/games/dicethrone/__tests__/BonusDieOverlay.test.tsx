@@ -133,7 +133,8 @@ describe('BonusDieOverlay', () => {
         expect(html).not.toContain('bonusDie.confirmDamage');
     });
 
-    it('奖励骰展示态特写应允许首次点击立即关闭', () => {
+    it('奖励骰展示态特写应保留首次点击保护，保护窗后才允许关闭', () => {
+        vi.useFakeTimers();
         const onClose = vi.fn();
 
         render(
@@ -147,10 +148,15 @@ describe('BonusDieOverlay', () => {
         );
 
         fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
+        expect(onClose).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(250);
+        fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
         expect(onClose).toHaveBeenCalledTimes(1);
     });
 
-    it('displayOnly 的 settlement 分支应允许首次点击立即关闭', () => {
+    it('displayOnly 的 settlement 分支也应保留首次点击保护', () => {
+        vi.useFakeTimers();
         const onClose = vi.fn();
 
         render(
@@ -162,6 +168,10 @@ describe('BonusDieOverlay', () => {
             />
         );
 
+        fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
+        expect(onClose).not.toHaveBeenCalled();
+
+        vi.advanceTimersByTime(250);
         fireEvent.click(document.querySelector('.fixed.inset-0') as Element);
         expect(onClose).toHaveBeenCalledTimes(1);
     });
@@ -435,7 +445,7 @@ describe('BonusDieOverlay', () => {
             expect(state[0].previewRef).toEqual({
                 type: 'atlas',
                 atlasId: 'dicethrone:gunslinger-cards',
-                index: 24,
+                index: 26,
             });
         });
     });

@@ -108,7 +108,6 @@ export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
         const player = core.players[playerId];
         if (!player) return core;
 
-        // 复合展示位可能共享 atlas 索引；命中多张时拒绝模糊发牌，避免把错误卡牌发到手里。
         const matchedDeckEntries = player.deck
             .map((card, deckIndex) => ({ card, deckIndex }))
             .filter(({ card }) => card.previewRef?.type === 'atlas' && card.previewRef.index === atlasIndex);

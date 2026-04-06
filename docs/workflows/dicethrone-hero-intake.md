@@ -48,7 +48,11 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 补充口径：
 
 - `crops/...` 默认只算录入核对中间产物，不计入“正式资源已完成”。
-- 但如果某些牌在现有 atlas 模型里无法被正确表达，允许把稳定单卡图作为正式运行时资源；此时完成判据应看这些单卡图是否已进 manifest、可被 `previewRef.type = 'image'` 正式引用。
+- 对 Dice Throne 角色，正式运行时默认必须优先走 atlas：
+  - 先尝试公共 atlas 配置
+  - 公共配置不够时，升级为 per-hero 精确 frame atlas
+  - 只有用户明确批准，且已有充分证据证明 atlas 合同本身无法成立时，才允许退到单卡 `image`
+- 因此不能把“单卡图能显示”当成 Dice Throne 新英雄 intake 的默认收口条件。
 
 ## 执行步骤
 
@@ -97,10 +101,11 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 - `crops/ability-cards/` 默认只是真相源裁图，不自动等于运行时素材。
 - 默认优先级永远是：
   - 能直接复用原 `ability-cards` atlas 的，继续走 atlas
-  - 只有 atlas 模型表达不了的特殊牌，才单独落正式单卡图
+  - 复合排版但仍属于同一张 `ability-cards.webp` 的，优先改成精确 frame atlas
+  - 只有 atlas 合同被证伪且用户明确批准时，才单独落正式单卡图
 - `previewRef` 可以指向两类正式资源：
   - `type = 'atlas'`：原 `ability-cards` atlas + 正确 index
-  - `type = 'image'`：已进 manifest 的正式单卡图
+  - `type = 'image'`：仅限用户已明确批准的正式单卡图
 - 不得为了迁就少数特殊牌，额外发明 `hand-cards-atlas.webp` 这类并行运行时方案；`gunslinger` / `samurai` 的历史 hand atlas 已确认是错误方向。
 - 真相源裁图与正式运行时 atlas 必须分开登记；前者服务核对合同，后者服务手牌 UI。
 - 禁止因为“已有 slot 裁图”就直接把复合裁图、临时 hand preview 或未进 manifest 的中间产物接到 `cards.ts` 的手牌图引用上。
@@ -142,8 +147,10 @@ Dice Throne 的资源交付不能只看 `git status`，因为图片目录常被�
 - 卡图顺序必须以 `ability-cards` 裁图和合同表为唯一来源
 - 不得沿用旧角色的 slot 顺序假设
 - 不得伪造未确认的 `abilityTags`、费用、数值或时机
-- 如果正式 `ability-cards.webp` 不能直接支撑某几张手牌显示，优先补正式单卡图并在 `previewRef` 上显式切到 `type = 'image'`
-- 允许“一张正式卡图对应多个运行时技能卡/可选卡”；是否采用这种复用关系，必须以旧实现或用户裁决为准，禁止凭 atlas 外观猜
+- 如果正式 `ability-cards.webp` 不能被公共 atlas 正确表达，优先补 per-hero 精确 frame atlas；只有 atlas 合同被证伪且用户明确批准时，才允许在 `previewRef` 上切到 `type = 'image'`
+- 升级卡可以替换一个基础技能定义，而这个基础技能定义内部可以有多个 `variants`；但这些 `variants` 不是新的手牌卡对象，也不会自动占用新的卡图索引
+- `targetAbilityId` 必须始终指向基础技能 ID，不能指向技能变体、技能子集或临时 UI 槽位
+- 如果原图出现复合排版，优先区分“原图 slot”与“运行时 frame”；禁止直接让多张牌共用一个 `previewRef.index`
 - 对“上下叠放拆卡”或“源图布局与通用 atlas 不一致”的角色，合同表里必须显式写出：
   - 哪些文件是主真相源裁图
   - 哪些文件是正式运行时 atlas

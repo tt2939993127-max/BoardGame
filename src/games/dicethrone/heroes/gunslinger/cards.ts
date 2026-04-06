@@ -126,7 +126,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-pistol-whip', 'description'),
         sfxKey: GUNSLINGER_SFX_HEAVY,
-        previewRef: atlasPreview(22),
+        previewRef: atlasPreview(23),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
             custom('gunslinger-card-pistol-whip', '选择 1 位敌方玩家，使其获得击倒并受到 1 点伤害。'),
@@ -140,7 +140,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('upgrade-take-cover-2', 'description'),
         sfxKey: GUNSLINGER_SFX_SHOT,
-        previewRef: atlasPreview(23),
+        previewRef: atlasPreview(24),
         effects: [replaceAbility('take-cover', TAKE_COVER_2, 2, '升级掩护射击至 II 级。')],
     },
     {
@@ -151,7 +151,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-mark-the-target', 'description'),
         sfxKey: GUNSLINGER_SFX_SHOT,
-        previewRef: atlasPreview(23),
+        previewRef: atlasPreview(25),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。'),
             custom('gunslinger-card-mark-the-target', '选择 1 位敌方玩家，使其获得 1 个赏金。'),
@@ -165,7 +165,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('upgrade-deadeye-2', 'description'),
         sfxKey: GUNSLINGER_SFX_HEAVY,
-        previewRef: atlasPreview(24),
+        previewRef: atlasPreview(26),
         effects: [replaceAbility('deadeye', DEADEYE_2, 2, '升级死亡之眼至 II 级。')],
     },
     {
@@ -176,7 +176,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-the-law', 'description'),
         sfxKey: GUNSLINGER_SFX_HEAVY,
-        previewRef: atlasPreview(24),
+        previewRef: atlasPreview(27),
         effects: [
             grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。'),
             custom('gunslinger-card-the-law', '选择至多 2 位目标玩家。每名目标玩家获得 1 个赏金并受到 1 层击倒。'),
@@ -190,7 +190,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('upgrade-duel-2', 'description'),
         sfxKey: GUNSLINGER_SFX_HEAVY,
-        previewRef: atlasPreview(25),
+        previewRef: atlasPreview(28),
         effects: [replaceAbility('duel', DUEL_2, 2, '升级对决至 II 级。')],
     },
     {
@@ -201,7 +201,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('upgrade-quick-draw', 'description'),
         sfxKey: GUNSLINGER_SFX_SHOT,
-        previewRef: atlasPreview(26),
+        previewRef: atlasPreview(29),
         effects: [replaceAbility('quick-draw', QUICK_DRAW_UPGRADED, 2, '升级快速拔枪至 II 级。')],
     },
     {
@@ -212,7 +212,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-wanted', 'description'),
         sfxKey: GUNSLINGER_TOKEN_UPDATE_SFX,
-        previewRef: atlasPreview(27),
+        previewRef: atlasPreview(30),
         effects: [
             custom('gunslinger-card-wanted', '选择 1 位敌方玩家，使其获得 1 个赏金。'),
         ],
@@ -225,7 +225,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-spin-the-chamber', 'description'),
         sfxKey: GUNSLINGER_TOKEN_UPDATE_SFX,
-        previewRef: atlasPreview(28),
+        previewRef: atlasPreview(31),
         effects: [
             grantToken('self', TOKEN_IDS.LOADED, 1, '获得 1 个装填。'),
         ],
@@ -238,7 +238,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'main',
         description: cardText('card-high-noon', 'description'),
         sfxKey: GUNSLINGER_SFX_SHOT,
-        previewRef: atlasPreview(29),
+        previewRef: atlasPreview(32),
         effects: [
             custom('gunslinger-card-high-noon', '选择 1 位敌方玩家，掷 1 颗骰子并按结果结算。'),
         ],
@@ -251,7 +251,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'roll',
         description: cardText('card-wild-west', 'description'),
         sfxKey: GUNSLINGER_SFX_SHOT,
-        previewRef: atlasPreview(30),
+        previewRef: atlasPreview(33),
         isAttackModifier: true,
         playCondition: { requireDiceExists: true, requireHasRolled: true },
         effects: [
@@ -266,7 +266,7 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         timing: 'roll',
         description: cardText('card-eat-my-lead', 'description'),
         sfxKey: GUNSLINGER_SFX_ULTIMATE,
-        previewRef: atlasPreview(31),
+        previewRef: atlasPreview(34),
         isAttackModifier: true,
         playCondition: { requireDiceExists: true, requireHasRolled: true },
         effects: [

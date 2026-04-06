@@ -1081,6 +1081,7 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
             pendingAttack: {
                 attackerId: '0',
                 defenderId: '1',
+                sourceAbilityId: 'lunar-eclipse',
                 isDefendable: true,
                 damage: 5,
                 bonusDamage: 0,
@@ -1107,6 +1108,8 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 2000 });
+    await page.waitForTimeout(400);
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 1000 });
 
     const afterClickState = await page.evaluate(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
@@ -1120,9 +1123,9 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
     });
 
     const expectedOverlayTextByEffectKey: Record<string, RegExp> = {
-        'bonusDie.effect.watchOut.bow': /(bonusDie\.effect\.watchOut\.bow|Bow.*\+2 Damage|\+2\s*Damage)/i,
-        'bonusDie.effect.watchOut.foot': /(bonusDie\.effect\.watchOut\.foot|Foot.*Inflict Entangle|Inflict Entangle|Entangle)/i,
-        'bonusDie.effect.watchOut.moon': /(bonusDie\.effect\.watchOut\.moon|Moon.*Inflict Blinded|Inflict Blinded|Blinded)/i,
+        'bonusDie.effect.watchOut.bow': /(bonusDie\.effect\.watchOut\.bow|Bow.*\+2 Damage|\+2\s*Damage|弓.*伤害\+2|伤害\+2)/i,
+        'bonusDie.effect.watchOut.foot': /(bonusDie\.effect\.watchOut\.foot|Foot.*Inflict Entangle|Inflict Entangle|Entangle|脚.*缠绕|施加缠绕|缠绕)/i,
+        'bonusDie.effect.watchOut.moon': /(bonusDie\.effect\.watchOut\.moon|Moon.*Inflict Blinded|Inflict Blinded|Blinded|月.*致盲|施加致盲|致盲)/i,
     };
 
     expect(afterClickState.bonusDieEffectKey).toMatch(/^bonusDie\.effect\.watchOut\.(bow|foot|moon)$/);
@@ -1246,6 +1249,7 @@ test('bonus die spotlight should close on backdrop click before confirm interact
             pendingAttack: {
                 attackerId: '0',
                 defenderId: '1',
+                sourceAbilityId: 'lunar-eclipse',
                 isDefendable: true,
                 damage: 5,
                 bonusDamage: 0,
@@ -1268,6 +1272,7 @@ test('bonus die spotlight should close on backdrop click before confirm interact
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
 
+    await page.waitForTimeout(250);
     await page.mouse.click(40, 40);
     await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 
@@ -1314,6 +1319,7 @@ test('bonus die spotlight should close on content click in display mode', async 
             pendingAttack: {
                 attackerId: '0',
                 defenderId: '1',
+                sourceAbilityId: 'lunar-eclipse',
                 isDefendable: true,
                 damage: 5,
                 bonusDamage: 0,
@@ -1335,6 +1341,7 @@ test('bonus die spotlight should close on content click in display mode', async 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
 
+    await page.waitForTimeout(250);
     await bonusDieOverlay.click();
     await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 

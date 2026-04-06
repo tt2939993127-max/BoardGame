@@ -224,12 +224,21 @@ test.describe('Lobby E2E', () => {
         });
 
         await page.evaluate(() => {
-            const openCalls: string[] = [];
-            (window as Window & { __testWindowOpenCalls__?: string[] }).__testWindowOpenCalls__ = openCalls;
-            window.open = ((url?: string | URL) => {
-                openCalls.push(typeof url === 'string' ? url : url?.toString() ?? '');
-                return {} as Window;
-            }) as typeof window.open;
+            const anchorClicks: Array<{ href: string; target: string | null; rel: string | null }> = [];
+            (window as Window & { __testDownloadAnchorClicks__?: Array<{ href: string; target: string | null; rel: string | null }> }).__testDownloadAnchorClicks__ = anchorClicks;
+
+            const originalClick = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function patchedClick(this: HTMLAnchorElement) {
+                anchorClicks.push({
+                    href: this.href,
+                    target: this.getAttribute('target'),
+                    rel: this.getAttribute('rel'),
+                });
+            };
+
+            (window as Window & { __restoreAnchorClick__?: () => void }).__restoreAnchorClick__ = () => {
+                HTMLAnchorElement.prototype.click = originalClick;
+            };
         });
 
         await page.locator('[data-fab-id="settings"]').click();
@@ -240,8 +249,16 @@ test.describe('Lobby E2E', () => {
         await page.locator('[data-fab-id="download-app"]').click();
 
         await expect.poll(async () => page.evaluate(() => (
-            (window as Window & { __testWindowOpenCalls__?: string[] }).__testWindowOpenCalls__ ?? []
-        ))).toEqual([apkUrl]);
+            (window as Window & { __testDownloadAnchorClicks__?: Array<{ href: string; target: string | null; rel: string | null }> }).__testDownloadAnchorClicks__ ?? []
+        ))).toEqual([{
+            href: apkUrl,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+        }]);
+
+        await page.evaluate(() => {
+            (window as Window & { __restoreAnchorClick__?: () => void }).__restoreAnchorClick__?.();
+        });
     });
 
     test('移动端反馈弹窗应覆盖悬浮球面板，且输入区使用可编辑字号', async ({ browser }, testInfo) => {

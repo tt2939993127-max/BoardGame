@@ -126,6 +126,47 @@ describe('i18n 静态检查工具', () => {
         expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(false);
     });
 
+    it('识别变量承载的 template literal 模式，并展开可确定的前缀字面量', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const { t } = useTranslation('game-dicethrone');
+            const i18nPrefix = isToken ? 'tokens' : 'statusEffects';
+            const descriptionKey = \`${'${i18nPrefix}'}.${'${effectId}'}.description\`;
+            const nameKey = \`${'${i18nPrefix}'}.${'${effectId}'}.name\`;
+            t(descriptionKey, { returnObjects: true });
+            t(nameKey);
+        `;
+
+        const result = collectReferencesFromContent(content, 'demo.tsx', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common', 'game-dicethrone']),
+        });
+
+        expect(result.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'tokens.*.description',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['tokens', null, 'description'],
+            }),
+            expect.objectContaining({
+                key: 'statusEffects.*.description',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['statusEffects', null, 'description'],
+            }),
+            expect.objectContaining({
+                key: 'tokens.*.name',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['tokens', null, 'name'],
+            }),
+            expect.objectContaining({
+                key: 'statusEffects.*.name',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['statusEffects', null, 'name'],
+            }),
+        ]));
+        expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(false);
+    });
+
     it('命令校验直接返回自然语言错误文案会产生告警', () => {
         const content = `
             export function validate() {
