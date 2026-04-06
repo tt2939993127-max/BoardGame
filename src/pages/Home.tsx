@@ -465,17 +465,7 @@ export const Home = () => {
                             gameModalNavigateAwayBridgeRef.current();
                         }}
                     >
-                        <Suspense
-                            fallback={(
-                                <HomeGameDetailsModalFallback
-                                    onClose={close}
-                                    closeOnBackdrop={closeOnBackdrop}
-                                    eyebrow={t('lobby:home.gameDetailsLoadingEyebrow', { defaultValue: '正在准备' })}
-                                    title={t('lobby:home.gameDetailsLoadingTitle', { defaultValue: '游戏详情' })}
-                                    description={t('lobby:home.gameDetailsLoadingDescription', { defaultValue: '内容马上出现，请稍候。' })}
-                                />
-                            )}
-                        >
+                        <Suspense fallback={<HomeGameDetailsModalFallback onClose={close} closeOnBackdrop={closeOnBackdrop} />}>
                             <LazyGameDetailsModal
                                 isOpen
                                 onClose={close}
