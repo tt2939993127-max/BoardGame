@@ -421,6 +421,12 @@ html[data-keyboard-visible="true"] .modal-base-container {
     overflow: hidden;
 }
 
+.mobile-battlefield-viewport--content-proxy {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+}
+
 .mobile-battlefield-viewport--zoom-enabled {
     touch-action: pan-x pan-y;
 }
@@ -438,6 +444,7 @@ html[data-keyboard-visible="true"] .modal-base-container {
 }
 
 .mobile-battlefield-viewport__stage--targeted {
+    display: contents;
     --mobile-battlefield-target-translate-x: 0px;
     --mobile-battlefield-target-translate-y: 0px;
     --mobile-battlefield-target-scale: 1;

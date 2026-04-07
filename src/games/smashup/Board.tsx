@@ -2293,15 +2293,17 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 <div className="absolute inset-0 z-0 pointer-events-none opacity-40 mix-blend-multiply">
                     <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/wood-pattern.png')]" />
                 </div>
-                {/* Vignette for focus */}
-                <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.6)_100%)]" />
+                {/* Vignette for focus: keep desktop mood, but do not add a translucent cover on mobile battlefield baseline. */}
+                {!isMobileViewport && (
+                    <div className="absolute inset-0 z-0 pointer-events-none bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.6)_100%)]" />
+                )}
 
                 {/* --- TOP HUD: "Sticky Notes" Style --- */}
                 <div className="relative z-20 flex justify-between items-start pt-6 px-[2vw] pointer-events-none">
 
                     {/* Left: Turn Tracker (Yellow Notepad) */}
                     <div
-                        className="bg-[#fef3c7] text-slate-800 p-3 pt-4 shadow-[2px_3px_5px_rgba(0,0,0,0.2)] -rotate-1 pointer-events-auto min-w-[140px] clip-path-jagged"
+                        className={`bg-[#fef3c7] text-slate-800 p-3 pt-4 shadow-[2px_3px_5px_rgba(0,0,0,0.2)] -rotate-1 min-w-[140px] clip-path-jagged ${isMobileViewport ? 'pointer-events-none' : 'pointer-events-auto'}`}
                         data-tutorial-id="su-turn-tracker"
                         style={turnTrackerStyle}
                     >
@@ -2331,7 +2333,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
                     {/* Right: Score Sheet + Player Info */}
                     <div
-                        className="bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] pointer-events-auto rounded-sm"
+                        className={`bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] rounded-sm ${isMobileViewport ? 'pointer-events-none' : 'pointer-events-auto'}`}
                         data-tutorial-id="su-scoreboard"
                         style={scoreboardStyle}
                     >
