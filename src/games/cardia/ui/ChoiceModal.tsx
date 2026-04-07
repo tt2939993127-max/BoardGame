@@ -22,7 +22,7 @@ interface Props {
 
 export function ChoiceModal({ title, description, options, onConfirm, onCancel }: Props) {
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 p-3 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/50 p-3 sm:items-center sm:p-4">
             <motion.div
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}

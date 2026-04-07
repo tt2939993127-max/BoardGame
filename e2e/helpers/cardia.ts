@@ -366,15 +366,26 @@ export const playCard = async (page: Page, index: number) => {
  * @param timeout - 超时时间（毫秒）
  */
 export const waitForPhase = async (page: Page, phase: string, timeout = 10000) => {
-    const phaseMap: Record<string, string> = {
-        play: 'Play Card',
-        ability: 'Ability',
-        end: 'End',
+    const phaseMap: Record<string, string[]> = {
+        play: ['Play Card', '打出卡牌'],
+        ability: ['Ability', '能力'],
+        end: ['End', '结束'],
     };
     
-    const phaseText = phaseMap[phase] || phase;
+    const phaseTexts = phaseMap[phase] || [phase];
     const indicator = page.locator('[data-testid="cardia-phase-indicator"]');
-    await expect(indicator).toContainText(phaseText, { timeout });
+    
+    // 等待任意一个匹配的文本出现
+    await page.waitForFunction(
+        ({ texts, timeout: timeoutMs }) => {
+            const indicator = document.querySelector('[data-testid="cardia-phase-indicator"]');
+            if (!indicator) return false;
+            const text = indicator.textContent || '';
+            return texts.some((t: string) => text.includes(t));
+        },
+        { texts: phaseTexts, timeout },
+        { timeout }
+    );
 };
 
 // ============================================================================

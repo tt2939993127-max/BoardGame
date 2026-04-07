@@ -85,7 +85,7 @@ export const CardSelectionModal: React.FC<CardSelectionModalProps> = ({
     };
     
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4">
             <div className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border-2 border-purple-500 bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl sm:rounded-lg">
                 {/* 标题栏 */}
                 <div className="border-b border-purple-500/30 px-4 py-3 sm:px-6 sm:py-4">

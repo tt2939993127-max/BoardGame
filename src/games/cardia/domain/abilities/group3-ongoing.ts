@@ -107,30 +107,96 @@ abilityExecutorRegistry.register(ABILITY_IDS.MAGISTRATE, (ctx: CardiaAbilityCont
  * 效果：🔄 上一个遭遇获胜的那张牌额外获得1枚印戒
  * 
  * 实现：
- * 1. 放置持续标记（在下次遭遇结算时应用）
- * 2. 遭遇结算时检查持续标记，给获胜者额外印戒
- * 3. 触发后自动移除（一次性效果）
+ * 1. 放置持续标记（保持持续能力的语义）
+ * 2. 同时立即检查上一个遭遇的获胜卡牌并给予额外印戒（效果立即生效）
+ * 3. 持续标记在下次遭遇结算时被移除（一次性效果）
  * 
- * 持续时间：一次性（下次遭遇结算后自动移除）
+ * 注意：
+ * - "上一个遭遇"指的是财务官激活时的上一个遭遇（不是当前遭遇）
+ * - 例如：第2回合 P1 获胜，第3回合财务官激活，立即给第2回合的获胜卡牌额外印戒
+ * - 持续标记的作用：标识能力已激活，在下次遭遇结算时被移除
  */
 abilityExecutorRegistry.register(ABILITY_IDS.TREASURER, (ctx: CardiaAbilityContext) => {
-    // 只放置持续标记，效果在下次遭遇结算时应用
-    return {
-        events: [
-            {
-                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
-                payload: {
-                    abilityId: ctx.abilityId,
-                    cardId: ctx.cardId,
-                    playerId: ctx.playerId,
-                    effectType: 'extraSignet',
-                    timestamp: ctx.timestamp,
-                    encounterIndex: ctx.core.turnNumber, // 记录放置时的遭遇索引
-                },
+    const events: any[] = [];
+    
+    // 2. 立即检查上一个遭遇的获胜卡牌并给予额外印戒
+    // 注意：Treasurer 在当前遭遇的 ability 阶段激活
+    // 此时 previousEncounter 已经是当前遭遇（第N回合）
+    // 我们需要的是"上一个遭遇"（第N-1回合），即 encounterHistory 的倒数第二个
+    const encounterHistory = ctx.core.encounterHistory;
+    const previousEncounter = encounterHistory.length >= 2 
+        ? encounterHistory[encounterHistory.length - 2]  // 倒数第二个遭遇
+        : null;
+    
+    console.log('[Treasurer] Ability activated:', {
+        playerId: ctx.playerId,
+        cardId: ctx.cardId,
+        currentTurn: ctx.core.turnNumber,
+        encounterHistoryLength: encounterHistory.length,
+        previousEncounter: previousEncounter ? {
+            winnerId: previousEncounter.winnerId,
+            player1CardUid: previousEncounter.player1Card?.uid,
+            player2CardUid: previousEncounter.player2Card?.uid,
+        } : null,
+    });
+    
+    let targetCardId: string | undefined;
+    let targetPlayerId: string | undefined;
+    
+    if (previousEncounter && previousEncounter.winnerId && previousEncounter.winnerId !== 'tie') {
+        // 找到上一个遭遇的获胜卡牌
+        const previousWinnerCard = previousEncounter.winnerId === previousEncounter.player1Card?.ownerId
+            ? previousEncounter.player1Card
+            : previousEncounter.player2Card;
+        
+        if (previousWinnerCard) {
+            targetCardId = previousWinnerCard.uid;
+            targetPlayerId = previousEncounter.winnerId;
+            
+            // 立即给上一个遭遇的获胜卡牌额外印戒
+            events.push({
+                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
                 timestamp: ctx.timestamp,
-            }
-        ],
-    };
+                payload: {
+                    cardId: previousWinnerCard.uid,
+                    playerId: previousEncounter.winnerId,
+                },
+            });
+            
+            console.log('[Treasurer] Extra signet granted immediately to previous encounter winner:', {
+                previousWinnerCardId: previousWinnerCard.uid,
+                previousWinnerId: previousEncounter.winnerId,
+                encounterIndex: encounterHistory.length - 2,
+            });
+        }
+    } else {
+        console.log('[Treasurer] No previous encounter winner found:', {
+            hasPreviousEncounter: !!previousEncounter,
+            previousWinnerId: previousEncounter?.winnerId,
+            reason: !previousEncounter ? 'no previous encounter' : 
+                    previousEncounter.winnerId === 'tie' ? 'previous was tie' : 
+                    'unknown',
+        });
+    }
+    
+    // 1. 放置持续标记（保持持续能力的语义）
+    // 记录目标卡牌信息，以便虚空法师移除时能收回额外印戒
+    events.push({
+        type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+        payload: {
+            abilityId: ctx.abilityId,
+            cardId: ctx.cardId,
+            playerId: ctx.playerId,
+            effectType: 'extraSignet',
+            timestamp: ctx.timestamp,
+            encounterIndex: ctx.core.turnNumber, // 记录放置时的遭遇索引
+            targetCardId,  // 记录目标卡牌 UID（虚空法师移除时需要）
+            targetPlayerId, // 记录目标玩家 ID（虚空法师移除时需要）
+        },
+        timestamp: ctx.timestamp,
+    });
+    
+    return { events };
 });
 
 /**
