@@ -1,4 +1,7 @@
 import {
+    Children,
+    cloneElement,
+    isValidElement,
     useCallback,
     useEffect,
     useMemo,
@@ -7,6 +10,7 @@ import {
     type CSSProperties,
     type MouseEvent as ReactMouseEvent,
     type PointerEvent as ReactPointerEvent,
+    type ReactElement,
     type TouchEvent as ReactTouchEvent,
     type ReactNode,
 } from 'react';
@@ -28,6 +32,26 @@ interface MobileBattlefieldViewportProps {
     style?: CSSProperties;
     testId?: string;
 }
+
+type ZoomTargetElementProps = {
+    className?: string;
+    style?: CSSProperties;
+    onTouchStart?: (event: ReactTouchEvent<HTMLElement>) => void;
+    onTouchMove?: (event: ReactTouchEvent<HTMLElement>) => void;
+    onTouchEnd?: (event: ReactTouchEvent<HTMLElement>) => void;
+    onTouchCancel?: (event: ReactTouchEvent<HTMLElement>) => void;
+    onPointerDown?: (event: ReactPointerEvent<HTMLElement>) => void;
+    onPointerMove?: (event: ReactPointerEvent<HTMLElement>) => void;
+    onPointerUp?: (event: ReactPointerEvent<HTMLElement>) => void;
+    onPointerCancel?: (event: ReactPointerEvent<HTMLElement>) => void;
+    onPointerLeave?: (event: ReactPointerEvent<HTMLElement>) => void;
+    onClickCapture?: (event: ReactMouseEvent<HTMLElement>) => void;
+    ['data-testid']?: string;
+    ['data-battlefield-zoom-enabled']?: string;
+    ['data-battlefield-zoom-scale']?: string;
+    ['data-battlefield-touch-mode']?: string;
+    ['data-battlefield-zoom-target-mode']?: string;
+};
 
 type Point = { clientX: number; clientY: number };
 type TransformState = { scale: number; x: number; y: number };
@@ -56,7 +80,7 @@ const getDistance = (a: Point, b: Point) => Math.hypot(a.clientX - b.clientX, a.
 
 const clampScale = (scale: number) => Math.min(MAX_SCALE, Math.max(MIN_SCALE, scale));
 
-const getLocalPoint = (surface: HTMLDivElement, clientX: number, clientY: number) => {
+const getLocalPoint = (surface: HTMLElement, clientX: number, clientY: number) => {
     const rect = surface.getBoundingClientRect();
     const safeWidth = Math.max(rect.width, 1);
     const safeHeight = Math.max(rect.height, 1);
@@ -70,7 +94,7 @@ const getLocalPoint = (surface: HTMLDivElement, clientX: number, clientY: number
 };
 
 const clampTransform = (
-    surface: HTMLDivElement | null,
+    surface: HTMLElement | null,
     next: TransformState,
 ): TransformState => {
     const normalizedScale = next.scale <= 1.001 ? MIN_SCALE : next.scale;
@@ -88,6 +112,12 @@ const clampTransform = (
         x: Math.min(0, Math.max(minX, next.x)),
         y: Math.min(0, Math.max(minY, next.y)),
     };
+};
+
+const joinClassNames = (...values: Array<string | undefined | false | null>) => values.filter(Boolean).join(' ');
+
+const callHandler = <TEvent,>(handler: ((event: TEvent) => void) | undefined, event: TEvent) => {
+    handler?.(event);
 };
 
 const useLandscapeMobileViewport = () => {
@@ -163,8 +193,7 @@ export const MobileBattlefieldViewport = ({
     style,
     testId = 'mobile-battlefield-viewport',
 }: MobileBattlefieldViewportProps) => {
-    const surfaceRef = useRef<HTMLDivElement | null>(null);
-    const stageRef = useRef<HTMLDivElement | null>(null);
+    const surfaceRef = useRef<HTMLElement | null>(null);
     const pointersRef = useRef(new Map<number, Point>());
     const pinchRef = useRef<PinchState | null>(null);
     const panRef = useRef<PanState | null>(null);
@@ -173,10 +202,12 @@ export const MobileBattlefieldViewport = ({
     const transformRef = useRef<TransformState>(initialTransform);
 
     const [transform, setTransform] = useState<TransformState>(initialTransform);
-    const [hasDedicatedZoomTarget, setHasDedicatedZoomTarget] = useState(false);
     const isLandscapeMobileViewport = useLandscapeMobileViewport();
     const isEnabled = zoomMode === 'shell-pinch-pan' && isLandscapeMobileViewport;
     const shouldLockTouchGestures = isEnabled && transform.scale > MIN_SCALE;
+    const childCount = Children.count(children);
+    const singleChild = childCount === 1 ? Children.only(children) : null;
+    const hasDedicatedZoomTarget = transformTarget === 'content' && isValidElement<ZoomTargetElementProps>(singleChild);
 
     const updateTransform = useCallback((updater: TransformState | ((current: TransformState) => TransformState)) => {
         setTransform((current) => {
@@ -199,15 +230,6 @@ export const MobileBattlefieldViewport = ({
         transformRef.current = { scale: MIN_SCALE, x: 0, y: 0 };
         setTransform(transformRef.current);
     }, [isEnabled]);
-
-    useEffect(() => {
-        if (transformTarget !== 'content') {
-            setHasDedicatedZoomTarget(false);
-            return;
-        }
-
-        setHasDedicatedZoomTarget(stageRef.current?.querySelector(ZOOM_TARGET_SELECTOR) != null);
-    }, [children, transformTarget]);
 
     const beginPanFromPointer = useCallback((pointerId: number, point: Point) => {
         if (!surfaceRef.current || transformRef.current.scale <= MIN_SCALE) {
@@ -251,18 +273,6 @@ export const MobileBattlefieldViewport = ({
 
         return false;
     }, [beginPanFromPointer]);
-
-    const onPointerDown = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-        if (!isEnabled || event.pointerType !== 'touch') {
-            return;
-        }
-
-        const point = { clientX: event.clientX, clientY: event.clientY };
-        if (beginTrackedPoint(event.pointerId, point)) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, [beginTrackedPoint, isEnabled]);
 
     const updateTrackedPoint = useCallback((pointerId: number, point: Point) => {
         if (!surfaceRef.current || !pointersRef.current.has(pointerId)) {
@@ -328,17 +338,6 @@ export const MobileBattlefieldViewport = ({
         return true;
     }, [updateTransform]);
 
-    const onPointerMove = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
-        if (!isEnabled || event.pointerType !== 'touch' || !surfaceRef.current) {
-            return;
-        }
-
-        if (updateTrackedPoint(event.pointerId, { clientX: event.clientX, clientY: event.clientY })) {
-            event.preventDefault();
-            event.stopPropagation();
-        }
-    }, [isEnabled, updateTrackedPoint]);
-
     const finishPointer = useCallback((pointerId: number) => {
         const point = pointersRef.current.get(pointerId);
         pointersRef.current.delete(pointerId);
@@ -381,7 +380,7 @@ export const MobileBattlefieldViewport = ({
         }
     }, [beginPanFromPointer]);
 
-    const onTouchStart = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const onTouchStart = useCallback((event: ReactTouchEvent<HTMLElement>) => {
         if (!isEnabled) {
             return;
         }
@@ -397,7 +396,7 @@ export const MobileBattlefieldViewport = ({
         }
     }, [beginTrackedPoint, isEnabled]);
 
-    const onTouchMove = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const onTouchMove = useCallback((event: ReactTouchEvent<HTMLElement>) => {
         if (!isEnabled) {
             return;
         }
@@ -413,7 +412,7 @@ export const MobileBattlefieldViewport = ({
         }
     }, [isEnabled, updateTrackedPoint]);
 
-    const onTouchEnd = useCallback((event: ReactTouchEvent<HTMLDivElement>) => {
+    const onTouchEnd = useCallback((event: ReactTouchEvent<HTMLElement>) => {
         if (!isEnabled) {
             return;
         }
@@ -423,53 +422,129 @@ export const MobileBattlefieldViewport = ({
         }
     }, [finishPointer, isEnabled]);
 
-    const onPointerUp = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+        if (!isEnabled || event.pointerType !== 'touch') {
+            return;
+        }
+
+        const point = { clientX: event.clientX, clientY: event.clientY };
+        if (beginTrackedPoint(event.pointerId, point)) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, [beginTrackedPoint, isEnabled]);
+
+    const onPointerMove = useCallback((event: ReactPointerEvent<HTMLElement>) => {
+        if (!isEnabled || event.pointerType !== 'touch' || !surfaceRef.current) {
+            return;
+        }
+
+        if (updateTrackedPoint(event.pointerId, { clientX: event.clientX, clientY: event.clientY })) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    }, [isEnabled, updateTrackedPoint]);
+
+    const onPointerUp = useCallback((event: ReactPointerEvent<HTMLElement>) => {
         if (!isEnabled || event.pointerType !== 'touch') {
             return;
         }
         finishPointer(event.pointerId);
     }, [finishPointer, isEnabled]);
 
-    const onPointerCancel = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const onPointerCancel = useCallback((event: ReactPointerEvent<HTMLElement>) => {
         if (!isEnabled || event.pointerType !== 'touch') {
             return;
         }
         finishPointer(event.pointerId);
     }, [finishPointer, isEnabled]);
 
-    const onClickCapture = useCallback((event: ReactMouseEvent<HTMLDivElement>) => {
+    const onClickCapture = useCallback((event: ReactMouseEvent<HTMLElement>) => {
         if (Date.now() < suppressClickUntilRef.current) {
             event.preventDefault();
             event.stopPropagation();
         }
     }, []);
 
-    const stageStyle = useMemo<CSSProperties>(() => {
-        if (hasDedicatedZoomTarget) {
-            return {
-                '--mobile-battlefield-target-translate-x': `${transform.x}px`,
-                '--mobile-battlefield-target-translate-y': `${transform.y}px`,
-                '--mobile-battlefield-target-scale': `${transform.scale}`,
-            } as CSSProperties;
-        }
-
-        return {
+    const hasActiveTransform = transform.scale > MIN_SCALE || Math.abs(transform.x) > 0.001 || Math.abs(transform.y) > 0.001;
+    const targetStyle = useMemo<CSSProperties>(() => ({
+        ...(hasDedicatedZoomTarget && hasActiveTransform ? {
             transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
             transformOrigin: '0 0',
-            willChange: transform.scale > MIN_SCALE ? 'transform' : undefined,
-        };
-    }, [hasDedicatedZoomTarget, transform.x, transform.y, transform.scale]);
+            willChange: 'transform',
+        } : {}),
+    }), [hasActiveTransform, hasDedicatedZoomTarget, transform.scale, transform.x, transform.y]);
+
+    const stageStyle = useMemo<CSSProperties>(() => ({
+        transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
+        transformOrigin: '0 0',
+        willChange: transform.scale > MIN_SCALE ? 'transform' : undefined,
+    }), [transform.x, transform.y, transform.scale]);
+
+    if (hasDedicatedZoomTarget && singleChild && isValidElement<ZoomTargetElementProps>(singleChild)) {
+        const child = singleChild as ReactElement<ZoomTargetElementProps>;
+        const childProps = child.props;
+
+        const targetElement = cloneElement(child, {
+            ref: (node: HTMLElement | null) => {
+                const originalRef = (child as ReactElement & { ref?: ((value: HTMLElement | null) => void) | { current?: HTMLElement | null } | null }).ref;
+                if (typeof originalRef === 'function') {
+                    originalRef(node);
+                } else if (originalRef && typeof originalRef === 'object') {
+                    originalRef.current = node;
+                }
+            },
+            style: {
+                ...childProps.style,
+                ...targetStyle,
+            },
+        });
+
+        return (
+            <div
+                ref={(node) => {
+                    surfaceRef.current = node;
+                }}
+                className={joinClassNames('mobile-battlefield-viewport mobile-battlefield-viewport--content-proxy', className)}
+                style={style}
+                data-testid={testId}
+                data-battlefield-zoom-enabled={isEnabled ? 'true' : 'false'}
+                data-battlefield-zoom-scale={transform.scale.toFixed(3)}
+                data-battlefield-touch-mode={shouldLockTouchGestures ? 'gesture-lock' : 'native-pan'}
+                data-battlefield-zoom-target-mode="content"
+                onTouchStart={onTouchStart}
+                onTouchMove={onTouchMove}
+                onTouchEnd={onTouchEnd}
+                onTouchCancel={onTouchEnd}
+                onPointerDown={onPointerDown}
+                onPointerMove={onPointerMove}
+                onPointerUp={onPointerUp}
+                onPointerCancel={onPointerCancel}
+                onPointerLeave={onPointerCancel}
+                onClickCapture={onClickCapture}
+            >
+                {targetElement}
+            </div>
+        );
+    }
 
     return (
         <div
-            ref={surfaceRef}
-            className={`mobile-battlefield-viewport${isEnabled ? ' mobile-battlefield-viewport--zoom-enabled' : ''}${shouldLockTouchGestures ? ' mobile-battlefield-viewport--gesture-lock' : ''}${className ? ` ${className}` : ''}`}
+            ref={(node) => {
+                surfaceRef.current = node;
+            }}
+            className={joinClassNames(
+                'mobile-battlefield-viewport',
+                isEnabled && 'mobile-battlefield-viewport--zoom-enabled',
+                shouldLockTouchGestures && 'mobile-battlefield-viewport--gesture-lock',
+                className,
+            )}
             style={style}
             data-testid={testId}
             data-battlefield-zoom-enabled={isEnabled ? 'true' : 'false'}
             data-battlefield-zoom-scale={transform.scale.toFixed(3)}
             data-battlefield-touch-mode={shouldLockTouchGestures ? 'gesture-lock' : 'native-pan'}
-            data-battlefield-zoom-target-mode={hasDedicatedZoomTarget ? 'content' : 'surface'}
+            data-battlefield-zoom-target-mode="surface"
             onTouchStart={onTouchStart}
             onTouchMove={onTouchMove}
             onTouchEnd={onTouchEnd}
@@ -482,8 +557,7 @@ export const MobileBattlefieldViewport = ({
             onClickCapture={onClickCapture}
         >
             <div
-                ref={stageRef}
-                className={`mobile-battlefield-viewport__stage${hasDedicatedZoomTarget ? ' mobile-battlefield-viewport__stage--targeted' : ''}`}
+                className="mobile-battlefield-viewport__stage"
                 data-testid={`${testId}-stage`}
                 style={stageStyle}
             >

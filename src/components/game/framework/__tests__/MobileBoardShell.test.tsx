@@ -78,7 +78,7 @@ describe('MobileBoardShell', () => {
         expect(screen.getByTestId('battlefield-stage')).toBeInTheDocument();
     });
 
-    it('can target pinch-pan transforms to a marked content layer', async () => {
+    it('can target pinch-pan transforms directly on the marked content layer without adding a stage wrapper', async () => {
         render(
             <MobileBattlefieldViewport
                 zoomMode="shell-pinch-pan"
@@ -92,11 +92,12 @@ describe('MobileBoardShell', () => {
         );
 
         const viewport = screen.getByTestId('battlefield');
-        const stage = screen.getByTestId('battlefield-stage');
 
         await waitFor(() => {
             expect(viewport.getAttribute('data-battlefield-zoom-target-mode')).toBe('content');
         });
+
+        expect(screen.queryByTestId('battlefield-stage')).toBeNull();
 
         act(() => {
             fireEvent.pointerDown(viewport, {
@@ -128,9 +129,9 @@ describe('MobileBoardShell', () => {
             });
         });
 
-        expect(stage.className).toContain('mobile-battlefield-viewport__stage--targeted');
         expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThan(1);
-        expect(stage.style.getPropertyValue('--mobile-battlefield-target-scale')).not.toBe('1');
+        const target = screen.getByTestId('battlefield-target');
+        expect(target.style.transform).toContain('scale(');
     });
 
     it('updates battlefield scale when a two-finger touch pointer gesture moves apart on mobile landscape', () => {
