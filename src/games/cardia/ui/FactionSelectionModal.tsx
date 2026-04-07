@@ -30,7 +30,10 @@ export const FactionSelectionModal: React.FC<FactionSelectionModalProps> = ({
     ];
     
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4">
+        <div
+            data-testid="faction-selection-modal"
+            className="fixed inset-0 z-[300] flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4"
+        >
             <div className="max-h-[86vh] w-full max-w-2xl overflow-y-auto rounded-t-2xl border-2 border-purple-500 bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl sm:rounded-lg">
                 {/* 标题栏 */}
                 <div className="border-b border-purple-500/30 px-4 py-3 sm:px-6 sm:py-4">
@@ -46,6 +49,7 @@ export const FactionSelectionModal: React.FC<FactionSelectionModalProps> = ({
                         {factions.map(faction => (
                             <button
                                 key={faction.id}
+                                data-testid={`faction-option-${faction.id}`}
                                 onClick={() => onConfirm(faction.id)}
                                 className={`relative rounded-xl border-2 border-white/20 bg-gradient-to-br ${faction.color} p-4 shadow-lg transition-all hover:scale-[1.02] hover:border-yellow-400 sm:p-6`}
                             >

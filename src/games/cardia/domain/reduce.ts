@@ -510,6 +510,57 @@ function reduceOngoingAbilityRemoved(
         }
     }
     
+    // 特殊处理：调停者能力移除时，重新判定该遭遇的胜负并授予印戒
+    // 规则：调停者使遭遇变为平局，移除后应该恢复原本的胜负结果
+    if (removedAbility && abilityId === ABILITY_IDS.MEDIATOR) {
+        const encounterIndex = (removedAbility as any).encounterIndex;
+        
+        // 查找对应的遭遇历史记录
+        const encounter = newCore.encounterHistory.find((_, idx) => idx + 1 === encounterIndex);
+        
+        if (encounter) {
+            // 重新判定胜负（不考虑调停者效果）
+            const player1Influence = encounter.player1Influence;
+            const player2Influence = encounter.player2Influence;
+            
+            let winnerId: PlayerId | null = null;
+            let winnerCard: CardiaCard | null = null;
+            
+            if (player1Influence > player2Influence) {
+                winnerId = newCore.playerOrder[0];
+                winnerCard = encounter.player1Card;
+            } else if (player2Influence > player1Influence) {
+                winnerId = newCore.playerOrder[1];
+                winnerCard = encounter.player2Card;
+            }
+            // 如果影响力相等，仍然是平局，不授予印戒
+            
+            // 如果有明确的获胜方，授予印戒
+            if (winnerId && winnerCard) {
+                const winnerPlayer = newCore.players[winnerId];
+                const cardIndex = winnerPlayer.playedCards.findIndex(c => c.uid === winnerCard.uid);
+                
+                if (cardIndex !== -1) {
+                    const card = winnerPlayer.playedCards[cardIndex];
+                    const updatedCard = {
+                        ...card,
+                        signets: card.signets + 1,
+                    };
+                    
+                    const newPlayedCards = [
+                        ...winnerPlayer.playedCards.slice(0, cardIndex),
+                        updatedCard,
+                        ...winnerPlayer.playedCards.slice(cardIndex + 1),
+                    ];
+                    
+                    newCore = updatePlayer(newCore, winnerId, {
+                        playedCards: newPlayedCards,
+                    });
+                }
+            }
+        }
+    }
+    
     return newCore;
 }
 
@@ -1119,8 +1170,8 @@ function reduceCardReplaced(
         previousEncounter: newPreviousEncounter,
     };
     
-    // 9. 处理印戒转移：如果遭遇结果发生变化（获胜者改变）
-    console.log('[reduceCardReplaced] 检查印戒转移条件:', {
+    // 9. 处理印戒授予：如果遭遇结果发生变化（获胜者改变）
+    console.log('[reduceCardReplaced] 检查印戒授予条件:', {
         hasOldWinnerId: !!oldWinnerId,
         hasNewWinnerId: !!newWinnerId,
         oldWinnerId,
@@ -1130,15 +1181,16 @@ function reduceCardReplaced(
     });
     
     if (oldWinnerId && newWinnerId && oldWinnerId !== newWinnerId) {
-        console.log('[reduceCardReplaced] 检测到遭遇结果变化，转移印戒:', {
+        console.log('[reduceCardReplaced] 检测到遭遇结果变化，处理印戒:', {
             oldWinnerId,
             newWinnerId,
             oldCardSignets: oldCard.signets,
         });
         
-        // 印戒从旧获胜者的卡牌转移到新获胜者的卡牌
-        // 旧获胜者的卡牌已经在弃牌堆（印戒已清零）
-        // 需要给新获胜者的卡牌添加印戒
+        // 胜负反转时的印戒处理：
+        // 1. 如果旧获胜者的卡牌有印戒（oldCard.signets > 0），转移到新获胜者
+        // 2. 如果旧获胜者的卡牌没有印戒（oldCard.signets === 0），给新获胜者授予 1 个印戒
+        //    （因为遭遇结算时已经授予了印戒，但旧卡牌被弃掉时印戒被清零了）
         
         // 找到新获胜者的卡牌
         let newWinnerCardId: string | undefined;
@@ -1174,9 +1226,11 @@ function reduceCardReplaced(
                 
                 if (cardIndex !== -1) {
                     const card = p.playedCards[cardIndex];
+                    // 如果旧卡牌有印戒，转移；否则授予 1 个新印戒
+                    const signetsToAdd = oldCard.signets > 0 ? oldCard.signets : 1;
                     const updatedCard = {
                         ...card,
-                        signets: card.signets + oldCard.signets,  // 添加旧卡牌的印戒数量
+                        signets: card.signets + signetsToAdd,
                     };
                     
                     const updatedPlayedCards = [
@@ -1189,11 +1243,12 @@ function reduceCardReplaced(
                         playedCards: updatedPlayedCards,
                     });
                     
-                    console.log('[reduceCardReplaced] 印戒转移完成:', {
+                    console.log('[reduceCardReplaced] 印戒处理完成:', {
                         toCardId: newWinnerCardId,
                         toPlayerId: pid,
-                        signetsAdded: oldCard.signets,
+                        signetsAdded: signetsToAdd,
                         newSignets: updatedCard.signets,
+                        wasTransfer: oldCard.signets > 0,
                     });
                     break;
                 }

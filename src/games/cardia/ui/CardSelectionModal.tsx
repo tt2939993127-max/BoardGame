@@ -87,6 +87,7 @@ export const CardSelectionModal: React.FC<CardSelectionModalProps> = ({
     
     return (
         <div
+            data-testid="card-selection-modal"
             className="fixed inset-0 flex items-end justify-center bg-black/70 p-3 backdrop-blur-sm sm:items-center sm:p-4"
             style={{ zIndex: UI_Z_INDEX.modalOverlay }}
         >
