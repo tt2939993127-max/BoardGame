@@ -309,7 +309,15 @@ node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
 node scripts/mobile/release-android.mjs ota --channel stable
 ```
 
-如果你确实要把这次 OTA 标记为“原生版本不兼容时必须先升级 App”，才显式加 `--force-update`：
+当前 `stable` OTA 默认就会把旧壳挡回原生升级链路：
+
+- 若未显式传兼容参数，发布脚本会自动补 `minNativeVersion=<package.json.version>`
+- 同时默认开启 `forceUpdate`
+- 也就是说，旧壳不会继续吃新的 `stable` OTA，而是直接要求安装新 App
+
+只有你明确要覆盖默认口径时，才再手动改这些参数。
+
+如果你要自定义强更文案：
 
 ```bash
 node scripts/mobile/release-android.mjs ota --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
@@ -349,7 +357,8 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --mi
 - `--min-native-version <version>`：显式声明最低兼容原生版本
 - `--max-native-version <version>`：显式声明最高兼容原生版本
 - `--force-update`：把这次 OTA 标记为“原生版本不兼容时需先升级 App”
-- `--no-force-update`：显式关闭该阻断语义；当前默认就是关闭
+- `--no-force-update`：显式关闭该阻断语义；仅在你明确不要旧壳强更时才使用
+- `--allow-legacy-shells`：显式放开 `stable` 对旧壳的默认拦截；没有这个参数时，`stable` 会默认把旧壳挡回原生升级链路
 - `--force-update-title <text>`：覆盖“需先升级 App”阻断页标题
 - `--force-update-message <text>`：覆盖“需先升级 App”阻断页正文
 - `--notes <text>`：写入 manifest 备注
@@ -358,11 +367,12 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --mi
 
 兼容字段生成规则：
 
-- 如果你没有显式传兼容参数，脚本默认**不写任何原生版本门禁**
-- 这意味着默认发布策略是：旧 APK 继续接收 H5 OTA，只要这次 bundle 没依赖新的原生壳能力
+- `stable`：如果你没有显式传兼容参数，脚本默认写入 `minNativeVersion=<nativeVersion>`
+- `stable`：如果你没有显式传 `--no-force-update`，脚本默认也会打开 `forceUpdate`
+- `gray` / `edge`：仍然保持“显式传兼容参数才写 target/min/max”
 - 如果你传了 `--target-native-version`，则按精确版本列表生成 `targetNativeVersion`
 - 如果你传了 `--min-native-version` 或 `--max-native-version`，则按版本区间生成兼容门禁
-- `targetNativeVersion` 与 `min/maxNativeVersion` 都是显式收窄范围的工具，不是默认值；除非确实需要收窄，否则不要加
+- 如确实要让 `stable` 放行旧壳，必须显式传 `--allow-legacy-shells`
 
 当前发布脚本会写入：
 
@@ -388,7 +398,7 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --mi
 
 兼容性控制支持：
 
-- 默认 manifest 不带原生版本门禁
+- `stable` 默认至少带 `minNativeVersion=<nativeVersion>`
 - `targetNativeVersion`：只允许某个原生版本或某几个原生版本接收该 bundle
 - `minNativeVersion` / `maxNativeVersion`：允许一个原生版本区间
 - `forceUpdate`：声明这次 OTA 在原生版本不兼容时是否阻断并要求先升级 App

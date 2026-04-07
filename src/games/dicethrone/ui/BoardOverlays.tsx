@@ -318,8 +318,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 {(() => {
                     const shouldRender = props.pendingDamage
                         && props.tokenResponsePhase
-                        && props.isTokenResponder
-                        && props.usableTokens.length > 0;
+                        && props.isTokenResponder;
                     return shouldRender ? (
                         <TokenResponseModal
                             key="token-response"

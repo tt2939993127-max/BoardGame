@@ -1,7 +1,7 @@
 import React from 'react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import type { EventStreamEntry } from '../../../engine/types';
 import type { BonusDieInfo } from '../domain/types';
@@ -131,6 +131,29 @@ describe('BonusDieOverlay', () => {
         expect(html).toContain('bonusDie.diceResult');
         expect(html).not.toContain('bonusDie.continue');
         expect(html).not.toContain('bonusDie.confirmDamage');
+    });
+
+    it('多骰紧凑模式不应在每颗骰子下重复渲染长效果文本', async () => {
+        vi.useFakeTimers();
+
+        render(
+            <BonusDieOverlay
+                isVisible
+                onClose={vi.fn()}
+                bonusDice={[
+                    { index: 0, value: 1, face: 'fist', effectKey: 'bonusDie.effect.watchOut.bow', effectParams: { value: 1 } },
+                    { index: 1, value: 2, face: 'fist', effectKey: 'bonusDie.effect.watchOut.bow', effectParams: { value: 2 } },
+                ]}
+                canReroll={false}
+                displayOnly
+            />
+        );
+
+        await act(async () => {
+            vi.advanceTimersByTime(1200);
+        });
+
+        expect(screen.queryByText('弓🏹：伤害+2')).not.toBeInTheDocument();
     });
 
     it('奖励骰展示态特写应保留首次点击保护，保护窗后才允许关闭', () => {
@@ -445,7 +468,7 @@ describe('BonusDieOverlay', () => {
             expect(state[0].previewRef).toEqual({
                 type: 'atlas',
                 atlasId: 'dicethrone:gunslinger-cards',
-                index: 26,
+                index: 24,
             });
         });
     });

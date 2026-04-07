@@ -266,35 +266,39 @@ describe('卡牌效果 target 合理性', () => {
 });
 
 describe('枪手 / 武士卡图接线一致性', () => {
-    it('枪手专属卡应直接使用 ability-cards atlas 索引，不能再走 hand atlas 或单卡图', () => {
-        const gunslingerAtlasCards: Record<string, number> = {
-            'upgrade-revolver-2': 18,
-            'upgrade-bounty-hunter-2': 19,
-            'upgrade-showdown-2': 20,
-            'upgrade-showdown-3': 21,
-            'upgrade-fan-the-hammer-2': 22,
-            'card-pistol-whip': 23,
-            'upgrade-take-cover-2': 24,
-            'card-mark-the-target': 25,
-            'upgrade-deadeye-2': 26,
-            'card-the-law': 27,
-            'upgrade-duel-2': 28,
-            'upgrade-quick-draw': 29,
-            'card-wanted': 30,
-            'card-spin-the-chamber': 31,
-            'card-high-noon': 32,
-            'card-wild-west': 33,
-            'card-eat-my-lead': 34,
+    it('枪手专属卡应只保留真实手牌对象；slot-22/23/24 不得再把下半区录成独立 card', () => {
+        const normalizedGunslingerRuntimeAtlasCards: Record<string, { runtimeIndex: number; sourceAtlasIndex?: number }> = {
+            'upgrade-revolver-2': { runtimeIndex: 18, sourceAtlasIndex: 18 },
+            'upgrade-bounty-hunter-2': { runtimeIndex: 19, sourceAtlasIndex: 19 },
+            'upgrade-showdown-2': { runtimeIndex: 20, sourceAtlasIndex: 20 },
+            'upgrade-showdown-3': { runtimeIndex: 21, sourceAtlasIndex: 21 },
+            'upgrade-fan-the-hammer-2': { runtimeIndex: 22, sourceAtlasIndex: 22 },
+            'upgrade-take-cover-2': { runtimeIndex: 23, sourceAtlasIndex: 23 },
+            'upgrade-deadeye-2': { runtimeIndex: 24, sourceAtlasIndex: 24 },
+            'upgrade-duel-2': { runtimeIndex: 25, sourceAtlasIndex: 25 },
+            'upgrade-quick-draw': { runtimeIndex: 26, sourceAtlasIndex: 26 },
+            'card-wanted': { runtimeIndex: 27, sourceAtlasIndex: 27 },
+            'card-spin-the-chamber': { runtimeIndex: 28, sourceAtlasIndex: 28 },
+            'card-high-noon': { runtimeIndex: 29, sourceAtlasIndex: 29 },
+            'card-wild-west': { runtimeIndex: 30, sourceAtlasIndex: 30 },
+            'card-eat-my-lead': { runtimeIndex: 31, sourceAtlasIndex: 31 },
         };
 
-        for (const [cardId, index] of Object.entries(gunslingerAtlasCards)) {
+        for (const [cardId, { runtimeIndex, sourceAtlasIndex }] of Object.entries(normalizedGunslingerRuntimeAtlasCards)) {
             const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
             expect(card?.previewRef).toEqual({
                 type: 'atlas',
                 atlasId: DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER,
-                index,
+                index: runtimeIndex,
             });
+            if (typeof sourceAtlasIndex === 'number') {
+                expect(card?.sourceAtlasIndex).toBe(sourceAtlasIndex);
+            }
         }
+
+        expect(GUNSLINGER_CARDS.some((card) => card.id === 'card-pistol-whip')).toBe(false);
+        expect(GUNSLINGER_CARDS.some((card) => card.id === 'card-mark-the-target')).toBe(false);
+        expect(GUNSLINGER_CARDS.some((card) => card.id === 'card-the-law')).toBe(false);
 
         const gunslingerCommonAtlasIndex: Record<string, number> = {
             'card-play-six': 17,
@@ -423,6 +427,68 @@ describe('枪手 / 武士卡图接线一致性', () => {
         verifyUpgradeTarget(PALADIN_CARDS, 'paladin');
         verifyUpgradeTarget(GUNSLINGER_CARDS, 'gunslinger');
         verifyUpgradeTarget(SAMURAI_CARDS, 'samurai');
+    });
+
+    it('所有英雄都必须区分 升级卡=替换技能 与 行动卡=直接结算效果', () => {
+        const heroCardsMap: Record<string, AbilityCard[]> = {
+            monk: MONK_CARDS,
+            barbarian: BARBARIAN_CARDS,
+            pyromancer: PYROMANCER_CARDS,
+            shadow_thief: SHADOW_THIEF_CARDS,
+            moon_elf: MOON_ELF_CARDS,
+            paladin: PALADIN_CARDS,
+            gunslinger: GUNSLINGER_CARDS,
+            samurai: SAMURAI_CARDS,
+        };
+
+        const directEffectBaselines = [
+            'monk/card-buddha-light',
+            'monk/card-palm-strike',
+            'shadow_thief/action-sneaky-sneaky',
+            'shadow_thief/action-card-trick',
+            'paladin/card-blessing-of-divinity',
+        ];
+        const upgradeBaselines = [
+            'monk/card-thrust-punch-2',
+            'barbarian/upgrade-slap-2',
+            'paladin/upgrade-holy-defense-2',
+        ];
+        const violations: string[] = [];
+
+        for (const [heroId, cards] of Object.entries(heroCardsMap)) {
+            for (const card of cards) {
+                const replaceEffects = card.effects?.filter((effect) => effect.action?.type === 'replaceAbility') ?? [];
+                const nonReplaceEffects = card.effects?.filter((effect) => effect.action?.type !== 'replaceAbility') ?? [];
+
+                if (card.type === 'upgrade') {
+                    if (replaceEffects.length === 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=upgrade 但没有 replaceAbility；老派系升级基线=${upgradeBaselines.join(', ')}`
+                        );
+                    }
+                    if (nonReplaceEffects.length > 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=upgrade 但混入了直接效果；老派系升级基线=${upgradeBaselines.join(', ')}`
+                        );
+                    }
+                }
+
+                if (card.type === 'action') {
+                    if (replaceEffects.length > 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=action 却写成 replaceAbility；老派系直接结算基线=${directEffectBaselines.join(', ')}`
+                        );
+                    }
+                    if (nonReplaceEffects.length === 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=action 但没有任何直接结算效果；老派系直接结算基线=${directEffectBaselines.join(', ')}`
+                        );
+                    }
+                }
+            }
+        }
+
+        expect(violations).toEqual([]);
     });
 
     it('枪手 / 武士每张升级卡都应逐张落在老派系升级合同上', () => {

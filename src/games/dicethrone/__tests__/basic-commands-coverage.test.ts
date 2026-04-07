@@ -1439,62 +1439,31 @@ describe('AI legal actions', () => {
     });
 });
 
-describe('作弊发牌按枪手精确 atlas 索引发牌', () => {
-    const createGunslingerAtlasState = () => createHeroMatchup('gunslinger', 'monk', (core) => {
+describe('作弊发牌 atlas 索引保护', () => {
+    const createUpgradeAtlasState = () => createHeroMatchup('gunslinger', 'monk', (core) => {
         const player = core.players['0'];
         player.hand = [];
         player.discard = [];
         player.deck = [
-            getCardById('upgrade-fan-the-hammer-2'),
-            getCardById('card-pistol-whip'),
             getCardById('upgrade-deadeye-2'),
-            getCardById('card-the-law'),
-            ...player.deck.filter((card) => ![
-                'upgrade-fan-the-hammer-2',
-                'card-pistol-whip',
-                'upgrade-deadeye-2',
-                'card-the-law',
-            ].includes(card.id)),
+            ...player.deck.filter((card) => card.id !== 'upgrade-deadeye-2'),
         ];
     })(['0', '1'], fixedRandom);
 
-    it('gunslinger index 22 应精确发出 upgrade-fan-the-hammer-2', () => {
-        const state = createGunslingerAtlasState();
-        const nextCore = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 22);
-
-        expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-fan-the-hammer-2']);
-        expect(nextCore.players['0'].deck.some((card) => card.id === 'upgrade-fan-the-hammer-2')).toBe(false);
-        expect(nextCore.players['0'].deck.some((card) => card.id === 'card-pistol-whip')).toBe(true);
-    });
-
-    it('gunslinger index 23 应精确发出 card-pistol-whip', () => {
-        const state = createGunslingerAtlasState();
-        const nextCore = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 23);
-
-        expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['card-pistol-whip']);
-        expect(nextCore.players['0'].deck.some((card) => card.id === 'card-pistol-whip')).toBe(false);
-        expect(nextCore.players['0'].deck.some((card) => card.id === 'upgrade-fan-the-hammer-2')).toBe(true);
-    });
-
-    it('gunslinger index 26 / 27 应分别精确发出升级卡与行动卡', () => {
-        const state = createGunslingerAtlasState();
-        const afterUpgrade = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 26);
-
-        expect(afterUpgrade.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-deadeye-2']);
-        expect(afterUpgrade.players['0'].deck.some((card) => card.id === 'card-the-law')).toBe(true);
-
-        const afterAction = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 27);
-
-        expect(afterAction.players['0'].hand.map((card) => card.id)).toEqual(['card-the-law']);
-        expect(afterAction.players['0'].deck.some((card) => card.id === 'upgrade-deadeye-2')).toBe(true);
-    });
-
-    it('精确 deckIndex 发牌仍可发出指定枪手卡', () => {
-        const state = createGunslingerAtlasState();
-        const nextCore = diceThroneCheatModifier.dealCardByIndex!(state.core, '0', 2);
+    it('gunslinger slot 24 现在只对应 upgrade-deadeye-2，按 atlas index 应可唯一发牌', () => {
+        const state = createUpgradeAtlasState();
+        const nextCore = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 24);
 
         expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-deadeye-2']);
-        expect(nextCore.players['0'].deck.some((card) => card.id === 'card-the-law')).toBe(true);
+        expect(nextCore.players['0'].deck).toHaveLength(state.core.players['0'].deck.length - 1);
+    });
+
+    it('精确 deckIndex 发牌仍可发出 upgrade-deadeye-2', () => {
+        const state = createUpgradeAtlasState();
+        const nextCore = diceThroneCheatModifier.dealCardByIndex!(state.core, '0', 0);
+
+        expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-deadeye-2']);
+        expect(nextCore.players['0'].deck[0]?.id).not.toBe('upgrade-deadeye-2');
     });
 });
 

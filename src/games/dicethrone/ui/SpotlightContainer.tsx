@@ -71,7 +71,12 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     closeClickGuardMs = 180,
 }) => {
     const visibleSinceRef = React.useRef<number>(0);
+    const onCloseRef = React.useRef(onClose);
     const shouldCaptureBackdropClick = !disableBackdropClose;
+
+    React.useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     React.useEffect(() => {
         if (isVisible) {
@@ -103,14 +108,14 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
         if (!isVisible || disableAutoClose) return;
 
         const closeTimer = setTimeout(() => {
-            onClose();
+            onCloseRef.current();
         }, autoCloseDelay);
 
 
         return () => {
             clearTimeout(closeTimer);
         };
-    }, [id, isVisible, autoCloseDelay, onClose, disableAutoClose]);
+    }, [id, isVisible, autoCloseDelay, disableAutoClose]);
 
     if (!isVisible) {
         return null;

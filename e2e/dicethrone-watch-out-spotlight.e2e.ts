@@ -709,8 +709,8 @@ async function injectGunslingerTheLawInteractionScene(page: Page): Promise<void>
             data: {
                 id: 'card-the-law-scene',
                 playerId: '0',
-                sourceCardId: 'card-the-law',
-                sourceId: 'card-the-law',
+                sourceCardId: 'the-law',
+                sourceId: 'the-law',
                 type: 'selectPlayer',
                 titleKey: 'interaction.gunslingerTheLaw',
                 selectCount: 2,
@@ -782,24 +782,55 @@ async function injectGunslingerTheLawPlayScene(
             shuffle: <T,>(array: T[]) => [...array],
         };
 
-        const [{ initHeroState }, { GUNSLINGER_CARDS }] = await Promise.all([
+        const [
+            { initHeroState, createCharacterDice },
+            { DEADEYE_2 },
+            { GUNSLINGER_CARDS },
+            { GUNSLINGER_DICE_FACE_IDS, TOKEN_IDS },
+        ] = await Promise.all([
             import('/src/games/dicethrone/domain/characters.ts'),
+            import('/src/games/dicethrone/heroes/gunslinger/abilities.ts'),
             import('/src/games/dicethrone/heroes/gunslinger/cards.ts'),
+            import('/src/games/dicethrone/domain/ids.ts'),
         ]);
 
-        const theLaw = GUNSLINGER_CARDS.find((card: any) => card.id === 'card-the-law');
-        if (!theLaw) {
-            throw new Error('card-the-law not found');
+        const deadeyeUpgrade = GUNSLINGER_CARDS.find((card: any) => card.id === 'upgrade-deadeye-2');
+        if (!deadeyeUpgrade) {
+            throw new Error('upgrade-deadeye-2 not found');
         }
 
+        const faceByValue: Record<number, string> = {
+            1: GUNSLINGER_DICE_FACE_IDS.BULLET,
+            2: GUNSLINGER_DICE_FACE_IDS.BULLET,
+            3: GUNSLINGER_DICE_FACE_IDS.BULLET,
+            4: GUNSLINGER_DICE_FACE_IDS.DASH,
+            5: GUNSLINGER_DICE_FACE_IDS.DASH,
+            6: GUNSLINGER_DICE_FACE_IDS.BULLSEYE,
+        };
         const gunslinger = {
             ...initHeroState('0', 'gunslinger', random as any),
             nickname: '枪手',
-            hand: [JSON.parse(JSON.stringify(theLaw))],
+            hand: [],
             discard: [],
             resources: {
                 cp: 2,
                 hp: 50,
+            },
+            tokens: {
+                ...initHeroState('0', 'gunslinger', random as any).tokens,
+                [TOKEN_IDS.LOADED]: 0,
+                [TOKEN_IDS.EVASIVE]: 0,
+            },
+            abilityLevels: {
+                ...initHeroState('0', 'gunslinger', random as any).abilityLevels,
+                deadeye: 2,
+            },
+            abilities: initHeroState('0', 'gunslinger', random as any).abilities.map((ability: any) =>
+                ability?.id === 'deadeye' ? JSON.parse(JSON.stringify(DEADEYE_2)) : ability
+            ),
+            upgradeCardByAbilityId: {
+                ...initHeroState('0', 'gunslinger', random as any).upgradeCardByAbilityId,
+                deadeye: { cardId: deadeyeUpgrade.id, cpCost: deadeyeUpgrade.cpCost },
             },
         };
         const monk = {
@@ -859,6 +890,23 @@ async function injectGunslingerTheLawPlayScene(
                 players,
                 pendingAttack: null,
                 pendingDamage: undefined,
+                phase: 'offensiveRoll',
+                rollConfirmed: true,
+                rollCount: 1,
+                rollLimit: 3,
+                rollDiceCount: 5,
+                dice: createCharacterDice('gunslinger').map((die: any, index: number) => {
+                    const values = [6, 6, 6, 1, 1];
+                    const value = values[index];
+                    const face = faceByValue[value];
+                    return {
+                        ...die,
+                        value,
+                        symbol: face,
+                        symbols: [face],
+                        isKept: false,
+                    };
+                }),
             },
         };
 
@@ -873,13 +921,32 @@ async function waitForGunslingerTheLawPlayScene(
 ): Promise<void> {
     await page.waitForFunction(({ multiplayer }) => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-        return state?.sys?.phase === 'main1'
+        return state?.sys?.phase === 'offensiveRoll'
             && state?.core?.activePlayerId === '0'
-            && state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-the-law')
+            && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
             && state?.core?.selectedCharacters?.['0'] === 'gunslinger'
             && state?.core?.selectedCharacters?.['1'] === 'monk'
             && (multiplayer ? state?.core?.selectedCharacters?.['2'] === 'paladin' : !state?.core?.players?.['2']);
     }, options, { timeout: 30000, polling: 200 });
+}
+
+async function dispatchHarnessCommand(
+    page: Page,
+    type: string,
+    playerId: string,
+    payload: Record<string, unknown> = {},
+): Promise<void> {
+    await page.evaluate(({ commandType, commandPlayerId, commandPayload }) => {
+        (window as any).__BG_TEST_HARNESS__!.command.dispatch({
+            type: commandType,
+            playerId: commandPlayerId,
+            payload: commandPayload,
+        });
+    }, {
+        commandType: type,
+        commandPlayerId: playerId,
+        commandPayload: payload,
+    });
 }
 
 async function saveLocatorEvidenceScreenshot(
@@ -1172,22 +1239,22 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
         opponentId: 'monk',
         handCardIds: [
             'upgrade-fan-the-hammer-2',
-            'card-pistol-whip',
             'upgrade-take-cover-2',
-            'card-mark-the-target',
             'upgrade-deadeye-2',
-            'card-the-law',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
         ],
     });
     await waitForHeroHandScreenshotScene(page, {
         heroId: 'gunslinger',
         handCardIds: [
             'upgrade-fan-the-hammer-2',
-            'card-pistol-whip',
             'upgrade-take-cover-2',
-            'card-mark-the-target',
             'upgrade-deadeye-2',
-            'card-the-law',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
         ],
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
@@ -2716,8 +2783,8 @@ test.describe('枪手 The Law 多目标交互', () => {
     });
 });
 
-test.describe('枪手 The Law 从手牌真实打出', () => {
-    test('should resolve immediately in 1v1 after clicking the hand card', async ({ page, game }, testInfo) => {
+test.describe('枪手 The Law 升级变体真实触发', () => {
+    test('should resolve immediately in 1v1 after selecting the upgraded variant', async ({ page, game }, testInfo) => {
         test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
         await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
@@ -2728,15 +2795,14 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
         await ensureDebugPanelClosed(page);
         await disableFabMenu(page);
 
-        const theLawCard = page.locator('[data-card-id="card-the-law"]').first();
-        await expect(theLawCard).toBeVisible({ timeout: 5000 });
-        await game.screenshot('22-the-law-from-hand-1v1-before-play', testInfo);
+        await game.screenshot('22-the-law-variant-1v1-before-select', testInfo);
 
-        await theLawCard.click();
+        await dispatchHarnessCommand(page, 'SELECT_ABILITY', '0', { abilityId: 'the-law' });
+        await dispatchHarnessCommand(page, 'ADVANCE_PHASE', '0');
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
             return !state?.sys?.interaction?.current
-                && state?.core?.players?.['0']?.hand?.every((card: any) => card.id !== 'card-the-law')
+                && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1
                 && (state?.core?.players?.['1']?.tokens?.bounty ?? 0) === 1
                 && (state?.core?.players?.['1']?.statusEffects?.knockdown ?? 0) === 1;
@@ -2744,14 +2810,14 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
 
         const stateAfter = await game.getState();
         expect(stateAfter.sys?.interaction?.current ?? null).toBeNull();
-        expect(stateAfter.core.players['0'].hand.map((card: any) => card.id)).not.toContain('card-the-law');
+        expect(stateAfter.core.players['0'].upgradeCardByAbilityId.deadeye?.cardId).toBe('upgrade-deadeye-2');
         expect(stateAfter.core.players['0'].tokens.evasive).toBe(1);
         expect(stateAfter.core.players['1'].tokens.bounty).toBe(1);
         expect(stateAfter.core.players['1'].statusEffects.knockdown).toBe(1);
-        await game.screenshot('23-the-law-from-hand-1v1-after-play', testInfo);
+        await game.screenshot('23-the-law-variant-1v1-after-resolve', testInfo);
     });
 
-    test('should open multi-target interaction after playing from hand in 3-player scene', async ({ page, game }, testInfo) => {
+    test('should open multi-target interaction after selecting the upgraded variant in 3-player scene', async ({ page, game }, testInfo) => {
         test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
         await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
@@ -2762,18 +2828,17 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
         await ensureDebugPanelClosed(page);
         await disableFabMenu(page);
 
-        const theLawCard = page.locator('[data-card-id="card-the-law"]').first();
         const confirmButton = page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).last();
         const targetOne = page.getByTestId('dt-player-target-1');
         const targetTwo = page.getByTestId('dt-player-target-2');
 
-        await expect(theLawCard).toBeVisible({ timeout: 5000 });
-        await theLawCard.click();
+        await dispatchHarnessCommand(page, 'SELECT_ABILITY', '0', { abilityId: 'the-law' });
+        await dispatchHarnessCommand(page, 'ADVANCE_PHASE', '0');
 
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            return state?.sys?.interaction?.current?.data?.sourceCardId === 'card-the-law'
-                && state?.core?.players?.['0']?.hand?.every((card: any) => card.id !== 'card-the-law')
+            return state?.sys?.interaction?.current?.data?.sourceCardId === 'the-law'
+                && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
@@ -2784,7 +2849,7 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
         await targetOne.click();
         await targetTwo.click();
         await expect(confirmButton).toBeEnabled();
-        await game.screenshot('24-the-law-from-hand-3p-selected-targets', testInfo);
+        await game.screenshot('24-the-law-variant-3p-selected-targets', testInfo);
 
         await confirmButton.click();
         await page.waitForFunction(() => {
@@ -2798,12 +2863,12 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
 
         const stateAfter = await game.getState();
         expect(stateAfter.sys?.interaction?.current ?? null).toBeNull();
-        expect(stateAfter.core.players['0'].hand.map((card: any) => card.id)).not.toContain('card-the-law');
+        expect(stateAfter.core.players['0'].upgradeCardByAbilityId.deadeye?.cardId).toBe('upgrade-deadeye-2');
         expect(stateAfter.core.players['0'].tokens.evasive).toBe(1);
         expect(stateAfter.core.players['1'].tokens.bounty).toBe(1);
         expect(stateAfter.core.players['2'].tokens.bounty).toBe(1);
         expect(stateAfter.core.players['1'].statusEffects.knockdown).toBe(1);
         expect(stateAfter.core.players['2'].statusEffects.knockdown).toBe(1);
-        await game.screenshot('25-the-law-from-hand-3p-resolved', testInfo);
+        await game.screenshot('25-the-law-variant-3p-resolved', testInfo);
     });
 });

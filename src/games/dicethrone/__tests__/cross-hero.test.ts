@@ -597,15 +597,15 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['1'].statusEffects.knockdown).toBe(1);
         });
 
-        it('the law uses single-opponent fallback in 1v1', () => {
-            const theLawCard = GUNSLINGER_CARDS.find(card => card.id === 'card-the-law');
-            expect(theLawCard).toBeDefined();
+        it('upgrade-deadeye-2 后选择执法者变体，在 1v1 中应自动对唯一对手结算', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-deadeye-2');
+            expect(upgradeCard).toBeDefined();
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
                 playerIds: ['0', '1'],
-                random: fixedRandom,
+                random: createQueuedRandom([6, 6, 6, 1, 1]),
                 setup: (playerIds: PlayerId[], random: RandomFn) => {
                     const state = createInitializedStateWithCharacters(
                         playerIds,
@@ -613,7 +613,7 @@ describe('cross hero battles', () => {
                         { '0': 'gunslinger', '1': 'monk' }
                     );
                     state.core.players['0'].resources.cp = 2;
-                    state.core.players['0'].hand = [{ ...theLawCard! }];
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
                     state.core.players['0'].deck = [];
                     return state;
                 },
@@ -622,35 +622,39 @@ describe('cross hero battles', () => {
             });
 
             const result = runner.run({
-                name: 'gunslinger the-law 1v1 fallback',
+                name: 'gunslinger upgraded deadeye the-law 1v1 fallback',
                 commands: [
-                    cmd('PLAY_CARD', '0', { cardId: 'card-the-law' }),
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-deadeye-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'the-law' }),
+                    cmd('ADVANCE_PHASE', '0'),
                 ],
-                expect: {
-                    turnPhase: 'main1',
-                    pendingInteraction: null,
-                    players: {
-                        '0': { hp: 50, cp: 0, discardSize: 1 },
-                        '1': { hp: 50 },
-                    },
-                },
             });
 
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.players['0'].tokens.evasive).toBe(1);
             expect(result.finalState.core.players['1'].tokens.bounty).toBe(1);
             expect(result.finalState.core.players['1'].statusEffects.knockdown).toBe(1);
+            expect(result.finalState.core.players['0'].upgradeCardByAbilityId.deadeye).toEqual({
+                cardId: 'upgrade-deadeye-2',
+                cpCost: 2,
+            });
+            expect(result.finalState.core.players['0'].discard).toHaveLength(0);
         });
 
-        it('the law can select up to two target players in multiplayer', () => {
-            const theLawCard = GUNSLINGER_CARDS.find(card => card.id === 'card-the-law');
-            expect(theLawCard).toBeDefined();
+        it('upgrade-deadeye-2 后选择执法者变体，在多人局可选择至多两名敌方玩家', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-deadeye-2');
+            expect(upgradeCard).toBeDefined();
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
                 playerIds: ['0', '1', '2'],
-                random: fixedRandom,
+                random: createQueuedRandom([6, 6, 6, 1, 1]),
                 setup: (playerIds: PlayerId[], random: RandomFn) => {
                     const state = createInitializedStateWithCharacters(
                         playerIds,
@@ -658,7 +662,7 @@ describe('cross hero battles', () => {
                         { '0': 'gunslinger', '1': 'monk', '2': 'paladin' }
                     );
                     state.core.players['0'].resources.cp = 2;
-                    state.core.players['0'].hand = [{ ...theLawCard! }];
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
                     state.core.players['0'].deck = [];
                     return state;
                 },
@@ -667,20 +671,18 @@ describe('cross hero battles', () => {
             });
 
             const result = runner.run({
-                name: 'gunslinger the-law multiplayer',
+                name: 'gunslinger upgraded deadeye the-law multiplayer',
                 commands: [
-                    cmd('PLAY_CARD', '0', { cardId: 'card-the-law' }),
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-deadeye-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'the-law' }),
+                    cmd('ADVANCE_PHASE', '0'),
                     cmd('RESOLVE_INTERACTION', '0', { selectedPlayerIds: ['1', '2'] }),
                 ],
-                expect: {
-                    turnPhase: 'main1',
-                    pendingInteraction: null,
-                    players: {
-                        '0': { cp: 0, discardSize: 1 },
-                        '1': {},
-                        '2': {},
-                    },
-                },
             });
 
             expect(result.assertionErrors).toEqual([]);
@@ -691,9 +693,9 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['2'].statusEffects.knockdown).toBe(1);
         });
 
-        it('the law should only target enemies in 4-player team mode', () => {
-            const theLawCard = GUNSLINGER_CARDS.find(card => card.id === 'card-the-law');
-            expect(theLawCard).toBeDefined();
+        it('upgrade-deadeye-2 后选择执法者变体，在 4 人组队局中只能选择敌方目标', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-deadeye-2');
+            expect(upgradeCard).toBeDefined();
 
             const playerIds: PlayerId[] = ['0', '1', '2', '3'];
             const pipelineConfig = {
@@ -707,7 +709,7 @@ describe('cross hero battles', () => {
                 { '0': 'gunslinger', '1': 'monk', '2': 'samurai', '3': 'paladin' }
             );
             state.core.players['0'].resources.cp = 2;
-            state.core.players['0'].hand = [{ ...theLawCard! }];
+            state.core.players['0'].hand = [{ ...upgradeCard! }];
             state.core.players['0'].deck = [];
 
             expect(state.core.teamIdByPlayerId).toEqual({
@@ -723,7 +725,7 @@ describe('cross hero battles', () => {
                 {
                     type: 'PLAY_CARD',
                     playerId: '0',
-                    payload: { cardId: 'card-the-law' },
+                    payload: { cardId: 'upgrade-deadeye-2' },
                     timestamp: 1,
                 } as DiceThroneCommand,
                 fixedRandom,
@@ -735,6 +737,89 @@ describe('cross hero battles', () => {
             }
 
             state = playResult.state as MatchState<DiceThroneCore>;
+            const upgradeRollResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'ADVANCE_PHASE',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: 2,
+                } as DiceThroneCommand,
+                createQueuedRandom([6, 6, 6, 1, 1]),
+                playerIds
+            );
+            expect(upgradeRollResult.success).toBe(true);
+            if (!upgradeRollResult.success) {
+                return;
+            }
+            state = upgradeRollResult.state as MatchState<DiceThroneCore>;
+
+            state = executePipeline(
+                pipelineConfig,
+                state,
+                { type: 'ROLL_DICE', playerId: '0', payload: {}, timestamp: 3 } as DiceThroneCommand,
+                createQueuedRandom([6, 6, 6, 1, 1]),
+                playerIds,
+            ).state as MatchState<DiceThroneCore>;
+            state = executePipeline(
+                pipelineConfig,
+                state,
+                { type: 'CONFIRM_ROLL', playerId: '0', payload: {}, timestamp: 4 } as DiceThroneCommand,
+                createQueuedRandom([6, 6, 6, 1, 1]),
+                playerIds,
+            ).state as MatchState<DiceThroneCore>;
+            state = executePipeline(
+                pipelineConfig,
+                state,
+                { type: 'RESPONSE_PASS', playerId: '0', payload: {}, timestamp: 5 } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            ).state as MatchState<DiceThroneCore>;
+            state = executePipeline(
+                pipelineConfig,
+                state,
+                { type: 'RESPONSE_PASS', playerId: '1', payload: {}, timestamp: 6 } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            ).state as MatchState<DiceThroneCore>;
+
+            const abilityResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'SELECT_ABILITY',
+                    playerId: '0',
+                    payload: { abilityId: 'the-law' },
+                    timestamp: 7,
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(abilityResult.success).toBe(true);
+            if (!abilityResult.success) {
+                return;
+            }
+            state = abilityResult.state as MatchState<DiceThroneCore>;
+
+            const advanceResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'ADVANCE_PHASE',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: 8,
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds,
+            );
+            expect(advanceResult.success).toBe(true);
+            if (!advanceResult.success) {
+                return;
+            }
+            state = advanceResult.state as MatchState<DiceThroneCore>;
+
             const interaction = state.sys.interaction.current as {
                 data?: { targetPlayerIds?: PlayerId[] };
             } | undefined;
@@ -749,7 +834,7 @@ describe('cross hero battles', () => {
                     type: 'RESOLVE_INTERACTION',
                     playerId: '0',
                     payload: { selectedPlayerIds: ['1', '3'] },
-                    timestamp: 2,
+                    timestamp: 9,
                 } as DiceThroneCommand,
                 fixedRandom,
                 playerIds
@@ -759,7 +844,24 @@ describe('cross hero battles', () => {
                 return;
             }
 
-            const finalState = resolveResult.state as MatchState<DiceThroneCore>;
+            const skipLoadedResult = executePipeline(
+                pipelineConfig,
+                resolveResult.state as MatchState<DiceThroneCore>,
+                {
+                    type: 'SYS_INTERACTION_RESPOND',
+                    playerId: '0',
+                    payload: { optionId: 'option-1' },
+                    timestamp: 10,
+                } as DiceThroneCommand,
+                fixedRandom,
+                playerIds
+            );
+            expect(skipLoadedResult.success).toBe(true);
+            if (!skipLoadedResult.success) {
+                return;
+            }
+
+            const finalState = skipLoadedResult.state as MatchState<DiceThroneCore>;
             expect(finalState.sys.interaction.current).toBeFalsy();
             expect(finalState.core.players['0'].tokens.evasive).toBe(1);
             expect(finalState.core.players['1'].tokens.bounty).toBe(1);
@@ -968,23 +1070,23 @@ describe('cross hero battles', () => {
             expect(finalState.core.players['2'].tokens.shame ?? 0).toBe(0);
         });
 
-        it('pistol whip undefendable damage should not trigger protect', () => {
-            const pistolWhipCard = GUNSLINGER_CARDS.find(card => card.id === 'card-pistol-whip');
-            expect(pistolWhipCard).toBeDefined();
+        it('upgrade-fan-the-hammer-2 后选择枪托击打变体，不可防御伤害不应触发 protect', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-fan-the-hammer-2');
+            expect(upgradeCard).toBeDefined();
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
                 playerIds: ['0', '1'],
-                random: fixedRandom,
+                random: createQueuedRandom([4, 4, 6, 1, 1]),
                 setup: (playerIds: PlayerId[], random: RandomFn) => {
                     const state = createInitializedStateWithCharacters(
                         playerIds,
                         random,
                         { '0': 'gunslinger', '1': 'paladin' }
                     );
-                    state.core.players['0'].resources.cp = 1;
-                    state.core.players['0'].hand = [{ ...pistolWhipCard! }];
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
                     state.core.players['0'].deck = [];
                     state.core.players['1'].tokens.protect = 1;
                     return state;
@@ -994,18 +1096,18 @@ describe('cross hero battles', () => {
             });
 
             const result = runner.run({
-                name: 'gunslinger pistol-whip skips protect',
+                name: 'gunslinger upgraded fan-the-hammer pistol-whip skips protect',
                 commands: [
-                    cmd('PLAY_CARD', '0', { cardId: 'card-pistol-whip' }),
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-fan-the-hammer-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'pistol-whip' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }),
                 ],
-                expect: {
-                    turnPhase: 'main1',
-                    pendingInteraction: null,
-                    players: {
-                        '0': { hp: 50, cp: 0, discardSize: 1 },
-                        '1': { hp: 49 },
-                    },
-                },
             });
 
             expect(result.assertionErrors).toEqual([]);
@@ -1013,24 +1115,26 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['1'].statusEffects.knockdown).toBe(1);
             expect(result.finalState.core.players['1'].tokens.protect).toBe(1);
             expect(result.finalState.sys.interaction.current).toBeFalsy();
+            expect(result.finalState.core.players['1'].resources[RESOURCE_IDS.HP]).toBe(49);
         });
 
-        it('mark the target grants 2 evasive and 1 bounty', () => {
-            const markTheTargetCard = GUNSLINGER_CARDS.find(card => card.id === 'card-mark-the-target');
-            expect(markTheTargetCard).toBeDefined();
+        it('upgrade-take-cover-2 后选择标记目标变体，应获得 2 闪避并施加 1 赏金', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-take-cover-2');
+            expect(upgradeCard).toBeDefined();
 
             const runner = new GameTestRunner({
                 domain: DiceThroneDomain,
                 systems: testSystems,
                 playerIds: ['0', '1'],
-                random: fixedRandom,
+                random: createQueuedRandom([4, 4, 4, 1, 1]),
                 setup: (playerIds: PlayerId[], random: RandomFn) => {
                     const state = createInitializedStateWithCharacters(
                         playerIds,
                         random,
                         { '0': 'gunslinger', '1': 'monk' }
                     );
-                    state.core.players['0'].hand = [{ ...markTheTargetCard! }];
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
                     state.core.players['0'].deck = [];
                     return state;
                 },
@@ -1039,18 +1143,17 @@ describe('cross hero battles', () => {
             });
 
             const result = runner.run({
-                name: 'gunslinger mark-the-target base effect',
+                name: 'gunslinger upgraded take-cover mark-the-target',
                 commands: [
-                    cmd('PLAY_CARD', '0', { cardId: 'card-mark-the-target' }),
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-take-cover-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'mark-the-target' }),
+                    cmd('ADVANCE_PHASE', '0'),
                 ],
-                expect: {
-                    turnPhase: 'main1',
-                    pendingInteraction: null,
-                    players: {
-                        '0': { hp: 50, cp: 2, discardSize: 1 },
-                        '1': { hp: 50 },
-                    },
-                },
             });
 
             expect(result.assertionErrors).toEqual([]);
@@ -1563,7 +1666,7 @@ describe('cross hero battles', () => {
                     cmd('CONFIRM_ROLL', '0'),
                     cmd('RESPONSE_PASS', '0'),
                     cmd('RESPONSE_PASS', '1'),
-                    cmd('SELECT_ABILITY', '0', { abilityId: 'fan-the-hammer' }),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fan-the-hammer-2-main' }),
                 ],
             });
 
@@ -1574,7 +1677,7 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack).toMatchObject({
                 attackerId: '0',
                 defenderId: '1',
-                sourceAbilityId: 'fan-the-hammer',
+                sourceAbilityId: 'fan-the-hammer-2-main',
             });
             expect(result.finalState.core.pendingAttack).not.toBeNull();
             expect(getPendingAttackExpectedDamage(

@@ -761,7 +761,7 @@ export function registerMultiBaseScoringInteractionHandler(): void {
             if (candidates.length >= 2) {
                 const interaction = createSimpleChoice(
                     `multi_base_scoring_${timestamp}`, playerId,
-                    '閫夋嫨鍏堣鍒嗙殑鍩哄湴', buildBaseTargetOptions(candidates, updatedCore) as any[],
+                    '选择先记分的基地', buildBaseTargetOptions(candidates, updatedCore) as any[],
                     { sourceId: 'multi_base_scoring', targetType: 'base' },
                 );
                 currentState = queueInteraction(currentState, interaction);
@@ -1349,7 +1349,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 
                 const interaction = createSimpleChoice(
                     `multi_base_scoring_${now}`, pid,
-                    '閫夋嫨鍏堣鍒嗙殑鍩哄湴', buildBaseTargetOptions(candidates, core) as any[],
+                    '选择先记分的基地', buildBaseTargetOptions(candidates, core) as any[],
                     { sourceId: 'multi_base_scoring', targetType: 'base' },
                 );
                 const updatedState = queueInteraction(state, interaction);

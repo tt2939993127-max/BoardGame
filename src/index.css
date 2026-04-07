@@ -437,6 +437,22 @@ html[data-keyboard-visible="true"] .modal-base-container {
     min-height: 0;
 }
 
+.mobile-battlefield-viewport__stage--targeted {
+    --mobile-battlefield-target-translate-x: 0px;
+    --mobile-battlefield-target-translate-y: 0px;
+    --mobile-battlefield-target-scale: 1;
+}
+
+.mobile-battlefield-viewport__stage--targeted [data-mobile-battlefield-zoom-target="true"] {
+    transform: translate3d(
+        var(--mobile-battlefield-target-translate-x),
+        var(--mobile-battlefield-target-translate-y),
+        0
+    ) scale(var(--mobile-battlefield-target-scale));
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
 .mobile-board-shell__top-rail,
 .mobile-board-shell__side-dock,
 .mobile-board-shell__bottom-rail {

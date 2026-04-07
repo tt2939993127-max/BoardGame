@@ -7,6 +7,14 @@ import type { CheatResourceModifier } from '../../../engine';
 import type { DiceThroneCore } from './types';
 import { getDieFaceByDefinition } from './rules';
 
+const getCardSourceAtlasIndex = (card: { sourceAtlasIndex?: number; previewRef?: { type: string; index?: number } }) => (
+    typeof card.sourceAtlasIndex === 'number'
+        ? card.sourceAtlasIndex
+        : card.previewRef?.type === 'atlas'
+            ? card.previewRef.index
+            : undefined
+);
+
 export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
     getResource: (core, playerId, resourceId) => {
         return core.players[playerId]?.resources[resourceId];
@@ -110,7 +118,7 @@ export const diceThroneCheatModifier: CheatResourceModifier<DiceThroneCore> = {
 
         const matchedDeckEntries = player.deck
             .map((card, deckIndex) => ({ card, deckIndex }))
-            .filter(({ card }) => card.previewRef?.type === 'atlas' && card.previewRef.index === atlasIndex);
+            .filter(({ card }) => getCardSourceAtlasIndex(card) === atlasIndex);
         if (matchedDeckEntries.length !== 1) return core;
 
         const newDeck = [...player.deck];

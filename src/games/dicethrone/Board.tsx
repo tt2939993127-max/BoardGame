@@ -7,7 +7,7 @@ import { STATUS_IDS, TOKEN_IDS } from './domain/ids';
 import type { DiceThroneCore } from './domain';
 import type { InteractionDescriptor } from './domain/types';
 import { getUsableTokensForTiming } from './domain/tokenResponse';
-import { isCardPlayableInResponseWindow, getAvailableAbilityIds, getSeatingOrder, getOpponents, areTeammates } from './domain/rules';
+import { isCardPlayableInResponseWindow, getAvailableAbilityIds, getSeatingOrder, getOpponents, areTeammates, getUpgradeTargetAbilityId } from './domain/rules';
 import { useTranslation } from 'react-i18next';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
@@ -77,7 +77,7 @@ const TUTORIAL_TARGET_COMMAND_MAP: Record<string, string[]> = {
     'dice-roll-button': ['ROLL_DICE'],
     'dice-confirm-button': ['CONFIRM_ROLL'],
     'discard-pile': ['SELL_CARD', 'UNDO_SELL_CARD'],
-    'hand-area': ['PLAY_CARD', 'SELL_CARD', 'MODIFY_DIE'],
+    'hand-area': ['PLAY_CARD', 'PLAY_UPGRADE_CARD', 'SELL_CARD', 'MODIFY_DIE'],
 };
 
 /**
@@ -1482,7 +1482,18 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 locale={locale}
                                 currentPhase={currentPhase}
                                 playerCp={handOwner.resources[RESOURCE_IDS.CP] ?? 0}
-                                onPlayCard={(cardId) => engineMoves.playCard(cardId)}
+                                onPlayCard={(card) => {
+                                    if (card.type === 'upgrade') {
+                                        const targetAbilityId = getUpgradeTargetAbilityId(card);
+                                        if (!targetAbilityId) {
+                                            toast.error(t('error.cannotPlayCard'));
+                                            return;
+                                        }
+                                        dispatch('PLAY_UPGRADE_CARD', { cardId: card.id, targetAbilityId });
+                                        return;
+                                    }
+                                    engineMoves.playCard(card.id);
+                                }}
                                 onSellCard={(cardId) => {
                                     const blocked = shouldBlockTutorialAction('discard-pile');
                                     if (blocked) return;
