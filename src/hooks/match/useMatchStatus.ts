@@ -557,6 +557,8 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
     const [error, setError] = useState<string | null>(null);
     const failureCountRef = useRef(0);
     const lastFailureAtRef = useRef<number | null>(null);
+    const hasLoadedMatchRef = useRef(false);
+    const pendingInitialNotFoundCountRef = useRef(0);
     // 用 ref 持有最新的 gameName/matchID，避免 fetchMatchStatus 依赖变化导致 useEffect 反复重建 interval
     const gameNameRef = useRef(gameName);
     const matchIDRef = useRef(matchID);
@@ -578,8 +580,10 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
                 name: p.name,
                 isConnected: p.isConnected,
             })));
+            hasLoadedMatchRef.current = true;
             failureCountRef.current = 0;
             lastFailureAtRef.current = null;
+            pendingInitialNotFoundCountRef.current = 0;
             setError(null);
         } catch (err: unknown) {
             console.error('获取房间状态失败:', err);
@@ -588,6 +592,13 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             // 404 错误（房间不存在）立即触发错误状态，无需等待 3 次失败
             const is404 = isMatchNotFoundError(err);
             if (is404) {
+                if (!hasLoadedMatchRef.current) {
+                    pendingInitialNotFoundCountRef.current += 1;
+                    if (pendingInitialNotFoundCountRef.current < 2) {
+                        setError(null);
+                        return;
+                    }
+                }
                 clearMatchCredentials(requestMatchID);
                 setError('房间不存在或已被删除');
                 return;
@@ -598,6 +609,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             if (!lastFailureAtRef.current) {
                 lastFailureAtRef.current = Date.now();
             }
+            pendingInitialNotFoundCountRef.current = 0;
             const shouldExposeError = failureCountRef.current >= 3;
             if (shouldExposeError) {
                 setError(prev => prev ?? '房间不存在或已被删除');
@@ -615,6 +627,8 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
     useEffect(() => {
         failureCountRef.current = 0;
         lastFailureAtRef.current = null;
+        hasLoadedMatchRef.current = false;
+        pendingInitialNotFoundCountRef.current = 0;
         setError(null);
         setPlayers([]);
         setIsLoading(Boolean(matchID));
@@ -709,16 +723,20 @@ export async function exitMatch(
 export async function rejoinMatch(
     gameName: string,
     matchID: string,
-    playerID: string,
+    playerID: string | undefined,
     playerName: string,
     options?: { guestId?: string }
-): Promise<{ success: boolean; credentials?: string }> {
+): Promise<{ success: boolean; credentials?: string; playerID?: string; error?: 'room_full' | 'unknown' }> {
     try {
-        const { playerCredentials } = await matchApi.joinMatch(gameName, matchID, {
+        const { playerCredentials, playerID: joinedPlayerID } = await matchApi.joinMatch(gameName, matchID, {
             playerID,
             playerName,
             data: options?.guestId ? { guestId: options.guestId } : undefined,
         });
+        const resolvedPlayerID = joinedPlayerID ?? playerID;
+        if (!resolvedPlayerID) {
+            throw new Error('join response missing playerID');
+        }
 
         // 保存新凭证
         const storageKey = `match_creds_${matchID}`;
@@ -735,17 +753,20 @@ export async function rejoinMatch(
 
         persistMatchCredentials(matchID, {
             ...(existing || {}),
-            playerID,
+            playerID: resolvedPlayerID,
             credentials: playerCredentials,
             matchID,
             gameName,
             playerName,
         });
 
-        return { success: true, credentials: playerCredentials };
+        return { success: true, credentials: playerCredentials, playerID: resolvedPlayerID };
     } catch (err) {
         console.error('重新加入房间失败:', err);
         clearMatchCredentials(matchID);
-        return { success: false };
+        return {
+            success: false,
+            error: String(err).includes('Room is full') ? 'room_full' : 'unknown',
+        };
     }
 }

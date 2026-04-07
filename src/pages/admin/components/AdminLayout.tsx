@@ -11,13 +11,13 @@ import {
     LayoutDashboard,
     LogOut,
     MessageSquareWarning,
-    Package,
     ScrollText,
     Users,
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { useModalStack } from '../../../contexts/ModalStackContext';
 import { cn } from '../../../lib/utils';
+import { AdminListPageSkeleton } from './AdminSkeletons';
 
 type NavItem = {
     icon: typeof LayoutDashboard;
@@ -36,7 +36,6 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
     { icon: ScrollText, label: '更新日志', path: '/admin/changelogs' },
     { icon: Gamepad2, label: '对局记录', path: '/admin/matches' },
     { icon: DoorOpen, label: '房间管理', path: '/admin/rooms' },
-    { icon: Package, label: 'UGC 管理', path: '/admin/ugc' },
     { icon: Heart, label: '赞助管理', path: '/admin/sponsors' },
     { icon: MessageSquareWarning, label: '反馈管理', path: '/admin/feedback' },
     { icon: Bell, label: '系统通知', path: '/admin/notifications' },
@@ -155,7 +154,7 @@ export default function AdminLayout() {
             </aside>
 
             <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-zinc-50">
-                <Suspense fallback={<div className="flex h-full items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600"></div></div>}>
+                <Suspense fallback={<AdminListPageSkeleton rows={3} />}>
                     <Outlet />
                 </Suspense>
             </main>

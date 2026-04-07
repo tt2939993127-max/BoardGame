@@ -2,6 +2,21 @@ import type { GameManifestMobileDelivery } from '../../games/manifest.types';
 
 export type GamePackageProgressMode = 'determinate' | 'indeterminate';
 
+export type GamePackageInstallErrorCode =
+    | 'network-timeout'
+    | 'http-error'
+    | 'resume-not-supported'
+    | 'checksum-mismatch'
+    | 'insufficient-storage'
+    | 'archive-invalid'
+    | 'file-io'
+    | 'cancelled'
+    | 'task-conflict'
+    | 'manifest-missing'
+    | 'notification-permission-required'
+    | 'unsupported-runtime'
+    | 'unknown';
+
 export type GamePackageInstallStatus =
     | 'not-installed'
     | 'queued'
@@ -16,16 +31,22 @@ export interface ResolvedGamePackageManifest {
     runtimeChannel: string;
     modulePackId?: string;
     assetPackId?: string;
+    sharedAudioPackId?: string;
     modulePackVersion?: string;
     assetPackVersion?: string;
+    sharedAudioPackVersion?: string;
     modulePackUrl?: string;
     assetPackUrl?: string;
+    sharedAudioPackUrl?: string;
     modulePackChecksum?: string;
     assetPackChecksum?: string;
+    sharedAudioPackChecksum?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
+    sharedAudioPackBytes?: number;
     modulePackFileCount?: number;
     assetPackFileCount?: number;
+    sharedAudioPackFileCount?: number;
     source: 'fallback' | 'remote';
 }
 
@@ -41,11 +62,17 @@ export interface StoredGamePackageState {
     assetPackBytes?: number;
     installedVersion?: string;
     localAssetBaseUrl?: string;
+    errorCode?: GamePackageInstallErrorCode;
     errorMessage?: string;
     updatedAt: number;
 }
 
-export type GamePackageCardState = Omit<StoredGamePackageState, 'gameId' | 'runtimeChannel' | 'updatedAt'>;
+export type GamePackageCardState = Omit<StoredGamePackageState, 'gameId' | 'runtimeChannel' | 'updatedAt'> & {
+    previewResolved?: boolean;
+    manifestSource?: ResolvedGamePackageManifest['source'];
+    modulePackUrl?: string;
+    assetPackUrl?: string;
+};
 
 export interface PendingGamePackageInstall extends ResolvedGamePackageManifest {
     gameName: string;
@@ -113,8 +140,13 @@ export const toGamePackageCardState = (state: StoredGamePackageState): GamePacka
     progressMode: state.progressMode,
     modulePackId: state.modulePackId,
     assetPackId: state.assetPackId,
+    previewResolved: undefined,
+    manifestSource: undefined,
+    modulePackUrl: undefined,
+    assetPackUrl: undefined,
     modulePackBytes: state.modulePackBytes,
     assetPackBytes: state.assetPackBytes,
     installedVersion: state.installedVersion,
+    errorCode: state.errorCode,
     errorMessage: state.errorMessage,
 });

@@ -93,3 +93,67 @@
 - 本轮同时补了两类测试稳定性修正：
   - `e2e/character-selection.e2e.ts` 先重置残留对局存储，避免首页被“返回当前对局”弹窗劫持；同时把选角放大层改成按 overlay 开关态断言，而不是错误地期待 DOM 卸载。
   - `e2e/dicethrone-watch-out-spotlight.e2e.ts` 改成中文 locale，并把放大断言从脆弱的 `img[alt="Preview"]` 依赖切到真实放大内容容器，避免图片节点瞬态导致误报。
+
+## 2026-04-04 桌面回归复核
+
+- 背景：
+  - 用户反馈 `gunslinger` / `samurai` 在**游戏内桌面主界面**里的玩家板“显示过大，超出范围”。
+  - 本次按回归问题流程，先回看最后正常证据，再对照当前代码补桌面视口验证。
+- 最后正常证据：
+  - 文档：本文档本身
+  - 历史截图：
+    - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\10-mobile-main-board-state.png`
+    - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\11-mobile-player-board-surface-magnify-open.png`
+- 本轮新增桌面回归用例：
+  - 文件：`e2e/dicethrone-watch-out-spotlight.e2e.ts`
+  - 用例：`desktop v2 player board should stay within normal gameplay width`
+  - 命令：
+    - `$env:CODEX_MANAGED_BY_NPM='0'; $env:BG_BYPASS_GLOBAL_HEAVY_BUDGET='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.ts "desktop v2 player board should stay within normal gameplay width"`
+  - 结果：通过
+- 本轮桌面截图：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\desktop-v2-player-board-should-stay-within-normal-gameplay-width\15-desktop-v2-board-layout.png`
+- 人工观察：
+  - 武士玩家板现在明显更大，中央主视觉已经回到“玩家板优先”的占比，较旧版 `<= 0.48` 收敛方案更接近用户想要的宽板效果。
+  - 玩家板与右侧提示板之间只保留一条很窄但仍清晰可见的缝，不再是此前偏保守的较宽留白，也没有重新贴死到提示板。
+  - 右侧提示板、骰列、掷骰/确认按钮和底部弃牌堆仍完整可见，没有因为这轮放大玩家板而被压缩、挤飞或遮挡。
+- 自动断言：
+  - 桌面视口 `1365x768` 下，玩家板与提示板都必须完全留在视口内。
+  - 玩家板宽度占视口比例必须落在 `0.495 ~ 0.515`，确保它比上一轮更大，但不会重新失控挤占右侧 HUD。
+  - 玩家板与提示板之间必须保留 `> 0px` 且 `<= 8px` 的边界框间距，确保是“只留一点点”的紧凑关系，而不是重新拉开大空档或互相顶住。
+
+## 2026-04-05 V2 布局紧凑化跟进
+
+- 背景：
+  - 用户继续反馈 `gunslinger / samurai` 的第二版布局还可以再收紧，明确要求“玩家面板和提示板间距只要一点点，让玩家面板大一点”。
+- 本轮实现：
+  - `src/games/dicethrone/ui/abilitySlotLayout.ts`
+    - 把 `CenterBoard` 相关参数正式纳入 `v1 / v2` 的 UI tuning。
+    - `v2` 新增 `tipBoardHeightVw: 29.6`、`centerBoardGapVw: 0.24`，保持 `v1` 完全不受影响。
+  - `src/games/dicethrone/ui/CenterBoard.tsx`
+    - 不再写死中央玩家板/提示板的统一高度与 gap。
+    - 改为按角色版本读取 `playerBoardBaseHeightVw / tipBoardHeightVw / centerBoardGapVw`，让枪手/武士单独走更紧凑的双板关系。
+  - `e2e/dicethrone-watch-out-spotlight.e2e.ts`
+    - 把桌面 V2 回归断言改成“玩家板更大 + 缝隙更小”的新口径，而不是只验证“不超 0.48”。
+- 本轮执行：
+  - `$env:CODEX_MANAGED_BY_NPM='0'; $env:BG_BYPASS_GLOBAL_HEAVY_BUDGET='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.ts "desktop v2 player board should stay within normal gameplay width"`
+  - 结果：通过
+- 本轮主截图复核：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\desktop-v2-player-board-should-stay-within-normal-gameplay-width\15-desktop-v2-board-layout.png`
+  - 肉眼结论：
+    - 中央武士玩家板横向占比确实比上一轮更饱满，八个技能槽与底部终极技区更接近“主屏主体”。
+    - 提示板仍紧贴在玩家板右侧，但两者之间保留了一条细窄缝隙，视觉上已经是“只差一点点”，没有重新贴边或互相压住。
+    - 右侧骰列、按钮和弃牌堆区仍保持完整纵向链路，说明这次优化解决的是中央双板比例，而不是靠牺牲右侧操作区换空间。
+
+## 2026-04-05 V2 玩家板上抬 10% 跟进
+
+- 背景：
+  - 用户进一步明确，本轮要上抬的是 `v2` 的玩家面板本体，不是提示板。
+- 本轮实现：
+  - `src/games/dicethrone/ui/abilitySlotLayout.ts`
+    - 将 `v2.playerBoardTranslateY` 从 `-1.45` 调整为 `-4.95`，等价于在当前 `35vw` 玩家板高度基线下额外上抬约 `10%` 面板高度。
+- 本轮验证：
+  - `$env:CODEX_MANAGED_BY_NPM='0'; $env:BG_BYPASS_GLOBAL_HEAVY_BUDGET='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.ts "desktop v2 player board should stay within normal gameplay width"`
+  - 结果：通过
+- 本轮截图观察：
+  - 同一张 `15-desktop-v2-board-layout.png` 中，武士头部和上沿技能槽整体更贴近顶部头像栏下方，中央面板重心明显上移。
+  - 顶部头像栏仍与玩家板保持安全距离，没有发生碰撞；底部手牌仍可完整展开，未被玩家板压没。

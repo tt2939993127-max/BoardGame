@@ -4,16 +4,97 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import type { IncomingMessage } from 'http';
 import type { Socket } from 'net';
+import os from 'node:os';
+import path from 'node:path';
 import express from 'express';
 import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import mongoose from 'mongoose';
 import { AppModule } from './app.module';
 import { MsgpackIoAdapter } from './adapters/msgpack-io.adapter';
+import { createAdminTestLatencyMiddleware } from './modules/admin/admin-test-latency.middleware';
+import { AdminTestLatencyService } from './modules/admin/admin-test-latency.service';
 import { GlobalHttpExceptionFilter } from './shared/filters/http-exception.filter';
 import logger from '../../../server/logger';
 import { isNoCacheSpaEntryPath, shouldServeSpaFallback } from './spa-fallback';
 import { LONG_CACHE_MAX_AGE, NO_CACHE_HEADER, isNoCacheStaticFilePath } from './spa-fallback';
+
+type TestMongoServerHandle = {
+    stop(): Promise<void>;
+    getUri(): string;
+};
+
+const LOCAL_TEST_MONGO_URI = 'mongodb://127.0.0.1:27017';
+const TEST_MONGO_PROBE_TIMEOUT_MS = 1500;
+
+let testMongoServer: TestMongoServerHandle | null = null;
+
+const shouldPrepareTestMongo = () => process.env.NODE_ENV === 'test';
+
+const configureMongoMemoryServerEnv = () => {
+    process.env.MONGOMS_PREFER_GLOBAL_PATH ??= 'true';
+    process.env.MONGOMS_DOWNLOAD_DIR ??= path.join(os.homedir(), '.cache', 'mongodb-binaries');
+    process.env.MONGOMS_EXP_NET0LISTEN ??= 'true';
+
+    if (process.env.TEST_MONGOD_PATH && !process.env.MONGOMS_SYSTEM_BINARY) {
+        process.env.MONGOMS_SYSTEM_BINARY = process.env.TEST_MONGOD_PATH;
+    }
+};
+
+const resolvePreferredTestMongoUri = async (): Promise<{ mongo: TestMongoServerHandle | null; mongoUri: string }> => {
+    const externalMongoUri = process.env.MONGO_URI?.trim();
+    if (externalMongoUri) {
+        return { mongo: null, mongoUri: externalMongoUri };
+    }
+
+    const probeConnection = mongoose.createConnection(LOCAL_TEST_MONGO_URI, {
+        dbName: 'admin',
+        serverSelectionTimeoutMS: TEST_MONGO_PROBE_TIMEOUT_MS,
+    });
+
+    try {
+        await probeConnection.asPromise();
+        await probeConnection.close();
+        return { mongo: null, mongoUri: LOCAL_TEST_MONGO_URI };
+    } catch {
+        try {
+            await probeConnection.close();
+        } catch {
+            // ignore probe cleanup failure
+        }
+    }
+
+    configureMongoMemoryServerEnv();
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+    const mongo = await MongoMemoryServer.create();
+    return { mongo, mongoUri: mongo.getUri() };
+};
+
+const prepareTestMongoIfNeeded = async () => {
+    if (!shouldPrepareTestMongo() || process.env.MONGO_URI?.trim()) {
+        return;
+    }
+
+    const { mongo, mongoUri } = await resolvePreferredTestMongoUri();
+    process.env.MONGO_URI = mongoUri;
+    testMongoServer = mongo;
+
+    logger.info('[API] 测试模式 Mongo 已就绪', {
+        source: mongo ? 'memory-server' : 'external-or-local',
+        mongo_uri: mongo ? 'mongodb-memory-server' : mongoUri,
+    });
+};
+
+const stopTestMongoIfNeeded = async () => {
+    if (!testMongoServer) {
+        return;
+    }
+
+    const server = testMongoServer;
+    testMongoServer = null;
+    await server.stop();
+};
 
 const initSentryInBackground = async () => {
     const dsn = process.env.SENTRY_DSN?.trim();
@@ -38,6 +119,7 @@ const initSentryInBackground = async () => {
 
 async function bootstrap() {
     const bootstrapStartedAt = Date.now();
+    await prepareTestMongoIfNeeded();
 
     const webOrigins = process.env.WEB_ORIGINS
         ? process.env.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
@@ -70,6 +152,7 @@ async function bootstrap() {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.use(express.json({ limit: '2mb' }));
     expressApp.use(express.urlencoded({ extended: true, limit: '2mb' }));
+    expressApp.use('/admin', createAdminTestLatencyMiddleware(app.get(AdminTestLatencyService)));
 
     const gameServerTarget =
         process.env.GAME_SERVER_PROXY_TARGET
@@ -174,6 +257,25 @@ async function bootstrap() {
     });
 
     void initSentryInBackground();
+
+    const shutdown = async (signal: string) => {
+        try {
+            await app.close();
+            await stopTestMongoIfNeeded();
+        } catch (error) {
+            logger.error(`[API] ${signal} 优雅关闭失败:`, error);
+        } finally {
+            process.exit(0);
+        }
+    };
+
+    process.once('SIGTERM', () => {
+        void shutdown('SIGTERM');
+    });
+
+    process.once('SIGINT', () => {
+        void shutdown('SIGINT');
+    });
 }
 
 bootstrap().catch((error) => {

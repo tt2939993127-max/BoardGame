@@ -13,8 +13,12 @@ import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import {
   createSummonerWarsMobileEvidenceState,
+  SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
   withSummonerWarsMobileEvidenceActionLog,
 } from '../src/games/summonerwars/mobileEvidence';
+
+const SW_PHONE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
+const SW_TABLET_LANDSCAPE_VIEWPORT = { width: 1170, height: 540 } as const;
 
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
   if (process.env.PW_SW_USE_REAL_MAP === 'true') {
@@ -476,6 +480,26 @@ const seedMobileActionLog = async (page: Page) => {
   }, nextState);
 };
 
+const readSummonerWarsHarnessState = async (page: Page) => (
+  page.evaluate(() => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    return harness.state.get();
+  })
+);
+
+const applySummonerWarsHarnessState = async (page: Page, state: unknown) => {
+  await page.evaluate((nextState) => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    harness.state.set(nextState);
+  }, state);
+};
+
 const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
   await page.addStyleTag({
     content: `
@@ -492,7 +516,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 667, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -587,7 +611,7 @@ const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -956,6 +980,100 @@ const touchDragElement = async (
   await page.mouse.up();
 };
 
+const sampleFabReleaseFrames = async (
+  page: Page,
+  {
+    buttonId,
+    panelId,
+    frameCount = 12,
+  }: {
+    buttonId: string;
+    panelId: string;
+    frameCount?: number;
+  },
+) => (
+  page.evaluate(async ({ buttonId: currentButtonId, panelId: currentPanelId, frameCount: currentFrameCount }) => {
+    const resolveAnchorEdgeDistance = (
+      targetRect: { top: number; bottom: number },
+      referenceRect: { top: number; bottom: number },
+    ) => Math.min(
+      Math.abs(targetRect.top - referenceRect.top),
+      Math.abs(targetRect.bottom - referenceRect.bottom),
+    );
+
+    const samples: Array<{
+      frame: number;
+      visualTop: number;
+      visualBottom: number;
+      panelTop: number;
+      panelBottom: number;
+      anchorEdgeDistance: number;
+    } | null> = [];
+
+    for (let frame = 0; frame < currentFrameCount; frame += 1) {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+      const visual = document.querySelector(`[data-fab-visual-id="${currentButtonId}"]`) as HTMLElement | null;
+      const panel = document.querySelector(`[data-testid="fab-panel-${currentPanelId}"]`) as HTMLElement | null;
+      if (!visual || !panel) {
+        samples.push(null);
+        continue;
+      }
+
+      const visualRect = visual.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      samples.push({
+        frame,
+        visualTop: visualRect.top,
+        visualBottom: visualRect.bottom,
+        panelTop: panelRect.top,
+        panelBottom: panelRect.bottom,
+        anchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, visualRect),
+      });
+    }
+
+    return samples;
+  }, { buttonId, panelId, frameCount })
+);
+
+const captureEvidenceClipAroundLocators = async (
+  page: Page,
+  locators: Locator[],
+  {
+    path,
+    padding = 20,
+  }: {
+    path: string;
+    padding?: number;
+  },
+) => {
+  const boxes = (await Promise.all(locators.map((locator) => locator.boundingBox())))
+    .filter((box): box is NonNullable<Awaited<ReturnType<Locator['boundingBox']>>> => Boolean(box));
+  if (!boxes.length) {
+    throw new Error('缺少可用于局部证据截图的元素边界');
+  }
+  const viewport = page.viewportSize();
+  const viewportWidth = viewport?.width ?? 0;
+  const viewportHeight = viewport?.height ?? 0;
+  const minX = Math.min(...boxes.map((box) => box.x));
+  const minY = Math.min(...boxes.map((box) => box.y));
+  const maxRight = Math.max(...boxes.map((box) => box.x + box.width));
+  const maxBottom = Math.max(...boxes.map((box) => box.y + box.height));
+  const x = Math.max(0, Math.floor(minX - padding));
+  const y = Math.max(0, Math.floor(minY - padding));
+  const right = Math.min(viewportWidth || Math.ceil(maxRight + padding), Math.ceil(maxRight + padding));
+  const bottom = Math.min(viewportHeight || Math.ceil(maxBottom + padding), Math.ceil(maxBottom + padding));
+  await page.screenshot({
+    path,
+    clip: {
+      x,
+      y,
+      width: Math.max(1, right - x),
+      height: Math.max(1, bottom - y),
+    },
+  });
+};
+
 const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
   await expect.poll(async () => page.evaluate(({ testId, target }) => {
     const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
@@ -968,6 +1086,128 @@ const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 
     }).length;
     return target === 'open' ? visibleCount > 0 : visibleCount === 0;
   }, { testId: overlayTestId, target: expected }), { timeout: 5000 }).toBe(true);
+};
+
+const getExpandedFabMetrics = async (page: Page) => (
+  page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
+    const panel = document.querySelector('[data-testid="fab-panel-action-log"]') as HTMLElement | null;
+    const rows = Array.from(document.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+    const firstRow = rows[0] ?? null;
+    const mainVisual = document.querySelector('[data-fab-visual-id="exit"]') as HTMLElement | null;
+    const gamePage = document.querySelector('[data-game-page]') as HTMLElement | null;
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      pageScrollX: window.scrollX,
+      pageScrollY: window.scrollY,
+      gamePageRect: gamePage
+        ? (() => {
+          const rect = gamePage.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      mainVisualRect: mainVisual
+        ? (() => {
+          const rect = mainVisual.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      panelRect: panel
+        ? (() => {
+          const rect = panel.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      panelClientHeight: panel?.clientHeight ?? 0,
+      panelScrollHeight: panel?.scrollHeight ?? 0,
+      panelClientWidth: panel?.clientWidth ?? 0,
+      panelScrollWidth: panel?.scrollWidth ?? 0,
+      firstRowClientWidth: firstRow?.clientWidth ?? 0,
+      firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+      rowCount: rows.length,
+      visibleButtons: buttons
+        .map((button) => {
+          const styles = window.getComputedStyle(button);
+          const rect = button.getBoundingClientRect();
+          return {
+            id: button.dataset.fabId ?? '',
+            visible: styles.display !== 'none'
+              && styles.visibility !== 'hidden'
+              && styles.opacity !== '0'
+              && rect.width > 0
+              && rect.height > 0,
+            rect: {
+              left: rect.left,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+            },
+          };
+        })
+        .filter((entry) => entry.visible),
+    };
+  })
+);
+
+const waitForExpandedFabLayoutStable = async (page: Page) => {
+  let previousSignature: string | null = null;
+  let stableMetrics: Awaited<ReturnType<typeof getExpandedFabMetrics>> | null = null;
+  let stableCount = 0;
+
+  await expect.poll(async () => {
+    const metrics = await getExpandedFabMetrics(page);
+    if (!metrics.panelRect || !metrics.mainVisualRect || metrics.visibleButtons.length === 0) {
+      stableCount = 0;
+      previousSignature = null;
+      return 0;
+    }
+
+    const signature = JSON.stringify({
+      panelRect: Object.fromEntries(
+        Object.entries(metrics.panelRect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+      ),
+      mainVisualRect: Object.fromEntries(
+        Object.entries(metrics.mainVisualRect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+      ),
+      visibleButtons: metrics.visibleButtons.map((button) => ({
+        id: button.id,
+        rect: Object.fromEntries(
+          Object.entries(button.rect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+        ),
+      })),
+    });
+
+    if (signature === previousSignature) {
+      stableCount += 1;
+    } else {
+      stableCount = 0;
+      previousSignature = signature;
+    }
+
+    stableMetrics = metrics;
+    return stableCount;
+  }, { timeout: 2500, intervals: [80, 120, 160] }).toBeGreaterThanOrEqual(1);
+
+  if (!stableMetrics) {
+    throw new Error('展开态 FAB 布局未能稳定');
+  }
+  return stableMetrics;
 };
 
 const getMapTransform = async (page: Page) => (
@@ -1061,11 +1301,22 @@ const collapseFabMenuToMainButton = async (page: Page, mainId = 'exit') => {
     }
 
     if (await mainButton.isVisible().catch(() => false)) {
-      await mainButton.click();
+      await mainButton.click({ force: true });
     } else {
       visibleButtons.sort((a, b) => b.y - a.y);
-      await fabButtons.nth(visibleButtons[0].index).click();
+      await fabButtons.nth(visibleButtons[0].index).click({ force: true });
     }
+    await page.waitForTimeout(120);
+  }
+
+  if (await mainButton.isVisible().catch(() => false)) {
+    await mainButton.evaluate((element) => {
+      (element as HTMLElement).click();
+    });
+    await page.waitForTimeout(120);
+    await mainButton.evaluate((element) => {
+      (element as HTMLElement).click();
+    });
     await page.waitForTimeout(120);
   }
 
@@ -1097,6 +1348,124 @@ const waitForSummonerWarsVisualStable = async (page: Page) => {
     });
   }, { timeout: 10000 }).toBe(0);
   await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandStable = async (page: Page, allowMissing = false) => {
+  await expect.poll(async () => {
+    return page.evaluate((canBeMissing) => {
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      if (!handArea) {
+        return canBeMissing;
+      }
+
+      const cards = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'));
+      if (cards.length === 0) {
+        return canBeMissing;
+      }
+
+      const parseTranslate = (transform: string) => {
+        if (!transform || transform === 'none') {
+          return { x: 0, y: 0 };
+        }
+        const matrix3dMatch = transform.match(/^matrix3d\((.+)\)$/);
+        if (matrix3dMatch) {
+          const values = matrix3dMatch[1].split(',').map((value) => Number(value.trim()));
+          return {
+            x: values[12] ?? 0,
+            y: values[13] ?? 0,
+          };
+        }
+        const matrixMatch = transform.match(/^matrix\((.+)\)$/);
+        if (matrixMatch) {
+          const values = matrixMatch[1].split(',').map((value) => Number(value.trim()));
+          return {
+            x: values[4] ?? 0,
+            y: values[5] ?? 0,
+          };
+        }
+        return { x: Number.NaN, y: Number.NaN };
+      };
+
+      return cards.every((card) => {
+        const styles = window.getComputedStyle(card);
+        const opacity = Number(styles.opacity || '1');
+        const translate = parseTranslate(styles.transform);
+        return opacity >= 0.99
+          && Number.isFinite(translate.x)
+          && Number.isFinite(translate.y)
+          && Math.abs(translate.x) <= 1
+          && Math.abs(translate.y) <= 1;
+      });
+    }, allowMissing);
+  }, {
+    timeout: 5000,
+    message: '等待召唤师战争手牌动画收敛',
+  }).toBe(true);
+  await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandArtReady = async (page: Page, allowMissing = false) => {
+  await expect.poll(async () => {
+    try {
+      return await page.evaluate((canBeMissing) => {
+        const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+        if (!handArea) {
+          return canBeMissing;
+        }
+
+        const cards = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'));
+        if (cards.length === 0) {
+          return canBeMissing;
+        }
+
+        const visibleCards = cards.filter((card) => {
+          const rect = card.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        if (visibleCards.length === 0) {
+          return canBeMissing;
+        }
+
+        return visibleCards.every((card) => {
+          const sprite = card.querySelector<HTMLElement>('[data-card-sprite="true"]');
+          if (!sprite) {
+            return false;
+          }
+          const rect = sprite.getBoundingClientRect();
+          return rect.width > 0
+            && rect.height > 0
+            && sprite.dataset.imageLoaded === 'true';
+        });
+      }, allowMissing);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Execution context was destroyed') || message.includes('Target closed')) {
+        return false;
+      }
+      throw error;
+    }
+  }, {
+    timeout: 30000,
+    message: '等待召唤师战争手牌卡图真实渲染完成',
+  }).toBe(true);
+  await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandCount = async (page: Page, expectedCount: number) => {
+  await expect.poll(async () => {
+    const state = await readSummonerWarsHarnessState(page);
+    return state?.core?.players?.['0']?.hand?.length ?? 0;
+  }, {
+    timeout: 5000,
+    message: `等待 TestHarness 手牌数量变为 ${expectedCount}`,
+  }).toBe(expectedCount);
+
+  await expect.poll(async () => {
+    return page.locator('[data-testid="sw-hand-area"] [data-card-id]').count();
+  }, {
+    timeout: 5000,
+    message: `等待 DOM 手牌数量变为 ${expectedCount}`,
+  }).toBe(expectedCount);
 };
 
 const getCurrentPhase = async (page: Page) => {
@@ -1198,7 +1567,9 @@ const prepareDeterministicCore = (coreState: any) => {
     return null;
   };
 
-  const unitCard = pickCard('unit') ?? pickCard('unit', () => true);
+  const unitCard = pickCard('unit', (card) => !(card.abilities ?? []).includes('fire_sacrifice_summon'))
+    ?? pickCard('unit')
+    ?? pickCard('unit', () => true);
   const structureCard = pickCard('structure') ?? pickCard('structure', () => true);
   const eventCard = pickCard('event', (card) => card.playPhase === 'summon' || card.playPhase === 'any')
     ?? pickCard('event');
@@ -1207,10 +1578,17 @@ const prepareDeterministicCore = (coreState: any) => {
     throw new Error('无法找到用于稳定流程的卡牌');
   }
 
+  const extraCards: any[] = [];
+  while (extraCards.length < 2) {
+    const nextExtra = handPool.shift() ?? deck.shift();
+    if (!nextExtra) break;
+    extraCards.push(nextExtra);
+  }
+
   next.players['0'] = {
     ...player,
     magic: 10,
-    hand: [unitCard, structureCard, eventCard],
+    hand: [unitCard, structureCard, eventCard, ...extraCards],
     deck,
     moveCount: 0,
     attackCount: 0,
@@ -1271,10 +1649,21 @@ const setupAttackState = (coreState: any) => {
   const next = cloneState(coreState);
   const board = next.board.map((row: any[]) => row.map((cell: any) => ({
     ...cell,
-    unit: cell.unit ? { ...cell.unit, position: { ...cell.unit.position } } : undefined,
+    unit: cell.unit ? {
+      ...cell.unit,
+      position: { ...cell.unit.position },
+      hasAttacked: false,
+    } : undefined,
     structure: cell.structure ? { ...cell.structure, position: { ...cell.structure.position } } : undefined,
   })));
   next.board = board;
+  if (next.players?.['0']) {
+    next.players['0'] = {
+      ...next.players['0'],
+      attackCount: 0,
+      hasAttackedEnemy: false,
+    };
+  }
 
   const directions = [
     { row: -1, col: 0 },
@@ -2330,7 +2719,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2391,41 +2780,14 @@ test.describe('SummonerWars', () => {
     await guestContext.close();
   });
 
-  test('移动横屏：长按放大与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+  test('移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
-    const desktopContext = await browser.newContext({
-      baseURL,
-      viewport: { width: 1920, height: 1080 },
-    });
-    await desktopContext.addInitScript(() => {
-      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
-      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
-      localStorage.removeItem('hud_fab_position');
-      localStorage.removeItem('hud_fab_offset');
-    });
-    await blockAudioRequests(desktopContext);
-    await mockSummonerWarsMapImage(desktopContext);
-    await setChineseLocale(desktopContext);
-    await disableAudio(desktopContext);
-    const desktopPage = await desktopContext.newPage();
-    await openSummonerWarsMobileEvidencePage(desktopPage);
-    await waitForSummonerWarsVisualStable(desktopPage);
-    await collapseFabMenuToMainButton(desktopPage);
-    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
-    await desktopPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
-        filename: '00-pc-reference-board.png',
-      }),
-      fullPage: false,
-    });
-    await desktopContext.close();
-
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2441,7 +2803,335 @@ test.describe('SummonerWars', () => {
     await setChineseLocale(hostContext);
     await disableAudio(hostContext);
     const hostPage = await hostContext.newPage();
-    await hostPage.setViewportSize({ width: 667, height: 375 });
+
+    await openSummonerWarsMobileEvidencePage(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow');
+    await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 5000 });
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+
+    const mobileViewport = hostPage.viewportSize();
+    const initialLayout = await hostPage.evaluate(() => ({
+      rootScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(initialLayout.rootScrollWidth).toBeLessThanOrEqual(initialLayout.innerWidth + 1);
+    expect(initialLayout.bodyScrollWidth).toBeLessThanOrEqual(initialLayout.innerWidth + 1);
+    expect(mobileViewport?.width).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.width);
+    expect(mobileViewport?.height).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.height);
+
+    let matchState = await readSummonerWarsHarnessState(hostPage);
+    let coreState = prepareDeterministicCore(matchState.core);
+    const expectedStartHandCount = coreState.players?.['0']?.hand?.length ?? 0;
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'summon');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedStartHandCount);
+    await waitForSummonerWarsHandStable(hostPage);
+    await waitForSummonerWarsHandArtReady(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow-start');
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-start', {
+        filename: '40-mobile-basic-flow-start.png',
+      }),
+      fullPage: false,
+    });
+
+    const unitCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-type="unit"][data-can-play="true"]')
+      .first();
+    await expect(unitCard).toBeVisible({ timeout: 8000 });
+    await unitCard.click();
+    expect.poll(() => hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]').count(), {
+      timeout: 3000,
+      message: '移动端单位牌点击后未进入选中态',
+    }).toBeGreaterThan(0);
+
+    const summonCell = hostPage.locator('[data-valid-summon="true"]').first();
+    await expect(summonCell).toBeVisible({ timeout: 8000 });
+    const summonRow = await summonCell.getAttribute('data-row');
+    const summonCol = await summonCell.getAttribute('data-col');
+    if (!summonRow || !summonCol) {
+      throw new Error('无法读取移动端召唤格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-summon="true"]');
+    await expect(hostPage.getByTestId(`sw-unit-${summonRow}-${summonCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'move');
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'move');
+    await waitForMyTurn(hostPage);
+
+    const movableUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"]:not([data-unit-class="summoner"])').first();
+    await expect(movableUnit).toBeVisible({ timeout: 8000 });
+    const movableUnitTestId = await movableUnit.getAttribute('data-testid');
+    if (!movableUnitTestId) {
+      throw new Error('无法读取移动单位 test id');
+    }
+    await clickBoardElement(hostPage, `[data-testid="${movableUnitTestId}"]`);
+
+    const moveCell = hostPage.locator('[data-valid-move="true"]').first();
+    await expect(moveCell).toBeVisible({ timeout: 8000 });
+    const moveRow = await moveCell.getAttribute('data-row');
+    const moveCol = await moveCell.getAttribute('data-col');
+    if (!moveRow || !moveCol) {
+      throw new Error('无法读取移动端移动格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-move="true"]');
+    await expect(hostPage.getByTestId(`sw-unit-${moveRow}-${moveCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'build');
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'build');
+    await waitForMyTurn(hostPage);
+
+    const structureCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-type="structure"][data-can-play="true"]')
+      .first();
+    await expect(structureCard).toBeVisible({ timeout: 8000 });
+    await structureCard.click();
+
+    const buildCell = hostPage.locator('[data-valid-build="true"]').first();
+    await expect(buildCell).toBeVisible({ timeout: 8000 });
+    const buildRow = await buildCell.getAttribute('data-row');
+    const buildCol = await buildCell.getAttribute('data-col');
+    if (!buildRow || !buildCol) {
+      throw new Error('无法读取移动端建造格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-build="true"]');
+    await expect(hostPage.getByTestId(`sw-structure-${buildRow}-${buildCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    const attackSetup = setupAttackState(matchState.core);
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: attackSetup.core,
+      sys: {
+        ...matchState.sys,
+        phase: attackSetup.core.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'attack');
+    await waitForMyTurn(hostPage);
+
+    await clickBoardElement(
+      hostPage,
+      `[data-testid="sw-unit-${attackSetup.attacker.row}-${attackSetup.attacker.col}"]`,
+    );
+    await expect.poll(async () => {
+      return hostPage.locator('[data-valid-attack="true"]').count();
+    }, {
+      timeout: 2000,
+      message: '等待移动端攻击目标出现',
+    }).toBeGreaterThan(0);
+
+    const targetCell = hostPage.getByTestId(`sw-cell-${attackSetup.target.row}-${attackSetup.target.col}`);
+    const isValidAttack = await targetCell.getAttribute('data-valid-attack').catch(() => null);
+    if (isValidAttack === 'true') {
+      await clickBoardElement(
+        hostPage,
+        `[data-testid="sw-cell-${attackSetup.target.row}-${attackSetup.target.col}"]`,
+      );
+    } else {
+      const anyValidTarget = hostPage.locator('[data-valid-attack="true"]').first();
+      await expect(anyValidTarget).toBeVisible({ timeout: 3000 });
+      const targetTestId = await anyValidTarget.getAttribute('data-testid');
+      if (!targetTestId) {
+        throw new Error('无法读取移动端攻击目标 test id');
+      }
+      await clickBoardElement(hostPage, `[data-testid="${targetTestId}"]`);
+    }
+
+    const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
+    await expect(diceOverlay).toBeVisible({ timeout: 10000 });
+    await diceOverlay.click({ force: true });
+    await expect(diceOverlay).toBeHidden({ timeout: 5000 });
+    await hostPage.waitForTimeout(1200);
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'magic');
+    const expectedMagicHandCountBeforeDiscard = coreState.players?.['0']?.hand?.length ?? 0;
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'magic');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountBeforeDiscard);
+
+    const discardCard = hostPage.getByTestId('sw-hand-area').locator('[data-card-id]').first();
+    await expect(discardCard).toBeVisible({ timeout: 8000 });
+    await discardCard.click();
+    const confirmDiscard = hostPage.getByTestId('sw-confirm-discard');
+    await expect(confirmDiscard).toBeVisible({ timeout: 5000 });
+    await confirmDiscard.click();
+    await expect(confirmDiscard).toBeHidden({ timeout: 5000 });
+    const expectedMagicHandCountAfterDiscard = Math.max(0, expectedMagicHandCountBeforeDiscard - 1);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountAfterDiscard);
+    await waitForSummonerWarsHandStable(hostPage);
+    await waitForSummonerWarsHandArtReady(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow-after-magic');
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '41-mobile-basic-flow-after-magic', {
+        filename: '41-mobile-basic-flow-after-magic.png',
+      }),
+      fullPage: false,
+    });
+
+    const finalLayout = await hostPage.evaluate(() => {
+      const root = document.documentElement;
+      const body = document.body;
+      const endPhase = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      const endPhaseRect = endPhase?.getBoundingClientRect();
+      const handAreaRect = handArea?.getBoundingClientRect();
+      return {
+        rootScrollWidth: root.scrollWidth,
+        bodyScrollWidth: body.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        endPhaseRect,
+        handAreaRect,
+      };
+    });
+    expect(finalLayout.rootScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.bodyScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.endPhaseRect?.right ?? 9999).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.endPhaseRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+    expect(finalLayout.handAreaRect).not.toBeNull();
+    expect(finalLayout.handAreaRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+
+    await hostContext.close();
+  });
+
+  test('移动横屏：长按放大与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const desktopContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1920, height: 1080 },
+    });
+    await desktopContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.setItem('hud_fab_position', JSON.stringify({ leftPercent: 0.5, topPercent: 0.5 }));
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(desktopContext);
+    await mockSummonerWarsMapImage(desktopContext);
+    await setChineseLocale(desktopContext);
+    await disableAudio(desktopContext);
+    const desktopPage = await desktopContext.newPage();
+    await openSummonerWarsMobileEvidencePage(desktopPage);
+    await waitForSummonerWarsVisualStable(desktopPage);
+    await collapseFabMenuToMainButton(desktopPage);
+    let desktopFabPosition: { leftRatio: number; topRatio: number } | null = null;
+    await expect.poll(async () => {
+      const box = await desktopPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]').boundingBox();
+      const viewport = desktopPage.viewportSize();
+      if (!box || !viewport) {
+        return null;
+      }
+      desktopFabPosition = {
+        leftRatio: (box.x + box.width / 2) / viewport.width,
+        topRatio: (box.y + box.height / 2) / viewport.height,
+      };
+      return desktopFabPosition;
+    }).not.toBeNull();
+    expect(desktopFabPosition?.leftRatio ?? 0).toBeGreaterThan(0.42);
+    expect(desktopFabPosition?.leftRatio ?? 1).toBeLessThan(0.58);
+    expect(desktopFabPosition?.topRatio ?? 0).toBeGreaterThan(0.42);
+    expect(desktopFabPosition?.topRatio ?? 1).toBeLessThan(0.58);
+    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
+        filename: '00-pc-reference-board.png',
+      }),
+      fullPage: false,
+    });
+    await seedMobileActionLog(desktopPage);
+    const desktopActionLogPanel = await openFabPanel(desktopPage, 'action-log', 'exit');
+    await expect(desktopActionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    const desktopActionLogLayout = await desktopActionLogPanel.evaluate((panel) => {
+      const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
+      const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+      const rect = panel.getBoundingClientRect();
+      return {
+        rect,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        panelClientWidth: panel.clientWidth,
+        panelScrollWidth: panel.scrollWidth,
+        firstRowClientWidth: firstRow?.clientWidth ?? 0,
+        firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+      rowCount: rows.length,
+    };
+  });
+    expect(desktopActionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
+    expect(desktopActionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
+    expect(desktopActionLogLayout.rect.right).toBeLessThanOrEqual(desktopActionLogLayout.innerWidth + 1);
+    expect(desktopActionLogLayout.rect.bottom).toBeLessThanOrEqual(desktopActionLogLayout.innerHeight + 1);
+    expect(desktopActionLogLayout.panelScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.panelClientWidth + 1);
+    expect(desktopActionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.firstRowClientWidth + 1);
+    expect(desktopActionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    await expect(desktopActionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '01-pc-action-log-open-from-center', {
+        filename: '01-pc-action-log-open-from-center.png',
+      }),
+      fullPage: false,
+    });
+    await desktopContext.close();
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+    await hostContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(hostContext);
+    await mockSummonerWarsMapImage(hostContext);
+    await setChineseLocale(hostContext);
+    await disableAudio(hostContext);
+    const hostPage = await hostContext.newPage();
+    await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
@@ -2459,8 +3149,8 @@ test.describe('SummonerWars', () => {
     expect(Number(initialScaleBadge.opacity)).toBeLessThan(0.05);
 
     const phoneViewport = hostPage.viewportSize();
-    expect(phoneViewport?.width).toBe(667);
-    expect(phoneViewport?.height).toBe(375);
+    expect(phoneViewport?.width).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.width);
+    expect(phoneViewport?.height).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.height);
 
     const phoneLayout = await hostPage.evaluate(() => {
       const root = document.documentElement;
@@ -2524,7 +3214,7 @@ test.describe('SummonerWars', () => {
     await expect.poll(async () => (await getMapScaleBadgeState(hostPage)).ariaHidden).toBe('true');
 
     const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
-    const initialMagnifyCloseButton = magnifyOverlay.getByRole('button', { name: /close/i });
+    const initialMagnifyCloseButton = magnifyOverlay.getByRole('button', { name: /关闭|Close/i });
     if (await magnifyOverlay.isVisible().catch(() => false)) {
       await initialMagnifyCloseButton.dispatchEvent('click');
       await waitForOverlayState(hostPage, 'sw-magnify-overlay', 'closed');
@@ -2565,30 +3255,44 @@ test.describe('SummonerWars', () => {
 
     await seedMobileActionLog(hostPage);
     const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
-    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(2);
+    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
     const actionLogLayout = await actionLogPanel.evaluate((panel) => {
       const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
+      const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
       const rect = panel.getBoundingClientRect();
       return {
         rect,
+        panelClientHeight: panel.clientHeight,
+        panelScrollHeight: panel.scrollHeight,
         panelClientWidth: panel.clientWidth,
         panelScrollWidth: panel.scrollWidth,
         firstRowClientWidth: firstRow?.clientWidth ?? 0,
         firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+        rowCount: rows.length,
       };
     });
     expect(actionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
+    expect(actionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
     expect(actionLogLayout.rect.right).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
     expect(actionLogLayout.rect.bottom).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
+    expect(actionLogLayout.panelScrollHeight).toBeGreaterThan(actionLogLayout.panelClientHeight);
     expect(actionLogLayout.panelScrollWidth).toBeLessThanOrEqual(actionLogLayout.panelClientWidth + 1);
     expect(actionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(actionLogLayout.firstRowClientWidth + 1);
+    expect(actionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    await expect(actionLogPanel).toContainText('最后一步把冠军停在外圈威胁位');
+    await expect(actionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
+    await actionLogPanel.evaluate((panel) => {
+      panel.scrollTop = panel.scrollHeight;
+    });
+    const actionLogScrollTop = await actionLogPanel.evaluate((panel) => panel.scrollTop);
+    expect(actionLogScrollTop).toBeGreaterThan(0);
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '13-phone-action-log-open', {
         filename: '13-phone-action-log-open.png',
       }),
       fullPage: false,
     });
-    await hostPage.setViewportSize({ width: 1024, height: 768 });
+    await hostPage.setViewportSize(SW_TABLET_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await waitForSummonerWarsVisualStable(hostPage);
     await assertHandAreaVisible(hostPage, 'tablet-landscape');
@@ -2653,9 +3357,11 @@ test.describe('SummonerWars', () => {
     expect(tabletLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(phoneLayout.playerEnergyRect?.width ?? 0);
     expect(tabletLayout.playerEnergyRect?.height ?? 0).toBeGreaterThanOrEqual(phoneLayout.playerEnergyRect?.height ?? 0);
     const tabletShellRatios = await getSummonerWarsShellRatios(hostPage);
-    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.02);
+    // 13:6 平板横屏会比 16:9 桌面更早受高度约束，地图横向占比允许比桌面基线更窄，
+    // 但不能窄到明显失去主战区存在感。
+    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.18);
     // 平板按 PC 风格验收：允许阶段流程宽度与桌面基线存在更大差值（不再强贴手机壳比例）
-    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.12);
+    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.16);
     expect(Math.abs(tabletShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
 
     await hostPage.screenshot({
@@ -2668,14 +3374,14 @@ test.describe('SummonerWars', () => {
     await hostContext.close();
   });
 
-  test('移动横屏：悬浮球可拖出边界并让出结束阶段按钮', async ({ browser }, testInfo) => {
+  test('移动横屏：展开后的悬浮球上下拖拽时展开框仍会收回视口并让出结束阶段按钮', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
@@ -2693,36 +3399,252 @@ test.describe('SummonerWars', () => {
     await disableAudio(hostContext);
 
     const hostPage = await hostContext.newPage();
-    await hostPage.setViewportSize({ width: 667, height: 375 });
+    await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
     await openSummonerWarsMobileEvidencePage(hostPage);
     await waitForSummonerWarsVisualStable(hostPage);
-
-    const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
-    await expect(exitFab).toBeVisible({ timeout: 5000 });
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+    await seedMobileActionLog(hostPage);
 
-    const beforeBox = await exitFab.boundingBox();
-    expect(beforeBox).not.toBeNull();
+    const runExpandedOverflowScenario = async ({
+      deltaY,
+      overflowDirection,
+      screenshotKey,
+      screenshotFilename,
+      undoScreenshotKey,
+      undoScreenshotFilename,
+      undoZoomScreenshotKey,
+      undoZoomScreenshotFilename,
+    }: {
+      deltaY: number;
+      overflowDirection: 'top' | 'bottom';
+      screenshotKey: string;
+      screenshotFilename: string;
+      undoScreenshotKey: string;
+      undoScreenshotFilename: string;
+      undoZoomScreenshotKey: string;
+      undoZoomScreenshotFilename: string;
+    }) => {
+      await hostPage.evaluate(() => {
+        localStorage.removeItem('hud_fab_position');
+        localStorage.removeItem('hud_fab_offset');
+      });
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
+      await collapseFabMenuToMainButton(hostPage);
 
-    await touchDragElement(exitFab, {
-      deltaX: -520,
-      deltaY: 120,
+      const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+      const exitFabVisual = hostPage.locator('[data-fab-visual-id="exit"]');
+      const exitFabPanel = hostPage.getByTestId('fab-panel-exit');
+      await expect(exitFab).toBeVisible({ timeout: 5000 });
+      await exitFab.click();
+      await expect(hostPage.getByTestId('fab-sheet-exit')).toHaveCount(0);
+      await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+      const exitPanelRectBeforeDrag = await exitFabPanel.boundingBox();
+      const exitVisualRectBeforeDrag = await exitFabVisual.boundingBox();
+      expect(exitPanelRectBeforeDrag).not.toBeNull();
+      expect(exitVisualRectBeforeDrag).not.toBeNull();
+
+      await touchDragElement(exitFab, {
+        deltaX: 0,
+        deltaY,
+        steps: 12,
+      });
+      const releaseSamples = await sampleFabReleaseFrames(hostPage, {
+        buttonId: 'exit',
+        panelId: 'exit',
+      });
+      await hostPage.waitForTimeout(180);
+
+      const validReleaseSamples = releaseSamples.filter((sample) => sample !== null);
+      expect(validReleaseSamples.length, `${overflowDirection} overflow should keep sampling the exit FAB after release`).toBeGreaterThan(0);
+      const firstReleaseSample = validReleaseSamples[0];
+      const lastReleaseSample = validReleaseSamples[validReleaseSamples.length - 1];
+      const preDragVisualTop = exitVisualRectBeforeDrag?.y ?? firstReleaseSample?.visualTop ?? 0;
+      expect(
+        Math.abs((firstReleaseSample?.visualTop ?? 0) - (lastReleaseSample?.visualTop ?? 0)),
+        `${overflowDirection} overflow should not let the exit FAB snap back toward its pre-drag origin before settling`,
+      ).toBeLessThan(
+        Math.abs((firstReleaseSample?.visualTop ?? 0) - preDragVisualTop),
+      );
+      expect(
+        Math.max(...validReleaseSamples.map((sample) => sample.anchorEdgeDistance)),
+        `${overflowDirection} overflow should keep the exit panel vertically anchored to the dragged main FAB during release`,
+      ).toBeLessThanOrEqual(18);
+
+      const draggedVisualBox = await hostPage.locator('[data-fab-visual-id="exit"]').boundingBox();
+      const draggedStoredPosition = await getFabStoredPosition(hostPage);
+      expect(draggedVisualBox).not.toBeNull();
+      expect(draggedStoredPosition).not.toBeNull();
+      if (overflowDirection === 'top') {
+        expect((draggedStoredPosition?.topPercent ?? 1)).toBeLessThan(0);
+        expect((draggedVisualBox?.y ?? 999)).toBeLessThan(20);
+      } else {
+        expect((draggedStoredPosition?.topPercent ?? 0)).toBeGreaterThan(0.9);
+        expect(
+          (draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0),
+          'bottom overflow should keep the recovered main FAB in the lower half instead of snapping back to its old resting point',
+        ).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.55);
+      }
+      await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+      await expect.poll(async () => {
+        const rect = await exitFabPanel.boundingBox();
+        return rect ? Math.round(rect.y) : null;
+      }, { timeout: 2500, intervals: [80, 120, 160] }).not.toBeNull();
+      const rawExitPanelRectAfterDrag = await exitFabPanel.boundingBox();
+      expect(rawExitPanelRectAfterDrag).not.toBeNull();
+      const resolvedExitPanelRectAfterDrag = {
+        x: rawExitPanelRectAfterDrag?.x ?? 0,
+        y: rawExitPanelRectAfterDrag?.y ?? 0,
+        right: (rawExitPanelRectAfterDrag?.x ?? 0) + (rawExitPanelRectAfterDrag?.width ?? 0),
+        bottom: (rawExitPanelRectAfterDrag?.y ?? 0) + (rawExitPanelRectAfterDrag?.height ?? 0),
+      };
+      expect(resolvedExitPanelRectAfterDrag.x).toBeGreaterThanOrEqual(0);
+      expect(resolvedExitPanelRectAfterDrag.y).toBeGreaterThanOrEqual(0);
+      expect(resolvedExitPanelRectAfterDrag.right).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.width + 1);
+      expect(resolvedExitPanelRectAfterDrag.bottom).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.height + 1);
+
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
+      const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
+      await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      const expandedFabMetrics = await waitForExpandedFabLayoutStable(hostPage);
+      expect(expandedFabMetrics.panelRect).not.toBeNull();
+      expect(expandedFabMetrics.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      expect(expandedFabMetrics.panelScrollHeight).toBeGreaterThan(expandedFabMetrics.panelClientHeight);
+      expect(expandedFabMetrics.panelScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.panelClientWidth + 1);
+      expect(expandedFabMetrics.firstRowScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.firstRowClientWidth + 1);
+      expect(expandedFabMetrics.panelRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.right ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportWidth + 1);
+      expect(expandedFabMetrics.panelRect?.bottom ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportHeight + 1);
+      expect(expandedFabMetrics.pageScrollX).toBe(0);
+      expect(expandedFabMetrics.pageScrollY).toBe(0);
+      expect(expandedFabMetrics.gamePageRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.gamePageRect?.bottom ?? -1).toBeGreaterThanOrEqual(expandedFabMetrics.viewportHeight - 1);
+      const nearestSatelliteToMain = expandedFabMetrics.visibleButtons
+        .filter((button) => button.id !== 'exit')
+        .map((button) => ({
+          ...button,
+          distanceToMain: Math.abs(
+            ((button.rect.top + button.rect.bottom) / 2)
+            - (((expandedFabMetrics.mainVisualRect?.top ?? 0) + (expandedFabMetrics.mainVisualRect?.bottom ?? 0)) / 2),
+          ),
+        }))
+        .sort((a, b) => a.distanceToMain - b.distanceToMain)[0];
+      expect(
+        nearestSatelliteToMain?.id,
+        `${overflowDirection} overflow should keep the business order stable and leave settings closest to the main FAB`,
+      ).toBe('settings');
+
+      const expandedButtons = expandedFabMetrics.visibleButtons.filter((button) => button.id !== 'exit');
+      const panelRect = expandedFabMetrics.panelRect;
+      if (!panelRect) {
+        throw new Error(`缺少 ${overflowDirection} 场景的日志面板尺寸`);
+      }
+      const resolveAnchorEdgeDistance = (
+        targetRect: { top: number; bottom: number },
+        referenceRect: { top: number; bottom: number },
+      ) => Math.min(
+        Math.abs(targetRect.top - referenceRect.top),
+        Math.abs(targetRect.bottom - referenceRect.bottom),
+      );
+      for (const button of expandedButtons) {
+        const overlapsVertically = panelRect.top < button.rect.bottom && panelRect.bottom > button.rect.top;
+        if (overlapsVertically) {
+          const leftClearance = button.rect.left - panelRect.right;
+          const rightClearance = panelRect.left - button.rect.right;
+          expect(
+            Math.max(leftClearance, rightClearance),
+            `${overflowDirection}:${button.id} panel should stay clear of visible expanded buttons`,
+          ).toBeGreaterThanOrEqual(8);
+        }
+      }
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, screenshotKey, {
+          filename: screenshotFilename,
+        }),
+        fullPage: false,
+      });
+
+      const undoButton = hostPage.locator('[data-testid="fab-menu"] [data-fab-id^="undo-"]').first();
+      await expect(undoButton).toBeVisible({ timeout: 5000 });
+      const undoButtonId = await undoButton.getAttribute('data-fab-id');
+      if (!undoButtonId) {
+        throw new Error(`缺少 ${overflowDirection} 场景的 undo FAB id`);
+      }
+      const undoPanel = await openFabPanel(hostPage, undoButtonId, 'exit');
+      await expect(undoPanel).toBeVisible({ timeout: 5000 });
+      const undoPanelAnchorMetrics = await hostPage.evaluate(({ undoButtonId: currentUndoButtonId }) => {
+        const panel = document.querySelector(`[data-testid="fab-panel-${currentUndoButtonId}"]`) as HTMLElement | null;
+        const undoButtonElement = document.querySelector(`[data-fab-id="${currentUndoButtonId}"]`) as HTMLElement | null;
+        const settingsButtonElement = document.querySelector('[data-fab-id="settings"]') as HTMLElement | null;
+        if (!panel || !undoButtonElement || !settingsButtonElement) {
+          return null;
+        }
+        const panelRect = panel.getBoundingClientRect();
+        const undoRect = undoButtonElement.getBoundingClientRect();
+        const settingsRect = settingsButtonElement.getBoundingClientRect();
+        const resolveAnchorEdgeDistance = (targetRect: DOMRect, referenceRect: DOMRect) =>
+          Math.min(
+            Math.abs(targetRect.top - referenceRect.top),
+            Math.abs(targetRect.bottom - referenceRect.bottom),
+          );
+        return {
+          undoAnchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, undoRect),
+          settingsAnchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, settingsRect),
+        };
+      }, { undoButtonId });
+      expect(undoPanelAnchorMetrics).not.toBeNull();
+      expect(
+        undoPanelAnchorMetrics?.undoAnchorEdgeDistance ?? Number.POSITIVE_INFINITY,
+        `${overflowDirection} overflow should keep the undo panel anchored to the undo button itself`,
+      ).toBeLessThanOrEqual(12);
+      expect(
+        (undoPanelAnchorMetrics?.settingsAnchorEdgeDistance ?? 0)
+        - (undoPanelAnchorMetrics?.undoAnchorEdgeDistance ?? 0),
+        `${overflowDirection} overflow should not let the undo panel snap to the settings button`,
+      ).toBeGreaterThanOrEqual(12);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, undoScreenshotKey, {
+          filename: undoScreenshotFilename,
+        }),
+        fullPage: false,
+      });
+
+      const settingsButtonLocator = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="settings"]').first();
+      await expect(settingsButtonLocator).toBeVisible({ timeout: 5000 });
+      await captureEvidenceClipAroundLocators(hostPage, [undoPanel, undoButton, settingsButtonLocator], {
+        path: getEvidenceScreenshotPath(testInfo, undoZoomScreenshotKey, {
+          filename: undoZoomScreenshotFilename,
+        }),
+        padding: 14,
+      });
+    };
+
+    await runExpandedOverflowScenario({
+      deltaY: -Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.78),
+      overflowDirection: 'top',
+      screenshotKey: 'mobile-fab-expanded-top-overflow-recovered',
+      screenshotFilename: '30-mobile-fab-expanded-top-overflow-recovered.png',
+      undoScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-recovered',
+      undoScreenshotFilename: '30a-mobile-fab-expanded-top-undo-anchor-recovered.png',
+      undoZoomScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-zoom',
+      undoZoomScreenshotFilename: '30b-mobile-fab-expanded-top-undo-anchor-zoom.png',
     });
-    await hostPage.waitForTimeout(180);
 
-    const draggedBox = await exitFab.boundingBox();
-    const draggedStoredPosition = await getFabStoredPosition(hostPage);
-    expect(draggedBox).not.toBeNull();
-    expect(draggedStoredPosition).not.toBeNull();
-    expect((draggedStoredPosition?.leftPercent ?? 1)).toBeLessThan(0.08);
-    expect((draggedBox?.x ?? 999)).toBeLessThan(50);
-    expect(Math.abs((draggedBox?.x ?? 0) - (beforeBox?.x ?? 0))).toBeGreaterThan(120);
-
-    await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-position', {
-        filename: '30-mobile-fab-overflow-position.png',
-      }),
-      fullPage: false,
+    await runExpandedOverflowScenario({
+      deltaY: Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.82),
+      overflowDirection: 'bottom',
+      screenshotKey: 'mobile-fab-expanded-bottom-overflow-recovered',
+      screenshotFilename: '31-mobile-fab-expanded-bottom-overflow-recovered.png',
+      undoScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-recovered',
+      undoScreenshotFilename: '31a-mobile-fab-expanded-bottom-undo-anchor-recovered.png',
+      undoZoomScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-zoom',
+      undoZoomScreenshotFilename: '31b-mobile-fab-expanded-bottom-undo-anchor-zoom.png',
     });
 
     const phaseBeforeAdvance = await getCurrentPhase(hostPage);
@@ -2730,8 +3652,8 @@ test.describe('SummonerWars', () => {
     expect(phaseAfterAdvance).not.toBe(phaseBeforeAdvance);
 
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-overflow-and-end-phase-clickable', {
-        filename: '31-mobile-fab-overflow-and-end-phase-clickable.png',
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-expanded-end-phase-clickable', {
+        filename: '32-mobile-fab-expanded-end-phase-clickable.png',
       }),
       fullPage: false,
     });

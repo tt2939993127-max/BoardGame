@@ -219,6 +219,9 @@ export const DICETHRONE_COMMANDS = {
     SELECT_CHARACTER: 'SELECT_CHARACTER',
     HOST_START_GAME: 'HOST_START_GAME',
     MOVE_SEAT: 'MOVE_SEAT',
+    REQUEST_SEAT_SWAP: 'REQUEST_SEAT_SWAP',
+    RESPOND_SEAT_SWAP: 'RESPOND_SEAT_SWAP',
+    CANCEL_SEAT_SWAP: 'CANCEL_SEAT_SWAP',
 } as const;
 
 export type DiceThroneCommandType = (typeof DICETHRONE_COMMANDS)[keyof typeof DICETHRONE_COMMANDS];
@@ -237,11 +240,6 @@ export const DICETHRONE_CARD_ATLAS_IDS = {
     PALADIN: 'dicethrone:paladin-cards',
     GUNSLINGER: 'dicethrone:gunslinger-cards',
     SAMURAI: 'dicethrone:samurai-cards',
-} as const;
-
-export const DICETHRONE_HAND_CARD_ATLAS_IDS = {
-    GUNSLINGER: 'dicethrone:gunslinger-hand-cards',
-    SAMURAI: 'dicethrone:samurai-hand-cards',
 } as const;
 
 export const DICETHRONE_STATUS_ATLAS_IDS = {

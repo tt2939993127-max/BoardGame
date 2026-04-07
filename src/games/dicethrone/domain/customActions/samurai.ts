@@ -194,6 +194,25 @@ function handleKatanaSliceThreshold3(ctx: CustomActionContext): DiceThroneEvent[
     return handleKatanaSliceThreshold(ctx, 3);
 }
 
+function handleBushidoStartTurn({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    if (state.turnNumber !== 1 || attackerId !== state.startingPlayerId) {
+        return [];
+    }
+
+    const honorEvent = createGrantTokenEvent(state, attackerId, TOKEN_IDS.HONOR, 1, sourceAbilityId, timestamp);
+    return honorEvent ? [honorEvent] : [];
+}
+
+function handleBushidoEndTurn({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const offensiveRollCount = state.offensiveRollCountThisTurn?.[attackerId] ?? 0;
+    if (offensiveRollCount >= 3) {
+        return [];
+    }
+
+    const honorEvent = createGrantTokenEvent(state, attackerId, TOKEN_IDS.HONOR, 1, sourceAbilityId, timestamp);
+    return honorEvent ? [honorEvent] : [];
+}
+
 function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, random, action }: CustomActionContext): DiceThroneEvent[] {
     if (!random) return [];
 
@@ -353,6 +372,12 @@ function handleYouShouldBeAshamedResolve({ targetId, state, sourceAbilityId, tim
 }
 
 export function registerSamuraiCustomActions(): void {
+    registerCustomActionHandler('samurai-bushido-start-turn', handleBushidoStartTurn, {
+        categories: ['passive', 'token'],
+    });
+    registerCustomActionHandler('samurai-bushido-end-turn', handleBushidoEndTurn, {
+        categories: ['passive', 'token'],
+    });
     registerCustomActionHandler('samurai-back-strike-use', handleBackStrikeUse, {
         categories: ['token', 'damage', 'dice', 'defense'],
     });

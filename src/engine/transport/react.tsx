@@ -54,12 +54,15 @@ import {
 import {
     resolveAiMinimumActionDelayMs,
     resolveNextAiAction,
+    getAiSeatIds,
     type AiSeatController,
 } from '../ai';
 import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
+import { onAppVisible } from '../../lib/mobile/appVisibility';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
+import { setUndoAiSeatIds } from '../systems/UndoSystem';
 
 // re-export 供外部使用（测试等场景）
 export { filterPlayedEvents };
@@ -86,6 +89,50 @@ interface GameClientContextValue {
 }
 
 const GameClientContext = createContext<GameClientContextValue | null>(null);
+
+export function buildAiProgressMarker(state: MatchState<unknown>): string {
+    const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : '';
+    const phase = typeof state.sys?.phase === 'string' ? state.sys.phase : '';
+    const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
+        ? state.sys.eventStream.nextId
+        : '';
+    const interactionId = typeof state.sys?.interaction?.current?.id === 'string'
+        ? state.sys.interaction.current.id
+        : '';
+    const responderIndex = typeof state.sys?.responseWindow?.current?.currentResponderIndex === 'number'
+        ? state.sys.responseWindow.current.currentResponderIndex
+        : '';
+    const currentPlayerId = (() => {
+        const core = state.core as Record<string, unknown>;
+        if (typeof core.activePlayerId === 'string') return core.activePlayerId;
+        if (typeof core.currentPlayer === 'string') return core.currentPlayer;
+        if (Array.isArray(core.turnOrder) && typeof core.currentPlayerIndex === 'number') {
+            return (core.turnOrder as string[])[core.currentPlayerIndex as number] ?? '';
+        }
+        return '';
+    })();
+
+    return [
+        turnNumber,
+        phase,
+        eventStreamNextId,
+        interactionId,
+        responderIndex,
+        currentPlayerId,
+    ].join('|');
+}
+
+export function shouldRetryLocalAiAttemptAfterDispatch(args: {
+    cancelled: boolean;
+    activeAttemptKey: string | null;
+    resolutionAttemptKey: string;
+    markerBeforeDispatch: string;
+    nextState: MatchState<unknown>;
+}): boolean {
+    if (args.cancelled) return false;
+    if (args.activeAttemptKey !== null && args.activeAttemptKey !== args.resolutionAttemptKey) return false;
+    return buildAiProgressMarker(args.nextState) === args.markerBeforeDispatch;
+}
 
 // ============================================================================
 // useGameClient Hook
@@ -162,6 +209,8 @@ export interface GameProviderProps {
     onError?: (error: string) => void;
     /** 连接状态变更回调 */
     onConnectionChange?: (connected: boolean) => void;
+    /** 首次拿到权威状态时回调 */
+    onStateReady?: () => void;
     /** 游戏引擎配置（乐观更新需要在客户端执行 Pipeline） */
     engineConfig?: GameEngineConfig;
     /** 延迟优化配置（可选，不传则不启用任何优化） */
@@ -176,6 +225,7 @@ export function GameProvider({
     children,
     onError,
     onConnectionChange,
+    onStateReady,
     engineConfig,
     latencyConfig,
 }: GameProviderProps) {
@@ -205,9 +255,47 @@ export function GameProvider({
 
     // 用 ref 存储回调，避免回调引用变化导致 effect 重新执行（断开重连）
     const onErrorRef = useRef(onError);
-    onErrorRef.current = onError;
     const onConnectionChangeRef = useRef(onConnectionChange);
-    onConnectionChangeRef.current = onConnectionChange;
+    const onStateReadyRef = useRef(onStateReady);
+    const hasReportedStateReadyRef = useRef(false);
+    const RECOVERABLE_COMMAND_ERRORS = useMemo(
+        () => new Set([
+            'command_failed',
+            'pipeline_error',
+            'invalid_phase',
+            'cannot_advance_phase',
+            'player_mismatch',
+        ]),
+        [],
+    );
+    const recoverFromRejectedCommand = useCallback((reason: string) => {
+        if (!RECOVERABLE_COMMAND_ERRORS.has(reason)) {
+            return;
+        }
+
+        if (optimisticEngineRef.current) {
+            optimisticEngineRef.current.reset();
+            setRollbackSignal(prev => ({
+                watermark: null,
+                seq: prev.seq + 1,
+                reconcileSeq: prev.reconcileSeq,
+            }));
+        }
+
+        clientRef.current?.resync();
+    }, [RECOVERABLE_COMMAND_ERRORS]);
+
+    useEffect(() => {
+        onErrorRef.current = onError;
+    }, [onError]);
+
+    useEffect(() => {
+        onConnectionChangeRef.current = onConnectionChange;
+    }, [onConnectionChange]);
+
+    useEffect(() => {
+        onStateReadyRef.current = onStateReady;
+    }, [onStateReady]);
 
     // 初始化乐观更新引擎
     useEffect(() => {
@@ -246,7 +334,12 @@ export function GameProvider({
                 } else {
                     // 批量发送
                     const batchId = `b-${++batchSeqRef.current}`;
-                    client.sendBatch(batchId, commands);
+                    client.sendBatch(batchId, commands, undefined, (reason) => {
+                        recoverFromRejectedCommand(reason);
+                        if (reason !== 'command_failed') {
+                            onErrorRef.current?.(reason);
+                        }
+                    });
                 }
             },
         });
@@ -255,7 +348,7 @@ export function GameProvider({
             batcher.destroy();
             batcherRef.current = null;
         };
-    }, [latencyConfig]);
+    }, [latencyConfig, recoverFromRejectedCommand]);
 
     useEffect(() => {
         const client = new GameTransportClient({
@@ -264,6 +357,11 @@ export function GameProvider({
             playerID: playerId,
             credentials,
             onStateUpdate: (newState, players, meta, randomMeta) => {
+                if (!hasReportedStateReadyRef.current) {
+                    hasReportedStateReadyRef.current = true;
+                    onStateReadyRef.current?.();
+                }
+
                 // 状态版本号检查：防止旧状态覆盖新状态（WebSocket 消息乱序/重复广播）
                 if (meta?.stateID !== undefined && lastConfirmedStateIDRef.current !== null) {
                     if (meta.stateID < lastConfirmedStateIDRef.current) {
@@ -320,6 +418,10 @@ export function GameProvider({
                     finalState = newState as MatchState<unknown>;
                 }
 
+                // reconcile 结果可能与原始服务端包不同（回滚过滤、保留乐观态、可疑确认兜底）。
+                // 回写传输层 patch 基线，避免后续 state:patch 基于错误快照继续叠错。
+                client.updateLatestState(finalState);
+
                 // 实时刷新交互选项（如果策略是 realtime）
                 const refreshedState = refreshInteractionOptions(finalState);
 
@@ -351,6 +453,7 @@ export function GameProvider({
                 }
             },
             onError: (error) => {
+                recoverFromRejectedCommand(error);
                 onErrorRef.current?.(error);
             },
         });
@@ -359,10 +462,11 @@ export function GameProvider({
         client.connect();
 
         return () => {
+            hasReportedStateReadyRef.current = false;
             client.disconnect();
             clientRef.current = null;
         };
-    }, [server, matchId, playerId, credentials]);
+    }, [server, matchId, playerId, credentials, recoverFromRejectedCommand]);
 
     // 页面可见性恢复时主动重新同步状态
     // 浏览器后台标签页会节流 timer / 冻结 JS 执行，导致：
@@ -370,8 +474,7 @@ export function GameProvider({
     // 2. state:update 消息到达 WebSocket 缓冲区但 JS 回调未执行
     // 恢复可见时主动 resync 确保状态最新
     useEffect(() => {
-        const handleVisibilityChange = () => {
-            if (document.hidden) return;
+        return onAppVisible(() => {
             const client = clientRef.current;
             if (!client) return;
             // 重置乐观引擎：后台期间可能错过了多次状态更新，pending 队列已过时
@@ -385,11 +488,7 @@ export function GameProvider({
                 }));
             }
             client.resync();
-        };
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-        };
+        });
     }, []);
 
     const dispatch = useCallback((type: string, payload: unknown) => {
@@ -605,6 +704,7 @@ export function LocalGameProvider({
         () => Array.from({ length: numPlayers }, (_, i) => String(i)),
         [numPlayers],
     );
+    const aiSeatIds = useMemo(() => getAiSeatIds(seatControllers), [seatControllers]);
     const persistedSnapshot = useMemo(
         () => (
             persistSession
@@ -614,12 +714,17 @@ export function LocalGameProvider({
         [config.gameId, numPlayers, persistSession, seed],
     );
 
-    const randomRef = useRef<LocalProviderRandom>(
+    const [initialRandom] = useState<LocalProviderRandom>(() =>
         createLocalProviderRandom(seed, persistedSnapshot?.randomCursor ?? 0),
     );
+    const randomRef = useRef<LocalProviderRandom>(initialRandom);
     const onCommandRejectedRef = useRef(onCommandRejected);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
-    onCommandRejectedRef.current = onCommandRejected;
+    const [aiRetryVersion, setAiRetryVersion] = useState(0);
+
+    useEffect(() => {
+        onCommandRejectedRef.current = onCommandRejected;
+    }, [onCommandRejected]);
 
     const [state, setState] = useState<MatchState<unknown>>(() => {
         console.log('[LocalGameProvider] 初始化状态');
@@ -629,9 +734,9 @@ export function LocalGameProvider({
                 seed,
                 randomCursor: persistedSnapshot.randomCursor,
             });
-            return persistedSnapshot.state;
+            return setUndoAiSeatIds(persistedSnapshot.state, aiSeatIds);
         }
-        const random = randomRef.current;
+        const random = initialRandom;
         
         // 检查是否启用 skipInitialization（测试模式 - 完全跳过初始化）
         const testConfig = typeof window !== 'undefined' 
@@ -681,7 +786,7 @@ export function LocalGameProvider({
             
             console.log('[LocalGameProvider] 最小化空白状态已创建，等待测试注入状态');
             
-            return { sys, core };
+            return setUndoAiSeatIds({ sys, core }, aiSeatIds);
         }
         
         const shouldSkipFactionSelect = testConfig?.skipFactionSelect === true &&
@@ -697,7 +802,7 @@ export function LocalGameProvider({
                 playerIds,
                 config.systems as EngineSystem[],
             );
-            let currentState: MatchState<unknown> = { sys, core };
+            let currentState: MatchState<unknown> = setUndoAiSeatIds({ sys, core }, aiSeatIds);
             
             // 同步执行 4 个派系选择命令（蛇形选秀：P0 → P1 → P1 → P0）
             const selectionOrder: Array<{ playerId: string; factionIndex: number }> = [
@@ -756,7 +861,7 @@ export function LocalGameProvider({
                 player1Hand: (currentState.core as any).players?.['1']?.hand?.length,
             });
             
-            return currentState;
+            return setUndoAiSeatIds(currentState, aiSeatIds);
         }
         
         // 正常流程：从 factionSelect 阶段开始
@@ -770,8 +875,13 @@ export function LocalGameProvider({
             hasSys: !!sys,
             phase: sys?.flow?.phase,
         });
-        return { sys, core };
+        return setUndoAiSeatIds({ sys, core }, aiSeatIds);
     });
+    const stateRef = useRef(state);
+
+    useEffect(() => {
+        stateRef.current = state;
+    }, [state]);
 
     const localPregameControlledPlayerId = useMemo(
         () => resolveLocalPregameControlledPlayerId({
@@ -901,6 +1011,7 @@ export function LocalGameProvider({
 
         const runAiTurn = async () => {
             const startedAt = Date.now();
+            const progressMarkerBeforeDispatch = buildAiProgressMarker(state);
             const resolution = await resolveNextAiAction({
                 engineConfig: config,
                 state,
@@ -952,6 +1063,20 @@ export function LocalGameProvider({
                     __tutorialAiCommand: true,
                 });
             }
+
+            setTimeout(() => {
+                if (!shouldRetryLocalAiAttemptAfterDispatch({
+                    cancelled,
+                    activeAttemptKey: lastAiAttemptKeyRef.current,
+                    resolutionAttemptKey: resolution.attemptKey,
+                    markerBeforeDispatch: progressMarkerBeforeDispatch,
+                    nextState: stateRef.current,
+                })) {
+                    return;
+                }
+                lastAiAttemptKeyRef.current = null;
+                setAiRetryVersion((version) => version + 1);
+            }, 30);
         };
 
         void runAiTurn();
@@ -963,18 +1088,18 @@ export function LocalGameProvider({
                 delayTimer = null;
             }
         };
-    }, [config, dispatch, localPregameControlledPlayerId, seatControllers, seed, state]);
+    }, [aiRetryVersion, config, dispatch, localPregameControlledPlayerId, seatControllers, seed, state]);
 
     const reset = useCallback(() => {
         randomRef.current = createLocalProviderRandom(seed);
         const random = randomRef.current;
-        const core = config.domain.setup(playerIds, random);
+        const core = config.domain.setup(playerIds, random, setupData);
         const sys = createInitialSystemState(
             playerIds,
             config.systems as EngineSystem[],
         );
-        setState({ sys, core });
-    }, [config, playerIds, seed]);
+        setState(setUndoAiSeatIds({ sys, core }, aiSeatIds));
+    }, [aiSeatIds, config, playerIds, seed, setupData]);
 
     const matchPlayers = useMemo<MatchPlayerInfo[]>(
         () => playerIds.map((id) => ({ id: Number(id), isConnected: true })),
@@ -1002,7 +1127,7 @@ export function LocalGameProvider({
         isConnected: true,
         isMultiplayer: false,
         reset,
-    }), [state, dispatch, matchPlayers, reset, localBoardPlayerId, config.domain]);
+    }), [state, dispatch, matchPlayers, reset, localBoardPlayerId]);
 
     // 注册测试工具访问器（仅在测试环境生效）
     useEffect(() => {
@@ -1024,8 +1149,12 @@ export function LocalGameProvider({
         // 注册状态访问器（本地模式可直接读写当前快照）
         // 本地模式没有 playerView 过滤，因此允许 TestHarness 直接注入状态。
         harness.state.register(
-            () => state,
-            (newState) => setState(newState as MatchState<unknown>),
+            () => stateRef.current,
+            (newState) => {
+                const nextState = newState as MatchState<unknown>;
+                stateRef.current = nextState;
+                setState(nextState);
+            },
         );
         
         // 注册命令分发器
@@ -1211,7 +1340,7 @@ class BoardErrorBoundary extends React.Component<
             }
 
             return (
-                <div className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
+                <div data-bg-friendly-screen="true" className="w-full h-full flex items-center justify-center text-red-300 text-sm p-4">
                     <div className="text-center">
                         <div className="mb-2">游戏加载失败</div>
                         <div className="text-xs text-white/50 mb-2">

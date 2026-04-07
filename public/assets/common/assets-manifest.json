@@ -4,57 +4,21 @@
   "id": "common",
   "basePrefix": "official/common/",
   "files": {
-    "audio/back": {
+    "audio/phrase-mappings.zh-CN.json": {
       "variants": {
-        "wav": {
-          "sha256": "31fd5441b0fd0f057e3fcd5205a9d8bdbfad63f93d40feb685a7df9c88f5ef9e",
-          "bytes": 192340,
-          "mime": "audio/wav"
+        "json": {
+          "sha256": "50de7813ca43a1df6c6d7401d510a72b944f4f645025f541317f426480ec1141",
+          "bytes": 169992,
+          "mime": "application/json"
         }
       }
     },
-    "audio/click": {
+    "audio/registry.json": {
       "variants": {
-        "wav": {
-          "sha256": "975f61a306fb55cfca15885a3efae57d9daa0c3fae50a6ce2955db99b804fb25",
-          "bytes": 188592,
-          "mime": "audio/wav"
-        }
-      }
-    },
-    "audio/compressed/back": {
-      "variants": {
-        "ogg": {
-          "sha256": "73f686f4b26fd03f4fa5d173271e2b2ba7f6c831c0918936eeed3737cdaccd78",
-          "bytes": 3453,
-          "mime": "audio/ogg"
-        }
-      }
-    },
-    "audio/compressed/click": {
-      "variants": {
-        "ogg": {
-          "sha256": "cbe68b1790b6c20fd8ba2d19138482619b511cffdbac4597fb7c4a978be82c36",
-          "bytes": 3175,
-          "mime": "audio/ogg"
-        }
-      }
-    },
-    "audio/compressed/hover": {
-      "variants": {
-        "ogg": {
-          "sha256": "4f198b57d357c803eef39f907bc2dda38914d976268ece7f40be55e782707b08",
-          "bytes": 5352,
-          "mime": "audio/ogg"
-        }
-      }
-    },
-    "audio/hover": {
-      "variants": {
-        "wav": {
-          "sha256": "64f7745e4e361cf5d2a48613e1df7d69a8cec6fa70b51fc794ba2633b8c436a1",
-          "bytes": 206326,
-          "mime": "audio/wav"
+        "json": {
+          "sha256": "4a271e65c59ba7353b946dc1c0de88bd13e80294984d72640152b6da805bce62",
+          "bytes": 3355390,
+          "mime": "application/json"
         }
       }
     },
@@ -64,6 +28,24 @@
           "sha256": "7d0dea4ddde014af07b969db29d1a9b3c2ea7d898b16fb8536b8f8d1f86b6973",
           "bytes": 277,
           "mime": "image/svg+xml"
+        }
+      }
+    },
+    "logos/compressed/weixin": {
+      "variants": {
+        "webp": {
+          "sha256": "c7f405073ba6229981936ebe6ba89357fc5d55c599cf28033209721e40edfcee",
+          "bytes": 20094,
+          "mime": "image/webp"
+        }
+      }
+    },
+    "logos/compressed/zhifubao": {
+      "variants": {
+        "webp": {
+          "sha256": "71cd814319b28ba301b95fa0f5ddacf898415263505e3228b50baa295987fadf",
+          "bytes": 12626,
+          "mime": "image/webp"
         }
       }
     }

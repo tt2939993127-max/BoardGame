@@ -20,6 +20,7 @@ import { describe, it, expect } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { DiceThroneDomain } from '../domain';
 import { STATUS_IDS } from '../domain/ids';
+import { SLAP_2, SLAP_3 } from '../heroes/barbarian/abilities';
 import {
     testSystems,
     createQueuedRandom,
@@ -34,7 +35,7 @@ import { createInitialSystemState, executePipeline } from '../../../engine/pipel
 // 自定义 Setup：玩家0=狂战士，玩家1=狂战士（移除响应卡避免干扰）
 // ============================================================================
 
-function createBarbarianSetup() {
+function createBarbarianSetup(opts?: { mutate?: (core: DiceThroneCore) => void }) {
     return (playerIds: PlayerId[], random: RandomFn): MatchState<DiceThroneCore> => {
         const core = DiceThroneDomain.setup(playerIds, random);
         const sys = createInitialSystemState(playerIds, testSystems, undefined);
@@ -72,6 +73,8 @@ function createBarbarianSetup() {
                 if (card) player.hand.push(card);
             }
         }
+
+        opts?.mutate?.(state.core);
 
         return state;
     };
@@ -133,6 +136,65 @@ describe('狂战士 GTR 技能覆盖', () => {
                     cmd('ADVANCE_PHASE', '1'),
                 ],
                 expect: { turnPhase: 'main2', players: { '1': { hp: 42 } } },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('重击 II：4剑但不是4个相同数字时仍可防御', () => {
+            const random = createQueuedRandom([1, 1, 2, 2, 4]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup: createBarbarianSetup({
+                    mutate: (core) => {
+                        const idx = core.players['0'].abilities.findIndex((a: any) => a.id === 'slap');
+                        if (idx >= 0) core.players['0'].abilities[idx] = SLAP_2 as any;
+                        core.players['0'].abilityLevels['slap'] = 2;
+                    },
+                }),
+                assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '重击II 4剑但非4同数仍可防御',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'slap-2-4' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: { turnPhase: 'defensiveRoll' },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('重击 III：4个相同数字时变为不可防御', () => {
+            const random = createQueuedRandom([1, 1, 1, 1, 4]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup: createBarbarianSetup({
+                    mutate: (core) => {
+                        const idx = core.players['0'].abilities.findIndex((a: any) => a.id === 'slap');
+                        if (idx >= 0) core.players['0'].abilities[idx] = SLAP_3 as any;
+                        core.players['0'].abilityLevels['slap'] = 3;
+                    },
+                }),
+                assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '重击III 4同数变不可防御',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'slap-3-4' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: { '1': { hp: 42 } },
+                },
             });
             expect(result.assertionErrors).toEqual([]);
         });

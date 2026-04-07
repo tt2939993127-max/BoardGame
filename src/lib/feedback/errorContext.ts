@@ -1,3 +1,5 @@
+import { logMobileRuntimeCritical } from '../mobile/mobileRuntimeDebug';
+
 export interface LastErrorContext {
     message: string;
     name?: string;
@@ -48,29 +50,35 @@ export const installGlobalErrorContextCapture = () => {
         const source = event.filename
             ? `${event.filename}:${event.lineno ?? 0}:${event.colno ?? 0}`
             : 'window.error';
-        setLastErrorContext({
+        const context = {
             message: error?.message ?? event.message ?? 'Script error',
             name: error?.name,
             stack: error?.stack,
             source,
-        });
+        };
+        setLastErrorContext(context);
+        logMobileRuntimeCritical('GlobalErrorContext', 'window-error', context);
     });
 
     host.addEventListener('unhandledrejection', (event) => {
         const reason = event.reason;
         if (reason instanceof Error) {
-            setLastErrorContext({
+            const context = {
                 message: reason.message || 'Unhandled rejection',
                 name: reason.name,
                 stack: reason.stack,
                 source: 'window.unhandledrejection',
-            });
+            };
+            setLastErrorContext(context);
+            logMobileRuntimeCritical('GlobalErrorContext', 'window-unhandledrejection', context);
             return;
         }
 
-        setLastErrorContext({
+        const context = {
             message: typeof reason === 'string' ? reason : 'Unhandled rejection',
             source: 'window.unhandledrejection',
-        });
+        };
+        setLastErrorContext(context);
+        logMobileRuntimeCritical('GlobalErrorContext', 'window-unhandledrejection', context);
     });
 };

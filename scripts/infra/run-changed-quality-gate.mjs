@@ -11,11 +11,73 @@ const mode = modeInput === 'prepush' ? 'pre-push' : modeInput;
 const isPrePushMode = mode === 'pre-push';
 const CACHE_SCHEMA_VERSION = 2;
 
-const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
-const FAST_VITEST_ARGS = ['--pool', 'threads', '--no-file-parallelism', '--maxWorkers', '1'];
+// pre-push changed test runs touch a large cross-section of suites and can emit
+// huge log payloads. `threads` has been unstable on Windows here because worker
+// result serialization can fail with DataCloneError / OOM before assertions do.
+// `forks` is slower but materially more reliable for the local gate.
+const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
+const FAST_VITEST_ARGS = ['--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
-const CORE_TEST_TARGETS = ['src/core', 'src/components', 'src/hooks', 'src/lib', 'src/shared', 'src/engine', 'src/pages'];
+const PRE_PUSH_CORE_TARGET_GROUPS = [
+  {
+    label: 'Core tests (engine)',
+    reason: '核心源码改动，回归 core/engine/shared/hooks/lib 完整测试集',
+    targets: ['src/core', 'src/engine', 'src/shared', 'src/hooks', 'src/lib'],
+  },
+  {
+    label: 'Core tests (ui)',
+    reason: '核心源码改动，回归 components/pages 完整测试集',
+    targets: ['src/components', 'src/pages'],
+  },
+];
 const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
+const VITEST_SHARDED_TARGETS = new Map([
+  [
+    'src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts',
+    [
+      {
+        label: '基础 helper',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsModal join confirm helpers|AI seat controller helpers|AiSupportPills',
+      },
+      {
+        label: '下载卡片',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsMobilePackageCard',
+      },
+      {
+        label: '详情与入房-基础',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsModal create room ai entry.*(创建房间弹窗内直接配置 AI，不再显示独立对战 AI 入口|加入房间时直接让服务端分配席位，不再先 getMatch 猜空位|未保存过 AI 偏好时，创建房间弹窗默认传入空偏好)',
+      },
+      {
+        label: '详情与入房-下载入口',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsModal create room ai entry.*(package-managed 游戏默认只渲染悬浮下载按钮|点击悬浮下载按钮后展开卡片，并可再次收起|打开详情后会预取远端素材包大小，并显示在下载卡片上|网页版不渲染 package-managed 下载入口|相同 package 状态快照在重挂载后只记录一次日志)',
+      },
+      {
+        label: '详情与入房-安装恢复',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsModal create room ai entry.*(未下载 package-managed 游戏时，创建房间仍走普通网页流程|模拟安装成功后关闭确认弹窗，不回退到确认下载|确认下载进行中时重复点击只触发一次 re-resolve|冷启动读到陈旧 queued 持久化状态时，回退为可重试失败态|冷启动读到原生 downloading 但任务已不存在时，回退为可重试失败态|原生安装器创建卡住时，3 秒内失败而不是无限停留 queued|下载完成后，package-managed 游戏允许创建房间)',
+      },
+      {
+        label: '详情与入房-状态展示',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsModal create room ai entry.*(已下载 package-managed 游戏时，不再展开安装卡片，只在标题右侧显示绿色版本号|已安装状态缺少版本号时，回退显示下载入口而不是已完成角标|已安装状态为 mock-installed 时，回退显示下载入口而不是误判为已安装|已安装状态为 mock-installed 时，会自动把本地状态归一化回未安装|已安装状态缺少版本号时，创建房间仍走普通网页流程|已安装状态缺少版本号时，点击下载安装仍保持确认弹窗并按未安装态处理|失败状态默认收起为重试按钮，不自动展开下载详情|标记必须更新时，默认渲染悬浮提示按钮，展开后显示更新卡片|未下载 package-managed 游戏时，教程入口直接进入网页流程|标记必须更新时，创建房间仍走普通网页流程)',
+      },
+      {
+        label: '详情与入房-大厅行为',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'GameDetailsModal create room ai entry.*(观战前发现房间 404 时不再跳进对局页，并提示房间已销毁|builtin 游戏不渲染移动端包管理入口|创建房间时显示进入对局 loading|socket 瞬时错误恢复后不再立刻弹服务不可用提示)',
+      },
+      {
+        label: '本地会话与房间列表',
+        reason: '按 describe 分片执行以规避 Windows 下的大文件 Vitest OOM',
+        testNamePattern: 'localSession helpers|RoomList lobby loading state',
+      },
+    ],
+  ],
+]);
 
 const UTF8_BOM = Buffer.from([0xef, 0xbb, 0xbf]);
 const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -29,6 +91,7 @@ const CACHE_DIR = path.join(repoRoot, 'temp', 'quality-gate-cache');
 const PRE_PUSH_CACHE_FILE = path.join(CACHE_DIR, 'pre-push.json');
 const COMMAND_CACHE_FILE = path.join(CACHE_DIR, 'command-results.json');
 const QUALITY_GATE_TYPECHECK_BUILD_INFO = path.join('temp', 'quality-gate-cache', 'typecheck.tsbuildinfo');
+const STABLE_VITEST_NODE_OPTIONS = '--max-old-space-size=8192';
 
 function runGit(args, options = {}) {
   try {
@@ -96,6 +159,11 @@ function isTsFamilyFile(file) {
 
 function isTestFile(file) {
   return /(^|\/)__tests__\//.test(file) || /\.(test|spec)\.[^/]+$/.test(file);
+}
+
+function isRunnableVitestTestFile(file) {
+  if (!isTestFile(file)) return false;
+  return !/(\.property\.test\.|audit.*\.test\.|Audit.*\.test\.|debug.*\.test\.|Debug.*\.test\.)/.test(file);
 }
 
 function isDocOnly(file) {
@@ -322,14 +390,76 @@ function collectGameIds(files, { sourceOnly = false } = {}) {
   return [...ids];
 }
 
-function buildVitestChangedArgs(baseRef, targets, options = {}) {
-  const { gameOnly = false } = options;
-  const stableArgs = gameOnly ? GAME_VITEST_ARGS : FAST_VITEST_ARGS;
-  const args = [...VITEST_SAFE_ENTRY, 'run', '--changed', baseRef, ...stableArgs];
-  if (targets.length > 0) {
-    args.push('--', ...targets);
+function hasChangesForTargetGroup(files, targets) {
+  return hasAny(files, (file) => targets.some((target) => file.startsWith(`${target}/`) || file === target));
+}
+
+function collectTrackedTestCoverage(targets) {
+  const output = runGit(['ls-files', '--', ...targets], { allowFailure: true });
+  const testFiles = output
+    .split(/\r?\n/)
+    .map(normalizeFile)
+    .filter((file) => isTestFile(file));
+
+  const coveredScopes = new Set(testFiles);
+  for (const file of testFiles) {
+    let current = path.posix.dirname(file);
+    while (current && current !== '.' && current !== path.posix.dirname(current)) {
+      coveredScopes.add(current);
+      current = path.posix.dirname(current);
+    }
   }
-  return args;
+
+  return { testFiles, coveredScopes };
+}
+
+function resolveScopedVitestTarget(file, targets, coverage) {
+  if (isTestFile(file)) return file;
+
+  let current = path.posix.dirname(file);
+  while (current && current !== '.' && current !== path.posix.dirname(current)) {
+    if (coverage.coveredScopes.has(current)) return current;
+    current = path.posix.dirname(current);
+  }
+
+  return targets.find((target) => coverage.coveredScopes.has(target) && (file.startsWith(`${target}/`) || file === target)) || null;
+}
+
+function expandVitestTargetsToTestFiles(targets, coverage) {
+  return dedupeValues(targets.flatMap((target) => {
+    if (isTestFile(target)) return isRunnableVitestTestFile(target) ? [target] : [];
+    return coverage.testFiles.filter((file) => isRunnableVitestTestFile(file) && (file === target || file.startsWith(`${target}/`)));
+  }));
+}
+
+function collectScopedVitestTargets(files, targets) {
+  const coverage = collectTrackedTestCoverage(targets);
+  const scopedTargets = dedupeValues(
+    files
+      .filter((file) => targets.some((target) => file.startsWith(`${target}/`) || file === target))
+      .map((file) => resolveScopedVitestTarget(file, targets, coverage))
+      .filter(Boolean),
+  );
+  return expandVitestTargetsToTestFiles(scopedTargets, coverage);
+}
+
+function createVitestCommands({ label, reason, target, vitestArgs }) {
+  const shards = VITEST_SHARDED_TARGETS.get(target);
+  if (!shards || shards.length === 0) {
+    return [{
+      label,
+      reason,
+      command: process.execPath,
+      args: [...VITEST_SAFE_ENTRY, 'run', target, ...vitestArgs],
+    }];
+  }
+
+  return shards.map((shard, index) => ({
+    label: `${label} - ${shard.label} (${index + 1}/${shards.length})`,
+    reason: `${reason}；${shard.reason}（限定到 ${target} / ${shard.label}）`,
+    command: process.execPath,
+    args: [...VITEST_SAFE_ENTRY, 'run', target, ...vitestArgs, '-t', shard.testNamePattern],
+  }));
 }
 
 function collectCommands(files, baseRef, affectsTypecheck) {
@@ -424,17 +554,35 @@ function collectCommands(files, baseRef, affectsTypecheck) {
 
   if (isPrePushMode) {
     if (coreSourceChanged) {
-      commands.push({
-        label: 'Core+Games changed tests',
-        reason: '核心源码改动，先跑核心 changed 测试集',
-        command: process.execPath,
-        args: buildVitestChangedArgs(baseRef, CORE_TEST_TARGETS),
-      });
-      commands.push({
-        label: 'Games changed tests',
-        reason: '核心源码改动，同时跑游戏 changed 测试集',
-        command: process.execPath,
-        args: buildVitestChangedArgs(baseRef, ['src/games'], { gameOnly: true }),
+      PRE_PUSH_CORE_TARGET_GROUPS
+        .filter((group) => hasChangesForTargetGroup(files, group.targets))
+        .forEach((group) => {
+          const scopedTargets = collectScopedVitestTargets(files, group.targets);
+          scopedTargets.forEach((target, index) => {
+            const label = scopedTargets.length === 1 ? group.label : `${group.label} (${index + 1}/${scopedTargets.length})`;
+            const reason = `${group.reason}（限定到 ${target}）`;
+            commands.push(...createVitestCommands({
+              label,
+              reason,
+              target,
+              vitestArgs: FAST_VITEST_ARGS,
+            }));
+          });
+        });
+
+      const targetGameIds = gameSourceIds.length > 0
+        ? gameSourceIds
+        : [...KNOWN_GAME_IDS];
+
+      targetGameIds.forEach((gameId) => {
+        commands.push({
+          label: `${gameId} tests`,
+          reason: gameSourceIds.length > 0
+            ? `${gameId} 源码改动，单独跑该游戏完整测试集`
+            : '核心源码改动，需要逐游戏回归完整测试集',
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+        });
       });
     } else {
       if (coreTestFiles.length > 0) {
@@ -446,15 +594,13 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         });
       }
       if (gameSourceIds.length > 0) {
-        commands.push({
-          label: 'Changed game source tests',
-          reason: `${gameSourceIds.join(', ')} 源码改动，合并运行 changed 测试集`,
-          command: process.execPath,
-          args: buildVitestChangedArgs(
-            baseRef,
-            gameSourceIds.map((gameId) => `src/games/${gameId}`),
-            { gameOnly: true },
-          ),
+        gameSourceIds.forEach((gameId) => {
+          commands.push({
+            label: `${gameId} tests`,
+            reason: `${gameId} 源码改动，跑该游戏完整测试集`,
+            command: process.execPath,
+            args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+          });
         });
       } else if (gameTestFiles.length > 0) {
         commands.push({
@@ -563,6 +709,34 @@ function commandToLine(command, args) {
   return [command, ...args].map(quoteArg).join(' ');
 }
 
+function mergeNodeOptions(extraOption, existingValue = process.env.NODE_OPTIONS) {
+  const trimmedExtra = extraOption?.trim();
+  const trimmedExisting = existingValue?.trim();
+  if (!trimmedExtra) return trimmedExisting;
+  if (!trimmedExisting) return trimmedExtra;
+  return trimmedExisting.includes(trimmedExtra)
+    ? trimmedExisting
+    : `${trimmedExisting} ${trimmedExtra}`;
+}
+
+function createVitestEnv() {
+  return {
+    ...process.env,
+    NODE_OPTIONS: mergeNodeOptions(STABLE_VITEST_NODE_OPTIONS),
+  };
+}
+
+function shouldUseStableVitestEnv(command, args) {
+  if (command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')) {
+    return true;
+  }
+
+  return command.trim().toLowerCase() === 'npm'
+    && args[0] === 'run'
+    && typeof args[1] === 'string'
+    && args[1].startsWith('test');
+}
+
 function shouldDirectSpawnOnWindows(command) {
   if (process.platform !== 'win32') return true;
   const normalized = command.trim().toLowerCase();
@@ -577,18 +751,21 @@ function runCommand({ label, reason, command, args }) {
   console.log(`[changed-quality-gate] 命令: ${commandToLine(command, args)}`);
 
   const startAt = Date.now();
+  const env = shouldUseStableVitestEnv(command, args)
+    ? createVitestEnv()
+    : process.env;
   const result = shouldDirectSpawnOnWindows(command)
     ? spawnSync(command, args, {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
-        env: process.env,
+        env,
       })
     : spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', commandToLine(command, args)], {
         cwd: repoRoot,
         stdio: 'inherit',
         shell: false,
-        env: process.env,
+        env,
       });
   const durationMs = Date.now() - startAt;
 

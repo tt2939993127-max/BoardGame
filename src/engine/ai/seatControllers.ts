@@ -10,7 +10,7 @@ import {
 } from '../../games/setupOptions';
 
 const DEFAULT_REMOTE_PROVIDER_ID = 'astrbot';
-export const DEFAULT_AI_MINIMUM_ACTION_DELAY_MS = 600;
+export const DEFAULT_AI_MINIMUM_ACTION_DELAY_MS = 200;
 const MAX_AI_MINIMUM_ACTION_DELAY_MS = 5000;
 
 function sanitizeOptionalId(value: string | undefined): string | undefined {
@@ -31,6 +31,18 @@ export function resolveAiMinimumActionDelayMs(controller: AiSeatController): num
 
     return sanitizeMinimumActionDelayMs(controller.minimumActionDelayMs)
         ?? DEFAULT_AI_MINIMUM_ACTION_DELAY_MS;
+}
+
+export function getAiSeatIds(
+    seatControllers?: Record<string, { type?: unknown } | undefined> | null,
+): string[] {
+    if (!seatControllers) {
+        return [];
+    }
+
+    return Object.entries(seatControllers)
+        .filter(([, controller]) => controller?.type === 'local-ai' || controller?.type === 'remote-ai')
+        .map(([playerId]) => playerId);
 }
 
 export function getDefaultSeatController(

@@ -380,8 +380,19 @@ describe('smashup', () => {
                 },
             },
         };
+        const withSixCards: SmashUpCore = {
+            ...withSevenCards,
+            players: {
+                ...withSevenCards.players,
+                '0': {
+                    ...withSevenCards.players['0'],
+                    hand: withSevenCards.players['0'].hand.slice(0, 6),
+                },
+            },
+        };
 
-        expect(getPlayerEffectivePowerOnBase(withSevenCards, withSevenCards.bases[0], 0, '0')).toBe(2);
+        expect(getPlayerEffectivePowerOnBase(withSixCards, withSixCards.bases[0], 0, '0')).toBe(3);
+        expect(getPlayerEffectivePowerOnBase(withSevenCards, withSevenCards.bases[0], 0, '0')).toBe(3);
     });
 
     it('奥术守护者使用天赋后抽 1 张牌并标记已使用', () => {
@@ -698,6 +709,7 @@ describe('smashup', () => {
         expect(prompt?.data?.sourceId).toBe('titan_sphinx_start_turn');
         const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-start-buried');
         expect(option).toBeDefined();
+        expect(option.displayMode).toBe('card');
 
         const handler = getInteractionHandler('titan_sphinx_start_turn');
         expect(handler).toBeDefined();
@@ -763,6 +775,7 @@ describe('smashup', () => {
         expect(prompt?.data?.sourceId).toBe('titan_sphinx_after_scoring');
         const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-score-buried');
         expect(option).toBeDefined();
+        expect(option.displayMode).toBe('card');
 
         const handler = getInteractionHandler('titan_sphinx_after_scoring');
         expect(handler).toBeDefined();
@@ -3969,6 +3982,9 @@ describe('smashup', () => {
         const commandEvents = SmashUpDomain.execute(state, command, FIXED_RANDOM);
         expect(commandEvents.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
         expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_penguins_emperor_penguin_talent');
+        expect(
+            state.sys.interaction?.current?.data?.options?.every((option: any) => option.displayMode === 'card'),
+        ).toBe(true);
 
         const handler = getInteractionHandler('titan_penguins_emperor_penguin_talent');
         expect(handler).toBeDefined();

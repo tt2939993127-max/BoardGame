@@ -550,6 +550,46 @@ describe('Feature: incremental-state-sync', () => {
       client.disconnect();
     });
 
+    it('batch:rejected returns rejection reason via callback', () => {
+      const { client } = createConnectedClient();
+
+      simulateSync({ core: { hp: 100 } });
+
+      const onConfirmed = vi.fn();
+      const onRejected = vi.fn();
+
+      client.sendBatch('batch-rejected', [{ type: 'attack', payload: {} }], onConfirmed, onRejected);
+
+      mockSocket.simulateEvent('batch:rejected', 'test-match', 'batch-rejected', 'command_failed');
+
+      expect(onConfirmed).not.toHaveBeenCalled();
+      expect(onRejected).toHaveBeenCalledWith('command_failed');
+
+      client.disconnect();
+    });
+
+    it('sendBatch rejects immediately when connection is not ready', () => {
+      const client = new GameTransportClient({
+        server: 'http://localhost:3000',
+        matchID: 'test-match',
+        playerID: '0',
+        credentials: 'cred',
+      });
+
+      const onConfirmed = vi.fn();
+      const onRejected = vi.fn();
+
+      client.connect();
+      mockSocket.simulateEvent('connect');
+
+      client.sendBatch('batch-not-connected', [{ type: 'attack', payload: {} }], onConfirmed, onRejected);
+
+      expect(onConfirmed).not.toHaveBeenCalled();
+      expect(onRejected).toHaveBeenCalledWith('not_connected');
+
+      client.disconnect();
+    });
+
     /**
      * 需求 8.3：回滚广播全量 state:update
      *

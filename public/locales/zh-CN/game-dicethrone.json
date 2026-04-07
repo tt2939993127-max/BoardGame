@@ -226,6 +226,21 @@
         "生命值降到0时，移除此标记并将生命值回到1。此标记无法被任何方式移除、转移、偷取。不叠加。"
       ]
     },
+    "loaded": {
+      "name": "装填",
+      "description": [
+        "攻击掷骰阶段结束时可消耗1个装填并掷1颗骰子。",
+        "将骰值的一半向上取整，作为本次攻击的额外伤害。"
+      ]
+    },
+    "bounty": {
+      "name": "赏金",
+      "description": [
+        "持有赏金的玩家受到攻击伤害时，伤害+1。",
+        "攻击者额外获得1 CP。",
+        "赏金不会自动移除。"
+      ]
+    },
     "honor": {
       "name": "Honor",
       "description": [
@@ -400,13 +415,17 @@
     "targetOptionDisabled": "不可选",
     "seating": {
       "title": "2v2 站位",
-      "hostTip": "点击任意玩家头像，再点击空位完成移动。不支持交换位。",
-      "readOnly": "仅房主可调整站位，其他玩家只读查看。",
-      "moveHint": "已选中 {{player}}，点击空位完成移动。",
-      "occupied": "该位置已有玩家，不支持交换位。",
-      "emptySlot": "空位",
-      "currentSlot": "当前位置",
-      "cancel": "取消",
+      "swapHint": "点目标头像换位：点到 AI 直接换，点到真人会先发申请。",
+      "swapWaiting": "已向 {{player}} 发起换位申请，等待对方处理。",
+      "swapWaitingHint": "对方确认前不会调整座位，你也可以在这里撤回这次申请。",
+      "swapIncoming": "{{player}} 想和你换位。",
+      "swapReviewHint": "确认后会立即交换你们两人的座位；拒绝则保持当前站位。",
+      "swapPendingOther": "{{requester}} 正在等待 {{target}} 处理换位申请。",
+      "swapApprove": "同意换位",
+      "swapReject": "拒绝",
+      "swapCancel": "取消申请",
+      "swapResolving": "等待换位处理",
+      "aiBadge": "AI",
       "seatNumber": "{{seat}}号位",
       "teamA": "A 队",
       "teamB": "B 队"
@@ -652,6 +671,7 @@
     "requireNotRollConfirmed": "骰面已确认，无法再打出此卡",
     "requireMinDamageDealt": "本次攻击未造成足够伤害，无法打出此卡",
     "noStatusOnBoard": "场上没有任何状态效果，无法打出此卡",
+    "requirePendingDamage": "需要存在待结算伤害才能打出此卡",
     "tutorial_manifest_invalid": "教程配置无效",
     "tutorial_command_blocked": "教程中禁止该操作",
     "tutorial_step_locked": "当前步骤不能跳过",
@@ -724,6 +744,26 @@
     "faceLabel": {
       "katana": "Katana",
       "rising_sun": "Rising Sun"
+    }
+  },
+  "compareRoll": {
+    "confirming": "正在确认对掷结果...",
+    "rolled": "掷出 {{value}}",
+    "gunslinger": {
+      "showdown": {
+        "title": "摊到牌面",
+        "attackerLabel": "枪手",
+        "defenderLabel": "对手",
+        "win": "你赢下对掷，本次攻击伤害 +{{bonus}}。",
+        "lose": "你没赢下对掷，本次攻击保持基础伤害。"
+      },
+      "duel": {
+        "title": "对决",
+        "defenderLabel": "枪手",
+        "attackerLabel": "攻击方",
+        "win": "你赢下对决，请选择结算效果。",
+        "lose": "你输掉对决，对攻击方造成 1 点不可防御伤害。"
+      }
     }
   },
   "choices": {
@@ -823,9 +863,10 @@
     },
     "fist-technique-3": {
       "name": "拳术 III",
-      "description": "3/4/5拳触发：造成7/8/9伤害，4个及以上拳施加击倒",
+      "description": "3/4/5拳触发：造成7/8/9伤害；若投出4个相同数字，施加击倒",
       "effects": {
-        "damage4": "造成4点伤害"
+        "damage4": "造成4点伤害",
+        "inflictKnockdownOnFourOfAKind": "若投出4个相同数字，施加击倒"
       }
     },
     "fist-technique-4": {
@@ -1115,6 +1156,12 @@
         "damageByFist": "造成伤害=结果中拳面的数量"
       }
     },
+    "meditation-2": {
+      "name": "清修 II",
+      "description": "防御掷骰阶段，投掷5颗骰子。根据结果获得太极标记。每有[拳]造成1点伤害。",
+      "taijiByResult": "根据结果获得太极标记",
+      "damageByFist": "每有[拳]造成1点伤害"
+    },
     "transcendence": {
       "name": "超越！",
       "description": "终极招式！一旦启动，对手无法干扰。",
@@ -1257,20 +1304,22 @@
     },
     "slap-2": {
       "name": "重击 II",
-      "description": "3/4/5剑触发：造成5/7/9伤害，其中4/5剑造成不可防御伤害",
+      "description": "3/4/5剑触发：造成5/7/9伤害；若投出4个相同数字，本次攻击造成不可防御伤害",
       "effects": {
         "damage5": "造成5点伤害",
-        "damage7Unblockable": "造成7点不可防御伤害",
-        "damage9Unblockable": "造成9点不可防御伤害"
+        "damage7": "造成7点伤害",
+        "damage9": "造成9点伤害",
+        "makeUnblockableOnFourOfAKind": "若投出4个相同数字，本次攻击造成不可防御伤害"
       }
     },
     "slap-3": {
       "name": "重击 III",
-      "description": "3/4/5剑触发：造成6/8/10伤害，其中4/5剑造成不可防御伤害",
+      "description": "3/4/5剑触发：造成6/8/10伤害；若投出4个相同数字，本次攻击造成不可防御伤害",
       "effects": {
         "damage6": "造成6点伤害",
-        "damage8Unblockable": "造成8点不可防御伤害",
-        "damage10Unblockable": "造成10点不可防御伤害"
+        "damage8": "造成8点伤害",
+        "damage10": "造成10点伤害",
+        "makeUnblockableOnFourOfAKind": "若投出4个相同数字，本次攻击造成不可防御伤害"
       }
     },
     "all-out-strike-2": {
@@ -1737,7 +1786,7 @@
     },
     "longbow-3": {
       "name": "长弓 III",
-      "description": "3/4/5弓触发：造成5/7/9伤害，3个及以上相同符号施加缠绕",
+      "description": "3/4/5弓触发：造成5/7/9伤害；若投出3个及以上相同数字，施加缠绕",
       "effects": {
         "damage3": "造成3点伤害",
         "damage5": "造成5点伤害",
@@ -1757,7 +1806,7 @@
     },
     "longbow-2": {
       "name": "长弓 II",
-      "description": "3/4/5弓触发：造成4/6/8伤害，4个及以上相同符号施加缠绕",
+      "description": "3/4/5弓触发：造成4/6/8伤害；若投出4个及以上相同数字，施加缠绕",
       "effects": {
         "damage4": "造成4点伤害",
         "damage6": "造成6点伤害",
@@ -1967,7 +2016,15 @@
     },
     "solemnity-2": {
       "name": "肃穆之仪 II",
+      "description": "包含肃穆之仪 II 与庄严两个变体。"
+    },
+    "solemnity-2-main": {
+      "name": "肃穆之仪 II",
       "description": "2 武士刀 + 3 头盔：施加 2 层耻辱，并造成 8 点伤害。"
+    },
+    "solemnity-2-solemn": {
+      "name": "庄严",
+      "description": "3 头盔：施加 2 层耻辱。"
     },
     "budo": {
       "name": "武道",
@@ -1983,7 +2040,15 @@
     },
     "samurai-slot-06-2": {
       "name": "叶隐之心 II",
+      "description": "包含叶隐之心 II 与羽翼剑道两个变体。"
+    },
+    "samurai-slot-06-2-main": {
+      "name": "叶隐之心 II",
       "description": "4 旭日：获得 1 个荣誉指示物，获得 1 个反击指示物，施加 2 层耻辱，然后造成 7 点不可防御伤害。"
+    },
+    "samurai-slot-06-2-feather-blade-style": {
+      "name": "羽翼剑道",
+      "description": "3 旭日：获得 1 个荣誉指示物，施加 2 层耻辱，然后造成 2 点不可防御伤害。"
     },
     "masamune": {
       "name": "正宗",
@@ -1991,14 +2056,14 @@
     },
     "masamune-2": {
       "name": "正宗 II",
-      "description": "大顺：造成 7 点伤害，然后额外掷 6 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。此外，若本次掷骰同时包含武士刀、头盔与旭日，也可以改为获得 1 个反击指示物。"
+      "description": "包含正宗 II 与荣耀两个变体。"
     },
     "masamune-2-large-straight": {
       "name": "正宗 II",
       "description": "大顺：造成 7 点伤害，然后额外掷 6 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。"
     },
-    "masamune-2-power-up": {
-      "name": "蓄势",
+    "masamune-2-honor": {
+      "name": "荣耀",
       "description": "武士刀 + 头盔 + 旭日：获得 1 个反击指示物。"
     },
     "stand-tall": {
@@ -2083,25 +2148,13 @@
       "name": "左轮速射 II",
       "description": "升级你的左轮速射。获得 2 个闪避，并造成 8 点伤害。"
     },
-    "card-pistol-whip": {
-      "name": "枪托鞭打",
-      "description": "获得 1 个闪避。对手获得击倒，然后造成 1 点伤害。"
-    },
     "upgrade-take-cover-2": {
       "name": "掩护射击 II",
       "description": "升级你的掩护射击。获得 1 个闪避，并造成 6 点伤害。"
     },
-    "card-mark-the-target": {
-      "name": "标记目标",
-      "description": "获得 2 个闪避。对手获得 1 个赏金。"
-    },
     "upgrade-deadeye-2": {
       "name": "死亡之眼 II",
       "description": "升级你的死亡之眼。施加击倒，并造成 8 点不可防御伤害。"
-    },
-    "card-the-law": {
-      "name": "执法者",
-      "description": "获得 1 个闪避。至多 2 位目标玩家获得赏金与击倒。当前 1v1 对局中按唯一对手结算。"
     },
     "upgrade-duel-2": {
       "name": "对决 II",
@@ -2161,7 +2214,7 @@
     },
     "card-thrust-punch-3": {
       "name": "冲拳 III",
-      "description": "3/4/5拳触发：造成7/8/9伤害，4个及以上拳施加击倒。"
+      "description": "3/4/5拳触发：造成7/8/9伤害；若投出4个相同数字，施加击倒。"
     },
     "card-contemplation-2": {
       "name": "冥想 II",
@@ -2196,7 +2249,7 @@
       "description": "改变任意2颗骰子的数值。"
     },
     "card-next-time": {
-      "name": "下次一定！",
+      "name": "这次不算！",
       "description": "一名玩家防止6点即将受到的伤害。"
     },
     "card-boss-generous": {

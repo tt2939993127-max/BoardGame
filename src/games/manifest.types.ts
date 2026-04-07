@@ -8,6 +8,8 @@ export type GameOrientationPreference = 'landscape' | 'portrait';
 
 export type GameMobileLayoutPreset = 'board-shell' | 'portrait-simple' | 'map-shell';
 
+export type GameMobileBattlefieldZoom = 'none' | 'shell-pinch-pan' | 'game-owned';
+
 export type GameShellTarget = 'pwa' | 'app-webview' | 'mini-program-webview';
 
 export type GameMobileDeliveryMode = 'builtin' | 'package-managed';
@@ -85,6 +87,7 @@ export interface GameManifestEntry {
     mobileProfile?: GameMobileProfile;
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
+    mobileBattlefieldZoom?: GameMobileBattlefieldZoom;
     shellTargets?: GameShellTarget[];
     mobileDelivery?: GameManifestMobileDelivery;
     ai?: GameManifestAiSupport;

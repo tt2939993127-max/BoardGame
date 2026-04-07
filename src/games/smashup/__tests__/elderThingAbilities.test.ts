@@ -151,6 +151,30 @@ describe('远古之物派系能力', () => {
             expect((madnessEvents[0] as any).payload.count).toBe(1);
         });
 
+        it('三人局中只有 P2 在该基地有随从时，P0 仍然抽一张疯狂卡', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_byakhee', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                    '2': makePlayer('2'),
+                },
+                turnOrder: ['0', '1', '2'],
+                bases: [{
+                    defId: 'b1',
+                    minions: [makeMinion('opp2', 'test', '2', 3)],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(1);
+            expect((madnessEvents[0] as any).payload.playerId).toBe('0');
+            expect((madnessEvents[0] as any).payload.count).toBe(1);
+        });
+
         it('基地无对手随从时不抽疯狂卡', () => {
             const state = makeState({
                 players: {

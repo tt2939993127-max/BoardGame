@@ -23,6 +23,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import ImageLightbox from '../../components/common/ImageLightbox';
+import Skeleton from '../../components/common/feedback/Skeleton';
 import {
     CopyFeedbackButton,
     extractText,
@@ -599,8 +600,25 @@ export default function AdminFeedbackPage() {
                     </div>
 
                     {loading ? (
-                        <div className="flex flex-1 items-center justify-center py-20">
-                            <RefreshCw className="animate-spin text-zinc-300" size={24} />
+                        <div className="flex-1 min-h-0 space-y-2 overflow-hidden px-3 py-3">
+                            {Array.from({ length: 8 }, (_, index) => (
+                                <div
+                                    key={`feedback-list-skeleton-${index}`}
+                                    className="grid grid-cols-[32px_minmax(0,1.7fr)_112px_128px_72px_88px_82px_52px] items-center gap-2 rounded-xl border border-zinc-100 bg-white px-2.5 py-2"
+                                >
+                                    <Skeleton className="h-4 w-4 rounded-sm" />
+                                    <div className="space-y-2">
+                                        <Skeleton className="h-4 w-full rounded-lg" />
+                                        <Skeleton className="h-3 w-[78%] rounded-lg" />
+                                    </div>
+                                    <Skeleton className="h-4 w-20 rounded-lg" />
+                                    <Skeleton className="h-4 w-24 rounded-lg" />
+                                    <Skeleton className="h-5 w-12 rounded-full" />
+                                    <Skeleton className="h-5 w-14 rounded-full" />
+                                    <Skeleton className="h-4 w-16 rounded-lg" />
+                                    <Skeleton className="h-8 w-8 justify-self-end rounded-lg" />
+                                </div>
+                            ))}
                         </div>
                     ) : feedbacks.length === 0 ? (
                         <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-zinc-400">
@@ -1061,7 +1079,7 @@ function FeedbackDetailPanel({
                             wrap="off"
                             data-testid="feedback-ai-payload-viewer"
                             value={aiPayloadPreview}
-                            className="min-h-[120px] w-full resize-y overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-700 outline-none"
+                            className="min-h-[260px] w-full resize-y overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-700 outline-none"
                         />
                     </section>
                 )}

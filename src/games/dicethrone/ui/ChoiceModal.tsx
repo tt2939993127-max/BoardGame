@@ -2,13 +2,14 @@ import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { GameModal } from './components/GameModal';
 import { GameButton } from './components/GameButton';
-import { TOKEN_META, getStatusEffectIconNode } from './statusEffects';
+import { getStatusEffectIconNode } from './statusEffects';
 import type { StatusAtlases } from './statusEffects';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { UI_Z_INDEX } from '../../../core';
 import { resolveI18nList } from './utils';
 import { OpponentHeader } from './OpponentHeader';
 import type { HeroState } from '../types';
+import { getVisualMetaById } from '../domain/statusEffects';
 
 interface ChoiceOption {
     id: string;
@@ -337,11 +338,11 @@ const TokenChoiceIcon = ({
 }) => {
     const [isHovered, setIsHovered] = React.useState(false);
     const tokenId = option.tokenId!;
-    const meta = TOKEN_META[tokenId] || { color: 'from-gray-500 to-gray-600' };
+    const meta = getVisualMetaById(tokenId) || { color: 'from-gray-500 to-gray-600' };
 
     // 检查精灵图是否存在
-    let hasSprite = false;
-    if (statusIconAtlas && meta.frameId) {
+    let hasSprite = Boolean(meta.iconPath);
+    if (!hasSprite && statusIconAtlas && meta.frameId) {
         if (meta.atlasId && statusIconAtlas[meta.atlasId]) {
             hasSprite = Boolean(statusIconAtlas[meta.atlasId].frames[meta.frameId]);
         } else {
@@ -417,7 +418,7 @@ const SliderChoice = ({
     t: (key: string, opts?: Record<string, unknown>) => string;
 }) => {
     const [value, setValue] = useState(1);
-    const meta = (confirmOption.tokenId ? TOKEN_META[confirmOption.tokenId] : undefined)
+    const meta = (confirmOption.tokenId ? getVisualMetaById(confirmOption.tokenId) : undefined)
         || { color: 'from-slate-500 to-slate-600' };
     const iconNode = getStatusEffectIconNode(meta, locale, 'choice', statusIconAtlas);
 

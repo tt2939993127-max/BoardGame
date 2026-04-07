@@ -86,7 +86,7 @@
       "title": "操作日志"
     },
     "aiSummary": {
-      "title": "AI 摘要"
+      "title": "AI 诊断包"
     },
     "stateSnapshot": {
       "title": "状态快照（JSON）",

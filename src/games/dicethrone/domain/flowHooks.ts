@@ -6,7 +6,7 @@
  * sys.phase 是阶段的单一权威来源，所有阶段副作用通过 FlowHooks 实现
  */
 
-import type { GameEvent } from '../../../engine/types';
+import type { GameEvent, RandomFn } from '../../../engine/types';
 import type { FlowHooks, PhaseExitResult } from '../../../engine';
 import type {
     DiceThroneCore,
@@ -24,6 +24,8 @@ import type {
 import { STATUS_IDS, TOKEN_IDS } from './ids';
 import {
     canAdvancePhase,
+    getActiveDice,
+    getFaceCounts,
     getNextPhase,
     getNextPlayerId,
     getPlayerDieFace,
@@ -40,11 +42,13 @@ import { RESOURCE_IDS } from './resources';
 import { buildDrawEvents } from './deckEvents';
 import { reduce } from './reducer';
 import { getGameMode, applyEvents, getPendingAttackExpectedDamage } from './utils';
+import { resolveEffectsToEvents } from './effects';
 import type { ResponseWindowOpenedEvent } from './events';
 import { createDamageCalculation } from '../../../engine/primitives';
 import { getUsableTokensForOffensiveRollEnd } from './tokenResponse';
 import { getPlayerAbilityBaseDamage, playerAbilityHasDamage, playerAbilityNeedsSingleOpponentTarget } from './abilityLookup';
 import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
+import { evaluateTriggerCondition } from './combat';
 
 const pendingAttackNeedsTargetingRoll = (core: DiceThroneCore): boolean => {
     const pendingAttack = core.pendingAttack;
@@ -58,7 +62,64 @@ const pendingAttackNeedsTargetingRoll = (core: DiceThroneCore): boolean => {
 };
 
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
-    event.type === 'CHOICE_REQUESTED' || event.type === 'INTERACTION_REQUESTED';
+    event.type === 'CHOICE_REQUESTED'
+    || event.type === 'COMPARE_ROLL_REQUESTED'
+    || event.type === 'INTERACTION_REQUESTED';
+
+function resolvePassivePhaseTriggerEvents(args: {
+    state: DiceThroneCore;
+    playerId: string;
+    phase: TurnPhase;
+    triggerType: 'phaseStart' | 'phaseEnd';
+    timestamp: number;
+    random?: RandomFn;
+}): DiceThroneEvent[] {
+    const player = args.state.players[args.playerId];
+    if (!player) return [];
+
+    const activeDice = getActiveDice(args.state);
+    const triggerCtx = {
+        currentPhase: args.phase,
+        resources: player.resources,
+        statusEffects: player.statusEffects,
+        diceValues: activeDice.map(die => die.value),
+        faceCounts: getFaceCounts(activeDice),
+    };
+
+    const events: DiceThroneEvent[] = [];
+    const resolvePassiveEffects = (sourceAbilityId: string, effects: typeof player.abilities[number]['effects']) => {
+        if (!effects?.length) return;
+        events.push(...resolveEffectsToEvents(
+            effects,
+            'immediate',
+            {
+                attackerId: args.playerId,
+                defenderId: args.state.pendingAttack?.defenderId ?? args.playerId,
+                sourceAbilityId,
+                state: args.state,
+                damageDealt: 0,
+                timestamp: args.timestamp,
+            },
+            { random: args.random },
+        ));
+    };
+
+    for (const ability of player.abilities) {
+        if (ability.type !== 'passive') continue;
+
+        if (ability.trigger?.type === args.triggerType && evaluateTriggerCondition(ability.trigger, triggerCtx)) {
+            resolvePassiveEffects(ability.id, ability.effects);
+        }
+
+        for (const variant of ability.variants ?? []) {
+            if (variant.trigger.type !== args.triggerType) continue;
+            if (!evaluateTriggerCondition(variant.trigger, triggerCtx)) continue;
+            resolvePassiveEffects(ability.id, variant.effects);
+        }
+    }
+
+    return events;
+}
 
 /**
  * 计算玩家当前的眩晕层数（包含 core 中的和 events 中的）
@@ -501,7 +562,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     // 不消耗潜行标记——潜行在回合末自动弃除，触发免伤时不移除
 
                     // 处理 preDefense 效果（攻击方的非伤害效果仍然生效）
-                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp);
+                    const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(core, timestamp, random);
                     events.push(...preDefenseEventsSneak);
 
                     const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
@@ -562,7 +623,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
 
                 // 处理进攻方的 preDefense 效果
-                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp);
+                const preDefenseEvents = resolveOffensivePreDefenseEffects(core, timestamp, random);
                 events.push(...preDefenseEvents);
 
                 const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
@@ -583,12 +644,14 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 // ========== 攻击掷骰阶段结束时 Token 使用（暴击、精准） ==========
                 // 检查攻击方是否有可用的 onOffensiveRollEnd 时机 Token
                 const attackerId = core.pendingAttack.attackerId;
-                const sourceAbilityId = core.pendingAttack.sourceAbilityId;
-                const expectedDamage = getPendingAttackExpectedDamage(coreAfterPreDefense, core.pendingAttack);
+                const sourceAbilityId = coreAfterPreDefense.pendingAttack?.sourceAbilityId;
+                const expectedDamage = coreAfterPreDefense.pendingAttack
+                    ? getPendingAttackExpectedDamage(coreAfterPreDefense, coreAfterPreDefense.pendingAttack)
+                    : 0;
                 const offensiveRollEndTokens = getUsableTokensForOffensiveRollEnd(coreAfterPreDefense, attackerId, expectedDamage);
                 
                 // 检查是否已经处理过 Token 选择（避免重复询问）
-                if (offensiveRollEndTokens.length > 0 && !core.pendingAttack.offensiveRollEndTokenResolved) {
+                if (offensiveRollEndTokens.length > 0 && !coreAfterPreDefense.pendingAttack?.offensiveRollEndTokenResolved) {
                     // 创建选择事件让玩家选择是否使用 Token
                     const tokenOptions = offensiveRollEndTokens.map(def => ({
                         tokenId: def.id,
@@ -623,7 +686,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                     return { events, overrideNextPhase: 'targetingRoll' };
                 }
 
-                if (core.pendingAttack.isDefendable) {
+                if (coreAfterPreDefense.pendingAttack?.isDefendable) {
                     // 攻击可防御，切换到防御阶段
                     return { events, overrideNextPhase: 'defensiveRoll' };
                 }
@@ -821,7 +884,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 : undefined;
             const sneakStacks = defender?.tokens[TOKEN_IDS.SNEAK] ?? 0;
             if (sneakStacks > 0 && !targetingCore.pendingAttack.isUltimate) {
-                const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(targetingCore, timestamp);
+                const preDefenseEventsSneak = resolveOffensivePreDefenseEffects(targetingCore, timestamp, random);
                 events.push(...preDefenseEventsSneak);
 
                 const hasSneakChoice = preDefenseEventsSneak.some(isBlockingInteractionEvent);
@@ -875,7 +938,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 return { events, overrideNextPhase: 'main2' };
             }
 
-            const preDefenseEvents = resolveOffensivePreDefenseEffects(targetingCore, timestamp);
+            const preDefenseEvents = resolveOffensivePreDefenseEffects(targetingCore, timestamp, random);
             events.push(...preDefenseEvents);
 
             const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
@@ -1108,6 +1171,15 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                 }
             }
 
+            events.push(...resolvePassivePhaseTriggerEvents({
+                state: core,
+                playerId: activeId,
+                phase: 'discard',
+                triggerType: 'phaseEnd',
+                timestamp,
+                random,
+            }));
+
             const nextPlayerId = getNextPlayerId(core);
             const turnEvent: TurnChangedEvent = {
                 type: 'TURN_CHANGED',
@@ -1231,23 +1303,31 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
         return undefined;
     },
 
-    onPhaseEnter: ({ state, from, to, command, random }): GameEvent[] | void => {
+    onPhaseEnter: ({ state, from, to, command, random, exitEvents }): GameEvent[] | void => {
         const core = state.core;
         const events: GameEvent[] = [];
         const timestamp = typeof command.timestamp === 'number' ? command.timestamp : 0;
 
         // ========== 进入 upkeep 阶段：结算维持阶段触发的状态效果 ==========
-        // 规则 §3.1：结算所有在"维持阶段"触发的状态效果或被动能力
-        // 注意：从 discard 进入 upkeep 时，TURN_CHANGED 事件尚未 reduce，
-        // core.activePlayerId 仍是上一个玩家。需要通过 from 判断并获取正确的活跃玩家。
-        // 从 setup 进入 upkeep 是游戏初始化转换，此时 HERO_INITIALIZED 尚未 reduce，
-        // 玩家状态不完整且不可能有状态效果，跳过结算。
-        if (to === 'upkeep' && from !== 'setup') {
-            // 从 discard 过来意味着换人了，活跃玩家是下一位
-            const activeId = from === 'discard'
-                ? getNextPlayerId(core)
-                : core.activePlayerId;
-            const player = core.players[activeId];
+        // 规则 §3.1：结算所有在"维持阶段"触发的状态效果或被动能力。
+        // 注意：onPhaseEnter 收到的 state.core 尚未应用 exitEvents（如 TURN_CHANGED / HERO_INITIALIZED），
+        // 因此这里先 apply exitEvents 得到真正的“进入 upkeep 时”状态，再做结算。
+        if (to === 'upkeep') {
+            const phaseEnterCore = exitEvents?.length
+                ? applyEvents(core, exitEvents as DiceThroneEvent[], reduce)
+                : core;
+            const activeId = phaseEnterCore.activePlayerId;
+            const player = phaseEnterCore.players[activeId];
+
+            events.push(...resolvePassivePhaseTriggerEvents({
+                state: phaseEnterCore,
+                playerId: activeId,
+                phase: 'upkeep',
+                triggerType: 'phaseStart',
+                timestamp,
+                random,
+            }));
+
             if (player?.statusEffects) {
                 // 0. 火焰精通冷却 — 维持阶段移除 1 个火焰精通
                 const fmCount = player.tokens?.[TOKEN_IDS.FIRE_MASTERY] ?? 0;
@@ -1273,7 +1353,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         source: { playerId: 'system', abilityId: 'upkeep-burn' },
                         target: { playerId: activeId },
                         baseDamage: 2,
-                        state: core,
+                        state: phaseEnterCore,
                         timestamp,
                     });
                     const damageEvents = damageCalc.toEvents();
@@ -1289,7 +1369,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         source: { playerId: 'system', abilityId: 'upkeep-poison' },
                         target: { playerId: activeId },
                         baseDamage: poisonStacks,
-                        state: core,
+                        state: phaseEnterCore,
                         timestamp,
                     });
                     const damageEvents = damageCalc.toEvents();

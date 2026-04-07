@@ -263,7 +263,7 @@ export const OptimizedImage = ({
             src,
             currentSrc,
             fallbackLevel,
-            isCdn: isCdnUrl(cdnUrl),
+            isCdn: isRemoteUrl(cdnUrl),
             autoRetryCount: autoRetryRef.current,
             error: event.type
         });

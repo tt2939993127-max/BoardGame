@@ -44,9 +44,9 @@ on:
         default: false
         type: boolean
       force_update:
-        description: '是否强制 OTA（下载完成后立即切换）'
+        description: '是否强制 OTA（默认开启，下载完成后立即切换）'
         required: true
-        default: false
+        default: true
         type: boolean
       force_update_title:
         description: '强更页标题（可选）'
@@ -103,7 +103,7 @@ jobs:
             target_ref="${GITHUB_SHA}"
             dry_run="false"
             skip_latest="false"
-            force_update="false"
+            force_update="true"
             force_update_title=""
             force_update_message=""
             target_native_version=""
@@ -249,7 +249,9 @@ jobs:
             args+=(--skip-latest)
           fi
 
-          if [[ "${{ steps.params.outputs.force_update }}" == "true" ]]; then
+          if [[ "${{ steps.params.outputs.force_update }}" == "false" ]]; then
+            args+=(--no-force-update)
+          else
             args+=(--force-update)
           fi
 

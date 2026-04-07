@@ -1,10 +1,11 @@
-import { lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { Component, type ErrorInfo, type ReactNode, lazy, Suspense, useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import packageJson from '../../package.json';
 import { CategoryPills, type Category } from '../components/layout/CategoryPills';
 import { GameList } from '../components/lobby/GameList';
-import { getGamesByCategory, getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
+import { getGamesByCategory, getGameById, subscribeGameRegistry } from '../config/games.config';
+import { resolveToolRoute } from '../config/toolRoutes';
 import { useAuth } from '../contexts/AuthContext';
 import { AuthModal } from '../components/auth/AuthModal';
 import { useNavigate } from 'react-router-dom';
@@ -41,14 +42,198 @@ import { useLobbyStats } from '../hooks/useLobbyStats';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { useGlobalCursor } from '../core/cursor/useGlobalCursor';
 import { versionedPublicFileUrl } from '../lib/publicFileUrl';
+import {
+    readAndroidLiveUpdateActivityState,
+    readAndroidLiveUpdateSnapshot,
+    requestAndroidLiveUpdateCheck,
+    subscribeAndroidLiveUpdateActivityState,
+    type AndroidLiveUpdateSnapshot,
+} from '../lib/mobile/androidLiveUpdates';
+import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
+import { RefreshCw } from 'lucide-react';
+import { AudioManager } from '../lib/audio/AudioManager';
+import { prefetchOnlineMatchRoute } from '../lib/prefetchPlayRoute';
 
 const MISSING_MATCH_CONFIRM_RETRY_DELAY_MS = 1500;
-const APP_VERSION_LABEL = `v${packageJson.version}`;
-const LazyGameDetailsModal = lazy(() => import('../components/lobby/GameDetailsModal').then((m) => ({ default: m.GameDetailsModal })));
-const isAndroidShellBuild = import.meta.env.MODE === 'android';
+const HOME_GAME_DETAILS_MODAL_IDLE_TIMEOUT_MS = 1500;
+const HOME_GAME_DETAILS_MODAL_WARMUP_DELAY_MS = 120;
+const loadGameDetailsModalModule = () => import('../components/lobby/GameDetailsModal');
+const LazyGameDetailsModal = lazy(() => loadGameDetailsModalModule().then((m) => ({ default: m.GameDetailsModal })));
+const toShortVersionLabel = (version: string) => version.replace(/^v/i, '').split('-')[0] || version.replace(/^v/i, '');
+
+type IdleSchedulerHost = Pick<Window, 'setTimeout' | 'clearTimeout'> & Partial<Pick<Window, 'requestIdleCallback' | 'cancelIdleCallback'>>;
+
+type HomeModalErrorBoundaryProps = {
+    children: ReactNode;
+    onError: () => void;
+};
+
+type HomeModalErrorBoundaryState = {
+    hasError: boolean;
+};
+
+class HomeModalErrorBoundary extends Component<HomeModalErrorBoundaryProps, HomeModalErrorBoundaryState> {
+    public state: HomeModalErrorBoundaryState = {
+        hasError: false,
+    };
+
+    public static getDerivedStateFromError(): HomeModalErrorBoundaryState {
+        return { hasError: true };
+    }
+
+    public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        console.error('[Home] 游戏详情弹窗渲染失败，已回退到首页', error, errorInfo);
+        this.props.onError();
+    }
+
+    public componentDidUpdate(prevProps: HomeModalErrorBoundaryProps) {
+        if (prevProps.children !== this.props.children && this.state.hasError) {
+            this.setState({ hasError: false });
+        }
+    }
+
+    public render() {
+        if (this.state.hasError) {
+            return null;
+        }
+        return this.props.children;
+    }
+}
+
+export const scheduleHomeGameDetailsModalWarmup = (
+    warmup: () => Promise<unknown> | void,
+    host: IdleSchedulerHost | undefined = typeof window !== 'undefined' ? window : undefined,
+) => {
+    if (!host) {
+        return () => undefined;
+    }
+
+    let cancelled = false;
+    const runWarmup = () => {
+        if (cancelled) {
+            return;
+        }
+
+        void Promise.resolve(warmup()).catch((error) => {
+            console.warn('[Home] 空闲预热 GameDetailsModal 失败，忽略并在显式打开时重试', error);
+        });
+    };
+
+    if (typeof host.requestIdleCallback === 'function') {
+        const idleHandle = host.requestIdleCallback(
+            () => {
+                runWarmup();
+            },
+            { timeout: HOME_GAME_DETAILS_MODAL_IDLE_TIMEOUT_MS },
+        );
+
+        return () => {
+            cancelled = true;
+            host.cancelIdleCallback?.(idleHandle);
+        };
+    }
+
+    const timeoutHandle = host.setTimeout(() => {
+        runWarmup();
+    }, HOME_GAME_DETAILS_MODAL_WARMUP_DELAY_MS);
+
+    return () => {
+        cancelled = true;
+        host.clearTimeout(timeoutHandle);
+    };
+};
+
+const HomeGameDetailsModalFallback = ({
+    onClose,
+    closeOnBackdrop,
+}: {
+    onClose: () => void;
+    closeOnBackdrop: boolean;
+}) => (
+    <>
+        <div
+            className="fixed inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={closeOnBackdrop ? onClose : undefined}
+        />
+        <div
+            data-testid="home-game-details-loading-fallback"
+            className="fixed inset-0 flex items-center justify-center px-4 py-6 pointer-events-none"
+        >
+            <div
+                data-testid="home-game-details-loading-fallback-root"
+                className="
+                    bg-parchment-card-bg pointer-events-auto
+                    w-[96vw] md:w-full max-w-[28.8rem] md:max-w-[50.4rem]
+                    h-[60vh] md:h-[33rem] max-h-[60vh] md:max-h-[95vh]
+                    rounded-sm shadow-parchment-card-hover
+                    flex flex-col md:flex-row
+                    border border-parchment-card-border/30 relative
+                    overflow-hidden
+                "
+                aria-hidden="true"
+            >
+                <div className="absolute top-2 left-2 h-3 w-3 border-t border-l border-parchment-card-border/60" />
+                <div className="absolute top-2 right-2 h-3 w-3 border-t border-r border-parchment-card-border/60" />
+                <div className="absolute bottom-2 left-2 h-3 w-3 border-b border-l border-parchment-card-border/60" />
+                <div className="absolute bottom-2 right-2 h-3 w-3 border-b border-r border-parchment-card-border/60" />
+
+                <div className="relative w-full shrink-0 overflow-hidden border-b border-parchment-card-border/30 bg-parchment-base-bg/50 md:w-2/5 md:border-b-0 md:border-r">
+                    <div className="flex h-full min-h-0 flex-col overflow-y-auto p-3 md:items-center md:p-8">
+                        <div className="hidden h-20 w-20 shrink-0 rounded-[4px] border border-parchment-card-border/30 bg-parchment-cream/60 animate-pulse md:flex md:mb-6" />
+                        <div className="mb-4 flex w-full shrink-0 items-start justify-between gap-3 md:mb-0 md:flex-col md:items-center">
+                            <div className="min-w-0 flex-1 space-y-2 md:flex-none md:w-full md:text-center">
+                                <div className="h-6 w-32 rounded-sm bg-parchment-cream/70 animate-pulse md:mx-auto md:h-8 md:w-40" />
+                                <div className="h-3 w-20 rounded-sm bg-parchment-cream/55 animate-pulse md:mx-auto" />
+                            </div>
+                            <div className="h-4 w-14 shrink-0 rounded-sm bg-parchment-cream/55 animate-pulse md:hidden" />
+                            <div className="hidden h-px w-12 bg-parchment-card-border/50 opacity-30 md:block" />
+                        </div>
+                        <div className="hidden min-h-0 flex-1 space-y-2 overflow-hidden md:block md:w-full md:pr-1">
+                            <div className="h-3 w-full rounded-sm bg-parchment-cream/55 animate-pulse" />
+                            <div className="h-3 w-[92%] rounded-sm bg-parchment-cream/55 animate-pulse" />
+                            <div className="h-3 w-[84%] rounded-sm bg-parchment-cream/55 animate-pulse" />
+                            <div className="h-3 w-[88%] rounded-sm bg-parchment-cream/45 animate-pulse" />
+                            <div className="h-3 w-[72%] rounded-sm bg-parchment-cream/45 animate-pulse" />
+                        </div>
+                        <div className="hidden shrink-0 space-y-2 md:mt-6 md:block md:w-full">
+                            <div className="mx-auto h-3 w-24 rounded-sm bg-parchment-cream/45 animate-pulse" />
+                            <div className="flex items-center justify-center gap-2">
+                                <div className="h-8 w-8 rounded-[4px] bg-parchment-cream/65 animate-pulse" />
+                                <div className="h-8 w-8 rounded-[4px] bg-parchment-cream/5 animate-pulse" />
+                                <div className="h-8 w-8 rounded-[4px] bg-parchment-cream/45 animate-pulse" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex min-h-0 flex-1 flex-col p-3 md:p-6">
+                    <div className="mb-4 flex items-center gap-2 border-b border-parchment-card-border/20 pb-3 md:mb-5">
+                        <div className="h-8 flex-1 rounded-sm bg-parchment-cream/65 animate-pulse" />
+                        <div className="h-8 w-8 rounded-sm bg-parchment-cream/55 animate-pulse" />
+                        <div className="h-8 w-8 rounded-sm bg-parchment-cream/45 animate-pulse" />
+                    </div>
+                    <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-2">
+                        <div className="min-h-0 space-y-3 overflow-hidden">
+                            <div className="h-11 rounded-sm bg-parchment-cream/60 animate-pulse" />
+                            <div className="h-11 rounded-sm bg-parchment-cream/52 animate-pulse" />
+                            <div className="h-11 rounded-sm bg-parchment-cream/44 animate-pulse" />
+                            <div className="h-11 rounded-sm bg-parchment-cream/38 animate-pulse" />
+                        </div>
+                        <div className="min-h-0 space-y-3 overflow-hidden">
+                            <div className="h-24 rounded-sm bg-parchment-cream/36 animate-pulse" />
+                            <div className="h-16 rounded-sm bg-parchment-cream/32 animate-pulse" />
+                            <div className="h-16 rounded-sm bg-parchment-cream/28 animate-pulse" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </>
+);
 
 export const Home = () => {
     useGlobalCursor();
+    const isNativeAndroid = isNativeAndroidRuntime();
     const [activeCategory, setActiveCategory] = useState<Category>('All');
     const [, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -61,12 +246,36 @@ export const Home = () => {
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [missingMatchConfirmRetryTick, setMissingMatchConfirmRetryTick] = useState(0);
     const [guestId, setGuestId] = useState<string | null>(null);
+    const [otaSnapshot, setOtaSnapshot] = useState<AndroidLiveUpdateSnapshot | null>(null);
+    const [isVersionExpanded, setIsVersionExpanded] = useState(false);
+    const [otaActivityState, setOtaActivityState] = useState(() => readAndroidLiveUpdateActivityState());
     const [pendingAction, setPendingAction] = useState<{
         matchID: string;
         playerID: string;
         credentials: string;
         isHost: boolean;
     } | null>(null);
+
+    const refreshOtaSnapshot = useCallback(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
+        let cancelled = false;
+        void readAndroidLiveUpdateSnapshot({ includeManifest: false })
+            .then((snapshot) => {
+                if (!cancelled) {
+                    setOtaSnapshot(snapshot);
+                }
+            })
+            .catch((error) => {
+                console.warn('[Home] 读取 OTA 快照失败', error);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isNativeAndroid]);
 
     // Monitoring & Stats
     const { mostPopularGameId } = useLobbyStats();
@@ -83,13 +292,19 @@ export const Home = () => {
         }
         return t;
     }, [i18n, t]);
-    const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
+    const filteredGames = useMemo(() => {
+        void registryVersion;
+        return getGamesByCategory(activeCategory);
+    }, [activeCategory, registryVersion]);
     useEffect(() => {
         if (user?.id) return;
         setGuestId((current) => current ?? getOrCreateGuestId());
     }, [user?.id]);
 
-    const ownerActive = useMemo(() => getOwnerActiveMatch(), [localStorageTick]);
+    const ownerActive = useMemo(() => {
+        void localStorageTick;
+        return getOwnerActiveMatch();
+    }, [localStorageTick]);
     const ownerKey = useMemo(() => {
         if (user?.id) return resolveOwnerKey(user.id);
         if (!guestId) return null;
@@ -98,14 +313,37 @@ export const Home = () => {
     const suppressedOwnerMatchId = useMemo(() => {
         if (!ownerActive?.matchID) return null;
         return isOwnerActiveMatchSuppressed(ownerActive.matchID) ? ownerActive.matchID : null;
-    }, [ownerActive?.matchID, localStorageTick]);
+    }, [ownerActive?.matchID]);
 
     useEffect(() => {
         if (!suppressedOwnerMatchId) return;
         clearOwnerActiveMatch(suppressedOwnerMatchId);
     }, [suppressedOwnerMatchId]);
 
+    useEffect(() => {
+        AudioManager.stopBgm();
+    }, []);
+
+    useEffect(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
+        return refreshOtaSnapshot();
+    }, [isNativeAndroid, refreshOtaSnapshot]);
+
+    useEffect(() => {
+        if (!isNativeAndroid) {
+            return;
+        }
+
+        return subscribeAndroidLiveUpdateActivityState((state) => {
+            setOtaActivityState(state);
+        });
+    }, [isNativeAndroid]);
+
     const storedLocalMatchRole = useMemo(() => {
+        void localStorageTick;
         const latestCreds = getLatestStoredMatchCredentials();
         if (latestCreds?.matchID) {
             const gameName = latestCreds.gameName || 'tictactoe';
@@ -142,18 +380,78 @@ export const Home = () => {
     }, [ownerActive, ownerKey, storedLocalMatchRole, suppressedOwnerMatchId]);
     const localMatchRole = storedLocalMatchRole ?? ownerLocalMatchRole;
     const activePlayerCount = activeMatch?.players.filter(player => player.name).length ?? 0;
+    const activeBundleVersion = useMemo(() => {
+        const bundleVersion = otaSnapshot?.currentBundleVersion?.trim();
+        return bundleVersion || packageJson.version;
+    }, [otaSnapshot?.currentBundleVersion]);
+    const shouldShowNativeAppVersion = isNativeAndroid && otaSnapshot?.nativeAndroid === true;
+    const homeVersionLabel = useMemo(
+        () => isVersionExpanded ? activeBundleVersion.replace(/^v/i, '') : toShortVersionLabel(activeBundleVersion),
+        [activeBundleVersion, isVersionExpanded],
+    );
+    const nativeAppVersion = otaSnapshot?.nativeVersion?.trim() || packageJson.version;
+    const appVersionLabel = useMemo(
+        () => isVersionExpanded ? nativeAppVersion.replace(/^v/i, '') : toShortVersionLabel(nativeAppVersion),
+        [isVersionExpanded, nativeAppVersion],
+    );
+    const latestManifestVersion = otaSnapshot?.manifestVersion?.trim() || null;
+    const latestManifestVersionLabel = useMemo(
+        () => latestManifestVersion
+            ? (isVersionExpanded ? latestManifestVersion.replace(/^v/i, '') : toShortVersionLabel(latestManifestVersion))
+            : null,
+        [isVersionExpanded, latestManifestVersion],
+    );
+    const otaVersionMismatch = shouldShowNativeAppVersion
+        && Boolean(latestManifestVersion)
+        && latestManifestVersion !== activeBundleVersion;
+    const isImmediateOtaActive = shouldShowNativeAppVersion && otaActivityState.active;
+    const handleVersionFooterClick = () => {
+        if (shouldShowNativeAppVersion) {
+            if (otaActivityState.active) {
+                return;
+            }
+            requestAndroidLiveUpdateCheck({
+                interactive: true,
+                applyMode: 'immediate',
+                initialImmediatePhase: otaVersionMismatch ? 'downloading' : 'checking',
+            });
+            return;
+        }
+
+        setIsVersionExpanded((expanded) => !expanded);
+    };
+    const nativeVersionTitle = useMemo(() => {
+        if (!shouldShowNativeAppVersion) {
+            return `当前版本 ${activeBundleVersion.replace(/^v/i, '')}\n点击${isVersionExpanded ? '收起' : '展开'}完整版本号`;
+        }
+
+        const lines = [
+            `当前 Bundle ${activeBundleVersion.replace(/^v/i, '')}`,
+            `App 壳版本 ${nativeAppVersion.replace(/^v/i, '')}`,
+        ];
+        if (latestManifestVersion) {
+            lines.push(`最新 OTA ${latestManifestVersion.replace(/^v/i, '')}`);
+        }
+        lines.push(isImmediateOtaActive ? '状态：正在检查并应用 OTA 更新' : otaVersionMismatch ? '状态：当前 Bundle 与最新 OTA 不一致，点击立即更新' : '状态：点击立即检查 OTA 更新');
+        return lines.join('\n');
+    }, [
+        activeBundleVersion,
+        isImmediateOtaActive,
+        isVersionExpanded,
+        latestManifestVersion,
+        nativeAppVersion,
+        otaVersionMismatch,
+        shouldShowNativeAppVersion,
+    ]);
 
     const confirmModalIdRef = useRef<string | null>(null);
     const authModalIdRef = useRef<string | null>(null);
     const missingMatchConfirmRef = useRef<string | null>(null);
     const missingMatchConfirmRetryTimerRef = useRef<number | null>(null);
     const initialUrlModalCheckDoneRef = useRef(false);
+    const gameModalNavigateAwayBridgeRef = useRef<() => void>(() => {});
 
-    const {
-        paramValue: activeGameModalId,
-        isOpen: isGameModalOpen,
-        navigateAwayRef: gameModalNavigateAwayRef,
-    } = useUrlModal({
+    const gameUrlModal = useUrlModal({
         paramKey: 'game',
         reopenNonce: gameModalReopenNonce,
         getModalConfig: useCallback((gameId: string) => {
@@ -161,28 +459,40 @@ export const Home = () => {
             if (!game) return null;
             return {
                 render: ({ close, closeOnBackdrop }: { close: () => void; closeOnBackdrop: boolean }) => (
-                    <Suspense fallback={null}>
-                        <LazyGameDetailsModal
-                            isOpen
-                            onClose={close}
-                            gameId={game.id}
-                            titleKey={game.titleKey}
-                            descriptionKey={game.descriptionKey}
-                            thumbnail={game.thumbnail}
-                            closeOnBackdrop={closeOnBackdrop}
-                            onNavigate={() => gameModalNavigateAwayRef.current()}
-                        />
-                    </Suspense>
+                    <HomeModalErrorBoundary
+                        onError={() => {
+                            close();
+                            gameModalNavigateAwayBridgeRef.current();
+                        }}
+                    >
+                        <Suspense fallback={<HomeGameDetailsModalFallback onClose={close} closeOnBackdrop={closeOnBackdrop} />}>
+                            <LazyGameDetailsModal
+                                isOpen
+                                onClose={close}
+                                gameId={game.id}
+                                titleKey={game.titleKey}
+                                descriptionKey={game.descriptionKey}
+                                thumbnail={game.thumbnail}
+                                closeOnBackdrop={closeOnBackdrop}
+                                onNavigate={() => gameModalNavigateAwayBridgeRef.current()}
+                            />
+                        </Suspense>
+                    </HomeModalErrorBoundary>
                 ),
             };
         }, []),
     });
+    const activeGameModalId = gameUrlModal.paramValue;
+    gameModalNavigateAwayBridgeRef.current = () => {
+        gameUrlModal.navigateAwayRef.current();
+    };
+
+    useEffect(() => scheduleHomeGameDetailsModalWarmup(loadGameDetailsModalModule), []);
 
     useEffect(() => {
         const unsubscribe = subscribeGameRegistry(() => {
             setRegistryVersion((version) => version + 1);
         });
-        void refreshUgcGames();
         return () => {
             unsubscribe();
         };
@@ -198,30 +508,36 @@ export const Home = () => {
         }
     }, [activeGameModalId]);
 
+    useEffect(() => {
+        if (!activeGameModalId) {
+            return;
+        }
+        const game = getGameById(activeGameModalId);
+        if (game?.type !== 'tool') {
+            return;
+        }
+        const toolRoute = resolveToolRoute(activeGameModalId);
+        if (!toolRoute) {
+            return;
+        }
+        gameUrlModal.navigateAwayRef.current();
+        navigate(toolRoute, { replace: true });
+    }, [activeGameModalId, gameUrlModal.navigateAwayRef, navigate]);
+
     const handleGameClick = (id: string) => {
-        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
+        const game = getGameById(id);
+        if (game?.type === 'tool') {
+            const toolRoute = resolveToolRoute(id);
+            if (toolRoute) {
+                gameUrlModal.navigateAwayRef.current();
+                navigate(toolRoute);
+            }
             return;
         }
-        if (id === 'assetslicer') {
-            navigate('/dev/slicer');
-            return;
-        }
-        if (id === 'fxpreview') {
-            navigate('/dev/fx');
-            return;
-        }
-        if (id === 'audiobrowser') {
-            navigate('/dev/audio');
-            return;
-        }
-        if (id === 'ugcbuilder') {
-            navigate('/dev/ugc');
-            return;
-        }
-        if (id === 'archview') {
-            navigate('/dev/arch');
-            return;
-        }
+
+        void loadGameDetailsModalModule().catch((error) => {
+            console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
+        });
 
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
@@ -236,13 +552,13 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
-        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
+        const game = getGameById(id);
+        if (game?.type === 'tool') {
             return;
         }
-        if (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview') {
-            return;
-        }
-        void import('../components/lobby/GameDetailsModal');
+        void loadGameDetailsModalModule().catch((error) => {
+            console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
+        });
     }, []);
 
     const handleLogout = () => {
@@ -474,6 +790,9 @@ export const Home = () => {
 
         // 有凭证：直接进入
         if (myMatchRole.credentials) {
+            void prefetchOnlineMatchRoute().catch(() => {
+                // 失败不阻塞进房
+            });
             navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
             return;
         }
@@ -497,6 +816,9 @@ export const Home = () => {
                         );
                         setMyMatchRole((prev) => (prev ? { ...prev, credentials: claimResult.credentials } : prev));
                         setLocalStorageTick((t) => t + 1);
+                        void prefetchOnlineMatchRoute().catch(() => {
+                            // 失败不阻塞进房
+                        });
                         navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
                         return;
                     }
@@ -530,6 +852,9 @@ export const Home = () => {
                         );
                         setMyMatchRole((prev) => (prev ? { ...prev, credentials: claimResult.credentials } : prev));
                         setLocalStorageTick((t) => t + 1);
+                        void prefetchOnlineMatchRoute().catch(() => {
+                            // 失败不阻塞进房
+                        });
                         navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${myMatchRole.playerID}`);
                         return;
                     }
@@ -547,20 +872,21 @@ export const Home = () => {
                     }
                 }
 
-                // 无凭证：尝试重新加入空位
-                const matchInfo = await matchApi.getMatch(gameId, activeMatch.matchID);
-                const player0 = matchInfo.players.find(p => p.id === 0);
-                const player1 = matchInfo.players.find(p => p.id === 1);
-                let targetPlayerID = '';
-                if (!player0?.name) targetPlayerID = '0';
-                else if (!player1?.name) targetPlayerID = '1';
-                else return;
-
+                // 无凭证：让服务端直接分配可用席位
                 const playerName = user?.username || getGuestName();
                 const guestId = user?.id ? undefined : getGuestId();
-                const { success } = await rejoinMatch(gameId, activeMatch.matchID, targetPlayerID, playerName, { guestId });
-                if (success) {
-                    navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${targetPlayerID}`);
+                const { success, playerID: assignedPlayerID } = await rejoinMatch(
+                    gameId,
+                    activeMatch.matchID,
+                    undefined,
+                    playerName,
+                    { guestId },
+                );
+                if (success && assignedPlayerID) {
+                    void prefetchOnlineMatchRoute().catch(() => {
+                        // 失败不阻塞进房
+                    });
+                    navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${assignedPlayerID}`);
                 }
             } catch {
                 // 忽略错误
@@ -667,7 +993,7 @@ export const Home = () => {
             closeModal(confirmModalIdRef.current);
             confirmModalIdRef.current = null;
         }
-    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction]);
+    }, [closeModal, handleCancelAction, handleConfirmAction, openModal, pendingAction, t]);
 
     return (
         <div className="min-h-[100dvh] bg-parchment-base-bg text-parchment-base-text font-serif overflow-y-scroll flex flex-col items-center pb-[env(safe-area-inset-bottom)]">
@@ -737,12 +1063,44 @@ export const Home = () => {
             </main>
 
             {/* 活跃对局指示器 */}
-            <div
-                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 pointer-events-none select-none text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80"
-                aria-label={`Current version ${APP_VERSION_LABEL}`}
+            <button
+                type="button"
+                onClick={handleVersionFooterClick}
+                className="fixed right-[max(0.75rem,env(safe-area-inset-right))] bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-30 max-w-[min(72vw,20rem)] select-none text-right text-[0.7rem] md:text-[0.78rem] leading-none tracking-[0.08em] text-parchment-light-text/80 cursor-pointer"
+                aria-label={shouldShowNativeAppVersion
+                    ? otaVersionMismatch
+                        ? `Current bundle version ${homeVersionLabel}, app version ${appVersionLabel}, latest ota version ${latestManifestVersionLabel ?? 'unknown'}, versions are not aligned`
+                        : `Current bundle version ${homeVersionLabel}, app version ${appVersionLabel}`
+                    : `Current version ${homeVersionLabel}`}
+                title={nativeVersionTitle}
             >
-                {APP_VERSION_LABEL}
-            </div>
+                <span className="inline-flex max-w-full items-center justify-end gap-1 break-all">
+                    {shouldShowNativeAppVersion && (
+                        <RefreshCw size={11} className={`shrink-0 ${isImmediateOtaActive ? 'animate-spin text-amber-700' : otaVersionMismatch ? 'text-red-700' : 'text-parchment-light-text/60'}`} />
+                    )}
+                    <span>{shouldShowNativeAppVersion ? `Bundle ${homeVersionLabel}` : homeVersionLabel}</span>
+                </span>
+                {shouldShowNativeAppVersion && (
+                    <span className="mt-1 block text-[0.58rem] tracking-[0.04em] text-parchment-light-text/60 md:text-[0.64rem]">
+                        App {appVersionLabel}
+                    </span>
+                )}
+                {shouldShowNativeAppVersion && latestManifestVersionLabel && (
+                    <span className={`mt-1 block text-[0.58rem] tracking-[0.04em] md:text-[0.64rem] ${otaVersionMismatch ? 'text-red-700/90' : 'text-parchment-light-text/55'}`}>
+                        Latest {latestManifestVersionLabel}
+                    </span>
+                )}
+                {otaVersionMismatch && (
+                    <span className={`mt-1 block text-[0.58rem] font-bold tracking-[0.04em] md:text-[0.64rem] ${isImmediateOtaActive ? 'text-amber-800' : 'text-red-800'}`}>
+                        {isImmediateOtaActive ? '正在立即更新' : 'OTA 未对齐，点击立即更新'}
+                    </span>
+                )}
+                {!otaVersionMismatch && shouldShowNativeAppVersion && (
+                    <span className={`mt-1 block text-[0.58rem] font-bold tracking-[0.04em] md:text-[0.64rem] ${isImmediateOtaActive ? 'text-amber-800' : 'text-parchment-light-text/55'}`}>
+                        {isImmediateOtaActive ? '正在检查更新' : '点击检查更新'}
+                    </span>
+                )}
+            </button>
 
             {activeMatch && (
                 <div

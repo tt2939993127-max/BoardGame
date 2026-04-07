@@ -26,6 +26,30 @@ interface ResolveNextAiActionArgs {
     seatControllers: Record<string, AiSeatController>;
     rulesVersion?: string | null;
     decisionBudgetMs?: number;
+    /**
+     * 在线房间里，每个 AI seat 都有自己的 transport client 和 playerView。
+     * 如果继续基于“当前主玩家”的过滤状态再套一层 playerView，
+     * AI 会看不到只对自己可见的交互，导致 simple-choice 永远不响应。
+     * 返回 null 表示“该 seat 的专属视角尚未就绪，本轮跳过，不要回退到共享视角”。
+     */
+    visibleStateResolver?: (playerId: string) => MatchState<unknown> | null | undefined;
+}
+
+function shouldUseRemoteDecision(args: {
+    runtime: ReturnType<typeof getGameAiRuntime>;
+    context: ReturnType<typeof buildAiDecisionContext>;
+    seatController: Extract<AiSeatController, { type: 'remote-ai' }>;
+}): boolean {
+    const predicate = args.runtime?.shouldUseRemoteDecision;
+    if (!predicate) {
+        return true;
+    }
+
+    try {
+        return predicate(args.context, args.seatController);
+    } catch {
+        return true;
+    }
 }
 
 function buildAttemptKey(args: {
@@ -164,7 +188,13 @@ export async function resolveNextAiAction(
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
         if (seatController.type === 'human') continue;
 
-        const visibleState = applyPlayerViewToState(args.engineConfig, args.state, playerId);
+        const resolvedSeatState = args.visibleStateResolver?.(playerId);
+        if (resolvedSeatState === null) {
+            continue;
+        }
+
+        const visibleState = resolvedSeatState
+            ?? applyPlayerViewToState(args.engineConfig, args.state, playerId);
         const context = buildAiDecisionContext({
             gameId: args.engineConfig.gameId,
             matchId: args.matchId,
@@ -200,6 +230,26 @@ export async function resolveNextAiAction(
                 action,
                 attemptKey,
                 source: 'local-ai',
+            };
+        }
+
+        if (!shouldUseRemoteDecision({
+            runtime,
+            context,
+            seatController,
+        })) {
+            const action = await resolveRemoteFallbackAction({
+                runtimeGameId: args.engineConfig.gameId,
+                seatController,
+                context,
+            });
+            if (!action) continue;
+
+            return {
+                playerId,
+                action,
+                attemptKey,
+                source: 'remote-ai-fallback',
             };
         }
 

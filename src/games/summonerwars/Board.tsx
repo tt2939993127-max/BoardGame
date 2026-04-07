@@ -72,6 +72,10 @@ import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
+const MAP_INTERNAL_TARGETS = new Set([
+  'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
+]);
+
 /** 默认网格配置 */
 const DEFAULT_GRID_CONFIG: GridConfig = {
   rows: BOARD_ROWS,
@@ -108,11 +112,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
   };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
+  const isPhoneLandscapeViewport = shouldUseMobileLandscapeMapFraming;
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
   const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
-  const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
-  const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const phaseTrackerClass = isPhoneLandscapeViewport
+    ? 'bg-slate-900/46 backdrop-blur-sm px-2.5 py-2 rounded-lg border border-slate-700/20 min-w-[6.75rem] max-w-[6.75rem]'
+    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = isPhoneLandscapeViewport
+    ? 'absolute top-[35%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
+    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const boardShellVars = isPhoneLandscapeViewport
+    ? { '--sw-hand-card-width-ratio': '0.14' } as React.CSSProperties
+    : undefined;
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -163,13 +175,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 教程自动平移：当高亮目标在地图内部时，传给 MapContainer 让其自动居中并放大
   // 地图内部的 tutorial-id：sw-my-summoner, sw-enemy-summoner, sw-my-gate, sw-start-archer（在 BoardGrid 内）
-  const MAP_INTERNAL_TARGETS = useMemo(() => new Set([
-    'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
-  ]), []);
-  const mapPanTarget = useMemo(() => {
-    if (!isTutorialActive || !tutorialStep?.highlightTarget) return null;
-    return MAP_INTERNAL_TARGETS.has(tutorialStep.highlightTarget) ? tutorialStep.highlightTarget : null;
-  }, [isTutorialActive, tutorialStep?.highlightTarget, MAP_INTERNAL_TARGETS]);
+  const highlightedTutorialTarget = tutorialStep?.highlightTarget ?? null;
+  const mapPanTarget = isTutorialActive && highlightedTutorialTarget && MAP_INTERNAL_TARGETS.has(highlightedTutorialTarget)
+    ? highlightedTutorialTarget
+    : null;
   // 聚焦到单个单位/建筑时放大到 1.8x，让卡牌清晰可见
   const MAP_PAN_SCALE = 1.8;
 
@@ -386,7 +395,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       // 近战攻击：启动卡牌本体碰撞动画
       setAttackAnimState({ attacker: pending.attacker, target: pending.target, hits: pending.hits });
     }
-  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus]);
+  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus, core]);
 
   // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效）
   const handleAttackHit = useCallback(() => {
@@ -408,7 +417,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       const damageSoundKey = resolveDamageSoundKey(dmg.damage);
       fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, soundKey: damageSoundKey });
     }
-  }, [pendingAttackRef, fxBus, releaseDamageSnapshot]);
+  }, [core, fxBus, pendingAttackRef, releaseDamageSnapshot]);
 
   // 近战攻击回弹完成回调（卡牌回到原位后触发，flush 摧毁效果）
   const handleAttackReturn = useCallback(() => {
@@ -701,7 +710,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
           </>
         </TutorialSelectionGate>
       ) : (
-        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900" data-game-page data-game-id="summonerwars">
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900" data-game-page data-game-id="summonerwars" style={boardShellVars}>
           {isEditingLayout ? (
             <div className="flex-1 overflow-auto p-4">
               <div className="mb-2 flex items-center gap-2">
@@ -1029,7 +1038,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                   {/* 底部：手牌区 */}
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
+                  <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center pointer-events-none" data-tutorial-id="sw-hand-area">
                     <HandArea
                       cards={myHand}
                       phase={currentPhase}
@@ -1046,7 +1055,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
-                  />
+                      className="pointer-events-auto"
+                    />
                   </div>
                 </div>
                 </div>

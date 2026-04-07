@@ -226,14 +226,14 @@ export function DiceThroneEndgameContent({
     const resultStyles = getResultStyles(perspective);
 
     // 获取结果标题文案（使用 common namespace 中已有的翻译）
-    const titleText = useMemo(() => {
+    const titleText = (() => {
         switch (perspective) {
             case 'victory': return tCommon('endgame.victory');
             case 'defeat': return tCommon('endgame.defeat');
             case 'draw': return tCommon('endgame.draw');
             case 'spectator': return tCommon('endgame.gameOver');
         }
-    }, [perspective, tCommon]);
+    })();
 
     // 无障碍标注：描述游戏结果
     const panelAriaLabel = t('endgame.ariaPanel', { result: titleText });

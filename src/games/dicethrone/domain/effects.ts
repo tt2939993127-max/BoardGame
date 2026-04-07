@@ -1231,10 +1231,10 @@ export function resolveEffectsToEvents(
             break;
         }
 
-        // CHOICE_REQUESTED 同样需要中断：用户选择完成前不应执行后续效果
+        // CHOICE_REQUESTED / COMPARE_ROLL_REQUESTED 同样需要中断：用户确认比较或分支前不应执行后续效果
         // 例如：taiji-combo 的 rollDie=莲花 产生选择，后续的 damage(6) 应等待选择完成后再执行
         // 否则会导致伤害在选择前就被应用，破坏游戏流程
-        if (effectEvents.some(e => e.type === 'CHOICE_REQUESTED')) {
+        if (effectEvents.some(e => e.type === 'CHOICE_REQUESTED' || e.type === 'COMPARE_ROLL_REQUESTED')) {
             break;
         }
 

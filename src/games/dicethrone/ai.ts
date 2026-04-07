@@ -141,6 +141,87 @@ const buildSimpleChoicePayload = (
     return { optionIds };
 };
 
+const enumerateInteractionOptionCombinations = <T extends { id: string }>(
+    options: T[],
+    minCount: number,
+    maxCount: number,
+): T[][] => {
+    const results: T[][] = [];
+    const path: T[] = [];
+
+    const dfs = (start: number) => {
+        if (path.length >= minCount && path.length <= maxCount) {
+            results.push([...path]);
+        }
+        if (path.length === maxCount) return;
+
+        for (let index = start; index < options.length; index += 1) {
+            path.push(options[index]);
+            dfs(index + 1);
+            path.pop();
+        }
+    };
+
+    dfs(0);
+    return results;
+};
+
+const enumerateArrayCombinations = <T>(
+    items: T[],
+    minCount: number,
+    maxCount: number,
+): T[][] => {
+    const results: T[][] = [];
+    const path: T[] = [];
+
+    const dfs = (start: number) => {
+        if (path.length >= minCount && path.length <= maxCount) {
+            results.push([...path]);
+        }
+        if (path.length === maxCount) return;
+
+        for (let index = start; index < items.length; index += 1) {
+            path.push(items[index]);
+            dfs(index + 1);
+            path.pop();
+        }
+    };
+
+    dfs(0);
+    return results;
+};
+
+const enumerateOrderedSelections = <T>(
+    items: T[],
+    count: number,
+): T[][] => {
+    if (count <= 0) return [[]];
+    if (count > items.length) return [];
+
+    const results: T[][] = [];
+    const path: T[] = [];
+    const used = new Set<number>();
+
+    const dfs = () => {
+        if (path.length === count) {
+            results.push([...path]);
+            return;
+        }
+
+        for (let index = 0; index < items.length; index += 1) {
+            if (used.has(index)) continue;
+            used.add(index);
+            path.push(items[index]);
+            dfs();
+            path.pop();
+            used.delete(index);
+        }
+    };
+
+    dfs();
+    return results;
+};
+
 const sumFaceRequirement = (faces: Record<string, number>): number => {
     return Object.values(faces).reduce((sum, count) => sum + count, 0);
 };
@@ -504,27 +585,102 @@ const buildInteractionActions = (
         const availableOptions = (data.options ?? []).filter((option): option is { id: string; label?: string } => {
             return typeof option?.id === 'string' && option.disabled !== true;
         });
-        const minCount = Math.max(1, data.multi?.min ?? 1);
-        return availableOptions.map((option, index) => {
-            const selectedIds = availableOptions.slice(0, minCount).map((item) => item.id);
-            const payload = buildSimpleChoicePayload(
-                minCount > 1 ? selectedIds : [option.id],
-                data.multi,
+        const minCount = data.multi?.min ?? 1;
+        const maxCount = data.multi?.max ?? minCount;
+
+        if (data.multi) {
+            const actions: AiLegalAction[] = [];
+            if (minCount === 0) {
+                actions.push({
+                    actionId: createAiLegalActionId('interaction', current.id, 'empty-selection'),
+                    kind: 'interaction-choice',
+                    label: '不选择任何项',
+                    commands: [{
+                        type: 'SYS_INTERACTION_RESPOND',
+                        payload: { optionIds: [] },
+                    }],
+                    metadata: {
+                        interactionId: current.id,
+                        optionIds: [],
+                    },
+                });
+            }
+
+            const combinations = enumerateInteractionOptionCombinations(
+                availableOptions,
+                Math.max(1, minCount),
+                maxCount,
             );
-            return {
-                actionId: createAiLegalActionId('interaction', current.id, option.id),
+            actions.push(...combinations.map((combination, index) => ({
+                actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
                 kind: 'interaction-choice',
-                label: option.label ?? `选择 ${index + 1}`,
+                label: combination.map((option) => option.label ?? option.id).join(' + ') || `选择 ${index + 1}`,
                 commands: [{
                     type: 'SYS_INTERACTION_RESPOND',
-                    payload,
+                    payload: buildSimpleChoicePayload(
+                        combination.map((option) => option.id),
+                        data.multi,
+                    ),
                 }],
                 metadata: {
                     interactionId: current.id,
-                    optionId: option.id,
+                    optionIds: combination.map((option) => option.id),
                 },
-            };
+            })));
+            return actions;
+        }
+
+        return availableOptions.map((option, index) => ({
+            actionId: createAiLegalActionId('interaction', current.id, option.id),
+            kind: 'interaction-choice',
+            label: option.label ?? `选择 ${index + 1}`,
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: buildSimpleChoicePayload([option.id], data.multi),
+            }],
+            metadata: {
+                interactionId: current.id,
+                optionId: option.id,
+            },
+        }));
+    }
+
+    if (current.kind === 'compare-roll-choice') {
+        const data = current.data as {
+            options?: Array<{ id?: string; label?: string; disabled?: boolean }>;
+        };
+        const availableOptions = (data.options ?? []).filter((option): option is { id: string; label?: string } => {
+            return typeof option?.id === 'string' && option.disabled !== true;
         });
+
+        if (availableOptions.length === 0) {
+            return [{
+                actionId: createAiLegalActionId('interaction', current.id, 'confirm'),
+                kind: 'interaction-choice',
+                label: '确认比较结果',
+                commands: [{
+                    type: 'SYS_INTERACTION_CONFIRM',
+                    payload: {},
+                }],
+                metadata: {
+                    interactionId: current.id,
+                },
+            }];
+        }
+
+        return availableOptions.map((option, index) => ({
+            actionId: createAiLegalActionId('interaction', current.id, option.id),
+            kind: 'interaction-choice',
+            label: option.label ?? `选择 ${index + 1}`,
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: { optionId: option.id },
+            }],
+            metadata: {
+                interactionId: current.id,
+                optionId: option.id,
+            },
+        }));
     }
 
     if (current.kind === 'dt:card-interaction') {
@@ -650,19 +806,25 @@ const buildInteractionActions = (
     const meta = data.meta;
     const activeDice = getActiveDice(state.core);
     const interactionId = current.id;
+    const selectCount = Math.max(1, Math.min(meta?.selectCount ?? 1, activeDice.length));
 
     if (meta?.dtType === 'selectDie') {
-        return activeDice.map((die) => ({
-            actionId: createAiLegalActionId('interaction', interactionId, 'reroll', die.id),
+        const selections = enumerateArrayCombinations(activeDice, 1, selectCount);
+        return selections.map((selection) => ({
+            actionId: createAiLegalActionId('interaction', interactionId, 'reroll', ...selection.map((die) => die.id)),
             kind: 'interaction-multistep',
-            label: `重掷骰子 ${die.id}`,
+            label: `重掷骰子 ${selection.map((die) => die.id).join(', ')}`,
             commands: [
-                { type: 'REROLL_DIE', payload: { dieId: die.id } },
+                ...selection.map((die) => ({
+                    type: 'REROLL_DIE',
+                    payload: { dieId: die.id },
+                })),
                 { type: 'SYS_INTERACTION_CONFIRM', payload: { interactionId } },
             ],
             metadata: {
                 interactionId,
-                dieId: die.id,
+                dieId: selection[0]?.id,
+                dieIds: selection.map((die) => die.id),
             },
         }));
     }
@@ -670,24 +832,74 @@ const buildInteractionActions = (
     if (meta?.dtType === 'modifyDie') {
         const targetValue = meta.dieModifyConfig?.targetValue ?? 6;
         const mode = meta.dieModifyConfig?.mode;
-        return activeDice.map((die) => {
-            const newValue = mode === 'adjust'
-                ? Math.min(6, Math.max(1, die.value + 1))
-                : mode === 'copy'
-                    ? activeDice[0]?.value ?? die.value
-                    : targetValue;
+        if (mode === 'copy') {
+            const orderedSelections = enumerateOrderedSelections(activeDice, Math.min(2, selectCount));
+            return orderedSelections.map((selection) => {
+                const sourceDie = selection[0];
+                const targetDice = selection.slice(1);
+                const sourceValue = sourceDie?.value ?? targetValue;
+                const diceIds = selection.map((die) => die.id);
+                const newValues = selection.map((die, index) => (index === 0 ? die.value : sourceValue));
+
+                return {
+                    actionId: createAiLegalActionId('interaction', interactionId, 'copy', ...diceIds),
+                    kind: 'interaction-multistep',
+                    label: `复制骰值 ${diceIds.join(' -> ')}`,
+                    commands: [
+                        ...selection.map((die, index) => ({
+                            type: 'MODIFY_DIE',
+                            payload: {
+                                dieId: die.id,
+                                newValue: index === 0 ? die.value : sourceValue,
+                            },
+                        })),
+                        { type: 'SYS_INTERACTION_CONFIRM', payload: { interactionId } },
+                    ],
+                    metadata: {
+                        interactionId,
+                        dieId: sourceDie?.id,
+                        dieIds: diceIds,
+                        newValue: sourceValue,
+                        newValues,
+                        mode,
+                        sourceDieId: sourceDie?.id,
+                        targetDieIds: targetDice.map((die) => die.id),
+                    },
+                };
+            });
+        }
+
+        const selections = enumerateArrayCombinations(activeDice, 1, selectCount);
+        return selections.map((selection) => {
+            const newValues = selection.map((die) => {
+                if (mode === 'adjust') {
+                    return Math.min(6, Math.max(1, die.value + 1));
+                }
+                return targetValue;
+            });
+
             return {
-                actionId: createAiLegalActionId('interaction', interactionId, 'modify', die.id, newValue),
+                actionId: createAiLegalActionId(
+                    'interaction',
+                    interactionId,
+                    'modify',
+                    ...selection.flatMap((die, index) => [die.id, newValues[index]]),
+                ),
                 kind: 'interaction-multistep',
-                label: `修改骰子 ${die.id}`,
+                label: `修改骰子 ${selection.map((die) => die.id).join(', ')}`,
                 commands: [
-                    { type: 'MODIFY_DIE', payload: { dieId: die.id, newValue } },
+                    ...selection.map((die, index) => ({
+                        type: 'MODIFY_DIE',
+                        payload: { dieId: die.id, newValue: newValues[index] },
+                    })),
                     { type: 'SYS_INTERACTION_CONFIRM', payload: { interactionId } },
                 ],
                 metadata: {
                     interactionId,
-                    dieId: die.id,
-                    newValue,
+                    dieId: selection[0]?.id,
+                    dieIds: selection.map((die) => die.id),
+                    newValue: newValues[0],
+                    newValues,
                     mode,
                 },
             };
@@ -1303,9 +1515,21 @@ const interactionValueScorer: LocalAiActionScorer = {
         const state = context.visibleState as DiceThroneState;
 
         if (action.kind === 'interaction-multistep') {
+            const dieIds = Array.isArray(action.metadata?.dieIds)
+                ? action.metadata.dieIds.filter((dieId): dieId is number => typeof dieId === 'number')
+                : [];
+            const newValues = Array.isArray(action.metadata?.newValues)
+                ? action.metadata.newValues.filter((value): value is number => typeof value === 'number')
+                : [];
             const newValue = typeof action.metadata?.newValue === 'number'
                 ? action.metadata.newValue
                 : null;
+            if (newValues.length > 0) {
+                return {
+                    score: newValues.reduce((sum, value) => sum + value * 18, 0) + newValues.length * 16,
+                    reason: `优先完成更多骰子调整，累计目标点数 ${newValues.join(', ')}`,
+                };
+            }
             if (newValue !== null) {
                 return {
                     score: newValue * 18,
@@ -1316,6 +1540,16 @@ const interactionValueScorer: LocalAiActionScorer = {
             const dieId = typeof action.metadata?.dieId === 'number'
                 ? action.metadata.dieId
                 : null;
+            if (dieIds.length > 0) {
+                const totalScore = dieIds.reduce((sum, currentDieId) => {
+                    const die = state.core.dice.find((item) => item.id === currentDieId);
+                    return sum + (die ? (7 - die.value) * 12 : 0);
+                }, 0);
+                return {
+                    score: totalScore + dieIds.length * 18,
+                    reason: `优先一次处理更多低点骰子 ${dieIds.join(', ')}`,
+                };
+            }
             if (dieId !== null) {
                 const die = state.core.dice.find((item) => item.id === dieId);
                 if (die) {
@@ -1953,6 +2187,18 @@ const defaultLocalPolicy = createLookaheadLocalAiPolicy({
     },
 });
 
+const REMOTE_VISIBLE_MAJOR_ACTION_KINDS = new Set<AiLegalAction['kind']>([
+    'setup-select-character',
+    'play-card',
+    'play-upgrade-card',
+    'response-play-card',
+    'select-ability',
+]);
+
+function shouldUseRemoteDecisionForDiceThrone(context: AiDecisionContext): boolean {
+    return context.legalActions.some((action) => REMOTE_VISIBLE_MAJOR_ACTION_KINDS.has(action.kind));
+}
+
 export const diceThroneAiRuntime: GameAiRuntime = {
     gameId: 'dicethrone',
     buildLegalActions: buildDiceThroneAiLegalActions,
@@ -1960,4 +2206,5 @@ export const diceThroneAiRuntime: GameAiRuntime = {
         baseline: defaultLocalPolicy,
     },
     defaultLocalPolicyId: 'baseline',
+    shouldUseRemoteDecision: shouldUseRemoteDecisionForDiceThrone,
 };

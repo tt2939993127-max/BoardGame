@@ -21,12 +21,14 @@ import {
     fixedRandom,
     createRunner,
     createNoResponseSetupWithEmptyHand,
+    createHeroMatchup,
     cmd,
 } from './test-utils';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
 import { INITIAL_HEALTH, INITIAL_CP } from '../domain/types';
 import { getCustomActionHandler } from '../domain/effects';
+import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
 import { validateCommand } from '../domain/commandValidation';
 import { processTokenUsage, shouldOpenTokenResponse, getUsableTokensForTiming } from '../domain/tokenResponse';
 import { initializeCustomActions } from '../domain/customActions';
@@ -35,6 +37,7 @@ import { BARBARIAN_TOKENS } from '../heroes/barbarian/tokens';
 import { PALADIN_TOKENS } from '../heroes/paladin/tokens';
 import { SAMURAI_TOKENS } from '../heroes/samurai/tokens';
 import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
+import type { AbilityEffect } from '../domain/combat';
 
 initializeCustomActions();
 
@@ -690,6 +693,56 @@ describe('锁定 (Targeted) 伤害修正', () => {
         // 并应用 modifyStat action，将伤害 +2
         // 完整的集成测试见 moon-elf-abilities.test.ts 的"锁定：受到伤害 +2，结算后移除"测试
         expect(true).toBe(true);
+    });
+});
+
+// ============================================================================
+// 赏金 (Bounty) — 受伤 +1 且攻击者获得 1 CP
+// ============================================================================
+
+describe('赏金 (Bounty) 伤害与奖励', () => {
+    it('赏金在受伤时会让伤害 +1，并使攻击者获得 1 CP', () => {
+        const match = createHeroMatchup('gunslinger', 'monk')(['0', '1'], fixedRandom);
+        const core = match.core;
+
+        core.players['0'].resources[RESOURCE_IDS.CP] = 0;
+        core.players['1'].tokens[TOKEN_IDS.BOUNTY] = 1;
+
+        const effects: AbilityEffect[] = [
+            {
+                description: '测试赏金伤害',
+                timing: 'immediate',
+                action: { type: 'damage', target: 'opponent', value: 3 },
+            },
+        ];
+        const ctx: EffectContext = {
+            attackerId: '0',
+            defenderId: '1',
+            sourceAbilityId: 'test-bounty',
+            state: core,
+            damageDealt: 0,
+            timestamp: 100,
+        };
+
+        const events = resolveEffectsToEvents(effects, 'immediate', ctx, { random: fixedRandom });
+        const finalCore = events.reduce(reduce, core);
+
+        const damageEvent = events.find((event) => event.type === 'DAMAGE_DEALT') as any;
+        const cpEvent = events.find((event) => event.type === 'CP_CHANGED') as any;
+
+        expect(damageEvent).toBeDefined();
+        expect(damageEvent.payload.amount).toBe(4);
+        expect(damageEvent.payload.actualDamage).toBe(4);
+        expect(cpEvent).toBeDefined();
+        expect(cpEvent.payload).toMatchObject({
+            playerId: '0',
+            delta: 1,
+            newValue: 1,
+            sourceAbilityId: 'test-bounty',
+        });
+        expect(finalCore.players['1'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 4);
+        expect(finalCore.players['0'].resources[RESOURCE_IDS.CP]).toBe(1);
+        expect(finalCore.players['1'].tokens[TOKEN_IDS.BOUNTY]).toBe(1);
     });
 });
 

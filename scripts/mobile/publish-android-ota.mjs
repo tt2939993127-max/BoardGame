@@ -3,9 +3,17 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { zipSync, strToU8 } from 'fflate';
+import { zipSync } from 'fflate';
+import {
+    resolveOtaForceUpdateOptions,
+} from './ota-publish-config.mjs';
 
 const rootDir = process.cwd();
+const OTA_EXCLUDED_PREFIXES = [
+    'assets/i18n/',
+];
+const OTA_ALLOWED_LOCALE_PREFIX = 'locales/zh-CN/';
+const MAX_ANDROID_OTA_ZIP_BYTES = 20 * 1024 * 1024;
 
 for (const file of ['.env', '.env.android', '.env.android.local', '.env.example']) {
     const fullPath = path.join(rootDir, file);
@@ -15,6 +23,97 @@ for (const file of ['.env', '.env.android', '.env.android.local', '.env.example'
 
 const packageJson = JSON.parse(readFileSync(path.join(rootDir, 'package.json'), 'utf8'));
 const args = process.argv.slice(2);
+const allowedValueArgs = new Set([
+    'channel',
+    'version',
+    'native-version',
+    'target-native-version',
+    'min-native-version',
+    'max-native-version',
+    'force-update-title',
+    'force-update-message',
+    'notes',
+]);
+const allowedBooleanArgs = new Set([
+    'force-update',
+    'no-force-update',
+    'allow-legacy-shells',
+    'dry-run',
+    'skip-latest',
+    'help',
+]);
+const helpText = `
+Android OTA 发布脚本
+
+默认策略：
+- stable 默认收紧到当前原生版本：若未显式传兼容参数，会自动写入 minNativeVersion=<nativeVersion>
+- stable 默认也会开启 forceUpdate，让旧壳直接进入原生 App 升级链路
+- 如确需放行旧壳，必须显式传 --allow-legacy-shells
+- 非 stable channel 仍保持显式传参才生成原生版本门禁
+
+常见用法：
+- node scripts/mobile/publish-android-ota.mjs --channel stable
+- node scripts/mobile/publish-android-ota.mjs --channel edge --dry-run
+- node scripts/mobile/publish-android-ota.mjs --channel stable --target-native-version 0.5.1
+- node scripts/mobile/publish-android-ota.mjs --channel stable --min-native-version 0.5.0 --max-native-version 0.5.2
+- node scripts/mobile/publish-android-ota.mjs --channel stable --allow-legacy-shells --no-force-update
+
+参数：
+- --channel <name>
+- --version <bundleVersion>
+- --native-version <version>
+- --target-native-version <version[,version]>
+- --min-native-version <version>
+- --max-native-version <version>
+- --force-update / --no-force-update
+- --allow-legacy-shells
+- --force-update-title <text>
+- --force-update-message <text>
+- --notes <text>
+- --dry-run
+- --skip-latest
+- --help
+`.trim();
+
+const validateArgs = (sourceArgs) => {
+    for (let index = 0; index < sourceArgs.length; index += 1) {
+        const current = sourceArgs[index];
+        if (current === '-h') {
+            continue;
+        }
+        if (!current.startsWith('--')) {
+            throw new Error(
+                `检测到不受支持的位置参数: ${current}。`
+                + ' Android OTA 发布脚本只接受 --channel 这类显式命名参数。'
+                + ' 若你是通过 npm 传参，请不要使用 `npm run mobile:android:ota:publish -- --channel stable` 这种形式；'
+                + ' 请改用 `node scripts/mobile/release-android.mjs ota --channel stable`'
+                + ' 或 `node scripts/mobile/publish-android-ota.mjs --channel stable`。',
+            );
+        }
+
+        const eqIndex = current.indexOf('=');
+        const rawName = eqIndex >= 0 ? current.slice(2, eqIndex) : current.slice(2);
+        if (allowedBooleanArgs.has(rawName)) {
+            continue;
+        }
+        if (allowedValueArgs.has(rawName)) {
+            if (eqIndex >= 0) {
+                continue;
+            }
+            const next = sourceArgs[index + 1];
+            if (!next || next.startsWith('--')) {
+                throw new Error(`参数 --${rawName} 缺少值。`);
+            }
+            index += 1;
+            continue;
+        }
+
+        throw new Error(`未知参数: ${current}`);
+    }
+};
+
+validateArgs(args);
+
 const readArgValue = (name, fallback = '') => {
     const prefix = `--${name}=`;
     const direct = args.find((arg) => arg.startsWith(prefix));
@@ -28,17 +127,34 @@ const readArgValue = (name, fallback = '') => {
     return fallback;
 };
 const hasFlag = (name) => args.includes(`--${name}`);
+if (hasFlag('help') || args.includes('-h')) {
+    console.log(helpText);
+    process.exit(0);
+}
 
 const channel = readArgValue('channel', process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || 'stable');
 const nativeVersion = readArgValue('native-version', packageJson.version);
 const explicitTargetNativeVersion = readArgValue('target-native-version', '');
-const minNativeVersion = readArgValue('min-native-version', '');
+const explicitMinNativeVersion = readArgValue('min-native-version', '');
 const maxNativeVersion = readArgValue('max-native-version', '');
 const explicitBundleVersion = readArgValue('version', '');
 const notes = readArgValue('notes', 'Android embedded OTA bundle');
-const forceUpdate = hasFlag('force-update');
-const forceUpdateTitle = readArgValue('force-update-title', '');
-const forceUpdateMessage = readArgValue('force-update-message', '');
+const allowLegacyShells = hasFlag('allow-legacy-shells');
+const stableChannel = channel === 'stable';
+const minNativeVersion = stableChannel && !allowLegacyShells && !explicitTargetNativeVersion && !explicitMinNativeVersion
+    ? nativeVersion
+    : explicitMinNativeVersion;
+const {
+    forceUpdate,
+    forceUpdateTitle,
+    forceUpdateMessage,
+} = resolveOtaForceUpdateOptions({
+    forceUpdateFlag: hasFlag('force-update'),
+    noForceUpdateFlag: hasFlag('no-force-update'),
+    forceUpdateTitle: readArgValue('force-update-title', ''),
+    forceUpdateMessage: readArgValue('force-update-message', ''),
+    defaultForceUpdate: stableChannel && !allowLegacyShells,
+});
 const dryRun = hasFlag('dry-run');
 const skipLatest = hasFlag('skip-latest');
 const distDir = path.join(rootDir, 'dist');
@@ -89,21 +205,67 @@ const s3Client = new S3Client({
     },
 });
 
-const collectFiles = (dirPath, baseDir, entries = {}) => {
+const shouldIncludeOtaFile = (relativePath) => {
+    if (OTA_EXCLUDED_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) {
+        return false;
+    }
+
+    if (relativePath.startsWith('locales/')) {
+        return relativePath.startsWith(OTA_ALLOWED_LOCALE_PREFIX);
+    }
+
+    return true;
+};
+
+const collectFiles = (dirPath, baseDir, entries = {}, stats = {
+    includedFiles: 0,
+    includedBytes: 0,
+    skippedFiles: 0,
+    skippedBytes: 0,
+}) => {
     for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
         const fullPath = path.join(dirPath, entry.name);
         if (entry.isDirectory()) {
-            collectFiles(fullPath, baseDir, entries);
+            collectFiles(fullPath, baseDir, entries, stats);
             continue;
         }
 
         const relativePath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
-        entries[relativePath] = new Uint8Array(readFileSync(fullPath));
+        const fileBuffer = new Uint8Array(readFileSync(fullPath));
+        if (!shouldIncludeOtaFile(relativePath)) {
+            stats.skippedFiles += 1;
+            stats.skippedBytes += fileBuffer.byteLength;
+            continue;
+        }
+        entries[relativePath] = fileBuffer;
+        stats.includedFiles += 1;
+        stats.includedBytes += fileBuffer.byteLength;
     }
-    return entries;
+
+    return { entries, stats };
 };
 
-const zipBuffer = Buffer.from(zipSync(collectFiles(distDir, distDir), { level: 9 }));
+const {
+    entries: otaEntries,
+    stats: otaCollectionStats,
+} = collectFiles(distDir, distDir);
+if (otaCollectionStats.skippedFiles > 0) {
+    throw new Error(
+        `检测到当前 dist 含有不允许进入 OTA 的文件：skippedFiles=${otaCollectionStats.skippedFiles}, `
+        + `skippedBytes=${otaCollectionStats.skippedBytes}。`
+        + ' 这通常说明你没有走 `npm run mobile:android:sync` 这条 Android 专用裁剪链路，'
+        + ' 或 dist 混入了 `assets/i18n/**` / 非 `locales/zh-CN/**` 资源。'
+        + ' 为避免再次打出整包，发布已强制中止。',
+    );
+}
+const zipBuffer = Buffer.from(zipSync(otaEntries, { level: 9 }));
+if (zipBuffer.length > MAX_ANDROID_OTA_ZIP_BYTES) {
+    throw new Error(
+        `Android OTA 包体异常过大：${zipBuffer.length} bytes。`
+        + ` 当前发布链路会自动排除 dist/assets/i18n/**，并只保留 dist/locales/zh-CN/**。`
+        + ' 请检查 dist 是否混入了不应进入 OTA 的大资源，禁止继续发布。',
+    );
+}
 const checksum = createHash('sha256').update(zipBuffer).digest('hex');
 const normalizedTargetNativeVersion = explicitTargetNativeVersion
     ? explicitTargetNativeVersion
@@ -111,10 +273,9 @@ const normalizedTargetNativeVersion = explicitTargetNativeVersion
         .map((value) => value.trim())
         .filter(Boolean)
     : [];
-const shouldUseDefaultTargetNativeVersion = !explicitTargetNativeVersion && !minNativeVersion && !maxNativeVersion;
-const resolvedTargetNativeVersion = shouldUseDefaultTargetNativeVersion
-    ? [nativeVersion]
-    : normalizedTargetNativeVersion;
+// stable 默认要求旧壳先升到当前原生版本，避免继续吃到新 OTA。
+// 如确需放行旧壳，必须显式传 --allow-legacy-shells，或手动指定 target/min/max。
+const resolvedTargetNativeVersion = normalizedTargetNativeVersion;
 const manifest = {
     version: bundleVersion,
     url: bundleUrl,
@@ -161,8 +322,15 @@ console.log(`channel=${channel}`);
 console.log(`bundleVersion=${bundleVersion}`);
 console.log(`nativeVersion=${nativeVersion}`);
 console.log(`mode=${dryRun ? 'dry-run' : 'publish'}`);
+console.log(`forceUpdate=${forceUpdate ? 'true' : 'false'}`);
+console.log(`allowLegacyShells=${allowLegacyShells ? 'true' : 'false'}`);
+console.log(`effectiveMinNativeVersion=${minNativeVersion || '(none)'}`);
 console.log(`skipLatest=${skipLatest ? 'true' : 'false'}`);
 console.log(`zipBytes=${zipBuffer.length}`);
+console.log(`otaIncludedFiles=${otaCollectionStats.includedFiles}`);
+console.log(`otaIncludedBytes=${otaCollectionStats.includedBytes}`);
+console.log(`otaSkippedFiles=${otaCollectionStats.skippedFiles}`);
+console.log(`otaSkippedBytes=${otaCollectionStats.skippedBytes}`);
 console.log(`indexMtime=${distStats.mtime.toISOString()}`);
 console.log(`androidBuildBackendUrl=${androidBuildMeta.backendUrl}`);
 console.log(`androidBuildBuiltAt=${androidBuildMeta.builtAt || '(unknown)'}`);

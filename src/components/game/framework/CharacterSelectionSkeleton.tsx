@@ -12,7 +12,12 @@ import { MagnifyOverlay } from '../../common/overlays/MagnifyOverlay';
 import { UI_Z_INDEX } from '../../../core';
 import clsx from 'clsx';
 import type { PlayerId } from '../../../engine/types';
+import {
+    buildRuntimeInlineUnitValue,
+} from '../../../games/mobileSupport';
+import { CharacterSelectionBadge } from './CharacterSelectionBadge';
 import type {
+    CharacterBadgeDef,
     CharacterDef,
     CharacterSelectionCallbacks,
     CharacterAssets,
@@ -60,9 +65,10 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
     locale,
     i18nNamespace,
 }) => {
-    const { t } = useTranslation(i18nNamespace);
+    const { t } = useTranslation([i18nNamespace, 'common']);
     const isHost = currentPlayerId === hostPlayerId;
     const playerIds = Object.keys(playerNames);
+    const inlineUnit = buildRuntimeInlineUnitValue;
 
     // 全员准备完毕：所有玩家都选好角色，且非房主玩家都点击了准备
     const everyoneReady = playerIds.every(pid => {
@@ -91,15 +97,19 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                 <span
                     key={`ready-dot-${pid}`}
                     className={clsx(
-                        'w-[0.55vw] h-[0.55vw] rounded-full',
+                        'rounded-full',
                         isReady
                             ? 'bg-emerald-400 shadow-[0_0_0.6vw_rgba(16,185,129,0.6)]'
                             : 'bg-white/30'
                     )}
+                    style={{
+                        width: inlineUnit(0.55),
+                        height: inlineUnit(0.55),
+                    }}
                 />
             );
         });
-    }, [playerIds, selectedCharacters, readyPlayers, hostPlayerId]);
+    }, [hostPlayerId, inlineUnit, playerIds, readyPlayers, selectedCharacters]);
 
     // 可选角色列表（过滤掉不可选的）
     const availableCharacters = useMemo(() => {
@@ -115,6 +125,14 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
 
     // 放大预览状态
     const [magnifyImage, setMagnifyImage] = useState<string | null>(null);
+
+    const getOverlayBadge = (badges?: CharacterBadgeDef[]) => {
+        return badges?.find((badge) => badge.variant === 'disabled-overlay');
+    };
+
+    const getPillBadges = (badges?: CharacterBadgeDef[]) => {
+        return badges?.filter((badge) => badge.variant !== 'disabled-overlay') ?? [];
+    };
 
     if (!isOpen) return null;
 
@@ -142,16 +160,38 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
             </div>
 
             {/* 左侧：角色选择列表 */}
-            <div className="w-[18vw] h-full border-r border-white/5 flex flex-col z-10 bg-black/60 backdrop-blur-xl relative flex-shrink-0">
+            <div
+                className="h-full border-r border-white/5 flex flex-col z-10 bg-black/60 backdrop-blur-xl relative flex-shrink-0"
+                style={{ width: inlineUnit(18) }}
+            >
                 {/* 标题 */}
-                <div className="px-[1vw] pt-[1.2vw] pb-[0.6vw] border-b border-white/10">
-                    <h2 className="text-[1vw] font-bold text-white/90 uppercase tracking-wider">
+                <div
+                    className="border-b border-white/10"
+                    style={{
+                        paddingLeft: inlineUnit(1),
+                        paddingRight: inlineUnit(1),
+                        paddingTop: inlineUnit(1.2),
+                        paddingBottom: inlineUnit(0.6),
+                    }}
+                >
+                    <h2
+                        className="font-bold text-white/90 uppercase tracking-wider"
+                        style={{ fontSize: inlineUnit(1) }}
+                    >
                         {t('selection.title')}
                     </h2>
                 </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-[1vw] pt-[1vw] grid grid-cols-2 gap-[0.8vw] content-start">
+                <div
+                    className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 content-start"
+                    style={{
+                        padding: inlineUnit(1),
+                        gap: inlineUnit(0.8),
+                    }}
+                >
                     {availableCharacters.map((char, index) => {
                         const isSelectedByMe = selectedCharacters[currentPlayerId] === char.id;
+                        const overlayBadge = getOverlayBadge(char.badges);
+                        const pillBadges = getPillBadges(char.badges);
 
                         return (
                             <motion.div
@@ -161,10 +201,11 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                 transition={{ delay: index * 0.03 }}
                                 data-char-id={char.id}
                                 className={clsx(
-                                    "relative aspect-[3/4] rounded-[0.4vw] border-2 transition-all duration-300 overflow-hidden cursor-pointer group",
+                                    "relative aspect-[3/4] border-2 transition-all duration-300 overflow-hidden cursor-pointer group",
                                     isSelectedByMe ? "border-amber-400 shadow-[0_0_1.5vw_rgba(251,191,36,0.4)] z-20 scale-[1.02]" : 
                                     "border-white/10 hover:border-white/30 hover:scale-[1.02]"
                                 )}
+                                style={{ borderRadius: inlineUnit(0.4) }}
                                 onClick={() => callbacks.onSelect(char.id)}
                             >
                                 <div className={clsx(
@@ -174,21 +215,79 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                      style={assets.getPortraitStyle(char.id, locale)} />
                                 
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+
+                                {pillBadges.length ? (
+                                    <div
+                                        className="absolute left-0 z-20 flex flex-col items-start pointer-events-none"
+                                        style={{
+                                            top: inlineUnit(0.34),
+                                            left: inlineUnit(0.34),
+                                            gap: inlineUnit(0.28),
+                                            maxWidth: `calc(100% - ${inlineUnit(1.9)})`,
+                                        }}
+                                    >
+                                        {pillBadges.map((badge) => (
+                                            <CharacterSelectionBadge
+                                                key={badge.id}
+                                                badge={badge}
+                                                label={t(badge.labelKey)}
+                                                inlineUnit={inlineUnit}
+                                                testId={`character-badge-${char.id}-${badge.id}`}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : null}
+
+                                {overlayBadge ? (
+                                    <div className="absolute inset-0 z-20 pointer-events-none">
+                                        <div className="absolute inset-0 overflow-hidden">
+                                            <CharacterSelectionBadge
+                                                badge={overlayBadge}
+                                                label={t(overlayBadge.labelKey)}
+                                                inlineUnit={inlineUnit}
+                                                mode="overlay"
+                                                testId={`character-badge-${char.id}-${overlayBadge.id}`}
+                                            />
+                                        </div>
+                                    </div>
+                                ) : null}
                                 
-                                <div className="absolute bottom-[0.5vw] left-[0.5vw] right-[0.5vw]">
-                                    <div className="text-[0.7vw] font-black truncate uppercase tracking-tight text-white/90">
+                                <div
+                                    className="absolute"
+                                    style={{
+                                        bottom: inlineUnit(0.5),
+                                        left: inlineUnit(0.5),
+                                        right: inlineUnit(0.5),
+                                    }}
+                                >
+                                    <div
+                                        className="font-black truncate uppercase tracking-tight text-white/90"
+                                        style={{ fontSize: inlineUnit(0.7) }}
+                                    >
                                         {t(char.nameKey)}
                                     </div>
                                 </div>
 
                                 {/* 玩家占用标签 */}
-                                <div className="absolute top-[0.3vw] right-[0.3vw] flex -space-x-[0.3vw]">
+                                <div
+                                    className="absolute flex"
+                                    style={{
+                                        top: inlineUnit(0.3),
+                                        right: inlineUnit(0.3),
+                                        marginLeft: `-${inlineUnit(0.3)}`,
+                                    }}
+                                >
                                     {playerIds.filter(pid => selectedCharacters[pid] === char.id).map(pid => (
                                         <motion.div 
                                             key={pid}
                                             layoutId={`occupied-${pid}`}
-                                            className="w-[1.2vw] h-[1.2vw] rounded-full border border-white/80 flex items-center justify-center text-[0.5vw] font-black shadow-lg"
-                                            style={{ backgroundColor: styleConfig.playerColors[pid]?.bg }}
+                                            className="rounded-full border border-white/80 flex items-center justify-center font-black shadow-lg"
+                                            style={{
+                                                width: inlineUnit(1.2),
+                                                height: inlineUnit(1.2),
+                                                fontSize: inlineUnit(0.5),
+                                                backgroundColor: styleConfig.playerColors[pid]?.bg,
+                                            }}
                                         >
                                             {styleConfig.playerLabels[pid]}
                                         </motion.div>
@@ -203,7 +302,10 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
             {/* 右侧：角色预览 */}
             <div className="flex-1 h-full relative flex flex-col z-10 overflow-hidden bg-gradient-to-br from-slate-900/20 to-black">
                 {/* 中央预览区域 */}
-                <div className="flex-1 flex items-center justify-center p-[1vw] overflow-hidden">
+                <div
+                    className="flex-1 flex items-center justify-center overflow-hidden"
+                    style={{ padding: inlineUnit(1) }}
+                >
                     <AnimatePresence mode="wait">
                         {previewCharId && assets.getPreviewAssets && (
                             <motion.div
@@ -213,14 +315,18 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                 exit={{ opacity: 0, scale: 1.02, y: -20 }}
                                 className="relative w-full h-full flex items-center justify-center"
                             >
-                                <div className="flex items-center justify-center gap-[1vw] h-full">
+                                <div
+                                    className="flex items-center justify-center h-full"
+                                    style={{ gap: inlineUnit(1) }}
+                                >
                                     {(() => {
                                         const previewAssets = assets.getPreviewAssets(previewCharId);
                                         return (
                                             <>
                                                 {/* 玩家面板：点击放大 */}
                                                 <div 
-                                                    className="relative h-[85%] w-auto shadow-2xl rounded-[0.6vw] overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
+                                                    className="relative h-[85%] w-auto shadow-2xl overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
+                                                    style={{ borderRadius: inlineUnit(0.6) }}
                                                     onClick={() => setMagnifyImage(previewAssets.playerBoard)}
                                                 >
                                                     <OptimizedImage
@@ -234,7 +340,8 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                                 {/* 提示板：点击放大 */}
                                                 {previewAssets.tipBoard && (
                                                     <div 
-                                                        className="relative h-[85%] w-auto rounded-[0.6vw] overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
+                                                        className="relative h-[85%] w-auto overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
+                                                        style={{ borderRadius: inlineUnit(0.6) }}
                                                         onClick={() => setMagnifyImage(previewAssets.tipBoard!)}
                                                     >
                                                         <OptimizedImage
@@ -256,11 +363,20 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
 
                 {/* 底部玩家面板区域：居中布局 */}
                 <div
-                    className="h-[8vw] bg-gradient-to-t from-black/95 to-black/80 backdrop-blur-xl flex items-center justify-center gap-[3vw] px-[4vw] flex-shrink-0 border-t border-white/5"
-                    style={{ zIndex: UI_Z_INDEX.hud }}
+                    className="bg-gradient-to-t from-black/95 to-black/80 backdrop-blur-xl flex items-center justify-center flex-shrink-0 border-t border-white/5"
+                    style={{
+                        zIndex: UI_Z_INDEX.hud,
+                        height: inlineUnit(8),
+                        gap: inlineUnit(3),
+                        paddingLeft: inlineUnit(4),
+                        paddingRight: inlineUnit(4),
+                    }}
                 >
                     {/* 玩家卡片列表 */}
-                    <div className="flex items-center justify-center gap-[1.5vw]">
+                    <div
+                        className="flex items-center justify-center"
+                        style={{ gap: inlineUnit(1.5) }}
+                    >
                         {playerIds.map(pid => {
                             const charId = selectedCharacters[pid];
                             const isMe = pid === currentPlayerId;
@@ -271,17 +387,27 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                 <motion.div 
                                     key={pid} 
                                     className={clsx(
-                                        "flex items-center gap-[0.8vw] px-[1.5vw] py-[0.6vw] rounded-full transition-all duration-300",
+                                        "flex items-center rounded-full transition-all duration-300",
                                         isMe ? "bg-white/15 ring-2 ring-amber-400/50" : "bg-white/8"
                                     )}
+                                    style={{
+                                        gap: inlineUnit(0.8),
+                                        paddingLeft: inlineUnit(1.5),
+                                        paddingRight: inlineUnit(1.5),
+                                        paddingTop: inlineUnit(0.6),
+                                        paddingBottom: inlineUnit(0.6),
+                                    }}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: Number(pid) * 0.08 }}
                                 >
                                     {/* 玩家标签 */}
                                     <div 
-                                        className="w-[2.5vw] h-[2.5vw] rounded-full flex items-center justify-center text-[1vw] font-black"
+                                        className="rounded-full flex items-center justify-center font-black"
                                         style={{ 
+                                            width: inlineUnit(2.5),
+                                            height: inlineUnit(2.5),
+                                            fontSize: inlineUnit(1),
                                             backgroundColor: colors.bg,
                                             color: colors.text,
                                             boxShadow: `0 0 15px ${colors.glow}`
@@ -293,15 +419,28 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                     {/* 玩家信息 */}
                                     <div className="flex flex-col">
                                         <div className={clsx(
-                                            "text-[0.9vw] font-black uppercase tracking-wide leading-tight",
+                                            "font-black uppercase tracking-wide leading-tight",
                                             hasSelected ? "text-amber-400" : "text-white/50"
-                                        )}>
+                                        )}
+                                            style={{ fontSize: inlineUnit(0.9) }}
+                                        >
                                             {hasSelected ? t(`characters.${charId}`) : t('selection.notSelected')}
                                         </div>
-                                        <div className="text-[0.6vw] text-white/50 truncate max-w-[8vw]">
+                                        <div
+                                            className="text-white/50 truncate"
+                                            style={{
+                                                fontSize: inlineUnit(0.6),
+                                                maxWidth: inlineUnit(8),
+                                            }}
+                                        >
                                             {playerNames[pid]}
                                             {isMe && (
-                                                <span className="ml-[0.2vw] text-amber-400/80 font-bold">({t('selection.you')})</span>
+                                                <span
+                                                    className="text-amber-400/80 font-bold"
+                                                    style={{ marginLeft: inlineUnit(0.2) }}
+                                                >
+                                                    ({t('selection.you')})
+                                                </span>
                                             )}
                                         </div>
                                     </div>
@@ -311,7 +450,11 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                                         <motion.div 
                                             initial={{ scale: 0 }}
                                             animate={{ scale: 1 }}
-                                            className="w-[1.2vw] h-[1.2vw] rounded-full bg-emerald-500 flex items-center justify-center text-white"
+                                            className="rounded-full bg-emerald-500 flex items-center justify-center text-white"
+                                            style={{
+                                                width: inlineUnit(1.2),
+                                                height: inlineUnit(1.2),
+                                            }}
                                         >
                                             <Check size={14} className="text-white" strokeWidth={3} />
                                         </motion.div>
@@ -327,7 +470,14 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
                             onClick={callbacks.onReady}
-                            className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(16,185,129,0.5)]"
+                            className="rounded-full font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(16,185,129,0.5)]"
+                            style={{
+                                paddingLeft: inlineUnit(3),
+                                paddingRight: inlineUnit(3),
+                                paddingTop: inlineUnit(1),
+                                paddingBottom: inlineUnit(1),
+                                fontSize: inlineUnit(1.2),
+                            }}
                         >
                             {t('selection.ready')}
                         </motion.button>
@@ -335,10 +485,19 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                     
                     {/* 已准备状态：非房主玩家准备后等待 */}
                     {!isHost && readyPlayers[currentPlayerId] && (
-                        <div className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] border-2 bg-white/5 text-emerald-400 border-emerald-400/50">
-                            <span className="inline-flex items-center gap-[0.8vw]">
+                        <div
+                            className="rounded-full font-black uppercase tracking-[0.2em] border-2 bg-white/5 text-emerald-400 border-emerald-400/50"
+                            style={{
+                                paddingLeft: inlineUnit(3),
+                                paddingRight: inlineUnit(3),
+                                paddingTop: inlineUnit(1),
+                                paddingBottom: inlineUnit(1),
+                                fontSize: inlineUnit(1.2),
+                            }}
+                        >
+                            <span className="inline-flex items-center" style={{ gap: inlineUnit(0.8) }}>
                                 <span>{t('selection.readyWaiting')}</span>
-                                <span className="flex items-center gap-[0.35vw]">
+                                <span className="flex items-center" style={{ gap: inlineUnit(0.35) }}>
                                     {readyProgressDots}
                                 </span>
                             </span>
@@ -353,15 +512,22 @@ export const CharacterSelectionSkeleton: React.FC<CharacterSelectionSkeletonProp
                             disabled={!everyoneReady}
                             onClick={callbacks.onStart}
                             className={clsx(
-                                "px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
+                                "rounded-full font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
                                 everyoneReady 
                                     ? "bg-amber-500 text-black border-amber-400 hover:bg-amber-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.5)]" 
                                     : "bg-white/5 text-white/30 border-white/10 cursor-not-allowed"
                             )}
+                            style={{
+                                paddingLeft: inlineUnit(3),
+                                paddingRight: inlineUnit(3),
+                                paddingTop: inlineUnit(1),
+                                paddingBottom: inlineUnit(1),
+                                fontSize: inlineUnit(1.2),
+                            }}
                         >
-                            <span className="inline-flex items-center gap-[0.8vw]">
+                            <span className="inline-flex items-center" style={{ gap: inlineUnit(0.8) }}>
                                 <span>{everyoneReady ? t('selection.pressStart') : t('selection.waitingAll')}</span>
-                                <span className="flex items-center gap-[0.35vw]">
+                                <span className="flex items-center" style={{ gap: inlineUnit(0.35) }}>
                                     {readyProgressDots}
                                 </span>
                             </span>

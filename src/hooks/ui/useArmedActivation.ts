@@ -31,9 +31,17 @@ export function useArmedActivation<TKey extends string | number>({
     useEffect(() => {
         if (armedKey == null || !isKeyValid) return;
         if (!isKeyValid(armedKey)) {
-            setArmedKey(null);
+            let cancelled = false;
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setArmedKey(null);
+                }
+            });
+            return () => {
+                cancelled = true;
+            };
         }
-    }, [armedKey, isKeyValid, ...validationDeps]);
+    }, [armedKey, isKeyValid, validationDeps]);
 
     const isArmed = useCallback((key: TKey) => {
         return armedKey === key;

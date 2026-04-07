@@ -57,7 +57,22 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
         }
         return die;
     });
-    return { ...state, dice: newDice, rollCount: state.rollCount + 1, rollConfirmed: false };
+
+    const isOffensiveRollAttempt = state.pendingAttack === null;
+    const offensiveRollCountThisTurn = isOffensiveRollAttempt
+        ? {
+            ...(state.offensiveRollCountThisTurn || {}),
+            [state.activePlayerId]: (state.offensiveRollCountThisTurn?.[state.activePlayerId] ?? 0) + 1,
+        }
+        : state.offensiveRollCountThisTurn;
+
+    return {
+        ...state,
+        dice: newDice,
+        rollCount: state.rollCount + 1,
+        rollConfirmed: false,
+        offensiveRollCountThisTurn,
+    };
 };
 
 /**
@@ -140,7 +155,26 @@ const handleSeatingMoved: EventHandler<Extract<DiceThroneEvent, { type: 'SEATING
 ) => ({
     ...state,
     seatingOrder: event.payload.seatingOrder,
+    seatSwapRequest: undefined,
     teamIdByPlayerId: buildTeamIdByPlayerIdFromSeatingOrder(event.payload.seatingOrder),
+});
+
+const handleSeatSwapRequested: EventHandler<Extract<DiceThroneEvent, { type: 'SEAT_SWAP_REQUESTED' }>> = (
+    state,
+    event,
+) => ({
+    ...state,
+    seatSwapRequest: {
+        requesterId: event.payload.requesterId,
+        targetPlayerId: event.payload.targetPlayerId,
+    },
+});
+
+const handleSeatSwapCleared: EventHandler<
+    Extract<DiceThroneEvent, { type: 'SEAT_SWAP_REJECTED' | 'SEAT_SWAP_CANCELLED' }>
+> = (state) => ({
+    ...state,
+    seatSwapRequest: undefined,
 });
 
 /**
@@ -542,6 +576,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
         turnNumber,
         lastResolvedAttackDamage: undefined,
         taijiGainedThisTurn: undefined, // 清除太极本回合获得量追踪
+        offensiveRollCountThisTurn: undefined,
     };
 };
 
@@ -907,6 +942,11 @@ export const reduce = (
             return handleHostStarted(state, event);
         case 'SEATING_MOVED':
             return handleSeatingMoved(state, event);
+        case 'SEAT_SWAP_REQUESTED':
+            return handleSeatSwapRequested(state, event);
+        case 'SEAT_SWAP_REJECTED':
+        case 'SEAT_SWAP_CANCELLED':
+            return handleSeatSwapCleared(state, event);
         case 'PLAYER_READY':
             return handlePlayerReady(state, event);
         case 'PLAYER_UNREADY':

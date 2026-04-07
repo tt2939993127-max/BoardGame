@@ -5,12 +5,10 @@
  */
 
 import type { TokenDef } from './tokenTypes';
-import { STATUS_IDS, TOKEN_IDS, DICETHRONE_STATUS_ATLAS_IDS } from './ids';
+import { STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from './ids';
 import { RESOURCE_IDS } from './resources';
 
 const statusText = (id: string, key: string) => `statusEffects.${id}.${key}`;
-const tokenText = (id: string, key: string) => `tokens.${id}.${key}`;
-
 /**
  * 共享状态效果和 Token 定义
  */
@@ -35,28 +33,6 @@ export const SHARED_TOKENS: TokenDef[] = [
         },
         frameId: 'knockdown',
         atlasId: DICETHRONE_STATUS_ATLAS_IDS.MONK,
-    },
-
-    /**
-     * 闪避（Evasive）- 下次攻击完全闪避
-     * 
-     * 使用角色：月精灵、武僧、枪手
-     */
-    {
-        id: TOKEN_IDS.EVASIVE,
-        name: tokenText(TOKEN_IDS.EVASIVE, 'name'),
-        colorTheme: 'from-cyan-500 to-blue-500',
-        description: tokenText(TOKEN_IDS.EVASIVE, 'description') as unknown as string[],
-        sfxKey: 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_wind',
-        stackLimit: 1,
-        category: 'buff',
-        passiveTrigger: {
-            timing: 'onDefense',
-            removable: true,
-            actions: [{ type: 'evade' }],
-        },
-        frameId: 'evasive',
-        atlasId: DICETHRONE_STATUS_ATLAS_IDS.MOON_ELF,
     },
 
     /**

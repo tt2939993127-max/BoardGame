@@ -25,6 +25,7 @@ import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 
 beforeAll(() => {
     clearRegistry();
@@ -407,6 +408,46 @@ describe('巫师派系能力（第6批）', () => {
         expect(current?.data?.sourceId).toBe('wizard_mass_enchantment');
     });
 
+    it('wizard_mass_enchantment: 对手牌库顶变化后不应继续保留过期行动卡候选', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [
+                        makeCard('d1', 'test_action', 'action', '1'),
+                        makeCard('d2', 'test_minion', 'minion', '1'),
+                    ],
+                }),
+            },
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const refreshedState = refreshInteractionOptions({
+            ...matchState,
+            core: {
+                ...matchState.core,
+                players: {
+                    ...matchState.core.players,
+                    '1': {
+                        ...matchState.core.players['1'],
+                        deck: [
+                            makeCard('intrude', 'test_minion', 'minion', '1'),
+                            makeCard('d1', 'test_action', 'action', '1'),
+                            makeCard('d2', 'test_minion', 'minion', '1'),
+                        ],
+                    },
+                },
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('wizard_mass_enchantment');
+        const optionUids = (current?.data?.options ?? []).map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionUids).not.toContain('d1');
+    });
+
     it('wizard_mass_enchantment: 对手牌库为空时无事件', () => {
         const state = makeState({
             players: {
@@ -490,6 +531,47 @@ describe('巫师派系能力（第6批）', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('wizard_portal_order');
+    });
+
+    it('wizard_portal_order: 牌库顶被插入新牌后不应继续保留旧揭示排序候选', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'wizard_portal', 'action', '0')],
+                    deck: [
+                        makeCard('d1', 'test_a', 'action', '0'),
+                        makeCard('d2', 'test_a2', 'action', '0'),
+                        makeCard('d3', 'test_a3', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const refreshedState = refreshInteractionOptions({
+            ...matchState,
+            core: {
+                ...matchState.core,
+                players: {
+                    ...matchState.core.players,
+                    '0': {
+                        ...matchState.core.players['0'],
+                        deck: [
+                            makeCard('intrude', 'test_a4', 'action', '0'),
+                            ...matchState.core.players['0'].deck,
+                        ],
+                    },
+                },
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('wizard_portal_order');
+        const optionUids = (current?.data?.options ?? []).map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionUids).not.toContain('d1');
+        expect(optionUids).not.toContain('d2');
+        expect(optionUids).not.toContain('d3');
     });
 
     it('wizard_scry: 单张行动卡时创建 Prompt', () => {

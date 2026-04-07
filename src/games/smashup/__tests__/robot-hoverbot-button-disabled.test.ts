@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { initAllAbilities } from '../abilities';
 import { runCommand } from './testRunner';
-import { makeState, makePlayer, makeCard, makeBase, makeMinion, makeMatchState } from './helpers';
+import { makeState, makePlayer, makeCard, makeMatchState } from './helpers';
 import { SU_COMMANDS } from '../domain/types';
 import type { RandomFn } from '../../../engine/types';
 
@@ -108,7 +108,7 @@ describe('盘旋机器人 - 按钮可点击性', () => {
         expect(result.events.length).toBeGreaterThan(0);
     });
 
-    it('牌库顶卡牌变化后，optionsGenerator 仍然保留原始卡牌选项（continuationContext 模式）', () => {
+    it('牌库顶卡牌变化后，optionsGenerator 应只保留 skip，避免 AI 继续拿过期牌', () => {
         // 设置：玩家牌库顶是入侵者
         const state = makeState({
             players: {
@@ -157,10 +157,9 @@ describe('盘旋机器人 - 按钮可点击性', () => {
         // 调用 optionsGenerator 获取刷新后的选项
         const refreshedOptions = optionsGenerator(modifiedState, interaction?.data);
 
-        // 验证：continuationContext 模式会保留原始卡牌信息，所以仍然返回两个选项
+        // 验证：live 校验下，原始打出选项必须失效，只能跳过
         expect(refreshedOptions).toBeDefined();
-        expect(refreshedOptions.length).toBe(2);
-        expect(refreshedOptions[0].id).toBe('play');
-        expect(refreshedOptions[1].id).toBe('skip');
+        expect(refreshedOptions.length).toBe(1);
+        expect(refreshedOptions[0].id).toBe('skip');
     });
 });

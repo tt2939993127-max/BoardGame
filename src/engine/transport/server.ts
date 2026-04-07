@@ -15,6 +15,7 @@ import type {
     StoredMatchState,
     MatchMetadata,
 } from './storage';
+import { isMatchAuthMetadataProvider } from './storage';
 import type {
     MatchPlayerInfo,
 } from './protocol';
@@ -22,7 +23,7 @@ import type { TrainingDataRecorder } from './trainingData';
 import { buildTrainingDecisionSample } from './trainingData';
 import logger, { gameLogger } from '../../../server/logger.js';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
-import { applyPlayerViewToState, buildAiDecisionContext } from '../ai';
+import { applyPlayerViewToState, buildAiDecisionContext, getAiSeatIds } from '../ai';
 import {
     executePipeline,
     createSeededRandom,
@@ -30,6 +31,7 @@ import {
     type PipelineConfig,
 } from '../pipeline';
 import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
+import { setUndoAiSeatIds } from '../systems/UndoSystem';
 import { computeDiff } from './patch';
 
 // 离线裁决：按交互 kind 选择最小语义正确的兜底命令
@@ -53,6 +55,19 @@ const ALLOWED_INJECT_STATE_ENVS = new Set(['test', 'development']);
 
 const canInjectStateInCurrentEnv = (nodeEnv: string | undefined): boolean =>
     typeof nodeEnv === 'string' && ALLOWED_INJECT_STATE_ENVS.has(nodeEnv);
+
+const extractSetupSeatControllers = (setupData: unknown): Record<string, { type?: unknown } | undefined> | undefined => {
+    if (!setupData || typeof setupData !== 'object' || Array.isArray(setupData)) {
+        return undefined;
+    }
+
+    const rawSeatControllers = (setupData as { seatControllers?: unknown }).seatControllers;
+    if (!rawSeatControllers || typeof rawSeatControllers !== 'object' || Array.isArray(rawSeatControllers)) {
+        return undefined;
+    }
+
+    return rawSeatControllers as Record<string, { type?: unknown } | undefined>;
+};
 
 // ============================================================================
 // 游戏引擎定义
@@ -353,7 +368,10 @@ export class GameTransportServer {
             engineConfig.systems as EngineSystem[],
             matchID,
         );
-        const state: MatchState<unknown> = { sys, core };
+        const state = setUndoAiSeatIds(
+            { sys, core },
+            getAiSeatIds(extractSetupSeatControllers(setupData)),
+        );
         return {
             state,
             randomCursor: trackedRandom.getCursor(),
@@ -377,6 +395,26 @@ export class GameTransportServer {
         const active = this.activeMatches.get(matchID);
         if (!active) return;
         active.metadata = metadata;
+    }
+
+    private async readFreshAuthMetadata(
+        matchID: string,
+        fallback?: MatchMetadata,
+    ): Promise<MatchMetadata | undefined> {
+        if (isMatchAuthMetadataProvider(this.storage)) {
+            return (await this.storage.fetchAuthMetadata(matchID)) ?? fallback;
+        }
+        return (await this.storage.fetch(matchID, { metadata: true })).metadata ?? fallback;
+    }
+
+    private mergeActiveMetadata(matchID: string, metadata: MatchMetadata): void {
+        const active = this.activeMatches.get(matchID);
+        if (!active) return;
+        active.metadata = {
+            ...active.metadata,
+            ...metadata,
+            players: metadata.players,
+        };
     }
 
     /**
@@ -561,6 +599,7 @@ export class GameTransportServer {
     ): Promise<void> {
         // 加载或获取活跃对局
         let match = this.activeMatches.get(matchID);
+        const reusedActiveMatch = Boolean(match);
         if (!match) {
             match = await this.loadMatch(matchID);
             if (!match) {
@@ -572,7 +611,10 @@ export class GameTransportServer {
         // 认证（旁观者无需凭证）。
         // 这里必须基于存储层最新 metadata 做校验，避免 leave/join 后内存缓存滞后。
         if (playerID !== null) {
-            const ok = await this.validateCommandAuth(matchID, playerID, credentials);
+            const authMetadata = reusedActiveMatch
+                ? await this.readFreshAuthMetadata(matchID, match.metadata) ?? match.metadata
+                : match.metadata;
+            const ok = await this.validateCommandAuth(matchID, playerID, credentials, authMetadata);
             if (!ok) {
                 socket.emit('error', matchID, 'unauthorized');
                 return;
@@ -605,8 +647,18 @@ export class GameTransportServer {
 
             // 更新 metadata 连接状态
             if (match.metadata.players[playerID]) {
+                const wasConnected = match.metadata.players[playerID].isConnected === true;
                 match.metadata.players[playerID].isConnected = true;
-                await this.storage.setMetadata(matchID, match.metadata);
+                if (!wasConnected) {
+                    match.metadata.updatedAt = Date.now();
+                    this.storage.setMetadata(matchID, match.metadata).catch((error) => {
+                        logger.warn('[GameTransport] persist connected metadata failed', {
+                            matchID,
+                            playerID,
+                            error,
+                        });
+                    });
+                }
             }
         }
 
@@ -1396,7 +1448,10 @@ export class GameTransportServer {
         const engineConfig = this.gameIndex.get(gameId);
         if (!engineConfig) return undefined;
 
-        const state = result.state.G as MatchState<unknown>;
+        const state = setUndoAiSeatIds(
+            result.state.G as MatchState<unknown>,
+            getAiSeatIds(extractSetupSeatControllers(result.metadata.setupData)),
+        );
         const playerIds = Object.keys(result.metadata.players) as PlayerId[];
 
         const randomSeed = resolveStoredRandomSeed(result.state, matchID);
@@ -1431,20 +1486,17 @@ export class GameTransportServer {
         matchID: string,
         playerID: string,
         credentials?: string,
+        metadata?: MatchMetadata,
     ): Promise<boolean> {
         if (!this.authenticate) return true;
 
-        const result = await this.storage.fetch(matchID, { metadata: true });
-        const metadata = result.metadata;
-        if (!metadata) return false;
+        const resolvedMetadata = metadata ?? await this.readFreshAuthMetadata(matchID);
+        if (!resolvedMetadata) return false;
 
-        const ok = await this.authenticate(matchID, playerID, credentials, metadata);
+        const ok = await this.authenticate(matchID, playerID, credentials, resolvedMetadata);
         if (!ok) return false;
 
-        const active = this.activeMatches.get(matchID);
-        if (active) {
-            active.metadata = metadata;
-        }
+        this.mergeActiveMetadata(matchID, resolvedMetadata);
         return true;
     }
 }

@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest';
 import type { MatchState, Command, RandomFn } from '../../types';
 import {
     createInteractionSystem,
+    createCompareRollChoice,
     createSimpleChoice,
     INTERACTION_COMMANDS,
 } from '../InteractionSystem';
+import { createCompareRollChoiceSystem } from '../CompareRollChoiceSystem';
 import { createSimpleChoiceSystem } from '../SimpleChoiceSystem';
 
 interface TestCore {
@@ -122,9 +124,113 @@ describe('InteractionSystem', () => {
         expect(viewForOther?.interaction?.isBlocked).toBe(true);
     });
 
-    it('非 slider simple-choice 不允许自定义 mergedValue', () => {
+    it('playerView 应为 optionsGenerator 刷新的同 ID 选项保留卡面元数据', () => {
+        const system = createInteractionSystem<TestCore>();
+        const interaction = createSimpleChoice(
+            'interaction-player-view-refresh',
+            '0',
+            '查看对手手牌',
+            [
+                {
+                    id: 'card-1',
+                    label: '测试卡牌',
+                    value: { cardUid: 'card-1', defId: 'test-card-1' },
+                    displayMode: 'card' as const,
+                },
+            ],
+        );
+        (interaction.data as typeof interaction.data & {
+            optionsGenerator?: (state: MatchState<TestCore>) => Array<{ id: string; label: string; value: { cardUid: string } }>;
+        }).optionsGenerator = () => [
+            {
+                id: 'card-1',
+                label: '测试卡牌',
+                value: { cardUid: 'card-1' },
+            },
+        ];
+
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current: interaction,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
+
+        const viewForTarget = system.playerView?.(state, '0') as any;
+        const option = viewForTarget?.interaction?.current?.data?.options?.[0];
+
+        expect(option?.displayMode).toBe('card');
+        expect(option?.value?.defId).toBe('test-card-1');
+    });
+
+    it('非 slider simple-choice 允许追加 mergedValue 字段，但不允许覆盖原字段', () => {
         const system = createSimpleChoiceSystem<TestCore>();
-        const state = createTestState();
+        const current = createSimpleChoice(
+            'interaction-merge',
+            '0',
+            '合并扩展值',
+            [{ id: 'a', label: 'A', value: { cardUid: 'card-1', defId: 'safe-choice' } }],
+        );
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
+        const command: Command = {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: {
+                optionId: 'a',
+                mergedValue: { baseIndex: 2 },
+            },
+            timestamp: 100,
+        };
+
+        const result = system.beforeCommand?.({
+            state,
+            command,
+            events: [],
+            random: mockRandom,
+            playerIds: ['0', '1'],
+        });
+
+        expect(result?.halt).toBe(false);
+        expect(result?.events?.[0]).toMatchObject({
+            type: 'SYS_INTERACTION_RESOLVED',
+            payload: {
+                value: {
+                    cardUid: 'card-1',
+                    defId: 'safe-choice',
+                    baseIndex: 2,
+                },
+            },
+        });
+    });
+
+    it('非 slider simple-choice 不允许通过 mergedValue 覆盖原字段', () => {
+        const system = createSimpleChoiceSystem<TestCore>();
+        const current = createSimpleChoice(
+            'interaction-merge-protected',
+            '0',
+            '覆盖保护',
+            [{ id: 'a', label: 'A', value: { customId: 'safe-choice', value: 3 } }],
+        );
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
         const command: Command = {
             type: INTERACTION_COMMANDS.RESPOND,
             playerId: '0',
@@ -195,6 +301,107 @@ describe('InteractionSystem', () => {
                     value: 2,
                     amount: 2,
                 },
+            },
+        });
+    });
+
+    it('compare-roll-choice 选择分支后应发出 RESOLVED 事件', () => {
+        const system = createCompareRollChoiceSystem<TestCore>();
+        const current = createCompareRollChoice(
+            'interaction-compare-roll',
+            '0',
+            {
+                title: '对比掷骰',
+                sourceId: 'duel',
+                contestants: [
+                    { label: '我方', roll: 6 },
+                    { label: '对手', roll: 1 },
+                ],
+                options: [
+                    { id: 'deal-3', label: '造成 3 伤害', value: { customId: 'deal-3', value: 3 } },
+                ],
+            },
+        );
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
+
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: '0',
+                payload: { optionId: 'deal-3' },
+                timestamp: 100,
+            },
+            events: [],
+            random: mockRandom,
+            playerIds: ['0', '1'],
+        });
+
+        expect(result?.halt).toBe(false);
+        expect(result?.state?.sys.interaction.current).toBeUndefined();
+        expect(result?.events?.[0]).toMatchObject({
+            type: 'SYS_INTERACTION_RESOLVED',
+            payload: {
+                sourceId: 'duel',
+                optionId: 'deal-3',
+                value: { customId: 'deal-3', value: 3 },
+            },
+        });
+    });
+
+    it('compare-roll-choice 无选项确认时应复用 confirmValue 发出 RESOLVED 事件', () => {
+        const system = createCompareRollChoiceSystem<TestCore>();
+        const current = createCompareRollChoice(
+            'interaction-compare-roll-autoconfirm',
+            '0',
+            {
+                title: '摊到牌面',
+                sourceId: 'showdown',
+                contestants: [
+                    { label: '我方', roll: 6 },
+                    { label: '对手', roll: 1 },
+                ],
+                confirmValue: { customId: 'showdown-win', value: 2 },
+            },
+        );
+        const state: MatchState<TestCore> = {
+            core: { value: 0 },
+            sys: {
+                interaction: {
+                    current,
+                    queue: [],
+                },
+            },
+        } as unknown as MatchState<TestCore>;
+
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.CONFIRM,
+                playerId: '0',
+                payload: {},
+                timestamp: 100,
+            },
+            events: [],
+            random: mockRandom,
+            playerIds: ['0', '1'],
+        });
+
+        expect(result?.halt).toBe(false);
+        expect(result?.events?.[0]).toMatchObject({
+            type: 'SYS_INTERACTION_RESOLVED',
+            payload: {
+                sourceId: 'showdown',
+                optionId: null,
+                value: { customId: 'showdown-win', value: 2 },
             },
         });
     });

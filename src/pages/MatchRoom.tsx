@@ -3,8 +3,8 @@ import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
-import { loadGameImplementation, getGameImplementation } from '../games/registry';
-import { GameProvider, LocalGameProvider, BoardBridge, useGameClient } from '../engine/transport/react';
+import { getGameImplementation } from '../games/registry';
+import { GameProvider, LocalGameProvider, BoardBridge, buildAiProgressMarker, useGameClient } from '../engine/transport/react';
 import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
 import type { GameBoardProps } from '../engine/transport/protocol';
@@ -20,6 +20,7 @@ import {
     leaveMatch,
     rejoinMatch,
     persistMatchCredentials,
+    persistAiSeatCredentials,
     clearMatchCredentials,
     clearOwnerActiveMatch,
     suppressOwnerActiveMatch,
@@ -27,20 +28,18 @@ import {
     readStoredMatchCredentials,
     validateStoredMatchSeat,
 } from '../hooks/match/useMatchStatus';
-import { getOrCreateGuestId } from '../hooks/match/ownerIdentity';
+import { getGuestName, getOrCreateGuestId } from '../hooks/match/ownerIdentity';
 import { useAuth } from '../contexts/AuthContext';
 import { ConfirmModal } from '../components/common/overlays/ConfirmModal';
 import { useModalStack } from '../contexts/ModalStackContext';
 import { useToast } from '../contexts/ToastContext';
 import { getGameServerUrl } from '../config/server';
-import { getGameById, refreshUgcGames, subscribeGameRegistry } from '../config/games.config';
+import { getGameById } from '../config/games.config';
 import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
 import { useLobbyMatchPresence } from '../hooks/useLobbyMatchPresence';
 import { GameHUD } from '../components/game/framework/widgets/GameHUD';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { SEO } from '../components/common/SEO';
-import { createUgcClientGame } from '../ugc/client/game';
-import { createUgcRemoteHostBoard } from '../ugc/client/board';
 import { LoadingScreen } from '../components/system/LoadingScreen';
 import { ConnectionLoadingScreen } from '../components/system/ConnectionLoadingScreen';
 import { GameNamespaceLoadError } from '../components/system/GameNamespaceLoadError';
@@ -50,12 +49,24 @@ import { preloadWarmImages } from '../core';
 import { resolveCriticalImages } from '../core/CriticalImageResolverRegistry';
 import { UI_Z_INDEX } from '../core';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
+import { appendMatchLoadTrace } from '../lib/matchLoadTrace';
+import { logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
+import { isNativeAndroidRuntime } from '../lib/mobile/androidRuntime';
 import { resolveCommandError } from '../engine/transport/errorI18n';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { useGameImplementationReady } from '../hooks/useGameImplementationReady';
+import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
+import { resolveOnlineHudPresence } from './matchHudPresence';
+import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
-    normalizeLocalMatchPreferences,
+    resolveForceEndTurnForStalledAi,
+    resolveForceSkippableHiddenAiInteraction,
+    submitOnlineAiResolution,
+    type ForceSkippableHiddenAiInteraction,
+} from './onlineAiForceSkip';
+import {
     resolveAiMinimumActionDelayMs,
     resolveNextAiAction,
     type AiSeatController,
@@ -63,6 +74,7 @@ import {
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
+const ONLINE_TRANSPORT_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout']);
 // 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
 
@@ -139,9 +151,23 @@ const OnlineAiSeatBridge = ({
     seatCredentials: Record<string, string>;
 }) => {
     const { state } = useGameClient();
+    const toast = useToast();
     const clientsRef = useRef<Record<string, GameTransportClient>>({});
     const [connectionVersion, setConnectionVersion] = useState(0);
+    const [aiRetryVersion, setAiRetryVersion] = useState(0);
+    const [forceSkipCheckVersion, setForceSkipCheckVersion] = useState(0);
     const lastAiAttemptKeyRef = useRef<string | null>(null);
+    const forceSkipTrackerRef = useRef<{
+        key: string;
+        firstSeenAt: number;
+        autoSubmittedAt: number | null;
+        candidate: ForceSkippableHiddenAiInteraction | null;
+    } | null>(null);
+    const forceEndTurnTrackerRef = useRef<{
+        key: string;
+        firstSeenAt: number;
+        autoSubmittedAt: number | null;
+    } | null>(null);
 
     useEffect(() => {
         const nextClientKeys = new Set(
@@ -167,6 +193,9 @@ const OnlineAiSeatBridge = ({
                 matchID: matchId,
                 playerID: playerId,
                 credentials: seatCredentials[playerId],
+                onStateUpdate: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
                 onConnectionChange: () => {
                     setConnectionVersion((version) => version + 1);
                 },
@@ -200,6 +229,13 @@ const OnlineAiSeatBridge = ({
                 state,
                 matchId,
                 seatControllers,
+                visibleStateResolver: (playerId) => {
+                    const seatState = clientsRef.current[playerId]?.latestState;
+                    if (!seatState || typeof seatState !== 'object') {
+                        return null;
+                    }
+                    return seatState as MatchState<unknown>;
+                },
             });
 
             if (cancelled) return;
@@ -219,8 +255,6 @@ const OnlineAiSeatBridge = ({
                 return;
             }
 
-            lastAiAttemptKeyRef.current = resolution.attemptKey;
-
             const remainingDelayMs = Math.max(
                 0,
                 resolveAiMinimumActionDelayMs(controller) - (Date.now() - startedAt),
@@ -239,9 +273,14 @@ const OnlineAiSeatBridge = ({
                 return;
             }
 
-            for (const command of resolution.action.commands) {
-                client.sendCommand(command.type, command.payload);
-            }
+            submitOnlineAiResolution({
+                client,
+                resolution,
+                lastAiAttemptKeyRef,
+                scheduleRetry: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
+            });
         };
 
         void runAiTurn();
@@ -252,7 +291,224 @@ const OnlineAiSeatBridge = ({
                 clearTimeout(delayTimer);
             }
         };
-    }, [connectionVersion, engineConfig, matchId, seatControllers, state]);
+    }, [aiRetryVersion, connectionVersion, engineConfig, matchId, seatControllers, state]);
+
+    useEffect(() => {
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const seatStates = Object.fromEntries(
+            Object.entries(clientsRef.current).map(([playerId, client]) => {
+                const latestState = client.latestState;
+                return [playerId, latestState && typeof latestState === 'object' ? latestState as MatchState<unknown> : null];
+            }),
+        );
+
+        const candidate = resolveForceSkippableHiddenAiInteraction({
+            sharedState: state as MatchState<unknown> | null | undefined,
+            seatControllers,
+            seatStates,
+        });
+        const candidateKey = candidate ? `${candidate.playerId}:${candidate.interactionId}` : null;
+
+        if (!candidateKey) {
+            forceSkipTrackerRef.current = null;
+            return;
+        }
+
+        const now = Date.now();
+        const currentTracker = forceSkipTrackerRef.current;
+        if (!currentTracker || currentTracker.key !== candidateKey) {
+            forceSkipTrackerRef.current = {
+                key: candidateKey,
+                firstSeenAt: now,
+                autoSubmittedAt: null,
+                candidate,
+            };
+            timer = setTimeout(() => {
+                setForceSkipCheckVersion((version) => version + 1);
+            }, 4000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        currentTracker.candidate = candidate;
+        if (currentTracker.autoSubmittedAt) {
+            return;
+        }
+
+        const elapsed = now - currentTracker.firstSeenAt;
+        if (elapsed < 4000) {
+            timer = setTimeout(() => {
+                setForceSkipCheckVersion((version) => version + 1);
+            }, 4000 - elapsed);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        const latestCandidate = forceSkipTrackerRef.current?.candidate;
+        if (!latestCandidate) {
+            return;
+        }
+        const targetClient = clientsRef.current[latestCandidate.playerId];
+        if (!targetClient?.isConnected) {
+            timer = setTimeout(() => {
+                setForceSkipCheckVersion((version) => version + 1);
+            }, 1000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        currentTracker.autoSubmittedAt = now;
+        submitOnlineAiResolution({
+            client: targetClient,
+            resolution: latestCandidate.resolution,
+            lastAiAttemptKeyRef,
+            scheduleRetry: () => {
+                setAiRetryVersion((version) => version + 1);
+            },
+            onConfirmed: () => {
+                toast.warning(
+                    'AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。建议通过反馈入口提交问题。',
+                    'AI 响应超时',
+                    { dedupeKey: `game.ai-force-skip.resolved.${candidateKey}` },
+                );
+            },
+            onRejected: (reason) => {
+                const tracker = forceSkipTrackerRef.current;
+                if (tracker?.key === candidateKey) {
+                    tracker.autoSubmittedAt = null;
+                    tracker.firstSeenAt = Date.now();
+                }
+                if (reason === 'unauthorized') {
+                    toast.warning('AI 座位凭据已失效，无法自动跳过这次隐藏交互。建议通过反馈入口提交问题。');
+                    return;
+                }
+                toast.warning('自动跳过这次 AI 隐藏交互未成功，系统会继续重试。建议通过反馈入口提交问题。');
+            },
+        });
+
+        return () => {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        };
+    }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, seatControllers, state, toast]);
+
+    useEffect(() => {
+        if (!state) {
+            forceEndTurnTrackerRef.current = null;
+            return;
+        }
+
+        let timer: ReturnType<typeof setTimeout> | null = null;
+        const seatStates = Object.fromEntries(
+            Object.entries(clientsRef.current).map(([playerId, client]) => {
+                const latestState = client.latestState;
+                return [playerId, latestState && typeof latestState === 'object' ? latestState as MatchState<unknown> : null];
+            }),
+        );
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: state as MatchState<unknown>,
+            seatControllers,
+            seatStates,
+        });
+        if (!candidate) {
+            forceEndTurnTrackerRef.current = null;
+            return;
+        }
+
+        const progressMarker = buildAiProgressMarker(state as MatchState<unknown>);
+        const trackerKey = progressMarker;
+        const now = Date.now();
+        const currentTracker = forceEndTurnTrackerRef.current;
+
+        if (!currentTracker || currentTracker.key !== trackerKey) {
+            forceEndTurnTrackerRef.current = {
+                key: trackerKey,
+                firstSeenAt: now,
+                autoSubmittedAt: null,
+            };
+            timer = setTimeout(() => {
+                setAiRetryVersion((version) => version + 1);
+            }, 8000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        if (currentTracker.autoSubmittedAt) {
+            return;
+        }
+
+        const elapsed = now - currentTracker.firstSeenAt;
+        if (elapsed < 8000) {
+            timer = setTimeout(() => {
+                setAiRetryVersion((version) => version + 1);
+            }, 8000 - elapsed);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        const targetClient = clientsRef.current[candidate.playerId];
+        if (!targetClient?.isConnected) {
+            timer = setTimeout(() => {
+                setAiRetryVersion((version) => version + 1);
+            }, 1000);
+            return () => {
+                if (timer) {
+                    clearTimeout(timer);
+                }
+            };
+        }
+
+        currentTracker.autoSubmittedAt = now;
+        submitOnlineAiResolution({
+            client: targetClient,
+            resolution: candidate.resolution,
+            lastAiAttemptKeyRef,
+            scheduleRetry: () => {
+                setAiRetryVersion((version) => version + 1);
+            },
+            onConfirmed: () => {
+                toast.warning(
+                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+            },
+            onRejected: (reason) => {
+                const tracker = forceEndTurnTrackerRef.current;
+                if (tracker?.key === trackerKey) {
+                    tracker.autoSubmittedAt = null;
+                    tracker.firstSeenAt = Date.now();
+                }
+                if (reason === 'unauthorized') {
+                    toast.warning('AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。');
+                    return;
+                }
+                toast.warning('强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。');
+            },
+        });
+
+        return () => {
+            if (timer) {
+                clearTimeout(timer);
+            }
+        };
+    }, [aiRetryVersion, connectionVersion, seatControllers, state, toast]);
 
     return null;
 };
@@ -261,12 +517,17 @@ const OnlineRoomConnectionLoading = ({
     title,
     description,
     gameId,
+    transportError,
+    onRetry,
 }: {
     title: string;
     description: string;
     gameId?: string;
+    transportError?: string | null;
+    onRetry?: () => void;
 }) => {
     const { t } = useTranslation('lobby');
+    const navigate = useNavigate();
     const { state, isConnected, matchPlayers } = useGameClient();
     const core = state?.core as { turnNumber?: number; activePlayer?: number | string; phase?: string } | undefined;
     const activityKey = [
@@ -276,14 +537,123 @@ const OnlineRoomConnectionLoading = ({
         core?.activePlayer ?? 'no-player',
         core?.phase ?? 'no-phase',
     ].join(':');
+    const progressText = state
+        ? undefined
+        : t(isConnected
+            ? 'matchRoom.loadingProgress.syncing'
+            : 'matchRoom.loadingProgress.connecting');
+    if (transportError) {
+        const titleKey = transportError === 'match_not_found'
+            ? 'matchRoom.connectionError.matchNotFoundTitle'
+            : transportError === 'unauthorized'
+                ? 'matchRoom.connectionError.unauthorizedTitle'
+                : 'matchRoom.connectionError.syncTimeoutTitle';
+        const descriptionKey = transportError === 'match_not_found'
+            ? 'matchRoom.connectionError.matchNotFoundDescription'
+            : transportError === 'unauthorized'
+                ? 'matchRoom.connectionError.unauthorizedDescription'
+                : 'matchRoom.connectionError.syncTimeoutDescription';
+
+        return (
+            <div className="absolute inset-0 flex items-center justify-center bg-black px-6 text-center">
+                <div className="max-w-md">
+                    <div className="text-white/85 text-xl font-semibold mb-3">{t(titleKey)}</div>
+                    <div className="text-white/60 text-sm leading-6 mb-6">{t(descriptionKey)}</div>
+                    <div className="flex items-center justify-center gap-4">
+                        <button
+                            onClick={() => {
+                                if (onRetry) {
+                                    onRetry();
+                                    return;
+                                }
+                                navigate(0);
+                            }}
+                            className="px-5 py-2 rounded-lg bg-amber-600/80 hover:bg-amber-500/90 text-white text-sm font-medium transition-colors"
+                        >
+                            {t('matchRoom.connectionTimeout.retry')}
+                        </button>
+                        <button
+                            onClick={() => {
+                                if (gameId) {
+                                    navigate(`/?game=${gameId}`, { replace: true });
+                                } else {
+                                    navigate('/', { replace: true });
+                                }
+                            }}
+                            className="px-5 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 text-sm transition-colors"
+                        >
+                            {t('matchRoom.connectionTimeout.backToLobby')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
     return (
         <ConnectionLoadingScreen
             anchor="container"
             title={title}
             description={description}
+            progressText={progressText}
             gameId={gameId}
             activityKey={activityKey}
             suppressTimeout={Boolean(state)}
+        />
+    );
+};
+
+const OnlineGameHudBridge = ({
+    matchId,
+    gameId,
+    isHost,
+    credentials,
+    myPlayerId,
+    fallbackPlayers,
+    fallbackOpponentName,
+    onLeave,
+    onDestroy,
+    onForceExit,
+    isLoading,
+    seatControllers,
+}: {
+    matchId?: string;
+    gameId?: string;
+    isHost: boolean;
+    credentials?: string;
+    myPlayerId?: string | null;
+    fallbackPlayers: Array<{ id: number; name?: string; isConnected?: boolean }>;
+    fallbackOpponentName?: string | null;
+    onLeave?: () => void;
+    onDestroy?: () => void;
+    onForceExit?: () => void;
+    isLoading?: boolean;
+    seatControllers: Record<string, AiSeatController>;
+}) => {
+    const { matchPlayers, isConnected } = useGameClient();
+    const hudPresence = useMemo(() => resolveOnlineHudPresence({
+        fallbackPlayers,
+        transportPlayers: matchPlayers,
+        transportReady: isConnected && matchPlayers.length > 0,
+        myPlayerId,
+        seatControllers,
+    }), [fallbackPlayers, isConnected, matchPlayers, myPlayerId, seatControllers]);
+
+    return (
+        <GameHUD
+            mode="online"
+            matchId={matchId}
+            gameId={gameId}
+            isHost={isHost}
+            credentials={credentials}
+            myPlayerId={myPlayerId}
+            opponentName={hudPresence.opponentName ?? fallbackOpponentName ?? null}
+            opponentConnected={hudPresence.opponentConnected}
+            presenceReady={hudPresence.presenceReady}
+            players={hudPresence.players}
+            onLeave={onLeave}
+            onDestroy={onDestroy}
+            onForceExit={onForceExit}
+            isLoading={isLoading}
         />
     );
 };
@@ -298,45 +668,60 @@ export const MatchRoom = () => {
     const { openModal, closeModal } = useModalStack();
     const toast = useToast();
     const { t, i18n } = useTranslation('lobby');
-    const { user } = useAuth();
+    const { user, token } = useAuth();
+    const [onlineTransportError, setOnlineTransportError] = useState<string | null>(null);
+    const [hasEverReceivedOnlineState, setHasEverReceivedOnlineState] = useState(false);
+    const renderLogKeyRef = useRef<string | null>(null);
+
+    const renderLogKey = `${gameId ?? 'unknown'}:${matchId ?? 'unknown'}:${searchParams.get('playerID') ?? 'no-player'}`;
+    if (isNativeAndroidRuntime() && renderLogKeyRef.current !== renderLogKey) {
+        renderLogKeyRef.current = renderLogKey;
+        logMobileRuntimeCritical('MatchRoom', 'render-enter', {
+            gameId,
+            matchId,
+            playerID: searchParams.get('playerID'),
+            spectate: searchParams.get('spectate'),
+            userId: user?.id ?? null,
+        });
+    }
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const guestId = useMemo(() => getOrCreateGuestId(), []);
+    const guestName = useMemo(() => getGuestName(t, guestId), [guestId, t]);
     const gameDisplayName = resolveGameDisplayName(gameConfig, t, gameId ?? '');
     const gamePageDataAttributes = useMemo(
         () => getGamePageDataAttributes(gameId, gameConfig),
         [gameConfig, gameId],
     );
-    const isUgcGame = Boolean(gameConfig?.isUgc);
-    const requiresGameNamespace = Boolean(gameConfig && !gameConfig.isUgc);
+    const requiresGameNamespace = Boolean(gameConfig);
     const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
-
-    // 异步加载游戏实现（Board/engineConfig/tutorial/latencyConfig）
-    const [gameImplReady, setGameImplReady] = useState(false);
     useEffect(() => {
-        if (!gameId || isUgcGame) return;
-        
-        // HMR 优化：如果游戏实现已经加载（通过检查 getGameImplementation），跳过重新加载
-        // 这避免了 HMR 时短暂的 gameImplReady=false 导致显示"未找到游戏客户端"
-        const impl = getGameImplementation(gameId);
-        if (impl) {
-            setGameImplReady(true);
-            return;
-        }
-        
-        let cancelled = false;
-        setGameImplReady(false);
-        loadGameImplementation(gameId).then(() => {
-            if (!cancelled) setGameImplReady(true);
-        }).catch(() => {
-            if (!cancelled) setGameImplReady(true); // 允许显示错误状态
+        appendMatchLoadTrace({
+            stage: 'match-room-mounted',
+            gameId,
+            matchId,
+            payload: {
+                playerID: searchParams.get('playerID'),
+                spectate: searchParams.get('spectate'),
+                isTutorialRoute,
+            },
         });
-        return () => { cancelled = true; };
-    }, [gameId, isUgcGame]);
+    }, [gameId, isTutorialRoute, matchId, searchParams]);
+    useEffect(() => {
+        setOnlineTransportError(null);
+    }, [gameId, matchId, isTutorialRoute]);
+    useEffect(() => {
+        setHasEverReceivedOnlineState(false);
+    }, [gameId, matchId, isTutorialRoute]);
 
     // 在线模式：命令被服务端拒绝时的统一反馈
     const handleGameError = useCallback((error: string) => {
-        if (SYSTEM_ERRORS.has(error)) return; // 系统错误由其他逻辑处理
+        if (ONLINE_TRANSPORT_ERRORS.has(error)) {
+            setOnlineTransportError(error);
+            return;
+        }
+        if (SYSTEM_ERRORS.has(error)) return; // 其他系统错误由独立逻辑处理
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.error.${error}` });
     }, [toast, i18n, gameId]);
@@ -355,9 +740,67 @@ export const MatchRoom = () => {
     // → WrappedBoard 重建 → Board 卸载重挂载 → CriticalImageGate 重新预加载 → 循环
     const tRef = useRef(t);
     tRef.current = t;
-    // 联机对局刷新时先给玩家看到棋盘，再让图片在后台补齐；
-    // 教程模式仍保留强门禁，避免首步引导和资源切阶段互相打架。
-    const shouldBlockBoardOnImagePreload = isTutorialRoute;
+    const [hasCompletedInitialOnlinePreload, setHasCompletedInitialOnlinePreload] = useState(false);
+    useEffect(() => {
+        setHasCompletedInitialOnlinePreload(false);
+    }, [gameId, matchId, isTutorialRoute]);
+
+    const {
+        isGameNamespaceReady,
+        gameNamespaceError,
+        retryGameNamespaceLoad,
+    } = useGameNamespaceReady(gameId, i18n, { required: requiresGameNamespace });
+    const {
+        isGameImplementationReady,
+        gameImplementationError,
+        retryGameImplementationLoad,
+    } = useGameImplementationReady(gameId, {
+        enabled: Boolean(gameId),
+        includeTutorial: isTutorialRoute,
+    });
+    const gameImplReady = isGameImplementationReady;
+    const tutorialLoadingProgressText = useMemo(() => {
+        if (!isTutorialRoute) return undefined;
+        if (!gameId || !isGameNamespaceReady) {
+            return t('matchRoom.loadingProgress.loadingGameModule');
+        }
+        return t('tutorial.steps.setup', {
+            ns: `game-${gameId}`,
+            defaultValue: t('matchRoom.loadingProgress.preparingRoom'),
+        });
+    }, [gameId, isGameNamespaceReady, isTutorialRoute, t]);
+
+    useEffect(() => {
+        if (gameImplementationError) {
+            appendMatchLoadTrace({
+                stage: 'match-room-client-error',
+                gameId,
+                matchId,
+                payload: {
+                    error: gameImplementationError,
+                    isTutorialRoute,
+                },
+            });
+        }
+    }, [gameId, gameImplementationError, isTutorialRoute, matchId]);
+
+    useEffect(() => {
+        if (gameImplReady) {
+            appendMatchLoadTrace({
+                stage: 'match-room-client-ready',
+                gameId,
+                matchId,
+                payload: {
+                    isTutorialRoute,
+                },
+            });
+        }
+    }, [gameId, gameImplReady, isTutorialRoute, matchId]);
+
+    // 教程模式始终保留强门禁，避免首步引导和资源切阶段互相打架。
+    // 联机模式仅在首次进入对局时阻塞并显示真实素材进度，首轮完成后恢复后台预加载，
+    // 避免后续阶段切换反复盖住棋盘。
+    const shouldBlockBoardOnImagePreload = isTutorialRoute || !hasCompletedInitialOnlinePreload;
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
         if (!gameId || !gameImplReady) return null;
         const impl = getGameImplementation(gameId);
@@ -369,16 +812,27 @@ export const MatchRoom = () => {
                 gameState={props?.G}
                 locale={i18n.language}
                 playerID={props?.playerID}
-                enabled={!isUgcGame}
+                enabled={true}
                 blockRendering={shouldBlockBoardOnImagePreload}
                 loadingDescription={tRef.current('matchRoom.loadingResources')}
+                onReady={() => {
+                    if (!isTutorialRoute) {
+                        setHasCompletedInitialOnlinePreload(true);
+                    }
+                }}
             >
                 <Board {...props} />
             </CriticalImageGate>
         );
         Wrapped.displayName = 'WrappedOnlineBoard';
         return Wrapped;
-    }, [gameId, i18n.language, isUgcGame, gameImplReady, shouldBlockBoardOnImagePreload]);
+    }, [
+        gameId,
+        gameImplReady,
+        i18n.language,
+        isTutorialRoute,
+        shouldBlockBoardOnImagePreload,
+    ]);
 
     // 从游戏实现中获取引擎配置（教学模式用）
     const engineConfig = useMemo(() => {
@@ -393,80 +847,12 @@ export const MatchRoom = () => {
     }, [gameId, gameImplReady]);
 
     // 在线模式是否就绪
-    const hasOnlineBoard = Boolean(WrappedBoard && gameId && !isUgcGame);
-
-    const [ugcEngineConfig, setUgcEngineConfig] = useState<GameEngineConfig | null>(null);
-    const [ugcBoard, setUgcBoard] = useState<ComponentType<GameBoardProps> | null>(null);
-    const [ugcLoading, setUgcLoading] = useState(false);
-    const [ugcError, setUgcError] = useState<string | null>(null);
-    const [registryVersion, setRegistryVersion] = useState(0);
-
-    useEffect(() => {
-        if (!gameId) return;
-        const unsubscribe = subscribeGameRegistry(() => {
-            setRegistryVersion((version) => version + 1);
-        });
-        const current = getGameById(gameId);
-        if (!current || current.isUgc) {
-            void refreshUgcGames();
-        }
-        return () => {
-            unsubscribe();
-        };
-    }, [gameId]);
-
-    useEffect(() => {
-        if (!gameId || !isUgcGame || isTutorialRoute) {
-            setUgcEngineConfig(null);
-            setUgcBoard(null);
-            setUgcLoading(false);
-            setUgcError(null);
-            return;
-        }
-
-        let cancelled = false;
-        setUgcLoading(true);
-        setUgcError(null);
-
-        createUgcClientGame(gameId)
-            .then(({ engineConfig, config }) => {
-                if (cancelled) return;
-                const BaseBoard = createUgcRemoteHostBoard({
-                    packageId: gameId,
-                    viewUrl: config.viewUrl,
-                });
-                // UGC Board 现在直接接受 GameBoardProps
-                const UgcWrapped: ComponentType<GameBoardProps> = BaseBoard as ComponentType<GameBoardProps>;
-                UgcWrapped.displayName = 'WrappedUgcBoard';
-                setUgcEngineConfig(engineConfig);
-                setUgcBoard(() => UgcWrapped);
-            })
-            .catch((error) => {
-                if (cancelled) return;
-                const message = error instanceof Error ? error.message : t('matchRoom.ugc.loadFailedShort');
-                setUgcError(message);
-                setUgcEngineConfig(null);
-                setUgcBoard(null);
-            })
-            .finally(() => {
-                if (cancelled) return;
-                setUgcLoading(false);
-            });
-
-        return () => {
-            cancelled = true;
-        };
-    }, [gameId, isUgcGame, isTutorialRoute, t]);
+    const hasOnlineBoard = Boolean(WrappedBoard && gameId);
 
     // 教程模式是否就绪
     const hasTutorialBoard = Boolean(WrappedBoard && engineConfig && gameId);
 
     const [isLeaving, setIsLeaving] = useState(false);
-    const {
-        isGameNamespaceReady,
-        gameNamespaceError,
-        retryGameNamespaceLoad,
-    } = useGameNamespaceReady(gameId, i18n, { required: requiresGameNamespace });
     const [destroyModalId, setDestroyModalId] = useState<string | null>(null);
     const [forceExitModalId, setForceExitModalId] = useState<string | null>(null);
     const [shouldShowMatchError, setShouldShowMatchError] = useState(false);
@@ -486,7 +872,7 @@ export const MatchRoom = () => {
     // 使用 preloadWarmImages（requestIdleCallback）不阻塞主线程。
     const lobbyPreloadStartedRef = useRef<string | null>(null);
     useEffect(() => {
-        if (!gameId || !isGameNamespaceReady || isTutorialRoute || isUgcGame) return;
+        if (!gameId || !isGameNamespaceReady || isTutorialRoute) return;
         if (lobbyPreloadStartedRef.current === gameId) return;
         lobbyPreloadStartedRef.current = gameId;
         // resolver 无状态降级：返回该游戏在大厅里也值得抢先预热的基础资源列表
@@ -495,7 +881,7 @@ export const MatchRoom = () => {
         if (criticalPaths.length > 0) {
             preloadWarmImages(criticalPaths, i18n.language, gameId);
         }
-    }, [gameId, isGameNamespaceReady, isTutorialRoute, isUgcGame, i18n.language]);
+    }, [gameId, isGameNamespaceReady, isTutorialRoute, i18n.language]);
 
 
     // 从地址查询参数中获取 playerID
@@ -503,6 +889,7 @@ export const MatchRoom = () => {
     const shouldAutoJoin = searchParams.get('join') === 'true';
     const spectateParam = searchParams.get('spectate');
     const storedMatchCreds = useMemo(() => {
+        void localStorageTick;
         // 教程模式不需要房间凭据
         if (isTutorialRoute || !matchId) return null;
         const raw = localStorage.getItem(`match_creds_${matchId}`);
@@ -526,6 +913,7 @@ export const MatchRoom = () => {
 
     // 自动加入逻辑（调试重置跳转）
     const [isAutoJoining, setIsAutoJoining] = useState(false);
+    const [autoJoinError, setAutoJoinError] = useState<string | null>(null);
     const autoJoinStartedRef = useRef(false);
     // 自动加入完成后的宽限期（防止 validateStoredMatchSeat 在 matchStatus 刷新前清除凭据）
     const autoJoinGraceRef = useRef(false);
@@ -535,6 +923,7 @@ export const MatchRoom = () => {
             return;
         }
         autoJoinStartedRef.current = true;
+        setAutoJoinError(null);
 
         let cancelled = false;
         let retryTimer: number | undefined;
@@ -575,17 +964,13 @@ export const MatchRoom = () => {
         const tryJoin = async () => {
             if (cancelled) return;
             try {
-                const matchInfo = await matchApi.getMatch(gameId, matchId);
-                if (cancelled) return;
-                const openSeat = [...matchInfo.players]
-                    .sort((a, b) => a.id - b.id)
-                    .find(p => !p.name);
-                if (!openSeat) {
-                    if (!cancelled) setIsAutoJoining(false);
-                    return;
-                }
-                const targetPlayerID = String(openSeat.id);
-                const { success } = await rejoinMatch(gameId, matchId, targetPlayerID, playerName, { guestId: user?.id ? undefined : guestId });
+                const { success, error } = await rejoinMatch(
+                    gameId,
+                    matchId,
+                    undefined,
+                    playerName,
+                    { guestId: user?.id ? undefined : guestId },
+                );
                 if (cancelled) return;
                 if (success) {
                     // rejoinMatch 内部已调用 persistMatchCredentials，
@@ -598,11 +983,19 @@ export const MatchRoom = () => {
                     setLocalStorageTick((t) => t + 1);
                     setIsAutoJoining(false);
                 } else {
+                    if (error === 'room_full') {
+                        setAutoJoinError(t('error.roomFull'));
+                        setIsAutoJoining(false);
+                        return;
+                    }
                     retryCount++;
                     if (retryCount < maxRetries) {
                         scheduleRetry(500);
                     } else {
-                        if (!cancelled) setIsAutoJoining(false);
+                        if (!cancelled) {
+                            setAutoJoinError(t('error.joinRoomFailed'));
+                            setIsAutoJoining(false);
+                        }
                     }
                 }
             } catch {
@@ -611,13 +1004,17 @@ export const MatchRoom = () => {
                 if (retryCount < maxRetries) {
                     scheduleRetry(500);
                 } else {
-                    if (!cancelled) setIsAutoJoining(false);
+                    if (!cancelled) {
+                        setAutoJoinError(t('error.joinRoomFailed'));
+                        setIsAutoJoining(false);
+                    }
                 }
             }
         };
 
-        // 延迟 1 秒，等待房主完全加入
-        scheduleRetry(1000);
+        // 创建房间已改为“建房即房主持有 seat 0 凭据”，无需再人为等待 1 秒。
+        // 直接首试，失败时再按现有退避策略重试。
+        void tryJoin();
 
         return () => {
             cancelled = true;
@@ -664,64 +1061,6 @@ export const MatchRoom = () => {
             return;
         }
     }, [gameId, matchId]);
-
-    useEffect(() => {
-        if (isTutorialRoute || !matchId || !gameId || !gameConfig) {
-            setOnlineAiSeatControllers({});
-            setOnlineAiSeatCredentials({});
-            return;
-        }
-
-        let cancelled = false;
-
-        const loadOnlineAiSeatControllers = async () => {
-            try {
-                const matchInfo = await matchApi.getMatch(gameId, matchId);
-                if (cancelled) return;
-
-                const setupData = matchInfo.setupData && typeof matchInfo.setupData === 'object'
-                    ? matchInfo.setupData as Record<string, unknown>
-                    : {};
-                const rawSeatControllers = setupData.seatControllers && typeof setupData.seatControllers === 'object' && !Array.isArray(setupData.seatControllers)
-                    ? setupData.seatControllers as Record<string, unknown>
-                    : {};
-                const rawSetupSelections = setupData.setupSelections && typeof setupData.setupSelections === 'object' && !Array.isArray(setupData.setupSelections)
-                    ? setupData.setupSelections as Record<string, unknown>
-                    : {};
-                const normalized = normalizeLocalMatchPreferences(gameConfig, {
-                    numPlayers: matchInfo.players.length,
-                    seatControllers: rawSeatControllers,
-                    setupSelections: rawSetupSelections,
-                }).seatControllers;
-                const storedAiSeatCredentials = readStoredAiSeatCredentials(matchId);
-                const nextSeatControllers: Record<string, AiSeatController> = {};
-
-                for (let index = 0; index < matchInfo.players.length; index += 1) {
-                    const playerId = String(index);
-                    const controller = normalized[playerId] ?? { type: 'human' };
-                    if (controller.type !== 'human' && !storedAiSeatCredentials[playerId]) {
-                        nextSeatControllers[playerId] = { type: 'human' };
-                        continue;
-                    }
-                    nextSeatControllers[playerId] = controller;
-                }
-
-                setOnlineAiSeatControllers(nextSeatControllers);
-                setOnlineAiSeatCredentials(storedAiSeatCredentials);
-            } catch {
-                if (!cancelled) {
-                    setOnlineAiSeatControllers({});
-                    setOnlineAiSeatCredentials({});
-                }
-            }
-        };
-
-        void loadOnlineAiSeatControllers();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [gameConfig, gameId, isTutorialRoute, localStorageTick, matchId]);
 
     const tutorialPlayerID = debugPlayerID ?? urlPlayerID ?? '0';
 
@@ -788,6 +1127,71 @@ export const MatchRoom = () => {
         setLocalStorageTick((t) => t + 1);
         toast.warning({ kind: 'i18n', key: 'error.localStateCleared', ns: 'lobby' });
     }, [isTutorialRoute, matchId, statusPlayerID, matchStatus.isLoading, matchStatus.players, toast, shouldAutoJoin, isAutoJoining]);
+
+    useEffect(() => {
+        if (isTutorialRoute || !matchId || !gameId || !gameConfig) {
+            setOnlineAiSeatControllers({});
+            setOnlineAiSeatCredentials({});
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadOnlineAiSeatControllers = async () => {
+            try {
+                const matchInfo = await matchApi.getMatch(gameId, matchId);
+                if (cancelled) return;
+
+                const storedAiSeatCredentials = readStoredAiSeatCredentials(matchId);
+                const nextAiSeatState = await loadOnlineAiSeatState({
+                    gameConfig,
+                    matchInfo,
+                    storedAiSeatCredentials,
+                    claimMissingSeatCredential: matchStatus.isHost
+                        ? async (playerId) => {
+                            const aiPlayerName = t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 });
+                            const response = await matchApi.claimSeat(gameId, matchId, playerId, token
+                                ? {
+                                    token,
+                                    playerName: aiPlayerName,
+                                }
+                                : {
+                                    guestId,
+                                    playerName: aiPlayerName,
+                                });
+                            return response.playerCredentials;
+                        }
+                        : undefined,
+                    onClaimError: (playerId, error) => {
+                        console.warn('[MatchRoom] AI 座位补领失败', {
+                            matchId,
+                            playerId,
+                            error: error instanceof Error ? error.message : String(error),
+                        });
+                    },
+                });
+                if (cancelled) return;
+
+                if (matchStatus.isHost && haveAiSeatCredentialsChanged(storedAiSeatCredentials, nextAiSeatState.seatCredentials)) {
+                    persistAiSeatCredentials(matchId, nextAiSeatState.seatCredentials);
+                }
+
+                setOnlineAiSeatControllers(nextAiSeatState.seatControllers);
+                setOnlineAiSeatCredentials(nextAiSeatState.seatCredentials);
+            } catch {
+                if (!cancelled) {
+                    setOnlineAiSeatControllers({});
+                    setOnlineAiSeatCredentials({});
+                }
+            }
+        };
+
+        void loadOnlineAiSeatControllers();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [gameConfig, gameId, guestId, guestName, isTutorialRoute, localStorageTick, matchId, matchStatus.isHost, t, token]);
     // 教程启动 effect
     // 使用 useLayoutEffect 确保在 CriticalImageGate 的 useEffect 之前执行。
     // 配合 TutorialDispatchBridge 的 useLayoutEffect（先 bindDispatch），
@@ -952,14 +1356,22 @@ export const MatchRoom = () => {
         }
     }, [closeModal, closeTutorial, isActive, isBoardMounted, isTutorialRoute, openModal]);
 
-    const clearMatchLocalState = () => {
+    const navigateBackToLobby = useCallback(() => {
+        if (gameId) {
+            navigate(`/?game=${gameId}`, { replace: true });
+            return;
+        }
+        navigate('/', { replace: true });
+    }, [gameId, navigate]);
+
+    const clearMatchLocalState = useCallback(() => {
         if (!matchId) return;
         clearMatchCredentials(matchId);
         clearOwnerActiveMatch(matchId);
         // 关键：强制退出时，也要增加对当前房间的“主页活跃对局”抑制，
         // 确保即使在跨标签页同步延迟时，主页也能立即排除此房间。
         suppressOwnerActiveMatch(matchId);
-    };
+    }, [matchId]);
 
     const lobbyPresence = useLobbyMatchPresence({
         gameId,
@@ -971,6 +1383,7 @@ export const MatchRoom = () => {
 
     useEffect(() => {
         if (isTutorialRoute || !matchId || !lobbyPresence.isMissing) return;
+        if (hasEverReceivedOnlineState) return;
         // 自动加入过程中不检查房间是否缺失（lobby 快照可能尚未包含该房间）
         if (shouldAutoJoin || isAutoJoining || autoJoinGraceRef.current) return;
         // 如果 matchStatus 没有报错，说明房间仍然存在（可能只是游戏结束后从大厅列表移除了）
@@ -985,7 +1398,7 @@ export const MatchRoom = () => {
             { dedupeKey: `matchRoom.missing.${matchId}` }
         );
         navigateBackToLobby();
-    }, [isTutorialRoute, matchId, lobbyPresence.isMissing, matchStatus.error, toast, shouldAutoJoin, isAutoJoining]);
+    }, [clearMatchLocalState, hasEverReceivedOnlineState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.error, navigateBackToLobby, shouldAutoJoin, toast]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();
@@ -1019,14 +1432,6 @@ export const MatchRoom = () => {
             ),
         });
         setForceExitModalId(modalId);
-    };
-
-    const navigateBackToLobby = () => {
-        if (gameId) {
-            navigate(`/?game=${gameId}`, { replace: true });
-            return;
-        }
-        navigate('/', { replace: true });
     };
 
     // 离开房间处理 - 主动离开时释放座位（房主/非房主一致）
@@ -1117,13 +1522,17 @@ export const MatchRoom = () => {
             setShouldShowMatchError(false);
             return;
         }
+        if (hasEverReceivedOnlineState) {
+            setShouldShowMatchError(false);
+            return;
+        }
         if (!matchStatus.error) {
             setShouldShowMatchError(false);
             return;
         }
         // 404 错误立即显示，无需延迟
         setShouldShowMatchError(true);
-    }, [isTutorialRoute, matchStatus.error]);
+    }, [hasEverReceivedOnlineState, isTutorialRoute, matchStatus.error]);
 
     // 如果房间不存在，显示错误并自动跳转
     useEffect(() => {
@@ -1165,7 +1574,7 @@ export const MatchRoom = () => {
             { kind: 'i18n', key: 'error.serviceUnavailable.title', ns: 'lobby' },
             { dedupeKey: key }
         );
-    }, [gameId, matchId, shouldShowMatchError, t, toast]);
+    }, [gameId, matchId, matchStatus.error, shouldShowMatchError, t, toast]);
 
     if (gameNamespaceError) {
         return (
@@ -1177,13 +1586,59 @@ export const MatchRoom = () => {
         );
     }
 
+    if (gameImplementationError) {
+        return (
+            <GameNamespaceLoadError
+                gameId={gameId}
+                error={gameImplementationError}
+                onRetry={retryGameImplementationLoad}
+                titleKey="matchRoom.clientLoadFailed"
+                descriptionKey="matchRoom.clientLoadFailedDesc"
+            />
+        );
+    }
+
     if (!isGameNamespaceReady) {
-        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
+        return (
+            <LoadingScreen
+                description={t('matchRoom.loadingResources')}
+                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+            />
+        );
+    }
+
+    if (!gameImplReady) {
+        return (
+            <LoadingScreen
+                description={t('matchRoom.loadingResources')}
+                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+            />
+        );
     }
 
     // 自动加入过程中显示加载状态
     if (isAutoJoining || (shouldAutoJoin && !credentials)) {
-        return <LoadingScreen description={t('matchRoom.joiningRoom')} />;
+        if (autoJoinError) {
+            return (
+                <div className="w-full game-page-viewport bg-black flex items-center justify-center">
+                    <div className="text-center">
+                        <div className="text-white/60 text-lg mb-4">{autoJoinError}</div>
+                        <button
+                            onClick={() => navigateBackToLobby()}
+                            className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors"
+                        >
+                            {t('matchRoom.connectionTimeout.backToLobby')}
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+        return (
+            <LoadingScreen
+                description={t('matchRoom.joiningRoom')}
+                progressText={t('matchRoom.loadingProgress.joiningRoom')}
+            />
+        );
     }
 
     if (shouldShowMatchError) {
@@ -1211,132 +1666,153 @@ export const MatchRoom = () => {
                 ogType="game"
                 noIndex
             />
-            {/* 统一的游戏 HUD */}
-            <GameHUD
-                mode={isTutorialRoute ? 'tutorial' : 'online'}
-                matchId={matchId}
-                gameId={gameId}
-                isHost={matchStatus.isHost}
-                credentials={credentials}
-                myPlayerId={effectivePlayerID}
-                opponentName={matchStatus.opponentName}
-                opponentConnected={matchStatus.opponentConnected}
-                players={matchStatus.players}
-                onLeave={handleLeaveRoom}
-                onDestroy={handleDestroyRoom}
-                onForceExit={handleForceExitLocal}
-                isLoading={isLeaving}
-            />
+            <SmashUpOverlayProvider>
+                {isTutorialRoute && (
+                    <GameHUD
+                        mode="tutorial"
+                        matchId={matchId}
+                        gameId={gameId}
+                        isHost={matchStatus.isHost}
+                        credentials={credentials}
+                        myPlayerId={effectivePlayerID}
+                        opponentName={matchStatus.opponentName}
+                        opponentConnected={matchStatus.opponentConnected}
+                        players={matchStatus.players}
+                        onLeave={handleLeaveRoom}
+                        onDestroy={handleDestroyRoom}
+                        onForceExit={handleForceExitLocal}
+                        isLoading={isLeaving}
+                    />
+                )}
+                {isSpectatorRoute && !isTutorialRoute && (
+                    <div
+                        className="absolute inset-0 bg-transparent pointer-events-auto"
+                        style={{ zIndex: UI_Z_INDEX.loading }}
+                        aria-hidden="true"
+                    />
+                )}
 
-            {isSpectatorRoute && !isTutorialRoute && (
-                <div
-                    className="absolute inset-0 bg-transparent pointer-events-auto"
-                    style={{ zIndex: UI_Z_INDEX.loading }}
-                    aria-hidden="true"
-                />
-            )}
-
-            {/* 游戏棋盘 - 全屏 */}
-            <MobileBoardShell>
-                <div
-                    className={`w-full h-full ${isUgcGame ? 'ugc-preview-container' : ''}`}
-                    style={{
-                        '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
-                    } as React.CSSProperties}
-                >
-                    <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={effectivePlayerID}>
-                        {isTutorialRoute ? (
-                            <GameModeProvider mode="tutorial">
-                                {!gameImplReady ? (
-                                    <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
-                                ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
-                                    <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
-                                        <TutorialDispatchBridge>
-                                            {tutorialBoardBootstrapComplete ? (
-                                                <BoardBridge
-                                                    board={WrappedBoard}
-                                                    loading={<LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />}
-                                                />
-                                            ) : (
-                                                <LoadingScreen anchor="container" title={t('matchRoom.title.tutorial')} description={t('matchRoom.loadingResources')} />
-                                            )}
-                                        </TutorialDispatchBridge>
-                                    </LocalGameProvider>
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-white/50">
-                                        {t('matchRoom.noTutorial')}
-                                    </div>
-                                )}
-                            </GameModeProvider>
-                        ) : (
-                            isUgcGame && ugcLoading ? (
-                                <LoadingScreen anchor="container" description={t('matchRoom.ugc.loading')} />
-                            ) : isUgcGame && ugcError ? (
-                                <div className="w-full h-full flex items-center justify-center text-red-300 text-sm">
-                                    {t('matchRoom.ugc.loadFailed', { error: ugcError })}
-                                </div>
-                            ) : isUgcGame && ugcBoard && ugcEngineConfig && matchId ? (
-                                <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                    <RematchProvider
-                                        matchId={matchId}
-                                        playerId={effectivePlayerID ?? undefined}
-                                        isMultiplayer={true}
-                                    >
-                                        <GameProvider
-                                            server={getGameServerUrl()}
-                                            matchId={matchId}
-                                            playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                            credentials={credentials}
-                                            onError={handleGameError}
-                                        >
-                                            <BoardBridge
-                                                board={ugcBoard}
-                                                loading={<OnlineRoomConnectionLoading title={t('matchRoom.title.joining')} description={t('matchRoom.joiningRoom')} gameId={gameId} />}
-                                            />
-                                        </GameProvider>
-                                    </RematchProvider>
+                {/* 游戏棋盘 - 全屏 */}
+                <MobileBoardShell battlefieldZoomMode={gameConfig?.mobileBattlefieldZoom}>
+                    <div
+                        className="w-full h-full"
+                        style={{
+                            '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
+                        } as React.CSSProperties}
+                    >
+                        <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={effectivePlayerID}>
+                            {isTutorialRoute ? (
+                                <GameModeProvider mode="tutorial">
+                                    {!gameImplReady ? (
+                                        <LoadingScreen
+                                            anchor="container"
+                                            title={t('matchRoom.title.tutorial')}
+                                            description={t('matchRoom.loadingResources')}
+                                            progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                                        />
+                                    ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
+                                        <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
+                                            <TutorialDispatchBridge>
+                                                {tutorialBoardBootstrapComplete ? (
+                                                    <BoardBridge
+                                                        board={WrappedBoard}
+                                                        loading={(
+                                                            <LoadingScreen
+                                                                anchor="container"
+                                                                title={t('matchRoom.title.tutorial')}
+                                                                description={t('matchRoom.loadingResources')}
+                                                                progressText={tutorialLoadingProgressText}
+                                                            />
+                                                        )}
+                                                    />
+                                                ) : (
+                                                    <LoadingScreen
+                                                        anchor="container"
+                                                        title={t('matchRoom.title.tutorial')}
+                                                        description={t('matchRoom.loadingResources')}
+                                                        progressText={tutorialLoadingProgressText}
+                                                    />
+                                                )}
+                                            </TutorialDispatchBridge>
+                                        </LocalGameProvider>
+                                    ) : (
+                                        <div className="w-full h-full flex items-center justify-center text-white/50">
+                                            {t('matchRoom.noTutorial')}
+                                        </div>
+                                    )}
                                 </GameModeProvider>
                             ) : hasOnlineBoard && WrappedBoard && matchId ? (
-                                <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
-                                    <RematchProvider
-                                        matchId={matchId}
-                                        playerId={effectivePlayerID ?? undefined}
-                                        isMultiplayer={true}
-                                    >
-                                        <GameProvider
-                                            server={getGameServerUrl()}
+                                    <GameModeProvider mode="online" isSpectator={isSpectatorRoute}>
+                                        <RematchProvider
                                             matchId={matchId}
-                                            playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
-                                            credentials={credentials}
-                                            engineConfig={engineConfig ?? undefined}
-                                            latencyConfig={latencyConfig}
-                                            onError={handleGameError}
+                                            playerId={effectivePlayerID ?? undefined}
+                                            isMultiplayer={true}
                                         >
-                                            {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
-                                                <OnlineAiSeatBridge
-                                                    server={getGameServerUrl()}
+                                            <GameProvider
+                                                server={getGameServerUrl()}
+                                                matchId={matchId}
+                                                playerId={isSpectatorRoute ? null : (effectivePlayerID ?? null)}
+                                                credentials={credentials}
+                                                engineConfig={engineConfig ?? undefined}
+                                                latencyConfig={latencyConfig}
+                                                onError={handleGameError}
+                                                onStateReady={() => {
+                                                    setHasEverReceivedOnlineState(true);
+                                                    setOnlineTransportError(null);
+                                                }}
+                                                onConnectionChange={(connected) => {
+                                                    if (connected) {
+                                                        setOnlineTransportError(null);
+                                                    }
+                                                }}
+                                            >
+                                                <OnlineGameHudBridge
                                                     matchId={matchId}
-                                                    engineConfig={engineConfig}
+                                                    gameId={gameId}
+                                                    isHost={matchStatus.isHost}
+                                                    credentials={credentials}
+                                                    myPlayerId={effectivePlayerID}
+                                                    fallbackPlayers={matchStatus.players}
+                                                    fallbackOpponentName={matchStatus.opponentName}
+                                                    onLeave={handleLeaveRoom}
+                                                    onDestroy={handleDestroyRoom}
+                                                    onForceExit={handleForceExitLocal}
+                                                    isLoading={isLeaving}
                                                     seatControllers={onlineAiSeatControllers}
-                                                    seatCredentials={onlineAiSeatCredentials}
                                                 />
-                                            )}
-                                            <BoardBridge
-                                                board={WrappedBoard}
-                                                loading={<OnlineRoomConnectionLoading title={t('matchRoom.title.connecting')} description={t('matchRoom.loadingResources')} gameId={gameId} />}
-                                            />
-                                        </GameProvider>
-                                    </RematchProvider>
-                                </GameModeProvider>
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-white/50">
-                                    {t('matchRoom.noClient')}
-                                </div>
-                            )
-                        )}
-                    </GameCursorProvider>
-                </div>
-            </MobileBoardShell>
+                                                {matchStatus.isHost && engineConfig && Object.keys(onlineAiSeatControllers).length > 0 && (
+                                                    <OnlineAiSeatBridge
+                                                        server={getGameServerUrl()}
+                                                        matchId={matchId}
+                                                        engineConfig={engineConfig}
+                                                        seatControllers={onlineAiSeatControllers}
+                                                        seatCredentials={onlineAiSeatCredentials}
+                                                    />
+                                                )}
+                                                <BoardBridge
+                                                    board={WrappedBoard}
+                                                    loading={(
+                                                        <OnlineRoomConnectionLoading
+                                                            title={t('matchRoom.title.connecting')}
+                                                            description={t('matchRoom.loadingResources')}
+                                                            gameId={gameId}
+                                                            transportError={onlineTransportError}
+                                                        />
+                                                    )}
+                                                />
+                                            </GameProvider>
+                                        </RematchProvider>
+                                    </GameModeProvider>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-white/50">
+                                        {t('matchRoom.noClient')}
+                                    </div>
+                                )
+                            }
+                        </GameCursorProvider>
+                    </div>
+                </MobileBoardShell>
+            </SmashUpOverlayProvider>
 
         </div>
     );

@@ -3,8 +3,13 @@
 import { describe, expect, it } from 'vitest';
 import { getAllGames, getGameById } from '../../config/games.config';
 import {
+    buildRuntimeBlockUnitValue,
+    buildRuntimeInlineUnitValue,
+    detectMobileLayoutEngineCapabilities,
     getGameMobileBannerKind,
     getGamePageDataAttributes,
+    parseChromiumMajorVersion,
+    resolveRuntimeLayoutScaleMetrics,
     resolveStableViewportSize,
     resolveGameMobileSupport,
     shouldUseBoardShellScale,
@@ -18,6 +23,7 @@ describe('mobile support manifest contract', () => {
         expect(games.length).toBeGreaterThan(0);
         for (const game of games) {
             expect(game.mobileProfile).toBeDefined();
+            expect(game.mobileBattlefieldZoom).toBeDefined();
             expect(game.shellTargets?.length ?? 0).toBeGreaterThan(0);
             expect(game.mobileDelivery?.mode).toBeDefined();
         }
@@ -29,6 +35,7 @@ describe('mobile support manifest contract', () => {
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
         expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(game?.mobileBattlefieldZoom).toBe('game-owned');
         expect(game?.shellTargets).toEqual(
             expect.arrayContaining(['pwa', 'app-webview', 'mini-program-webview']),
         );
@@ -46,6 +53,7 @@ describe('mobile support manifest contract', () => {
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
         expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(game?.mobileBattlefieldZoom).toBe('none');
         expect(
             getGameMobileBannerKind(
                 {
@@ -65,6 +73,7 @@ describe('mobile support manifest contract', () => {
         expect(game?.mobileProfile).toBe('landscape-adapted');
         expect(game?.preferredOrientation).toBe('landscape');
         expect(game?.mobileLayoutPreset).toBe('board-shell');
+        expect(game?.mobileBattlefieldZoom).toBe('none');
         expect(
             shouldUseBoardShellScale(
                 {
@@ -85,6 +94,7 @@ describe('mobile support helpers', () => {
             mobileProfile: 'landscape-adapted',
             preferredOrientation: 'landscape',
             mobileLayoutPreset: 'board-shell',
+            mobileBattlefieldZoom: 'none',
             shellTargets: ['pwa'],
             mobileDelivery: {
                 mode: 'builtin',
@@ -167,6 +177,7 @@ describe('mobile support helpers', () => {
             mobileProfile: 'landscape-adapted',
             preferredOrientation: 'landscape',
             mobileLayoutPreset: 'board-shell',
+            mobileBattlefieldZoom: 'shell-pinch-pan',
             shellTargets: ['pwa', 'app-webview'],
         });
 
@@ -175,6 +186,7 @@ describe('mobile support helpers', () => {
         expect(attrs['data-mobile-profile']).toBe('landscape-adapted');
         expect(attrs['data-preferred-orientation']).toBe('landscape');
         expect(attrs['data-mobile-layout-preset']).toBe('board-shell');
+        expect(attrs['data-mobile-battlefield-zoom']).toBe('shell-pinch-pan');
         expect(attrs['data-shell-targets']).toBe('pwa,app-webview');
     });
 
@@ -187,12 +199,14 @@ describe('mobile support helpers', () => {
             'data-game-id': 'dicethrone',
             'data-mobile-profile': 'landscape-adapted',
             'data-mobile-layout-preset': 'board-shell',
+            'data-mobile-battlefield-zoom': 'game-owned',
         });
 
         expect(document.documentElement.getAttribute('data-game-page')).toBe('true');
         expect(document.documentElement.getAttribute('data-game-id')).toBe('dicethrone');
         expect(document.body.getAttribute('data-mobile-profile')).toBe('landscape-adapted');
         expect(document.body.getAttribute('data-mobile-layout-preset')).toBe('board-shell');
+        expect(document.body.getAttribute('data-mobile-battlefield-zoom')).toBe('game-owned');
 
         cleanup();
 
@@ -200,6 +214,7 @@ describe('mobile support helpers', () => {
         expect(document.documentElement.getAttribute('data-game-id')).toBe('previous-root');
         expect(document.body.getAttribute('data-mobile-profile')).toBe('previous-body-profile');
         expect(document.body.getAttribute('data-mobile-layout-preset')).toBeNull();
+        expect(document.body.getAttribute('data-mobile-battlefield-zoom')).toBeNull();
     });
 
     it('only landscape board-shell games enable legacy scale fallback', () => {
@@ -247,5 +262,51 @@ describe('mobile support helpers', () => {
                 { width: 844, height: undefined },
             ),
         ).toEqual({ width: 844, height: 390 });
+    });
+
+    it('can parse Chromium major version from user agent', () => {
+        expect(parseChromiumMajorVersion('Mozilla/5.0 Chrome/91.0.4472.114 Mobile Safari/537.36')).toBe(91);
+        expect(parseChromiumMajorVersion('Mozilla/5.0 AppleWebKit/537.36')).toBeNull();
+    });
+
+    it('detects legacy mobile layout engines from capability probe', () => {
+        expect(
+            detectMobileLayoutEngineCapabilities({
+                userAgent: 'Mozilla/5.0 Chrome/91.0.4472.114 Mobile Safari/537.36',
+                cssSupports: () => false,
+            }),
+        ).toEqual({
+            chromiumMajorVersion: 91,
+            layoutMode: 'legacy',
+            supportsCalcDivision: false,
+            supportsDynamicViewportUnits: false,
+            requiresJsScaleFallback: true,
+            requiresLegacyViewportFallback: true,
+        });
+
+        expect(
+            detectMobileLayoutEngineCapabilities({
+                userAgent: 'Mozilla/5.0 Chrome/146.0.7680.164 Mobile Safari/537.36',
+                cssSupports: () => true,
+            }).layoutMode,
+        ).toBe('modern');
+    });
+
+    it('builds stable pixel scale metrics for runtime layout fallbacks', () => {
+        expect(resolveRuntimeLayoutScaleMetrics({ width: 802, height: 393 }, 940)).toEqual({
+            designWidth: 940,
+            scale: 802 / 940,
+            inverseScale: 940 / 802,
+            logicalHeight: 393 * (940 / 802),
+            inlineUnit: 9.4,
+            blockUnit: (393 * (940 / 802)) / 100,
+        });
+    });
+
+    it('builds runtime inline and block css unit expressions', () => {
+        expect(buildRuntimeInlineUnitValue(18)).toBe('calc(var(--mobile-layout-inline-unit, 1vw) * 18)');
+        expect(buildRuntimeInlineUnitValue(0.55)).toBe('calc(var(--mobile-layout-inline-unit, 1vw) * 0.55)');
+        expect(buildRuntimeBlockUnitValue(8)).toBe('calc(var(--mobile-layout-block-unit, 1vh) * 8)');
+        expect(buildRuntimeBlockUnitValue(12.34567)).toBe('calc(var(--mobile-layout-block-unit, 1vh) * 12.3457)');
     });
 });

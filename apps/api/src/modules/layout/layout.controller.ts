@@ -4,7 +4,8 @@ import { LayoutService } from './layout.service';
 import type {
     AbilitySlotLayoutItem,
     DiceThroneAbilityLayoutVersion,
-    DiceThroneAbilityLayoutsPayload,
+    DiceThroneBoardLayoutPayload,
+    PlayerBoardUiTuning,
 } from './layout.service';
 
 @Controller('layout')
@@ -46,7 +47,7 @@ export class LayoutController {
             return res.status(403).json({ error: '布局保存已禁用' });
         }
         try {
-            const payload = this.normalizeAbilityLayoutsPayload(body);
+            const payload = this.normalizeBoardLayoutPayload(body);
             if (!payload) {
                 return res.status(400).json({ error: '布局保存失败', message: 'layoutConfig.invalid', path: req.path });
             }
@@ -90,23 +91,30 @@ export class LayoutController {
         return null;
     }
 
-    private normalizeAbilityLayoutsPayload(body: unknown): DiceThroneAbilityLayoutsPayload | null {
+    private normalizeBoardLayoutPayload(body: unknown): DiceThroneBoardLayoutPayload | null {
         if (!body) return null;
         const raw = this.normalizeBody(body);
-        const layouts = raw?.layouts as Record<string, unknown> | undefined;
-        if (!layouts || typeof layouts !== 'object') {
+        const slotLayouts = raw?.slotLayouts as Record<string, unknown> | undefined;
+        const uiTuning = raw?.uiTuning as Record<string, unknown> | undefined;
+        if (!slotLayouts || typeof slotLayouts !== 'object' || !uiTuning || typeof uiTuning !== 'object') {
             return null;
         }
 
         const versions: DiceThroneAbilityLayoutVersion[] = ['v1', 'v2'];
-        const normalizedLayouts = {} as Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>;
+        const normalizedSlotLayouts = {} as Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>;
+        const normalizedUiTuning = {} as Record<DiceThroneAbilityLayoutVersion, PlayerBoardUiTuning>;
         for (const version of versions) {
-            const normalized = this.normalizeAbilityLayoutArray(layouts[version]);
-            if (!normalized) return null;
-            normalizedLayouts[version] = normalized;
+            const normalizedLayout = this.normalizeAbilityLayoutArray(slotLayouts[version]);
+            const normalizedTuning = this.normalizeUiTuning(uiTuning[version]);
+            if (!normalizedLayout || !normalizedTuning) return null;
+            normalizedSlotLayouts[version] = normalizedLayout;
+            normalizedUiTuning[version] = normalizedTuning;
         }
 
-        return { layouts: normalizedLayouts };
+        return {
+            slotLayouts: normalizedSlotLayouts,
+            uiTuning: normalizedUiTuning,
+        };
     }
 
     private normalizeAbilityLayoutArray(body: unknown): AbilitySlotLayoutItem[] | null {
@@ -124,5 +132,38 @@ export class LayoutController {
             normalized.push({ id, x: x as number, y: y as number, w: w as number, h: h as number });
         }
         return normalized.length > 0 ? normalized : null;
+    }
+
+    private normalizeUiTuning(body: unknown): PlayerBoardUiTuning | null {
+        if (!body || typeof body !== 'object') return null;
+        const record = body as Record<string, unknown>;
+        const {
+            shellTranslateX,
+            playerBoardTranslateY,
+            magnifyButtonTop,
+            playerBoardBaseHeightVw,
+            tipBoardHeightVw,
+            centerBoardGapVw,
+        } = record;
+
+        if (![
+            shellTranslateX,
+            playerBoardTranslateY,
+            magnifyButtonTop,
+            playerBoardBaseHeightVw,
+            tipBoardHeightVw,
+            centerBoardGapVw,
+        ].every((value) => typeof value === 'number' && Number.isFinite(value))) {
+            return null;
+        }
+
+        return {
+            shellTranslateX,
+            playerBoardTranslateY,
+            magnifyButtonTop,
+            playerBoardBaseHeightVw,
+            tipBoardHeightVw,
+            centerBoardGapVw,
+        } as PlayerBoardUiTuning;
     }
 }

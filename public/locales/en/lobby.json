@@ -3,6 +3,9 @@
     "title": "Yi Board Game",
     "subtitle": "Platform for Tutorials, Online Play, and Prototyping",
     "logoAlt": "Board Game Platform Logo",
+    "gameDetailsLoadingEyebrow": "Preparing",
+    "gameDetailsLoadingTitle": "Game Details",
+    "gameDetailsLoadingDescription": "Content will appear shortly. Please wait.",
     "audio": {
       "mute": "Mute",
       "unmute": "Unmute"
@@ -54,6 +57,11 @@
   },
   "button": {
     "processing": "Processing..."
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "Preparing room"
+    }
   },
   "activeMatch": {
     "notice": "You are currently in a match",
@@ -122,10 +130,13 @@
     "assetPack": "Asset Pack",
     "packIdUnknown": "Pack ID pending",
     "sizeUnknown": "Pending manifest",
+    "packageSyncing": "Syncing",
+    "packageUnpublished": "Package not published",
     "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
     "failedTitle": "Download Failed",
     "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
     "retryAction": "Retry",
+    "cancelAction": "Cancel Download",
     "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",
     "updateRequiredEyebrow": "App Update Required",
     "updateRequiredBadge": "Update Needed",
@@ -136,8 +147,8 @@
       "label": "Progress",
       "percent": "{{percent}}%",
       "pendingPercent": "Pending",
-      "queuedTitle": "Preparing",
-      "queuedHint": "Preparing the package list for the current game.",
+      "queuedTitle": "Queued",
+      "queuedHint": "Only one game package download runs at a time on the device. This one starts automatically when its turn arrives.",
       "manifestTitle": "Reading Manifest",
       "manifestHint": "Loading the published manifest for this game.",
       "downloadTitle": "Downloading",
@@ -169,6 +180,38 @@
       "progressPercent": "{{percent}}%",
       "progressPending": "Preparing",
       "retryAction": "Check again"
+    }
+  },
+  "nativeUpdate": {
+    "gate": {
+      "eyebrow": "Install New App",
+      "checkingTitle": "Preparing installer",
+      "checkingDescription": "Checking and preparing the new app package. Please wait.",
+      "downloadingTitle": "Downloading installer",
+      "downloadingDescription": "Downloading the new app package. The system installer will open automatically when ready.",
+      "verifyingTitle": "Verifying package",
+      "verifyingDescription": "The app package has been downloaded. Verifying integrity now.",
+      "permissionTitle": "Install permission required",
+      "permissionDescription": "Allow this app to install unknown apps first, then return and continue installation.",
+      "installingTitle": "Opening system installer",
+      "installingDescription": "The system installer is ready. Follow the system prompt to complete the update.",
+      "errorTitle": "App update failed",
+      "errorDescription": "Downloading the app package or starting the installer failed. Please retry.",
+      "targetVersion": "Target app version",
+      "progressLabel": "Download progress",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "Preparing",
+      "openSettingsAction": "Open settings",
+      "continueInstallAction": "Continue install",
+      "retryAction": "Retry download"
+    },
+    "toast": {
+      "disabled": "Native app update is not enabled in the current Android shell build.",
+      "upToDate": "This app is already up to date.",
+      "available": "A newer app version {{version}} is available and ready to install.",
+      "installerOpened": "The system installer has opened. Follow the prompt to finish the update.",
+      "openSettingsFailed": "Failed to open the install permission page. Please try again.",
+      "missingPreparedUpdate": "No downloaded update package is ready to continue. Please download it again."
     }
   },
   "gameDetails": {
@@ -257,6 +300,8 @@
     "creatingRoom": "Creating room and entering match...",
     "namespaceLoadFailed": "Failed to load game translations",
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
+    "clientLoadFailed": "Failed to load game client",
+    "clientLoadFailedDesc": "The current game's client code or resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
     "loadingProgress": {
       "step": "{{current}}/{{total}}",
@@ -283,6 +328,34 @@
       "description": "Unable to connect to the game server. Please check your network or server status.",
       "retry": "Retry",
       "backToLobby": "Back to Lobby"
+    },
+    "rescue": {
+      "eyebrow": "Game Page Guard",
+      "title": "The page did not render correctly",
+      "description": "The current game page did not render normally. To avoid staying on a black screen, the app switched to this recovery prompt first.",
+      "reload": "Reload",
+      "backToLobby": "Back to Lobby",
+      "copyDiagnostics": "Copy Diagnostics",
+      "copied": "Copied",
+      "reason": {
+        "game-viewport-missing": "The game viewport container never appeared, so the page is likely stuck during startup.",
+        "game-shell-collapsed": "The game canvas size is abnormal and the main content area has collapsed.",
+        "game-content-missing": "The game container exists, but no visible main content was rendered for too long."
+      }
+    },
+    "routeLoadingTimeout": {
+      "eyebrow": "Load Timeout",
+      "title": "Game page loading timed out",
+      "description": "This device took too long to finish loading the game page. Instead of keeping a black screen, the app switched to an actionable prompt first.",
+      "reason": "This usually means the game module, WebView compatibility, or startup-time resource initialization got stuck. Try reloading first, then return to the lobby if it keeps happening."
+    },
+    "connectionError": {
+      "unauthorizedTitle": "Failed to enter room",
+      "unauthorizedDescription": "The room credential is invalid or expired. Return to the lobby and join again.",
+      "matchNotFoundTitle": "Room not found",
+      "matchNotFoundDescription": "The target room may have been destroyed or expired. Return to the lobby and try again.",
+      "syncTimeoutTitle": "Failed to sync room state",
+      "syncTimeoutDescription": "Connected to the server, but the match state never arrived. Retry first; if this keeps happening, the server sync pipeline is abnormal."
     },
     "ugc": {
       "loading": "Loading UGC runtime…",

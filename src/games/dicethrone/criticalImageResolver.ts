@@ -32,8 +32,6 @@ const COMMON_CRITICAL_PATHS = [
     'dicethrone/images/Common/character-portraits',
 ] as const;
 
-const HAND_ATLAS_CHARACTER_IDS = new Set<SelectableCharacterId>(['gunslinger', 'samurai']);
-
 function dedupePreserveOrder(paths: string[]): string[] {
     return [...new Set(paths.filter(Boolean))];
 }
@@ -42,24 +40,14 @@ function getCharAssetPath(charId: SelectableCharacterId, assetKey: string): stri
     return `dicethrone/images/${CHARACTER_DIR_MAP[charId]}/${assetKey}`;
 }
 
-function getHandAtlasAssets(charId: SelectableCharacterId): string[] {
-    if (!HAND_ATLAS_CHARACTER_IDS.has(charId)) return [];
-    return [getCharAssetPath(charId, 'hand-cards-atlas')];
-}
-
 function getCharAssetsByTag(charId: SelectableCharacterId, tag: AssetTag): string[] {
-    const baseAssets = CHARACTER_ASSET_TYPES
+    return CHARACTER_ASSET_TYPES
         .filter((asset) => (asset.tags as readonly string[]).includes(tag))
         .map((asset) => getCharAssetPath(charId, asset.key));
-    if (tag !== 'gameplay') return baseAssets;
-    return [...baseAssets, ...getHandAtlasAssets(charId)];
 }
 
 function getAllCharAssets(charId: SelectableCharacterId): string[] {
-    return [
-        ...CHARACTER_ASSET_TYPES.map((asset) => getCharAssetPath(charId, asset.key)),
-        ...getHandAtlasAssets(charId),
-    ];
+    return CHARACTER_ASSET_TYPES.map((asset) => getCharAssetPath(charId, asset.key));
 }
 
 function extractSelectedCharacters(core: DiceThroneCore): SelectableCharacterId[] {
@@ -192,11 +180,11 @@ export const diceThroneCriticalImageResolver: CriticalImageResolver = (
 
 export const _testExports = {
     CHARACTER_ASSET_TYPES,
-    HAND_ATLAS_CHARACTER_IDS,
     IMPLEMENTED_CHARACTERS,
     COMMON_CRITICAL_PATHS,
     getCharAssetPath,
     getCharAssetsByTag,
     getAllCharAssets,
-    getHandAtlasAssets,
 };
+
+export default diceThroneCriticalImageResolver;

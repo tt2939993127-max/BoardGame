@@ -232,6 +232,22 @@ test.describe('DiceThrone E2E', () => {
             }
         };
 
+        const clickHandCard = async (cardId: string) => {
+            const card = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
+            await expect(card).toBeVisible({ timeout: 10000 });
+            await card.click();
+        };
+
+        const clickHandCardArea = async (cardId: string) => {
+            const card = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
+            await expect(card).toBeVisible({ timeout: 10000 });
+            const box = await card.boundingBox();
+            if (!box) {
+                throw new Error(`未能获取手牌 ${cardId} 的点击区域`);
+            }
+            await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+        };
+
         const overlayNextButton = page.getByRole('button', { name: /^(Next|下一步)$/i }).first();
         await expect(overlayNextButton).toBeVisible({ timeout: 15000 });
         const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
@@ -390,13 +406,18 @@ test.describe('DiceThrone E2E', () => {
         await advanceToStep('main2-intro', 30000);
         await clickNextOverlayStep();
 
-        // enlightenment-play：通过 dispatch 直接打出悟道卡（framer-motion 拖拽在 Playwright 中不可靠）
+        // enlightenment-play：真实点击手牌，覆盖奖励骰特写不能阻塞后续交互的回归
         await advanceToStep('enlightenment-play', 15000);
-        await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-enlightenment' });
+        await clickHandCard('card-enlightenment');
+        const bonusDieOverlay = page.getByTestId('bonus-die-overlay');
+        await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
+        await expect(bonusDieOverlay).not.toContainText('bonusDie.effect.', { timeout: 5000 });
 
-        // inner-peace：出牌内心平静
+        // inner-peace：点下一张牌区域时，奖励骰特写应先被关闭，而不是继续卡死
         await advanceToStep('inner-peace', 15000);
-        await dispatchLocalCommand(page, 'PLAY_CARD', { cardId: 'card-inner-peace' });
+        await clickHandCardArea('card-inner-peace');
+        await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
+        await clickHandCard('card-inner-peace');
 
         // ai-turn 步骤有大量 aiActions，教学系统自动执行，结束后应进入击倒说明
         await advanceToStep('ai-turn-intro', 15000);

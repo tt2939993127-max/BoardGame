@@ -23,6 +23,12 @@ export const OpponentOfflineBanner = ({ connected, name }: OpponentOfflineBanner
     const disconnectTimeRef = useRef<number | null>(null);
     const delayTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const tickTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const scheduleOfflineReset = () => {
+        queueMicrotask(() => {
+            setOfflineVisible(false);
+            setElapsed(0);
+        });
+    };
 
     // 对手是否已加入房间（座位上有玩家）
     const hasJoined = !!name;
@@ -36,8 +42,7 @@ export const OpponentOfflineBanner = ({ connected, name }: OpponentOfflineBanner
             delayTimerRef.current = null;
             tickTimerRef.current = null;
             disconnectTimeRef.current = null;
-            setOfflineVisible(false);
-            setElapsed(0);
+            scheduleOfflineReset();
             return;
         }
 
@@ -59,8 +64,7 @@ export const OpponentOfflineBanner = ({ connected, name }: OpponentOfflineBanner
             delayTimerRef.current = null;
             tickTimerRef.current = null;
             disconnectTimeRef.current = null;
-            setOfflineVisible(false);
-            setElapsed(0);
+            scheduleOfflineReset();
         }
 
         return () => {

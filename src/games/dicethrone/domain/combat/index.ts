@@ -54,4 +54,6 @@ export {
   evaluateRollSumGreaterThan,
   evaluateDiceCountAtLeast,
   evaluateThreeOfAKind,
+  evaluatePhaseStart,
+  evaluatePhaseEnd,
 } from './conditions';

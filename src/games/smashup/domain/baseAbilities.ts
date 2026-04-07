@@ -35,7 +35,12 @@ import {
     buildStandardDrawEvents,
 } from './abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
-import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
+import {
+    createSimpleChoice,
+    getCurrentTrackedIdTopSnapshot,
+    queueInteraction,
+    type PromptOption,
+} from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
 import { isBaseAbilitySuppressed } from './ongoingEffects';
@@ -131,6 +136,27 @@ function getDeferredPostScoringEvents(
     interactionData: Record<string, unknown> | undefined,
 ): SmashUpEvent[] | undefined {
     return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
+}
+
+function getCurrentBaseDeckTopSnapshotDefIds(
+    state: SmashUpCore,
+    trackedTopCards: string[],
+): string[] {
+    return getCurrentTrackedIdTopSnapshot(state.baseDeck ?? [], trackedTopCards);
+}
+
+function buildWizardAcademyOptions(
+    state: SmashUpCore,
+    trackedTopCards: string[],
+) {
+    return getCurrentBaseDeckTopSnapshotDefIds(state, trackedTopCards).map((defId, index) => {
+        const def = getBaseDef(defId);
+        return {
+            id: `base-${index}`,
+            label: def?.name ?? defId,
+            value: { defId, index },
+        };
+    });
 }
 
 function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): number {
@@ -1161,8 +1187,14 @@ export function registerBaseAbilities(): void {
     // base_ninja_dojo: 忍者道场
     // "在这个基地计分后，冠军可以消灭任意一个随从"（全局范围）
     registerBaseAbility('base_ninja_dojo', 'afterScoring', (ctx) => {
-        if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
-        const winnerId = ctx.rankings[0].playerId;
+        if (!ctx.rankings || ctx.rankings.length === 0 || !ctx.matchState) return { events: [] };
+
+        const championPower = ctx.rankings[0]?.power;
+        const championIds = ctx.rankings
+            .filter(ranking => ranking.power === championPower)
+            .map(ranking => ranking.playerId);
+        if (championIds.length === 0) return { events: [] };
+
         // 收集所有基地上的所有随从（全局范围）
         const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; controller: string; label: string }[] = [];
         for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -1177,6 +1209,7 @@ export function registerBaseAbilities(): void {
             }
         }
         if (allMinions.length === 0) return { events: [] };
+
         const minionOptions = allMinions.map((m, i) => ({
             id: `minion-${i}`,
             label: m.label,
@@ -1188,13 +1221,20 @@ export function registerBaseAbilities(): void {
             { id: 'skip', label: '不消灭', value: { skip: true }, displayMode: 'button' as const },
             ...minionOptions,
         ];
-        if (!ctx.matchState) return { events: [] };
-        const interaction = createSimpleChoice(
-            `base_ninja_dojo_${ctx.now}`, winnerId,
-            '忍者道场：选择消灭的随从', options,
-            { sourceId: 'base_ninja_dojo', targetType: 'minion' },
-        );
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+
+        let nextMatchState = ctx.matchState;
+        championIds.forEach((winnerId, index) => {
+            const interaction = createSimpleChoice(
+                `base_ninja_dojo_${ctx.now}_${index}`,
+                winnerId,
+                '忍者道场：选择消灭的随从',
+                options,
+                { sourceId: 'base_ninja_dojo', targetType: 'minion' },
+            );
+            nextMatchState = queueInteraction(nextMatchState, interaction);
+        });
+
+        return { events: [], matchState: nextMatchState };
     }, { mandatory: false });
 
     // base_ninja_dojo_pod: POD 勘误为无基地能力。
@@ -1416,26 +1456,24 @@ export function registerBaseAbilities(): void {
         if (!baseDeck || baseDeck.length === 0) return { events: [] };
         const topCount = Math.min(3, baseDeck.length);
         const topCards = baseDeck.slice(0, topCount);
-        // 为每张基地卡生成选项，玩家选择排列顺序
-        const options = topCards.map((defId, i) => {
-            const def = getBaseDef(defId);
-            return {
-                id: `base-${i}`,
-                label: def?.name ?? defId,
-                value: { defId, index: i },
-            };
-        });
         if (!ctx.matchState) return { events: [] };
+        const wizardAcademyTopCards = topCards.slice();
         const interaction = createSimpleChoice(
-            `base_wizard_academy_${ctx.now}`, winnerId,
-            '巫师学院：选择排列基地牌库顶的顺序', options,
-            { sourceId: 'base_wizard_academy', targetType: 'generic' },
+            `base_wizard_academy_${ctx.now}`,
+            winnerId,
+            '巫师学院：选择排列基地牌库顶的顺序',
+            buildWizardAcademyOptions(ctx.state, wizardAcademyTopCards),
+            { sourceId: 'base_wizard_academy', targetType: 'generic', responseValidationMode: 'live' },
         );
+        (interaction.data as { optionsGenerator?: unknown }).optionsGenerator = (
+            nextState: { core: SmashUpCore },
+            interactionData: { continuationContext?: { topCards?: string[] } } | undefined,
+        ) => buildWizardAcademyOptions(nextState.core, interactionData?.continuationContext?.topCards ?? wizardAcademyTopCards);
         return {
             events: [],
             matchState: queueInteraction(ctx.matchState, {
                 ...interaction,
-                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex, topCards } },
+                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex, topCards: wizardAcademyTopCards } },
             }),
         };
     });
@@ -1861,8 +1899,11 @@ export function registerBaseInteractionHandlers(): void {
         const selected = value as { defId: string; index: number };
         const ctx = getContinuationContext<{ topCards: string[] }>(iData);
         if (!ctx?.topCards || ctx.topCards.length === 0) return { state, events: [] };
-        const chosenDefId = selected.defId;
-        const remaining = ctx.topCards.filter(id => id !== chosenDefId);
+        const currentTopCards = getCurrentBaseDeckTopSnapshotDefIds(state.core, ctx.topCards);
+        if (currentTopCards.length === 0) return { state, events: [] };
+        const chosenDefId = currentTopCards.find((defId) => defId === selected.defId);
+        if (!chosenDefId) return { state, events: [] };
+        const remaining = currentTopCards.filter(id => id !== chosenDefId);
         const newOrder = [chosenDefId, ...remaining];
         return { state, events: [{
             type: SU_EVENTS.BASE_DECK_REORDERED,

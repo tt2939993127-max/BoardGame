@@ -8,7 +8,7 @@
  * - manifest 声明的 setupOptions（单选 / 多选）
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameManifestEntry } from '../../games/manifest.types';
@@ -88,19 +88,6 @@ function countAiSeats(seatControllers: Record<string, AiSeatController>, numPlay
     return total;
 }
 
-function resolveLocalAiDifficulty(
-    seatControllers: Record<string, AiSeatController>,
-    numPlayers: number,
-): AiDifficultyLevel {
-    for (let index = 0; index < numPlayers; index += 1) {
-        const controller = seatControllers[String(index)];
-        if (controller?.type === 'local-ai') {
-            return controller.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY;
-        }
-    }
-    return DEFAULT_LOCAL_AI_DIFFICULTY;
-}
-
 function applyLocalAiDifficulty(
     seatControllers: Record<string, AiSeatController>,
     numPlayers: number,
@@ -130,7 +117,7 @@ export const CreateRoomModal = ({
 }: CreateRoomModalProps) => {
     const gameNamespace = `game-${gameManifest.id}`;
     const { t } = useTranslation(['lobby', gameNamespace]);
-    const playerOptions = gameManifest.playerOptions ?? [2];
+    const playerOptions = useMemo(() => gameManifest.playerOptions ?? [2], [gameManifest.playerOptions]);
     const hasPlayerOptions = playerOptions.length > 1;
 
     const [roomName, setRoomName] = useState('');
@@ -144,24 +131,22 @@ export const CreateRoomModal = ({
 
     useEffect(() => {
         if (!isOpen) return;
-        const hasSavedPreferences = initialPreferences != null;
         const nextPreferences = normalizeLocalMatchPreferences(
             gameManifest,
             (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
         );
-        const nextSeatControllers = hasSavedPreferences
-            ? forceHumanOwnerSeat(nextPreferences.seatControllers)
-            : forceHumanOwnerSeat(
-                Object.fromEntries(
-                    Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
-                ),
-            );
+        const nextSeatControllers = forceHumanOwnerSeat(
+            Object.fromEntries(
+                Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+            ),
+        );
+
         setRoomName('');
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
-        setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
+        setEnableAi(false);
+        setAiDifficulty(DEFAULT_LOCAL_AI_DIFFICULTY);
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
@@ -274,12 +259,19 @@ export const CreateRoomModal = ({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed inset-0 flex items-center justify-center p-4 sm:p-8 pointer-events-none"
-                        style={{ zIndex: UI_Z_INDEX.modalContent }}
+                        className="modal-base-container fixed inset-0 flex items-center justify-center p-4 sm:p-8 pointer-events-none"
+                        style={{
+                            zIndex: UI_Z_INDEX.modalContent,
+                            paddingTop: 'max(1rem, var(--safe-area-top))',
+                            paddingRight: 'max(1rem, var(--safe-area-right))',
+                            paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                            paddingLeft: 'max(1rem, var(--safe-area-left))',
+                        }}
                     >
                         <div
-                            className="bg-parchment-card-bg pointer-events-auto relative flex w-full max-w-md max-h-[min(88dvh,42rem)] flex-col overflow-hidden rounded-sm border border-parchment-card-border/30 shadow-parchment-card-hover font-serif sm:max-h-[min(84dvh,44rem)]"
+                            className="bg-parchment-card-bg pointer-events-auto relative flex w-full max-w-md flex-col overflow-hidden rounded-sm border border-parchment-card-border/30 shadow-parchment-card-hover font-serif"
                             onClick={(event) => event.stopPropagation()}
+                            style={{ maxHeight: 'min(var(--runtime-modal-max-height), 42rem)' }}
                         >
                             <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
                             <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-parchment-card-border/60" />

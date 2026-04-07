@@ -4,6 +4,26 @@
     "cancel": "Cancel",
     "close": "Close"
   },
+  "actions": {
+    "closePreview": "Close Preview"
+  },
+  "selection": {
+    "title": "Choose Character",
+    "notSelected": "Not Selected",
+    "you": "You",
+    "ready": "Ready",
+    "readyWaiting": "Waiting for other players",
+    "pressStart": "Start Match",
+    "waitingAll": "Waiting for everyone to be ready"
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "Preparing room"
+    }
+  },
+  "characters": {
+    "placeholder": "Character"
+  },
   "category": {
     "all": "All Games",
     "card": "Card",
@@ -20,6 +40,9 @@
     "tactical": "Tactical",
     "card_driven": "Card Driven",
     "casual": "Casual"
+  },
+  "status_tags": {
+    "under_construction": "Under Construction"
   },
   "game_details": {
     "best_players": "Best Players",
@@ -38,8 +61,8 @@
     "close": "Close"
   },
   "socketCompatibility": {
-    "title": "Real-time connection looks unstable",
-    "description": "This network may not support websocket-only connections. You can enable compatibility mode for a steadier connection, though it may be slightly slower.",
+    "title": "Real-time connection was unstable, so compatibility mode was enabled",
+    "description": "This network did not handle websocket-only connections reliably. Polling fallback is now allowed and reconnection has started. It may respond a bit slower; you can turn compatibility mode off after the network recovers.",
     "enable": "Enable compatibility mode",
     "enabledTitle": "Compatibility mode enabled",
     "enabledDescription": "Polling fallback is now allowed for real-time updates. If your network becomes normal again, you can turn it off to recover faster response.",
@@ -69,6 +92,12 @@
   "close": "Close",
   "back": "Back",
   "loading": "Loading",
+  "routeLoading": {
+    "eyebrow": "Loading Page",
+    "title": "Loading page...",
+    "description": "Preparing the current page content.",
+    "progress": "Loading page module..."
+  },
   "unknownUser": "Unknown User",
   "notFound": {
     "seoTitle": "404 - Page Not Found",

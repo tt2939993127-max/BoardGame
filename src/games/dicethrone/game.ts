@@ -12,6 +12,7 @@ import {
     createFlowSystem,
     createInteractionSystem,
     createSimpleChoiceSystem,
+    createCompareRollChoiceSystem,
     createMultistepChoiceSystem,
     createRematchSystem,
     createResponseWindowSystem,
@@ -948,6 +949,7 @@ const systems = [
     }),
     createInteractionSystem(),
     createSimpleChoiceSystem(),
+    createCompareRollChoiceSystem(),
     createMultistepChoiceSystem(),
     createRematchSystem(),
     createResponseWindowSystem({
@@ -1040,6 +1042,9 @@ const COMMAND_TYPES = [
     'SELECT_CHARACTER',
     'HOST_START_GAME',
     'MOVE_SEAT',
+    'REQUEST_SEAT_SWAP',
+    'RESPOND_SEAT_SWAP',
+    'CANCEL_SEAT_SWAP',
     'PLAYER_READY',
     'PLAYER_UNREADY',
     // Token 响应系统

@@ -55,7 +55,7 @@ export function steampunkScrapDiving(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `steampunk_scrap_diving_${ctx.now}`, ctx.playerId,
-        '选择要从弃牌堆取回的行动卡', options as any[], { sourceId: 'steampunk_scrap_diving', targetType: 'generic' },
+        '选择要从弃牌堆取回的行动卡', options as any[], { sourceId: 'steampunk_scrap_diving', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -361,7 +361,7 @@ function steampunkZeppelin(ctx: AbilityContext): AbilityResult {
 
     if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    const options = buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId });
+    const options = buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId });
     const interaction = createSimpleChoice(
         `steampunk_zeppelin_minion_${ctx.now}`, ctx.playerId,
         '齐柏林飞艇：点击要移动的随从', options,

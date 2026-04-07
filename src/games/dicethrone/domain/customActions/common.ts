@@ -279,7 +279,11 @@ function handleResolveCardEffectsOnSelectedOpponent({
     timestamp,
     random,
 }: CustomActionContext): DiceThroneEvent[] {
-    const card = findHeroCard(sourceAbilityId);
+    const attackerCharacterId = state.players[attackerId]?.characterId;
+    const card = findHeroCard(
+        sourceAbilityId,
+        attackerCharacterId && attackerCharacterId !== 'unselected' ? attackerCharacterId : undefined,
+    );
     if (!card?.effects?.length) {
         return [];
     }

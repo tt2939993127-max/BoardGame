@@ -351,10 +351,57 @@ describe('Feedback Module (e2e)', () => {
         expect(listRes.body.items[1].content).toBe('newer feedback');
     });
 
-    it('bug 类型必须附带 actionLog 或 stateSnapshot', async () => {
+    it('开放接口支持匿名读取反馈列表、详情并修改状态', async () => {
+        const createRes = await request(app.getHttpServer())
+            .post('/feedback')
+            .send({
+                content: '公开接口反馈',
+                type: 'bug',
+                severity: 'high',
+                gameName: 'smashup',
+                actionLog: '[13:00] public open endpoint',
+                clientContext: {
+                    gameId: 'smashup',
+                    route: '/play/smashup/match/public-open',
+                },
+            })
+            .expect(201);
+
+        const feedbackId = createRes.body._id as string;
+
+        const listRes = await request(app.getHttpServer())
+            .get('/feedback/open?status=open&limit=20')
+            .expect(200);
+
+        expect(listRes.body.total).toBe(1);
+        expect(listRes.body.items).toHaveLength(1);
+        expect(listRes.body.items[0]._id).toBe(feedbackId);
+        expect(listRes.body.items[0].clientContext?.gameId).toBe('smashup');
+
+        const detailRes = await request(app.getHttpServer())
+            .get(`/feedback/open/${feedbackId}`)
+            .expect(200);
+
+        expect(detailRes.body._id).toBe(feedbackId);
+        expect(detailRes.body.content).toBe('公开接口反馈');
+        expect(detailRes.body.status).toBe('open');
+
+        const updateRes = await request(app.getHttpServer())
+            .patch(`/feedback/open/${feedbackId}/status`)
+            .send({ status: 'resolved' })
+            .expect(200);
+
+        expect(updateRes.body._id).toBe(feedbackId);
+        expect(updateRes.body.status).toBe('resolved');
+
+        const updated = await feedbackModel.findById(feedbackId).lean();
+        expect(updated?.status).toBe('resolved');
+    });
+
+    it('bug 类型不附带 actionLog 或 stateSnapshot 也允许提交', async () => {
         const { userToken } = await seedUsers();
 
-        await request(app.getHttpServer())
+        const acceptedWithoutDiagnostic = await request(app.getHttpServer())
             .post('/feedback')
             .set('Authorization', `Bearer ${userToken}`)
             .send({
@@ -363,7 +410,11 @@ describe('Feedback Module (e2e)', () => {
                 severity: 'high',
                 gameName: 'smashup',
             })
-            .expect(400);
+            .expect(201);
+
+        expect(acceptedWithoutDiagnostic.body.type).toBe('bug');
+        expect(acceptedWithoutDiagnostic.body.actionLog).toBeUndefined();
+        expect(acceptedWithoutDiagnostic.body.stateSnapshot).toBeUndefined();
 
         const accepted = await request(app.getHttpServer())
             .post('/feedback')

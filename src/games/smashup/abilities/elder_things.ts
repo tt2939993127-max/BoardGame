@@ -118,7 +118,7 @@ export function registerElderThingAbilities(): void {
     registerProtection('elder_thing_elder_thing', 'affect', elderThingProtectionChecker);
 }
 
-/** 拜亚基?onPlay：如果其他玩家有随从在本基地，抽一张疯狂卡 */
+/** 拜亚基 onPlay：如果其他玩家有随从在本基地，则你抽一张疯狂卡 */
 function elderThingByakhee(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
@@ -303,7 +303,7 @@ function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `elder_thing_begin_the_summoning_${ctx.now}`, ctx.playerId,
         '选择要放到牌库顶的随从', options as any[],
-        { sourceId: 'elder_thing_begin_the_summoning', targetType: 'generic' },
+        { sourceId: 'elder_thing_begin_the_summoning', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -517,7 +517,7 @@ function elderThingBeginTheSummoningPod(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '选择要放到牌库顶的随从',
         options as any[],
-        { sourceId: 'elder_thing_begin_the_summoning_pod', targetType: 'generic' },
+        { sourceId: 'elder_thing_begin_the_summoning_pod', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -1599,7 +1599,7 @@ export function registerElderThingInteractionHandlers(): void {
             playerId,
             '散播恐怖：选择要从弃牌堆打出的随从（战斗力≤3）',
             options as any[],
-            { sourceId: 'elder_thing_spreading_horror_pod_choose_minion', targetType: 'generic' },
+            { sourceId: 'elder_thing_spreading_horror_pod_choose_minion', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
         );
         (interaction.data as any).continuationContext = { ...ctx, chosenBaseIndex: baseIndex };
         return { state: queueInteraction(state, interaction), events: [] };

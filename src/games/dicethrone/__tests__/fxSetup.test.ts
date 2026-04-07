@@ -35,4 +35,12 @@ describe('DiceThrone FX Setup', () => {
     expect(resolveTokenImpactKey(false)).toBe(TOKEN_GAIN_KEY);
     expect(resolveTokenImpactKey(true)).toBe(TOKEN_REMOVE_KEY);
   });
+
+  it('状态/Token 获得时若提供 customKey，应优先使用自定义音效', () => {
+    expect(resolveStatusImpactKey(false, 'custom-status')).toBe('custom-status');
+    expect(resolveStatusImpactKey(true, 'custom-status')).toBe(STATUS_REMOVE_KEY);
+
+    expect(resolveTokenImpactKey(false, 'custom-token')).toBe('custom-token');
+    expect(resolveTokenImpactKey(true, 'custom-token')).toBe(TOKEN_REMOVE_KEY);
+  });
 });

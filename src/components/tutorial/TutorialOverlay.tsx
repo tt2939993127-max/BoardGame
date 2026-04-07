@@ -56,6 +56,44 @@ function hasOverflowHiddenAncestor(el: Element): boolean {
     return false;
 }
 
+function resolveTutorialTargetElement(targetId: string): HTMLElement | null {
+    const candidates = Array.from(
+        document.querySelectorAll<HTMLElement>(`[data-tutorial-id="${targetId}"]`),
+    );
+    if (candidates.length === 0) {
+        const fallback = document.getElementById(targetId);
+        return fallback instanceof HTMLElement ? fallback : null;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    let bestCandidate: HTMLElement | null = null;
+    let bestVisibleArea = -1;
+
+    for (const candidate of candidates) {
+        const style = getComputedStyle(candidate);
+        if (style.display === 'none' || style.visibility === 'hidden') {
+            continue;
+        }
+
+        const rect = candidate.getBoundingClientRect();
+        if (rect.width <= 1 || rect.height <= 1) {
+            continue;
+        }
+
+        const visibleWidth = Math.max(0, Math.min(rect.right, viewportWidth) - Math.max(rect.left, 0));
+        const visibleHeight = Math.max(0, Math.min(rect.bottom, viewportHeight) - Math.max(rect.top, 0));
+        const visibleArea = visibleWidth * visibleHeight;
+
+        if (visibleArea > bestVisibleArea) {
+            bestVisibleArea = visibleArea;
+            bestCandidate = candidate;
+        }
+    }
+
+    return bestCandidate ?? candidates[0] ?? null;
+}
+
 export const TutorialOverlay: React.FC = () => {
     const { isActive, currentStep, nextStep, isLastStep } = useTutorial();
     const stepNamespace = currentStep?.content?.includes(':')
@@ -250,8 +288,7 @@ export const TutorialOverlay: React.FC = () => {
 
         const updateLayout = () => {
             if (highlightTarget) {
-                const el = document.querySelector(`[data-tutorial-id="${highlightTarget}"]`) ||
-                    document.getElementById(highlightTarget);
+                const el = resolveTutorialTargetElement(highlightTarget);
                 if (el) {
                     const rect = el.getBoundingClientRect();
                     applyLayout(rect);
@@ -298,7 +335,7 @@ export const TutorialOverlay: React.FC = () => {
             if (rafId !== null) cancelAnimationFrame(rafId);
             resizeObserver?.disconnect();
         };
-    }, [currentStep, isActive, isCompactTutorialLayout, viewport.height, viewport.safeArea, viewport.width]);
+    }, [currentStep, isActive, isCompactTutorialLayout, rootViewportHeight, rootViewportWidth, viewport.height, viewport.safeArea, viewport.width]);
 
     if (!isActive || !currentStep) {
         return null;

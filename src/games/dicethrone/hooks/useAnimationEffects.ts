@@ -26,11 +26,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { EventStreamEntry } from '../../../engine/types';
 import type { DamageDealtEvent, HealAppliedEvent, HeroState, AbilityDef } from '../domain/types';
-import type { CpChangedEvent, AttackResolvedEvent } from '../domain/events';
+import type { CpChangedEvent } from '../domain/events';
 import type { PlayerId } from '../../../engine/types';
 import type { StatusAtlases } from '../ui/statusEffects';
 import { getStatusEffectIconNode } from '../ui/statusEffects';
-import { STATUS_EFFECT_META, TOKEN_META } from '../domain/statusEffects';
+import { STATUS_EFFECT_META, getVisualMetaById } from '../domain/statusEffects';
 import { getElementCenter } from '../../../components/common/animations/FlyingEffect';
 import type { FxBus, FxParams } from '../../../engine/fx';
 import {
@@ -268,7 +268,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             frozenHp,
             damage: 0,
         };
-    }, [opponentId, opponent, player, getAbilityStartPos, refs.opponentHp, refs.selfHp]);
+    }, [currentPlayerId, opponentId, opponent, player, getAbilityStartPos, refs.opponentHp, refs.selfHp]);
 
     /**
      * 构建单个 CP 变化事件的 FX 参数
@@ -341,22 +341,29 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
     // render 阶段计算出的待推送步骤（effect 中消费）
     const pendingPushRef = useRef<AnimStep[] | null>(null);
 
+    const releaseBufferedStep = useCallback((step: AnimStep) => {
+        if (!step.bufferKey) return;
+        damageBuffer.release([step.bufferKey]);
+    }, [damageBuffer]);
+
     /** 推入队列中的下一步，返回是否成功 */
     const pushNextStep = useCallback(() => {
-        const next = pendingStepsRef.current.shift();
-        if (!next) {
-            activeFxIdRef.current = null;
-            return;
+        while (true) {
+            const next = pendingStepsRef.current.shift();
+            if (!next) {
+                activeFxIdRef.current = null;
+                return;
+            }
+            const fxId = fxBus.push(next.cue, {}, next.params);
+            if (fxId) {
+                fxImpactMapRef.current.set(fxId, { bufferKey: next.bufferKey, damage: next.damage });
+                activeFxIdRef.current = fxId;
+                return;
+            }
+            // cue 未注册或被跳过：立即释放冻结，避免旧 HP 卡住。
+            releaseBufferedStep(next);
         }
-        const fxId = fxBus.push(next.cue, {}, next.params);
-        if (fxId) {
-            fxImpactMapRef.current.set(fxId, { bufferKey: next.bufferKey, damage: next.damage });
-            activeFxIdRef.current = fxId;
-        } else {
-            // cue 未注册或被跳过，继续推进
-            pushNextStep();
-        }
-    }, [fxBus]);
+    }, [fxBus, releaseBufferedStep]);
 
     /**
      * Board 层在 onEffectComplete 中调用：当前步骤动画完成后推进下一步。
@@ -442,12 +449,14 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
             fxImpactMapRef.current.set(fxId, { bufferKey: first.bufferKey, damage: first.damage });
             activeFxIdRef.current = fxId;
         } else {
+            releaseBufferedStep(first);
             pushNextStep();
         }
     }, [
         eventStreamEntries,
         fxBus,
         pushNextStep,
+        releaseBufferedStep,
         damageBuffer,
     ]);
 
@@ -480,7 +489,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: info.color,
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentBuff.current),
-                    soundKey: resolveStatusImpactKey(false),
+                    soundKey: resolveStatusImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -494,7 +503,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.opponentBuff.current),
                     isRemove: true,
-                    soundKey: resolveStatusImpactKey(true),
+                    soundKey: resolveStatusImpactKey(true, info.sfxKey),
                 });
             }
         });
@@ -518,7 +527,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: info.color,
                     startPos: getEffectStartPos(currentPlayerId),
                     endPos: getElementCenter(refs.selfBuff.current),
-                    soundKey: resolveStatusImpactKey(false),
+                    soundKey: resolveStatusImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -532,7 +541,7 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.selfBuff.current),
                     isRemove: true,
-                    soundKey: resolveStatusImpactKey(true),
+                    soundKey: resolveStatusImpactKey(true, info.sfxKey),
                 });
             }
         });
@@ -552,13 +561,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
             const prevStacks = prevTokens[tokenId] ?? 0;
             if (stacks > prevStacks) {
-                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                const info = getVisualMetaById(tokenId) || { color: 'from-slate-500 to-slate-600' };
                 fxBus.push(DT_FX.TOKEN, {}, {
                     content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                     color: info.color,
                     startPos: getEffectStartPos(opponentId),
                     endPos: getElementCenter(refs.opponentBuff.current),
-                    soundKey: resolveTokenImpactKey(false),
+                    soundKey: resolveTokenImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -566,13 +575,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
             const currentStacks = currentTokens[tokenId] ?? 0;
             if (prevStacks > 0 && currentStacks < prevStacks) {
-                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                const info = getVisualMetaById(tokenId) || { color: 'from-slate-500 to-slate-600' };
                 fxBus.push(DT_FX.TOKEN, {}, {
                     content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.opponentBuff.current),
                     isRemove: true,
-                    soundKey: resolveTokenImpactKey(true),
+                    soundKey: resolveTokenImpactKey(true, info.sfxKey),
                 });
             }
         });
@@ -590,13 +599,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         Object.entries(currentTokens).forEach(([tokenId, stacks]) => {
             const prevStacks = prevTokens[tokenId] ?? 0;
             if (stacks > prevStacks) {
-                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                const info = getVisualMetaById(tokenId) || { color: 'from-slate-500 to-slate-600' };
                 fxBus.push(DT_FX.TOKEN, {}, {
                     content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                     color: info.color,
                     startPos: getEffectStartPos(currentPlayerId),
                     endPos: getElementCenter(refs.selfBuff.current),
-                    soundKey: resolveTokenImpactKey(false),
+                    soundKey: resolveTokenImpactKey(false, info.sfxKey),
                 });
             }
         });
@@ -604,13 +613,13 @@ export function useAnimationEffects(config: AnimationEffectsConfig): {
         Object.entries(prevTokens).forEach(([tokenId, prevStacks]) => {
             const currentStacks = currentTokens[tokenId] ?? 0;
             if (prevStacks > 0 && currentStacks < prevStacks) {
-                const info = TOKEN_META[tokenId] || { color: 'from-slate-500 to-slate-600' };
+                const info = getVisualMetaById(tokenId) || { color: 'from-slate-500 to-slate-600' };
                 fxBus.push(DT_FX.TOKEN, {}, {
                     content: getStatusEffectIconNode(info, locale, 'fly', statusIconAtlas),
                     color: 'from-slate-400 to-slate-600',
                     startPos: getElementCenter(refs.selfBuff.current),
                     isRemove: true,
-                    soundKey: resolveTokenImpactKey(true),
+                    soundKey: resolveTokenImpactKey(true, info.sfxKey),
                 });
             }
         });

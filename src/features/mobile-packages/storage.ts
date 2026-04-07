@@ -1,8 +1,9 @@
-import type { StoredGamePackageState } from './types';
+import type { GamePackageInstallErrorCode, StoredGamePackageState } from './types';
 import { mergeGamePackageState } from './types';
+import { normalizeGamePackageAssetBaseUrl } from './assetBaseUrl';
 
 const STORAGE_PREFIX = 'mobile-package-state:';
-const STALE_IN_PROGRESS_ERROR_MESSAGE = '上次下载未完成，请重新发起。';
+export const STALE_IN_PROGRESS_ERROR_MESSAGE = '上次下载未完成，请重新发起。';
 
 const getStorage = () => {
     if (typeof window === 'undefined' || typeof window.localStorage === 'undefined') {
@@ -26,11 +27,20 @@ const isValidStatus = (value: unknown): value is StoredGamePackageState['status'
 const isValidProgressMode = (value: unknown): value is StoredGamePackageState['progressMode'] =>
     value === undefined || value === 'determinate' || value === 'indeterminate';
 
-const isInProgressStatus = (value: StoredGamePackageState['status']) =>
-    value === 'queued'
-    || value === 'manifest'
-    || value === 'downloading'
-    || value === 'verifying';
+const isValidErrorCode = (value: unknown): value is GamePackageInstallErrorCode =>
+    value === undefined
+    || value === 'network-timeout'
+    || value === 'http-error'
+    || value === 'resume-not-supported'
+    || value === 'checksum-mismatch'
+    || value === 'insufficient-storage'
+    || value === 'archive-invalid'
+    || value === 'file-io'
+    || value === 'cancelled'
+    || value === 'task-conflict'
+    || value === 'manifest-missing'
+    || value === 'unsupported-runtime'
+    || value === 'unknown';
 
 const sanitizeStoredState = (
     gameId: string,
@@ -45,7 +55,11 @@ const sanitizeStoredState = (
         return null;
     }
 
-    if (!isValidStatus(candidate.status) || !isValidProgressMode(candidate.progressMode)) {
+    if (
+        !isValidStatus(candidate.status)
+        || !isValidProgressMode(candidate.progressMode)
+        || !isValidErrorCode(candidate.errorCode)
+    ) {
         return null;
     }
 
@@ -75,8 +89,9 @@ const sanitizeStoredState = (
             ? candidate.installedVersion.trim()
             : undefined,
         localAssetBaseUrl: typeof candidate.localAssetBaseUrl === 'string' && candidate.localAssetBaseUrl.trim()
-            ? candidate.localAssetBaseUrl.trim()
+            ? normalizeGamePackageAssetBaseUrl(candidate.localAssetBaseUrl.trim())
             : undefined,
+        errorCode: candidate.errorCode,
         errorMessage: typeof candidate.errorMessage === 'string' && candidate.errorMessage.trim()
             ? candidate.errorMessage
             : undefined,
@@ -106,16 +121,6 @@ export const readStoredGamePackageState = (
             return fallbackState;
         }
 
-        if (parsed.status && isInProgressStatus(parsed.status)) {
-            return mergeGamePackageState(fallbackState, {
-                status: 'failed',
-                progressPercent: undefined,
-                progressMode: undefined,
-                errorMessage: parsed.errorMessage ?? STALE_IN_PROGRESS_ERROR_MESSAGE,
-                updatedAt: parsed.updatedAt ?? Date.now(),
-            });
-        }
-
         return mergeGamePackageState(fallbackState, parsed);
     } catch {
         return fallbackState;
@@ -129,7 +134,10 @@ export const writeStoredGamePackageState = (state: StoredGamePackageState) => {
     }
 
     try {
-        storage.setItem(getStorageKey(state.gameId), JSON.stringify(state));
+        storage.setItem(getStorageKey(state.gameId), JSON.stringify({
+            ...state,
+            localAssetBaseUrl: normalizeGamePackageAssetBaseUrl(state.localAssetBaseUrl),
+        }));
     } catch {
         // 忽略 localStorage 不可用或空间不足
     }

@@ -12,7 +12,9 @@ import { getPlayerAbilityEffects } from './abilityLookup';
 import { getPendingAttackExpectedDamage } from './utils';
 
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
-    event.type === 'CHOICE_REQUESTED' || event.type === 'INTERACTION_REQUESTED';
+    event.type === 'CHOICE_REQUESTED'
+    || event.type === 'COMPARE_ROLL_REQUESTED'
+    || event.type === 'INTERACTION_REQUESTED';
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,
@@ -48,7 +50,8 @@ const createDefenseResolvedEvent = (
 
 export const resolveOffensivePreDefenseEffects = (
     state: DiceThroneCore,
-    timestamp: number = 0
+    timestamp: number = 0,
+    random?: RandomFn,
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
     if (!pending || pending.preDefenseResolved) return [];
@@ -72,7 +75,7 @@ export const resolveOffensivePreDefenseEffects = (
     };
 
     const events: DiceThroneEvent[] = [];
-    events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx));
+    events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx, { random }));
     events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp));
     return events;
 };
@@ -181,7 +184,7 @@ export const resolveAttack = (
 
     const events: DiceThroneEvent[] = [];
     if (options?.includePreDefense) {
-        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, timestamp);
+        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, timestamp, random);
         events.push(...preDefenseEvents);
 
         const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
@@ -192,7 +195,7 @@ export const resolveAttack = (
     const bonusDamage = pending.bonusDamage ?? 0;
     const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(state, random, timestamp);
     events.push(...defenseEvents);
-    const hasDefenseChoice = defenseEvents.some(e => e.type === 'CHOICE_REQUESTED');
+    const hasDefenseChoice = defenseEvents.some(isBlockingInteractionEvent);
     const hasDefenseTokenResponse = defenseEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
     const hasDefenseInteractiveBonusDiceReroll = defenseEvents.some(e =>
         e.type === 'BONUS_DICE_REROLL_REQUESTED'

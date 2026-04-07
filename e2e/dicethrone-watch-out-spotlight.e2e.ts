@@ -8,12 +8,16 @@ import { dirname } from 'node:path';
 import { test, expect } from './framework';
 import type { Locator, Page } from '@playwright/test';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
+import { initHeroState } from '../src/games/dicethrone/domain/characters';
 import { BARBARIAN_CARDS } from '../src/games/dicethrone/heroes/barbarian/cards';
+import { GUNSLINGER_CARDS } from '../src/games/dicethrone/heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../src/games/dicethrone/heroes/samurai/cards';
 import {
     advanceToOffensiveRoll,
     applyCoreStateDirect,
     disableFabMenu,
     ensureDebugPanelClosed,
+    ensureDebugStateTab,
     readyAndStartGame,
     readCoreState,
     selectCharacter,
@@ -25,6 +29,146 @@ import { setChineseLocale, waitForTestHarness } from './helpers/common';
 const DICETHRONE_OPEN_TIMEOUT_MS = 180000;
 const DICETHRONE_TEST_TIMEOUT_MS = 300000;
 const DICETHRONE_ONLINE_TEST_TIMEOUT_MS = 240000;
+const FIXED_RANDOM = {
+    random: () => 0.5,
+    d: (max: number) => Math.min(max, 1),
+    range: (min: number) => min,
+    shuffle: <T,>(array: T[]) => [...array],
+};
+
+function cloneJson<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function buildOnlineCommonCardSceneState(
+    baseState: Record<string, any>,
+    options: {
+        actorCharacter: 'samurai' | 'gunslinger';
+        actorCardId: 'card-boss-generous' | 'card-next-time';
+        actorCp: number;
+        responseScene?: {
+            pendingDamage: number;
+            responseWindowType: 'afterAttackResolved';
+        };
+    },
+) {
+    const viewerBase = initHeroState('0', 'monk', FIXED_RANDOM as any);
+    const actorBase = initHeroState('1', options.actorCharacter, FIXED_RANDOM as any);
+    const actorCards = options.actorCharacter === 'samurai' ? SAMURAI_CARDS : GUNSLINGER_CARDS;
+    const actorCard = actorCards.find((card) => card.id === options.actorCardId);
+    if (!actorCard) {
+        throw new Error(`Card ${options.actorCardId} not found for ${options.actorCharacter}`);
+    }
+
+    const nextState = cloneJson(baseState);
+    const isResponseScene = !!options.responseScene;
+
+    nextState.core = {
+        ...(nextState.core ?? {}),
+        activePlayerId: isResponseScene ? '0' : '1',
+        hostStarted: true,
+        selectedCharacters: {
+            ...(nextState.core?.selectedCharacters ?? {}),
+            '0': 'monk',
+            '1': options.actorCharacter,
+        },
+        readyPlayers: {
+            ...(nextState.core?.readyPlayers ?? {}),
+            '0': true,
+            '1': true,
+        },
+        players: {
+            ...(nextState.core?.players ?? {}),
+            '0': {
+                ...viewerBase,
+                hand: [],
+                discard: [],
+                resources: {
+                    ...viewerBase.resources,
+                    cp: 2,
+                    hp: 50,
+                },
+            },
+            '1': {
+                ...actorBase,
+                hand: [cloneJson(actorCard)],
+                discard: [],
+                resources: {
+                    ...actorBase.resources,
+                    cp: options.actorCp,
+                    hp: 50,
+                },
+            },
+        },
+        pendingAttack: isResponseScene
+            ? {
+                attackerId: '0',
+                defenderId: '1',
+                isDefendable: true,
+                sourceAbilityId: 'monk-test-attack',
+                damage: options.responseScene!.pendingDamage,
+                bonusDamage: 0,
+                attackModifierBonusDamage: 0,
+                damageResolved: false,
+                resolvedDamage: 0,
+                preDefenseResolved: false,
+                offensiveRollEndTokenResolved: false,
+            }
+            : null,
+        pendingDamage: isResponseScene
+            ? {
+                id: `common-card-${options.actorCardId}-pending-damage`,
+                sourcePlayerId: '0',
+                targetPlayerId: '1',
+                originalDamage: options.responseScene!.pendingDamage,
+                currentDamage: options.responseScene!.pendingDamage,
+                sourceAbilityId: 'monk-test-attack',
+                responseType: 'beforeDamageReceived',
+                responderId: '1',
+                isFullyEvaded: false,
+            }
+            : undefined,
+        rollCount: Math.max(nextState.core?.rollCount ?? 0, 1),
+        rollConfirmed: true,
+    };
+    nextState.sys = {
+        ...(nextState.sys ?? {}),
+        phase: 'main1',
+        eventStream: {
+            ...(nextState.sys?.eventStream ?? {}),
+            entries: [],
+        },
+        responseWindow: isResponseScene
+            ? {
+                current: {
+                    id: `common-card-${options.actorCardId}-response-window`,
+                    windowType: options.responseScene!.responseWindowType,
+                    responderQueue: ['1'],
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                },
+            }
+            : { current: undefined },
+    };
+    return nextState;
+}
+
+async function readMatchStateFromDebugPanel(page: Page): Promise<Record<string, any>> {
+    await ensureDebugStateTab(page);
+    const raw = await page.getByTestId('debug-state-json').innerText();
+    return JSON.parse(raw) as Record<string, any>;
+}
+
+async function applyFullStateDirect(page: Page, state: Record<string, any>): Promise<void> {
+    await ensureDebugStateTab(page);
+    const toggleBtn = page.getByTestId('debug-state-toggle-input');
+    await toggleBtn.click();
+    const input = page.getByTestId('debug-state-input');
+    await expect(input).toBeVisible({ timeout: 3000 });
+    await input.fill(JSON.stringify(state));
+    await page.getByTestId('debug-state-apply').click();
+    await expect(input).toBeHidden({ timeout: 5000 }).catch(() => {});
+}
 
 async function expectMinBoundingBox(locator: Locator, label: string, minWidth: number, minHeight: number): Promise<void> {
     const box = await locator.boundingBox();
@@ -52,6 +196,50 @@ async function expectElementInsideViewport(
     expect(box!.y, `${label} top edge`).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width, `${label} right edge`).toBeLessThanOrEqual(viewportWidth + 1);
     expect(box!.y + box!.height, `${label} bottom edge`).toBeLessThanOrEqual(viewportHeight + 1);
+}
+
+async function expectMaxViewportWidthRatio(
+    locator: Locator,
+    label: string,
+    viewportWidth: number,
+    maxRatio: number,
+): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box, `${label} should have bounding box`).not.toBeNull();
+    expect(box!.width / viewportWidth, `${label} width ratio`).toBeLessThanOrEqual(maxRatio);
+}
+
+async function expectMinViewportWidthRatio(
+    locator: Locator,
+    label: string,
+    viewportWidth: number,
+    minRatio: number,
+): Promise<void> {
+    const box = await locator.boundingBox();
+    expect(box, `${label} should have bounding box`).not.toBeNull();
+    expect(box!.width / viewportWidth, `${label} width ratio`).toBeGreaterThanOrEqual(minRatio);
+}
+
+async function expectCombinedHorizontalCenter(
+    locators: Locator[],
+    label: string,
+    viewportWidth: number,
+    tolerancePx: number,
+): Promise<void> {
+    const boxes = (await Promise.all(locators.map((locator) => locator.boundingBox())))
+        .filter((box): box is NonNullable<typeof box> => box !== null);
+
+    expect(boxes.length, `${label} should expose bounding boxes`).toBeGreaterThan(0);
+
+    const left = Math.min(...boxes.map((box) => box.x));
+    const right = Math.max(...boxes.map((box) => box.x + box.width));
+    const combinedCenter = left + ((right - left) / 2);
+    const viewportCenter = viewportWidth / 2;
+
+    expect(
+        Math.abs(combinedCenter - viewportCenter),
+        `${label} combined center should stay near viewport center`,
+    ).toBeLessThanOrEqual(tolerancePx);
 }
 
 async function expectNoHorizontalOverflow(page: Page): Promise<void> {
@@ -521,8 +709,8 @@ async function injectGunslingerTheLawInteractionScene(page: Page): Promise<void>
             data: {
                 id: 'card-the-law-scene',
                 playerId: '0',
-                sourceCardId: 'card-the-law',
-                sourceId: 'card-the-law',
+                sourceCardId: 'the-law',
+                sourceId: 'the-law',
                 type: 'selectPlayer',
                 titleKey: 'interaction.gunslingerTheLaw',
                 selectCount: 2,
@@ -594,24 +782,55 @@ async function injectGunslingerTheLawPlayScene(
             shuffle: <T,>(array: T[]) => [...array],
         };
 
-        const [{ initHeroState }, { GUNSLINGER_CARDS }] = await Promise.all([
+        const [
+            { initHeroState, createCharacterDice },
+            { DEADEYE_2 },
+            { GUNSLINGER_CARDS },
+            { GUNSLINGER_DICE_FACE_IDS, TOKEN_IDS },
+        ] = await Promise.all([
             import('/src/games/dicethrone/domain/characters.ts'),
+            import('/src/games/dicethrone/heroes/gunslinger/abilities.ts'),
             import('/src/games/dicethrone/heroes/gunslinger/cards.ts'),
+            import('/src/games/dicethrone/domain/ids.ts'),
         ]);
 
-        const theLaw = GUNSLINGER_CARDS.find((card: any) => card.id === 'card-the-law');
-        if (!theLaw) {
-            throw new Error('card-the-law not found');
+        const deadeyeUpgrade = GUNSLINGER_CARDS.find((card: any) => card.id === 'upgrade-deadeye-2');
+        if (!deadeyeUpgrade) {
+            throw new Error('upgrade-deadeye-2 not found');
         }
 
+        const faceByValue: Record<number, string> = {
+            1: GUNSLINGER_DICE_FACE_IDS.BULLET,
+            2: GUNSLINGER_DICE_FACE_IDS.BULLET,
+            3: GUNSLINGER_DICE_FACE_IDS.BULLET,
+            4: GUNSLINGER_DICE_FACE_IDS.DASH,
+            5: GUNSLINGER_DICE_FACE_IDS.DASH,
+            6: GUNSLINGER_DICE_FACE_IDS.BULLSEYE,
+        };
         const gunslinger = {
             ...initHeroState('0', 'gunslinger', random as any),
             nickname: '枪手',
-            hand: [JSON.parse(JSON.stringify(theLaw))],
+            hand: [],
             discard: [],
             resources: {
                 cp: 2,
                 hp: 50,
+            },
+            tokens: {
+                ...initHeroState('0', 'gunslinger', random as any).tokens,
+                [TOKEN_IDS.LOADED]: 0,
+                [TOKEN_IDS.EVASIVE]: 0,
+            },
+            abilityLevels: {
+                ...initHeroState('0', 'gunslinger', random as any).abilityLevels,
+                deadeye: 2,
+            },
+            abilities: initHeroState('0', 'gunslinger', random as any).abilities.map((ability: any) =>
+                ability?.id === 'deadeye' ? JSON.parse(JSON.stringify(DEADEYE_2)) : ability
+            ),
+            upgradeCardByAbilityId: {
+                ...initHeroState('0', 'gunslinger', random as any).upgradeCardByAbilityId,
+                deadeye: { cardId: deadeyeUpgrade.id, cpCost: deadeyeUpgrade.cpCost },
             },
         };
         const monk = {
@@ -671,6 +890,23 @@ async function injectGunslingerTheLawPlayScene(
                 players,
                 pendingAttack: null,
                 pendingDamage: undefined,
+                phase: 'offensiveRoll',
+                rollConfirmed: true,
+                rollCount: 1,
+                rollLimit: 3,
+                rollDiceCount: 5,
+                dice: createCharacterDice('gunslinger').map((die: any, index: number) => {
+                    const values = [6, 6, 6, 1, 1];
+                    const value = values[index];
+                    const face = faceByValue[value];
+                    return {
+                        ...die,
+                        value,
+                        symbol: face,
+                        symbols: [face],
+                        isKept: false,
+                    };
+                }),
             },
         };
 
@@ -685,13 +921,32 @@ async function waitForGunslingerTheLawPlayScene(
 ): Promise<void> {
     await page.waitForFunction(({ multiplayer }) => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-        return state?.sys?.phase === 'main1'
+        return state?.sys?.phase === 'offensiveRoll'
             && state?.core?.activePlayerId === '0'
-            && state?.core?.players?.['0']?.hand?.some((card: any) => card.id === 'card-the-law')
+            && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
             && state?.core?.selectedCharacters?.['0'] === 'gunslinger'
             && state?.core?.selectedCharacters?.['1'] === 'monk'
             && (multiplayer ? state?.core?.selectedCharacters?.['2'] === 'paladin' : !state?.core?.players?.['2']);
     }, options, { timeout: 30000, polling: 200 });
+}
+
+async function dispatchHarnessCommand(
+    page: Page,
+    type: string,
+    playerId: string,
+    payload: Record<string, unknown> = {},
+): Promise<void> {
+    await page.evaluate(({ commandType, commandPlayerId, commandPayload }) => {
+        (window as any).__BG_TEST_HARNESS__!.command.dispatch({
+            type: commandType,
+            playerId: commandPlayerId,
+            payload: commandPayload,
+        });
+    }, {
+        commandType: type,
+        commandPlayerId: playerId,
+        commandPayload: payload,
+    });
 }
 
 async function saveLocatorEvidenceScreenshot(
@@ -703,6 +958,18 @@ async function saveLocatorEvidenceScreenshot(
     const path = getEvidenceScreenshotPath(testInfo, name, { filename });
     await mkdir(dirname(path), { recursive: true });
     await locator.screenshot({ path });
+    return path;
+}
+
+async function savePageEvidenceScreenshot(
+    page: Page,
+    testInfo: Parameters<typeof getEvidenceScreenshotPath>[0],
+    name: string,
+    filename: string,
+): Promise<string> {
+    const path = getEvidenceScreenshotPath(testInfo, name, { filename });
+    await mkdir(dirname(path), { recursive: true });
+    await page.screenshot({ path, fullPage: false });
     return path;
 }
 
@@ -881,6 +1148,7 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
             pendingAttack: {
                 attackerId: '0',
                 defenderId: '1',
+                sourceAbilityId: 'lunar-eclipse',
                 isDefendable: true,
                 damage: 5,
                 bonusDamage: 0,
@@ -907,6 +1175,8 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 2000 });
+    await page.waitForTimeout(400);
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 1000 });
 
     const afterClickState = await page.evaluate(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
@@ -920,9 +1190,9 @@ test('self watch out should show bonus die spotlight', async ({ page, game }, te
     });
 
     const expectedOverlayTextByEffectKey: Record<string, RegExp> = {
-        'bonusDie.effect.watchOut.bow': /(bonusDie\.effect\.watchOut\.bow|Bow.*\+2 Damage|\+2\s*Damage)/i,
-        'bonusDie.effect.watchOut.foot': /(bonusDie\.effect\.watchOut\.foot|Foot.*Inflict Entangle|Inflict Entangle|Entangle)/i,
-        'bonusDie.effect.watchOut.moon': /(bonusDie\.effect\.watchOut\.moon|Moon.*Inflict Blinded|Inflict Blinded|Blinded)/i,
+        'bonusDie.effect.watchOut.bow': /(bonusDie\.effect\.watchOut\.bow|Bow.*\+2 Damage|\+2\s*Damage|弓.*伤害\+2|伤害\+2)/i,
+        'bonusDie.effect.watchOut.foot': /(bonusDie\.effect\.watchOut\.foot|Foot.*Inflict Entangle|Inflict Entangle|Entangle|脚.*缠绕|施加缠绕|缠绕)/i,
+        'bonusDie.effect.watchOut.moon': /(bonusDie\.effect\.watchOut\.moon|Moon.*Inflict Blinded|Inflict Blinded|Blinded|月.*致盲|施加致盲|致盲)/i,
     };
 
     expect(afterClickState.bonusDieEffectKey).toMatch(/^bonusDie\.effect\.watchOut\.(bow|foot|moon)$/);
@@ -969,22 +1239,22 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
         opponentId: 'monk',
         handCardIds: [
             'upgrade-fan-the-hammer-2',
-            'card-pistol-whip',
             'upgrade-take-cover-2',
-            'card-mark-the-target',
             'upgrade-deadeye-2',
-            'card-the-law',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
         ],
     });
     await waitForHeroHandScreenshotScene(page, {
         heroId: 'gunslinger',
         handCardIds: [
             'upgrade-fan-the-hammer-2',
-            'card-pistol-whip',
             'upgrade-take-cover-2',
-            'card-mark-the-target',
             'upgrade-deadeye-2',
-            'card-the-law',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
         ],
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
@@ -1046,6 +1316,7 @@ test('bonus die spotlight should close on backdrop click before confirm interact
             pendingAttack: {
                 attackerId: '0',
                 defenderId: '1',
+                sourceAbilityId: 'lunar-eclipse',
                 isDefendable: true,
                 damage: 5,
                 bonusDamage: 0,
@@ -1068,6 +1339,7 @@ test('bonus die spotlight should close on backdrop click before confirm interact
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
 
+    await page.waitForTimeout(250);
     await page.mouse.click(40, 40);
     await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 
@@ -1114,6 +1386,7 @@ test('bonus die spotlight should close on content click in display mode', async 
             pendingAttack: {
                 attackerId: '0',
                 defenderId: '1',
+                sourceAbilityId: 'lunar-eclipse',
                 isDefendable: true,
                 damage: 5,
                 bonusDamage: 0,
@@ -1135,6 +1408,7 @@ test('bonus die spotlight should close on content click in display mode', async 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 3000 });
 
+    await page.waitForTimeout(250);
     await bonusDieOverlay.click();
     await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
 
@@ -1921,6 +2195,197 @@ test('opponent lucky card should only show card spotlight for viewer', async ({ 
     }
 });
 
+test('opponent common-card spotlight should match actual effect for samurai and gunslinger', async ({ browser }, testInfo) => {
+    test.setTimeout(DICETHRONE_ONLINE_TEST_TIMEOUT_MS);
+
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    const setup = await setupDTOnlineMatch(browser, baseURL);
+    if (!setup) {
+        test.skip(true, 'online setup unavailable in current environment');
+        return;
+    }
+
+    const { hostPage, guestPage, hostContext, guestContext } = setup;
+
+    try {
+        await selectCharacter(hostPage, 'monk');
+        await selectCharacter(guestPage, 'samurai');
+        await readyAndStartGame(hostPage, guestPage);
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+        await waitForTestHarness(hostPage, 10000);
+        await waitForTestHarness(guestPage, 10000);
+        await ensureDebugPanelClosed(hostPage);
+        await ensureDebugPanelClosed(guestPage);
+
+        const hostSpotlight = hostPage.locator('[data-testid="card-spotlight-overlay"]');
+
+        const applySceneAndPlay = async (options: {
+            actorCharacter: 'samurai' | 'gunslinger';
+            actorCardId: 'card-boss-generous' | 'card-next-time';
+            actorCp: number;
+            expectedCp: number;
+            expectedShield: number;
+            responseScene?: {
+                pendingDamage: number;
+                responseWindowType: 'afterAttackResolved';
+            };
+            overlayName: string;
+            overlayFilename: string;
+            stateName: string;
+            stateFilename: string;
+        }) => {
+            const matchState = await readMatchStateFromDebugPanel(hostPage);
+            const injectedState = buildOnlineCommonCardSceneState(matchState, {
+                actorCharacter: options.actorCharacter,
+                actorCardId: options.actorCardId,
+                actorCp: options.actorCp,
+                responseScene: options.responseScene,
+            });
+
+            await applyFullStateDirect(hostPage, injectedState);
+            await ensureDebugPanelClosed(hostPage);
+            await ensureDebugPanelClosed(guestPage);
+
+            await guestPage.waitForFunction(({ actorCharacter, actorCardId, actorCp, isResponseScene, expectedWindowId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const responseWindow = state?.sys?.responseWindow?.current;
+                return state?.core?.activePlayerId === (isResponseScene ? '0' : '1')
+                    && state?.core?.selectedCharacters?.['1'] === actorCharacter
+                    && state?.core?.players?.['1']?.resources?.cp === actorCp
+                    && state?.core?.players?.['1']?.hand?.length === 1
+                    && state?.core?.players?.['1']?.hand?.[0]?.id === actorCardId
+                    && (isResponseScene
+                        ? responseWindow?.id === expectedWindowId
+                            && responseWindow?.windowType === 'afterAttackResolved'
+                            && state?.core?.pendingDamage?.id === `common-card-${actorCardId}-pending-damage`
+                        : !responseWindow);
+            }, {
+                actorCharacter: options.actorCharacter,
+                actorCardId: options.actorCardId,
+                actorCp: options.actorCp,
+                isResponseScene: !!options.responseScene,
+                expectedWindowId: `common-card-${options.actorCardId}-response-window`,
+            }, { timeout: 15000, polling: 200 });
+
+            const cardInHand = guestPage.locator(`[data-card-id="${options.actorCardId}"]`).first();
+            await expect(cardInHand).toBeVisible({ timeout: 10000 });
+            await cardInHand.click();
+            const armedResponseButton = guestPage.getByRole('button', { name: /^可以响应$/ }).last();
+            if (await armedResponseButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+                await armedResponseButton.click();
+            }
+
+            await guestPage.waitForFunction(({ actorCardId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
+                return !handIds.includes(actorCardId)
+                    && entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId);
+            }, {
+                actorCardId: options.actorCardId,
+            }, { timeout: 10000, polling: 200 });
+
+            await hostPage.waitForFunction(({ actorCardId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                return entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId);
+            }, {
+                actorCardId: options.actorCardId,
+            }, { timeout: 15000, polling: 200 });
+
+            await expect(hostSpotlight).toBeVisible({ timeout: 5000 });
+            await savePageEvidenceScreenshot(
+                hostPage,
+                testInfo,
+                options.overlayName,
+                options.overlayFilename,
+            );
+            await hostPage.waitForTimeout(250);
+            await hostSpotlight.click();
+
+            await guestPage.waitForFunction(({ actorCardId, expectedCp, expectedShield }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const shields = state?.core?.players?.['1']?.damageShields ?? [];
+                const discardIds = state?.core?.players?.['1']?.discard?.map((card: any) => card.id) ?? [];
+                const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
+                const shieldTotal = shields.reduce((sum: number, shield: any) => sum + (shield?.value ?? 0), 0);
+                return !handIds.includes(actorCardId)
+                    && discardIds.includes(actorCardId)
+                    && (state?.core?.players?.['1']?.resources?.cp ?? 0) === expectedCp
+                    && shieldTotal === expectedShield
+                    && entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED');
+            }, {
+                actorCardId: options.actorCardId,
+                expectedCp: options.expectedCp,
+                expectedShield: options.expectedShield,
+            }, { timeout: 15000, polling: 200 });
+
+            const finalState = await guestPage.evaluate(() => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const shields = state?.core?.players?.['1']?.damageShields ?? [];
+                return {
+                    handIds: state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [],
+                    discardIds: state?.core?.players?.['1']?.discard?.map((card: any) => card.id) ?? [],
+                    cp: state?.core?.players?.['1']?.resources?.cp ?? 0,
+                    shieldTotal: shields.reduce((sum: number, shield: any) => sum + (shield?.value ?? 0), 0),
+                    lastEventTypes: entries.slice(-6).map((entry: any) => entry.event?.type),
+                };
+            });
+
+            expect(finalState.handIds).not.toContain(options.actorCardId);
+            expect(finalState.discardIds).toContain(options.actorCardId);
+            expect(finalState.cp).toBe(options.expectedCp);
+            expect(finalState.shieldTotal).toBe(options.expectedShield);
+            expect(finalState.lastEventTypes).toContain('CARD_PLAYED');
+
+            await expect(hostSpotlight).toBeHidden({ timeout: 6000 });
+            await guestPage.waitForTimeout(500);
+            await savePageEvidenceScreenshot(
+                guestPage,
+                testInfo,
+                options.stateName,
+                options.stateFilename,
+            );
+        };
+
+        await applySceneAndPlay({
+            actorCharacter: 'samurai',
+            actorCardId: 'card-boss-generous',
+            actorCp: 1,
+            expectedCp: 3,
+            expectedShield: 0,
+            overlayName: '20-samurai-boss-generous-spotlight',
+            overlayFilename: '20-samurai-boss-generous-spotlight.png',
+            stateName: '21-samurai-boss-generous-state',
+            stateFilename: '21-samurai-boss-generous-state.png',
+        });
+
+        await applySceneAndPlay({
+            actorCharacter: 'gunslinger',
+            actorCardId: 'card-next-time',
+            actorCp: 2,
+            expectedCp: 1,
+            expectedShield: 6,
+            responseScene: {
+                pendingDamage: 6,
+                responseWindowType: 'afterAttackResolved',
+            },
+            overlayName: '30-gunslinger-next-time-spotlight',
+            overlayFilename: '30-gunslinger-next-time-spotlight.png',
+            stateName: '31-gunslinger-next-time-state',
+            stateFilename: '31-gunslinger-next-time-state.png',
+        });
+    } finally {
+        await guestContext.close();
+        await hostContext.close();
+    }
+});
+
 test('mobile narrow viewport should keep magnify entries visible and clickable', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
@@ -1987,6 +2452,9 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await disableFabMenu(page);
 
     const playerBoardMagnifyButton = page.locator('[data-testid="player-board-magnify-button"]');
+    const playerBoardSurface = page.locator('[data-testid="player-board-surface"]');
+    const playerBoardAbilitySlot = page.locator('[data-testid="player-board-surface"] [data-ability-slot="combo"]').first();
+    const tipBoardSurface = page.locator('[data-testid="tip-board-surface"]');
     const discardPileInspectButton = page.locator('[data-testid="discard-pile-inspect-button"]');
     const autoResponseToggle = page.locator('[data-testid="auto-response-toggle"]');
     const boardMagnifyOverlay = page.locator('[data-testid="board-magnify-overlay"]');
@@ -2011,17 +2479,46 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await expectElementInsideViewport(discardPileInspectButton, 'discard pile inspect button', viewport!.width, viewport!.height);
     await expectElementInsideViewport(rollButton, 'roll button', viewport!.width, viewport!.height);
     await expectElementInsideViewport(confirmButton, 'confirm button', viewport!.width, viewport!.height);
+    await expect(playerBoardSurface).toBeVisible({ timeout: 5000 });
+    await expect(playerBoardAbilitySlot).toBeVisible({ timeout: 5000 });
+    await expect(tipBoardSurface).toBeVisible({ timeout: 5000 });
+    await expectCombinedHorizontalCenter(
+        [playerBoardSurface, tipBoardSurface],
+        'mobile center board cluster',
+        viewport!.width,
+        12,
+    );
 
     await game.screenshot('10-mobile-main-board-state', testInfo);
 
+    await playerBoardSurface.click({ position: { x: 44, y: 44 } });
+    await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
+    let overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
+    await game.screenshot('11-mobile-player-board-surface-magnify-open', testInfo);
+    await boardMagnifyOverlay.click({ position: { x: 10, y: 10 } });
+    await expect(boardMagnifyOverlay).toBeHidden({ timeout: 5000 });
+
+    await playerBoardAbilitySlot.click();
+    await page.waitForTimeout(300);
+    await expect(boardMagnifyOverlay).toBeHidden();
+
+    await tipBoardSurface.click({ position: { x: 28, y: 80 } });
+    await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
+    overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
+    await game.screenshot('12-mobile-tip-board-surface-magnify-open', testInfo);
+    await boardMagnifyOverlay.click({ position: { x: 10, y: 10 } });
+    await expect(boardMagnifyOverlay).toBeHidden({ timeout: 5000 });
+
     await playerBoardMagnifyButton.click();
     await expect(boardMagnifyOverlay).toBeVisible({ timeout: 5000 });
-    const overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
+    overlayCloseButton = boardMagnifyOverlay.getByRole('button', { name: /关闭预览|Close Preview/i }).first();
     await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
     const magnifiedBoardFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
     await expect(magnifiedBoardFrame).toBeVisible({ timeout: 5000 });
     const magnifiedBoardImage = boardMagnifyOverlay.locator('img[alt="Preview"]').first();
-    await game.screenshot('11-mobile-player-board-magnify-open', testInfo);
+    await game.screenshot('13-mobile-player-board-button-magnify-open', testInfo);
     const magnifiedBoardImageCount = await magnifiedBoardImage.count();
     if (magnifiedBoardImageCount > 0) {
         const naturalSize = await magnifiedBoardImage.evaluate((node) => ({
@@ -2046,7 +2543,82 @@ test('mobile narrow viewport should keep magnify entries visible and clickable',
     await expect(overlayCloseButton).toBeVisible({ timeout: 5000 });
     const discardPreviewFrame = overlayCloseButton.locator('xpath=following-sibling::div[1]');
     await expect(discardPreviewFrame).toBeVisible({ timeout: 5000 });
-    await game.screenshot('12-mobile-discard-pile-inspect-open', testInfo);
+    await game.screenshot('14-mobile-discard-pile-inspect-open', testInfo);
+});
+
+test('desktop v2 player board should stay within normal gameplay width', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await setChineseLocale(page.context());
+    await page.setViewportSize({ width: 1365, height: 768 });
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await game.setupScene({
+        gameId: 'dicethrone',
+        player0: {
+            resources: { CP: 3, HP: 50 },
+            discard: ['card-play-six'],
+        },
+        player1: {
+            resources: { HP: 50 },
+        },
+        currentPlayer: '0',
+        phase: 'offensiveRoll',
+        extra: {
+            selectedCharacters: { '0': 'samurai', '1': 'gunslinger' },
+            hostStarted: true,
+            rollCount: 1,
+            rollConfirmed: false,
+            dice: [
+                { id: 0, value: 1, isKept: false },
+                { id: 1, value: 2, isKept: false },
+                { id: 2, value: 3, isKept: false },
+                { id: 3, value: 4, isKept: false },
+                { id: 4, value: 5, isKept: false },
+            ],
+        },
+    });
+
+    await page.waitForFunction(
+        () => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 1365
+                && state?.sys?.phase === 'offensiveRoll'
+                && state?.core?.selectedCharacters?.['0'] === 'samurai'
+                && state?.core?.selectedCharacters?.['1'] === 'gunslinger'
+                && (state?.core?.players?.['0']?.discard?.length ?? 0) === 1;
+        },
+        { timeout: 10000, polling: 200 },
+    );
+    await ensureDebugPanelClosed(page);
+    await disableFabMenu(page);
+
+    const playerBoardSurface = page.locator('[data-testid="player-board-surface"]');
+    const tipBoardSurface = page.locator('[data-testid="tip-board-surface"]');
+    const playerBoardMagnifyButton = page.locator('[data-testid="player-board-magnify-button"]');
+    const viewport = page.viewportSize();
+
+    expect(viewport).not.toBeNull();
+    await expect(playerBoardSurface).toBeVisible({ timeout: 5000 });
+    await expect(tipBoardSurface).toBeVisible({ timeout: 5000 });
+    await expect(playerBoardMagnifyButton).toBeVisible({ timeout: 5000 });
+    await expectNoHorizontalOverflow(page);
+    await expectElementInsideViewport(playerBoardSurface, 'desktop player board surface', viewport!.width, viewport!.height);
+    await expectElementInsideViewport(tipBoardSurface, 'desktop tip board surface', viewport!.width, viewport!.height);
+    await expectMinViewportWidthRatio(playerBoardSurface, 'desktop samurai player board surface', viewport!.width, 0.495);
+    await expectMaxViewportWidthRatio(playerBoardSurface, 'desktop samurai player board surface', viewport!.width, 0.515);
+
+    const [playerBoardBox, tipBoardBox] = await Promise.all([
+        playerBoardSurface.boundingBox(),
+        tipBoardSurface.boundingBox(),
+    ]);
+    expect(playerBoardBox, 'desktop player board should expose bounding box').not.toBeNull();
+    expect(tipBoardBox, 'desktop tip board should expose bounding box').not.toBeNull();
+    const boardGapPx = tipBoardBox!.x - (playerBoardBox!.x + playerBoardBox!.width);
+    expect(boardGapPx, 'desktop v2 player board should keep a visible gap before tip board').toBeGreaterThan(0);
+    expect(boardGapPx, 'desktop v2 player board and tip board should only keep a tight gap').toBeLessThanOrEqual(8);
+
+    await game.screenshot('15-desktop-v2-board-layout', testInfo);
 });
 
 test('mobile long press hand card should open magnify without playing card', async ({ page, game }, testInfo) => {
@@ -2211,8 +2783,8 @@ test.describe('枪手 The Law 多目标交互', () => {
     });
 });
 
-test.describe('枪手 The Law 从手牌真实打出', () => {
-    test('should resolve immediately in 1v1 after clicking the hand card', async ({ page, game }, testInfo) => {
+test.describe('枪手 The Law 升级变体真实触发', () => {
+    test('should resolve immediately in 1v1 after selecting the upgraded variant', async ({ page, game }, testInfo) => {
         test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
         await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
@@ -2223,15 +2795,14 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
         await ensureDebugPanelClosed(page);
         await disableFabMenu(page);
 
-        const theLawCard = page.locator('[data-card-id="card-the-law"]').first();
-        await expect(theLawCard).toBeVisible({ timeout: 5000 });
-        await game.screenshot('22-the-law-from-hand-1v1-before-play', testInfo);
+        await game.screenshot('22-the-law-variant-1v1-before-select', testInfo);
 
-        await theLawCard.click();
+        await dispatchHarnessCommand(page, 'SELECT_ABILITY', '0', { abilityId: 'the-law' });
+        await dispatchHarnessCommand(page, 'ADVANCE_PHASE', '0');
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
             return !state?.sys?.interaction?.current
-                && state?.core?.players?.['0']?.hand?.every((card: any) => card.id !== 'card-the-law')
+                && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1
                 && (state?.core?.players?.['1']?.tokens?.bounty ?? 0) === 1
                 && (state?.core?.players?.['1']?.statusEffects?.knockdown ?? 0) === 1;
@@ -2239,14 +2810,14 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
 
         const stateAfter = await game.getState();
         expect(stateAfter.sys?.interaction?.current ?? null).toBeNull();
-        expect(stateAfter.core.players['0'].hand.map((card: any) => card.id)).not.toContain('card-the-law');
+        expect(stateAfter.core.players['0'].upgradeCardByAbilityId.deadeye?.cardId).toBe('upgrade-deadeye-2');
         expect(stateAfter.core.players['0'].tokens.evasive).toBe(1);
         expect(stateAfter.core.players['1'].tokens.bounty).toBe(1);
         expect(stateAfter.core.players['1'].statusEffects.knockdown).toBe(1);
-        await game.screenshot('23-the-law-from-hand-1v1-after-play', testInfo);
+        await game.screenshot('23-the-law-variant-1v1-after-resolve', testInfo);
     });
 
-    test('should open multi-target interaction after playing from hand in 3-player scene', async ({ page, game }, testInfo) => {
+    test('should open multi-target interaction after selecting the upgraded variant in 3-player scene', async ({ page, game }, testInfo) => {
         test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
         await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
@@ -2257,18 +2828,17 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
         await ensureDebugPanelClosed(page);
         await disableFabMenu(page);
 
-        const theLawCard = page.locator('[data-card-id="card-the-law"]').first();
         const confirmButton = page.getByRole('button', { name: /^(确认|Confirm)(?:\s*\(\d+\))?$/i }).last();
         const targetOne = page.getByTestId('dt-player-target-1');
         const targetTwo = page.getByTestId('dt-player-target-2');
 
-        await expect(theLawCard).toBeVisible({ timeout: 5000 });
-        await theLawCard.click();
+        await dispatchHarnessCommand(page, 'SELECT_ABILITY', '0', { abilityId: 'the-law' });
+        await dispatchHarnessCommand(page, 'ADVANCE_PHASE', '0');
 
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            return state?.sys?.interaction?.current?.data?.sourceCardId === 'card-the-law'
-                && state?.core?.players?.['0']?.hand?.every((card: any) => card.id !== 'card-the-law')
+            return state?.sys?.interaction?.current?.data?.sourceCardId === 'the-law'
+                && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
@@ -2279,7 +2849,7 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
         await targetOne.click();
         await targetTwo.click();
         await expect(confirmButton).toBeEnabled();
-        await game.screenshot('24-the-law-from-hand-3p-selected-targets', testInfo);
+        await game.screenshot('24-the-law-variant-3p-selected-targets', testInfo);
 
         await confirmButton.click();
         await page.waitForFunction(() => {
@@ -2293,12 +2863,12 @@ test.describe('枪手 The Law 从手牌真实打出', () => {
 
         const stateAfter = await game.getState();
         expect(stateAfter.sys?.interaction?.current ?? null).toBeNull();
-        expect(stateAfter.core.players['0'].hand.map((card: any) => card.id)).not.toContain('card-the-law');
+        expect(stateAfter.core.players['0'].upgradeCardByAbilityId.deadeye?.cardId).toBe('upgrade-deadeye-2');
         expect(stateAfter.core.players['0'].tokens.evasive).toBe(1);
         expect(stateAfter.core.players['1'].tokens.bounty).toBe(1);
         expect(stateAfter.core.players['2'].tokens.bounty).toBe(1);
         expect(stateAfter.core.players['1'].statusEffects.knockdown).toBe(1);
         expect(stateAfter.core.players['2'].statusEffects.knockdown).toBe(1);
-        await game.screenshot('25-the-law-from-hand-3p-resolved', testInfo);
+        await game.screenshot('25-the-law-variant-3p-resolved', testInfo);
     });
 });

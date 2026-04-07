@@ -3,6 +3,9 @@
     "title": "易桌游",
     "subtitle": "桌游教程、联机与原型制作平台",
     "logoAlt": "桌游平台 Logo",
+    "gameDetailsLoadingEyebrow": "正在准备",
+    "gameDetailsLoadingTitle": "游戏详情",
+    "gameDetailsLoadingDescription": "内容马上出现，请稍候。",
     "audio": {
       "mute": "静音",
       "unmute": "取消静音"
@@ -54,6 +57,11 @@
   },
   "button": {
     "processing": "处理中..."
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "准备房间"
+    }
   },
   "activeMatch": {
     "notice": "您当前正在进行一场对局",
@@ -122,10 +130,13 @@
     "assetPack": "素材包",
     "packIdUnknown": "包标识待同步",
     "sizeUnknown": "大小待同步",
+    "packageSyncing": "同步中",
+    "packageUnpublished": "下载包未发布",
     "runtimeUnsupported": "当前运行环境暂不支持下载游戏包，请在 Android App 内重试。",
     "failedTitle": "下载失败",
     "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",
     "retryAction": "重新发起",
+    "cancelAction": "取消下载",
     "pending": "该游戏的移动端包管理正在接入，入口位置和状态骨架已预留。",
     "updateRequiredEyebrow": "需要更新 App",
     "updateRequiredBadge": "更新后可玩",
@@ -136,8 +147,8 @@
       "label": "当前进度",
       "percent": "{{percent}}%",
       "pendingPercent": "等待中",
-      "queuedTitle": "准备下载",
-      "queuedHint": "正在整理当前游戏需要的下载任务。",
+      "queuedTitle": "排队中",
+      "queuedHint": "当前设备同一时间只处理一个游戏下载任务，轮到后会自动开始。",
       "manifestTitle": "读取清单",
       "manifestHint": "正在读取当前游戏的发布清单。",
       "downloadTitle": "下载中",
@@ -169,6 +180,38 @@
       "progressPercent": "{{percent}}%",
       "progressPending": "准备中",
       "retryAction": "重新检查"
+    }
+  },
+  "nativeUpdate": {
+    "gate": {
+      "eyebrow": "安装新版 App",
+      "checkingTitle": "正在准备安装包",
+      "checkingDescription": "正在检查并准备新的 App 安装包，请稍候。",
+      "downloadingTitle": "正在下载安装包",
+      "downloadingDescription": "正在下载新的 App 安装包，完成后会自动拉起系统安装界面。",
+      "verifyingTitle": "正在校验安装包",
+      "verifyingDescription": "安装包已下载完成，正在校验完整性。",
+      "permissionTitle": "需要安装授权",
+      "permissionDescription": "请先允许当前 App 安装未知应用，返回后再继续安装。",
+      "installingTitle": "正在打开系统安装器",
+      "installingDescription": "系统安装界面已经准备就绪，请按系统提示完成覆盖安装。",
+      "errorTitle": "安装包更新失败",
+      "errorDescription": "下载安装包或启动安装失败，请重试。",
+      "targetVersion": "目标 App 版本",
+      "progressLabel": "下载进度",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "准备中",
+      "openSettingsAction": "打开授权页",
+      "continueInstallAction": "继续安装",
+      "retryAction": "重新下载"
+    },
+    "toast": {
+      "disabled": "当前 Android 壳未启用原生更新配置。",
+      "upToDate": "当前已经是最新 App 版本。",
+      "available": "发现新的 App 版本 {{version}}，可直接开始安装。",
+      "installerOpened": "系统安装界面已打开，请按提示完成更新。",
+      "openSettingsFailed": "打开安装授权页失败，请稍后重试。",
+      "missingPreparedUpdate": "没有可继续安装的已下载更新包，请重新下载。"
     }
   },
   "gameDetails": {
@@ -257,6 +300,8 @@
     "creatingRoom": "正在创建房间并进入对局...",
     "namespaceLoadFailed": "游戏文案加载失败",
     "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
+    "clientLoadFailed": "游戏客户端加载失败",
+    "clientLoadFailedDesc": "未能加载当前游戏的客户端代码或资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
     "loadingProgress": {
       "step": "{{current}}/{{total}}",
@@ -283,6 +328,34 @@
       "description": "无法连接到游戏服务器，请检查网络或服务状态",
       "retry": "重试",
       "backToLobby": "返回大厅"
+    },
+    "rescue": {
+      "eyebrow": "游戏页保护",
+      "title": "页面没有正常显示",
+      "description": "检测到当前游戏页没有正常渲染。为了避免继续停留在黑屏，这里先切到友好提示页。",
+      "reload": "刷新重试",
+      "backToLobby": "返回大厅",
+      "copyDiagnostics": "复制诊断",
+      "copied": "已复制",
+      "reason": {
+        "game-viewport-missing": "长时间没有检测到游戏视口容器，页面很可能卡在启动阶段。",
+        "game-shell-collapsed": "检测到游戏画布尺寸异常，主内容区已经塌缩到不可用状态。",
+        "game-content-missing": "检测到游戏主容器存在，但长时间没有渲染出可见内容。"
+      }
+    },
+    "routeLoadingTimeout": {
+      "eyebrow": "进入超时",
+      "title": "游戏页面加载超时",
+      "description": "当前设备迟迟没有完成游戏页面加载。为了避免一直停留在黑屏，这里先切到可操作提示页。",
+      "reason": "通常是游戏模块加载、WebView 兼容性或启动阶段资源初始化卡住了。你可以先刷新重试；如果反复出现，再返回大厅。"
+    },
+    "connectionError": {
+      "unauthorizedTitle": "进入房间失败",
+      "unauthorizedDescription": "当前房间凭证无效或已失效，请返回大厅后重新加入。",
+      "matchNotFoundTitle": "房间不存在",
+      "matchNotFoundDescription": "目标房间可能已被销毁或已失效，请返回大厅后重试。",
+      "syncTimeoutTitle": "同步房间状态失败",
+      "syncTimeoutDescription": "已连接到服务器，但迟迟没有收到对局状态。请重试；如果问题持续出现，说明服务端同步链路存在异常。"
     },
     "ugc": {
       "loading": "UGC 运行态加载中…",

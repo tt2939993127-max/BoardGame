@@ -1,7 +1,7 @@
 {
   "name": "boardgame-platform",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "engines": {
     "node": "24.1.0"
@@ -31,6 +31,8 @@
     "clean:ports": "node scripts/infra/clean_ports.js",
     "generate:manifests": "node scripts/game/generate_game_manifests.js",
     "generate:locales": "node scripts/game/generate-card-locales.cjs",
+    "smashup:kb:export": "npx tsx scripts/export-smashup-kb.ts",
+    "smashup:wiki:crawl": "npx tsx scripts/crawl-smashup-wiki.ts",
     "assets:manifest": "node scripts/assets/generate_asset_manifests.js",
     "assets:validate": "node scripts/assets/generate_asset_manifests.js --validate",
     "preview": "node scripts/infra/vite-cli-safe.mjs preview --configLoader bundle",
@@ -102,8 +104,14 @@
     "mobile:android:sync": "node scripts/mobile/android.mjs sync",
     "mobile:android:open": "node scripts/mobile/android.mjs open",
     "mobile:android:run": "node scripts/mobile/android.mjs run",
+    "mobile:android:release:ota": "node scripts/mobile/release-android.mjs ota",
+    "mobile:android:release:native": "node scripts/mobile/release-android.mjs native",
+    "mobile:android:release:packages": "node scripts/mobile/release-android.mjs packages",
+    "mobile:android:release:full": "node scripts/mobile/release-android.mjs full",
+    "mobile:android:native-update:publish": "node scripts/mobile/publish-android-native-update.mjs",
     "mobile:android:ota:publish": "node scripts/mobile/publish-android-ota.mjs",
     "mobile:android:packages:publish": "node scripts/mobile/publish-android-game-packages.mjs",
+    "mobile:android:compat:smoke": "node scripts/mobile/android.mjs compat-smoke",
     "mobile:android:build:debug": "node scripts/mobile/android.mjs build-debug",
     "mobile:android:build:release": "node scripts/mobile/android.mjs build-release",
     "mobile:android:build:bundle": "node scripts/mobile/android.mjs build-bundle",
@@ -132,6 +140,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.975.0",
     "@babel/standalone": "^7.29.0",
+    "@capacitor/app": "^8.1.0",
     "@capacitor/core": "^8.2.0",
     "@capacitor/screen-orientation": "^8.0.1",
     "@capgo/capacitor-updater": "^8.45.0",

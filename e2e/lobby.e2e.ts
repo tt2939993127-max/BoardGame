@@ -48,7 +48,9 @@ async function ensureLobbyReady(page: Page): Promise<void> {
 
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
+const GAME_DETAILS_LOADING_FALLBACK_TEST_NAME = '首次打开游戏详情时会先显示加载骨架，避免只剩路由跳转';
 const ACTIVE_MATCH_FLOATING_BANNER_TEST_NAME = '首页活跃房间浮层在桌面端居中且移动端不溢出';
+const WEB_APP_DOWNLOAD_ENTRY_TEST_NAME = '网页端下载 App 入口会读取 native update latest.json 并打开其中 APK 地址';
 
 async function createTicTacToeRoom(page: Page): Promise<string> {
     const gameServerBaseURL = getGameServerBaseURL();
@@ -108,7 +110,11 @@ test.describe('Lobby E2E', () => {
 
     test.beforeEach(async ({ page }, testInfo) => {
         await setChineseLocale(page);
-        if (testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME) {
+        if (
+            testInfo.title === MOBILE_AUTHOR_ENTRY_TEST_NAME
+            || testInfo.title === MOBILE_PACKAGE_ENTRY_TEST_NAME
+            || testInfo.title === GAME_DETAILS_LOADING_FALLBACK_TEST_NAME
+        ) {
             return;
         }
         await ensureLobbyReady(page);
@@ -129,8 +135,9 @@ test.describe('Lobby E2E', () => {
     test('游戏详情弹窗会显示当前中文动作入口', async ({ page }) => {
         await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
+        await expect(page.getByTestId('game-details-modal-root').last()).toBeVisible({ timeout: 15000 });
 
-        await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible();
+        await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible({ timeout: 15000 });
         await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '对战AI' })).toHaveCount(0);
         await expect(page.getByRole('button', { name: '本地对战设置' })).toHaveCount(0);
@@ -139,6 +146,179 @@ test.describe('Lobby E2E', () => {
         await page.getByRole('button', { name: '排行榜' }).click();
         await expect(page.getByRole('heading', { name: '胜场排行', level: 4 })).toBeVisible({ timeout: 10000 });
         await expect(page.getByText('加载中...')).toHaveCount(0, { timeout: 10000 });
+    });
+
+    test(GAME_DETAILS_LOADING_FALLBACK_TEST_NAME, async ({ page, game }, testInfo) => {
+        let releaseModalModuleRequest: (() => void) | null = null;
+        const allowModalModuleRequest = new Promise<void>((resolve) => {
+            releaseModalModuleRequest = resolve;
+        });
+
+        await page.route('**/src/components/lobby/GameDetailsModal.tsx*', async (route) => {
+            await allowModalModuleRequest;
+            await route.continue();
+        });
+
+        await ensureLobbyReady(page);
+
+        await page.getByRole('heading', { name: '井字棋' }).click();
+        await expect(page).toHaveURL(/game=tictactoe/);
+        await expect(page.getByTestId('home-game-details-loading-fallback')).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('home-game-details-loading-fallback-root')).toBeVisible();
+
+        await game.screenshot('lobby-game-details-loading-fallback-visible', testInfo);
+
+        releaseModalModuleRequest?.();
+    });
+
+    test('关于弹窗赞助二维码会显示 public logos 静态图', async ({ page, game }, testInfo) => {
+        await page.locator('[data-fab-id="settings"]').click();
+        await page.locator('[data-fab-id="about"]').click();
+
+        await expect(page.getByRole('heading', { name: '易桌游', level: 2 })).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText('如果喜欢这个项目，可以请作者喝杯咖啡。')).toBeVisible();
+
+        const wechatQr = page.getByAltText('微信支付二维码');
+        const alipayQr = page.getByAltText('支付宝支付二维码');
+
+        await expect(wechatQr).toBeVisible();
+        await expect(alipayQr).toBeVisible();
+
+        const qrStates = await Promise.all([
+            wechatQr.evaluate((img) => ({
+                naturalWidth: img.naturalWidth,
+                src: img.getAttribute('src') ?? '',
+                currentSrc: img.currentSrc,
+            })),
+            alipayQr.evaluate((img) => ({
+                naturalWidth: img.naturalWidth,
+                src: img.getAttribute('src') ?? '',
+                currentSrc: img.currentSrc,
+            })),
+        ]);
+
+        expect(qrStates[0].naturalWidth).toBeGreaterThan(0);
+        expect(qrStates[1].naturalWidth).toBeGreaterThan(0);
+        expect(qrStates[0].src).toContain('/logos/weixin.jpg');
+        expect(qrStates[1].src).toContain('/logos/zhifubao.jpg');
+        expect(qrStates[0].currentSrc).toContain('/logos/weixin.jpg');
+        expect(qrStates[1].currentSrc).toContain('/logos/zhifubao.jpg');
+
+        await game.screenshot('lobby-about-modal-support-qr-visible', testInfo);
+    });
+
+    test(WEB_APP_DOWNLOAD_ENTRY_TEST_NAME, async ({ page, game }, testInfo) => {
+        const manifestUrl = 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json';
+        const apkUrl = 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.1.apk';
+
+        await page.route(manifestUrl, async (route) => {
+            await route.fulfill({
+                status: 200,
+                contentType: 'application/json',
+                body: JSON.stringify({
+                    version: '0.5.1',
+                    url: apkUrl,
+                    channel: 'stable',
+                }),
+            });
+        });
+
+        await page.evaluate(() => {
+            const anchorClicks: Array<{ href: string; target: string | null; rel: string | null }> = [];
+            (window as Window & { __testDownloadAnchorClicks__?: Array<{ href: string; target: string | null; rel: string | null }> }).__testDownloadAnchorClicks__ = anchorClicks;
+
+            const originalClick = HTMLAnchorElement.prototype.click;
+            HTMLAnchorElement.prototype.click = function patchedClick(this: HTMLAnchorElement) {
+                anchorClicks.push({
+                    href: this.href,
+                    target: this.getAttribute('target'),
+                    rel: this.getAttribute('rel'),
+                });
+            };
+
+            (window as Window & { __restoreAnchorClick__?: () => void }).__restoreAnchorClick__ = () => {
+                HTMLAnchorElement.prototype.click = originalClick;
+            };
+        });
+
+        await page.locator('[data-fab-id="settings"]').click();
+        await expect(page.locator('[data-fab-id="download-app"]')).toBeVisible();
+
+        await game.screenshot('lobby-download-app-entry-visible', testInfo);
+
+        await page.locator('[data-fab-id="download-app"]').click();
+
+        await expect.poll(async () => page.evaluate(() => (
+            (window as Window & { __testDownloadAnchorClicks__?: Array<{ href: string; target: string | null; rel: string | null }> }).__testDownloadAnchorClicks__ ?? []
+        ))).toEqual([{
+            href: apkUrl,
+            target: '_blank',
+            rel: 'noopener noreferrer',
+        }]);
+
+        await page.evaluate(() => {
+            (window as Window & { __restoreAnchorClick__?: () => void }).__restoreAnchorClick__?.();
+        });
+    });
+
+    test('移动端反馈弹窗应覆盖悬浮球面板，且输入区使用可编辑字号', async ({ browser }, testInfo) => {
+        const context = await browser.newContext({
+            viewport: { width: 393, height: 852 },
+            isMobile: true,
+            hasTouch: true,
+        });
+
+        try {
+            await setChineseLocale(context);
+            const page = await context.newPage();
+            await ensureLobbyReady(page);
+
+            await page.locator('[data-fab-id="settings"]').click();
+            await expect(page.locator('[data-fab-id="feedback"]')).toBeVisible({ timeout: 10000 });
+            await page.locator('[data-fab-id="feedback"]').click();
+
+            const feedbackModal = page.getByTestId('feedback-modal');
+            const feedbackTextarea = feedbackModal.getByPlaceholder(/描述/i);
+            await expect(feedbackModal).toBeVisible({ timeout: 10000 });
+            await expect(feedbackTextarea).toBeVisible();
+
+            const layerMetrics = await page.evaluate(() => {
+                const modal = document.querySelector('[data-testid="feedback-modal"]') as HTMLElement | null;
+                const fabPanel = document.querySelector('[data-testid="fab-panel-settings"]') as HTMLElement | null;
+                const fabSheet = document.querySelector('[data-testid="fab-sheet-settings"]') as HTMLElement | null;
+                const fabMenu = document.querySelector('[data-testid="fab-menu"]') as HTMLElement | null;
+                const activeFabLayer = fabSheet ?? fabPanel ?? fabMenu;
+                const textarea = modal?.querySelector('textarea') as HTMLTextAreaElement | null;
+                const resolveZIndex = (element: HTMLElement | null) => {
+                    if (!element) return 0;
+                    const parsed = Number.parseInt(window.getComputedStyle(element).zIndex || '0', 10);
+                    return Number.isFinite(parsed) ? parsed : 0;
+                };
+                const modalZIndex = resolveZIndex(modal);
+                const fabLayerZIndex = resolveZIndex(activeFabLayer);
+                const textareaFontSize = textarea ? Number.parseFloat(window.getComputedStyle(textarea).fontSize || '0') : 0;
+
+                return {
+                    modalZIndex,
+                    fabLayerZIndex,
+                    textareaFontSize,
+                };
+            });
+
+            expect(layerMetrics.modalZIndex, '反馈弹窗层级应高于 FAB 展开层').toBeGreaterThan(layerMetrics.fabLayerZIndex);
+            expect(layerMetrics.textareaFontSize, '移动端反馈输入区至少应为 16px，避免输入时看不清').toBeGreaterThanOrEqual(16);
+
+            await feedbackTextarea.click();
+            await feedbackTextarea.fill('移动端反馈输入可见性校验');
+            await expect(feedbackTextarea).toHaveValue('移动端反馈输入可见性校验');
+
+            await page.screenshot({
+                path: 'test-results/evidence-screenshots/lobby-feedback-modal-mobile.png',
+                fullPage: false,
+            });
+        } finally {
+            await context.close();
+        }
     });
 
     test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {

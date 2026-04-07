@@ -21,14 +21,13 @@ export const ASSETS = {
     PLAYER_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/player-board`, charId),
     TIP_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/tip`, charId),
     CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/ability-cards`, charId),
-    HAND_CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/hand-cards-atlas`, charId),
     DICE_SPRITE: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/dice`,
     EFFECT_ICONS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/status-icons-atlas`, charId),
     CARD_BG: 'dicethrone/images/Common/card-background',
     AVATAR: 'dicethrone/images/Common/character-portraits',
 };
 
-const DIRECT_SPRITE_ASSET_RE = /^(?:https?:|data:|blob:)/i;
+const DIRECT_SPRITE_ASSET_RE = /^(?:https?:|data:|blob:|\/game-data\/)/i;
 const GAME_DATA_DICE_SPRITE_RE = /^\/game-data\/dicethrone\/([^/]+)\/dice-sprite\.png$/i;
 const LOGICAL_DICE_SPRITE_RE =
     /^(?:\/assets\/|https?:\/\/[^/]+\/official\/)?(?:i18n\/[^/]+\/)?dicethrone\/images\/([^/]+)\/(?:compressed\/)?(dice(?:-sprite)?)(?:\.(?:png|webp|avif))?$/i;
@@ -82,9 +81,11 @@ const dedupeStringList = (list: Array<string | undefined>) => {
 
 const getSpriteAssetPathCandidates = (assetPath?: string | null) => {
     const normalized = normalizeDiceSpriteAssetPath(assetPath);
-    if (!normalized) return [];
-    if (isDirectSpriteAsset(normalized)) return [normalized];
-    return [normalized];
+    const directInput = isDirectSpriteAsset(assetPath) ? assetPath.trim() : undefined;
+    return dedupeStringList([
+        normalized,
+        directInput,
+    ]);
 };
 
 const getLogicalSpriteUrlCandidates = (assetPath: string, locale?: string) => {
@@ -93,11 +94,10 @@ const getLogicalSpriteUrlCandidates = (assetPath: string, locale?: string) => {
         localized.primary.webp,
         localized.fallback.webp,
     ]);
-    // DiceThrone 骰图强制不走未语言化的本地 /assets 回退：
-    // 本地开发时该路径会被 dev server 以 SPA index.html 的假 200 响应吞掉，
-    // Image 探测链路会误把“HTML 不是图片”的情况当成图片候选，导致长期 loading。
-    // 因此这里仅保留语言化 primary/fallback 两条真实图片链路。
-    // DiceThrone 骰图强制不走本地 /assets 回退，统一转成 R2 绝对域名
+    // DiceThrone 骰图优先走语言化压缩资源；
+    // 但如果定义里给的是 /game-data 直链，resolveSpriteAssetUrls 仍会把原始 PNG 保留为最后回退，
+    // 避免某些角色的压缩资源链路缺失时整块骰面空白。
+    // 这里依然不追加未语言化的本地 /assets 回退，避免 dev server 把 SPA HTML 误探测成图片。
     const base = getAssetsBaseUrl().replace(/\/+$/, '');
     const toR2AbsoluteUrl = (url: string) => {
         if (url.startsWith('/assets/')) {

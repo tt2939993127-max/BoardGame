@@ -1116,6 +1116,8 @@ describe('ancient_egyptians audit regressions', () => {
         const optionCardUids = prompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toContain('own-buried');
         expect(optionCardUids).not.toContain('opp-buried');
+        const ownOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        expect(ownOption?.displayMode).toBe('card');
     });
 
     it('Pharaoh 在计分前只提示翻开这里你的一张埋葬牌', () => {
@@ -1155,10 +1157,12 @@ describe('ancient_egyptians audit regressions', () => {
         const optionCardUids = prompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toContain('own-buried');
         expect(optionCardUids).not.toContain('opp-buried');
+        const ownPromptOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        expect(ownPromptOption?.displayMode).toBe('card');
 
         const handler = getInteractionHandler('ancient_egyptians_pharaoh_before_scoring');
         expect(handler).toBeDefined();
-        const ownOption = prompt.data.options.find((option: any) => option.value?.cardUid === 'own-buried');
+        const ownOption = ownPromptOption;
         const resolved = handler!(triggered.matchState!, '0', ownOption.value, prompt.data, dummyRandom, 3);
         expect(resolved?.events.some((event: any) => event.type === SU_EVENTS.BURIED_CARD_UNCOVERED)).toBe(true);
     });
@@ -1359,7 +1363,7 @@ describe('ancient_egyptians audit regressions', () => {
         expect(tempPowerEvents.every(event => event.payload.amount === -1 && event.payload.baseIndex === 0)).toBe(true);
     });
 
-    it('Mummy Strength 的 +4 模式可作用于存在任意埋葬牌的基地', () => {
+    it('Mummy Strength 先选随从，再按所选随从所在基地是否有埋葬牌决定 +4 或 +2', () => {
         const executor = resolveAbility('ancient_egyptians_mummy_strength', 'onPlay');
         expect(executor).toBeDefined();
 
@@ -1392,25 +1396,25 @@ describe('ancient_egyptians audit regressions', () => {
             random: dummyRandom,
             now: 11,
         });
-        const modePrompt = initial.matchState?.sys.interaction.current as any;
-        expect(modePrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_mode');
-
-        const modeHandler = getInteractionHandler('ancient_egyptians_mummy_strength_mode');
-        expect(modeHandler).toBeDefined();
-        const plusFourOption = modePrompt.data.options.find((option: any) => option.value?.amount === 4);
-        const chooseTarget = modeHandler!(initial.matchState!, '0', plusFourOption.value, modePrompt.data, dummyRandom, 12);
-        const targetPrompt = chooseTarget.state.sys.interaction.queue[0] as any;
+        const targetPrompt = initial.matchState?.sys.interaction.current as any;
         expect(targetPrompt?.data?.sourceId).toBe('ancient_egyptians_mummy_strength_target');
-        expect(targetPrompt.data.options.map((option: any) => option.value?.minionUid).filter(Boolean)).toEqual(['empowered']);
+        expect(targetPrompt.data.options.map((option: any) => option.value?.minionUid).filter(Boolean).sort()).toEqual(['empowered', 'other']);
 
         const targetHandler = getInteractionHandler('ancient_egyptians_mummy_strength_target');
         expect(targetHandler).toBeDefined();
-        const targetOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'empowered');
-        const resolved = targetHandler!(chooseTarget.state, '0', targetOption.value, targetPrompt.data, dummyRandom, 13);
-        const powerEvent = resolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
-        expect(powerEvent?.payload.amount).toBe(4);
-        expect(powerEvent?.payload.minionUid).toBe('empowered');
-        expect(powerEvent?.payload.baseIndex).toBe(0);
+        const empoweredOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'empowered');
+        const empoweredResolved = targetHandler!(initial.matchState!, '0', empoweredOption.value, targetPrompt.data, dummyRandom, 12);
+        const empoweredEvent = empoweredResolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
+        expect(empoweredEvent?.payload.amount).toBe(4);
+        expect(empoweredEvent?.payload.minionUid).toBe('empowered');
+        expect(empoweredEvent?.payload.baseIndex).toBe(0);
+
+        const otherOption = targetPrompt.data.options.find((option: any) => option.value?.minionUid === 'other');
+        const otherResolved = targetHandler!(initial.matchState!, '0', otherOption.value, targetPrompt.data, dummyRandom, 13);
+        const otherEvent = otherResolved.events.find((event: any) => event.type === SU_EVENTS.TEMP_POWER_ADDED) as TempPowerAddedEvent | undefined;
+        expect(otherEvent?.payload.amount).toBe(2);
+        expect(otherEvent?.payload.minionUid).toBe('other');
+        expect(otherEvent?.payload.baseIndex).toBe(1);
     });
 
     it('Tomb Trap 翻开后可消灭所选的力量≤4随从', () => {
@@ -1558,6 +1562,7 @@ describe('ancient_egyptians audit regressions', () => {
         expect(buriedPrompt?.data?.sourceId).toBe('ancient_egyptians_seal_the_tomb_uncover');
         const optionCardUids = buriedPrompt.data.options.map((option: any) => option.value?.cardUid).filter(Boolean);
         expect(optionCardUids).toEqual(['own-here']);
+        expect(buriedPrompt.data.options.every((option: any) => option.displayMode === 'card')).toBe(true);
     });
 });
 
@@ -1566,7 +1571,7 @@ describe('samurai_pod audit regressions', () => {
         return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
     }
 
-    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的两个 +1 指示物交互', () => {
+    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的一个 +1 指示物交互', () => {
         const executor = resolveAbility('samurai_ronin_pod', 'onPlay');
         expect(executor).toBeDefined();
 
@@ -1596,7 +1601,7 @@ describe('samurai_pod audit regressions', () => {
         const resolved = handler!(prompted.matchState!, '0', yesOption.value, prompt.data, dummyRandom, 102);
         const counterEvents = resolved.events.filter(event => event.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
 
-        expect(counterEvents).toHaveLength(2);
+        expect(counterEvents).toHaveLength(1);
         expect(counterEvents.every(event => event.payload.minionUid === 'ronin-pod')).toBe(true);
     });
 
@@ -1936,6 +1941,48 @@ describe('BASE_REPLACED keepCards 模式 (terraform)', () => {
         expect(next.bases.length).toBe(2);
         expect(next.bases[0].defId).toBe('new_base');
         expect(next.bases[0].minions.length).toBe(0);
+    });
+
+    it('计分清场后插入替换基地时，后续基地上的泰坦索引应跟随回补', () => {
+        const state = makeState({
+            bases: [
+                makeBase({ defId: 'old_base' }),
+                makeBase({ defId: 'follow_base' }),
+            ],
+            baseDeck: ['new_base'],
+            titans: [{
+                uid: 't-mergacon',
+                defId: 'changerbots_mergacon',
+                faction: 'changerbots' as any,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 1, enteredAt: 1 },
+            }],
+        });
+
+        const afterClear = reduce(state, {
+            type: SU_EVENTS.BASE_CLEARED,
+            payload: { baseIndex: 0, baseDefId: 'old_base' },
+            timestamp: 0,
+        } as any);
+        expect(afterClear.titans?.find(t => t.uid === 't-mergacon')?.location).toMatchObject({
+            zone: 'base',
+            baseIndex: 0,
+        });
+
+        const afterReplace = reduce(afterClear, {
+            type: SU_EVENTS.BASE_REPLACED,
+            payload: { baseIndex: 0, oldBaseDefId: 'old_base', newBaseDefId: 'new_base' },
+            timestamp: 1,
+        } as any);
+
+        expect(afterReplace.titans?.find(t => t.uid === 't-mergacon')?.location).toMatchObject({
+            zone: 'base',
+            baseIndex: 1,
+        });
+        expect(afterReplace.bases[1].defId).toBe('follow_base');
     });
 });
 
@@ -2569,17 +2616,32 @@ describe('special_madness onPlay', () => {
         expect(drawEvt.payload.cardUids).toEqual(['d1', 'd2']);
     });
 
-    it('选择返回→产生 MADNESS_RETURNED 事件', () => {
-        const state = makeState();
+    it('选择返回→返回疯狂牌并获得 1 个额外行动额度', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
         const handler = getInteractionHandler('special_madness');
         expect(handler).toBeDefined();
         const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
         const result = handler!(ms, '0', { action: 'return' }, { continuationContext: { cardUid: 'mad-1' } }, dummyRandom, 0);
-        expect(result.events.length).toBe(1);
+        expect(result.events.length).toBe(2);
         expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_RETURNED);
         const retEvt = result.events[0] as MadnessReturnedEvent;
         expect(retEvt.payload.playerId).toBe('0');
         expect(retEvt.payload.cardUid).toBe('mad-1');
+        expect(result.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+        expect((result.events[1] as LimitModifiedEvent).payload).toMatchObject({
+            playerId: '0',
+            limitType: 'action',
+            delta: 1,
+            reason: 'special_madness',
+        });
+
+        const next = result.events.reduce((core, event) => reduce(core, event as any), state);
+        expect(next.players['0'].actionLimit).toBe(state.players['0'].actionLimit + 1);
     });
 });
 

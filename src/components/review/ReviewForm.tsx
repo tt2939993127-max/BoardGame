@@ -20,10 +20,11 @@ export const ReviewForm = ({ onSubmit, initialData, isSubmitting }: ReviewFormPr
 
     // 初始数据可能稍后加载
     useEffect(() => {
-        if (initialData) {
+        if (!initialData) return;
+        queueMicrotask(() => {
             setIsPositive(initialData.isPositive);
             setContent(initialData.content || '');
-        }
+        });
     }, [initialData]);
 
     const handleSubmit = async (e: React.FormEvent) => {

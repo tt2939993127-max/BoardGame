@@ -13,6 +13,8 @@ import {
     INTERACTION_COMMANDS,
     INTERACTION_EVENTS,
     createInteractionSystem,
+    getCurrentTrackedCardTopSnapshot,
+    getCurrentTrackedIdTopSnapshot,
     createSimpleChoice,
     queueInteraction,
     resolveInteraction,
@@ -27,6 +29,9 @@ interface TestCore {
             hand: Array<{ uid: string; defId: string }>;
         };
     };
+    bases?: Array<{
+        buriedCards?: Array<{ uid: string; defId: string; controllerId?: string }>;
+    }>;
 }
 
 const dummyRandom = {
@@ -37,6 +42,50 @@ const dummyRandom = {
 };
 
 describe('InteractionSystem - 通用刷新', () => {
+    it('getCurrentTrackedCardTopSnapshot 只应保留当前仍连续位于顶部的揭示牌', () => {
+        const snapshot = getCurrentTrackedCardTopSnapshot(
+            [
+                { uid: 'intrude', defId: 'x' },
+                { uid: 'card-1', defId: 'a' },
+                { uid: 'card-2', defId: 'b' },
+            ],
+            [
+                { uid: 'card-1', defId: 'a', tag: 'tracked-1' },
+                { uid: 'card-2', defId: 'b', tag: 'tracked-2' },
+            ],
+        );
+
+        expect(snapshot).toEqual([]);
+    });
+
+    it('getCurrentTrackedCardTopSnapshot 应按当前顶部顺序返回仍属于原揭示集合的连续块', () => {
+        const snapshot = getCurrentTrackedCardTopSnapshot(
+            [
+                { uid: 'card-2', defId: 'b' },
+                { uid: 'card-1', defId: 'a' },
+                { uid: 'rest', defId: 'z' },
+            ],
+            [
+                { uid: 'card-1', defId: 'a', tag: 'tracked-1' },
+                { uid: 'card-2', defId: 'b', tag: 'tracked-2' },
+            ],
+        );
+
+        expect(snapshot).toEqual([
+            { uid: 'card-2', defId: 'b', tag: 'tracked-2' },
+            { uid: 'card-1', defId: 'a', tag: 'tracked-1' },
+        ]);
+    });
+
+    it('getCurrentTrackedIdTopSnapshot 只应保留当前仍连续位于顶部的字符串快照', () => {
+        const snapshot = getCurrentTrackedIdTopSnapshot(
+            ['base-a', 'base-b', 'base-c'],
+            ['base-a', 'base-b', 'base-x'],
+        );
+
+        expect(snapshot).toEqual(['base-a', 'base-b']);
+    });
+
     it('应该自动检测选项中的 cardUid 字段并刷新选项', () => {
         // 1. 创建初始状态：玩家有 3 张手牌
         let state: MatchState<TestCore> = {
@@ -263,6 +312,55 @@ describe('InteractionSystem - 通用刷新', () => {
         expect(options[0].id).toBe('custom');
     });
 
+    it('refreshInteractionOptions 应为同 ID 选项保留原始卡面元数据', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'test-renderable-metadata-refresh',
+            'p1',
+            '选择一张卡牌',
+            [
+                {
+                    id: 'card-1',
+                    label: '卡牌 1',
+                    value: { cardUid: 'card-1', defId: 'test-card-1' },
+                    displayMode: 'card' as const,
+                },
+            ],
+            { sourceId: 'test' },
+        );
+
+        (interaction.data as any).optionsGenerator = () => [
+            {
+                id: 'card-1',
+                label: '卡牌 1',
+                value: { cardUid: 'card-1' },
+            },
+        ];
+
+        state = queueInteraction(state, interaction);
+        state = refreshInteractionOptions(state);
+
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(1);
+        expect(options[0].displayMode).toBe('card');
+        expect(options[0].value.defId).toBe('test-card-1');
+    });
+
     it('选项中包含非卡牌选项（如 skip）时，应该保留这些选项', () => {
         let state: MatchState<TestCore> = {
             core: {
@@ -392,6 +490,54 @@ describe('InteractionSystem - 通用刷新', () => {
         const currentInteraction = state.sys.interaction.current;
         const options = (currentInteraction?.data as any).options || [];
         expect(options).toHaveLength(3); // 保持原始的 3 个选项
+    });
+
+    it('required 单选在动态刷新后变成空数组时，应自动注入紧急跳过选项', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [
+                            { uid: 'card-1', defId: 'test-card-1' },
+                        ],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'required-empty-after-refresh',
+            'p1',
+            '选择一张卡牌',
+            [
+                { id: 'opt-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+            ],
+            { sourceId: 'test', autoRefresh: 'hand', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    p1: {
+                        hand: [],
+                    },
+                },
+            },
+        };
+
+        state = refreshInteractionOptions(state);
+
+        const currentInteraction = state.sys.interaction.current;
+        const options = (currentInteraction?.data as any).options || [];
+        expect(options).toHaveLength(1);
+        expect(options[0].id).toBe('__emergency_skip__');
+        expect(options[0].value.__emergency_skip__).toBe(true);
     });
 
     it('紧急跳过选项应该在刷新时被保留', () => {
@@ -568,6 +714,260 @@ describe('InteractionSystem - 通用刷新', () => {
 
         expect(result?.halt).toBe(true);
         expect(result?.error).toBe('无效的选择');
+    });
+
+    it('autoRefresh=buried 时，后续交互弹出应剔除已失效的埋葬牌选项', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: { hand: [] },
+                },
+                bases: [{
+                    buriedCards: [
+                        { uid: 'buried-1', defId: 'card-1', controllerId: 'p1' },
+                        { uid: 'buried-2', defId: 'card-2', controllerId: 'p1' },
+                    ],
+                }],
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const current = createSimpleChoice(
+            'interaction-current',
+            'p1',
+            '当前步骤',
+            [{ id: 'skip', label: '跳过', value: { skip: true } }],
+        );
+        const queued = createSimpleChoice(
+            'interaction-buried',
+            'p1',
+            '选择埋葬牌',
+            [
+                { id: 'buried-1', label: '埋葬牌 1', value: { cardUid: 'buried-1', baseIndex: 0, defId: 'card-1' } },
+                { id: 'buried-2', label: '埋葬牌 2', value: { cardUid: 'buried-2', baseIndex: 0, defId: 'card-2' } },
+            ],
+            { sourceId: 'test-buried', autoRefresh: 'buried', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, current);
+        state = queueInteraction(state, queued);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                bases: [{
+                    buriedCards: [{ uid: 'buried-1', defId: 'card-1', controllerId: 'p1' }],
+                }],
+            },
+        };
+
+        state = resolveInteraction(state);
+
+        const options = (state.sys.interaction.current?.data as any)?.options ?? [];
+        expect(options.map((option: any) => option.value?.cardUid)).toEqual(['buried-1']);
+    });
+
+    it('autoRefresh=buried 且 live 校验时，应拒绝已被移除的埋葬牌响应', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: { hand: [] },
+                },
+                bases: [{
+                    buriedCards: [{ uid: 'buried-1', defId: 'card-1', controllerId: 'p1' }],
+                }],
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'respond-with-buried-live',
+            'p1',
+            '选择埋葬牌',
+            [
+                { id: 'buried-1', label: '埋葬牌 1', value: { cardUid: 'buried-1', baseIndex: 0, defId: 'card-1' } },
+                { id: 'buried-2', label: '埋葬牌 2', value: { cardUid: 'buried-2', baseIndex: 0, defId: 'card-2' } },
+            ],
+            { sourceId: 'test-buried', autoRefresh: 'buried', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                bases: [{
+                    buriedCards: [{ uid: 'buried-1', defId: 'card-1', controllerId: 'p1' }],
+                }],
+            },
+        };
+
+        const system = createSimpleChoiceSystem<TestCore>();
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: 'p1',
+                payload: { optionId: 'buried-2' },
+            } as any,
+            events: [],
+            random: dummyRandom as any,
+            playerIds: ['p1'],
+        });
+
+        expect(result?.halt).toBe(true);
+        expect(result?.error).toBe('无效的选择');
+    });
+
+    it('autoRefresh=discard 时，应保留弃牌堆中仍存在同名分组选项并剔除失效分组', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [],
+                        discard: [{ uid: 'discard-a', defId: 'minion-a' }],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'discard-defid-refresh',
+            'p1',
+            '选择弃牌堆中的分组',
+            [
+                { id: 'group-a', label: 'A', value: { defId: 'minion-a' } },
+                { id: 'group-b', label: 'B', value: { defId: 'minion-b' } },
+            ],
+            { sourceId: 'discard-defid-refresh', autoRefresh: 'discard', responseValidationMode: 'live' },
+        );
+
+        const current = createSimpleChoice(
+            'discard-placeholder',
+            'p1',
+            '占位',
+            [{ id: 'skip', label: '跳过', value: { skip: true } }],
+        );
+        state = queueInteraction(state, current);
+        state = queueInteraction(state, interaction);
+        state = resolveInteraction(state);
+
+        const options = (state.sys.interaction.current?.data as any)?.options ?? [];
+        expect(options.map((option: any) => option.id)).toEqual(['group-a']);
+    });
+
+    it('autoRefresh=hand_or_discard 且 live 校验时，应拒绝已离开指定来源区域的响应', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [],
+                        discard: [{ uid: 'discard-1', defId: 'card-1' }],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'mixed-refresh',
+            'p1',
+            '选择手牌或弃牌堆中的卡',
+            [
+                { id: 'discard-1', label: '弃牌', value: { cardUid: 'discard-1', zone: 'discard', defId: 'card-1' } },
+                { id: 'hand-1', label: '手牌', value: { cardUid: 'hand-1', zone: 'hand', defId: 'card-2' } },
+            ],
+            { sourceId: 'mixed-refresh', autoRefresh: 'hand_or_discard', responseValidationMode: 'live' },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = {
+            ...state,
+            core: {
+                ...state.core,
+                players: {
+                    ...state.core.players,
+                    p1: {
+                        ...state.core.players.p1,
+                        discard: [],
+                        hand: [{ uid: 'discard-1', defId: 'card-1' }],
+                    },
+                },
+            },
+        } as any;
+
+        const system = createSimpleChoiceSystem<TestCore>();
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: 'p1',
+                payload: { optionId: 'discard-1' },
+            } as any,
+            events: [],
+            random: dummyRandom as any,
+            playerIds: ['p1'],
+        });
+
+        expect(result?.halt).toBe(true);
+        expect(result?.error).toBe('无效的选择');
+    });
+
+    it('紧急跳过选项被响应时，应取消交互而不是报无效选择', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [],
+                    },
+                },
+            },
+            sys: {
+                interaction: {
+                    current: {
+                        id: 'required-empty-live',
+                        playerId: 'p1',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'test',
+                            options: [
+                                { id: '__emergency_skip__', label: '跳过（无可用选项）', value: { __emergency_skip__: true } },
+                            ],
+                            responseValidationMode: 'live',
+                            autoRefresh: 'hand',
+                        },
+                    },
+                    queue: [],
+                },
+            },
+        } as any;
+
+        const system = createSimpleChoiceSystem<TestCore>();
+        const result = system.beforeCommand?.({
+            state,
+            command: {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: 'p1',
+                payload: { optionId: '__emergency_skip__' },
+            } as any,
+            events: [],
+            random: dummyRandom as any,
+            playerIds: ['p1'],
+        });
+
+        expect(result?.halt).toBe(false);
+        expect(result?.state?.sys.interaction.current).toBeUndefined();
+        expect(result?.events?.[0].type).toBe(INTERACTION_EVENTS.CANCELLED);
+        expect((result?.events?.[0] as any)?.payload?.reason).toBe('empty-options');
     });
 
     it('旧字段 revalidateOnRespond 仍兼容映射到 live 语义', () => {

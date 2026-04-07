@@ -7,6 +7,7 @@ import { ADMIN_API_URL } from '../../config/server';
 import { getAllGames } from '../../config/games.config';
 import { cn } from '../../lib/utils';
 import { logger } from '../../lib/logger';
+import { AdminCardListSkeleton } from './components/AdminSkeletons';
 
 type GameChangelogItem = {
     id: string;
@@ -389,9 +390,7 @@ export default function AdminGameChangelogs() {
                 )}
 
                 {loading ? (
-                    <div className="flex justify-center py-12">
-                        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600" />
-                    </div>
+                    <AdminCardListSkeleton rows={4} />
                 ) : items.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-zinc-300 bg-white py-16 text-center text-sm text-zinc-400">
                         {manageableGames.length === 0 ? '当前没有可管理的游戏' : '暂无更新日志'}

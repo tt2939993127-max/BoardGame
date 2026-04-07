@@ -26,6 +26,7 @@ import type {
     MinionDestroyedEvent,
     MinionMovedEvent,
     MinionControlChangedEvent,
+    MinionCardDef,
     PowerCounterAddedEvent,
     PowerCounterRemovedEvent,
     CardRecoveredFromDiscardEvent,
@@ -51,12 +52,13 @@ import type {
     TitanPowerCounterAddedEvent,
     TitanPowerCounterRemovedEvent,
     TitanPlayAsKind,
+    ActionCardDef,
+    SpecialLimitUsedEvent,
 } from './types';
 import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
-import { triggerAllBaseAbilities } from './baseAbilities';
-import { collectTriggers, fireTriggers } from './ongoingEffects';
-import { getMinionDef, getTitanDef } from '../data/cards';
+import { collectTriggers } from './ongoingEffects';
+import { getCardDef, getMinionDef, getTitanDef } from '../data/cards';
 import { drawCards } from './utils';
 
 // ============================================================================
@@ -1110,9 +1112,6 @@ export function shuffleHandIntoDeck(
 // Special 能力限制组（每基地每回合一次）
 // ============================================================================
 
-import type { MinionCardDef, ActionCardDef, SpecialLimitUsedEvent } from './types';
-import { getCardDef } from '../data/cards';
-
 /**
  * 检查指定 defId 的 special 能力在指定基地是否已被限制组阻止
  * @returns true = 已被使用，不能再用
@@ -1247,7 +1246,7 @@ export function hasCthulhuExpansionFaction(players: Record<string, { factions: [
     for (const player of Object.values(players)) {
         for (const f of player.factions) {
             const baseFactionId = f.endsWith('_pod') ? f.slice(0, -4) : f;
-            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(baseFactionId as any)) return true;
+            if (CTHULHU_EXPANSION_FACTIONS.some((factionId) => factionId === baseFactionId)) return true;
         }
     }
     return false;
@@ -1360,16 +1359,35 @@ export function buildMinionTargetOptions(
         state: SmashUpCore;
         /** 发起效果的玩家 */
         sourcePlayerId: PlayerId;
+        /** 来源卡牌 defId；若是行动卡，会自动尊重 action 保护 */
+        sourceDefId?: string;
+        /** 显式来源类型；仅在无法提供 sourceDefId 时使用 */
+        sourceKind?: 'action' | 'nonAction';
         /** 效果类型覆盖（可选，不传则自动检查 destroy + affect） */
         effectType?: ProtectionType;
+        /** 是否额外尊重“行动卡保护”（如烟雾弹） */
+        respectActionProtection?: boolean;
     }
 ): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
-    const { state, sourcePlayerId, effectType } = context;
+    const {
+        state,
+        sourcePlayerId,
+        sourceDefId,
+        sourceKind,
+        effectType,
+        respectActionProtection = false,
+    } = context;
+    const inferredActionSource = sourceKind === 'action'
+        || (sourceKind !== 'nonAction' && !!sourceDefId && getCardDef(sourceDefId)?.type === 'action');
+    const shouldRespectActionProtection = respectActionProtection || inferredActionSource;
     const filteredCandidates = candidates.filter(c => {
         const minion = state.bases[c.baseIndex]?.minions.find(m => m.uid === c.uid);
         if (!minion) return false;
         // 己方随从不做保护检查（保护只针对对手效果）
         if (minion.controller === sourcePlayerId) return true;
+        if (shouldRespectActionProtection && isMinionProtected(state, minion, c.baseIndex, sourcePlayerId, 'action')) {
+            return false;
+        }
         // 对手随从：检查保护
         if (effectType) {
             // 指定了 effectType → 只检查该类型（非消耗型）+ affect（非消耗型广义保护）
@@ -1389,6 +1407,27 @@ export function buildMinionTargetOptions(
         value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
         _source: 'field' as const,
     }));
+}
+
+/**
+ * 构建“行动卡来源”的随从目标选择选项。
+ *
+ * 仅用于行动卡/特殊行动卡/行动卡持续效果这类真实会影响目标随从的场景。
+ * 若某张行动只是把随从当作参照物（例如查同名、统计条件），不要用这个 helper。
+ */
+export function buildActionMinionTargetOptions(
+    candidates: { uid: string; defId: string; baseIndex: number; label: string }[],
+    context: {
+        state: SmashUpCore;
+        sourcePlayerId: PlayerId;
+        effectType?: ProtectionType;
+    },
+): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
+    return buildMinionTargetOptions(candidates, {
+        ...context,
+        sourceKind: 'action',
+        respectActionProtection: true,
+    });
 }
 
 /**

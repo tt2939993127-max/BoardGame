@@ -47,7 +47,7 @@ describe('LayoutService', () => {
         process.env.DICETHRONE_ABILITY_LAYOUT_PATH = join(TEST_DIR, ABILITY_LAYOUT_FILE);
         const service = new LayoutService();
         const layout = {
-            layouts: {
+            slotLayouts: {
                 v1: [
                     { id: 'fist', x: 0.1, y: 1.2, w: 20.5, h: 30.4 },
                     { id: 'chi', x: 22.2, y: 1.4, w: 21.3, h: 39.4 },
@@ -56,6 +56,24 @@ describe('LayoutService', () => {
                     { id: 'fist', x: 0.0, y: 13.6, w: 16.1, h: 38.8 },
                     { id: 'chi', x: 16.1, y: 13.6, w: 16.6, h: 38.8 },
                 ],
+            },
+            uiTuning: {
+                v1: {
+                    shellTranslateX: 0,
+                    playerBoardTranslateY: 0,
+                    magnifyButtonTop: 0.48,
+                    playerBoardBaseHeightVw: 35,
+                    tipBoardHeightVw: 35,
+                    centerBoardGapVw: 0.5,
+                },
+                v2: {
+                    shellTranslateX: 1.1,
+                    playerBoardTranslateY: -1.45,
+                    magnifyButtonTop: 1.85,
+                    playerBoardBaseHeightVw: 35,
+                    tipBoardHeightVw: 29.6,
+                    centerBoardGapVw: 0.24,
+                },
             },
         };
 
@@ -67,9 +85,13 @@ describe('LayoutService', () => {
         expect(existsSync(expectedPath)).toBe(true);
 
         const saved = readFileSync(expectedPath, 'utf8');
-        expect(saved).toContain('DICETHRONE_PLAYER_BOARD_LAYOUTS');
+        expect(saved).toContain('DICETHRONE_ABILITY_SLOT_LAYOUTS');
+        expect(saved).toContain('DICETHRONE_PLAYER_BOARD_UI_TUNING');
+        expect(saved).toContain('DICETHRONE_BOARD_LAYOUT_CONFIG');
         expect(saved).toContain("id: 'fist'");
         expect(saved).toContain('x: 0.10');
+        expect(saved).toContain('playerBoardBaseHeightVw: 35');
+        expect(saved).toContain('tipBoardHeightVw: 29.60');
         expect(saved).toContain("gunslinger: 'v2'");
     });
 });

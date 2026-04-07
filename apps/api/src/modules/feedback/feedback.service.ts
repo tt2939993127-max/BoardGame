@@ -1,10 +1,10 @@
-import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { normalizeDeveloperGameIds } from '../auth/schemas/developer-game-access';
 import { User, type UserDocument } from '../auth/schemas/user.schema';
 import type { UserRole } from '../auth/schemas/user-role';
-import { Feedback, FeedbackDocument, FeedbackStatus, FeedbackType } from './feedback.schema';
+import { Feedback, FeedbackDocument, FeedbackStatus } from './feedback.schema';
 import { CreateFeedbackDto, FeedbackFilterDto, QueryFeedbackDto } from './dto';
 
 type FeedbackManagerScope = {
@@ -20,14 +20,6 @@ export class FeedbackService {
     ) { }
 
     async create(userId: string | null, dto: CreateFeedbackDto): Promise<Feedback> {
-        if (
-            dto.type === FeedbackType.BUG
-            && !dto.actionLog?.trim()
-            && !dto.stateSnapshot?.trim()
-        ) {
-            throw new BadRequestException('bug 反馈必须附带操作日志或状态快照');
-        }
-
         return this.feedbackModel.create({
             ...dto,
             gameId: this.normalizeFeedbackGameId(dto.clientContext?.gameId ?? dto.gameName),
@@ -37,31 +29,36 @@ export class FeedbackService {
 
     async findAll(actorUserId: string, query: QueryFeedbackDto) {
         const manager = await this.assertActorCanManage(actorUserId);
-        const page = Math.max(1, Number(query.page) || 1);
-        const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
-        const { status, type, severity, sort } = query;
-        const filter = this.buildScopedFilter(manager);
-        if (status) filter.status = status;
-        if (type) filter.type = type;
-        if (severity) filter.severity = severity;
-        const createdAtSort = sort === 'oldest' ? 1 : -1;
+        return this.queryFeedbackList(this.buildScopedFilter(manager), query);
+    }
 
-        const total = await this.feedbackModel.countDocuments(filter);
-        const items = await this.feedbackModel
-            .find(filter)
-            .sort({ createdAt: createdAtSort })
-            .skip((page - 1) * limit)
-            .limit(limit)
+    async findAllOpen(query: QueryFeedbackDto) {
+        return this.queryFeedbackList({}, query);
+    }
+
+    async findById(actorUserId: string, id: string) {
+        const manager = await this.assertActorCanManage(actorUserId);
+        return this.feedbackModel
+            .findOne({ _id: id, ...this.buildScopedFilter(manager) })
             .populate('userId', 'username avatar email')
             .exec();
+    }
 
-        return { items, total, page, limit };
+    async findByIdOpen(id: string) {
+        return this.feedbackModel
+            .findById(id)
+            .populate('userId', 'username avatar email')
+            .exec();
     }
 
     async updateStatus(actorUserId: string, id: string, status: FeedbackStatus): Promise<Feedback | null> {
         const manager = await this.assertActorCanManage(actorUserId);
         const scopeFilter = this.buildScopedFilter(manager);
         return this.feedbackModel.findOneAndUpdate({ _id: id, ...scopeFilter }, { status }, { new: true });
+    }
+
+    async updateStatusOpen(id: string, status: FeedbackStatus): Promise<Feedback | null> {
+        return this.feedbackModel.findByIdAndUpdate(id, { status }, { new: true });
     }
 
     async deleteOne(actorUserId: string, id: string): Promise<boolean> {
@@ -102,6 +99,28 @@ export class FeedbackService {
         }
         const normalized = value.trim().toLowerCase();
         return normalized || undefined;
+    }
+
+    private async queryFeedbackList(baseFilter: Record<string, unknown>, query: QueryFeedbackDto) {
+        const page = Math.max(1, Number(query.page) || 1);
+        const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+        const { status, type, severity, sort } = query;
+        const filter = { ...baseFilter };
+        if (status) filter.status = status;
+        if (type) filter.type = type;
+        if (severity) filter.severity = severity;
+        const createdAtSort = sort === 'oldest' ? 1 : -1;
+
+        const total = await this.feedbackModel.countDocuments(filter);
+        const items = await this.feedbackModel
+            .find(filter)
+            .sort({ createdAt: createdAtSort })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .populate('userId', 'username avatar email')
+            .exec();
+
+        return { items, total, page, limit };
     }
 
     private buildScopedFilter(

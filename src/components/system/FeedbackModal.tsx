@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { X, MessageSquareWarning, Send, Loader2, AlertTriangle, Lightbulb, HelpCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { cn } from '../../lib/utils';
@@ -63,6 +64,10 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
     const { success, error } = useToast();
     const location = useLocation();
     const backdropRef = useRef<HTMLDivElement>(null);
+    const portalRoot = useMemo(() => {
+        if (typeof document === 'undefined') return null;
+        return document.getElementById('modal-root') ?? document.body;
+    }, []);
 
     const [content, setContent] = useState('');
     const [type, setType] = useState<FeedbackType>(FeedbackType.BUG);
@@ -168,13 +173,20 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                 })
             });
 
-            if (!res.ok) throw new Error(t('hud.feedback.errors.submitFailed'));
+            if (!res.ok) {
+                const payload = await res.json().catch(() => null) as { error?: string; message?: string } | null;
+                throw new Error(
+                    payload?.error
+                    || payload?.message
+                    || t('hud.feedback.errors.submitFailed')
+                );
+            }
 
             success(t('hud.feedback.success'));
             onClose();
         } catch (err) {
             console.error(err);
-            error(t('hud.feedback.errors.submitFailed'));
+            error(err instanceof Error ? err.message : t('hud.feedback.errors.submitFailed'));
         } finally {
             setSubmitting(false);
         }
@@ -188,18 +200,28 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
         }
     };
 
-    return (
+    const modal = (
         <div
             ref={backdropRef}
             onClick={handleBackdropClick}
-            className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
-            style={{ zIndex: UI_Z_INDEX.modalContent }}
+            className="modal-base-container fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
+            data-testid="feedback-modal"
+            style={{
+                zIndex: UI_Z_INDEX.modalContent,
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
+            role="dialog"
+            aria-modal="true"
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-parchment-base-bg rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border-2 border-parchment-brown/30"
+                className="bg-parchment-base-bg rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border-2 border-parchment-brown/30"
+                style={{ maxHeight: 'var(--runtime-modal-max-height)' }}
             >
                 {/* Header */}
                 <div className="bg-parchment-brown px-6 py-4 flex items-center justify-between shrink-0 border-b border-parchment-gold/20">
@@ -386,6 +408,8 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
             </motion.div>
         </div>
     );
+
+    return portalRoot ? createPortal(modal, portalRoot) : modal;
 };
 
 

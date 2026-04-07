@@ -21,7 +21,7 @@ import { getCardDef, getBaseDef } from '../data/cards';
 import { matchesDefId } from '../domain/utils';
 import {
     drawMadnessCards, grantExtraAction, destroyMinion,
-    returnMadnessCard, getMinionPower, buildMinionTargetOptions,
+    returnMadnessCard, getMinionPower, buildActionMinionTargetOptions,
     addTempPower, revealAndPickFromDeck,
     buildAbilityFeedback,
 } from '../domain/abilityHelpers';
@@ -111,7 +111,7 @@ function cthulhuRecruitByForce(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<MinionCardChoiceValue | SkipChoiceValue>(
         `cthulhu_recruit_by_force_${ctx.now}`, ctx.playerId,
         '选择要放到牌库顶的随从（任意数量，可跳过）', promptOptions,
-        { sourceId: 'cthulhu_recruit_by_force', targetType: 'generic', multi: { min: 0, max: eligibleMinions.length } },
+        { sourceId: 'cthulhu_recruit_by_force', targetType: 'generic', multi: { min: 0, max: eligibleMinions.length }, autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -131,7 +131,7 @@ function cthulhuItBeginsAgain(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<CardChoiceValue | SkipChoiceValue>(
         `cthulhu_it_begins_again_${ctx.now}`, ctx.playerId,
         '选择要洗回牌库的战术（任意数量，可跳过）', [...options, { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const }],
-        { sourceId: 'cthulhu_it_begins_again', targetType: 'generic', multi: { min: 0, max: actionsInDiscard.length } },
+        { sourceId: 'cthulhu_it_begins_again', targetType: 'generic', multi: { min: 0, max: actionsInDiscard.length }, autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     // 手动提供 optionsGenerator：从弃牌堆过滤行动卡（保留 skip 选项）
     interaction.data.optionsGenerator = state => {
@@ -208,10 +208,16 @@ function cthulhuCorruption(ctx: AbilityContext): AbilityResult {
     if (targets.length === 0) return { events };
     // Prompt 选择
     const options = targets.map(t => ({ uid: t.uid, defId: t.defId, baseIndex: t.baseIndex, label: t.label }));
+    const targetOptions = buildActionMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'destroy',
+    });
+    if (targetOptions.length === 0) return { events };
     const interaction = createSimpleChoice(
         `cthulhu_corruption_${ctx.now}`, ctx.playerId,
         '选择要消灭的随从',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        targetOptions,
         { sourceId: 'cthulhu_corruption', targetType: 'minion' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
@@ -606,7 +612,7 @@ function cthulhuServitor(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<CardChoiceValue>(
         `cthulhu_servitor_${ctx.now}`, ctx.playerId,
         '选择放回牌库顶的行动卡', options,
-        { sourceId: 'cthulhu_servitor', targetType: 'generic' },
+        { sourceId: 'cthulhu_servitor', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -688,7 +694,13 @@ export function registerCthulhuInteractionHandlers(): void {
         const ctx = getContinuationContext<{ cardUid: string }>(iData);
         if (!ctx) return { state, events: [] };
         if (action === 'return') {
-            return { state, events: [returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp)] };
+            return {
+                state,
+                events: [
+                    returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp),
+                    grantExtraAction(playerId, 'special_madness', timestamp),
+                ],
+            };
         }
         const player = state.core.players[playerId];
         const drawCount = Math.min(2, player.deck.length);

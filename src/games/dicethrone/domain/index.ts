@@ -29,6 +29,7 @@ import { gunslingerDiceDefinition } from '../heroes/gunslinger/diceConfig';
 import { samuraiDiceDefinition } from '../heroes/samurai/diceConfig';
 import { INITIAL_HEALTH } from './types';
 import { buildTeamIdByPlayerIdFromSeatingOrder, getTeamIdByPlayerIdMap, isTeamMode } from './rules';
+import type { SeatControllerKind } from './types';
 
 // 注册 DiceThrone 游戏特定条件（骰子组合、顺子等）
 registerDiceThroneConditions();
@@ -56,7 +57,7 @@ paladinResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def)
 export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, DiceThroneEvent> = {
     gameId: 'dicethrone',
 
-    setup: (playerIds: PlayerId[], _random: RandomFn): DiceThroneCore => {
+    setup: (playerIds: PlayerId[], _random: RandomFn, setupData?: Record<string, unknown>): DiceThroneCore => {
         const players: Record<PlayerId, HeroState> = {};
         const selectedCharacters: Record<PlayerId, CharacterId> = {};
 
@@ -87,6 +88,17 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
 
         const isFourPlayerTeamMode = playerIds.length === 4;
         const seatingOrder = isFourPlayerTeamMode ? [...playerIds] : undefined;
+        const rawSeatControllers = setupData?.seatControllers && typeof setupData.seatControllers === 'object' && !Array.isArray(setupData.seatControllers)
+            ? setupData.seatControllers as Record<string, unknown>
+            : {};
+        const seatControllers = playerIds.reduce((acc, playerId) => {
+            const rawController = rawSeatControllers[playerId];
+            const type = rawController && typeof rawController === 'object' && 'type' in rawController
+                ? (rawController as { type?: unknown }).type
+                : undefined;
+            acc[playerId] = type === 'human' || type == null ? 'human' : 'ai';
+            return acc;
+        }, {} as Record<PlayerId, SeatControllerKind>);
         const teamIdByPlayerId = isFourPlayerTeamMode && seatingOrder
             ? buildTeamIdByPlayerIdFromSeatingOrder(seatingOrder)
             : undefined;
@@ -97,6 +109,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
         return {
             players,
             seatingOrder,
+            seatControllers,
             teamIdByPlayerId,
             teamHealth,
             selectedCharacters,
@@ -128,13 +141,14 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
         if (interaction?.kind === 'dt:card-interaction') {
             pendingInteraction = interaction.data as InteractionDescriptor;
         } else if (interaction?.kind === 'multistep-choice') {
-            const meta = (interaction.data as any)?.meta;
+            const multistepData = interaction.data as { meta?: { dtType?: unknown }; sourceId?: unknown };
+            const meta = multistepData.meta;
             if (meta?.dtType === 'modifyDie' || meta?.dtType === 'selectDie') {
                 // 构造最小兼容结构，validateCommand 只用 playerId 做权限检查
                 pendingInteraction = {
                     id: interaction.id,
                     playerId: interaction.playerId,
-                    sourceCardId: (interaction.data as any)?.sourceId ?? '',
+                    sourceCardId: typeof multistepData.sourceId === 'string' ? multistepData.sourceId : '',
                     type: meta.dtType === 'selectDie' ? 'selectDie' : 'modifyDie',
                     titleKey: '',
                 } as InteractionDescriptor;
@@ -145,7 +159,13 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             ? pendingInteraction
             : interaction;
 
-        return validateCommand(state.core, command, phase, effectivePendingInteraction as any, responseWindowType);
+        return validateCommand(
+            state.core,
+            command,
+            phase,
+            effectivePendingInteraction as InteractionDescriptor | undefined,
+            responseWindowType,
+        );
     },
     execute: (state, command, random) => execute(state, command, random),
     reduce,

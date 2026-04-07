@@ -40,20 +40,25 @@ export const AvatarUpdateModal = ({ isOpen, onClose, closeOnBackdrop }: AvatarUp
         }
     }, []);
 
-    // 重置状态
+    const resetForm = useCallback(() => {
+        revokePreview();
+        setStep('select');
+        setSelectedFile(null);
+        setPreviewUrl('');
+        setError('');
+        setCrop({ x: 0, y: 0 });
+        setZoom(1);
+        setCroppedArea(null);
+    }, [revokePreview]);
+
+    const handleClose = useCallback(() => {
+        resetForm();
+        onClose();
+    }, [onClose, resetForm]);
+
     useEffect(() => {
-        if (isOpen) {
-            revokePreview();
-            setStep('select');
-            setSelectedFile(null);
-            setPreviewUrl('');
-            setError('');
-            setCrop({ x: 0, y: 0 });
-            setZoom(1);
-            setCroppedArea(null);
-        }
         return revokePreview;
-    }, [isOpen, revokePreview]);
+    }, [revokePreview]);
 
     // 提取公共的文件校验+进入裁剪逻辑（DRY）
     const processFile = useCallback((file: File) => {
@@ -107,26 +112,32 @@ export const AvatarUpdateModal = ({ isOpen, onClose, closeOnBackdrop }: AvatarUp
                 width: croppedArea.width,
                 height: croppedArea.height,
             });
-            onClose();
+            handleClose();
         } catch (err) {
             setError(err instanceof Error ? err.message : t('avatar.error.uploadFailed'));
             setStep('crop');
         }
     };
 
-    const handleReselect = () => {
-        revokePreview();
-        setSelectedFile(null);
-        setPreviewUrl('');
-        setStep('select');
-        setError('');
-        setCrop({ x: 0, y: 0 });
-        setZoom(1);
-    };
+    const handleReselect = useCallback(() => {
+        resetForm();
+    }, [resetForm]);
+
+    if (!isOpen) return null;
 
     return (
-        <ModalBase onClose={onClose} closeOnBackdrop={closeOnBackdrop} containerClassName="p-4 sm:p-6">
-            <div className="bg-parchment-card-bg pointer-events-auto w-full max-w-[420px] shadow-parchment-card-hover border border-parchment-card-border/50 p-6 sm:p-8 relative rounded-sm font-serif">
+        <ModalBase
+            onClose={handleClose}
+            closeOnBackdrop={closeOnBackdrop}
+            containerClassName="p-4 sm:p-6"
+            containerStyle={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
+        >
+            <div className="bg-parchment-card-bg pointer-events-auto w-full max-w-[420px] max-h-[var(--runtime-modal-max-height)] overflow-y-auto shadow-parchment-card-hover border border-parchment-card-border/50 p-6 sm:p-8 relative rounded-sm font-serif">
                 {/* 标题 */}
                 <div className="text-center mb-5">
                     <div className="text-xs sm:text-sm text-parchment-light-text font-bold uppercase tracking-wider">
@@ -185,7 +196,7 @@ export const AvatarUpdateModal = ({ isOpen, onClose, closeOnBackdrop }: AvatarUp
                         <div className="flex justify-center">
                             <button
                                 type="button"
-                                onClick={onClose}
+                                onClick={handleClose}
                                 className="px-4 py-2 text-xs sm:text-sm font-bold uppercase tracking-wider border border-parchment-card-border/50 text-parchment-base-text bg-parchment-card-bg hover:bg-parchment-base-bg transition-colors rounded-[4px]"
                             >
                                 {t('avatar.button.cancel')}

@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { PALADIN_TOKENS, PALADIN_INITIAL_TOKENS } from '../heroes/paladin/tokens';
 import { PALADIN_ABILITIES } from '../heroes/paladin/abilities';
-import { getPaladinStartingDeck } from '../heroes/paladin/cards';
+import { PALADIN_CARDS, getPaladinStartingDeck } from '../heroes/paladin/cards';
 import { paladinDiceDefinition } from '../heroes/paladin/diceConfig';
 import { CHARACTER_DATA_MAP } from '../domain/characters';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS } from '../domain/ids';
@@ -80,6 +80,15 @@ describe('圣骑士 Token 定义', () => {
         );
     });
 
+    it('应包含 Tithes Upgraded（历史元数据）— unique，但不直接驱动运行时触发', () => {
+        const tithesUpgraded = PALADIN_TOKENS.find(t => t.id === TOKEN_IDS.TITHES_UPGRADED);
+        expect(tithesUpgraded).toBeDefined();
+        expect(tithesUpgraded!.category).toBe('unique');
+        expect(tithesUpgraded!.stackLimit).toBe(1);
+        expect(tithesUpgraded!.activeUse).toBeUndefined();
+        expect(tithesUpgraded!.passiveTrigger).toBeUndefined();
+    });
+
     it('Token 数量应为 6', () => {
         expect(PALADIN_TOKENS).toHaveLength(6);
     });
@@ -116,6 +125,21 @@ describe('圣骑士角色注册', () => {
         expect(data.initialTokens).toEqual(PALADIN_INITIAL_TOKENS);
         expect(data.diceDefinitionId).toBe('paladin-dice');
         expect(data.getStartingDeck).toBe(getPaladinStartingDeck);
+    });
+
+    it('教会税升级走 passiveAbilities.replaceAbility，而不是授予 tithes_upgraded token', () => {
+        const data = CHARACTER_DATA_MAP.paladin;
+        expect(data.passiveAbilities?.map(passive => passive.id)).toContain('tithes');
+
+        const tithesUpgradeCard = PALADIN_CARDS.find(card => card.id === 'card-tithes-2');
+        expect(tithesUpgradeCard).toBeDefined();
+        const replaceAction = tithesUpgradeCard?.effects.find(effect => effect.action?.type === 'replaceAbility')?.action as
+            | { type: 'replaceAbility'; targetAbilityId?: string; newAbilityDef?: { id?: string } }
+            | undefined;
+
+        expect(replaceAction?.type).toBe('replaceAbility');
+        expect(replaceAction?.targetAbilityId).toBe('tithes');
+        expect(replaceAction?.newAbilityDef?.id).toBe('tithes');
     });
 
     it('技能等级初始值全为 1', () => {

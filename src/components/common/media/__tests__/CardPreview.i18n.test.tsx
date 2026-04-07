@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { CardPreview, getCardAtlasCandidateUrls, registerCardAtlasSource, registerCardPreviewRenderer } from '../CardPreview';
 import type { SpriteAtlasConfig } from '../../../../engine/primitives/spriteAtlas';
 import { getCardAtlasSource, getLazyRegistration, registerLazyCardAtlasSource } from '../cardAtlasRegistry';
-import { markImageLoaded, setAssetsBaseUrl } from '../../../../core';
+import { clearGameAssetBaseOverrides, markImageLoaded, setAssetsBaseUrl, setGameAssetBaseOverride } from '../../../../core';
 
 const TEST_UNIFORM_ATLAS: SpriteAtlasConfig = {
     imageW: 100,
@@ -19,6 +19,7 @@ const TEST_UNIFORM_ATLAS: SpriteAtlasConfig = {
 describe('CardPreview i18n atlas path', () => {
     beforeEach(() => {
         setAssetsBaseUrl('/assets');
+        clearGameAssetBaseOverrides();
     });
 
     it('atlas 预览在未传 locale 时默认使用 zh-CN 路径', () => {
@@ -27,6 +28,10 @@ describe('CardPreview i18n atlas path', () => {
             image: 'smashup/cards/cards1',
             config: TEST_UNIFORM_ATLAS,
         });
+        const img = new Image();
+        Object.defineProperty(img, 'naturalWidth', { value: 100, configurable: true });
+        Object.defineProperty(img, 'naturalHeight', { value: 200, configurable: true });
+        markImageLoaded('smashup/cards/cards1', 'zh-CN', img);
 
         const html = renderToStaticMarkup(
             <CardPreview previewRef={{ type: 'atlas', atlasId, index: 0 }} />
@@ -80,6 +85,17 @@ describe('CardPreview i18n atlas path', () => {
         expect(candidates[0]).toBe(remotePrimary);
         expect(candidates).toContain(localPrimary);
         expect(candidates.indexOf(localPrimary)).toBeGreaterThan(candidates.indexOf(remotePrimary));
+    });
+
+    it('游戏包 override 生效时 atlas 候选 URL 仍应保留远端 CDN 回退', () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+        setGameAssetBaseOverride('smashup', '/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/smashup/current/assets');
+
+        const candidates = getCardAtlasCandidateUrls('smashup/cards/tts_atlas_8789f47742', 'en');
+
+        expect(candidates[0]).toBe('/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/smashup/current/assets/i18n/en/smashup/cards/compressed/tts_atlas_8789f47742.webp');
+        expect(candidates).toContain('https://assets.easyboardgame.top/official/i18n/en/smashup/cards/compressed/tts_atlas_8789f47742.webp');
+        expect(candidates).toContain('/assets/i18n/en/smashup/cards/compressed/tts_atlas_8789f47742.webp');
     });
 
     it('懒注册图集不应把 1x1 占位图当成有效 atlas', () => {

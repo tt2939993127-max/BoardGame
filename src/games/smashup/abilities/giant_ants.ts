@@ -77,7 +77,7 @@ function giantAntSoldierTalent(ctx: AbilityContext): AbilityResult {
     }
     const options = buildMinionTargetOptions(candidates, {
         state: ctx.state,
-        sourcePlayerId: ctx.playerId,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
         effectType: 'affect',
     });
     if (options.length === 0) {
@@ -171,7 +171,7 @@ function giantAntKillerQueenTalent(ctx: AbilityContext): AbilityResult {
         `giant_ant_killer_queen_choose_minion_${ctx.now}`,
         ctx.playerId,
         '杀手女皇：选择本回合打到这里的随从（在其和女皇上各放1个指示物）',
-        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId }),
+        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
         {
             sourceId: 'giant_ant_killer_queen_choose_minion',
             targetType: 'minion',
@@ -749,7 +749,7 @@ function giantAntUnderPressure(ctx: AbilityContext): AbilityResult {
         `giant_ant_under_pressure_choose_source_${ctx.now}`,
         ctx.playerId,
         '选择计分基地上要转出力量指示物的随从',
-        buildMinionTargetOptions(sources, { state: ctx.state, sourcePlayerId: ctx.playerId }),
+        buildMinionTargetOptions(sources, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
         {
             sourceId: 'giant_ant_under_pressure_choose_source',
             targetType: 'minion',
@@ -879,7 +879,7 @@ function giantAntHeadlong(ctx: AbilityContext): AbilityResult {
         `giant_ant_headlong_minion_${ctx.now}`,
         ctx.playerId,
         '选择要移动的己方随从',
-        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }),
+        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
         {
             sourceId: 'giant_ant_headlong_choose_minion',
             targetType: 'minion',
@@ -1542,7 +1542,7 @@ function giantAntSoldierPodTalent(ctx: AbilityContext): AbilityResult {
     // 先选择来源随从（有指示物的己方随从）
     const sourceOptions = buildMinionTargetOptions(sources, {
         state: ctx.state,
-        sourcePlayerId: ctx.playerId,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
         effectType: 'affect',
     });
 

@@ -65,31 +65,50 @@ export const DamageFlash: React.FC<DamageFlashProps> = ({
 
   // 用 ref 持有 onComplete，避免父组件传内联函数导致 useEffect 重跑
   const onCompleteRef = useRef(onComplete);
-  onCompleteRef.current = onComplete;
+
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
     if (!active) return;
 
     const timers: number[] = [];
+    let cancelled = false;
 
     if (showSlash) {
-      setSlashActive(true);
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setSlashActive(true);
+        }
+      });
       timers.push(window.setTimeout(() => setSlashActive(false), 100));
     }
 
     if (showRedPulse) {
-      setPulseActive(true);
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setPulseActive(true);
+        }
+      });
       timers.push(window.setTimeout(() => setPulseActive(false), isStrong ? 500 : 350));
     }
 
     if (showNumber) {
-      setDmgKey(k => k + 1);
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setDmgKey(k => k + 1);
+        }
+      });
     }
 
     // 完成回调：等最长的效果结束
     timers.push(window.setTimeout(() => onCompleteRef.current?.(), 800));
 
-    return () => timers.forEach(t => window.clearTimeout(t));
+    return () => {
+      cancelled = true;
+      timers.forEach(t => window.clearTimeout(t));
+    };
   }, [active, showSlash, showRedPulse, showNumber, isStrong]);
 
   if (!active) return null;

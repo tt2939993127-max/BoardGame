@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { DiscardPile } from '../ui/DiscardPile';
+import { CardSelectionModal } from '../ui/CardSelectionModal';
 import type { CardInstance } from '../domain/core-types';
+import { UI_Z_INDEX } from '../../../core';
 
 function createCard(overrides: Partial<CardInstance> = {}): CardInstance {
     return {
@@ -43,5 +45,21 @@ describe('DiscardPile', () => {
         const html = renderToStaticMarkup(<DiscardPile cards={[]} />);
 
         expect(html).toContain('空');
+    });
+
+    it('卡牌选择弹窗应使用全局 modal 层级，避免被手牌展开层遮挡', () => {
+        const html = renderToStaticMarkup(
+            <CardSelectionModal
+                title="选择卡牌"
+                cards={[createCard({ uid: 'c1' })]}
+                minSelect={1}
+                maxSelect={1}
+                onConfirm={() => {}}
+                onCancel={() => {}}
+            />
+        );
+
+        expect(html).toContain(`z-index:${UI_Z_INDEX.modalOverlay}`);
+        expect(html).toContain(`z-index:${UI_Z_INDEX.modalContent}`);
     });
 });

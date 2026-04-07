@@ -146,6 +146,10 @@ export function getSummonerWarsUIHints(
   const phase = (filter?.phase ?? core.phase) as GamePhase;
   const types = filter?.types;
 
+  if (!Array.isArray(core.board) || core.board.length === 0 || !core.players?.[playerId]) {
+    return hints;
+  }
+
   // 可移动/攻击的单位
   if (!types || types.includes('actionable')) {
     hints.push(...getActionableUnitHints(core, playerId, phase));
