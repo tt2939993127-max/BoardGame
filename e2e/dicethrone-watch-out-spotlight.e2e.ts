@@ -575,7 +575,7 @@ async function injectSamuraiTokenResponseScene(
             ...state,
             sys: {
                 ...state.sys,
-                phase: 'main1',
+                phase: 'offensiveRoll',
                 interaction: {
                     current: undefined,
                     queue: [],
@@ -875,7 +875,7 @@ async function injectGunslingerTheLawPlayScene(
             ...state,
             sys: {
                 ...state.sys,
-                phase: 'main1',
+                phase: 'offensiveRoll',
                 interaction: {
                     current: undefined,
                     queue: [],
@@ -1029,7 +1029,7 @@ async function injectHeroHandScreenshotScene(
             ...state,
             sys: {
                 ...state.sys,
-                phase: 'main1',
+                phase: 'offensiveRoll',
                 interaction: {
                     current: undefined,
                     queue: [],

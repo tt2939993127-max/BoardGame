@@ -130,8 +130,9 @@ describe('MobileBoardShell', () => {
         });
 
         expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThan(1);
-        const target = screen.getByTestId('battlefield-target');
-        expect(target.style.transform).toContain('scale(');
+        const root = screen.getByTestId('battlefield-target');
+        expect(root.style.getPropertyValue('--mobile-battlefield-target-scale')).not.toBe('1');
+        expect(root.style.getPropertyValue('--mobile-battlefield-target-translate-x')).not.toBe('');
     });
 
     it('updates battlefield scale when a two-finger touch pointer gesture moves apart on mobile landscape', () => {

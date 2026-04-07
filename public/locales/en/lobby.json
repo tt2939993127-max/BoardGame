@@ -386,6 +386,8 @@
     "createRoomForbidden": "You do not have permission to create a room.",
     "createRoomNotFound": "Game service could not find the game. Please refresh and try again.",
     "createRoomRequestSize": "Request payload error. Please refresh and try again.",
+    "createRoomErrorCodeOnly": "(Error code: {{code}})",
+    "createRoomErrorCodeWithStatus": "(Error code: {{code}} / HTTP status: {{status}})",
     "activeMatchStale": "Your previous room no longer exists. It has been cleared so you can create a new one.",
     "destroyForbidden": "Unable to destroy the room: invalid or expired credentials. Please re-enter the match and try again.",
     "destroyNetwork": "Failed to destroy the room due to network or service issues. Please try again later.",

@@ -775,7 +775,7 @@ export const diceThroneFlowHooks: FlowHooks<DiceThroneCore> = {
                         payload: {
                             playerId: choiceOwnerId,
                             sourceAbilityId: 'targeting-roll',
-                            titleKey: targetingValue === 5 ? '鐢卞鎵嬪喅瀹氳皝鎵垮彈鏈鏀诲嚮' : '閫夋嫨鏈鏀诲嚮鐩爣',
+                            titleKey: targetingValue === 5 ? '由对手决定谁承受本次攻击' : '选择本次攻击目标',
                             options: getTargetingRollChoiceOptions(core, attackerId),
                         },
                         sourceCommandType: command.type,
