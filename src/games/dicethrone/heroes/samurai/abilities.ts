@@ -229,10 +229,28 @@ export const SOLEMNITY_2: AbilityDef = {
     type: 'offensive',
     description: abilityText('solemnity-2', 'description'),
     sfxKey: SAMURAI_SFX_HEAVY,
-    trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.HELM]: 3 } },
-    effects: [
-        grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
-        damage(8, '造成 8 点伤害。'),
+    variants: [
+        {
+            id: 'solemnity-2-solemn',
+            name: abilityText('solemnity-2-solemn', 'name'),
+            description: abilityText('solemnity-2-solemn', 'description'),
+            trigger: { type: 'diceSet', faces: { [FACE.HELM]: 3 } },
+            effects: [
+                grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
+            ],
+            priority: 0,
+        },
+        {
+            id: 'solemnity-2-main',
+            name: abilityText('solemnity-2', 'name'),
+            description: abilityText('solemnity-2-main', 'description'),
+            trigger: { type: 'diceSet', faces: { [FACE.KATANA]: 2, [FACE.HELM]: 3 } },
+            effects: [
+                grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
+                damage(8, '造成 8 点伤害。'),
+            ],
+            priority: 1,
+        },
     ],
 };
 
@@ -285,12 +303,34 @@ export const SAMURAI_SLOT_06_2: AbilityDef = {
     tags: ['unblockable'],
     description: abilityText('samurai-slot-06-2', 'description'),
     sfxKey: SAMURAI_SFX_HEAVY,
-    trigger: { type: 'diceSet', faces: { [FACE.RISING_SUN]: 4 } },
-    effects: [
-        grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
-        grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。'),
-        grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
-        damage(7, '再造成 7 点不可防御伤害。', { unblockable: true }),
+    variants: [
+        {
+            id: 'samurai-slot-06-2-feather-blade-style',
+            name: abilityText('samurai-slot-06-2-feather-blade-style', 'name'),
+            description: abilityText('samurai-slot-06-2-feather-blade-style', 'description'),
+            trigger: { type: 'diceSet', faces: { [FACE.RISING_SUN]: 3 } },
+            effects: [
+                grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
+                grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
+                damage(2, '再造成 2 点不可防御伤害。', { unblockable: true }),
+            ],
+            tags: ['unblockable'],
+            priority: 0,
+        },
+        {
+            id: 'samurai-slot-06-2-main',
+            name: abilityText('samurai-slot-06-2', 'name'),
+            description: abilityText('samurai-slot-06-2-main', 'description'),
+            trigger: { type: 'diceSet', faces: { [FACE.RISING_SUN]: 4 } },
+            effects: [
+                grantToken('self', TOKEN_IDS.HONOR, 1, '获得 1 个荣誉指示物。'),
+                grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。'),
+                grantToken('opponent', TOKEN_IDS.SHAME, 2, '对手获得 2 层耻辱。'),
+                damage(7, '再造成 7 点不可防御伤害。', { unblockable: true }),
+            ],
+            tags: ['unblockable'],
+            priority: 1,
+        },
     ],
 };
 
@@ -319,6 +359,8 @@ export const MASAMUNE_2: AbilityDef = {
     variants: [
         {
             id: 'masamune-2-large-straight',
+            name: abilityText('masamune-2', 'name'),
+            description: abilityText('masamune-2-large-straight', 'description'),
             trigger: { type: 'largeStraight' },
             effects: [
                 damage(7, '造成 7 点伤害。'),
@@ -333,6 +375,8 @@ export const MASAMUNE_2: AbilityDef = {
         },
         {
             id: 'masamune-2-power-up',
+            name: abilityText('masamune-2-honor', 'name'),
+            description: abilityText('masamune-2-honor', 'description'),
             trigger: { type: 'allSymbolsPresent', symbols: [FACE.KATANA, FACE.HELM, FACE.RISING_SUN] },
             effects: [
                 grantToken('self', TOKEN_IDS.SAMURAI_RETRIBUTION, 1, '获得 1 个反击指示物。', 'preDefense'),

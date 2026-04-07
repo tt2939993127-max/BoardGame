@@ -37,6 +37,7 @@ const allowedValueArgs = new Set([
 const allowedBooleanArgs = new Set([
     'force-update',
     'no-force-update',
+    'allow-legacy-shells',
     'dry-run',
     'skip-latest',
     'help',
@@ -45,15 +46,17 @@ const helpText = `
 Android OTA 发布脚本
 
 默认策略：
-- 默认不会写入 targetNativeVersion / minNativeVersion / maxNativeVersion
-- 也就是说，只要新 bundle 不依赖新的原生壳能力，旧 APK 会继续收到 OTA
-- 只有你显式传兼容参数时，才会生成原生版本门禁
+- stable 默认收紧到当前原生版本：若未显式传兼容参数，会自动写入 minNativeVersion=<nativeVersion>
+- stable 默认也会开启 forceUpdate，让旧壳直接进入原生 App 升级链路
+- 如确需放行旧壳，必须显式传 --allow-legacy-shells
+- 非 stable channel 仍保持显式传参才生成原生版本门禁
 
 常见用法：
 - node scripts/mobile/publish-android-ota.mjs --channel stable
 - node scripts/mobile/publish-android-ota.mjs --channel edge --dry-run
 - node scripts/mobile/publish-android-ota.mjs --channel stable --target-native-version 0.5.1
 - node scripts/mobile/publish-android-ota.mjs --channel stable --min-native-version 0.5.0 --max-native-version 0.5.2
+- node scripts/mobile/publish-android-ota.mjs --channel stable --allow-legacy-shells --no-force-update
 
 参数：
 - --channel <name>
@@ -63,6 +66,7 @@ Android OTA 发布脚本
 - --min-native-version <version>
 - --max-native-version <version>
 - --force-update / --no-force-update
+- --allow-legacy-shells
 - --force-update-title <text>
 - --force-update-message <text>
 - --notes <text>
@@ -131,10 +135,15 @@ if (hasFlag('help') || args.includes('-h')) {
 const channel = readArgValue('channel', process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || 'stable');
 const nativeVersion = readArgValue('native-version', packageJson.version);
 const explicitTargetNativeVersion = readArgValue('target-native-version', '');
-const minNativeVersion = readArgValue('min-native-version', '');
+const explicitMinNativeVersion = readArgValue('min-native-version', '');
 const maxNativeVersion = readArgValue('max-native-version', '');
 const explicitBundleVersion = readArgValue('version', '');
 const notes = readArgValue('notes', 'Android embedded OTA bundle');
+const allowLegacyShells = hasFlag('allow-legacy-shells');
+const stableChannel = channel === 'stable';
+const minNativeVersion = stableChannel && !allowLegacyShells && !explicitTargetNativeVersion && !explicitMinNativeVersion
+    ? nativeVersion
+    : explicitMinNativeVersion;
 const {
     forceUpdate,
     forceUpdateTitle,
@@ -144,6 +153,7 @@ const {
     noForceUpdateFlag: hasFlag('no-force-update'),
     forceUpdateTitle: readArgValue('force-update-title', ''),
     forceUpdateMessage: readArgValue('force-update-message', ''),
+    defaultForceUpdate: stableChannel && !allowLegacyShells,
 });
 const dryRun = hasFlag('dry-run');
 const skipLatest = hasFlag('skip-latest');
@@ -263,8 +273,8 @@ const normalizedTargetNativeVersion = explicitTargetNativeVersion
         .map((value) => value.trim())
         .filter(Boolean)
     : [];
-// 默认不加原生门禁，避免把 OTA 默认焊死到当前壳版本。
-// 只有显式传兼容参数时，才让 manifest 带上 target/min/max。
+// stable 默认要求旧壳先升到当前原生版本，避免继续吃到新 OTA。
+// 如确需放行旧壳，必须显式传 --allow-legacy-shells，或手动指定 target/min/max。
 const resolvedTargetNativeVersion = normalizedTargetNativeVersion;
 const manifest = {
     version: bundleVersion,
@@ -313,6 +323,8 @@ console.log(`bundleVersion=${bundleVersion}`);
 console.log(`nativeVersion=${nativeVersion}`);
 console.log(`mode=${dryRun ? 'dry-run' : 'publish'}`);
 console.log(`forceUpdate=${forceUpdate ? 'true' : 'false'}`);
+console.log(`allowLegacyShells=${allowLegacyShells ? 'true' : 'false'}`);
+console.log(`effectiveMinNativeVersion=${minNativeVersion || '(none)'}`);
 console.log(`skipLatest=${skipLatest ? 'true' : 'false'}`);
 console.log(`zipBytes=${zipBuffer.length}`);
 console.log(`otaIncludedFiles=${otaCollectionStats.includedFiles}`);

@@ -2016,7 +2016,15 @@
     },
     "solemnity-2": {
       "name": "肃穆之仪 II",
+      "description": "包含肃穆之仪 II 与庄严两个变体。"
+    },
+    "solemnity-2-main": {
+      "name": "肃穆之仪 II",
       "description": "2 武士刀 + 3 头盔：施加 2 层耻辱，并造成 8 点伤害。"
+    },
+    "solemnity-2-solemn": {
+      "name": "庄严",
+      "description": "3 头盔：施加 2 层耻辱。"
     },
     "budo": {
       "name": "武道",
@@ -2032,7 +2040,15 @@
     },
     "samurai-slot-06-2": {
       "name": "叶隐之心 II",
+      "description": "包含叶隐之心 II 与羽翼剑道两个变体。"
+    },
+    "samurai-slot-06-2-main": {
+      "name": "叶隐之心 II",
       "description": "4 旭日：获得 1 个荣誉指示物，获得 1 个反击指示物，施加 2 层耻辱，然后造成 7 点不可防御伤害。"
+    },
+    "samurai-slot-06-2-feather-blade-style": {
+      "name": "羽翼剑道",
+      "description": "3 旭日：获得 1 个荣誉指示物，施加 2 层耻辱，然后造成 2 点不可防御伤害。"
     },
     "masamune": {
       "name": "正宗",
@@ -2040,14 +2056,14 @@
     },
     "masamune-2": {
       "name": "正宗 II",
-      "description": "大顺：造成 7 点伤害，然后额外掷 6 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。此外，若本次掷骰同时包含武士刀、头盔与旭日，也可以改为获得 1 个反击指示物。"
+      "description": "包含正宗 II 与荣耀两个变体。"
     },
     "masamune-2-large-straight": {
       "name": "正宗 II",
       "description": "大顺：造成 7 点伤害，然后额外掷 6 颗骰子。每个武士刀令伤害 +1；每个头盔施加 1 层耻辱；每个旭日获得 1 个反击指示物。"
     },
-    "masamune-2-power-up": {
-      "name": "蓄势",
+    "masamune-2-honor": {
+      "name": "荣耀",
       "description": "武士刀 + 头盔 + 旭日：获得 1 个反击指示物。"
     },
     "stand-tall": {
@@ -2132,25 +2148,13 @@
       "name": "左轮速射 II",
       "description": "升级你的左轮速射。获得 2 个闪避，并造成 8 点伤害。"
     },
-    "card-pistol-whip": {
-      "name": "枪托鞭打",
-      "description": "获得 1 个闪避。对手获得击倒，然后造成 1 点伤害。"
-    },
     "upgrade-take-cover-2": {
       "name": "掩护射击 II",
       "description": "升级你的掩护射击。获得 1 个闪避，并造成 6 点伤害。"
     },
-    "card-mark-the-target": {
-      "name": "标记目标",
-      "description": "获得 2 个闪避。对手获得 1 个赏金。"
-    },
     "upgrade-deadeye-2": {
       "name": "死亡之眼 II",
       "description": "升级你的死亡之眼。施加击倒，并造成 8 点不可防御伤害。"
-    },
-    "card-the-law": {
-      "name": "执法者",
-      "description": "获得 1 个闪避。至多 2 位目标玩家获得赏金与击倒。当前 1v1 对局中按唯一对手结算。"
     },
     "upgrade-duel-2": {
       "name": "对决 II",

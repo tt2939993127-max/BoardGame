@@ -365,7 +365,7 @@ export const DiceThroneTutorial: TutorialManifest = {
             highlightTarget: 'hand-area',
             position: 'top',
             requireAction: true,
-            allowedCommands: ['PLAY_CARD', 'SELL_CARD', 'REORDER_CARD_TO_END'],
+            allowedCommands: ['PLAY_CARD', 'PLAY_UPGRADE_CARD', 'SELL_CARD', 'REORDER_CARD_TO_END'],
             advanceOnEvents: [
                 { type: 'ABILITY_REPLACED', match: { playerId: '0', oldAbilityId: 'meditation' } },
             ],

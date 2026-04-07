@@ -184,6 +184,8 @@ export interface AbilityCard {
     /** @deprecated 使用 i18n 字段代替，此字段由构建脚本自动生成 */
     description: string;
     previewRef?: CardPreviewRef;
+    /** 源图中的 slot/index，仅用于调试、审计和作弊发牌；不等于正式运行时预览资源。 */
+    sourceAtlasIndex?: number;
     /** 卡牌效果列表（行动卡的即时效果，或升级卡的 replaceAbility 效果） */
     effects?: AbilityEffect[];
     /** 卡牌打出的额外条件 */
@@ -368,6 +370,8 @@ export interface BonusDieInfo {
     face: DieFace;
     /** 效果描述 i18n key（用于 displayOnly 展示） */
     effectKey?: string;
+    /** 效果描述参数（例如 {{value}}） */
+    effectParams?: Record<string, string | number>;
 }
 
 /**

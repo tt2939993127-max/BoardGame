@@ -8,6 +8,14 @@ import { useTranslation } from 'react-i18next';
 import { resolveCardDisplayName } from '../../components/game/framework/debug/cardNameResolver';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+const getCardSourceAtlasIndex = (card: any) => (
+    typeof card?.sourceAtlasIndex === 'number'
+        ? card.sourceAtlasIndex
+        : card?.previewRef?.type === 'atlas'
+            ? card.previewRef.index
+            : null
+);
+
 interface DiceThroneDebugConfigProps {
     G: unknown;
     dispatch: (type: string, payload?: unknown) => void;
@@ -45,7 +53,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
             .map((card: any, deckIndexInDeck: number) => ({ card, deckIndexInDeck }))
             .filter(
                 ({ card }: { card: any; deckIndexInDeck: number }) =>
-                    card.previewRef?.type === 'atlas' && card.previewRef.index === targetIndex
+                    getCardSourceAtlasIndex(card) === targetIndex
             );
     }, [playerDeck, deckIndex]);
 
@@ -61,8 +69,8 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
         return playerDeck
             .map((card: any, deckIndexInDeck: number) => ({ card, deckIndexInDeck }))
             .sort((a, b) => {
-                const ai = a.card.previewRef?.type === 'atlas' ? a.card.previewRef.index : 999;
-                const bi = b.card.previewRef?.type === 'atlas' ? b.card.previewRef.index : 999;
+                const ai = getCardSourceAtlasIndex(a.card) ?? 999;
+                const bi = getCardSourceAtlasIndex(b.card) ?? 999;
                 if (ai !== bi) return ai - bi;
                 return a.deckIndexInDeck - b.deckIndexInDeck;
             });
@@ -408,7 +416,7 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                                     className="flex items-center gap-2 text-[10px] text-slate-700 px-1 py-0.5 rounded"
                                 >
                                     <span className="w-5 text-slate-400 font-mono">
-                                        {card.previewRef?.type === 'atlas' ? card.previewRef.index : '-'}
+                                        {getCardSourceAtlasIndex(card) ?? '-'}
                                     </span>
                                     <span className={`px-1 rounded text-[8px] ${
                                         card.type === 'upgrade' ? 'bg-amber-200 text-amber-800' : 'bg-purple-200 text-purple-800'

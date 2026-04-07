@@ -6,12 +6,15 @@ export const resolveOtaForceUpdateOptions = ({
     noForceUpdateFlag = false,
     forceUpdateTitle = '',
     forceUpdateMessage = '',
+    defaultForceUpdate = false,
 } = {}) => {
     if (forceUpdateFlag && noForceUpdateFlag) {
         throw new Error('不能同时传 --force-update 和 --no-force-update。');
     }
 
-    const forceUpdate = forceUpdateFlag && !noForceUpdateFlag;
+    const forceUpdate = noForceUpdateFlag
+        ? false
+        : (forceUpdateFlag || defaultForceUpdate);
 
     return {
         forceUpdate,

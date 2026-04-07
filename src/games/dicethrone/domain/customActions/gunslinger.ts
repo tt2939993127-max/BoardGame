@@ -306,7 +306,13 @@ function handleEatMyLead({ attackerId, sourceAbilityId, state, timestamp, random
     const dice = Array.from({ length: 5 }, (_, index) => {
         const value = random.d(6);
         const face = getPlayerDieFace(state, attackerId, value) ?? '';
-        return { index, value, face, effectKey: 'bonusDie.effect.gunslingerEatMyLeadDie' };
+        return {
+            index,
+            value,
+            face,
+            effectKey: 'bonusDie.effect.gunslingerEatMyLeadDie',
+            effectParams: { value, index },
+        };
     });
 
     const bonusDamage = dice.filter(die => die.face === GUNSLINGER_DICE_FACE_IDS.BULLET).length;

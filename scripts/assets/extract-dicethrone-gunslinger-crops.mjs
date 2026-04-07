@@ -3,11 +3,12 @@ import path from 'node:path';
 import sharp from 'sharp';
 
 const rootDir = process.cwd();
+const tempRoot = 'temp/dicethrone-intake/gunslinger';
 
 const jobs = [
   {
     source: 'public/assets/i18n/zh-CN/dicethrone/images/gunslinger/compressed/player-board.webp',
-    outputDir: 'public/assets/i18n/zh-CN/dicethrone/images/gunslinger/crops/player-board',
+    outputDir: `${tempRoot}/crops/player-board`,
     entries: [
       { id: 'revolver', left: 0, top: 170, width: 330, height: 485 },
       { id: 'bounty-hunter', left: 330, top: 170, width: 340, height: 485 },
@@ -22,7 +23,7 @@ const jobs = [
   },
   {
     source: 'public/assets/i18n/zh-CN/dicethrone/images/gunslinger/compressed/tip.webp',
-    outputDir: 'public/assets/i18n/zh-CN/dicethrone/images/gunslinger/crops/tip',
+    outputDir: `${tempRoot}/crops/tip`,
     entries: [
       { id: 'evasive', left: 0, top: 0, width: 700, height: 470 },
       { id: 'reload', left: 0, top: 450, width: 700, height: 510 },
@@ -35,19 +36,24 @@ const jobs = [
 
 const abilityCardsAtlasJob = {
   source: 'public/assets/i18n/zh-CN/dicethrone/images/gunslinger/compressed/ability-cards.webp',
-  outputDir: 'public/assets/i18n/zh-CN/dicethrone/images/gunslinger/crops/ability-cards',
-  // 真相源 slot 裁图：用于人工核对原图布局，不等于运行时 atlas index。
+  sourceSlotsOutputDir: `${tempRoot}/ability-cards/source-slots`,
   sourceAtlasConfigPath: 'public/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json',
+  sourceAliasesOutputDir: `${tempRoot}/ability-cards/source-aliases`,
   sourceMaxIndex: 31,
-  // 正式运行时 frame 裁图：与 ability-cards-gunslinger.atlas.json 一致。
-  runtimeAtlasConfigPath: 'public/assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json',
-  namedRuntimeEntries: [
-    { id: 'fan-the-hammer-2', frameIndex: 22 },
-    { id: 'pistol-whip', frameIndex: 23 },
-    { id: 'take-cover-2', frameIndex: 24 },
-    { id: 'mark-the-target', frameIndex: 25 },
-    { id: 'deadeye-2', frameIndex: 26 },
-    { id: 'the-law', frameIndex: 27 },
+  namedSourceEntries: [
+    { id: 'fan-the-hammer-2', sourceIndex: 22 },
+    { id: 'pistol-whip', sourceIndex: 22 },
+    { id: 'take-cover-2', sourceIndex: 23 },
+    { id: 'mark-the-target', sourceIndex: 23 },
+    { id: 'deadeye-2', sourceIndex: 24 },
+    { id: 'the-law', sourceIndex: 24 },
+    { id: 'duel-2', sourceIndex: 25 },
+    { id: 'quick-draw-upgrade', sourceIndex: 26 },
+    { id: 'wanted', sourceIndex: 27 },
+    { id: 'spin-the-chamber', sourceIndex: 28 },
+    { id: 'high-noon', sourceIndex: 29 },
+    { id: 'wild-west', sourceIndex: 30 },
+    { id: 'eat-my-lead', sourceIndex: 31 },
   ],
   directEntries: [
     { id: 'hero-portrait-extra', left: 6065, top: 6318, width: 675, height: 1054 },
@@ -55,8 +61,7 @@ const abilityCardsAtlasJob = {
 };
 
 const handPreviewJob = {
-  // 仅供录入核对使用，不得再接入运行时代码。
-  outputDir: 'temp/dicethrone-intake/gunslinger/hand-preview',
+  outputDir: `${tempRoot}/hand-preview`,
   targetWidth: 598,
   targetHeight: 965,
   entries: [
@@ -66,6 +71,13 @@ const handPreviewJob = {
     'mark-the-target.webp',
     'deadeye-2.webp',
     'the-law.webp',
+    'duel-2.webp',
+    'quick-draw-upgrade.webp',
+    'wanted.webp',
+    'spin-the-chamber.webp',
+    'high-noon.webp',
+    'wild-west.webp',
+    'eat-my-lead.webp',
   ],
 };
 
@@ -111,10 +123,11 @@ async function writeNormalizedPreview(sourcePath, outputDir, fileName, targetWid
 function getScaledAtlasRect(atlasConfig, metadata, index) {
   const scaleX = metadata.width / atlasConfig.imageW;
   const scaleY = metadata.height / atlasConfig.imageH;
+
   if (Array.isArray(atlasConfig.frames)) {
     const frame = atlasConfig.frames[index];
     if (!frame) {
-      throw new Error(`运行时 atlas 缺少 frame index=${index}`);
+      throw new Error(`atlas 缺少 frame index=${index}`);
     }
     return {
       left: Math.round(frame.x * scaleX),
@@ -156,46 +169,40 @@ async function run() {
   }
 
   const atlasSourcePath = path.join(rootDir, abilityCardsAtlasJob.source);
-  const atlasOutputDir = path.join(rootDir, abilityCardsAtlasJob.outputDir);
+  const sourceSlotsOutputDir = path.join(rootDir, abilityCardsAtlasJob.sourceSlotsOutputDir);
+  const sourceAliasesOutputDir = path.join(rootDir, abilityCardsAtlasJob.sourceAliasesOutputDir);
   const sourceAtlasConfig = await readJson(abilityCardsAtlasJob.sourceAtlasConfigPath);
-  const runtimeAtlasConfig = await readJson(abilityCardsAtlasJob.runtimeAtlasConfigPath);
   const atlasMetadata = await sharp(atlasSourcePath).metadata();
-  await ensureDir(atlasOutputDir);
+
+  await ensureDir(sourceSlotsOutputDir);
+  await ensureDir(sourceAliasesOutputDir);
 
   for (let index = 0; index <= abilityCardsAtlasJob.sourceMaxIndex; index += 1) {
     const id = `slot-${String(index).padStart(2, '0')}`;
-    const outputPath = path.join(atlasOutputDir, `${id}.webp`);
+    const outputPath = path.join(sourceSlotsOutputDir, `${id}.webp`);
     const rect = getScaledAtlasRect(sourceAtlasConfig, atlasMetadata, index);
     await extractFromRect(atlasSourcePath, outputPath, rect);
-    console.log(`${abilityCardsAtlasJob.outputDir}/${id}.webp`);
+    console.log(`${abilityCardsAtlasJob.sourceSlotsOutputDir}/${id}.webp`);
   }
 
-  for (const entry of abilityCardsAtlasJob.namedRuntimeEntries) {
-    const outputPath = path.join(atlasOutputDir, `${entry.id}.webp`);
-    const rect = getScaledAtlasRect(runtimeAtlasConfig, atlasMetadata, entry.frameIndex);
+  for (const entry of abilityCardsAtlasJob.namedSourceEntries) {
+    const outputPath = path.join(sourceAliasesOutputDir, `${entry.id}.webp`);
+    const rect = getScaledAtlasRect(sourceAtlasConfig, atlasMetadata, entry.sourceIndex);
     await extractFromRect(atlasSourcePath, outputPath, rect);
-    await ensureDir(path.join(atlasOutputDir, 'compressed'));
-    await extractFromRect(
-      atlasSourcePath,
-      path.join(atlasOutputDir, 'compressed', `${entry.id}.webp`),
-      rect,
-    );
-    console.log(`${abilityCardsAtlasJob.outputDir}/${entry.id}.webp`);
-    console.log(`${abilityCardsAtlasJob.outputDir}/compressed/${entry.id}.webp`);
+    console.log(`${abilityCardsAtlasJob.sourceAliasesOutputDir}/${entry.id}.webp`);
   }
 
   for (const entry of abilityCardsAtlasJob.directEntries) {
-    const outputPath = path.join(atlasOutputDir, `${entry.id}.webp`);
+    const outputPath = path.join(sourceSlotsOutputDir, `${entry.id}.webp`);
     await extractFromRect(atlasSourcePath, outputPath, entry);
-    console.log(`${abilityCardsAtlasJob.outputDir}/${entry.id}.webp`);
+    console.log(`${abilityCardsAtlasJob.sourceSlotsOutputDir}/${entry.id}.webp`);
   }
 
-  const handPreviewOutputDir = path.join(rootDir, handPreviewJob.outputDir);
   for (const fileName of handPreviewJob.entries) {
-    const sourcePath = path.join(atlasOutputDir, fileName);
+    const sourcePath = path.join(sourceAliasesOutputDir, fileName);
     await writeNormalizedPreview(
       sourcePath,
-      handPreviewOutputDir,
+      path.join(rootDir, handPreviewJob.outputDir),
       fileName,
       handPreviewJob.targetWidth,
       handPreviewJob.targetHeight,

@@ -7,7 +7,10 @@
 - Dice Throne 手牌预览统一走 `previewRef.type = 'atlas'`。
 - 基础技能不再渲染 `base-ability-cards`；玩家面板 `player-board` 自带基础技能图，覆盖层只负责点击区域和升级卡叠加。
 - 运行时不再使用 `hand-cards-atlas`。
-- 枪手 / 武士这类新派系也要回到和老派系一致的 atlas 契约，不能私自新开一套单卡运行时资源。
+- 录入时为了看清文字额外做的后处理图，一律是中间产物，必须放 `temp/`，不能放进 `public/assets/.../crops/**` 伪装成正式资源。
+- 新角色是否能继续沿用老派系 atlas 契约，必须回到原始 `compressed/ability-cards.webp` 与老角色同位对照后再裁定；不能拿历史核对图直接下结论。
+- 复合升级默认先按老派系能力合同理解：一张升级卡替换一个基础技能，内部 `variants` / 子效果同类取最高；这不自动等于图片层要拆成多张正式手牌图。
+- 新角色默认必须优先复用老派系已经跑通的共享运行时逻辑：同类档位自动取最高，同卡复合子技能再选择。除非已证伪老派系合同，否则禁止为新角色单独发明新的选择规则、手牌模型或 atlas 语义。
 
 ## 2. 单一真实来源
 
@@ -22,17 +25,19 @@
   - `dice.webp|png`
   - `status-icons-atlas.webp|png`
 
+补充强制规则：
+
+- `public/assets/.../crops/**` 不再是 Dice Throne 的默认正式目录语义。
+- 只要某张图是为了 OCR / 录入核对 / 局部放大 / 上下拆分额外生成的，就必须落 `temp/dicethrone-intake/<hero>/...`。
+- 如果仓库里已经存在 `public/assets/.../crops/**` 的历史文件，排查时必须先确认它是不是后处理中间产物，不能默认拿来当主真相源或正式运行时合同。
+
 ### 2.2 图集配置
 
 - 默认卡牌 atlas 配置：`src/assets/atlas-configs/dicethrone/ability-cards-common.atlas.json`
-- 当前例外配置：`src/assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json`
-- 当前实现不是“所有英雄永远共享同一份配置”，而是：
-  - 大多数老派系与武士继续复用公共网格配置
-  - 枪手因 `slot-22 / 23 / 24` 原图是复合展示位，改为使用逐 frame 精确配置
-- 裁决规则：
-  - 默认优先复用公共 atlas 配置
-  - 只有在真相源明确证明公共网格无法正确表达正式运行时卡面时，才允许引入 per-hero atlas json
-  - 引入后也仍然属于 atlas 合同，不得回退成单卡 `image` 运行时方案
+- 当前真实实现不是“所有英雄永远共享同一份配置”，而是：
+  - `monk / barbarian / pyromancer / shadow_thief / moon_elf / paladin / gunslinger / samurai` 全部复用公共网格
+- `src/assets/atlas-configs/dicethrone/ability-cards-gunslinger.atlas.json` 现仅作为历史错误实现留档，不再是正式运行时配置
+- 是否允许引入新的 per-hero atlas json，必须先由“原始图 + 老角色同位对照 + 真实 UI 消费链”共同证实；禁止无证据扩表。
 
 ### 2.3 路径帮助函数
 
@@ -83,12 +88,24 @@ Dice Throne 新英雄录入时，至少要区分下面三层，禁止混写：
 
 强制约束：
 
+- `action` 卡是“打出后直接结算自己的 `effects` / `customAction` / `rollDie`”，不是替换技能槽。
+- `upgrade` 卡才允许用 `replaceAbility(...)` 改写玩家面板上的基础技能。
 - 一张升级卡可以替换一个基础技能定义，并且该技能定义内部可以包含多个 `variants`。
 - 但这不代表“一张升级卡存在多个手牌对象”或“一个技能变体要占一个新 card index”。
+- 老派系里更常见的真实模式是“复合升级，但不是复合手牌”：
+  - `monk/card-thrust-punch-2/3 -> fist-technique`
+  - `barbarian/upgrade-slap-2/3 -> slap`
+  - `paladin/upgrade-righteous-combat-2/3 -> righteous-combat`
+  - `paladin/upgrade-holy-defense-2/3 -> holy-defense`
+  - `samurai/upgrade-katana-slice-2/3 -> katana-slice`
+- 这些升级内部都可能含多个 `variants`、多个阈值或同类取最高的子效果，但运行时仍是一张升级卡、一个基础技能目标。
 - `targetAbilityId` 必须始终是基础技能 ID；`newAbilityDef.id` 也必须与该基础技能 ID 一致。
+- 如果某个新角色只能靠新增特判才能“看起来正常”，默认先怀疑录入模型错了；在证伪老派系共享逻辑之前，不得先给新角色开分叉。
 
 老派系基线，必须按这个口径对新角色逐张比：
 
+- `monk/card-buddha-light`、`monk/card-palm-strike`：都是 `type: 'action'`，打出后直接获得 token / 施加状态，不会升级技能。
+- `shadow_thief/action-sneaky-sneaky`、`shadow_thief/action-card-trick`：也是直接结算行动牌，不会写 `replaceAbility`。
 - `monk/card-thrust-punch-2`、`barbarian/upgrade-slap-3`：升级后虽然内部按档位拆 `variants`，但升级目标仍是基础技能。
 - `paladin/upgrade-righteous-combat-2/3`：II / III 两张升级卡都指向同一个基础技能 ID。
 - `paladin/upgrade-holy-defense-2`、`paladin/upgrade-tithes-2`：防御/偏被动技能升级也不例外，仍只替换基础技能。
@@ -99,27 +116,42 @@ Dice Throne 新英雄录入时，至少要区分下面三层，禁止混写：
 - `slot-18 ~ slot-31` 一张正式卡对应一个运行时 `previewRef.index`。
 - `slot-00 ~ slot-17` 是反向排列的通用卡区，不得回退到老角色默认顺序。
 
-### 4.3 枪手：原图 slot 与运行时 frame 不是同一概念
+### 4.3 新角色：先证伪核对图，再裁定 atlas 合同
 
-- 枪手的 `ability-cards.webp` 里，`slot-22 / slot-23 / slot-24` 是原图上的复合展示区。
-- 这些原图 slot 不能再被解释成“一个 runtime index 对两张牌”。
-- 正式运行时合同应写成：
-  - 原图 slot：真相源定位与人工核对单位
-  - atlas frame：运行时预览单位
-- 因此枪手运行时改为使用独立 atlas frame 配置：
-  - `upgrade-fan-the-hammer-2` → `index 22`
-  - `card-pistol-whip` → `index 23`
-  - `upgrade-take-cover-2` → `index 24`
-  - `card-mark-the-target` → `index 25`
-  - `upgrade-deadeye-2` → `index 26`
-  - `card-the-law` → `index 27`
-- 其余枪手专属卡顺延到 `index 34`，不再存在共享 runtime index。
+- 枪手 / 武士这类新角色排查时，不能先拿 `public/assets/.../crops/ability-cards/*.webp` 当铁证。
+- 任何“看起来一格里有两张”“看起来只裁到上半张”“看起来不像老派系”的结论，都必须先回到原始 `compressed/ability-cards.webp` 与老派系同位裁图对照。
+- 如果核对图是经过上下拆分、放大、normalized preview、拼接等后处理生成的，它只服务人工辨认，不代表 atlas 真相源本体。
+- 因此必须同时区分三层：
+  - `原始真相源`：`compressed/ability-cards.webp`
+  - `临时核对图`：录入时为看清文字生成的后处理图，统一放 `temp/`
+  - `正式运行时资源`：代码真实引用、已进 manifest 的 atlas 或正式单图
+- 当前硬规则：
+  - 不得从历史核对图直接反推“枪手某 slot 是复合位”
+  - 不得从历史核对图直接反推“武士某 slot 需要改单卡图”
+  - 不得因为一张升级牌素材里有上下子区、多个标题或相关技能名，就直接把它拆成多个 runtime frame
+  - atlas 是否失配，必须由原始图 + 老角色同位对照 + 真实 UI 消费链共同裁定
+  - 一旦证据闭环成立，运行时合同必须显式落到 atlas 配置里，不能继续用临时单卡图硬接线
+  - 一旦证据闭环指向“同一张物理牌里的复合子区”，必须立刻停止继续修 UI / 测试 / atlas 接线，先回到录入模型裁定；禁止用“当前链路能跑通”继续掩盖错误数据模型
 
-### 4.4 调试 / 作弊入口仍不能把原图 slot 当成唯一事实
+### 4.3.1 复合物理牌的强制裁定顺序
 
-- 调试发牌、索引速查、测试注入只认运行时 `previewRef.index`。
-- 不要再拿原图 `slot-22 / 23 / 24` 这种人工核对定位去推断 card identity。
-- 只要 atlas 合同正确，`dealCardByAtlasIndex` 就必须能精确发出唯一卡牌；不需要再保留“共享索引命中多张时拒绝发牌”的特殊口径。
+当枪手 / 武士或后续新角色出现“同一张物理牌上下子区”时，必须按下面顺序处理：
+
+1. 先裁定它是不是一张物理牌
+2. 再对照老派系同类升级，判断是否属于“一个基础技能目标 + 内部同类取最高”的复合升级
+3. 最后才允许修改 `cards.ts`、`previewRef`、atlas 或 E2E
+
+禁止倒序：
+
+- 不能先改显示再反推素材语义
+- 不能先写两张牌数据再靠文档兜底
+- 不能先用 E2E 证明“当前看起来没问题”，再把这当成录入正确
+
+### 4.4 调试 / 作弊入口仍不能把 source slot 当成唯一 card identity
+
+- 调试发牌、索引速查、测试注入如果只传 `source slot`，在枪手 `slot-22 / 23 / 24` 这类共享源位上会出现多候选。
+- 因此需要精确发牌或精确验图时，必须改用 `cardId` 或精确 `deckIndex`，不能把共享 `source slot` 当唯一 card identity。
+- 不要把人工核对时拆出来的上半 / 下半辅助图，误当成正式运行时资源或主真相源。
 
 ## 5. 运行时加载链路
 
@@ -130,8 +162,8 @@ Dice Throne 新英雄录入时，至少要区分下面三层，禁止混写：
 - 注册逻辑：
   - 遍历 `DICETHRONE_CARD_ATLAS_IDS`
   - 用 `ASSETS.CARDS_ATLAS(charId)` 作为图片路径
-  - 大多数英雄绑定 `ability-cards-common.atlas.json`
-  - `gunslinger` 绑定 `ability-cards-gunslinger.atlas.json`
+  - 默认绑定 `ability-cards-common.atlas.json`
+  - 当前全部角色绑定 `ability-cards-common.atlas.json`
 
 ### 5.2 状态图标 atlas
 
@@ -174,8 +206,9 @@ Dice Throne 新英雄录入时，至少要区分下面三层，禁止混写：
 - 先按整图逐格编号
 - 再把 `cards.ts` 的 `previewRef.index` 与逐格图一一对应
 - 如遇复合排版：
-  - 先区分“原图 slot”与“运行时 frame”
-  - 判断是否需要精确 frame 配置，而不是默认让多张卡共享一个 `previewRef.index`
+  - 先区分“原图 slot”和“正式运行时合同”
+  - 先核老派系与当前运行时是否本来就允许共享 `slot/index`
+  - 如果共享的是源图位而不是运行时卡面，应该把差异落成专属 frame atlas，而不是继续保留临时单卡图
   - 把结论写进对应英雄的 `rule/*卡牌录入核对.md`
   - 补审计文档，不要只在代码里默许
 
@@ -187,14 +220,15 @@ Dice Throne 新英雄录入时，至少要区分下面三层，禁止混写：
 - 通用卡是否走统一注入，而不是手写散落
 - 新英雄是否错误复用了别的英雄通用牌索引
 - 是否残留 `hand-cards-atlas`、单卡运行时裁图或过期路径
-- 若存在复合排版，是否已经拆成精确 runtime frame，而不是继续共享索引
+- 若存在复合排版，是否已经明确共享索引合同，而不是又被代码偷偷拆成半张 frame
+- 若争议点是复合升级，是否已经先和老派系同类升级逐张对照，而不是只看新角色自己的图
 
 ### 7.2 建议验证命令
 
 ```powershell
 npx vitest run --config vitest.config.audit.ts --configLoader native src/games/dicethrone/__tests__/card-cross-audit.test.ts
 npx vitest run src/games/dicethrone/__tests__/criticalImageResolver.test.ts
-node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --configLoader native --maxWorkers 1 -t "作弊发牌按枪手精确 atlas 索引发牌"
+node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts --configLoader native --maxWorkers 1 -t "作弊发牌源图 atlas 索引保护"
 ```
 
 如果本轮只改了某个英雄，也至少要补一条该英雄自己的索引/预览回归，不要只靠肉眼扫图。
@@ -202,7 +236,8 @@ node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-
 ## 8. 禁止事项
 
 - 禁止把 `hand-cards-atlas` 当成回退方案重新接回来
-- 禁止把人工核对裁图直接当运行时素材
+- 禁止把人工核对裁图或后处理核对图直接当运行时素材
+- 禁止把 `public/assets/.../crops/**` 当成“后处理图的正式归宿”
 - 禁止按代码顺序猜 atlas 索引
 - 禁止给通用卡逐张手写 `previewRef`
 - 禁止在新 UI 里只按 `cardId` 反查通用卡预览，却不传 `characterId`
@@ -217,4 +252,4 @@ node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/basic-
 
 ---
 
-最后更新：`2026-04-05`
+最后更新：`2026-04-06`

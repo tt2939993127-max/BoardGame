@@ -29,6 +29,8 @@ interface BonusDieSpotlightContentProps {
     characterId?: string;
     /** 是否为紧凑模式（多骰场景，文字变小） */
     compact?: boolean;
+    /** 是否隐藏效果文案（多骰紧凑排版避免撑爆宽度） */
+    hideEffectText?: boolean;
 }
 
 /** Die face glow colors */
@@ -65,6 +67,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     rollingDurationMs = 800,
     characterId = 'monk',
     compact = false,
+    hideEffectText = false,
 }) => {
 
     const { t, i18n } = useTranslation('game-dicethrone');
@@ -83,6 +86,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     const effectText = React.useMemo(() => {
         return resolveBonusDieText(effectKey, { t, i18n, params: effectParams });
     }, [t, i18n, effectKey, effectParams]);
+    const shouldRenderEffectText = !hideEffectText && Boolean(effectText);
 
     return (
         <div className="flex flex-col items-center gap-[1.5vw]">
@@ -107,7 +111,7 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
             </div>
 
             <AnimatePresence>
-                {!isRolling && effectText && (
+                {!isRolling && shouldRenderEffectText && effectText && (
                     <motion.div
                         initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}

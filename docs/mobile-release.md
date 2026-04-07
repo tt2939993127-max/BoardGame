@@ -5,6 +5,7 @@
 ## 结论先说
 
 - OTA：默认不改 `package.json.version`
+- `stable` OTA：默认只给当前原生版本或更高版本，旧壳应走原生强更
 - 原生 APK：建议发版时用 `--bump patch|minor|major` 自动更新版本
 - 游戏包：继续走 `package.json.version + gameId + 时间戳` 的派生版本
 - 日常入口统一走新的包装脚本，避免再手打多条命令和 npm 参数透传坑
@@ -24,6 +25,11 @@ npm run mobile:android:release:ota
 ```bash
 node scripts/mobile/release-android.mjs ota --channel stable
 ```
+
+说明：
+- 对 `stable`，脚本会默认补 `minNativeVersion=<package.json.version>`，并默认开启 `forceUpdate`
+- 也就是旧壳不会继续吃新的 `stable` OTA，而是改走原生 APK 更新链路
+- 若确实需要临时放开旧壳，必须显式说明并传兼容参数，不再依赖“默认全放行”
 
 预演 OTA，不上传：
 
@@ -96,7 +102,7 @@ OTA：
 
 - `edge`：日常自测或刚合并后的快速验证
 - `gray`：给测试机、小范围用户先吃
-- `stable`：正式渠道
+- `stable`：正式渠道；默认口径是“旧壳先升级原生 App，再吃新的 OTA”
 
 ## 常见注意点
 
@@ -104,3 +110,4 @@ OTA：
 - `--dry-run` 不能和 `native --bump` 同时用；预演不会改版本文件
 - `--skip-build` 只能在你确认本地 release APK 已经是最新时再用
 - 如果只需要发兼容壳的 H5 修复，优先发 OTA，不要顺手 bump 原生版本
+- 正式发 `stable` OTA 时，默认假设旧壳应被挡回原生升级链路；不要再把“旧壳继续吃 OTA”当成默认策略

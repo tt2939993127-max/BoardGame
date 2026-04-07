@@ -2008,7 +2008,15 @@
     },
     "solemnity-2": {
       "name": "Solemnity II",
+      "description": "Includes the Solemnity II and Solemn variants."
+    },
+    "solemnity-2-main": {
+      "name": "Solemnity II",
       "description": "2 Katana + 3 Helm: inflict 2 Shame and deal 8 damage."
+    },
+    "solemnity-2-solemn": {
+      "name": "Solemn",
+      "description": "3 Helm: inflict 2 Shame."
     },
     "budo": {
       "name": "Budo",
@@ -2024,7 +2032,15 @@
     },
     "samurai-slot-06-2": {
       "name": "Heart of Hagakure II",
+      "description": "Includes the Heart of Hagakure II and Feather Blade Style variants."
+    },
+    "samurai-slot-06-2-main": {
+      "name": "Heart of Hagakure II",
       "description": "4 Rising Sun: gain 1 Honor, gain 1 Back Strike, inflict 2 Shame, then deal 7 undefendable damage."
+    },
+    "samurai-slot-06-2-feather-blade-style": {
+      "name": "Feather Blade Style",
+      "description": "3 Rising Sun: gain 1 Honor, inflict 2 Shame, then deal 2 undefendable damage."
     },
     "masamune": {
       "name": "Masamune",
@@ -2032,14 +2048,14 @@
     },
     "masamune-2": {
       "name": "Masamune II",
-      "description": "Large Straight: deal 7 damage, then roll 6 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike. Also, if your roll contains Katana, Helm, and Rising Sun, you may instead gain 1 Back Strike."
+      "description": "Includes the Masamune II and Honor variants."
     },
     "masamune-2-large-straight": {
       "name": "Masamune II",
       "description": "Large Straight: deal 7 damage, then roll 6 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike."
     },
-    "masamune-2-power-up": {
-      "name": "Power Up",
+    "masamune-2-honor": {
+      "name": "Honor",
       "description": "Katana + Helm + Rising Sun: gain 1 Back Strike."
     },
     "stand-tall": {
@@ -2104,25 +2120,13 @@
       "name": "Fan the Hammer II",
       "description": "Upgrade your Fan the Hammer. Gain 2 Evasive and deal 8 damage."
     },
-    "card-pistol-whip": {
-      "name": "Pistol Whip",
-      "description": "Gain 1 Evasive. Inflict Knockdown on your opponent, then deal 1 damage."
-    },
     "upgrade-take-cover-2": {
       "name": "Take Cover II",
       "description": "Upgrade your Take Cover. Gain 1 Evasive and deal 6 damage."
     },
-    "card-mark-the-target": {
-      "name": "Mark the Target",
-      "description": "Gain 2 Evasive. Inflict 1 Bounty on your opponent."
-    },
     "upgrade-deadeye-2": {
       "name": "Deadeye II",
       "description": "Upgrade your Deadeye. Inflict Knockdown, then deal 8 undefendable damage."
-    },
-    "card-the-law": {
-      "name": "The Law",
-      "description": "Gain 1 Evasive. Up to 2 target players gain Bounty and Knockdown. In current 1v1 play this resolves against the only opponent."
     },
     "upgrade-duel-2": {
       "name": "Duel II",

@@ -116,7 +116,7 @@ export const HandArea = ({
     locale?: string;
     currentPhase?: TurnPhase;
     playerCp?: number;
-    onPlayCard?: (cardId: string) => void;
+    onPlayCard?: (card: AbilityCard) => void;
     onSellCard?: (cardId: string) => void;
     onError?: (message: string) => void;
     canInteract?: boolean;
@@ -569,7 +569,7 @@ export const HandArea = ({
                     resetDragValues(entry.key, 'drag');
                     clearPendingPlay();
                 }, PENDING_PLAY_TIMEOUT);
-                onPlayCard(card.id);
+                onPlayCard(card);
                 actionTaken = true;
             }
         }
@@ -690,7 +690,7 @@ export const HandArea = ({
 
         if (canDrag && onPlayCard) {
             queuePendingPlay(entry, { x: 0, y: 0 });
-            onPlayCard(entry.card.id);
+            onPlayCard(entry.card);
         }
     }, [onDiscardCard, onPlayCard, queuePendingPlay, shouldBlockLongPressClick]);
 
@@ -722,7 +722,7 @@ export const HandArea = ({
     const cardAreaHeight = 18; // 卡牌可见高度（vw），卡牌高度约19.7vw减去底部溢出2vw
     const flyingOutMetrics = React.useMemo(() => {
         if (!flyingOutCard) return null;
-        const flyingCenterIndex = hand.length / 2;
+        const flyingCenterIndex = centerIndex;
         const startIndexOffset = flyingOutCard.startIndex - flyingCenterIndex;
         const startYOffset = Math.abs(startIndexOffset) * 0.8;
         return {
@@ -904,6 +904,7 @@ export const HandArea = ({
                     {flyingOutMetrics ? (
                         <motion.div
                             key={`flying-${flyingOutMetrics.cardKey}`}
+                            data-testid="hand-flying-card"
                             className="absolute bottom-0 w-[12vw] aspect-[0.61] rounded-[0.8vw] pointer-events-none"
                             style={{
                                 bottom: '-2vw',

@@ -7,9 +7,13 @@ export const GUNSLINGER_SFX_SHOT = 'combat.general.mini_games_sound_effects_and_
 export const GUNSLINGER_SFX_HEAVY = 'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_generic_b_shoot_2';
 export const GUNSLINGER_SFX_ULTIMATE = 'combat.general.mini_games_sound_effects_and_music_pack.gun.shoot.sfx_gun_minigun_shoot_1';
 
-const damage = (value: number, description: string, opts?: { timing?: EffectTiming }): AbilityEffect => ({
+const damage = (
+    value: number,
+    description: string,
+    opts?: { timing?: EffectTiming; unblockable?: boolean },
+): AbilityEffect => ({
     description,
-    action: { type: 'damage', target: 'opponent', value },
+    action: { type: 'damage', target: 'opponent', value, ...(opts?.unblockable ? { unblockable: true } : {}) },
     timing: opts?.timing,
 });
 
@@ -93,7 +97,7 @@ export const REVOLVER_2: AbilityDef = {
             trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 4 } },
             effects: [
                 damage(5, '造成 5 点伤害。'),
-                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。'),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。', 'preDefense'),
             ],
             priority: 2,
         },
@@ -102,7 +106,7 @@ export const REVOLVER_2: AbilityDef = {
             trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 5 } },
             effects: [
                 damage(6, '造成 6 点伤害。'),
-                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。'),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '施加击倒。', 'preDefense'),
             ],
             priority: 3,
         },
@@ -176,12 +180,31 @@ export const TAKE_COVER_2: AbilityDef = {
     id: 'take-cover',
     name: '掩护射击 II',
     type: 'offensive',
-    description: '获得 1 个闪避，并造成 6 点伤害。',
+    description: '包含掩护射击 II 与标记目标两个变体。',
     sfxKey: GUNSLINGER_SFX_SHOT,
-    trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.DASH]: 3 } },
-    effects: [
-        grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
-        damage(6, '造成 6 点伤害。'),
+    variants: [
+        {
+            id: 'mark-the-target',
+            name: '标记目标',
+            description: '3 个冲刺：获得 2 个闪避，并施加 1 个赏金。',
+            trigger: { type: 'diceSet', faces: { [FACE.DASH]: 3 } },
+            effects: [
+                grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。', 'preDefense'),
+                custom('gunslinger-card-mark-the-target', '选择 1 位敌方玩家，使其获得 1 个赏金。', 'preDefense'),
+            ],
+            priority: 0,
+        },
+        {
+            id: 'take-cover-2-main',
+            name: '掩护射击 II',
+            description: '2 个子弹 + 3 个冲刺：获得 1 个闪避，并造成 6 点伤害。',
+            trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.DASH]: 3 } },
+            effects: [
+                grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
+                damage(6, '造成 6 点伤害。'),
+            ],
+            priority: 1,
+        },
     ],
 };
 
@@ -248,7 +271,7 @@ const DEADEYE: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
     effects: [
-        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。'),
+        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。', 'preDefense'),
         damage(6, '造成 6 点不可防御伤害。'),
     ],
 };
@@ -257,13 +280,32 @@ export const DEADEYE_2: AbilityDef = {
     id: 'deadeye',
     name: '死亡之眼 II',
     type: 'offensive',
-    description: '施加击倒，并造成 8 点不可防御伤害。',
+    description: '包含死亡之眼 II 与执法者两个变体。',
     sfxKey: GUNSLINGER_SFX_HEAVY,
-    tags: ['unblockable'],
-    trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
-    effects: [
-        inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。'),
-        damage(8, '造成 8 点不可防御伤害。'),
+    variants: [
+        {
+            id: 'the-law',
+            name: '执法者',
+            description: '3 个准星：获得 1 个闪避；至多 2 位目标玩家获得赏金与击倒。',
+            trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 3 } },
+            effects: [
+                grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
+                custom('gunslinger-card-the-law', '选择至多 2 位目标玩家。每名目标玩家获得 1 个赏金并受到 1 层击倒。', 'preDefense'),
+            ],
+            priority: 0,
+        },
+        {
+            id: 'deadeye-2-main',
+            name: '死亡之眼 II',
+            description: '4 个准星：施加击倒，并造成 8 点不可防御伤害。',
+            trigger: { type: 'diceSet', faces: { [FACE.BULLSEYE]: 4 } },
+            effects: [
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。', 'preDefense'),
+                damage(8, '造成 8 点不可防御伤害。', { unblockable: true }),
+            ],
+            tags: ['unblockable'],
+            priority: 1,
+        },
     ],
 };
 
@@ -284,12 +326,33 @@ export const FAN_THE_HAMMER_2: AbilityDef = {
     id: 'fan-the-hammer',
     name: '左轮速射 II',
     type: 'offensive',
-    description: '获得 2 个闪避，并造成 8 点伤害。',
+    description: '包含左轮速射 II 与枪托击打两个变体。',
     sfxKey: GUNSLINGER_SFX_HEAVY,
-    trigger: { type: 'largeStraight' },
-    effects: [
-        grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。', 'preDefense'),
-        damage(8, '造成 8 点伤害。'),
+    variants: [
+        {
+            id: 'pistol-whip',
+            name: '枪托击打',
+            description: '2 个冲刺 + 1 个准星：获得 1 个闪避，施加击倒，并造成 1 点不可防御伤害。',
+            trigger: { type: 'diceSet', faces: { [FACE.DASH]: 2, [FACE.BULLSEYE]: 1 } },
+            tags: ['unblockable'],
+            effects: [
+                grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
+                inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。', 'preDefense'),
+                damage(1, '造成 1 点不可防御伤害。', { unblockable: true }),
+            ],
+            priority: 0,
+        },
+        {
+            id: 'fan-the-hammer-2-main',
+            name: '左轮速射 II',
+            description: '大顺：获得 2 个闪避，并造成 8 点伤害。',
+            trigger: { type: 'largeStraight' },
+            effects: [
+                grantToken('self', TOKEN_IDS.EVASIVE, 2, '获得 2 个闪避。', 'preDefense'),
+                damage(8, '造成 8 点伤害。'),
+            ],
+            priority: 1,
+        },
     ],
 };
 

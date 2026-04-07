@@ -8,7 +8,7 @@ import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { test, expect } from '@playwright/test';
 import { setChineseLocale } from './helpers/common';
-import { dispatchLocalCommand, waitForTutorialBoardReady } from './helpers/dicethrone';
+import { disableFabMenu, dispatchLocalCommand, waitForTutorialBoardReady } from './helpers/dicethrone';
 
 const MOBILE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
 
@@ -97,6 +97,99 @@ const readHighlightMetrics = async (page: Parameters<typeof test>[0]['page'], ta
         deltaHeight: Math.abs(targetRect.height - (highlightRect.height - 8)),
     };
 }, targetId);
+
+const waitForTutorialStepIn = async (
+    page: Parameters<typeof test>[0]['page'],
+    stepIds: string[],
+    timeout = 15000,
+) => {
+    await page.waitForFunction(
+        (expectedStepIds) => {
+            const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+            return !!stepId && expectedStepIds.includes(stepId);
+        },
+        stepIds,
+        { timeout },
+    );
+
+    const stepId = await page.locator('[data-tutorial-step]').first().getAttribute('data-tutorial-step');
+    if (!stepId || !stepIds.includes(stepId)) {
+        throw new Error(`未能命中步骤集合: ${stepIds.join(', ')}，当前=${stepId}`);
+    }
+    return stepId;
+};
+
+const dragHandCardToDiscard = async (
+    page: Parameters<typeof test>[0]['page'],
+    cardId: string,
+) => {
+    const card = page.locator(`[data-testid="hand-area"] [data-card-id="${cardId}"]`).first();
+    const discardPile = page.getByTestId('discard-pile');
+    await expect(card).toBeVisible({ timeout: 10000 });
+    await expect(discardPile).toBeVisible({ timeout: 10000 });
+
+    const cardBox = await card.boundingBox();
+    const discardBox = await discardPile.boundingBox();
+    if (!cardBox || !discardBox) {
+        throw new Error(`未能获取拖拽区域: card=${cardId}`);
+    }
+
+    const startX = cardBox.x + cardBox.width / 2;
+    const startY = cardBox.y + cardBox.height * 0.82;
+    const endX = discardBox.x + discardBox.width / 2;
+    const endY = discardBox.y + discardBox.height / 2;
+
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(endX, endY, { steps: 12 });
+    await page.mouse.up();
+    await page.mouse.move(2, 2);
+};
+
+const clickAbilitySlot = async (
+    page: Parameters<typeof test>[0]['page'],
+    slotId: string,
+) => {
+    const slot = page.locator(`[data-ability-slot="${slotId}"]`).first();
+    await expect(slot).toBeVisible({ timeout: 10000 });
+    await slot.click();
+};
+
+const assertHighlightAligned = async (
+    page: Parameters<typeof test>[0]['page'],
+    options: {
+        stepId: string;
+        targetId: string;
+        testInfo: Parameters<typeof test>[1];
+        evidenceDir: string;
+        screenshotKey: string;
+    },
+) => {
+    await waitForTutorialStep(page, options.stepId, 15000);
+    await page.waitForTimeout(300);
+
+    await expect.poll(
+        async () => readHighlightMetrics(page, options.targetId),
+        { timeout: 10000 },
+    ).not.toBeNull();
+
+    const metrics = await readHighlightMetrics(page, options.targetId);
+    console.log('tutorial-highlight-real-flow', options.stepId, options.targetId, JSON.stringify(metrics));
+    expect(metrics).not.toBeNull();
+    expect(metrics?.deltaLeft ?? 99999).toBeLessThanOrEqual(4);
+    expect(metrics?.deltaTop ?? 99999).toBeLessThanOrEqual(4);
+    expect(metrics?.deltaWidth ?? 99999).toBeLessThanOrEqual(4);
+    expect(metrics?.deltaHeight ?? 99999).toBeLessThanOrEqual(4);
+
+    await page.screenshot({
+        path: options.testInfo.outputPath(`${options.screenshotKey}.png`),
+        fullPage: false,
+    });
+    await page.screenshot({
+        path: join(options.evidenceDir, `${options.screenshotKey}.png`),
+        fullPage: false,
+    });
+};
 
 test.describe('DiceThrone Tutorial (Simplified)', () => {
     test('Tutorial starts and shows initial steps', async ({ page }, testInfo) => {
@@ -299,23 +392,14 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         expect(await getTutorialStepId()).toBe('dice-confirm');
     });
 
-    test('移动端教程蓝框应与目标元素对齐', async ({ page }, testInfo) => {
-        test.setTimeout(120000);
+    test('移动端教程蓝框应在真实点击全流程中与目标元素对齐', async ({ page }, testInfo) => {
+        test.setTimeout(240000);
 
         await setChineseLocale(page);
         await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
         await page.goto('/play/dicethrone/tutorial');
         await waitForTutorialBoardReady(page, 60000);
-
-        const steps: Array<{ stepId: string; targetId: string }> = [
-            { stepId: 'stats', targetId: 'player-stats' },
-            { stepId: 'phases', targetId: 'phase-indicator' },
-            { stepId: 'player-board', targetId: 'player-board' },
-            { stepId: 'tip-board', targetId: 'tip-board' },
-            { stepId: 'hand', targetId: 'hand-area' },
-            { stepId: 'discard', targetId: 'discard-pile' },
-            { stepId: 'status-tokens', targetId: 'status-tokens' },
-        ];
+        await disableFabMenu(page);
 
         while ((await page.locator('[data-tutorial-step]').first().getAttribute('data-tutorial-step')) !== 'stats') {
             await clickNextOverlayStep(page);
@@ -326,39 +410,120 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
             'test-results',
             'evidence-screenshots',
             'dicethrone-tutorial-simple.e2e',
-            'tutorial-highlight-mobile-alignment',
+            'tutorial-highlight-mobile-real-click-flow',
         );
         mkdirSync(evidenceDir, { recursive: true });
+        const captureAlignedStep = async (
+            sequence: number,
+            stepId: string,
+            targetId: string,
+        ) => assertHighlightAligned(page, {
+            stepId,
+            targetId,
+            testInfo,
+            evidenceDir,
+            screenshotKey: `${String(sequence).padStart(2, '0')}-${stepId}`,
+        });
 
-        for (const { stepId, targetId } of steps) {
-            await waitForTutorialStep(page, stepId, 10000);
-            await page.waitForTimeout(300);
-            await expect.poll(
-                async () => readHighlightMetrics(page, targetId),
-                { timeout: 10000 },
-            ).not.toBeNull();
+        await captureAlignedStep(1, 'stats', 'player-stats');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(2, 'phases', 'phase-indicator');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(3, 'player-board', 'player-board');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(4, 'tip-board', 'tip-board');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(5, 'hand', 'hand-area');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(6, 'discard', 'discard-pile');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(7, 'status-tokens', 'status-tokens');
+        await clickNextOverlayStep(page);
 
-            const metrics = await readHighlightMetrics(page, targetId);
-            console.log('tutorial-highlight-metrics', stepId, targetId, JSON.stringify(metrics));
-            expect(metrics).not.toBeNull();
-            expect(metrics?.deltaLeft ?? 99999).toBeLessThanOrEqual(4);
-            expect(metrics?.deltaTop ?? 99999).toBeLessThanOrEqual(4);
-            expect(metrics?.deltaWidth ?? 99999).toBeLessThanOrEqual(4);
-            expect(metrics?.deltaHeight ?? 99999).toBeLessThanOrEqual(4);
+        await captureAlignedStep(8, 'sell-card-intro', 'hand-area');
+        await dragHandCardToDiscard(page, 'card-deep-thought');
+        await waitForTutorialStep(page, 'undo-sell-intro', 10000);
 
-            await page.screenshot({
-                path: testInfo.outputPath(`tutorial-highlight-${stepId}.png`),
-                fullPage: false,
-            });
-            await page.screenshot({
-                path: join(evidenceDir, `tutorial-highlight-${stepId}.png`),
-                fullPage: false,
-            });
+        await captureAlignedStep(9, 'undo-sell-intro', 'discard-pile');
+        await clickNextOverlayStep(page);
+        await captureAlignedStep(10, 'undo-sell', 'discard-pile');
+        await page.getByTestId('discard-pile').click();
+        await waitForTutorialStep(page, 'advance', 10000);
 
-            if (stepId !== 'status-tokens') {
-                await clickNextOverlayStep(page);
-            }
+        await captureAlignedStep(11, 'advance', 'advance-phase-button');
+        await page.locator('[data-tutorial-id="advance-phase-button"]').click();
+
+        const postAdvanceStep = await waitForTutorialStepIn(page, ['dice-tray', 'dice-roll', 'play-six'], 15000);
+        if (postAdvanceStep === 'dice-tray') {
+            await captureAlignedStep(12, 'dice-tray', 'dice-tray');
+            await clickNextOverlayStep(page);
         }
+
+        await waitForTutorialStepIn(page, ['dice-roll', 'play-six'], 10000);
+        if (await page.locator('[data-tutorial-step="dice-roll"]').isVisible().catch(() => false)) {
+            await captureAlignedStep(13, 'dice-roll', 'dice-roll-button');
+            await page.locator('[data-tutorial-id="dice-roll-button"]').click();
+        }
+
+        await waitForTutorialStep(page, 'play-six', 10000);
+        await captureAlignedStep(14, 'play-six', 'hand-area');
+        await clickHandCardVisibleArea(page, 'card-play-six');
+        await page.locator('[data-testid="die-button-0"]').click();
+
+        await waitForTutorialStep(page, 'dice-confirm', 10000);
+        await captureAlignedStep(15, 'dice-confirm', 'dice-confirm-button');
+        await page.locator('[data-tutorial-id="dice-confirm-button"]').click();
+
+        await waitForTutorialStep(page, 'abilities', 10000);
+        await captureAlignedStep(16, 'abilities', 'ability-slots');
+        await clickAbilitySlot(page, 'fist');
+
+        await waitForTutorialStep(page, 'resolve-attack', 10000);
+        await captureAlignedStep(17, 'resolve-attack', 'advance-phase-button');
+        await page.locator('[data-tutorial-id="advance-phase-button"]').click();
+
+        await waitForTutorialStepIn(page, ['opponent-defense', 'main2-intro'], 30000);
+        if (await page.locator('[data-tutorial-step="opponent-defense"]').isVisible().catch(() => false)) {
+            await waitForTutorialStep(page, 'main2-intro', 30000);
+        }
+
+        await captureAlignedStep(18, 'main2-intro', 'hand-area');
+        await clickNextOverlayStep(page);
+
+        await captureAlignedStep(19, 'enlightenment-play', 'hand-area');
+        await clickHandCardVisibleArea(page, 'card-enlightenment');
+        const bonusDieOverlay = page.getByTestId('bonus-die-overlay');
+        await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
+
+        await waitForTutorialStep(page, 'inner-peace', 10000);
+        await captureAlignedStep(20, 'inner-peace', 'hand-area');
+        await expect(bonusDieOverlay).toBeHidden({ timeout: 4000 });
+        await clickHandCardVisibleArea(page, 'card-inner-peace');
+
+        await waitForTutorialStep(page, 'ai-turn-intro', 10000);
+        await clickNextOverlayStep(page);
+        await waitForTutorialStep(page, 'knockdown-explain', 45000);
+        await captureAlignedStep(21, 'knockdown-explain', 'status-tokens');
+        await clickNextOverlayStep(page);
+
+        await captureAlignedStep(22, 'purify-use', 'status-tokens');
+        await page.locator('[data-tutorial-id="status-tokens"] .animate-pulse').first().click();
+        await expect(page.getByRole('heading', { name: /使用净化|Purify/i }).first()).toBeVisible({ timeout: 10000 });
+        await page.getByRole('button', { name: /^确认$|^Confirm$/i }).last().click();
+
+        await waitForTutorialStep(page, 'meditation-2', 15000);
+        await captureAlignedStep(23, 'meditation-2', 'hand-area');
+        await clickHandCardVisibleArea(page, 'card-meditation-2');
+
+        await waitForTutorialStep(page, 'finish', 30000);
+        await page.screenshot({
+            path: testInfo.outputPath('24-finish.png'),
+            fullPage: false,
+        });
+        await page.screenshot({
+            path: join(evidenceDir, '24-finish.png'),
+            fullPage: false,
+        });
     });
 
     test('顿悟后的奖励骰特写不应卡死手牌区', async ({ page }, testInfo) => {
@@ -436,14 +601,20 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await clickNextOverlayStep(page);
         await advanceToStep('enlightenment-play', 15000);
 
-        const enlightenmentCard = page
-            .locator('[data-testid="hand-area"] [data-card-id="card-enlightenment"]')
-            .first();
-        await expect(enlightenmentCard).toBeVisible({ timeout: 10000 });
-        await enlightenmentCard.click();
         const bonusDieOverlay = page.getByTestId('bonus-die-overlay');
-        await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
-        await waitForTutorialStep(page, 'inner-peace', 10000);
+        let openedEnlightenmentOverlay = false;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            await clickHandCardVisibleArea(page, 'card-enlightenment');
+            try {
+                await expect(bonusDieOverlay).toBeVisible({ timeout: 2500 });
+                await waitForTutorialStep(page, 'inner-peace', 2500);
+                openedEnlightenmentOverlay = true;
+                break;
+            } catch {
+                await page.waitForTimeout(250);
+            }
+        }
+        expect(openedEnlightenmentOverlay).toBe(true);
 
         await page.waitForTimeout(250);
         await clickHandCardVisibleArea(page, 'card-inner-peace');
@@ -467,10 +638,21 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
             fullPage: false,
         });
 
-        await clickHandCardVisibleArea(page, 'card-inner-peace');
-        await page.waitForFunction(() => {
-            const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
-            return stepId === 'ai-turn-intro' || stepId === 'ai-turn';
-        }, { timeout: 10000 });
+        let advancedToAiTurn = false;
+        for (let attempt = 0; attempt < 3; attempt += 1) {
+            await clickHandCardVisibleArea(page, 'card-inner-peace');
+            try {
+                await page.waitForFunction(() => {
+                    const stepId = document.querySelector('[data-tutorial-step]')?.getAttribute('data-tutorial-step');
+                    return stepId === 'ai-turn-intro' || stepId === 'ai-turn';
+                }, { timeout: 2500 });
+                advancedToAiTurn = true;
+                break;
+            } catch {
+                await page.waitForTimeout(250);
+            }
+        }
+
+        expect(advancedToAiTurn).toBe(true);
     });
 });

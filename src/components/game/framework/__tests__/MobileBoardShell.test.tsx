@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MobileBattlefieldViewport, MobileBoardShell } from '../MobileBoardShell';
 
@@ -76,6 +76,61 @@ describe('MobileBoardShell', () => {
 
         expect(screen.getByTestId('battlefield')).toBeInTheDocument();
         expect(screen.getByTestId('battlefield-stage')).toBeInTheDocument();
+    });
+
+    it('can target pinch-pan transforms to a marked content layer', async () => {
+        render(
+            <MobileBattlefieldViewport
+                zoomMode="shell-pinch-pan"
+                transformTarget="content"
+                testId="battlefield"
+            >
+                <div data-testid="battlefield-target" data-mobile-battlefield-zoom-target="true">
+                    board
+                </div>
+            </MobileBattlefieldViewport>,
+        );
+
+        const viewport = screen.getByTestId('battlefield');
+        const stage = screen.getByTestId('battlefield-stage');
+
+        await waitFor(() => {
+            expect(viewport.getAttribute('data-battlefield-zoom-target-mode')).toBe('content');
+        });
+
+        act(() => {
+            fireEvent.pointerDown(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 120,
+                clientY: 120,
+            });
+            fireEvent.pointerDown(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 220,
+                clientY: 120,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 80,
+                clientY: 120,
+            });
+            fireEvent.pointerMove(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 260,
+                clientY: 120,
+            });
+        });
+
+        expect(stage.className).toContain('mobile-battlefield-viewport__stage--targeted');
+        expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThan(1);
+        expect(stage.style.getPropertyValue('--mobile-battlefield-target-scale')).not.toBe('1');
     });
 
     it('updates battlefield scale when a two-finger touch pointer gesture moves apart on mobile landscape', () => {

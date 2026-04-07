@@ -110,6 +110,12 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
+        const multiDieSize = bonusDice.length >= 5
+            ? '5.2vw'
+            : bonusDice.length >= 4
+                ? '5.8vw'
+                : '6.4vw';
+        const multiDieGap = bonusDice.length >= 5 ? '0.8vw' : '1.2vw';
         // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
         const isInteractive = !displayOnly && canReroll === true;
         bonusDieOverlayLogger.info('render-reroll', {
@@ -129,7 +135,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 disableAutoClose={isInteractive}
                 disableBackdropClose={isInteractive}
                 blockPointerEvents={isInteractive}
-                autoCloseDelay={displayOnly ? 5000 : 3000}
+                autoCloseDelay={autoCloseDelay}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
             >
@@ -150,7 +156,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                     </motion.div>
 
                     {/* 骰子列表 */}
-                    <div className="flex gap-[2vw]">
+                    <div className="flex items-start justify-center" style={{ gap: multiDieGap }}>
                         {bonusDice.map((die) => (
                             <motion.div
                                 key={die.index}
@@ -168,11 +174,13 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                                     value={die.value}
                                     face={die.face}
                                     effectKey={die.effectKey}
+                                    effectParams={die.effectParams}
                                     locale={locale}
-                                    size="7vw"
+                                    size={multiDieSize}
                                     rollingDurationMs={600 + die.index * 100}
                                     characterId={characterId}
                                     compact={true}
+                                    hideEffectText={bonusDice.length > 1}
                                 />
                                 {canReroll && (
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">

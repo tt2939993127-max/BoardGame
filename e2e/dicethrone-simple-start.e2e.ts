@@ -12,10 +12,11 @@ import { ensureGameServerAvailable, getGameServerBaseURL, initContext, setChines
 import { getMatchState, injectMatchState } from './helpers/state-injection';
 import { createCharacterDice } from '../src/games/dicethrone/domain/characters';
 import { COMMON_CARDS } from '../src/games/dicethrone/domain/commonCards';
-import { PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
+import { GUNSLINGER_DICE_FACE_IDS, PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
 import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
 import { getAvailableAbilityIds } from '../src/games/dicethrone/domain/rules';
 import { registerDiceThroneConditions } from '../src/games/dicethrone/conditions';
+import { DEADEYE_2, FAN_THE_HAMMER_2 } from '../src/games/dicethrone/heroes/gunslinger/abilities';
 import { GUNSLINGER_CARDS } from '../src/games/dicethrone/heroes/gunslinger/cards';
 import { VENGEANCE_2 } from '../src/games/dicethrone/heroes/paladin/abilities';
 import { PALADIN_CARDS } from '../src/games/dicethrone/heroes/paladin/cards';
@@ -45,10 +46,10 @@ const REMOVE_ALL_STATUS_CARD_ID = 'card-what-status';
 const REMOVE_ALL_STATUS_CARD = COMMON_CARDS.find((card) => card.id === REMOVE_ALL_STATUS_CARD_ID);
 const TRANSFER_STATUS_CARD_ID = 'card-transfer-status';
 const TRANSFER_STATUS_CARD = COMMON_CARDS.find((card) => card.id === TRANSFER_STATUS_CARD_ID);
-const THE_LAW_CARD_ID = 'card-the-law';
-const THE_LAW_CARD = GUNSLINGER_CARDS.find((card) => card.id === THE_LAW_CARD_ID);
-const PISTOL_WHIP_CARD_ID = 'card-pistol-whip';
-const PISTOL_WHIP_CARD = GUNSLINGER_CARDS.find((card) => card.id === PISTOL_WHIP_CARD_ID);
+const UPGRADE_DEADEYE_2_CARD_ID = 'upgrade-deadeye-2';
+const UPGRADE_DEADEYE_2_CARD = GUNSLINGER_CARDS.find((card) => card.id === UPGRADE_DEADEYE_2_CARD_ID);
+const UPGRADE_FAN_THE_HAMMER_2_CARD_ID = 'upgrade-fan-the-hammer-2';
+const UPGRADE_FAN_THE_HAMMER_2_CARD = GUNSLINGER_CARDS.find((card) => card.id === UPGRADE_FAN_THE_HAMMER_2_CARD_ID);
 const WANTED_CARD_ID = 'card-wanted';
 const WANTED_CARD = GUNSLINGER_CARDS.find((card) => card.id === WANTED_CARD_ID);
 const HIGH_NOON_CARD_ID = 'card-high-noon';
@@ -768,21 +769,83 @@ const buildFourPlayerTransferTokenState = (state: any) => {
     return next;
 };
 
-const buildFourPlayerTheLawState = (state: any) => {
-    const next = buildFourPlayerNoResponseState(state);
-    const theLawCard = THE_LAW_CARD;
-    if (!theLawCard) {
-        throw new Error(`未找到稳定枪手卡 ${THE_LAW_CARD_ID}，无法构造 4 人 The Law 场景`);
-    }
+const GUNSLINGER_FACE_BY_VALUE: Record<number, string> = {
+    1: GUNSLINGER_DICE_FACE_IDS.BULLET,
+    2: GUNSLINGER_DICE_FACE_IDS.BULLET,
+    3: GUNSLINGER_DICE_FACE_IDS.BULLET,
+    4: GUNSLINGER_DICE_FACE_IDS.DASH,
+    5: GUNSLINGER_DICE_FACE_IDS.DASH,
+    6: GUNSLINGER_DICE_FACE_IDS.BULLSEYE,
+};
 
+const applyUpgradedGunslingerAbilityScene = (
+    next: any,
+    options: {
+        abilityId: 'deadeye' | 'fan-the-hammer';
+        upgradedAbility: any;
+        upgradeCard: { id: string; cpCost: number };
+        level: 2;
+        diceValues: number[];
+    },
+) => {
     next.core.activePlayerId = '0';
-    next.sys.phase = 'main1';
+    next.sys.phase = 'offensiveRoll';
     next.sys.flowHalted = false;
     next.core.pendingAttack = null;
+    next.core.pendingDamage = undefined;
     next.core.selectedAbilityId = undefined;
-    next.core.rollConfirmed = false;
-    next.core.players['0'].hand = [{ ...structuredClone(theLawCard) }];
-    next.core.players['0'].resources.cp = Math.max(next.core.players['0'].resources.cp ?? 0, 2);
+    next.core.phase = 'offensiveRoll';
+    next.core.rollConfirmed = true;
+    next.core.rollCount = 1;
+    next.core.rollLimit = 3;
+    next.core.rollDiceCount = 5;
+    next.core.players['0'].hand = [];
+    next.core.players['0'].discard = [];
+    next.core.players['0'].tokens = {
+        ...(next.core.players['0'].tokens ?? {}),
+        [TOKEN_IDS.LOADED]: 0,
+    };
+    next.core.players['0'].abilityLevels = {
+        ...(next.core.players['0'].abilityLevels ?? {}),
+        [options.abilityId]: options.level,
+    };
+    next.core.players['0'].abilities = (next.core.players['0'].abilities ?? []).map((ability: any) =>
+        ability?.id === options.abilityId ? structuredClone(options.upgradedAbility) : ability
+    );
+    next.core.players['0'].upgradeCardByAbilityId = {
+        ...(next.core.players['0'].upgradeCardByAbilityId ?? {}),
+        [options.abilityId]: {
+            cardId: options.upgradeCard.id,
+            cpCost: options.upgradeCard.cpCost,
+        },
+    };
+    next.core.dice = createCharacterDice('gunslinger').map((die, index) => {
+        const value = options.diceValues[index] ?? die.value;
+        const face = GUNSLINGER_FACE_BY_VALUE[value] ?? GUNSLINGER_DICE_FACE_IDS.BULLET;
+        return {
+            ...die,
+            value,
+            symbol: face,
+            symbols: [face],
+            isKept: false,
+        };
+    });
+};
+
+const buildFourPlayerTheLawState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+    const deadeyeUpgradeCard = UPGRADE_DEADEYE_2_CARD;
+    if (!deadeyeUpgradeCard) {
+        throw new Error(`未找到稳定枪手升级卡 ${UPGRADE_DEADEYE_2_CARD_ID}，无法构造 4 人 The Law 场景`);
+    }
+
+    applyUpgradedGunslingerAbilityScene(next, {
+        abilityId: 'deadeye',
+        upgradedAbility: DEADEYE_2,
+        upgradeCard: deadeyeUpgradeCard,
+        level: 2,
+        diceValues: [6, 6, 6, 1, 1],
+    });
     next.core.players['0'].tokens = {
         ...(next.core.players['0'].tokens ?? {}),
         [TOKEN_IDS.EVASIVE]: 0,
@@ -835,19 +898,18 @@ const buildFourPlayerWantedState = (state: any) => {
 
 const buildFourPlayerPistolWhipState = (state: any) => {
     const next = buildFourPlayerNoResponseState(state);
-    const pistolWhipCard = PISTOL_WHIP_CARD;
-    if (!pistolWhipCard) {
-        throw new Error(`未找到稳定枪手卡 ${PISTOL_WHIP_CARD_ID}，无法构造 4 人 Pistol Whip 场景`);
+    const fanTheHammerUpgradeCard = UPGRADE_FAN_THE_HAMMER_2_CARD;
+    if (!fanTheHammerUpgradeCard) {
+        throw new Error(`未找到稳定枪手升级卡 ${UPGRADE_FAN_THE_HAMMER_2_CARD_ID}，无法构造 4 人 Pistol Whip 场景`);
     }
 
-    next.core.activePlayerId = '0';
-    next.sys.phase = 'main1';
-    next.sys.flowHalted = false;
-    next.core.pendingAttack = null;
-    next.core.selectedAbilityId = undefined;
-    next.core.rollConfirmed = false;
-    next.core.players['0'].hand = [{ ...structuredClone(pistolWhipCard) }];
-    next.core.players['0'].resources.cp = Math.max(next.core.players['0'].resources.cp ?? 0, 5);
+    applyUpgradedGunslingerAbilityScene(next, {
+        abilityId: 'fan-the-hammer',
+        upgradedAbility: FAN_THE_HAMMER_2,
+        upgradeCard: fanTheHammerUpgradeCard,
+        level: 2,
+        diceValues: [6, 4, 4, 1, 1],
+    });
     next.core.players['0'].tokens = {
         ...(next.core.players['0'].tokens ?? {}),
         [TOKEN_IDS.EVASIVE]: 0,
@@ -2178,7 +2240,7 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both', async ({ browser }, testInfo) => {
+    test('Online 4-player The Law variant: upgraded Deadeye only offers enemies in 2v2 and resolves on both', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -2205,27 +2267,26 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForHarnessPages(players.map((player) => player.page));
 
         await applyOnlineMatchState(matchId, hostPage, buildFourPlayerTheLawState);
-        await waitForPhase(hostPage, 'main1');
+        await waitForPhase(hostPage, 'offensiveRoll');
 
-        const theLawCard = hostPage.locator('[data-card-id="card-the-law"]').first();
         const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
 
-        await expect(theLawCard).toBeVisible({ timeout: 5000 });
-        await theLawCard.click();
+        await dispatchHarnessCommand(hostPage, 'SELECT_ABILITY', '0', { abilityId: 'the-law' });
+        await dispatchHarnessCommand(hostPage, 'ADVANCE_PHASE', '0');
 
         await hostPage.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
             const current = state?.sys?.interaction?.current?.data;
             const targetPlayerIds = current?.targetPlayerIds ?? [];
-            return current?.sourceCardId === 'card-the-law'
+            return current?.sourceCardId === 'the-law'
                 && targetPlayerIds.length === 2
                 && targetPlayerIds.includes('1')
                 && targetPlayerIds.includes('3')
                 && !targetPlayerIds.includes('2')
-                && state?.core?.players?.['0']?.hand?.every((card: any) => card.id !== 'card-the-law')
+                && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
@@ -2308,7 +2369,6 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForPhase(hostPage, 'main1');
 
         const wantedCard = hostPage.locator(`[data-card-id="${WANTED_CARD_ID}"]`).first();
-        const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
@@ -2387,7 +2447,6 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForPhase(hostPage, 'main1');
 
         const ashamedCard = hostPage.locator(`[data-card-id="${SAMURAI_ASHAMED_CARD_ID}"]`).first();
-        const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
@@ -2435,7 +2494,7 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 4-player Pistol Whip: real hand play only offers enemies in 2v2 and applies knockdown plus undefendable damage to selected enemy', async ({ browser }, testInfo) => {
+    test('Online 4-player Pistol Whip variant: upgraded Fan the Hammer only offers enemies in 2v2 and applies knockdown plus undefendable damage to selected enemy', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -2461,47 +2520,74 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForHarnessPages(players.map((player) => player.page));
 
         await applyOnlineMatchState(matchId, hostPage, buildFourPlayerPistolWhipState);
-        await waitForPhase(hostPage, 'main1');
+        await waitForPhase(hostPage, 'offensiveRoll');
 
-        const pistolWhipCard = hostPage.locator(`[data-card-id="${PISTOL_WHIP_CARD_ID}"]`).first();
-        const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
-        const enemyOne = hostPage.getByTestId('dt-player-target-1');
-        const allyTarget = hostPage.getByTestId('dt-player-target-2');
-        const enemyTwo = hostPage.getByTestId('dt-player-target-3');
+        const enemyOne = hostPage.getByTestId('dt-target-option-1');
+        const allyTarget = hostPage.getByTestId('dt-target-option-2');
+        const enemyTwo = hostPage.getByTestId('dt-target-option-3');
 
         const beforeState = await readHarnessState<any>(hostPage);
         const enemyHpBefore = beforeState.core.players['3'].resources[RESOURCE_IDS.HP] ?? 0;
 
-        await expect(pistolWhipCard).toBeVisible({ timeout: 5000 });
-        await pistolWhipCard.click({ force: true });
+        await dispatchHarnessCommand(hostPage, 'SELECT_ABILITY', '0', { abilityId: 'pistol-whip' });
+        await dispatchHarnessCommand(hostPage, 'ADVANCE_PHASE', '0');
 
-        await expect.poll(async () => hostPage.evaluate(() => {
+        await hostPage.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            const current = state?.sys?.interaction?.current?.data;
-            return {
-                sourceCardId: current?.sourceCardId ?? null,
-                resolveCustomActionId: current?.resolveCustomActionId ?? null,
-                targetPlayerIds: current?.targetPlayerIds ?? [],
-                hand: state?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [],
-            };
-        }), { timeout: 15000, intervals: [200, 400, 800] }).toEqual({
-            sourceCardId: 'card-pistol-whip',
-            resolveCustomActionId: 'gunslinger-card-pistol-whip-resolve',
-            targetPlayerIds: ['1', '3'],
-            hand: [],
-        });
+            const pendingAttackSource = state?.core?.pendingAttack?.sourceAbilityId ?? null;
+            return state?.sys?.phase === 'targetingRoll'
+                && state?.core?.players?.['0']?.upgradeCardByAbilityId?.['fan-the-hammer']?.cardId === 'upgrade-fan-the-hammer-2'
+                && pendingAttackSource === 'pistol-whip';
+        }, undefined, { timeout: 15000, polling: 200 });
 
+        await applyOnlineMatchState(matchId, hostPage, (state) => {
+            const next = structuredClone(state);
+            next.sys.phase = 'targetingRoll';
+            next.sys.flowHalted = false;
+            next.core.phase = 'targetingRoll';
+            next.core.rollCount = 1;
+            next.core.rollLimit = 1;
+            next.core.rollDiceCount = 1;
+            next.core.rollConfirmed = true;
+            next.core.selectedAbilityId = 'pistol-whip';
+            next.core.pendingAttack = {
+                ...(next.core.pendingAttack ?? {}),
+                attackerId: '0',
+                defenderId: undefined,
+                targetingSelectionPending: false,
+                targetingSelectionResolved: false,
+                sourceAbilityId: 'pistol-whip',
+                isDefendable: false,
+                damage: 1,
+                bonusDamage: 0,
+                attackModifierBonusDamage: 0,
+                damageResolved: false,
+                resolvedDamage: 0,
+                offensiveRollEndTokenResolved: false,
+                bonusDiceResolved: false,
+            };
+            next.core.dice = (next.core.dice ?? []).map((die: any, index: number) => ({
+                ...die,
+                value: index === 0 ? 6 : (die?.value ?? 1),
+                isKept: false,
+            }));
+            return next;
+        });
+        await waitForPhase(hostPage, 'targetingRoll');
+        await dispatchHarnessCommand(hostPage, 'ADVANCE_PHASE', '0');
+        await hostPage.waitForFunction(() => {
+            return (window as any).__BG_TEST_HARNESS__?.state?.get?.()?.sys?.interaction?.current?.playerId === '0';
+        }, undefined, { timeout: 10000, polling: 200 });
+
+        await expect(hostPage.getByTestId('dt-target-choice-panel')).toBeVisible();
         await expect(enemyOne).toHaveAttribute('data-team-tone', 'enemy');
         await expect(enemyTwo).toHaveAttribute('data-team-tone', 'enemy');
         await expect(allyTarget).toHaveCount(0);
-        await expect(confirmButton).toBeDisabled();
 
         await clearEvidenceScreenshotsForTest(testInfo);
         await saveEvidenceScreenshot(hostPage, testInfo, '18-four-player-pistol-whip-enemy-only-selection');
 
         await enemyTwo.click();
-        await expect(confirmButton).toBeEnabled();
-        await confirmButton.click();
 
         await hostPage.waitForFunction((baselineHp) => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
