@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { 
     setupCardiaTestScenario,
     readCoreState,
@@ -82,35 +82,20 @@ test.describe('Cardia 一号牌组 - 伏击者', () => {
             
             console.log('\n=== 阶段2：激活能力 ===');
             
-            // 使用 dispatch 手动触发能力
-            await setup.player1Page.evaluate(async ({ abilityId, cardUid }) => {
-                const dispatch = (window as any).__BG_DISPATCH__;
-                if (!dispatch) {
-                    throw new Error('__BG_DISPATCH__ not found');
-                }
-                
-                const result = await dispatch('cardia:activate_ability', {
-                    abilityId,
-                    sourceCardUid: cardUid,
-                });
-                
-                console.log('[Test] ACTIVATE_ABILITY result:', result);
-            }, {
-                abilityId: ABILITY_IDS.AMBUSHER,
-                cardUid: ambusherCard.uid,
-            });
-            
+            console.log('激活伏击者能力', ambusherCard.uid);
+            const abilityButton = setup.player1Page.locator('[data-testid="cardia-activate-ability-btn"]');
+            await abilityButton.waitFor({ state: 'visible', timeout: 5000 });
+            await abilityButton.click();
             await setup.player1Page.waitForTimeout(1000);
             console.log('✅ 伏击者能力已激活');
             
             // 等待派系选择弹窗出现
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="faction-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 派系选择弹窗已显示');
             
             // 选择 Academy 派系（P2 手牌中有 1 张 Academy 派系的牌）
-            const factionButtons = modal.locator('button');
-            const academyButton = factionButtons.nth(1); // 第二个是 Academy
+            const academyButton = modal.locator('[data-testid="faction-option-academy"]');
             await academyButton.click();
             await setup.player1Page.waitForTimeout(500);
             console.log('✅ 已选择 Academy 派系');
@@ -214,34 +199,19 @@ test.describe('Cardia 一号牌组 - 伏击者', () => {
             
             console.log('\n=== 阶段2：激活能力并选择 Academy 派系 ===');
             
-            // 使用 dispatch 手动触发能力
-            await setup.player1Page.evaluate(async ({ abilityId, cardUid }) => {
-                const dispatch = (window as any).__BG_DISPATCH__;
-                if (!dispatch) {
-                    throw new Error('__BG_DISPATCH__ not found');
-                }
-                
-                const result = await dispatch('cardia:activate_ability', {
-                    abilityId,
-                    sourceCardUid: cardUid,
-                });
-                
-                console.log('[Test] ACTIVATE_ABILITY result:', result);
-            }, {
-                abilityId: ABILITY_IDS.AMBUSHER,
-                cardUid: ambusherCard.uid,
-            });
-            
+            console.log('激活伏击者能力', ambusherCard.uid);
+            const abilityButton = setup.player1Page.locator('[data-testid="cardia-activate-ability-btn"]');
+            await abilityButton.waitFor({ state: 'visible', timeout: 5000 });
+            await abilityButton.click();
             await setup.player1Page.waitForTimeout(1000);
             
             // 等待派系选择弹窗出现
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="faction-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 派系选择弹窗已显示');
             
             // 选择 Academy 派系（P2 手牌中没有 Academy 派系）
-            const factionButtons = modal.locator('button');
-            const academyButton = factionButtons.nth(1); // 第二个是 Academy
+            const academyButton = modal.locator('[data-testid="faction-option-academy"]');
             await academyButton.click();
             await setup.player1Page.waitForTimeout(500);
             console.log('✅ 已选择 Academy 派系');
@@ -338,34 +308,19 @@ test.describe('Cardia 一号牌组 - 伏击者', () => {
             
             console.log('\n=== 阶段2：激活能力并选择 Academy 派系 ===');
             
-            // 使用 dispatch 手动触发能力
-            await setup.player1Page.evaluate(async ({ abilityId, cardUid }) => {
-                const dispatch = (window as any).__BG_DISPATCH__;
-                if (!dispatch) {
-                    throw new Error('__BG_DISPATCH__ not found');
-                }
-                
-                const result = await dispatch('cardia:activate_ability', {
-                    abilityId,
-                    sourceCardUid: cardUid,
-                });
-                
-                console.log('[Test] ACTIVATE_ABILITY result:', result);
-            }, {
-                abilityId: ABILITY_IDS.AMBUSHER,
-                cardUid: ambusherCard.uid,
-            });
-            
+            console.log('激活伏击者能力', ambusherCard.uid);
+            const abilityButton = setup.player1Page.locator('[data-testid="cardia-activate-ability-btn"]');
+            await abilityButton.waitFor({ state: 'visible', timeout: 5000 });
+            await abilityButton.click();
             await setup.player1Page.waitForTimeout(1000);
             
             // 等待派系选择弹窗出现
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="faction-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 派系选择弹窗已显示');
             
             // 选择 Academy 派系（P2 手牌中有 3 张 Academy 派系）
-            const factionButtons = modal.locator('button');
-            const academyButton = factionButtons.nth(1); // 第二个是 Academy
+            const academyButton = modal.locator('[data-testid="faction-option-academy"]');
             await academyButton.click();
             await setup.player1Page.waitForTimeout(500);
             console.log('✅ 已选择 Academy 派系');
@@ -461,34 +416,19 @@ test.describe('Cardia 一号牌组 - 伏击者', () => {
             
             console.log('\n=== 阶段2：激活能力并选择 Guild 派系 ===');
             
-            // 使用 dispatch 手动触发能力
-            await setup.player1Page.evaluate(async ({ abilityId, cardUid }) => {
-                const dispatch = (window as any).__BG_DISPATCH__;
-                if (!dispatch) {
-                    throw new Error('__BG_DISPATCH__ not found');
-                }
-                
-                const result = await dispatch('cardia:activate_ability', {
-                    abilityId,
-                    sourceCardUid: cardUid,
-                });
-                
-                console.log('[Test] ACTIVATE_ABILITY result:', result);
-            }, {
-                abilityId: ABILITY_IDS.AMBUSHER,
-                cardUid: ambusherCard.uid,
-            });
-            
+            console.log('激活伏击者能力', ambusherCard.uid);
+            const abilityButton = setup.player1Page.locator('[data-testid="cardia-activate-ability-btn"]');
+            await abilityButton.waitFor({ state: 'visible', timeout: 5000 });
+            await abilityButton.click();
             await setup.player1Page.waitForTimeout(1000);
             
             // 等待派系选择弹窗出现
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="faction-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 派系选择弹窗已显示');
             
             // 选择 Guild 派系（P2 手牌中有 1 张 Guild 派系）
-            const factionButtons = modal.locator('button');
-            const guildButton = factionButtons.nth(2); // 第三个是 Guild
+            const guildButton = modal.locator('[data-testid="faction-option-guild"]');
             await guildButton.click();
             await setup.player1Page.waitForTimeout(500);
             console.log('✅ 已选择 Guild 派系');

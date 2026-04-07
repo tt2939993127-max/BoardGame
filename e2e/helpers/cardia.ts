@@ -404,6 +404,9 @@ export interface CardiaTestScenario {
     
     /** 游戏阶段（默认 'play'） */
     phase?: 'play' | 'ability' | 'end';
+
+    /** 可选：期望的当前/下一遭遇索引；未指定时由 helper 自动推导 */
+    turnNumber?: number;
     
     /** 修正标记（可选） */
     modifierTokens?: ModifierToken[];
@@ -419,6 +422,8 @@ export interface CardiaTestScenario {
         player1Influence: number;
         player2Influence: number;
         winnerId?: string;
+        /** 可选：当前遭遇索引；多回合场景下建议显式传入 */
+        encounterIndex?: number;
     };
 }
 
@@ -701,9 +706,34 @@ async function buildStateFromScenario(
         // 从 playedCards 中查找对应的卡牌实例
         const p1Cards = player1State.playedCards as Array<Record<string, unknown>>;
         const p2Cards = player2State.playedCards as Array<Record<string, unknown>>;
-        
-        const player1Card = p1Cards && p1Cards.length > 0 ? p1Cards[0] : null;
-        const player2Card = p2Cards && p2Cards.length > 0 ? p2Cards[0] : null;
+
+        const requestedEncounterIndex =
+            typeof scenario.currentEncounter.encounterIndex === 'number'
+                ? scenario.currentEncounter.encounterIndex
+                : typeof scenario.turnNumber === 'number'
+                  ? scenario.turnNumber
+                  : undefined;
+
+        const resolveCurrentEncounterIndex = () => {
+            if (typeof requestedEncounterIndex === 'number') {
+                const hasRequestedEncounter =
+                    p1Cards.some(card => card.encounterIndex === requestedEncounterIndex) ||
+                    p2Cards.some(card => card.encounterIndex === requestedEncounterIndex);
+                if (hasRequestedEncounter) {
+                    return requestedEncounterIndex;
+                }
+            }
+            return Math.max(
+                ...[
+                    ...p1Cards.map(card => Number(card.encounterIndex ?? -1)),
+                    ...p2Cards.map(card => Number(card.encounterIndex ?? -1)),
+                ]
+            );
+        };
+
+        const resolvedEncounterIndex = resolveCurrentEncounterIndex();
+        const player1Card = p1Cards.find(card => card.encounterIndex === resolvedEncounterIndex) ?? null;
+        const player2Card = p2Cards.find(card => card.encounterIndex === resolvedEncounterIndex) ?? null;
         
         if (player1Card && player2Card) {
             const winnerId = scenario.currentEncounter.winnerId;
@@ -720,7 +750,11 @@ async function buildStateFromScenario(
         }
     }
     
-    // 8. 自动计算 turnNumber（基于已打出牌的最大 encounterIndex）
+    // 8. 自动计算 turnNumber
+    // 规则：
+    // - play 阶段：turnNumber 指向“下一次遭遇”的索引，因此取 maxEncounterIndex + 1
+    // - ability / end 阶段：turnNumber 仍指向“当前遭遇”的索引，必须与 currentEncounter 对应卡牌的 encounterIndex 一致
+    //   否则 Board 无法从 playedCards 中定位当前失败方卡牌，能力按钮不会显示
     const allPlayedCards = [
         ...(player1State.playedCards as Array<Record<string, unknown>>),
         ...(player2State.playedCards as Array<Record<string, unknown>>),
@@ -729,10 +763,23 @@ async function buildStateFromScenario(
         const encounterIndex = card.encounterIndex as number;
         return encounterIndex > max ? encounterIndex : max;
     }, -1);
-    
-    // turnNumber 应该是下一个遭遇的序号（maxEncounterIndex + 1）
-    // 但如果没有已打出的牌，turnNumber 应该是 0
-    state.turnNumber = maxEncounterIndex >= 0 ? maxEncounterIndex + 1 : 0;
+
+    const currentEncounterRecord = state.currentEncounter as Record<string, unknown> | undefined;
+    const currentEncounterPlayer1Card = currentEncounterRecord?.player1Card as Record<string, unknown> | undefined;
+    const currentEncounterPlayer2Card = currentEncounterRecord?.player2Card as Record<string, unknown> | undefined;
+    const currentEncounterIndex =
+        typeof currentEncounterPlayer1Card?.encounterIndex === 'number'
+            ? currentEncounterPlayer1Card.encounterIndex
+            : typeof currentEncounterPlayer2Card?.encounterIndex === 'number'
+              ? currentEncounterPlayer2Card.encounterIndex
+              : undefined;
+
+    if ((scenario.phase === 'ability' || scenario.phase === 'end') && typeof currentEncounterIndex === 'number') {
+        state.turnNumber = currentEncounterIndex;
+    } else {
+        // play 阶段默认指向“下一次遭遇”的序号；如果没有已打出的牌，则从 0 开始
+        state.turnNumber = maxEncounterIndex >= 0 ? maxEncounterIndex + 1 : 0;
+    }
     
     return state;
 }
