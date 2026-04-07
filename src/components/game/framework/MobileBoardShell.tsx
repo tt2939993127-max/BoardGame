@@ -164,9 +164,10 @@ export const MobileBattlefieldViewport = ({
     const pinchRef = useRef<PinchState | null>(null);
     const panRef = useRef<PanState | null>(null);
     const suppressClickUntilRef = useRef(0);
-    const transformRef = useRef<TransformState>({ scale: MIN_SCALE, x: 0, y: 0 });
+    const initialTransform: TransformState = { scale: MIN_SCALE, x: 0, y: 0 };
+    const transformRef = useRef<TransformState>(initialTransform);
 
-    const [transform, setTransform] = useState<TransformState>(transformRef.current);
+    const [transform, setTransform] = useState<TransformState>(initialTransform);
     const isLandscapeMobileViewport = useLandscapeMobileViewport();
     const isEnabled = zoomMode === 'shell-pinch-pan' && isLandscapeMobileViewport;
     const shouldLockTouchGestures = isEnabled && transform.scale > MIN_SCALE;
