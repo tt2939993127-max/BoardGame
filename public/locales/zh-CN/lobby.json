@@ -386,6 +386,8 @@
     "createRoomForbidden": "当前权限不足，无法创建房间。",
     "createRoomNotFound": "游戏服务未找到该游戏，请刷新页面后重试。",
     "createRoomRequestSize": "请求数据异常，请刷新页面后再试。",
+    "createRoomErrorCodeOnly": "（错误码：{{code}}）",
+    "createRoomErrorCodeWithStatus": "（错误码：{{code}} / 状态码：{{status}}）",
     "activeMatchStale": "检测到旧房间已失效，已自动清理，现在可以重新创建房间。",
     "destroyForbidden": "无法销毁房间：凭证无效或已失效，请重新进入房间后再试。",
     "destroyNetwork": "销毁房间失败：网络或服务异常，请稍后重试。",

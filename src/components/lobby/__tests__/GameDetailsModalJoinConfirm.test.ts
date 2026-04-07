@@ -174,7 +174,15 @@ const setWebRuntime = () => {
 
 vi.mock('react-i18next', () => ({
     useTranslation: () => ({
-        t: (key: string) => key,
+        t: (key: string, options?: Record<string, unknown>) => {
+            if (key === 'error.createRoomErrorCodeWithStatus') {
+                return `（错误码：${String(options?.code ?? '')} / 状态码：${String(options?.status ?? '')}）`;
+            }
+            if (key === 'error.createRoomErrorCodeOnly') {
+                return `（错误码：${String(options?.code ?? '')}）`;
+            }
+            return key;
+        },
         i18n: {
             language: 'zh-CN',
             hasLoadedNamespace: () => true,
@@ -1397,6 +1405,32 @@ describe('GameDetailsModal create room ai entry', () => {
 
         await waitFor(() => {
             expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-created?playerID=0');
+        });
+    });
+
+    it('创建房间失败时 toast 会显示错误码和状态码', async () => {
+        markGamePackageInstalled();
+        const error = Object.assign(new Error('401: Invalid token'), {
+            status: 401,
+            details: 'Invalid token',
+            code: 'INVALID_TOKEN',
+        });
+        vi.spyOn(matchApi, 'createMatch').mockRejectedValueOnce(error);
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('mock-create-room-confirm'));
+
+        await waitFor(() => {
+            expect(toastMock.error).toHaveBeenCalledWith(
+                'error.createRoomInvalidToken （错误码：INVALID_TOKEN / 状态码：401）',
+                { kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' },
+                { dedupeKey: 'create-room-failed.INVALID_TOKEN.401' },
+            );
         });
     });
 

@@ -834,9 +834,15 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         expect(Math.abs((endTurnButtonBoxAfterZoom?.y ?? 0) - (endTurnButtonBoxBeforeZoom?.y ?? 0)), '结束回合按钮不应跟随战场一起纵向漂移').toBeLessThan(4);
         await game.screenshot('04d-mobile-battlefield-pinch-zoom', testInfo);
 
+        const translateXBeforePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
         await panTouch(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
+        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
         const pannedSecondBaseBox = await secondBase.boundingBox();
         expect(pannedSecondBaseBox, '战场平移后的基地应提供尺寸').not.toBeNull();
+        expect(
+            Math.abs(translateXAfterPan - translateXBeforePan),
+            `拖拽后 viewport translateX 应明显变化（before=${translateXBeforePan}, after=${translateXAfterPan}）`,
+        ).toBeGreaterThan(8);
         expect(
             Math.abs((pannedSecondBaseBox?.x ?? 0) - (zoomedSecondBaseBox?.x ?? 0)),
             '拖拽平移后基地在屏幕中的横向位置应明显变化',

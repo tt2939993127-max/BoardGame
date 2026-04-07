@@ -2849,13 +2849,16 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 <MobileBattlefieldViewport
                     zoomMode={SMASH_UP_MANIFEST.mobileBattlefieldZoom}
                     transformTarget="content"
+                    visibleInsets={{
+                        top: layout.hudTopOffset,
+                        bottom: layout.handAreaHeight,
+                    }}
                     className="absolute inset-0 z-10"
                     testId="su-battlefield-viewport"
                 >
                     <div
                         className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden no-scrollbar"
                         data-testid="su-battlefield-zoom-target"
-                        data-mobile-battlefield-zoom-target="true"
                         data-tutorial-id="su-base-area"
                         style={{
                             paddingTop: `${layout.boardPaddingTop}px`,
@@ -2864,6 +2867,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     >
                         <div
                             className="flex items-center min-w-max"
+                            data-mobile-battlefield-zoom-target="true"
                             style={{
                                 gap: `${layout.baseGap}vw`,
                                 paddingInline: `${layout.boardHorizontalPadding}px`,

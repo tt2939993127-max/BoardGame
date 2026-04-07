@@ -4,7 +4,6 @@ import {
     isValidElement,
     useCallback,
     useEffect,
-    useMemo,
     useRef,
     useState,
     type CSSProperties,
@@ -28,10 +27,18 @@ interface MobileBattlefieldViewportProps {
     children: ReactNode;
     zoomMode?: GameMobileBattlefieldZoom;
     transformTarget?: 'surface' | 'content';
+    visibleInsets?: Partial<ViewportInsets>;
     className?: string;
     style?: CSSProperties;
     testId?: string;
 }
+
+type ViewportInsets = {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+};
 
 type ZoomTargetElementProps = {
     className?: string;
@@ -55,12 +62,22 @@ type ZoomTargetElementProps = {
 
 type Point = { clientX: number; clientY: number };
 type TransformState = { scale: number; x: number; y: number };
+type TransformMetrics = {
+    width: number;
+    height: number;
+    left: number;
+    top: number;
+    visibleLeft: number;
+    visibleTop: number;
+    visibleRight: number;
+    visibleBottom: number;
+};
 type PinchState = {
     startDistance: number;
     startScale: number;
-    startX: number;
-    startY: number;
-    startCenterLocal: { x: number; y: number };
+    targetLeft: number;
+    targetTop: number;
+    startCenterTargetLocal: { x: number; y: number };
 };
 type PanState = {
     pointerId: number;
@@ -75,6 +92,12 @@ const MAX_SCALE = 2.5;
 const PAN_THRESHOLD_LOCAL_PX = 10;
 const CLICK_SUPPRESS_MS = 320;
 const ZOOM_TARGET_SELECTOR = '[data-mobile-battlefield-zoom-target="true"]';
+
+type BattlefieldTargetStyle = CSSProperties & {
+    '--mobile-battlefield-target-translate-x'?: string;
+    '--mobile-battlefield-target-translate-y'?: string;
+    '--mobile-battlefield-target-scale'?: string;
+};
 
 const getDistance = (a: Point, b: Point) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
 
@@ -93,32 +116,122 @@ const getLocalPoint = (surface: HTMLElement, clientX: number, clientY: number) =
     };
 };
 
+const normalizeInsets = (insets?: Partial<ViewportInsets>): ViewportInsets => ({
+    top: Math.max(0, insets?.top ?? 0),
+    right: Math.max(0, insets?.right ?? 0),
+    bottom: Math.max(0, insets?.bottom ?? 0),
+    left: Math.max(0, insets?.left ?? 0),
+});
+
+const getOffsetWithinSurface = (
+    node: HTMLElement,
+    surface: HTMLElement,
+) => {
+    if (node === surface) {
+        return { left: 0, top: 0 };
+    }
+
+    const surfaceRect = surface.getBoundingClientRect();
+    const offsetParent = node.offsetParent instanceof HTMLElement ? node.offsetParent : surface;
+    const offsetParentRect = offsetParent.getBoundingClientRect();
+    const anchorLeft = offsetParent === surface ? 0 : offsetParentRect.left - surfaceRect.left;
+    const anchorTop = offsetParent === surface ? 0 : offsetParentRect.top - surfaceRect.top;
+
+    return {
+        left: anchorLeft + node.offsetLeft - offsetParent.scrollLeft,
+        top: anchorTop + node.offsetTop - offsetParent.scrollTop,
+    };
+};
+
+const clampAxis = (min: number, max: number, nextValue: number) => {
+    if (min > max) {
+        return (min + max) / 2;
+    }
+
+    return Math.min(max, Math.max(min, nextValue));
+};
+
+const resolveTransformMetrics = (
+    surface: HTMLElement | null,
+    target: HTMLElement | null,
+    insets?: Partial<ViewportInsets>,
+): TransformMetrics | null => {
+    if (!surface || !target) {
+        return null;
+    }
+
+    const normalizedInsets = normalizeInsets(insets);
+    const { left, top } = getOffsetWithinSurface(target, surface);
+    const logicalWidthAnchor = target.offsetParent instanceof HTMLElement ? target.offsetParent : surface;
+    const width = Math.max(
+        target.scrollWidth,
+        target.offsetWidth,
+        target.clientWidth,
+        logicalWidthAnchor.scrollWidth,
+        logicalWidthAnchor.clientWidth,
+        1,
+    );
+    const height = Math.max(target.scrollHeight, target.offsetHeight, target.clientHeight, 1);
+    const visibleLeft = normalizedInsets.left;
+    const visibleTop = normalizedInsets.top;
+    const visibleRight = Math.max(visibleLeft + 1, surface.clientWidth - normalizedInsets.right);
+    const visibleBottom = Math.max(visibleTop + 1, surface.clientHeight - normalizedInsets.bottom);
+
+    return {
+        width,
+        height,
+        left,
+        top,
+        visibleLeft,
+        visibleTop,
+        visibleRight,
+        visibleBottom,
+    };
+};
+
 const clampTransform = (
     surface: HTMLElement | null,
+    target: HTMLElement | null,
     next: TransformState,
+    insets?: Partial<ViewportInsets>,
 ): TransformState => {
     const normalizedScale = next.scale <= 1.001 ? MIN_SCALE : next.scale;
-    if (!surface || normalizedScale === MIN_SCALE) {
+    if (!surface || !target || normalizedScale === MIN_SCALE) {
         return { scale: MIN_SCALE, x: 0, y: 0 };
     }
 
-    const width = Math.max(surface.clientWidth, 1);
-    const height = Math.max(surface.clientHeight, 1);
-    const minX = width * (1 - normalizedScale);
-    const minY = height * (1 - normalizedScale);
+    const metrics = resolveTransformMetrics(surface, target, insets);
+    if (!metrics) {
+        return { scale: MIN_SCALE, x: 0, y: 0 };
+    }
+
+    const minX = metrics.visibleRight - metrics.left - (metrics.width * normalizedScale);
+    const maxX = metrics.visibleLeft - metrics.left;
+    const minY = metrics.visibleBottom - metrics.top - (metrics.height * normalizedScale);
+    const maxY = metrics.visibleTop - metrics.top;
 
     return {
         scale: normalizedScale,
-        x: Math.min(0, Math.max(minX, next.x)),
-        y: Math.min(0, Math.max(minY, next.y)),
+        x: clampAxis(minX, maxX, next.x),
+        y: clampAxis(minY, maxY, next.y),
+    };
+};
+
+const getTargetLocalPoint = (surface: HTMLElement, target: HTMLElement, transform: TransformState, clientX: number, clientY: number) => {
+    const surfacePoint = getLocalPoint(surface, clientX, clientY);
+    const { left, top } = getOffsetWithinSurface(target, surface);
+    const safeScale = Math.max(transform.scale, MIN_SCALE);
+
+    return {
+        x: (surfacePoint.x - left - transform.x) / safeScale,
+        y: (surfacePoint.y - top - transform.y) / safeScale,
+        left,
+        top,
+        surfacePoint,
     };
 };
 
 const joinClassNames = (...values: Array<string | undefined | false | null>) => values.filter(Boolean).join(' ');
-
-const callHandler = <TEvent,>(handler: ((event: TEvent) => void) | undefined, event: TEvent) => {
-    handler?.(event);
-};
 
 const useLandscapeMobileViewport = () => {
     const [isLandscapeMobileViewport, setIsLandscapeMobileViewport] = useState(() => {
@@ -189,17 +302,21 @@ export const MobileBattlefieldViewport = ({
     children,
     zoomMode = 'none',
     transformTarget = 'surface',
+    visibleInsets,
     className = '',
     style,
     testId = 'mobile-battlefield-viewport',
 }: MobileBattlefieldViewportProps) => {
     const surfaceRef = useRef<HTMLElement | null>(null);
+    const contentTargetRef = useRef<HTMLElement | null>(null);
     const pointersRef = useRef(new Map<number, Point>());
     const pinchRef = useRef<PinchState | null>(null);
     const panRef = useRef<PanState | null>(null);
     const suppressClickUntilRef = useRef(0);
     const initialTransform: TransformState = { scale: MIN_SCALE, x: 0, y: 0 };
     const transformRef = useRef<TransformState>(initialTransform);
+    const hasDedicatedZoomTargetRef = useRef(false);
+    const visibleInsetsRef = useRef<Partial<ViewportInsets> | undefined>(visibleInsets);
 
     const [transform, setTransform] = useState<TransformState>(initialTransform);
     const isLandscapeMobileViewport = useLandscapeMobileViewport();
@@ -209,14 +326,10 @@ export const MobileBattlefieldViewport = ({
     const singleChild = childCount === 1 ? Children.only(children) : null;
     const hasDedicatedZoomTarget = transformTarget === 'content' && isValidElement<ZoomTargetElementProps>(singleChild);
 
-    const updateTransform = useCallback((updater: TransformState | ((current: TransformState) => TransformState)) => {
-        setTransform((current) => {
-            const resolved = typeof updater === 'function' ? updater(current) : updater;
-            const clamped = clampTransform(surfaceRef.current, resolved);
-            transformRef.current = clamped;
-            return clamped;
-        });
-    }, []);
+    useEffect(() => {
+        hasDedicatedZoomTargetRef.current = hasDedicatedZoomTarget;
+        visibleInsetsRef.current = visibleInsets;
+    }, [hasDedicatedZoomTarget, visibleInsets]);
 
     useEffect(() => {
         if (isEnabled) {
@@ -230,6 +343,21 @@ export const MobileBattlefieldViewport = ({
         transformRef.current = { scale: MIN_SCALE, x: 0, y: 0 };
         setTransform(transformRef.current);
     }, [isEnabled]);
+
+    useEffect(() => {
+        if (!hasDedicatedZoomTarget) {
+            contentTargetRef.current = null;
+            return;
+        }
+
+        const surface = surfaceRef.current;
+        if (!surface) {
+            contentTargetRef.current = null;
+            return;
+        }
+
+        contentTargetRef.current = surface.querySelector<HTMLElement>(ZOOM_TARGET_SELECTOR) ?? surface;
+    }, [children, hasDedicatedZoomTarget]);
 
     const beginPanFromPointer = useCallback((pointerId: number, point: Point) => {
         if (!surfaceRef.current || transformRef.current.scale <= MIN_SCALE) {
@@ -251,16 +379,23 @@ export const MobileBattlefieldViewport = ({
 
         if (pointersRef.current.size >= 2 && surfaceRef.current) {
             const [first, second] = Array.from(pointersRef.current.values());
+            const activeTarget = hasDedicatedZoomTargetRef.current ? contentTargetRef.current : surfaceRef.current;
+            if (!activeTarget) {
+                return false;
+            }
+            const center = getTargetLocalPoint(
+                surfaceRef.current,
+                activeTarget,
+                transformRef.current,
+                (first.clientX + second.clientX) / 2,
+                (first.clientY + second.clientY) / 2,
+            );
             pinchRef.current = {
                 startDistance: Math.max(getDistance(first, second), 1),
                 startScale: transformRef.current.scale,
-                startX: transformRef.current.x,
-                startY: transformRef.current.y,
-                startCenterLocal: getLocalPoint(
-                    surfaceRef.current,
-                    (first.clientX + second.clientX) / 2,
-                    (first.clientY + second.clientY) / 2,
-                ),
+                targetLeft: center.left,
+                targetTop: center.top,
+                startCenterTargetLocal: { x: center.x, y: center.y },
             };
             panRef.current = null;
             return true;
@@ -283,17 +418,27 @@ export const MobileBattlefieldViewport = ({
 
         if (pointersRef.current.size >= 2) {
             const [first, second] = Array.from(pointersRef.current.values());
-            const pinch = pinchRef.current ?? {
-                startDistance: Math.max(getDistance(first, second), 1),
-                startScale: transformRef.current.scale,
-                startX: transformRef.current.x,
-                startY: transformRef.current.y,
-                startCenterLocal: getLocalPoint(
+            const activeTarget = hasDedicatedZoomTargetRef.current ? contentTargetRef.current : surfaceRef.current;
+            if (!activeTarget) {
+                return false;
+            }
+
+            const pinch = pinchRef.current ?? (() => {
+                const center = getTargetLocalPoint(
                     surfaceRef.current,
+                    activeTarget,
+                    transformRef.current,
                     (first.clientX + second.clientX) / 2,
                     (first.clientY + second.clientY) / 2,
-                ),
-            };
+                );
+                return {
+                    startDistance: Math.max(getDistance(first, second), 1),
+                    startScale: transformRef.current.scale,
+                    targetLeft: center.left,
+                    targetTop: center.top,
+                    startCenterTargetLocal: { x: center.x, y: center.y },
+                } satisfies PinchState;
+            })();
             pinchRef.current = pinch;
 
             const currentCenterLocal = getLocalPoint(
@@ -302,12 +447,15 @@ export const MobileBattlefieldViewport = ({
                 (first.clientY + second.clientY) / 2,
             );
             const nextScale = clampScale(pinch.startScale * (getDistance(first, second) / pinch.startDistance));
-            const scaleRatio = nextScale / pinch.startScale;
 
-            updateTransform({
-                scale: nextScale,
-                x: currentCenterLocal.x - (pinch.startCenterLocal.x - pinch.startX) * scaleRatio,
-                y: currentCenterLocal.y - (pinch.startCenterLocal.y - pinch.startY) * scaleRatio,
+            setTransform(() => {
+                const clamped = clampTransform(surfaceRef.current, activeTarget, {
+                    scale: nextScale,
+                    x: currentCenterLocal.x - pinch.targetLeft - pinch.startCenterTargetLocal.x * nextScale,
+                    y: currentCenterLocal.y - pinch.targetTop - pinch.startCenterTargetLocal.y * nextScale,
+                }, visibleInsetsRef.current);
+                transformRef.current = clamped;
+                return clamped;
             });
 
             suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
@@ -330,13 +478,18 @@ export const MobileBattlefieldViewport = ({
 
         pan.moved = true;
         suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
-        updateTransform({
-            scale: transformRef.current.scale,
-            x: pan.startX + deltaX,
-            y: pan.startY + deltaY,
+        setTransform(() => {
+            const activeTarget = hasDedicatedZoomTargetRef.current ? contentTargetRef.current : surfaceRef.current;
+            const clamped = clampTransform(surfaceRef.current, activeTarget, {
+                scale: transformRef.current.scale,
+                x: pan.startX + deltaX,
+                y: pan.startY + deltaY,
+            }, visibleInsetsRef.current);
+            transformRef.current = clamped;
+            return clamped;
         });
         return true;
-    }, [updateTransform]);
+    }, []);
 
     const finishPointer = useCallback((pointerId: number) => {
         const point = pointersRef.current.get(pointerId);
@@ -352,16 +505,23 @@ export const MobileBattlefieldViewport = ({
                 return;
             }
             const [first, second] = Array.from(pointersRef.current.values());
+            const activeTarget = hasDedicatedZoomTargetRef.current ? contentTargetRef.current : surfaceRef.current;
+            if (!activeTarget) {
+                return;
+            }
+            const center = getTargetLocalPoint(
+                surfaceRef.current,
+                activeTarget,
+                transformRef.current,
+                (first.clientX + second.clientX) / 2,
+                (first.clientY + second.clientY) / 2,
+            );
             pinchRef.current = {
                 startDistance: Math.max(getDistance(first, second), 1),
                 startScale: transformRef.current.scale,
-                startX: transformRef.current.x,
-                startY: transformRef.current.y,
-                startCenterLocal: getLocalPoint(
-                    surfaceRef.current,
-                    (first.clientX + second.clientX) / 2,
-                    (first.clientY + second.clientY) / 2,
-                ),
+                targetLeft: center.left,
+                targetTop: center.top,
+                startCenterTargetLocal: { x: center.x, y: center.y },
             };
             panRef.current = null;
             return;
@@ -467,33 +627,27 @@ export const MobileBattlefieldViewport = ({
     }, []);
 
     const hasActiveTransform = transform.scale > MIN_SCALE || Math.abs(transform.x) > 0.001 || Math.abs(transform.y) > 0.001;
-    const targetStyle = useMemo<CSSProperties>(() => ({
-        ...(hasDedicatedZoomTarget && hasActiveTransform ? {
-            transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
-            transformOrigin: '0 0',
-            willChange: 'transform',
+    const targetStyle: BattlefieldTargetStyle = {
+        ...(hasDedicatedZoomTarget ? {
+            '--mobile-battlefield-target-translate-x': `${transform.x}px`,
+            '--mobile-battlefield-target-translate-y': `${transform.y}px`,
+            '--mobile-battlefield-target-scale': `${transform.scale}`,
         } : {}),
-    }), [hasActiveTransform, hasDedicatedZoomTarget, transform.scale, transform.x, transform.y]);
+        willChange: hasDedicatedZoomTarget && hasActiveTransform ? 'transform' : undefined,
+    };
 
-    const stageStyle = useMemo<CSSProperties>(() => ({
+    const stageStyle: CSSProperties = {
         transform: `translate3d(${transform.x}px, ${transform.y}px, 0) scale(${transform.scale})`,
         transformOrigin: '0 0',
         willChange: transform.scale > MIN_SCALE ? 'transform' : undefined,
-    }), [transform.x, transform.y, transform.scale]);
+    };
 
     if (hasDedicatedZoomTarget && singleChild && isValidElement<ZoomTargetElementProps>(singleChild)) {
         const child = singleChild as ReactElement<ZoomTargetElementProps>;
         const childProps = child.props;
 
         const targetElement = cloneElement(child, {
-            ref: (node: HTMLElement | null) => {
-                const originalRef = (child as ReactElement & { ref?: ((value: HTMLElement | null) => void) | { current?: HTMLElement | null } | null }).ref;
-                if (typeof originalRef === 'function') {
-                    originalRef(node);
-                } else if (originalRef && typeof originalRef === 'object') {
-                    originalRef.current = node;
-                }
-            },
+            className: joinClassNames(childProps.className, 'mobile-battlefield-viewport__content-root'),
             style: {
                 ...childProps.style,
                 ...targetStyle,
@@ -510,6 +664,8 @@ export const MobileBattlefieldViewport = ({
                 data-testid={testId}
                 data-battlefield-zoom-enabled={isEnabled ? 'true' : 'false'}
                 data-battlefield-zoom-scale={transform.scale.toFixed(3)}
+                data-battlefield-translate-x={transform.x.toFixed(3)}
+                data-battlefield-translate-y={transform.y.toFixed(3)}
                 data-battlefield-touch-mode={shouldLockTouchGestures ? 'gesture-lock' : 'native-pan'}
                 data-battlefield-zoom-target-mode="content"
                 onTouchStart={onTouchStart}
@@ -543,6 +699,8 @@ export const MobileBattlefieldViewport = ({
             data-testid={testId}
             data-battlefield-zoom-enabled={isEnabled ? 'true' : 'false'}
             data-battlefield-zoom-scale={transform.scale.toFixed(3)}
+            data-battlefield-translate-x={transform.x.toFixed(3)}
+            data-battlefield-translate-y={transform.y.toFixed(3)}
             data-battlefield-touch-mode={shouldLockTouchGestures ? 'gesture-lock' : 'native-pan'}
             data-battlefield-zoom-target-mode="surface"
             onTouchStart={onTouchStart}

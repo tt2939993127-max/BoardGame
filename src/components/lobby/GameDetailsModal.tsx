@@ -18,7 +18,7 @@ import { getGameById } from '../../config/games.config';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
-import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
+import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, resolveCreateRoomErrorCode, resolveCreateRoomErrorStatus, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
 import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
@@ -1035,14 +1035,24 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 return;
             }
             const friendlyTip = buildCreateRoomErrorTip(error);
+            const errorCode = resolveCreateRoomErrorCode(error);
+            const errorStatus = resolveCreateRoomErrorStatus(error);
+            const errorCodeText = errorStatus
+                ? t('error.createRoomErrorCodeWithStatus', { ns: 'lobby', code: errorCode, status: errorStatus })
+                : t('error.createRoomErrorCodeOnly', { ns: 'lobby', code: errorCode });
             if (friendlyTip) {
                 toast.error(
-                    { kind: 'i18n', key: friendlyTip.messageKey, ns: 'lobby' },
-                    { kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' }
+                    `${t(friendlyTip.messageKey, { ns: 'lobby' })} ${errorCodeText}`,
+                    { kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' },
+                    { dedupeKey: `create-room-failed.${errorCode}.${errorStatus ?? 'unknown'}` }
                 );
                 return;
             }
-            toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
+            toast.error(
+                `${t('error.createRoomFailed', { ns: 'lobby' })} ${errorCodeText}`,
+                undefined,
+                { dedupeKey: `create-room-failed.${errorCode}.${errorStatus ?? 'unknown'}` }
+            );
         } finally {
             setIsLoading(false);
             if (!shouldPreserveLoading) {

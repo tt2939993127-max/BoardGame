@@ -2369,6 +2369,7 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForPhase(hostPage, 'main1');
 
         const wantedCard = hostPage.locator(`[data-card-id="${WANTED_CARD_ID}"]`).first();
+        const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
@@ -2447,6 +2448,7 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForPhase(hostPage, 'main1');
 
         const ashamedCard = hostPage.locator(`[data-card-id="${SAMURAI_ASHAMED_CARD_ID}"]`).first();
+        const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');

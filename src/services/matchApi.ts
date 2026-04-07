@@ -61,6 +61,42 @@ export interface LeaveMatchOptions {
 
 const baseUrl = (): string => GAME_SERVER_URL || '';
 
+export interface MatchApiError extends Error {
+    status?: number;
+    details?: string;
+    code?: string;
+}
+
+const tryParseErrorCode = (text: string): string | undefined => {
+    const normalized = text.trim();
+    if (!normalized) return undefined;
+
+    const jsonMatch = normalized.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        try {
+            const parsed = JSON.parse(jsonMatch[0]) as { error?: unknown; code?: unknown };
+            if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error.trim();
+            if (typeof parsed.code === 'string' && parsed.code.trim()) return parsed.code.trim();
+        } catch {
+            // 忽略解析失败，降级到文本匹配
+        }
+    }
+
+    const textCodeMatch = normalized.match(/\b([A-Z][A-Z0-9_]{2,})\b/);
+    return textCodeMatch?.[1];
+};
+
+const buildApiError = (status: number, text: string, fallbackStatusText: string): MatchApiError => {
+    const normalizedText = text.trim();
+    const error = new Error(`${status}: ${normalizedText || fallbackStatusText}`) as MatchApiError;
+    error.status = status;
+    error.details = normalizedText || fallbackStatusText;
+    error.code = tryParseErrorCode(normalizedText)
+        ?? (status === 401 ? 'INVALID_TOKEN' : undefined)
+        ?? `HTTP_${status}`;
+    return error;
+};
+
 async function apiPost<T = unknown>(url: string, body: unknown, extraHeaders?: Record<string, string>): Promise<T> {
     const response = await fetch(url, {
         method: 'POST',
@@ -76,7 +112,7 @@ async function apiPost<T = unknown>(url: string, body: unknown, extraHeaders?: R
             localStorage.removeItem('refresh_token');
             // 不自动跳转，让 AuthContext 处理
         }
-        throw new Error(`${response.status}: ${text || response.statusText}`);
+        throw buildApiError(response.status, text, response.statusText);
     }
     return response.json() as Promise<T>;
 }
@@ -92,7 +128,7 @@ async function apiGet<T = unknown>(url: string): Promise<T> {
             localStorage.removeItem('refresh_token');
             // 不自动跳转，让 AuthContext 处理
         }
-        throw new Error(`${response.status}: ${text || response.statusText}`);
+        throw buildApiError(response.status, text, response.statusText);
     }
     return response.json() as Promise<T>;
 }

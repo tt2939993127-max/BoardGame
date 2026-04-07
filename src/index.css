@@ -443,14 +443,14 @@ html[data-keyboard-visible="true"] .modal-base-container {
     min-height: 0;
 }
 
-.mobile-battlefield-viewport__stage--targeted {
-    display: contents;
+.mobile-battlefield-viewport__content-root {
     --mobile-battlefield-target-translate-x: 0px;
     --mobile-battlefield-target-translate-y: 0px;
     --mobile-battlefield-target-scale: 1;
 }
 
-.mobile-battlefield-viewport__stage--targeted [data-mobile-battlefield-zoom-target="true"] {
+.mobile-battlefield-viewport__content-root [data-mobile-battlefield-zoom-target="true"],
+.mobile-battlefield-viewport__content-root[data-mobile-battlefield-zoom-target="true"] {
     transform: translate3d(
         var(--mobile-battlefield-target-translate-x),
         var(--mobile-battlefield-target-translate-y),
