@@ -1,8 +1,43 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MobileBattlefieldViewport, MobileBoardShell } from '../MobileBoardShell';
 
 describe('MobileBoardShell', () => {
+    const originalInnerWidth = window.innerWidth;
+    const originalInnerHeight = window.innerHeight;
+
+    beforeEach(() => {
+        Object.defineProperty(window, 'innerWidth', {
+            configurable: true,
+            writable: true,
+            value: 900,
+        });
+        Object.defineProperty(window, 'innerHeight', {
+            configurable: true,
+            writable: true,
+            value: 500,
+        });
+        act(() => {
+            window.dispatchEvent(new Event('resize'));
+        });
+    });
+
+    afterEach(() => {
+        Object.defineProperty(window, 'innerWidth', {
+            configurable: true,
+            writable: true,
+            value: originalInnerWidth,
+        });
+        Object.defineProperty(window, 'innerHeight', {
+            configurable: true,
+            writable: true,
+            value: originalInnerHeight,
+        });
+        act(() => {
+            window.dispatchEvent(new Event('resize'));
+        });
+    });
+
     it('renders canvas content inside the constrained shell wrapper and optional rails', () => {
         const { container } = render(
             <MobileBoardShell
@@ -41,5 +76,51 @@ describe('MobileBoardShell', () => {
 
         expect(screen.getByTestId('battlefield')).toBeInTheDocument();
         expect(screen.getByTestId('battlefield-stage')).toBeInTheDocument();
+    });
+
+    it('updates battlefield scale when a two-finger touch pointer gesture moves apart on mobile landscape', () => {
+        render(
+            <MobileBattlefieldViewport zoomMode="shell-pinch-pan" testId="battlefield">
+                <div>board</div>
+            </MobileBattlefieldViewport>,
+        );
+
+        const viewport = screen.getByTestId('battlefield');
+        const stage = screen.getByTestId('battlefield-stage');
+        expect(viewport.getAttribute('data-battlefield-zoom-scale')).toBe('1.000');
+
+        act(() => {
+            fireEvent.pointerDown(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 120,
+                clientY: 120,
+            });
+            fireEvent.pointerDown(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 220,
+                clientY: 120,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 80,
+                clientY: 120,
+            });
+            fireEvent.pointerMove(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 260,
+                clientY: 120,
+            });
+        });
+
+        expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThan(1);
+        expect(viewport.getAttribute('data-battlefield-touch-mode')).toBe('gesture-lock');
+        expect(stage.style.transform).toContain('scale(');
     });
 });
