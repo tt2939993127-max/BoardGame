@@ -998,6 +998,100 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await game.screenshot('13-desktop-end-turn-restored', testInfo);
     });
 
+    test('移动端横屏 pinch 后仍可拖拽战场，避免 pan 锁死回归', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        });
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 800
+                && window.innerHeight === 450
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards'
+                && (state?.core?.players?.['0']?.hand?.length ?? 0) === 2;
+        }, { timeout: 10000, polling: 200 });
+
+        await waitForSmashUpMainUiReady(page);
+
+        const battlefieldViewport = page.locator('[data-testid="su-battlefield-viewport"]');
+        const secondBase = page.locator('[data-base-index="1"]');
+        const endTurnActionButton = page.locator('[data-testid="su-end-turn-action-button"]');
+
+        await expect(battlefieldViewport).toBeVisible({ timeout: 15000 });
+        await expect(secondBase).toBeVisible({ timeout: 15000 });
+        await expect(endTurnActionButton).toBeVisible({ timeout: 15000 });
+
+        await pinchZoomTouch(battlefieldViewport, page, { startDistance: 120, endDistance: 260 });
+
+        await expect
+            .poll(async () => Number(await battlefieldViewport.getAttribute('data-battlefield-zoom-scale')), {
+                timeout: 5000,
+                message: '双指缩放后战场应进入大于 1 的缩放态',
+            })
+            .toBeGreaterThan(1.15);
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'gesture-lock');
+
+        const translateXBeforePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const secondBaseBoxBeforePan = await secondBase.boundingBox();
+        const endTurnButtonBoxBeforePan = await endTurnActionButton.boundingBox();
+        expect(secondBaseBoxBeforePan, '拖拽前的基地应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxBeforePan, '拖拽前的结束回合按钮应提供尺寸').not.toBeNull();
+
+        await panTouch(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
+
+        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const secondBaseBoxAfterPan = await secondBase.boundingBox();
+        const endTurnButtonBoxAfterPan = await endTurnActionButton.boundingBox();
+        expect(secondBaseBoxAfterPan, '拖拽后的基地应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxAfterPan, '拖拽后的结束回合按钮应提供尺寸').not.toBeNull();
+
+        expect(
+            Math.abs(translateXAfterPan - translateXBeforePan),
+            'pinch 后拖拽不应锁死，viewport translateX 应继续变化',
+        ).toBeGreaterThan(8);
+        expect(
+            Math.abs((secondBaseBoxAfterPan?.x ?? 0) - (secondBaseBoxBeforePan?.x ?? 0)),
+            'pinch 后拖拽应继续带动基地横向位移',
+        ).toBeGreaterThan(8);
+        expect(
+            Math.abs((endTurnButtonBoxAfterPan?.x ?? 0) - (endTurnButtonBoxBeforePan?.x ?? 0)),
+            '外围结束回合按钮不应随战场横向漂移',
+        ).toBeLessThan(4);
+        expect(
+            Math.abs((endTurnButtonBoxAfterPan?.y ?? 0) - (endTurnButtonBoxBeforePan?.y ?? 0)),
+            '外围结束回合按钮不应随战场纵向漂移',
+        ).toBeLessThan(4);
+
+        await game.screenshot('04f-mobile-battlefield-pan-still-works-after-pinch', testInfo);
+    });
+
     test('手牌超限时继续按钮应保持与结束回合同款白色描边', async ({ page, game }, testInfo) => {
         test.setTimeout(60000);
 
