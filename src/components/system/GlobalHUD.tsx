@@ -9,6 +9,7 @@ import { MessageSquare, Settings, Info, MessageSquareWarning, Maximize, Minimize
 import { useLocation } from 'react-router-dom';
 import {
     readAndroidLiveUpdateActivityState,
+    readAndroidLiveUpdateConfig,
     requestAndroidLiveUpdateCheck,
     subscribeAndroidLiveUpdateActivityState,
 } from '../../lib/mobile/androidLiveUpdates';
@@ -46,6 +47,8 @@ const openExternalUrlInNewTab = (url: string) => {
 
 export const GlobalHUD = () => {
     const isNativeAndroid = isNativeAndroidRuntime();
+    const otaConfig = readAndroidLiveUpdateConfig(import.meta.env);
+    const otaEnabledForCurrentShell = isNativeAndroid && otaConfig.enabled;
     const { t } = useTranslation('game');
     const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const { openModal, closeModal, closeByNamespace } = useModalStack();
@@ -120,6 +123,10 @@ export const GlobalHUD = () => {
     };
 
     const handleCheckAppUpdate = () => {
+        if (!otaEnabledForCurrentShell) {
+            toast.warning('当前测试版 App 已禁用 OTA 更新，请改用正式版安装包。');
+            return;
+        }
         if (otaActivityState.active) {
             return;
         }
@@ -162,7 +169,7 @@ export const GlobalHUD = () => {
 
     if (isGamePage) return null;
 
-    const isImmediateOtaActive = isNativeAndroid && otaActivityState.active;
+    const isImmediateOtaActive = otaEnabledForCurrentShell && otaActivityState.active;
 
     // 定义菜单项（主按钮优先）
     const items: FabAction[] = [];
@@ -203,7 +210,9 @@ export const GlobalHUD = () => {
         items.push({
             id: 'check-update',
             icon: <RefreshCw size={20} className={isImmediateOtaActive ? 'animate-spin' : undefined} />,
-            label: t(isImmediateOtaActive ? 'hud.actions.checkingUpdate' : 'hud.actions.checkUpdate'),
+            label: otaEnabledForCurrentShell
+                ? t(isImmediateOtaActive ? 'hud.actions.checkingUpdate' : 'hud.actions.checkUpdate')
+                : '测试版 OTA 已禁用',
             onClick: handleCheckAppUpdate,
         });
     }
