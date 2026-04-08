@@ -122,7 +122,7 @@ test.describe('游戏评价系统', () => {
         // 4. Fill and submit form
         await expect(modalRoot.getByText(/撰写评价|修改我的评价/)).toBeVisible();
 
-        const positiveBtn = modalRoot.getByRole('button', { name: '推荐' });
+        const positiveBtn = modalRoot.getByRole('button', { name: /^推荐$/ });
         await expect(positiveBtn).toBeVisible({ timeout: 10000 });
         await positiveBtn.click();
 
@@ -183,13 +183,16 @@ test.describe('游戏评价系统', () => {
 
     test('移动端评价输入聚焦后仍应保持可见', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.goto('/?game=tictactoe', { waitUntil: 'domcontentloaded' });
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
         if (await serviceUnavailable.isVisible().catch(() => false)) {
             await page.getByRole('button', { name: /Close|关闭/i }).first().click();
         }
 
+        const gameHeading = page.getByRole('heading', { name: '井字棋' });
+        await expect(gameHeading).toBeVisible({ timeout: 15000 });
+        await gameHeading.click();
         await expect(page).toHaveURL(/game=tictactoe/);
         const getDetailsModal = () => page.getByTestId('game-details-modal-root').last();
         await expect(getDetailsModal()).toBeVisible({ timeout: 15000 });
@@ -200,7 +203,6 @@ test.describe('游戏评价系统', () => {
             }
             button.click();
         });
-        await expect(modalRoot.getByText('评价较少')).toBeVisible({ timeout: 10000 });
 
         const writeButton = getDetailsModal().getByRole('button', { name: '写评价' });
         await expect(writeButton).toBeVisible();

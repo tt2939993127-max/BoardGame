@@ -14,6 +14,7 @@ import {
     type ReactNode,
 } from 'react';
 import type { GameMobileBattlefieldZoom } from '../../../games/manifest.types';
+import { isNativeAndroidRuntime } from '../../../lib/mobile/androidRuntime';
 import { logMobileRuntimeCritical } from '../../../lib/mobile/mobileRuntimeDebug';
 
 interface MobileBoardShellProps {
@@ -386,7 +387,7 @@ export const MobileBattlefieldViewport = ({
     }, []);
 
     const logPinchDebug = useCallback((stage: string, payload: Record<string, unknown>) => {
-        if (!import.meta.env.DEV) {
+        if (!import.meta.env.DEV && !isNativeAndroidRuntime()) {
             return;
         }
 
