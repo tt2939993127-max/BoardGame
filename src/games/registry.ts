@@ -9,6 +9,7 @@ import { appendMatchLoadTrace, captureRecentMatchLoadResources } from '../lib/ma
 import { isMobileViewport } from './mobileSupport';
 import { getCriticalImageResolver, registerCriticalImageResolver } from '../core';
 import type { CriticalImageResolver } from '../core/types';
+import type { GameTutorialSource, TutorialCollection, TutorialManifest } from '../engine/types';
 
 // 重新导出类型供外部使用
 export type { GameImplementation } from '../core/types';
@@ -27,7 +28,7 @@ const readyListeners = new Set<(gameId: string) => void>();
 /** 游戏 ID → loadRuntime 函数的映射 */
 const loaderMap = new Map<string, () => Promise<GameClientRuntimeModule>>();
 /** 游戏 ID → loadTutorial 函数的映射 */
-const tutorialLoaderMap = new Map<string, () => Promise<GameClientRuntimeModule['tutorial']>>();
+const tutorialLoaderMap = new Map<string, () => Promise<GameTutorialSource | undefined>>();
 /** 游戏 ID → loadCriticalImageResolver 函数的映射 */
 const criticalImageResolverLoaderMap = new Map<string, () => Promise<CriticalImageResolver>>();
 
@@ -55,6 +56,37 @@ type GameImplementationTimeoutRuntimeOptions = {
 };
 
 const SLOW_NETWORK_TYPES = new Set(['slow-2g', '2g', '3g']);
+
+const isTutorialCollection = (source: GameTutorialSource | undefined): source is TutorialCollection => {
+    if (!source || typeof source !== 'object') return false;
+    return 'defaultTutorialId' in source && 'tutorials' in source;
+};
+
+const createSingleTutorialCatalog = (manifest: TutorialManifest): TutorialCollection => ({
+    defaultTutorialId: manifest.id,
+    tutorials: {
+        [manifest.id]: {
+            manifest,
+        },
+    },
+});
+
+const normalizeGameTutorialSource = (
+    tutorialSource: GameTutorialSource,
+): Pick<GameClientRuntimeModule, 'tutorial' | 'tutorialCatalog'> => {
+    if (isTutorialCollection(tutorialSource)) {
+        const defaultEntry = tutorialSource.tutorials[tutorialSource.defaultTutorialId];
+        return {
+            tutorial: defaultEntry?.manifest,
+            tutorialCatalog: tutorialSource,
+        };
+    }
+
+    return {
+        tutorial: tutorialSource,
+        tutorialCatalog: createSingleTutorialCatalog(tutorialSource),
+    };
+};
 
 const emitGameImplementationReady = (gameId: string) => {
     for (const listener of readyListeners) {
@@ -322,7 +354,7 @@ export const prefetchGameImplementation = async (
 
 const ensureGameTutorialLoaded = async (gameId: string): Promise<void> => {
     const cached = runtimeCache.get(gameId);
-    if (cached?.tutorial) {
+    if (cached?.tutorialCatalog || cached?.tutorial) {
         appendMatchLoadTrace({
             stage: 'game-tutorial-cache-hit',
             gameId,
@@ -350,17 +382,18 @@ const ensureGameTutorialLoaded = async (gameId: string): Promise<void> => {
         gameId,
     });
     const promise = loader()
-        .then((tutorial) => {
-            if (!tutorial) {
+        .then((tutorialSource) => {
+            if (!tutorialSource) {
                 return;
             }
             const current = runtimeCache.get(gameId);
-            if (!current || current.tutorial === tutorial) {
+            if (!current) {
                 return;
             }
+            const normalizedTutorial = normalizeGameTutorialSource(tutorialSource);
             runtimeCache.set(gameId, {
                 ...current,
-                tutorial,
+                ...normalizedTutorial,
             });
             emitGameImplementationReady(gameId);
             appendMatchLoadTrace({
@@ -505,6 +538,28 @@ export const loadGameImplementation = async (
  */
 export const getGameImplementation = (gameId: string): GameImplementation | null => {
     return runtimeCache.get(gameId) ?? null;
+};
+
+export const resolveGameTutorialManifest = (
+    gameId: string,
+    tutorialId?: string,
+): TutorialManifest | null => {
+    const implementation = getGameImplementation(gameId);
+    if (!implementation) {
+        return null;
+    }
+
+    if (!tutorialId) {
+        return implementation.tutorial ?? null;
+    }
+
+    if (implementation.tutorialCatalog) {
+        return implementation.tutorialCatalog.tutorials[tutorialId]?.manifest ?? null;
+    }
+
+    return implementation.tutorial?.id === tutorialId
+        ? implementation.tutorial
+        : null;
 };
 
 /**

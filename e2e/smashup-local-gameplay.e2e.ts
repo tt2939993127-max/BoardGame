@@ -136,12 +136,13 @@ const captureLayoutMotionDuringMinionPlay = async (
         selector: string;
         cardUid: string;
         baseIndex: number;
+        playerId?: string;
         durationMs?: number;
         dispatchDelayMs?: number;
     },
 ) => {
     return await page.evaluate(
-        ({ selector, cardUid, baseIndex, durationMs, dispatchDelayMs }) =>
+        ({ selector, cardUid, baseIndex, playerId, durationMs, dispatchDelayMs }) =>
             new Promise<{
                 found: boolean;
                 dispatched: boolean;
@@ -182,11 +183,11 @@ const captureLayoutMotionDuringMinionPlay = async (
                         dispatched = true;
                         try {
                             const state = harness.state?.get?.();
-                            const playerId = state?.core?.turnOrder?.[state?.core?.currentPlayerIndex ?? 0] ?? '0';
+                            const resolvedPlayerId = playerId ?? state?.core?.turnOrder?.[state?.core?.currentPlayerIndex ?? 0] ?? '0';
                             harness.command?.dispatch?.({
                                 type: 'su:play_minion',
-                                playerId,
-                                payload: { cardUid, baseIndex },
+                                playerId: resolvedPlayerId,
+                                payload: { cardUid, baseIndex, __tutorialPlayerId: resolvedPlayerId },
                             });
                         } catch (error) {
                             dispatchError = error instanceof Error ? error.message : String(error);
@@ -212,7 +213,107 @@ const captureLayoutMotionDuringMinionPlay = async (
             selector: options.selector,
             cardUid: options.cardUid,
             baseIndex: options.baseIndex,
+            playerId: options.playerId,
             durationMs: options.durationMs ?? 700,
+            dispatchDelayMs: options.dispatchDelayMs ?? 50,
+        },
+    );
+};
+
+const captureMinionEntryTimeline = async (
+    page: Page,
+    options: {
+        cardUid: string;
+        baseIndex: number;
+        playerId?: string;
+        durationMs?: number;
+        dispatchDelayMs?: number;
+    },
+) => {
+    return await page.evaluate(
+        ({ cardUid, baseIndex, playerId, durationMs, dispatchDelayMs }) =>
+            new Promise<{
+                dispatched: boolean;
+                dispatchError: string | null;
+                samples: Array<{
+                    t: number;
+                    exists: boolean;
+                    top: number | null;
+                    hasAtlasShimmer: boolean;
+                }>;
+            }>((resolve) => {
+                const harness = (window as Window & {
+                    __BG_TEST_HARNESS__?: {
+                        state?: { get?: () => unknown };
+                        command?: { dispatch?: (command: unknown) => void };
+                    };
+                }).__BG_TEST_HARNESS__;
+
+                if (!harness?.command?.dispatch) {
+                    resolve({
+                        dispatched: false,
+                        dispatchError: 'harness-command-unavailable',
+                        samples: [],
+                    });
+                    return;
+                }
+
+                const startedAt = performance.now();
+                const samples: Array<{
+                    t: number;
+                    exists: boolean;
+                    top: number | null;
+                    hasAtlasShimmer: boolean;
+                }> = [];
+                let dispatched = false;
+                let dispatchError: string | null = null;
+
+                const tick = () => {
+                    const now = performance.now();
+                    const minion = document.querySelector(`[data-minion-uid="${cardUid}"]`) as HTMLElement | null;
+                    samples.push({
+                        t: now - startedAt,
+                        exists: Boolean(minion),
+                        top: minion ? minion.getBoundingClientRect().top : null,
+                        hasAtlasShimmer: Boolean(minion?.querySelector('.atlas-shimmer')),
+                    });
+
+                    if (!dispatched && now - startedAt >= dispatchDelayMs) {
+                        dispatched = true;
+                        try {
+                            const state = harness.state?.get?.() as {
+                                core?: { currentPlayerIndex?: number; turnOrder?: string[] };
+                            } | undefined;
+                            const resolvedPlayerId = playerId ?? state?.core?.turnOrder?.[state?.core?.currentPlayerIndex ?? 0] ?? '0';
+                            harness.command?.dispatch?.({
+                                type: 'su:play_minion',
+                                playerId: resolvedPlayerId,
+                                payload: { cardUid, baseIndex, __tutorialPlayerId: resolvedPlayerId },
+                            });
+                        } catch (error) {
+                            dispatchError = error instanceof Error ? error.message : String(error);
+                        }
+                    }
+
+                    if (now - startedAt < durationMs) {
+                        requestAnimationFrame(tick);
+                        return;
+                    }
+
+                    resolve({
+                        dispatched,
+                        dispatchError,
+                        samples,
+                    });
+                };
+
+                requestAnimationFrame(tick);
+            }),
+        {
+            cardUid: options.cardUid,
+            baseIndex: options.baseIndex,
+            playerId: options.playerId,
+            durationMs: options.durationMs ?? 1200,
             dispatchDelayMs: options.dispatchDelayMs ?? 50,
         },
     );
@@ -705,6 +806,93 @@ test.describe('SmashUp 本地模式 E2E', () => {
         }));
 
         await saveEvidenceLocatorScreenshot(playerColumn, 'smashup-first-minion-layout-after', testInfo);
+    });
+
+    test('本地模式：诊断自己与对手打出随从时的入场时序差异', async ({ page }) => {
+        const game = new GameTestContext(page);
+
+        await gotoLocalSmashUp(page);
+        await completeFactionSelectionLocal(page);
+        await waitForHandArea(page);
+
+        const buildScene = async () => {
+            await game.setupScene({
+                gameId: 'smashup',
+                player0: {
+                    hand: [
+                        { uid: 'self-minion-entry-card', defId: 'pirate_first_mate', type: 'minion' },
+                    ],
+                    factions: ['pirates', 'aliens'],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                },
+                player1: {
+                    hand: [
+                        { uid: 'opponent-minion-entry-card', defId: 'robot_microbot_alpha', type: 'minion' },
+                    ],
+                    factions: ['robots', 'zombies'],
+                    minionsPlayed: 0,
+                    minionLimit: 1,
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                },
+                bases: [
+                    { defId: 'base_the_homeworld' },
+                ],
+                currentPlayer: '0',
+                phase: 'playCards',
+            });
+            await expect(page.getByTestId('su-base-player-column-0-0')).toBeVisible({ timeout: 10000 });
+            await expect(page.getByTestId('su-base-player-column-0-1')).toBeVisible({ timeout: 10000 });
+        };
+
+        await buildScene();
+        const selfTimeline = await captureMinionEntryTimeline(page, {
+            cardUid: 'self-minion-entry-card',
+            baseIndex: 0,
+            playerId: '0',
+        });
+
+        expect(selfTimeline.dispatched, '自己打出随从的诊断命令未触发').toBe(true);
+        expect(selfTimeline.dispatchError, `自己打出随从失败: ${selfTimeline.dispatchError}`).toBeNull();
+        await expect(page.locator('[data-minion-uid="self-minion-entry-card"]')).toBeVisible({ timeout: 5000 });
+
+        await buildScene();
+        const opponentTimeline = await captureMinionEntryTimeline(page, {
+            cardUid: 'opponent-minion-entry-card',
+            baseIndex: 0,
+            playerId: '1',
+        });
+
+        expect(opponentTimeline.dispatched, '对手打出随从的诊断命令未触发').toBe(true);
+        expect(opponentTimeline.dispatchError, `对手打出随从失败: ${opponentTimeline.dispatchError}`).toBeNull();
+        await expect(page.locator('[data-minion-uid="opponent-minion-entry-card"]')).toBeVisible({ timeout: 5000 });
+
+        const summarizeTimeline = (
+            timeline: typeof selfTimeline,
+        ) => {
+            const firstVisible = timeline.samples.find((sample) => sample.exists);
+            const lastShimmer = [...timeline.samples].reverse().find((sample) => sample.exists && sample.hasAtlasShimmer);
+            const visibleSamples = timeline.samples.filter((sample) => sample.exists && sample.top !== null);
+            const roundedTops = Array.from(new Set(
+                visibleSamples
+                    .map((sample) => sample.top)
+                    .filter((top): top is number => typeof top === 'number')
+                    .map((top) => Math.round(top * 10) / 10),
+            ));
+            return {
+                firstVisibleAt: firstVisible?.t ?? null,
+                lastShimmerAt: lastShimmer?.t ?? null,
+                distinctTops: roundedTops,
+            };
+        };
+
+        console.log('[smashup-minion-entry-diagnostic]', JSON.stringify({
+            self: summarizeTimeline(selfTimeline),
+            opponent: summarizeTimeline(opponentTimeline),
+        }));
     });
 
     test('本地模式：默认模式下点击随从会进入部署选择，点击基地后才真正打出', async ({ page }, testInfo) => {

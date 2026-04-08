@@ -36,11 +36,11 @@ export const RoomList = ({
                 {(() => {
                     if (activeMatch) {
                         return (
-                            <div className="w-full py-3 px-4 bg-parchment-base-bg/50 border border-parchment-card-border/50 rounded-[4px] flex flex-col items-center gap-2">
+                            <div className="w-full py-3 px-4 bg-parchment-base-bg/50 border border-parchment-card-border/50 rounded-[4px] flex flex-col items-center gap-3">
                                 <span className="text-xs text-parchment-light-text font-bold uppercase tracking-wider">
                                     {t('activeMatch.notice')}
                                 </span>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap justify-center gap-2">
                                     <button
                                         onClick={() => onJoinRoom(activeMatch.matchID, activeMatch.gameName)}
                                         className="px-4 py-1.5 bg-parchment-card-border text-parchment-card-bg text-xs font-bold rounded hover:bg-parchment-brown transition-colors cursor-pointer uppercase tracking-wider"
@@ -73,6 +73,15 @@ export const RoomList = ({
                                         </button>
                                     )}
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={onOpenCreateRoom}
+                                    disabled={isActionLoading}
+                                    data-testid="game-details-open-create-room"
+                                    className="w-full py-2.5 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-xs uppercase tracking-widest"
+                                >
+                                    {isActionLoading ? t('button.processing') : t('actions.createRoom')}
+                                </button>
                             </div>
                         );
                     }
@@ -81,6 +90,7 @@ export const RoomList = ({
                         <button
                             onClick={onOpenCreateRoom}
                             disabled={isActionLoading}
+                            data-testid="game-details-open-create-room"
                             className="w-full py-3 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
                         >
                             {isActionLoading ? t('button.processing') : t('actions.createRoom')}

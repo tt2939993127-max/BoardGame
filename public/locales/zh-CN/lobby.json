@@ -400,6 +400,7 @@
     "roomFull": "房间已满",
     "ownerClaimFailed": "无法重连该房间：可能是游客身份丢失或服务器重启导致凭据失效。请使用原浏览器重试，或重新创建房间。",
     "roomCreatedButClaimFailed": "房间已创建但入座失败，请返回大厅重试。",
+    "roomCreatedButEnterFailed": "房间已创建，但自动进入失败，请返回大厅重新进入。",
     "aiSeatClaimFailed": "部分 AI 座位初始化失败，已进入房间，请检查座位状态。",
     "joinRoomFailed": "加入房间失败",
     "actionFailed": "操作失败，请稍后重试。",

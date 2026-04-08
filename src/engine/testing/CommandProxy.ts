@@ -22,7 +22,6 @@ export class CommandProxy {
      */
     register(dispatch: (command: any) => Promise<void> | void) {
         this.dispatchFn = dispatch;
-        console.log('[CommandProxy] 命令分发器已注册');
     }
 
     /**
@@ -32,7 +31,6 @@ export class CommandProxy {
         if (!this.dispatchFn) {
             throw new Error('[CommandProxy] 命令分发器未注册，请确保游戏已加载');
         }
-        console.log('[CommandProxy] 分发命令:', command);
         await this.dispatchFn(command);
     }
 

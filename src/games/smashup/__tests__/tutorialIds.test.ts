@@ -37,4 +37,8 @@ describe('SmashUp Board data-tutorial-id 属性', () => {
             expect(allSrc).toContain(`data-tutorial-id="${id}"`);
         });
     }
+
+    it('派系详情源码包含机制教程入口测试标识', () => {
+        expect(factionSrc).toContain('data-testid="faction-mechanic-tutorial-entry"');
+    });
 });

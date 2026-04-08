@@ -93,11 +93,6 @@ const systems: EngineSystem<SmashUpCore>[] = [
                 }
                 
                 // 其他响应牌默认可用
-                console.log('[hasRespondableContent] Found respondable action:', {
-                    playerId,
-                    windowType,
-                    cardDefId: c.defId,
-                });
                 return true;
             });
             
@@ -105,27 +100,12 @@ const systems: EngineSystem<SmashUpCore>[] = [
             const hasBeforeScoringMinion = windowType === 'meFirst' && player.hand.some(c => {
                 if (!isCardMinionLike(c)) return false;
                 if (getMeFirstPlayableBaseIndicesForCard(core, c.defId).length > 0) {
-                    console.log('[hasRespondableContent] Found beforeScoringPlayable minion:', {
-                        playerId,
-                        windowType,
-                        minionDefId: c.defId,
-                    });
                     return true;
                 }
                 return false;
             });
             
-            const result = hasRespondableAction || hasBeforeScoringMinion;
-            console.log('[hasRespondableContent] Result:', {
-                playerId,
-                windowType,
-                hasRespondableAction,
-                hasBeforeScoringMinion,
-                result,
-                handSize: player.hand.length,
-            });
-            
-            return result;
+            return hasRespondableAction || hasBeforeScoringMinion;
         },
     }),
     createTutorialSystem(),

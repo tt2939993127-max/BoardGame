@@ -25,7 +25,6 @@ export class RandomInjector {
         this.queue = [...values];
         this.enabled = true;
         this.consumedCount = 0;
-        console.log('[RandomInjector] 设置随机数队列:', values);
     }
 
     /**
@@ -34,7 +33,6 @@ export class RandomInjector {
     enqueue(...values: number[]) {
         this.queue.push(...values);
         this.enabled = true;
-        console.log('[RandomInjector] 添加随机数:', values, '当前队列长度:', this.queue.length);
     }
 
     /**
@@ -44,7 +42,6 @@ export class RandomInjector {
         this.queue = [];
         this.enabled = false;
         this.consumedCount = 0;
-        console.log('[RandomInjector] 清空队列');
     }
 
     /**
@@ -55,7 +52,6 @@ export class RandomInjector {
             if (this.enabled && this.queue.length > 0) {
                 const value = this.queue.shift()!;
                 this.consumedCount++;
-                console.log(`[RandomInjector] 注入随机数 #${this.consumedCount}:`, value, '剩余:', this.queue.length);
                 return value;
             }
             return originalRandom();

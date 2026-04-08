@@ -60,7 +60,7 @@ function getOrderedOpponentIds(state: SmashUpCore, playerId: string): string[] {
 }
 
 export function registerElderThingAbilities(): void {
-    // 拜亚基?onPlay：如果其他玩家有随从在本基地，抽一张疯狂卡
+    // 拜亚基 onPlay：每位在这里有随从的其他玩家各抽一张疯狂卡
     registerAbility('elder_thing_byakhee', 'onPlay', elderThingByakhee);
     // ??onPlay：每个对手可抽疯狂卡，不收回抽的让你抽一张牌（MVP：对手全部抽疯狂卡）
     registerAbility('elder_thing_mi_go', 'onPlay', elderThingMiGo);
@@ -118,18 +118,19 @@ export function registerElderThingAbilities(): void {
     registerProtection('elder_thing_elder_thing', 'affect', elderThingProtectionChecker);
 }
 
-/** 拜亚基 onPlay：如果其他玩家有随从在本基地，则你抽一张疯狂卡 */
+/** 拜亚基 onPlay：每位在这里有随从的其他玩家各抽一张疯狂卡 */
 function elderThingByakhee(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
 
-    const hasOpponentMinion = base.minions.some(
-        m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid
-    );
-    if (!hasOpponentMinion) return { events: [] };
-
-    const evt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'elder_thing_byakhee', ctx.now);
-    return { events: evt ? [evt] : [] };
+    const events: SmashUpEvent[] = [];
+    for (const pid of ctx.state.turnOrder) {
+        if (pid === ctx.playerId) continue;
+        if (!base.minions.some(m => m.controller === pid)) continue;
+        const evt = drawMadnessCards(pid, 1, ctx.state, 'elder_thing_byakhee', ctx.now);
+        if (evt) events.push(evt);
+    }
+    return { events };
 }
 
 /**

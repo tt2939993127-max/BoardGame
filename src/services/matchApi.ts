@@ -31,6 +31,7 @@ export interface CreateMatchOptions {
     numPlayers: number;
     setupData?: Record<string, unknown>;
     playerName?: string;
+    forceReplaceOwnerRoom?: boolean;
 }
 
 export interface CreateMatchResult {
@@ -150,6 +151,7 @@ export async function createMatch(
         numPlayers: options.numPlayers,
         setupData: options.setupData,
         playerName: options.playerName,
+        forceReplaceOwnerRoom: options.forceReplaceOwnerRoom,
     }, init?.headers);
 }
 

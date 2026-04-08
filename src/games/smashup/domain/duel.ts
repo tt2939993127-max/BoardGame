@@ -992,8 +992,15 @@ export function registerDuelInteractionHandlers(): void {
             0,
             now,
         );
+        const nextState: MatchState<SmashUpCore> = {
+            ...stageResult.state,
+            core: {
+                ...state.core,
+                activeDuel: stageResult.state.core.activeDuel,
+            },
+        };
         return {
-            state: stageResult.state,
+            state: nextState,
             events: [...events, ...stageResult.events],
         };
     });

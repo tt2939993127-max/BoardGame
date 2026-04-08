@@ -42,6 +42,23 @@ const isInProgressStatus = (status: StoredGamePackageState['status']) =>
     || status === 'downloading'
     || status === 'verifying';
 
+const createInstalledPackageFallbackState = (
+    installedPackage: {
+        gameId: string;
+        runtimeChannel: string;
+        installedVersion?: string;
+        assetBaseUrl?: string;
+        installedAt?: number;
+    },
+): StoredGamePackageState => ({
+    gameId: installedPackage.gameId,
+    runtimeChannel: installedPackage.runtimeChannel || 'stable',
+    status: 'not-installed',
+    installedVersion: installedPackage.installedVersion,
+    localAssetBaseUrl: installedPackage.assetBaseUrl,
+    updatedAt: installedPackage.installedAt ?? Date.now(),
+});
+
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
@@ -464,10 +481,8 @@ export const hydrateInstalledNativeGamePackages = async () => {
             continue;
         }
 
-        const fallbackState = fallbackCache.get(installedPackage.gameId);
-        if (!fallbackState) {
-            continue;
-        }
+        const fallbackState = fallbackCache.get(installedPackage.gameId)
+            ?? createInstalledPackageFallbackState(installedPackage);
 
         const hydratedState = normalizeIncompleteInstalledState(mergeGamePackageState(fallbackState, {
             status: 'installed',

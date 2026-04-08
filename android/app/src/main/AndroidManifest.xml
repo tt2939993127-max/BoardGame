@@ -42,7 +42,7 @@
         </provider>
 
         <service
-            android:name=".AndroidDownloadForegroundService"
+            android:name="top.easyboardgame.app.AndroidDownloadForegroundService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
     </application>

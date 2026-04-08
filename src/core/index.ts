@@ -39,6 +39,7 @@ export {
     getOptimizedImageUrls,
     getOptimizedAudioUrl,
     getLocalizedAssetPath,
+    getLocalizedImageCandidateUrls,
     getLocalizedImageUrls,
     buildLocalizedImageSet,
     buildOptimizedImageSet,

@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
-import { getGameImplementation } from '../games/registry';
+import { getGameImplementation, resolveGameTutorialManifest } from '../games/registry';
 import { GameProvider, LocalGameProvider, BoardBridge, buildAiProgressMarker, useGameClient } from '../engine/transport/react';
 import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
@@ -61,6 +61,7 @@ import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
+    applyAiAutoRecoveryRejection,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -161,12 +162,14 @@ const OnlineAiSeatBridge = ({
         key: string;
         firstSeenAt: number;
         autoSubmittedAt: number | null;
+        lastReportedFailureReason: string | null;
         candidate: ForceSkippableHiddenAiInteraction | null;
     } | null>(null);
     const forceEndTurnTrackerRef = useRef<{
         key: string;
         firstSeenAt: number;
         autoSubmittedAt: number | null;
+        lastReportedFailureReason: string | null;
     } | null>(null);
 
     useEffect(() => {
@@ -321,6 +324,7 @@ const OnlineAiSeatBridge = ({
                 key: candidateKey,
                 firstSeenAt: now,
                 autoSubmittedAt: null,
+                lastReportedFailureReason: null,
                 candidate,
             };
             timer = setTimeout(() => {
@@ -383,15 +387,28 @@ const OnlineAiSeatBridge = ({
             },
             onRejected: (reason) => {
                 const tracker = forceSkipTrackerRef.current;
+                let shouldNotify = true;
                 if (tracker?.key === candidateKey) {
-                    tracker.autoSubmittedAt = null;
-                    tracker.firstSeenAt = Date.now();
+                    const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                    forceSkipTrackerRef.current = rejection.nextTracker;
+                    shouldNotify = rejection.shouldNotify;
                 }
-                if (reason === 'unauthorized') {
-                    toast.warning('AI 座位凭据已失效，无法自动跳过这次隐藏交互。建议通过反馈入口提交问题。');
+                if (!shouldNotify) {
                     return;
                 }
-                toast.warning('自动跳过这次 AI 隐藏交互未成功，系统会继续重试。建议通过反馈入口提交问题。');
+                if (reason === 'unauthorized') {
+                    toast.warning(
+                        'AI 座位凭据已失效，无法自动跳过这次隐藏交互。建议通过反馈入口提交问题。',
+                        undefined,
+                        { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.${reason}` },
+                    );
+                    return;
+                }
+                toast.warning(
+                    '自动跳过这次 AI 隐藏交互未成功，系统会继续重试。建议通过反馈入口提交问题。',
+                    undefined,
+                    { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.${reason}` },
+                );
             },
         });
 
@@ -435,6 +452,7 @@ const OnlineAiSeatBridge = ({
                 key: trackerKey,
                 firstSeenAt: now,
                 autoSubmittedAt: null,
+                lastReportedFailureReason: null,
             };
             timer = setTimeout(() => {
                 setAiRetryVersion((version) => version + 1);
@@ -491,15 +509,28 @@ const OnlineAiSeatBridge = ({
             },
             onRejected: (reason) => {
                 const tracker = forceEndTurnTrackerRef.current;
+                let shouldNotify = true;
                 if (tracker?.key === trackerKey) {
-                    tracker.autoSubmittedAt = null;
-                    tracker.firstSeenAt = Date.now();
+                    const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                    forceEndTurnTrackerRef.current = rejection.nextTracker;
+                    shouldNotify = rejection.shouldNotify;
                 }
-                if (reason === 'unauthorized') {
-                    toast.warning('AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。');
+                if (!shouldNotify) {
                     return;
                 }
-                toast.warning('强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。');
+                if (reason === 'unauthorized') {
+                    toast.warning(
+                        'AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。',
+                        undefined,
+                        { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
+                    );
+                    return;
+                }
+                toast.warning(
+                    '强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。',
+                    undefined,
+                    { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
+                );
             },
         });
 
@@ -661,7 +692,7 @@ const OnlineGameHudBridge = ({
 export const MatchRoom = () => {
     usePerformanceMonitor();
     const { playerID: debugPlayerID, setPlayerID } = useDebug();
-    const { gameId, matchId } = useParams();
+    const { gameId, matchId, tutorialId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { startTutorial, closeTutorial, isActive, currentStep, isBoardMounted } = useTutorial();
@@ -694,7 +725,8 @@ export const MatchRoom = () => {
         [gameConfig, gameId],
     );
     const requiresGameNamespace = Boolean(gameConfig);
-    const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const isTutorialRoute = /^\/play\/[^/]+\/tutorial(?:\/[^/]+)?\/?$/.test(pathname);
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
     useEffect(() => {
         appendMatchLoadTrace({
@@ -757,8 +789,15 @@ export const MatchRoom = () => {
     } = useGameImplementationReady(gameId, {
         enabled: Boolean(gameId),
         includeTutorial: isTutorialRoute,
+        tutorialId,
     });
     const gameImplReady = isGameImplementationReady;
+    const resolvedTutorialManifest = useMemo(() => {
+        if (!gameId || !isTutorialRoute || !gameImplReady) {
+            return null;
+        }
+        return resolveGameTutorialManifest(gameId, tutorialId);
+    }, [gameId, gameImplReady, isTutorialRoute, tutorialId]);
     const tutorialLoadingProgressText = useMemo(() => {
         if (!isTutorialRoute) return undefined;
         if (!gameId || !isGameNamespaceReady) {
@@ -859,7 +898,6 @@ export const MatchRoom = () => {
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [onlineAiSeatControllers, setOnlineAiSeatControllers] = useState<Record<string, AiSeatController>>({});
     const [onlineAiSeatCredentials, setOnlineAiSeatCredentials] = useState<Record<string, string>>({});
-    const [tutorialBoardBootstrapComplete, setTutorialBoardBootstrapComplete] = useState(false);
     const tutorialStartedRef = useRef(false);
     const lastTutorialStepIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
@@ -1212,13 +1250,12 @@ export const MatchRoom = () => {
         // 只在未激活且未启动过时调用 startTutorial
         // 不依赖 tutorial.manifestId/steps.length，避免 startTutorial 的 setTutorial 触发循环
         if (!isActive && !tutorialStartedRef.current) {
-            const impl = gameId ? getGameImplementation(gameId) : null;
-            if (impl?.tutorial) {
+            if (resolvedTutorialManifest) {
                 tutorialStartedRef.current = true;
-                startTutorial(impl.tutorial!);
+                startTutorial(resolvedTutorialManifest);
             }
         }
-    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady]);
+    }, [startTutorial, isTutorialRoute, isActive, isGameNamespaceReady, resolvedTutorialManifest]);
 
     // gameImplReady 变为 true 时补触发一次教程启动
     // 场景：dev 模式首次加载时 i18n namespace 先于游戏实现加载完成，
@@ -1229,12 +1266,24 @@ export const MatchRoom = () => {
         if (!isTutorialRoute) return;
         if (!isGameNamespaceReady) return;
         if (isActive || tutorialStartedRef.current) return;
-        const impl = gameId ? getGameImplementation(gameId) : null;
-        if (impl?.tutorial) {
+        if (resolvedTutorialManifest) {
             tutorialStartedRef.current = true;
-            startTutorial(impl.tutorial!);
+            startTutorial(resolvedTutorialManifest);
         }
-    }, [gameImplReady, isTutorialRoute, isGameNamespaceReady, isActive, gameId, startTutorial]);
+    }, [gameImplReady, isTutorialRoute, isGameNamespaceReady, isActive, startTutorial, resolvedTutorialManifest]);
+
+    useEffect(() => {
+        if (!isTutorialRoute) return;
+        if (!isBoardMounted) return;
+        if (!gameImplReady) return;
+        if (!isGameNamespaceReady) return;
+        if (isActive) return;
+        if (lastTutorialStepIdRef.current === 'finish') return;
+        if (!resolvedTutorialManifest) return;
+
+        tutorialStartedRef.current = true;
+        startTutorial(resolvedTutorialManifest);
+    }, [gameImplReady, isActive, isBoardMounted, isGameNamespaceReady, isTutorialRoute, resolvedTutorialManifest, startTutorial]);
 
     // 组件真正卸载时清理教程
     // 使用 setTimeout(0) 延迟执行：如果是 StrictMode 的 unmount→remount，
@@ -1301,20 +1350,6 @@ export const MatchRoom = () => {
             return () => window.clearTimeout(timer);
         }
     }, [isTutorialRoute, isActive, navigate]);
-
-    useEffect(() => {
-        if (!isTutorialRoute) {
-            setTutorialBoardBootstrapComplete(false);
-            return;
-        }
-        setTutorialBoardBootstrapComplete(false);
-    }, [gameId, isTutorialRoute]);
-
-    useEffect(() => {
-        if (!isTutorialRoute) return;
-        if (!isActive) return;
-        setTutorialBoardBootstrapComplete(true);
-    }, [isTutorialRoute, isActive]);
 
     useEffect(() => {
         // 关键约束：教程提示层只允许在 /tutorial 路由出现。
@@ -1713,26 +1748,17 @@ export const MatchRoom = () => {
                                     ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                         <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                             <TutorialDispatchBridge>
-                                                {tutorialBoardBootstrapComplete ? (
-                                                    <BoardBridge
-                                                        board={WrappedBoard}
-                                                        loading={(
-                                                            <LoadingScreen
-                                                                anchor="container"
-                                                                title={t('matchRoom.title.tutorial')}
-                                                                description={t('matchRoom.loadingResources')}
-                                                                progressText={tutorialLoadingProgressText}
-                                                            />
-                                                        )}
-                                                    />
-                                                ) : (
-                                                    <LoadingScreen
-                                                        anchor="container"
-                                                        title={t('matchRoom.title.tutorial')}
-                                                        description={t('matchRoom.loadingResources')}
-                                                        progressText={tutorialLoadingProgressText}
-                                                    />
-                                                )}
+                                                <BoardBridge
+                                                    board={WrappedBoard}
+                                                    loading={(
+                                                        <LoadingScreen
+                                                            anchor="container"
+                                                            title={t('matchRoom.title.tutorial')}
+                                                            description={t('matchRoom.loadingResources')}
+                                                            progressText={tutorialLoadingProgressText}
+                                                        />
+                                                    )}
+                                                />
                                             </TutorialDispatchBridge>
                                         </LocalGameProvider>
                                     ) : (

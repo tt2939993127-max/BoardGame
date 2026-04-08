@@ -693,7 +693,9 @@ export const BaseZone: React.FC<{
                     return (
                         <motion.div
                             key={pid}
-                            layout
+                            // 不要对整列做尺寸缩放动画。
+                            // 随从自身已有 initial/animate 入场，叠加父层 full layout 会让新卡像是在开头反复放大。
+                            layout="position"
                             data-testid={`su-base-player-column-${baseIndex}-${pid}`}
                             data-player-id={pid}
                             className="flex flex-col items-center relative"
@@ -703,7 +705,7 @@ export const BaseZone: React.FC<{
 
                             {/* --- MINIONS + BURIED CARDS --- */}
                             <motion.div
-                                layout
+                                layout="position"
                                 data-testid={`su-base-stack-${baseIndex}-${pid}`}
                                 className="flex flex-col items-center isolate z-10 hover:z-[100]"
                                 transition={{ layout: { duration: 0.22, ease: 'easeOut' } }}

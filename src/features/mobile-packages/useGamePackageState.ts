@@ -17,7 +17,13 @@ import {
     syncGamePackageState,
 } from './packageManagerService';
 import type { GamePackageCardState, PendingGamePackageInstall, ResolvedGamePackageManifest } from './types';
-import { createDefaultGamePackageState, hasUsableInstalledGamePackageVersion, toGamePackageCardState } from './types';
+import {
+    createDefaultGamePackageState,
+    hasGamePackageUpdateAvailable,
+    hasUsableInstalledGamePackageVersion,
+    normalizeGamePackageVersion,
+    toGamePackageCardState,
+} from './types';
 
 interface UseGamePackageStateOptions {
     gameId: string;
@@ -63,6 +69,13 @@ const isInProgressStatus = (status: GamePackageCardState['status']) => (
     || status === 'manifest'
     || status === 'downloading'
     || status === 'verifying'
+);
+
+const resolveManifestAvailableVersion = (
+    manifest?: ResolvedGamePackageManifest | null,
+) => normalizeGamePackageVersion(
+    manifest?.assetPackVersion
+    ?? manifest?.modulePackVersion,
 );
 
 export const useGamePackageState = ({
@@ -232,10 +245,17 @@ export const useGamePackageState = ({
     }, [cardState.installedVersion, cardState.status, pendingInstall]);
 
     const displayCardState = useMemo(
-        () => ({
-            ...mergeManifestIntoCardState(cardState, previewManifest ?? fallbackManifest),
-            previewResolved: Boolean(previewManifest),
-        }),
+        () => {
+            const manifest = previewManifest ?? fallbackManifest;
+            const availableVersion = resolveManifestAvailableVersion(manifest);
+
+            return {
+                ...mergeManifestIntoCardState(cardState, manifest),
+                previewResolved: Boolean(previewManifest),
+                availableVersion,
+                isUpdateAvailable: hasGamePackageUpdateAvailable(cardState.installedVersion, availableVersion),
+            };
+        },
         [cardState, fallbackManifest, previewManifest],
     );
 

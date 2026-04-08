@@ -64,12 +64,6 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
         if (titanDef?.previewRef?.type === 'atlas') {
             return { originalAtlasId: titanDef.previewRef.atlasId, originalIndex: titanDef.previewRef.index };
         }
-        console.log('[SmashUpCardRenderer] No previewRef found:', {
-            defId,
-            cardDef: !!cardDef,
-            baseDef: !!baseDef,
-            titanDef: !!titanDef,
-        });
         return { originalAtlasId: '', originalIndex: 0 };
     }, [defId]);
 
@@ -159,13 +153,11 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
     
     // Early returns after all hooks
     if (previewRef.type !== 'renderer' || !defId) {
-        console.log('[SmashUpCardRenderer] Early return:', { previewRefType: previewRef.type, defId });
         return null;
     }
 
     // 如果未配置任何图集，只渲染外框和名字
     if (!finalAtlasId) {
-        console.log('[SmashUpCardRenderer] No atlas, fallback render:', { defId, name });
         return (
             <div className={`relative bg-[#f3f0e8] flex flex-col items-center justify-center p-2 border-2 border-slate-300 rounded overflow-hidden ${className || ''}`} style={style}>
                 <div className="text-[1vw] font-black uppercase text-slate-800 mb-1">{name}</div>

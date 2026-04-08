@@ -1639,6 +1639,50 @@ describe('samurai_pod audit regressions', () => {
 });
 
 describe('werewolf beforeScoring - 多实例触发', () => {
+    it('loup_garou 在触发时即使战力被降到 0 也仍会正常结算', () => {
+        const wolf = makeMinion('wolf-zero', 'werewolf_loup_garou', '0', 4, { powerModifier: -4 });
+        const ally = makeMinion('ally-1', 'werewolf_howler', '0', 2, { powerModifier: 0 });
+        const state = makeState({
+            bases: [makeBase({ minions: [wolf, ally] })],
+        });
+
+        expect(getEffectivePower(state, wolf, 0)).toBe(0);
+
+        const queued = collectTriggers(state, 'beforeScoring', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 100,
+        });
+
+        expect(queued).toBeDefined();
+        const wolfTriggers = (queued as any).payload.triggers.filter((t: any) => t.sourceDefId === 'werewolf_loup_garou');
+        expect(wolfTriggers).toHaveLength(1);
+        expect(wolfTriggers[0]?.sourceCardUid).toBe('wolf-zero');
+
+        const { events } = fireTriggers(state, 'beforeScoring', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 100,
+        });
+
+        const buffEvent = events.find((event) =>
+            event.type === SU_EVENTS.TEMP_POWER_ADDED
+            && (event as TempPowerAddedEvent).payload.minionUid === 'wolf-zero'
+        ) as TempPowerAddedEvent | undefined;
+
+        expect(buffEvent).toBeDefined();
+        expect(buffEvent?.payload.amount).toBe(2);
+
+        const resolvedState = events.reduce((core, event) => reduce(core, event), state);
+        const resolvedWolf = resolvedState.bases[0].minions.find((minion) => minion.uid === 'wolf-zero');
+        expect(resolvedWolf).toBeDefined();
+        expect(getEffectivePower(resolvedState, resolvedWolf!, 0)).toBe(2);
+    });
+
     it('多个 loup_garou 会各自产生独立 beforeScoring trigger', () => {
         const wolf1 = makeMinion('wolf1', 'werewolf_loup_garou', '0', 4, { powerModifier: 0 });
         const wolf2 = makeMinion('wolf2', 'werewolf_loup_garou', '1', 4, { powerModifier: 0 });

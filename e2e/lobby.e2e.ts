@@ -46,6 +46,41 @@ async function ensureLobbyReady(page: Page): Promise<void> {
     }
 }
 
+async function applyKeyboardViewportSimulation(page: Page, options: { runtimeViewportHeight: number; keyboardInsetHeight: number }) {
+    await page.evaluate(({ runtimeViewportHeight, keyboardInsetHeight }) => {
+        const root = document.documentElement;
+        root.style.setProperty('--runtime-viewport-height', `${runtimeViewportHeight}px`);
+        root.style.setProperty('--keyboard-inset-height', `${keyboardInsetHeight}px`);
+        root.dataset.keyboardVisible = 'true';
+    }, options);
+}
+
+async function openCreateRoomFromDetailsModal(page: Page): Promise<void> {
+    const detailsModal = page.getByTestId('game-details-modal-root').last();
+    await expect(detailsModal).toBeVisible({ timeout: 15000 });
+
+    const openCreateRoomButton = detailsModal.getByTestId('game-details-open-create-room');
+    await expect(openCreateRoomButton).toBeVisible({ timeout: 10000 });
+    await openCreateRoomButton.evaluate((button) => {
+        if (!(button instanceof HTMLButtonElement)) {
+            throw new Error('创建房间按钮节点不是 button');
+        }
+        button.click();
+    });
+    await expect(page.getByTestId('create-room-modal').last()).toBeVisible({ timeout: 10000 });
+}
+
+async function confirmCreateRoomFromModal(page: Page): Promise<void> {
+    const confirmButton = page.getByTestId('create-room-confirm-button');
+    await expect(confirmButton).toBeVisible({ timeout: 10000 });
+    await confirmButton.evaluate((button) => {
+        if (!(button instanceof HTMLButtonElement)) {
+            throw new Error('确认创建按钮节点不是 button');
+        }
+        button.click();
+    });
+}
+
 const MOBILE_AUTHOR_ENTRY_TEST_NAME = '移动端游戏详情隐藏描述和推荐人数，作者入口位于右上角且无包围框';
 const MOBILE_PACKAGE_ENTRY_TEST_NAME = '移动端 package-managed 游戏详情在左下角显示包管理入口';
 const GAME_DETAILS_LOADING_FALLBACK_TEST_NAME = '首次打开游戏详情时会先显示加载骨架，避免只剩路由跳转';
@@ -261,7 +296,7 @@ test.describe('Lobby E2E', () => {
         });
     });
 
-    test('移动端反馈弹窗应覆盖悬浮球面板，且输入区使用可编辑字号', async ({ browser }, testInfo) => {
+    test('移动端反馈弹窗应覆盖悬浮球面板，且输入区使用可编辑字号', async ({ browser }, _testInfo) => {
         const context = await browser.newContext({
             viewport: { width: 393, height: 852 },
             isMobile: true,
@@ -321,6 +356,139 @@ test.describe('Lobby E2E', () => {
         }
     });
 
+    test('移动端创建房间输入聚焦后不应把弹窗顶飞出可视区', async ({ page }) => {
+        await page.setViewportSize({ width: 393, height: 852 });
+        await setChineseLocale(page);
+        await ensureLobbyReady(page);
+
+        await page.getByRole('heading', { name: '井字棋' }).click();
+        await expect(page).toHaveURL(/game=tictactoe/);
+        await openCreateRoomFromDetailsModal(page);
+
+        const getCreateRoomModal = () => page.getByTestId('create-room-modal').last();
+        const getRoomNameInput = () => page.getByTestId('create-room-name-input').last();
+        const getPasswordInput = () => page.getByTestId('create-room-password-input').last();
+
+        await expect(getCreateRoomModal()).toBeVisible();
+        await applyKeyboardViewportSimulation(page, {
+            runtimeViewportHeight: 564,
+            keyboardInsetHeight: 280,
+        });
+
+        await getRoomNameInput().evaluate((node, value) => {
+            if (!(node instanceof HTMLInputElement)) {
+                throw new Error('房间名输入框节点不是 input');
+            }
+            node.focus();
+            node.value = value;
+            node.dispatchEvent(new Event('input', { bubbles: true }));
+        }, '移动端建房输入校验');
+        await expect(getPasswordInput()).toBeVisible();
+        await getPasswordInput().evaluate((node, value) => {
+            if (!(node instanceof HTMLInputElement)) {
+                throw new Error('房间密码输入框节点不是 input');
+            }
+            node.focus();
+            node.value = value;
+            node.dispatchEvent(new Event('input', { bubbles: true }));
+        }, '123456');
+        await expect(getRoomNameInput()).toHaveValue('移动端建房输入校验');
+        await expect(getPasswordInput()).toHaveValue('123456');
+
+        const layoutMetrics = await getCreateRoomModal().evaluate((element) => {
+            const roomName = element.querySelector('[data-testid="create-room-name-input"]');
+            const password = element.querySelector('[data-testid="create-room-password-input"]');
+            const runtimeViewportHeight = Number.parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0');
+            const modalRect = element.getBoundingClientRect();
+
+            document.querySelector('[data-testid="e2e-create-room-modal-capture-host"]')?.remove();
+            if (!(element instanceof HTMLElement)) {
+                throw new Error('建房弹窗节点不是 HTMLElement');
+            }
+            const clone = element.cloneNode(true);
+            if (!(clone instanceof HTMLElement)) {
+                throw new Error('建房弹窗快照节点不是 HTMLElement');
+            }
+            clone.setAttribute('data-testid', 'e2e-create-room-modal-capture');
+            clone.style.position = 'fixed';
+            clone.style.top = '16px';
+            clone.style.left = '16px';
+            clone.style.right = 'auto';
+            clone.style.bottom = 'auto';
+            clone.style.inset = 'auto';
+            clone.style.margin = '0';
+            clone.style.transform = 'none';
+            clone.style.maxHeight = 'none';
+            clone.style.width = `${modalRect.width}px`;
+            clone.style.height = `${modalRect.height}px`;
+            clone.style.zIndex = '2147483647';
+            clone.style.pointerEvents = 'none';
+            clone.style.opacity = '1';
+            clone.style.visibility = 'visible';
+
+            const sourceInputs = element.querySelectorAll('input, textarea, select');
+            const cloneInputs = clone.querySelectorAll('input, textarea, select');
+            sourceInputs.forEach((input, index) => {
+                const target = cloneInputs[index];
+                if (input instanceof HTMLInputElement && target instanceof HTMLInputElement) {
+                    target.value = input.value;
+                    target.checked = input.checked;
+                    return;
+                }
+                if (input instanceof HTMLTextAreaElement && target instanceof HTMLTextAreaElement) {
+                    target.value = input.value;
+                    return;
+                }
+                if (input instanceof HTMLSelectElement && target instanceof HTMLSelectElement) {
+                    target.value = input.value;
+                }
+            });
+
+            const host = document.createElement('div');
+            host.setAttribute('data-testid', 'e2e-create-room-modal-capture-host');
+            host.style.position = 'fixed';
+            host.style.inset = '0';
+            host.style.zIndex = '2147483647';
+            host.style.background = getComputedStyle(document.body).backgroundColor || '#efe4cb';
+            host.style.display = 'flex';
+            host.style.alignItems = 'flex-start';
+            host.style.justifyContent = 'flex-start';
+            host.style.padding = '16px';
+            host.style.pointerEvents = 'none';
+            host.appendChild(clone);
+            document.body.appendChild(host);
+
+            return {
+                modalLeft: modalRect.left,
+                modalTop: element.getBoundingClientRect().top,
+                modalWidth: modalRect.width,
+                modalHeight: modalRect.height,
+                roomNameBottom: roomName?.getBoundingClientRect().bottom ?? 0,
+                passwordBottom: password?.getBoundingClientRect().bottom ?? 0,
+                runtimeViewportHeight,
+                inputFontSizes: Array.from(element.querySelectorAll('input, select, textarea')).map((node) => {
+                    const rect = node.getBoundingClientRect();
+                    if (rect.width <= 0 || rect.height <= 0) {
+                        return 0;
+                    }
+                    const fontSize = window.getComputedStyle(node).fontSize || '0';
+                    return Number.parseFloat(fontSize);
+                }).filter((fontSize) => Number.isFinite(fontSize) && fontSize > 0),
+            };
+        });
+
+        expect(layoutMetrics.modalTop, '建房弹窗聚焦输入后顶部不应被顶出屏幕').toBeGreaterThanOrEqual(0);
+        expect(layoutMetrics.roomNameBottom, '房间名输入框应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
+        expect(layoutMetrics.passwordBottom, '密码输入框应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
+        expect(Math.min(...layoutMetrics.inputFontSizes), '移动端建房输入区至少应为 16px').toBeGreaterThanOrEqual(16);
+
+        await expect(page.getByTestId('e2e-create-room-modal-capture-host')).toBeVisible();
+        await page.screenshot({
+            path: 'test-results/evidence-screenshots/create-room-modal-mobile-keyboard-safe.png',
+            fullPage: false,
+        });
+    });
+
     test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {
         let delayedOnce = false;
         await page.route('**/games/tictactoe/create', async (route) => {
@@ -333,10 +501,10 @@ test.describe('Lobby E2E', () => {
 
         await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
-        await page.getByRole('button', { name: '创建房间' }).click();
+        await openCreateRoomFromDetailsModal(page);
         await expect(page.getByRole('heading', { name: '创建房间' })).toBeVisible();
 
-        await page.getByRole('button', { name: '确认创建' }).click();
+        await confirmCreateRoomFromModal(page);
 
         await expect(page.getByText('创建中')).toBeVisible({ timeout: 5000 });
         await expect(page.getByText('正在创建房间并进入对局...')).toBeVisible();
@@ -356,7 +524,7 @@ test.describe('Lobby E2E', () => {
 
         await page.getByRole('heading', { name: '大杀四方' }).click();
         await expect(page).toHaveURL(/game=smashup/);
-        await page.getByRole('button', { name: '创建房间' }).click();
+        await openCreateRoomFromDetailsModal(page);
 
         await expect(page.getByRole('heading', { name: '创建房间' })).toBeVisible();
         await page.getByRole('button', { name: '3人' }).click();
@@ -373,7 +541,7 @@ test.describe('Lobby E2E', () => {
 
         await game.screenshot('lobby-smashup-create-room-ai-config-hard-and-seats', testInfo);
 
-        await page.getByRole('button', { name: '确认创建' }).click();
+        await confirmCreateRoomFromModal(page);
 
         await expect(page).toHaveURL(/\/play\/smashup\/match\//);
 

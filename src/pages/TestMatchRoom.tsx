@@ -100,36 +100,22 @@ export const TestMatchRoom: React.FC = () => {
         if (!gameId) return;
 
         const loadGame = async () => {
-            console.log('[TestMatchRoom] 闁诲孩顔栭崰鎺楀磻閹炬枼鏀芥い鏃傗拡閸庡繐鈹戦鎯т沪婵炵⒈浜幊鐐哄Ψ瑜嶉悡鎴︽⒑?', gameId);
             try {
                 setLoading(true);
-                console.log('[TestMatchRoom] 闂佽崵濮撮鍛村疮娴兼潙鏋?loadGameImplementation');
                 await loadGameImplementation(gameId);
-                console.log('[TestMatchRoom] loadGameImplementation done');
-                
-                console.log('[TestMatchRoom] 闂佽崵濮撮鍛村疮娴兼潙鏋?getGameImplementation');
                 const impl = getGameImplementation(gameId);
-                console.log('[TestMatchRoom] getGameImplementation 缂傚倸鍊烽悞锕傚箰婵犳碍鍊?', {
-                    hasImpl: !!impl,
-                    hasEngineConfig: !!impl?.engineConfig,
-                    hasBoard: !!impl?.board,
-                });
 
                 if (!impl) {
                     console.error(`[TestMatchRoom] 婵犵數鍋為幐鎼佸箟閿熺姴鍨傛繛鍡樺灍閸嬫捇宕烽鐐版埛濡ょ姷鍋涘ú顓烆嚕閻㈠壊鏁傞柛娑卞弾濡喖姊? ${gameId}`);
                     return;
                 }
 
-                console.log('[TestMatchRoom] 闂佽崵濮崇粈浣规櫠娴犲鍋?engineConfig 闂?board');
                 setEngineConfig(impl.engineConfig);
                 setWrappedBoard(() => impl.board);
-                
-                console.log('[TestMatchRoom] game implementation loaded');
             } catch (error) {
                 console.error(`[TestMatchRoom] 闂備礁鎲″缁樻叏閹灐褰掑炊瑜嬮埀顒佸浮瀹曘劍绻濋崒婊€绨藉┑鐘灪閸庤偐鍒掗崜褎鍠?`, error);
                 console.error(`[TestMatchRoom] 闂傚倷鐒︾€笛囨偡閵娾晩鏁嬮柕鍫濐槸闁卞洭鏌涢埄鍐剧劷闁?`, (error as Error).stack);
             } finally {
-                console.log('[TestMatchRoom] 闂備礁鎲″缁樻叏閹灐褰掑炊閳规儳浜鹃柣鐔哄濠€浼存煕閵婏箑鍝洪柡浣哥Т閻ｆ繈宕橀幆褎娅楃紓?loading=false');
                 setLoading(false);
             }
         };
@@ -143,9 +129,6 @@ export const TestMatchRoom: React.FC = () => {
         
         const holder = window as Window & { __BG_TEST_CONFIG__?: typeof testConfig };
         holder.__BG_TEST_CONFIG__ = testConfig;
-        
-        console.log('[TestMatchRoom] 婵犵數鍋炲娆擃敄閸儲鍎婃い鏍仦閻撯偓閻庡箍鍎卞ú銊╁几閸屾壕鍋撻崷顓х劸鐎殿喖鐖煎顐︽倷閸濆嫮顦?', testConfig);
-        
         return () => {
             holder.__BG_TEST_CONFIG__ = undefined;
         };
@@ -156,7 +139,6 @@ export const TestMatchRoom: React.FC = () => {
         if (typeof window === 'undefined') return;
         if (!testConfig.player0Factions.length && !testConfig.player1Factions.length) return;
         if (testConfig.skipFactionSelect) {
-            console.log('[TestMatchRoom] skipFactionSelect=true, bypass auto faction selection');
             return;
         }
         // 缂傚倷鐒︾粙鎴λ囬婊勵偨闁绘梹鐏氶埀顒佸浮瀹曘劍绻濋崒婊€绨介梻浣告啞濮婄粯鎱ㄩ幆顬″綊宕堕埞鎯т壕闁荤喓澧楀﹢浼存煕?
@@ -166,30 +148,24 @@ export const TestMatchRoom: React.FC = () => {
         const checkAndAutoSelect = async () => {
             const harness = (window as any).__BG_TEST_HARNESS__;
             if (!harness || !harness.command.isRegistered()) {
-                console.log('[TestMatchRoom] TestHarness 闂備礁鎼悧婊勭濠婂喚娼╅柕濞у懐锛滃銈呯箰濞撮绮堟径宀€纾兼繛鎴烇供濡插摜绱?..');
                 return;
             }
             
             // 婵犵妲呴崑鈧柛瀣崌閺岋紕浠︾拠鎻掑缂傚倸绉撮澶婄暦濠婂喚鍚嬮柛銉仢閿曞倹鐓?
             const state = harness.state.get();
             if (!state || !state.core) {
-                console.log('[TestMatchRoom] state not ready');
                 return;
             }
             
             // 闂備礁鎲￠…鍥窗閹邦剨鑰垮〒姘ｅ亾闁诡垰鍟村畷鐔碱敊閸忕⒈鍞堕梻浣告啞閺岋綁宕濆鍚冲骸鐣烽崶褍顕ф繝鐢靛У閸╁啴宕戦幘鏉戠窞閻庯綆浜舵禒鎾⒒娓氬洤浜濇俊鍙夊笧濞嗐垽顢曢敂鑺ユ珫闂佸壊鍋侀崕顕€宕戦幘璇茬疀妞ゅ繐鐗嗗▓婵堢磽娴ｅ湱鈽夋い锔诲灣濞嗐垽鎮㈤崗鍏兼珫?
             if (!state.core.factionSelection) {
-                console.log('[TestMatchRoom] state not ready or faction selection already completed');
                 return;
             }
             
             if (state.sys.phase !== 'factionSelect') {
-                console.log('[TestMatchRoom] not in factionSelect phase, skip auto select');
                 return;
             }
-            
-            console.log('[TestMatchRoom] auto faction selection started');
-            
+
             // 闂備胶鍋撻弻銊ッ洪妶澶嬪殝濞寸厧鐡ㄩ悞璇差熆鐠鸿櫣鐒炬繛鐓庯躬閺屻劌鈽夊▎鎴炴儥0 闂?P1 闂?P1 闂?P0
             const selectionOrder: Array<{ playerId: string; factionIndex: number }> = [];
             selectionOrder.push({ playerId: '0', factionIndex: 0 });
@@ -206,8 +182,6 @@ export const TestMatchRoom: React.FC = () => {
                     console.warn(`[TestMatchRoom] player ${playerId} faction #${factionIndex + 1} missing, skip`);
                     continue;
                 }
-                
-                console.log(`[TestMatchRoom] 闂備胶绮竟鏇㈠疾濞戙埄鏁?${playerId} 闂傚倷绶￠崑鍕囬幍顔瑰亾濮樸儱濡奸悡銈夋煕閹炬娲ら崢?${factionIndex + 1}: ${factionId}`);
                 await harness.command.dispatch({
                     type: 'su:select_faction',
                     payload: { factionId }
@@ -216,8 +190,6 @@ export const TestMatchRoom: React.FC = () => {
                 // 缂傚倷鐒︾粙鎴λ囬婊勵偨闁绘柨鍚嬮崑鎰版煠閸濄儺鏆柛瀣尰閹峰懐鎲撮崟顓炲毐闂?
                 await new Promise(resolve => setTimeout(resolve, 100));
             }
-            
-            console.log('[TestMatchRoom] faction selection finished');
         };
         
         // 闁诲海鍋ｉ崐鏍磿閼测晜宕叉繝濠傜墕缁犮儳鎲搁幋锔衡偓渚€骞嬮敂鑺ユ珫閻庡厜鍋撻柍褜鍓熼崹鎯熼懡銈傛敵?LocalGameProvider 闁诲氦顫夐悺鏇犱焊濞嗘垵鍨濋柍銉︽灱閺嬫牠鏌曟繛鍨姎闁哄倵鍋?TestHarness
@@ -253,18 +225,12 @@ export const TestMatchRoom: React.FC = () => {
     }
 
     if (!engineConfig || !WrappedBoard) {
-        console.log('[TestMatchRoom] 婵犵數鍋為幐鎼佸箟閿熺姴鍨傛繛鍡樻尭缁€澶愭煟濡厧鍔嬬紒浣规緲椤潡骞嗛幍顔剧勘闁?', { engineConfig: !!engineConfig, WrappedBoard: !!WrappedBoard });
         return (
             <div className="w-full h-full flex items-center justify-center text-white/50">
                 {'\u6e38\u620f\u52a0\u8f7d\u5931\u8d25'}
             </div>
         );
     }
-    
-    console.log('[TestMatchRoom] 闂備礁鎲￠崹闈浳涘Δ鍚藉洭顢楅埀顒勫Υ閹烘鐭楀璺鸿嫰鐢?', {
-        engineConfig: !!engineConfig,
-        WrappedBoard: !!WrappedBoard,
-    });
 
     return (
         <>

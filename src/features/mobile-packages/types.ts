@@ -72,6 +72,8 @@ export type GamePackageCardState = Omit<StoredGamePackageState, 'gameId' | 'runt
     manifestSource?: ResolvedGamePackageManifest['source'];
     modulePackUrl?: string;
     assetPackUrl?: string;
+    availableVersion?: string;
+    isUpdateAvailable?: boolean;
 };
 
 export interface PendingGamePackageInstall extends ResolvedGamePackageManifest {
@@ -92,17 +94,35 @@ const normalizeOptionalNumber = (value: number | undefined) =>
         ? value
         : undefined;
 
-export const hasUsableInstalledGamePackageVersion = (value?: string) => {
-    if (typeof value !== 'string') {
-        return false;
-    }
+export const normalizeGamePackageVersion = (value?: string) =>
+    typeof value === 'string' && value.trim()
+        ? value.trim()
+        : undefined;
 
-    const normalized = value.trim();
+export const hasUsableInstalledGamePackageVersion = (value?: string) => {
+    const normalized = normalizeGamePackageVersion(value);
     if (!normalized) {
         return false;
     }
 
     return !INVALID_INSTALLED_VERSION_PLACEHOLDERS.has(normalized.toLowerCase());
+};
+
+export const hasGamePackageUpdateAvailable = (
+    installedVersion?: string,
+    availableVersion?: string,
+) => {
+    if (!hasUsableInstalledGamePackageVersion(installedVersion)) {
+        return false;
+    }
+
+    const normalizedInstalledVersion = normalizeGamePackageVersion(installedVersion);
+    const normalizedAvailableVersion = normalizeGamePackageVersion(availableVersion);
+    if (!normalizedInstalledVersion || !normalizedAvailableVersion) {
+        return false;
+    }
+
+    return normalizedInstalledVersion !== normalizedAvailableVersion;
 };
 
 export const createDefaultGamePackageState = (
@@ -149,4 +169,6 @@ export const toGamePackageCardState = (state: StoredGamePackageState): GamePacka
     installedVersion: state.installedVersion,
     errorCode: state.errorCode,
     errorMessage: state.errorMessage,
+    availableVersion: undefined,
+    isUpdateAvailable: false,
 });
