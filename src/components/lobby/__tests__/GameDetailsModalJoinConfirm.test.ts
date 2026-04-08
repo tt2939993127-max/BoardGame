@@ -253,6 +253,7 @@ vi.mock('../../../core', async (importOriginal) => {
 
 vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
     createNativeGamePackageInstallHandle: vi.fn(async () => null),
+    ensureNativeDownloadNotificationPermission: vi.fn(async () => null),
     listInstalledNativeGamePackages: vi.fn(async () => []),
     readNativeGamePackageInstallState: vi.fn(async () => null),
 }));
@@ -470,6 +471,7 @@ beforeEach(() => {
     latestCreateRoomModalProps.current = null;
     latestPackageInstallModalProps.current = null;
     latestConfirmModalProps.current = null;
+    vi.mocked(nativeGamePackagePlugin.ensureNativeDownloadNotificationPermission).mockResolvedValue(null);
     vi.mocked(matchStatus.getOwnerActiveMatch).mockImplementation(() => null);
     vi.mocked(matchStatus.getLatestStoredMatchCredentials).mockImplementation(() => null);
     vi.mocked(matchStatus.listStoredMatchCredentials).mockImplementation(() => []);
@@ -1214,6 +1216,136 @@ describe('GameDetailsModal create room ai entry', () => {
         await expect(installPromise).resolves.toEqual(expect.objectContaining({
             status: 'failed',
             errorMessage: '创建原生安装器超时，请重新发起。',
+        }));
+    });
+
+    it('通知权限未处理完前，不提前写入 queued，授权后才进入下载队列', async () => {
+        let resolvePermission: ((value: {
+            required: boolean;
+            granted: boolean;
+            canPrompt: boolean;
+            state: 'granted';
+            requested: boolean;
+        }) => void) | null = null;
+        let resolveFinished: ((value: {
+            gameId: string;
+            runtimeChannel: string;
+            status: 'installed';
+            modulePackId: string;
+            assetPackId: string;
+            installedVersion: string;
+            localAssetBaseUrl: string;
+            updatedAt: number;
+        }) => void) | null = null;
+
+        vi.mocked(nativeGamePackagePlugin.ensureNativeDownloadNotificationPermission).mockImplementationOnce(
+            () => new Promise((resolve) => {
+                resolvePermission = resolve;
+            }),
+        );
+        vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle).mockImplementationOnce(
+            async (_manifest, options) => ({
+                cancel: vi.fn(),
+                finished: new Promise((resolve) => {
+                    resolveFinished = (value) => {
+                        options.onStateChange(value);
+                        resolve(value);
+                    };
+                }),
+            }),
+        );
+
+        const fallbackState = createDefaultGamePackageState('dicethrone', {
+            mode: 'package-managed',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+        });
+        syncGamePackageState('dicethrone', fallbackState);
+
+        const installPromise = startGamePackageInstall({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            assetPackVersion: 'test-asset-pack-v1',
+            assetPackUrl: 'https://example.com/dicethrone.zip',
+            source: 'remote',
+        }, 'packageManager.runtimeUnsupported');
+
+        expect(vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle)).not.toHaveBeenCalled();
+        expect(JSON.parse(window.localStorage.getItem('mobile-package-state:dicethrone') ?? '{}')).toEqual(expect.objectContaining({
+            status: 'not-installed',
+        }));
+
+        resolvePermission?.({
+            required: true,
+            granted: true,
+            canPrompt: false,
+            state: 'granted',
+            requested: true,
+        });
+
+        await waitFor(() => {
+            expect(vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle)).toHaveBeenCalledTimes(1);
+            expect(JSON.parse(window.localStorage.getItem('mobile-package-state:dicethrone') ?? '{}')).toEqual(expect.objectContaining({
+                status: 'queued',
+            }));
+        });
+
+        resolveFinished?.({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            status: 'installed',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            installedVersion: 'test-asset-pack-v1',
+            localAssetBaseUrl: '/_capacitor_file_/data/user/0/top.easyboardgame.app.debug/files/game-packages/dicethrone/current/assets',
+            updatedAt: Date.now(),
+        });
+
+        await expect(installPromise).resolves.toEqual(expect.objectContaining({
+            status: 'installed',
+            installedVersion: 'test-asset-pack-v1',
+        }));
+    });
+
+    it('通知权限被拒绝时，不进入 queued，直接回退为失败态', async () => {
+        vi.mocked(nativeGamePackagePlugin.ensureNativeDownloadNotificationPermission).mockResolvedValueOnce({
+            required: true,
+            granted: false,
+            canPrompt: false,
+            state: 'denied',
+            requested: true,
+            message: '通知权限已被拒绝，请到系统设置中开启后再重试下载。',
+        });
+
+        const fallbackState = createDefaultGamePackageState('dicethrone', {
+            mode: 'package-managed',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+        });
+        syncGamePackageState('dicethrone', fallbackState);
+
+        await expect(startGamePackageInstall({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            assetPackVersion: 'test-asset-pack-v1',
+            assetPackUrl: 'https://example.com/dicethrone.zip',
+            source: 'remote',
+        }, 'packageManager.runtimeUnsupported')).resolves.toEqual(expect.objectContaining({
+            status: 'failed',
+            errorCode: 'notification-permission-required',
+            errorMessage: '通知权限已被拒绝，请到系统设置中开启后再重试下载。',
+        }));
+
+        expect(vi.mocked(nativeGamePackagePlugin.createNativeGamePackageInstallHandle)).not.toHaveBeenCalled();
+        expect(JSON.parse(window.localStorage.getItem('mobile-package-state:dicethrone') ?? '{}')).toEqual(expect.objectContaining({
+            status: 'failed',
+            errorCode: 'notification-permission-required',
         }));
     });
 

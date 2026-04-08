@@ -78,6 +78,7 @@ type PinchState = {
     targetLeft: number;
     targetTop: number;
     startCenterTargetLocal: { x: number; y: number };
+    activated: boolean;
 };
 type PanState = {
     pointerId: number;
@@ -89,6 +90,7 @@ type PanState = {
 
 const MIN_SCALE = 1;
 const MAX_SCALE = 2.5;
+const PINCH_ACTIVATION_DISTANCE_PX = 12;
 const PAN_THRESHOLD_LOCAL_PX = 10;
 const CLICK_SUPPRESS_MS = 320;
 const ZOOM_TARGET_SELECTOR = '[data-mobile-battlefield-zoom-target="true"]';
@@ -396,6 +398,7 @@ export const MobileBattlefieldViewport = ({
                 targetLeft: center.left,
                 targetTop: center.top,
                 startCenterTargetLocal: { x: center.x, y: center.y },
+                activated: false,
             };
             panRef.current = null;
             return true;
@@ -437,6 +440,7 @@ export const MobileBattlefieldViewport = ({
                     targetLeft: center.left,
                     targetTop: center.top,
                     startCenterTargetLocal: { x: center.x, y: center.y },
+                    activated: false,
                 } satisfies PinchState;
             })();
             pinchRef.current = pinch;
@@ -446,7 +450,32 @@ export const MobileBattlefieldViewport = ({
                 (first.clientX + second.clientX) / 2,
                 (first.clientY + second.clientY) / 2,
             );
-            const nextScale = clampScale(pinch.startScale * (getDistance(first, second) / pinch.startDistance));
+            const currentDistance = Math.max(getDistance(first, second), 1);
+
+            if (!pinch.activated) {
+                if (Math.abs(currentDistance - pinch.startDistance) < PINCH_ACTIVATION_DISTANCE_PX) {
+                    suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
+                    return true;
+                }
+
+                const center = getTargetLocalPoint(
+                    surfaceRef.current,
+                    activeTarget,
+                    transformRef.current,
+                    (first.clientX + second.clientX) / 2,
+                    (first.clientY + second.clientY) / 2,
+                );
+                pinch.startDistance = currentDistance;
+                pinch.startScale = transformRef.current.scale;
+                pinch.targetLeft = center.left;
+                pinch.targetTop = center.top;
+                pinch.startCenterTargetLocal = { x: center.x, y: center.y };
+                pinch.activated = true;
+                suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
+                return true;
+            }
+
+            const nextScale = clampScale(pinch.startScale * (currentDistance / pinch.startDistance));
 
             setTransform(() => {
                 const clamped = clampTransform(surfaceRef.current, activeTarget, {
@@ -522,6 +551,7 @@ export const MobileBattlefieldViewport = ({
                 targetLeft: center.left,
                 targetTop: center.top,
                 startCenterTargetLocal: { x: center.x, y: center.y },
+                activated: false,
             };
             panRef.current = null;
             return;

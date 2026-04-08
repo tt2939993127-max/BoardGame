@@ -180,4 +180,64 @@ describe('MobileBoardShell', () => {
         expect(viewport.getAttribute('data-battlefield-touch-mode')).toBe('gesture-lock');
         expect(stage.style.transform).toContain('scale(');
     });
+
+    it('uses the first real pinch frame as the zoom anchor instead of jumping on the first move', () => {
+        render(
+            <MobileBattlefieldViewport zoomMode="shell-pinch-pan" testId="battlefield">
+                <div>board</div>
+            </MobileBattlefieldViewport>,
+        );
+
+        const viewport = screen.getByTestId('battlefield');
+
+        act(() => {
+            fireEvent.pointerDown(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 180,
+                clientY: 180,
+            });
+            fireEvent.pointerDown(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 280,
+                clientY: 180,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 288,
+                clientY: 180,
+            });
+        });
+
+        expect(viewport.getAttribute('data-battlefield-zoom-scale')).toBe('1.000');
+        expect(viewport.getAttribute('data-battlefield-translate-x')).toBe('0.000');
+        expect(viewport.getAttribute('data-battlefield-translate-y')).toBe('0.000');
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 300,
+                clientY: 180,
+            });
+        });
+
+        expect(viewport.getAttribute('data-battlefield-zoom-scale')).toBe('1.000');
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 344,
+                clientY: 180,
+            });
+        });
+
+        expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThan(1.1);
+    });
 });
