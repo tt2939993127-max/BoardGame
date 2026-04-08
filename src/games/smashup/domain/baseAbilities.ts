@@ -1109,9 +1109,6 @@ export function registerBaseAbilities(): void {
     // "每当有一个随从打出到这里后，它的拥有者可以额外打出一个力量为2或以下的随从"
     // 力量≤2 限制通过 LIMIT_MODIFIED 事件的 powerMax 字段全局生效
     registerBaseAbility('base_the_homeworld', 'onMinionPlayed', (ctx) => {
-        // POD 勘误：改为“每回合一次”。若统计缺失（如部分单测直接调用），按可触发处理。
-        const playedAtBaseThisTurn = getTurnMinionsPlayedAtBase(ctx.state, ctx.baseIndex);
-        if (playedAtBaseThisTurn >= 2) return { events: [] };
         return {
             events: [{
                 type: SU_EVENTS.LIMIT_MODIFIED,

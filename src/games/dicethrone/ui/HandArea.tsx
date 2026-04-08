@@ -868,27 +868,44 @@ export const HandArea = ({
                                                 ${canClickDiscard && !isHovered ? 'ring-2 ring-red-500/50' : ''}
                                                 ${respondableCardIds?.has(card.id) && !isDragging && !canClickDiscard ? 'ring-4 ring-cyan-400 shadow-cyan-400/60' : ''}
                                             `}
-                                            style={{ transformStyle: 'preserve-3d' }}
+                                            style={{
+                                                transformStyle: 'preserve-3d',
+                                                WebkitTransformStyle: 'preserve-3d',
+                                                willChange: 'transform',
+                                            }}
                                             initial={{ rotateY: isFlipped ? 0 : 180 }}
                                             animate={{ rotateY: isFlipped ? 0 : 180 }}
                                             transition={{ duration: 0.6 }}
                                         >
-                                            <CardPreview
-                                                previewRef={card.previewRef}
-                                                locale={locale}
-                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] border border-slate-700"
-                                                style={{
-                                                    backgroundColor: '#1e293b',
-                                                    backfaceVisibility: 'hidden',
-                                                }}
-                                            />
                                             <div
+                                                data-card-face="front"
+                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] overflow-hidden"
+                                                style={{
+                                                    transform: 'translateZ(0.1px)',
+                                                    WebkitTransform: 'translateZ(0.1px)',
+                                                    backfaceVisibility: 'hidden',
+                                                    WebkitBackfaceVisibility: 'hidden',
+                                                }}
+                                            >
+                                                <CardPreview
+                                                    previewRef={card.previewRef}
+                                                    locale={locale}
+                                                    className="w-full h-full rounded-[0.8vw] border border-slate-700"
+                                                    style={{
+                                                        backgroundColor: '#1e293b',
+                                                    }}
+                                                />
+                                            </div>
+                                            <div
+                                                data-card-face="back"
                                                 className="absolute inset-0 w-full h-full rounded-[0.8vw] border border-slate-700"
                                                 style={{
-                                                    transform: 'rotateY(180deg)',
+                                                    transform: 'rotateY(180deg) translateZ(0.1px)',
+                                                    WebkitTransform: 'rotateY(180deg) translateZ(0.1px)',
                                                     backgroundImage: cardBackImage,
                                                     backgroundSize: 'cover',
                                                     backfaceVisibility: 'hidden',
+                                                    WebkitBackfaceVisibility: 'hidden',
                                                 }}
                                             />
                                         </motion.div>

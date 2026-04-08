@@ -140,6 +140,43 @@ async function createTicTacToeRoom(page: Page): Promise<string> {
     return matchId;
 }
 
+async function createLockedTicTacToeRoom(page: Page): Promise<{ matchId: string; roomName: string; password: string }> {
+    const gameServerBaseURL = getGameServerBaseURL();
+    const guestId = `private-room-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+    const roomName = `移动端密码房-${guestId.slice(-4)}`;
+    const password = '654321';
+
+    const createResponse = await page.request.post(`${gameServerBaseURL}/games/tictactoe/create`, {
+        data: {
+            numPlayers: 2,
+            setupData: {
+                guestId,
+                roomName,
+                password,
+            },
+        },
+    });
+    if (!createResponse.ok()) {
+        throw new Error(`私密井字棋建房失败: ${createResponse.status()}`);
+    }
+    const createData = await createResponse.json() as { matchID?: string };
+    const matchId = createData.matchID;
+    if (!matchId) throw new Error('私密建房响应缺少 matchID');
+
+    const joinResponse = await page.request.post(`${gameServerBaseURL}/games/tictactoe/${matchId}/join`, {
+        data: {
+            playerID: '0',
+            playerName: `Private_${guestId.slice(-4)}`,
+            data: { guestId, password },
+        },
+    });
+    if (!joinResponse.ok()) {
+        throw new Error(`私密房主加入失败: ${joinResponse.status()}`);
+    }
+
+    return { matchId, roomName, password };
+}
+
 test.describe('Lobby E2E', () => {
     test.describe.configure({ timeout: 90000 });
 
@@ -485,6 +522,81 @@ test.describe('Lobby E2E', () => {
         await expect(page.getByTestId('e2e-create-room-modal-capture-host')).toBeVisible();
         await page.screenshot({
             path: 'test-results/evidence-screenshots/create-room-modal-mobile-keyboard-safe.png',
+            fullPage: false,
+        });
+    });
+
+    test('移动端私密房间密码输入聚焦后仍应保持可见', async ({ page }) => {
+        await page.setViewportSize({ width: 393, height: 852 });
+        await setChineseLocale(page);
+
+        const privateRoom = await createLockedTicTacToeRoom(page);
+        await page.goto('/?game=tictactoe', { waitUntil: 'domcontentloaded' });
+        await expect(page).toHaveURL(/game=tictactoe/);
+        const detailsModal = page.getByTestId('game-details-modal-root').last();
+        await expect(detailsModal).toBeVisible({ timeout: 15000 });
+
+        const roomCard = detailsModal.getByTestId(`room-list-item-${privateRoom.matchId}`).last();
+        await expect(roomCard).toBeVisible({ timeout: 15000 });
+
+        await roomCard.getByTestId(`room-list-join-${privateRoom.matchId}`).evaluate((button) => {
+            if (!(button instanceof HTMLButtonElement)) {
+                throw new Error('私密房间加入按钮节点不是 button');
+            }
+            button.click();
+        });
+
+        const passwordModal = page.getByTestId('room-password-modal');
+        const passwordInput = page.getByTestId('room-password-input');
+        const confirmButton = page.getByTestId('room-password-confirm');
+
+        await expect(passwordModal).toBeVisible();
+        await expect(confirmButton).toBeVisible();
+        await applyKeyboardViewportSimulation(page, {
+            runtimeViewportHeight: 564,
+            keyboardInsetHeight: 280,
+        });
+
+        await passwordInput.evaluate((node, value) => {
+            if (!(node instanceof HTMLInputElement)) {
+                throw new Error('私密房间密码输入框节点不是 input');
+            }
+            node.focus();
+            node.value = value;
+            node.dispatchEvent(new Event('input', { bubbles: true }));
+        }, privateRoom.password);
+
+        await expect(passwordInput).toHaveValue(privateRoom.password);
+
+        const layoutMetrics = await passwordModal.evaluate((element) => {
+            if (!(element instanceof HTMLElement)) {
+                throw new Error('私密房间密码弹窗节点不是 HTMLElement');
+            }
+
+            const input = element.querySelector('[data-testid="room-password-input"]');
+            const confirm = element.querySelector('[data-testid="room-password-confirm"]');
+            const modalRect = element.getBoundingClientRect();
+            const runtimeViewportHeight = Number.parseFloat(
+                window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0',
+            );
+            const fontSize = input ? Number.parseFloat(window.getComputedStyle(input).fontSize || '0') : 0;
+
+            return {
+                modalTop: modalRect.top,
+                inputBottom: input?.getBoundingClientRect().bottom ?? 0,
+                confirmBottom: confirm?.getBoundingClientRect().bottom ?? 0,
+                runtimeViewportHeight,
+                fontSize,
+            };
+        });
+
+        expect(layoutMetrics.modalTop, '私密房间密码弹窗聚焦后顶部不应被顶出屏幕').toBeGreaterThanOrEqual(0);
+        expect(layoutMetrics.inputBottom, '私密房间密码输入框应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
+        expect(layoutMetrics.confirmBottom, '私密房间确认按钮应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
+        expect(layoutMetrics.fontSize, '移动端私密房间密码输入至少应为 16px').toBeGreaterThanOrEqual(16);
+
+        await page.screenshot({
+            path: 'test-results/evidence-screenshots/private-room-password-modal-mobile.png',
             fullPage: false,
         });
     });

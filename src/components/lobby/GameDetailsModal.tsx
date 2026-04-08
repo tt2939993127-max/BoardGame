@@ -128,6 +128,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         cancelInstall: cancelGamePackageInstall,
         confirmInstall: confirmGamePackageInstall,
         retryInstall: retryGamePackageInstall,
+        notificationPermissionAction: packageNotificationPermissionAction,
+        openNotificationSettings: openGamePackageNotificationSettings,
     } = useGamePackageState({
         gameId,
         gameName: gameDisplayName,
@@ -145,6 +147,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const shouldShowInstalledPackageVersionBadge = hasInstalledPackageForMobileGame
         && !hasMobilePackageUpdateAvailable
         && !isAppUpdateRequiredForMobileGame;
+    const packageInstallFailedActionLabel = packageInstallCardState.errorCode === 'notification-permission-required'
+        && packageNotificationPermissionAction === 'settings'
+        ? t('packageManager.notificationSettingsAction')
+        : t('packageManager.retryAction');
     const mobilePackageCardDisplayState = (
         (!hasInstalledPackageForMobileGame || hasMobilePackageUpdateAvailable)
         && packageInstallCardState.status === 'installed'
@@ -193,7 +199,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     icon: RefreshCw,
                     iconClassName: '',
                     buttonClassName: 'border-amber-800/20 bg-amber-50/92 text-amber-900 hover:bg-amber-100',
-                    label: t('packageManager.retryAction'),
+                    label: packageInstallFailedActionLabel,
                 };
             case 'installed':
                 return {
@@ -217,6 +223,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         mobilePackageCardDisplayState.installedVersion,
         mobilePackageCardDisplayState.status,
         isAppUpdateRequiredForMobileGame,
+        packageInstallFailedActionLabel,
         t,
     ]);
     const MobilePackageToggleIcon = mobilePackageToggleMeta.icon;
@@ -559,12 +566,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             status: packageInstallCardState.status,
             errorMessage: packageInstallCardState.errorMessage,
         });
+        if (
+            packageInstallCardState.errorCode === 'notification-permission-required'
+            && packageNotificationPermissionAction === 'settings'
+        ) {
+            void openGamePackageNotificationSettings();
+            return;
+        }
         retryGamePackageInstall();
     }, [
         gameDisplayName,
         gameId,
+        openGamePackageNotificationSettings,
         packageInstallCardState.errorMessage,
+        packageInstallCardState.errorCode,
         packageInstallCardState.status,
+        packageNotificationPermissionAction,
         retryGamePackageInstall,
     ]);
 
@@ -1861,6 +1878,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                         state={mobilePackageCardDisplayState}
                                         onInstall={handleOpenMobilePackageInstall}
                                         onRetry={handleRetryPackageInstall}
+                                        failedActionLabel={packageInstallFailedActionLabel}
                                         onCancel={handleCancelPackageInstall}
                                         onCollapse={() => setIsMobilePackageCardExpanded(false)}
                                         presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
@@ -2151,6 +2169,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     closeOnBackdrop
                     onConfirm={handleConfirmPackageInstall}
                     onRetry={handleRetryPackageInstall}
+                    failedActionLabel={packageInstallFailedActionLabel}
                     onClose={handleDismissPackageInstall}
                     onCancel={handleCancelPackageInstall}
                 />

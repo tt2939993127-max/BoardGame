@@ -1,5 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './framework';
 import { setChineseLocale } from './helpers/common';
+
+const REVIEW_MOBILE_SCREENSHOT_PATH = 'test-results/evidence-screenshots/review-form-mobile-input-visible.png';
 
 const mockUser = {
     id: 'user-review-test',
@@ -177,5 +179,87 @@ test.describe('游戏评价系统', () => {
         await expect(page.getByText('评价已发布')).toBeVisible();
         await expect(page.getByText(/100%\s*好评/i)).toBeVisible();
         await expect(page.getByText('评测者', { exact: true })).toBeVisible();
+    });
+
+    test('移动端评价输入聚焦后仍应保持可见', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/?game=tictactoe', { waitUntil: 'domcontentloaded' });
+
+        const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
+        if (await serviceUnavailable.isVisible().catch(() => false)) {
+            await page.getByRole('button', { name: /Close|关闭/i }).first().click();
+        }
+
+        await expect(page).toHaveURL(/game=tictactoe/);
+        const getDetailsModal = () => page.getByTestId('game-details-modal-root').last();
+        await expect(getDetailsModal()).toBeVisible({ timeout: 15000 });
+        const modalRoot = page.locator('#modal-root');
+        await getDetailsModal().getByRole('button', { name: '评价' }).evaluate((button) => {
+            if (!(button instanceof HTMLButtonElement)) {
+                throw new Error('评价标签节点不是 button');
+            }
+            button.click();
+        });
+        await expect(modalRoot.getByText('评价较少')).toBeVisible({ timeout: 10000 });
+
+        const writeButton = getDetailsModal().getByRole('button', { name: '写评价' });
+        await expect(writeButton).toBeVisible();
+        await writeButton.evaluate((button) => {
+            if (!(button instanceof HTMLButtonElement)) {
+                throw new Error('写评价按钮节点不是 button');
+            }
+            button.click();
+        });
+
+        const positiveBtn = modalRoot.getByRole('button', { name: '推荐' });
+        await positiveBtn.click();
+
+        await page.evaluate(() => {
+            const root = document.documentElement;
+            root.style.setProperty('--runtime-viewport-height', '564px');
+            root.style.setProperty('--keyboard-inset-height', '280px');
+            root.dataset.keyboardVisible = 'true';
+        });
+
+        const textarea = modalRoot.getByPlaceholder('写点什么...');
+        await textarea.click();
+        await textarea.fill('移动端评价输入可见性校验');
+        await expect(textarea).toHaveValue('移动端评价输入可见性校验');
+
+        const submitBtn = modalRoot.getByRole('button', { name: '发布评论' });
+        const metrics = await textarea.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const fontSize = Number.parseFloat(window.getComputedStyle(node).fontSize || '0');
+            const runtimeViewportHeight = Number.parseFloat(
+                window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0',
+            );
+            return {
+                right: rect.right,
+                bottom: rect.bottom,
+                viewportWidth: window.innerWidth,
+                runtimeViewportHeight,
+                fontSize,
+            };
+        });
+        const submitMetrics = await submitBtn.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const runtimeViewportHeight = Number.parseFloat(
+                window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0',
+            );
+            return {
+                bottom: rect.bottom,
+                runtimeViewportHeight,
+            };
+        });
+
+        expect(metrics.right).toBeLessThanOrEqual(metrics.viewportWidth);
+        expect(metrics.bottom).toBeLessThanOrEqual(metrics.runtimeViewportHeight);
+        expect(metrics.fontSize).toBeGreaterThanOrEqual(16);
+        expect(submitMetrics.bottom).toBeLessThanOrEqual(submitMetrics.runtimeViewportHeight);
+
+        await page.screenshot({
+            path: REVIEW_MOBILE_SCREENSHOT_PATH,
+            fullPage: false,
+        });
     });
 });

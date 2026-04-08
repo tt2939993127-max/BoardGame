@@ -33,6 +33,10 @@ import { SU_COMMANDS } from '../domain/types';
 import { ToastProvider } from '../../../contexts/ToastContext';
 import { PromptOverlay } from '../ui/PromptOverlay';
 import { SmashUpCardRenderer } from '../ui/SmashUpCardRenderer';
+import {
+    buildMinionUidSnapshotByController,
+    resolveEnteringMinionUidsByController,
+} from '../ui/baseZoneEntryAnimation';
 
 vi.mock('../../../components/common/media/CardPreview', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../../../components/common/media/CardPreview')>();
@@ -148,6 +152,40 @@ beforeAll(() => {
 });
 
 describe('SmashUp UI 交互验证', () => {
+    it('BaseZone 初次挂载时不应把现有随从误判成新入场', () => {
+        const turnOrder = ['0', '1'];
+        const minionsByController = {
+            '0': [makeMinion('ally-1', 'robot_microbot_alpha', '0', 2)],
+            '1': [makeMinion('enemy-1', 'pirate_first_mate', '1', 3)],
+        };
+
+        const initialSnapshot = buildMinionUidSnapshotByController(turnOrder, minionsByController);
+        const entering = resolveEnteringMinionUidsByController(turnOrder, initialSnapshot, initialSnapshot);
+
+        expect(Array.from(entering['0'] ?? [])).toEqual([]);
+        expect(Array.from(entering['1'] ?? [])).toEqual([]);
+    });
+
+    it('BaseZone 仅应给新 UID 随从播放入场动画，旧 UID 重渲染不应重复入场', () => {
+        const turnOrder = ['0', '1'];
+        const previousSnapshot = buildMinionUidSnapshotByController(turnOrder, {
+            '0': [makeMinion('ally-1', 'robot_microbot_alpha', '0', 2)],
+            '1': [makeMinion('enemy-1', 'pirate_first_mate', '1', 3)],
+        });
+        const currentSnapshot = buildMinionUidSnapshotByController(turnOrder, {
+            '0': [
+                makeMinion('ally-1', 'robot_microbot_alpha', '0', 2),
+                makeMinion('ally-2', 'robot_microbot_fixer', '0', 1),
+            ],
+            '1': [makeMinion('enemy-1', 'pirate_first_mate', '1', 3)],
+        });
+
+        const entering = resolveEnteringMinionUidsByController(turnOrder, currentSnapshot, previousSnapshot);
+
+        expect(Array.from(entering['0'] ?? [])).toEqual(['ally-2']);
+        expect(Array.from(entering['1'] ?? [])).toEqual([]);
+    });
+
     it('原生泰坦图集预览应透传正确的 atlas index', () => {
         render(
             React.createElement(SmashUpCardRenderer, {

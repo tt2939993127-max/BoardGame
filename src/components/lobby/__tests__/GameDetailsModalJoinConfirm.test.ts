@@ -254,7 +254,9 @@ vi.mock('../../../core', async (importOriginal) => {
 vi.mock('../../../features/mobile-packages/nativeGamePackagePlugin', () => ({
     createNativeGamePackageInstallHandle: vi.fn(async () => null),
     ensureNativeDownloadNotificationPermission: vi.fn(async () => null),
+    getNativeDownloadNotificationPermissionStatus: vi.fn(async () => null),
     listInstalledNativeGamePackages: vi.fn(async () => []),
+    openNativeDownloadNotificationSettings: vi.fn(async () => false),
     readNativeGamePackageInstallState: vi.fn(async () => null),
 }));
 
@@ -718,6 +720,26 @@ describe('GameDetailsMobilePackageCard', () => {
         fireEvent.click(screen.getByText('packageManager.retryAction'));
 
         expect(retryMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('通知权限被系统拒绝时显示打开通知设置按钮', () => {
+        const openSettingsMock = vi.fn();
+
+        render(createElement(GameDetailsMobilePackageCard, {
+            gameName: 'Tic-Tac-Toe',
+            state: {
+                status: 'failed',
+                errorCode: 'notification-permission-required',
+                errorMessage: '通知权限已被拒绝，请到系统设置中开启后再重试下载。',
+            },
+            onInstall: vi.fn(),
+            onRetry: openSettingsMock,
+            failedActionLabel: 'packageManager.notificationSettingsAction',
+        }));
+
+        fireEvent.click(screen.getByText('packageManager.notificationSettingsAction'));
+
+        expect(openSettingsMock).toHaveBeenCalledTimes(1);
     });
 
     it('更新模式显示更新提示而不是安装按钮', () => {
@@ -1347,6 +1369,74 @@ describe('GameDetailsModal create room ai entry', () => {
             status: 'failed',
             errorCode: 'notification-permission-required',
         }));
+    });
+
+    it('冷启动读到通知权限失败且系统不可再弹窗时，显示打开通知设置入口', async () => {
+        window.localStorage.setItem('mobile-package-state:dicethrone', JSON.stringify({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            status: 'failed',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            errorCode: 'notification-permission-required',
+            errorMessage: '通知权限已被拒绝，请到系统设置中开启后再重试下载。',
+            updatedAt: Date.now(),
+        }));
+        vi.mocked(nativeGamePackagePlugin.getNativeDownloadNotificationPermissionStatus).mockResolvedValue({
+            required: true,
+            granted: false,
+            canPrompt: false,
+            state: 'denied',
+            requested: true,
+            message: '通知权限已被拒绝，请到系统设置中开启后再重试下载。',
+        });
+        vi.mocked(nativeGamePackagePlugin.openNativeDownloadNotificationSettings).mockResolvedValue(true);
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'packageManager.notificationSettingsAction' })).toBeInTheDocument();
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'packageManager.notificationSettingsAction' }));
+
+        expect(nativeGamePackagePlugin.openNativeDownloadNotificationSettings).toHaveBeenCalledTimes(1);
+    });
+
+    it('通知权限恢复后，冷启动会把旧失败态恢复成可重新下载', async () => {
+        window.localStorage.setItem('mobile-package-state:dicethrone', JSON.stringify({
+            gameId: 'dicethrone',
+            runtimeChannel: 'stable',
+            status: 'failed',
+            modulePackId: 'dicethrone',
+            assetPackId: 'dicethrone',
+            errorCode: 'notification-permission-required',
+            errorMessage: '通知权限已被拒绝，请到系统设置中开启后再重试下载。',
+            updatedAt: Date.now(),
+        }));
+        vi.mocked(nativeGamePackagePlugin.getNativeDownloadNotificationPermissionStatus).mockResolvedValue({
+            required: true,
+            granted: true,
+            canPrompt: false,
+            state: 'granted',
+            requested: true,
+        });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByTestId('game-details-mobile-package-toggle'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('button', { name: 'packageManager.installAction' })).toBeInTheDocument();
+        });
+
+        const stored = JSON.parse(window.localStorage.getItem('mobile-package-state:dicethrone') ?? '{}');
+        expect(stored).toEqual(expect.objectContaining({
+            status: 'not-installed',
+        }));
+        expect(stored.errorCode).toBeUndefined();
     });
 
     it('下载完成后，package-managed 游戏允许创建房间', async () => {

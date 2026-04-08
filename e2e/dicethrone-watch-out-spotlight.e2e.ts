@@ -1029,7 +1029,7 @@ async function injectHeroHandScreenshotScene(
             ...state,
             sys: {
                 ...state.sys,
-                phase: 'offensiveRoll',
+                phase: 'main1',
                 interaction: {
                     current: undefined,
                     queue: [],
@@ -1115,6 +1115,42 @@ async function waitForHandCardsFlipped(
             && !hasAtlasShimmer;
     }, expectedCount, { timeout: 10000, polling: 100 });
     await page.waitForTimeout(300);
+}
+
+async function waitForHandCardFrontFacesReady(
+    page: Page,
+    expectedCount: number,
+    expectedAssetFragment = 'ability-cards.webp',
+): Promise<void> {
+    await page.waitForFunction(({ count, assetFragment }) => {
+        const handArea = document.querySelector('[data-testid="hand-area"]');
+        if (!handArea) return false;
+        const cards = Array.from(handArea.querySelectorAll('[data-card-id]'));
+        if (cards.length !== count) return false;
+
+        return cards.every((card) => {
+            const frontFace = card.querySelector('[data-card-face="front"]');
+            if (!(frontFace instanceof HTMLElement)) return false;
+
+            const previewNode = Array.from(frontFace.querySelectorAll('*')).find((node) => {
+                if (!(node instanceof HTMLElement)) return false;
+                const bgImage = window.getComputedStyle(node).backgroundImage;
+                return Boolean(bgImage) && bgImage !== 'none' && bgImage.includes(assetFragment);
+            });
+
+            if (!(previewNode instanceof HTMLElement)) return false;
+
+            const previewStyle = window.getComputedStyle(previewNode);
+            const previewRect = previewNode.getBoundingClientRect();
+            const faceStyle = window.getComputedStyle(frontFace);
+
+            return previewRect.width > 0
+                && previewRect.height > 0
+                && previewStyle.backgroundImage !== 'none'
+                && !previewStyle.backgroundImage.includes('gradient(')
+                && faceStyle.backfaceVisibility === 'hidden';
+        });
+    }, { count: expectedCount, assetFragment: expectedAssetFragment }, { timeout: 10000, polling: 100 });
 }
 
 test('self watch out should show bonus die spotlight', async ({ page, game }, testInfo) => {
@@ -1227,6 +1263,7 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(3, { timeout: 10000 });
     await waitForHandCardsFlipped(page, 3);
+    await waitForHandCardFrontFacesReady(page, 3);
     await saveLocatorEvidenceScreenshot(
         handArea,
         testInfo,
@@ -1259,6 +1296,7 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
     await waitForHandCardsFlipped(page, 6);
+    await waitForHandCardFrontFacesReady(page, 6);
     await saveLocatorEvidenceScreenshot(
         handArea,
         testInfo,
@@ -1277,11 +1315,93 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(3, { timeout: 10000 });
     await waitForHandCardsFlipped(page, 3);
+    await waitForHandCardFrontFacesReady(page, 3);
     await saveLocatorEvidenceScreenshot(
         handArea,
         testInfo,
         '12-monk-hand-area-reference',
         '12-monk-hand-area-reference.png',
+    );
+});
+
+test('gunslinger hand area should recover after first atlas load failure without manual refresh', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await clearEvidenceScreenshotsForTest(testInfo);
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+
+    await page.evaluate(() => {
+        (window as any).__BG_ASSET_CACHE__?.preloadedImages?.clear?.();
+        const OriginalImage = window.Image;
+        if ((window as any).__BG_FAIL_GUNSLINGER_ATLAS_PATCHED__) {
+            (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ = 0;
+            return;
+        }
+
+        let failed = false;
+        class FailFirstGunslingerAtlasImage extends OriginalImage {
+            get src() {
+                return super.src;
+            }
+
+            set src(value: string) {
+                if (!failed && typeof value === 'string' && value.includes('/dicethrone/images/gunslinger/compressed/ability-cards.webp')) {
+                    failed = true;
+                    (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ = ((window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ ?? 0) + 1;
+                    window.setTimeout(() => {
+                        this.onerror?.(new Event('error'));
+                    }, 0);
+                    return;
+                }
+                super.src = value;
+            }
+        }
+
+        (window as any).__BG_FAIL_GUNSLINGER_ATLAS_PATCHED__ = true;
+        (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ = 0;
+        (window as any).Image = FailFirstGunslingerAtlasImage;
+    });
+
+    const handArea = page.locator('[data-testid="hand-area"]');
+    await injectHeroHandScreenshotScene(page, {
+        heroId: 'gunslinger',
+        opponentId: 'monk',
+        handCardIds: [
+            'upgrade-fan-the-hammer-2',
+            'upgrade-take-cover-2',
+            'upgrade-deadeye-2',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
+        ],
+    });
+    await page.waitForFunction((handCardIds) => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        const handIds = state?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [];
+        return state?.core?.selectedCharacters?.['0'] === 'gunslinger'
+            && handIds.length === handCardIds.length
+            && handCardIds.every((cardId: string, index: number) => handIds[index] === cardId);
+    }, [
+        'upgrade-fan-the-hammer-2',
+        'upgrade-take-cover-2',
+        'upgrade-deadeye-2',
+        'card-wanted',
+        'card-spin-the-chamber',
+        'card-high-noon',
+    ], { timeout: 10000, polling: 200 });
+    await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
+    await waitForHandCardsFlipped(page, 6);
+    await waitForHandCardFrontFacesReady(page, 6);
+
+    const failCount = await page.evaluate(() => (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ ?? 0);
+    expect(failCount).toBe(1);
+
+    await saveLocatorEvidenceScreenshot(
+        handArea,
+        testInfo,
+        '13-gunslinger-hand-area-auto-retry-after-fail',
+        '13-gunslinger-hand-area-auto-retry-after-fail.png',
     );
 });
 

@@ -140,6 +140,7 @@
     "runtimeUnsupported": "当前运行环境暂不支持下载游戏包，请在 Android App 内重试。",
     "failedTitle": "下载失败",
     "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",
+    "notificationSettingsAction": "打开通知设置",
     "retryAction": "重新发起",
     "cancelAction": "取消下载",
     "pending": "该游戏的移动端包管理正在接入，入口位置和状态骨架已预留。",

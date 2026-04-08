@@ -361,9 +361,18 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     
     // 对手视角切换状态（必须在使用前声明，避免 TDZ 错误）
     const [viewMode, setViewMode] = useState<'self' | 'opponent'>('self');
+    const opponentScoreTouchHandledAtRef = useRef(0);
     const toggleViewMode = useCallback(() => {
         setViewMode(prev => prev === 'self' ? 'opponent' : 'self');
     }, []);
+    const triggerOpponentViewFromTouch = useCallback(() => {
+        const now = Date.now();
+        if (now - opponentScoreTouchHandledAtRef.current < 400) {
+            return;
+        }
+        opponentScoreTouchHandledAtRef.current = now;
+        toggleViewMode();
+    }, [toggleViewMode]);
     
     // 对手玩家数据
     const opponentPid = coreTurnOrder.find(pid => pid !== rootPid) || '1';
@@ -505,6 +514,16 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             label: resolvePromptOptionLabel(opt),
         }));
     }, [isHandDiscardPrompt, currentPrompt, resolvePromptOptionLabel]);
+
+    // 手牌区交互模式需要额外门禁：
+    // - 用户全局偏好可以是 drag
+    // - 但 hand prompt / 弃牌态本质上是“选牌交互”，不是“正常打牌”
+    //   此时必须强制回到 click，避免把“额外打出一张随从”等交互误做成拖拽。
+    const handInteractionMode = useMemo<'click' | 'drag'>(() => {
+        if (interactionMode !== 'drag') return 'click';
+        if (needDiscard || isHandDiscardPrompt) return 'click';
+        return 'drag';
+    }, [interactionMode, isHandDiscardPrompt, needDiscard]);
 
     // 基地选择交互检测：当前 interaction 的选项包含有效 baseIndex 时，用基地区直接点击选择
     const isBaseSelectPrompt = useMemo(() => {
@@ -1449,7 +1468,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [phase, currentPid]);
 
     useEffect(() => {
-        if (interactionMode === 'drag' && viewMode !== 'opponent') return;
+        if (handInteractionMode === 'drag' && viewMode !== 'opponent') return;
         let cancelled = false;
         queueMicrotask(() => {
             if (cancelled) return;
@@ -1458,7 +1477,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return () => {
             cancelled = true;
         };
-    }, [interactionMode, viewMode]);
+    }, [handInteractionMode, viewMode]);
 
     useEffect(() => {
         if (endTurnCooldownUntil <= Date.now()) return;
@@ -2088,7 +2107,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [core.bases, getDeployableBaseStateForCard, resolvePlayableCardMode]);
 
     const handleCardDragPlay = useCallback((card: CardInstance, dropTarget: HandAreaDropTarget) => {
-        if (interactionMode !== 'drag') return;
+        if (handInteractionMode !== 'drag') return;
         if (isHandDiscardPrompt || needDiscard || isBaseSelectPrompt || isMinionSelectPrompt || isOngoingSelectPrompt || isDiscardMinionPrompt) return;
 
         const cardMode = resolvePlayableCardMode(card);
@@ -2150,7 +2169,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return;
         }
         handlePlayMinion(card.uid, dropTarget.baseIndex);
-    }, [getDeployableBaseStateForCard, handlePlayActionWithoutTarget, handlePlayMinion, handlePlayOngoingAction, handlePlayOngoingToMinion, interactionMode, isBaseSelectPrompt, isDiscardMinionPrompt, isHandDiscardPrompt, isMinionSelectPrompt, isMyTurn, isOngoingSelectPrompt, isTutorialCommandAllowed, isTutorialTargetAllowed, needDiscard, phase, resolvePlayableCardMode]);
+    }, [getDeployableBaseStateForCard, handlePlayActionWithoutTarget, handlePlayMinion, handlePlayOngoingAction, handlePlayOngoingToMinion, handInteractionMode, isBaseSelectPrompt, isDiscardMinionPrompt, isHandDiscardPrompt, isMinionSelectPrompt, isMyTurn, isOngoingSelectPrompt, isTutorialCommandAllowed, isTutorialTargetAllowed, needDiscard, phase, resolvePlayableCardMode]);
 
 
 
@@ -2213,15 +2232,17 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             normalX *= -1;
             normalY *= -1;
         }
-        const curveLift = Math.min(184, Math.max(92, distance * 0.22));
+        // 旧实现把前段抬得过高、尾段又几乎贴直线，容易形成“前鼓后折”的怪曲线。
+        // 这里改成更平顺的双控制点抬升：前段抬升更克制，尾段保留较小弧度，让箭头更像自然的拖拽引导。
+        const curveLift = Math.min(108, Math.max(34, distance * 0.14));
         const startInset = 18;
         const visibleStartX = startX + unitX * startInset;
         const visibleStartY = startY + unitY * startInset;
-        const control1X = visibleStartX + deltaX * 0.12 + normalX * curveLift;
-        const control1Y = visibleStartY + deltaY * 0.04 + normalY * curveLift;
-        const endTangent = Math.min(104, Math.max(56, distance * 0.2));
-        const control2X = endX - unitX * endTangent;
-        const control2Y = endY - unitY * endTangent;
+        const trailingLift = Math.max(14, curveLift * 0.42);
+        const control1X = visibleStartX + deltaX * 0.24 + normalX * curveLift;
+        const control1Y = visibleStartY + deltaY * 0.18 + normalY * curveLift;
+        const control2X = visibleStartX + deltaX * 0.78 + normalX * trailingLift;
+        const control2Y = visibleStartY + deltaY * 0.84 + normalY * trailingLift;
         return {
             startX: visibleStartX,
             startY: visibleStartY,
@@ -2349,7 +2370,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
                     {/* Right: Score Sheet + Player Info */}
                     <div
-                        className={`bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] rounded-sm ${isMobileViewport ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                        className="bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] rounded-sm pointer-events-auto"
                         data-tutorial-id="su-scoreboard"
                         style={scoreboardStyle}
                     >
@@ -2380,12 +2401,32 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                         </span>
                                         <motion.div
                                             key={`vp-${pid}-${core.players[pid]?.vp ?? 0}`}
+                                            data-testid={`su-score-vp-${pid}`}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-md border-2 border-white ${conf.bg} ${isOpponent ? 'cursor-pointer relative' : ''}`}
                                             initial={{ scale: 1 }}
                                             animate={{ scale: [1, 1.3, 1] }}
                                             transition={{ duration: 0.4, ease: 'easeOut' }}
+                                            onPointerUp={(event) => {
+                                                if (!isOpponent || event.pointerType !== 'touch') {
+                                                    return;
+                                                }
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                triggerOpponentViewFromTouch();
+                                            }}
+                                            onTouchEnd={(event) => {
+                                                if (!isOpponent) {
+                                                    return;
+                                                }
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                triggerOpponentViewFromTouch();
+                                            }}
                                             onClick={() => {
                                                 if (isOpponent) {
+                                                    if (Date.now() - opponentScoreTouchHandledAtRef.current < 400) {
+                                                        return;
+                                                    }
                                                     toggleViewMode();
                                                 }
                                             }}
@@ -2999,7 +3040,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                         </div>
                     </motion.div>
                 )}
-                {interactionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && typeof document !== 'undefined' && createPortal(
+                {handInteractionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && typeof document !== 'undefined' && createPortal(
                     <div className="fixed inset-0 z-[58] pointer-events-none">
                         <svg className="absolute inset-0 w-full h-full overflow-visible">
                             {dragGuidePaths && (
@@ -3066,13 +3107,14 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 // 教学模式下，当不允许打出随从和行动时禁用手牌交互（摇头反馈）
                                 disableInteraction={
                                     isTutorialActive &&
+                                    !isHandDiscardPrompt &&
                                     !isTutorialCommandAllowed(SU_COMMANDS.PLAY_MINION) &&
                                     !isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)
                                 }
                                 disabledCardUids={meFirstDisabledUids ?? handPromptDisabledUids ?? tutorialDisabledUids}
                                 onCardView={handleViewCardDetail}
                                 isOpponentView={viewMode === 'opponent'}
-                                interactionMode={interactionMode}
+                                interactionMode={handInteractionMode}
                                 onResolveDropTarget={resolveHandDropTarget}
                                 onCardDragPlay={handleCardDragPlay}
                                 onDragStateChange={setHandDragPreview}

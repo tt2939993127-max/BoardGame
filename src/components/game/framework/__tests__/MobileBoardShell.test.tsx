@@ -98,6 +98,7 @@ describe('MobileBoardShell', () => {
         });
 
         expect(screen.queryByTestId('battlefield-stage')).toBeNull();
+        expect(viewport.className).toContain('mobile-battlefield-viewport--zoom-enabled');
 
         act(() => {
             fireEvent.pointerDown(viewport, {
@@ -181,7 +182,7 @@ describe('MobileBoardShell', () => {
         expect(stage.style.transform).toContain('scale(');
     });
 
-    it('uses the first real pinch frame as the zoom anchor instead of jumping on the first move', () => {
+    it('locks the first real pinch center as the zoom anchor instead of following one finger on the first zoom frame', () => {
         render(
             <MobileBattlefieldViewport zoomMode="shell-pinch-pan" testId="battlefield">
                 <div>board</div>
@@ -189,6 +190,54 @@ describe('MobileBoardShell', () => {
         );
 
         const viewport = screen.getByTestId('battlefield');
+        const stage = screen.getByTestId('battlefield-stage');
+
+        Object.defineProperty(viewport, 'clientWidth', {
+            configurable: true,
+            value: 600,
+        });
+        Object.defineProperty(viewport, 'clientHeight', {
+            configurable: true,
+            value: 400,
+        });
+        viewport.getBoundingClientRect = () => ({
+            x: 0,
+            y: 0,
+            left: 0,
+            top: 0,
+            right: 600,
+            bottom: 400,
+            width: 600,
+            height: 400,
+            toJSON: () => ({}),
+        });
+
+        for (const [property, value] of [
+            ['offsetWidth', 1000],
+            ['clientWidth', 1000],
+            ['scrollWidth', 1000],
+            ['offsetHeight', 600],
+            ['clientHeight', 600],
+            ['scrollHeight', 600],
+            ['offsetLeft', 0],
+            ['offsetTop', 0],
+        ] as const) {
+            Object.defineProperty(stage, property, {
+                configurable: true,
+                value,
+            });
+        }
+        stage.getBoundingClientRect = () => ({
+            x: 0,
+            y: 0,
+            left: 0,
+            top: 0,
+            right: 1000,
+            bottom: 600,
+            width: 1000,
+            height: 600,
+            toJSON: () => ({}),
+        });
 
         act(() => {
             fireEvent.pointerDown(viewport, {
@@ -238,6 +287,56 @@ describe('MobileBoardShell', () => {
             });
         });
 
-        expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThan(1.1);
+        const scale = Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1');
+        const translateX = Number(viewport.getAttribute('data-battlefield-translate-x') ?? '0');
+
+        expect(scale).toBeGreaterThan(1.1);
+        expect(translateX).toBeLessThan(-80);
+        expect(translateX).toBeGreaterThan(-95);
+    });
+
+    it('ignores legacy touch events when touch pointer events are available', () => {
+        render(
+            <MobileBattlefieldViewport zoomMode="shell-pinch-pan" testId="battlefield">
+                <div>board</div>
+            </MobileBattlefieldViewport>,
+        );
+
+        const viewport = screen.getByTestId('battlefield');
+
+        act(() => {
+            fireEvent.touchStart(viewport, {
+                changedTouches: [
+                    { identifier: 1, clientX: 120, clientY: 120 },
+                ],
+                touches: [
+                    { identifier: 1, clientX: 120, clientY: 120 },
+                ],
+            });
+            fireEvent.pointerDown(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 120,
+                clientY: 120,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 200,
+                clientY: 120,
+            });
+            fireEvent.pointerMove(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 260,
+                clientY: 120,
+            });
+        });
+
+        expect(viewport.getAttribute('data-battlefield-zoom-scale')).toBe('1.000');
+        expect(viewport.getAttribute('data-battlefield-touch-mode')).toBe('native-pan');
     });
 });

@@ -62,6 +62,7 @@ import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
     applyAiAutoRecoveryRejection,
+    resolveForceEndTurnFollowUpAfterConfirmation,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -443,7 +444,7 @@ const OnlineAiSeatBridge = ({
         }
 
         const progressMarker = buildAiProgressMarker(state as MatchState<unknown>);
-        const trackerKey = progressMarker;
+        const trackerKey = `${candidate.playerId}:${candidate.reason}:${candidate.resolution.attemptKey}:${progressMarker}`;
         const now = Date.now();
         const currentTracker = forceEndTurnTrackerRef.current;
 
@@ -500,7 +501,55 @@ const OnlineAiSeatBridge = ({
             scheduleRetry: () => {
                 setAiRetryVersion((version) => version + 1);
             },
-            onConfirmed: () => {
+            onConfirmed: (authoritativeState) => {
+                const followUpResolution = resolveForceEndTurnFollowUpAfterConfirmation({
+                    candidate,
+                    authoritativeState: authoritativeState as MatchState<unknown> | null | undefined,
+                    seatControllers,
+                });
+                if (followUpResolution) {
+                    submitOnlineAiResolution({
+                        client: targetClient,
+                        resolution: followUpResolution,
+                        lastAiAttemptKeyRef,
+                        scheduleRetry: () => {
+                            setAiRetryVersion((version) => version + 1);
+                        },
+                        onConfirmed: () => {
+                            toast.warning(
+                                'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
+                                'AI 强制结束回合',
+                                { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                            );
+                        },
+                        onRejected: (reason) => {
+                            const tracker = forceEndTurnTrackerRef.current;
+                            let shouldNotify = true;
+                            if (tracker?.key === trackerKey) {
+                                const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                                forceEndTurnTrackerRef.current = rejection.nextTracker;
+                                shouldNotify = rejection.shouldNotify;
+                            }
+                            if (!shouldNotify) {
+                                return;
+                            }
+                            if (reason === 'unauthorized') {
+                                toast.warning(
+                                    'AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。',
+                                    undefined,
+                                    { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
+                                );
+                                return;
+                            }
+                            toast.warning(
+                                '强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。',
+                                undefined,
+                                { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
+                            );
+                        },
+                    });
+                    return;
+                }
                 toast.warning(
                     'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
                     'AI 强制结束回合',

@@ -1,5 +1,5 @@
 import { extractAiInteractionSnapshot, extractAiResponseWindowSnapshot } from '../ai/snapshots';
-import type { AiLegalAction } from '../ai/types';
+import type { AiLegalAction, AiSeatController } from '../ai/types';
 
 export type TrainingInteractionOptionSnapshot = NonNullable<ReturnType<typeof extractAiInteractionSnapshot>>['options'][number];
 export type TrainingInteractionSnapshot = NonNullable<ReturnType<typeof extractAiInteractionSnapshot>>;
@@ -13,6 +13,7 @@ export interface TrainingDecisionSample {
     gameId: string;
     matchId: string;
     playerId: string;
+    seatControllerType: AiSeatController['type'];
     stateIdBefore: number;
     stateIdAfter: number;
     command: {
@@ -38,6 +39,7 @@ interface BuildTrainingDecisionSampleArgs {
     gameId: string;
     matchId: string;
     playerId: string;
+    seatControllerType: AiSeatController['type'];
     stateIdBefore: number;
     stateIdAfter: number;
     commandType: string;
@@ -66,6 +68,7 @@ export function buildTrainingDecisionSample(args: BuildTrainingDecisionSampleArg
         gameId: args.gameId,
         matchId: args.matchId,
         playerId: args.playerId,
+        seatControllerType: args.seatControllerType,
         stateIdBefore: args.stateIdBefore,
         stateIdAfter: args.stateIdAfter,
         command: {

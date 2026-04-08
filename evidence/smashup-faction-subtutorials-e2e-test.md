@@ -20,6 +20,14 @@
 
 结果：`2 passed`
 
+- `npx playwright test e2e/smashup-tutorial.e2e.ts --project=chromium --grep '牛仔决斗子教程在手机横屏下提示不应遮挡基地且副警长可正常弃置'`
+  - 环境：`PW_USE_DEV_SERVERS=true`、`PW_PORT=4273`、`PW_GAME_SERVER_PORT=18000`、`PW_API_SERVER_PORT=18001`
+  - 结果：`1 passed`
+
+- `npx playwright test e2e/smashup-tutorial.e2e.ts --project=chromium --grep '派系详情标题右侧机制教程入口可进入牛仔决斗子教程并完成主流程'`
+  - 环境：`PW_USE_DEV_SERVERS=true`、`PW_PORT=4273`、`PW_GAME_SERVER_PORT=18000`、`PW_API_SERVER_PORT=18001`
+  - 结果：`1 passed`
+
 ### ESLint
 - `npx eslint e2e/smashup-tutorial.e2e.ts src/games/smashup/domain/duel.ts src/games/smashup/__tests__/newFactionAbilities.test.ts`
 
@@ -66,6 +74,16 @@
 
 是否达到验收标准：达到。作为 finish 前的第二张复核图，没有发现新的视觉异常。
 
+### 5. 手机横屏下教程提示不遮挡基地
+截图：`D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/smashup-tutorial.e2e/牛仔决斗子教程在手机横屏下提示不应遮挡基地且副警长可正常弃置/cowboys-duel-mobile-no-base-occlusion.png`
+
+我实际看到：
+- 教程卡片已经贴到棋盘左侧，不再像之前那样压在基地中央区域上。
+- 中央基地卡和其下方两张随从卡完整可见，基地上方的断点徽章和下方战力标记也没有被教程卡遮住。
+- 左侧教程卡与中央基地之间留出了清晰空隙，下一步按钮也在卡片内部，没有漂到基地附近。
+
+是否达到验收标准：达到。移动端横屏下这一步已经证明“教程提示不挡基地”，并且位置策略确实落到了左侧贴边。
+
 ## 非截图但同轮已验证的关键业务断言
 在“牛仔决斗子教程并完成主流程”这条 E2E 里，实际断言通过了以下关键状态：
 - 路由进入：`/play/smashup/tutorial/cowboys-duel`
@@ -75,6 +93,11 @@
   - `deputy-1` 已进入 `discard`
   - `activeDuel === null`
 
+在“牛仔决斗子教程在手机横屏下提示不应遮挡基地且副警长可正常弃置”这条 E2E 里，额外实际断言通过：
+- `data-tutorial-placement` 为 `left` / `right`
+- 教程卡与 `[data-base-index="0"]` 的重叠面积为 `0`
+- **未使用 `force: true` 点击 `deputy-1`**，真实点击后成功进入 `discard`
+
 这部分用于证明不仅 UI 入口和教程壳层正确，决斗教程本身也真的走完了规则链。
 
 ## 结论
@@ -83,4 +106,6 @@
 - 已验证牛仔派系教程入口在标题右侧
 - 已验证 Smash Up 子教程路由可进入 `cowboys-duel`
 - 已验证牛仔决斗教程主流程可完整完成
+- 已验证移动端横屏下教程提示不再遮挡基地
+- 已验证副警长在子教程里可真实点击弃置，不再需要 `force: true`
 - 已验证 Deputy 决斗加成链不再出现“效果结算了但手牌/弃牌不同步”的问题

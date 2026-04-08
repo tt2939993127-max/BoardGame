@@ -188,12 +188,16 @@
 }
 
 .modal-base-container {
+    top: 0;
+    right: 0;
+    bottom: auto;
+    left: 0;
+    height: var(--runtime-viewport-height, 100dvh);
+    max-height: var(--runtime-viewport-height, 100dvh);
     overflow-y: auto;
     overscroll-behavior: contain;
-}
-
-html[data-keyboard-visible="true"] .modal-base-container {
-    align-items: flex-start;
+    scroll-padding-top: max(1rem, var(--safe-area-top));
+    scroll-padding-bottom: max(1rem, calc(var(--keyboard-inset-height) + 1rem));
 }
 
 /* 娓告垙涓撳睘瀛椾綋锛歮anifest.fontFamily 閫氳繃 MatchRoom/LocalMatchRoom 娉ㄥ叆涓?CSS 鍙橀噺锛?
