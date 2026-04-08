@@ -211,7 +211,8 @@ const isNonReleaseAndroidAppId = (appId: string) => (
 );
 
 const isAndroidOtaAllowedForAppId = (env: Record<string, string | boolean | undefined>) => {
-    const appId = readTrimmedEnv(env.VITE_CAPACITOR_APP_ID);
+    const appId = readTrimmedEnv(env.VITE_CAPACITOR_APP_ID)
+        || readTrimmedEnv(env.CAPACITOR_APP_ID);
     if (!appId || !isNonReleaseAndroidAppId(appId)) {
         return true;
     }
