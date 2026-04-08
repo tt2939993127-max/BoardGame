@@ -55,8 +55,8 @@ var __asyncValues = (this && this.__asyncValues) || function (o) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.readyCheckPlugin = readyCheckPlugin;
-var promises_1 = require("node:fs/promises");
-var node_path_1 = require("node:path");
+var fs = require("node:fs/promises");
+var path = require("node:path");
 var READY_DELAY_MS = 1000;
 var CAPTURE_SAVE_ROUTE = '/__capture/save';
 var CAPTURE_STATUS_ROUTE = '/__capture/status';
@@ -118,10 +118,10 @@ function resolveWorkspaceOutputPath(outputPath) {
     if (typeof outputPath !== 'string' || !outputPath.trim()) {
         throw new Error('missing_output_path');
     }
-    var workspaceRoot = node_path_1.default.resolve(process.cwd());
-    var resolvedOutputPath = node_path_1.default.resolve(outputPath);
-    var relativePath = node_path_1.default.relative(workspaceRoot, resolvedOutputPath);
-    var isInsideWorkspace = relativePath === '' || (!relativePath.startsWith('..') && !node_path_1.default.isAbsolute(relativePath));
+    var workspaceRoot = path.resolve(process.cwd());
+    var resolvedOutputPath = path.resolve(outputPath);
+    var relativePath = path.relative(workspaceRoot, resolvedOutputPath);
+    var isInsideWorkspace = relativePath === '' || (!relativePath.startsWith('..') && !path.isAbsolute(relativePath));
     if (!isInsideWorkspace) {
         throw new Error('output_path_outside_workspace');
     }
@@ -167,10 +167,10 @@ function handleCaptureSave(req, res, captureStatuses) {
                         throw new Error('invalid_image_data');
                     }
                     buffer = Buffer.from(match[1], 'base64');
-                    return [4 /*yield*/, promises_1.default.mkdir(node_path_1.default.dirname(outputPath), { recursive: true })];
+                    return [4 /*yield*/, fs.mkdir(path.dirname(outputPath), { recursive: true })];
                 case 3:
                     _a.sent();
-                    return [4 /*yield*/, promises_1.default.writeFile(outputPath, buffer)];
+                    return [4 /*yield*/, fs.writeFile(outputPath, buffer)];
                 case 4:
                     _a.sent();
                     if (scenario) {
