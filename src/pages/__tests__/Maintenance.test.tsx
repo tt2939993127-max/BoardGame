@@ -217,6 +217,12 @@ vi.mock('../../lib/mobile/androidRuntime', () => ({
 }));
 
 vi.mock('../../lib/mobile/androidLiveUpdates', () => ({
+    readAndroidLiveUpdateConfig: vi.fn(() => ({
+        enabled: nativeAndroidRuntimeState.value,
+        manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+        channel: 'stable',
+        appReadyTimeoutMs: 10000,
+    })),
     readAndroidLiveUpdateSnapshot: vi.fn(async () => androidLiveUpdateSnapshotState.value),
     readAndroidLiveUpdateActivityState: vi.fn(() => androidLiveUpdateActivityState.value),
     subscribeAndroidLiveUpdateActivityState: vi.fn((listener: (state: typeof androidLiveUpdateActivityState.value) => void) => {
@@ -1421,7 +1427,19 @@ describe('Home native runtime footer', () => {
         expect(screen.queryByText('OTA 未对齐')).toBeNull();
     });
 
-    it('仅在原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {
+    it('原生 Android 下即使快照未返回也显示 Bundle/App 骨架信息', async () => {
+        nativeAndroidRuntimeState.value = true;
+
+        render(<Home />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Bundle 0.5.1')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
+    });
+
+    it('原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {
         nativeAndroidRuntimeState.value = true;
         androidLiveUpdateSnapshotState.value = {
             enabled: true,
