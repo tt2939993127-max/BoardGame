@@ -54,6 +54,23 @@ describe('androidLiveUpdates', () => {
         }).enabled).toBe(false);
     });
 
+    it('debug 测试包默认禁用 OTA，即使环境变量显式开启也不生效', () => {
+        expect(readAndroidLiveUpdateConfig({
+            VITE_ANDROID_OTA_ENABLED: 'true',
+            VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            VITE_CAPACITOR_APP_ID: 'top.easyboardgame.app.debug',
+        }).enabled).toBe(false);
+    });
+
+    it('显式允许 debug 包 OTA 后，测试包才恢复 OTA 能力', () => {
+        expect(readAndroidLiveUpdateConfig({
+            VITE_ANDROID_OTA_ENABLED: 'true',
+            VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            VITE_CAPACITOR_APP_ID: 'top.easyboardgame.app.debug',
+            VITE_ANDROID_OTA_ALLOW_DEBUG_APP: 'true',
+        }).enabled).toBe(true);
+    });
+
     it('网页端下载入口优先解析 native update latest.json 中的 APK 地址', async () => {
         const result = await resolveAndroidWebAppDownload({
             VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json',

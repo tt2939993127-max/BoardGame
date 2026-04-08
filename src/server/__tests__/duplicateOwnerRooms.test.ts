@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchMetadata } from '../../engine/transport/storage';
 import {
+    createMatchWithOwnerConflictRetry,
     decideDuplicateOwnerRoomAction,
     DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
+    parseActiveMatchExistsConflict,
     planDuplicateOwnerRoomCreate,
 } from '../duplicateOwnerRooms';
 
@@ -139,5 +141,107 @@ describe('decideDuplicateOwnerRoomAction', () => {
                 },
             }],
         });
+    });
+});
+
+describe('parseActiveMatchExistsConflict', () => {
+    it('parses ACTIVE_MATCH_EXISTS legacy error text', () => {
+        expect(parseActiveMatchExistsConflict(new Error('ACTIVE_MATCH_EXISTS:dicethrone:match-1'))).toEqual({
+            gameName: 'dicethrone',
+            matchID: 'match-1',
+        });
+    });
+
+    it('returns null for unrelated errors', () => {
+        expect(parseActiveMatchExistsConflict(new Error('boom'))).toBeNull();
+    });
+});
+
+describe('createMatchWithOwnerConflictRetry', () => {
+    it('returns conflict immediately when forceReplaceActive is disabled', async () => {
+        const createMatch = async () => {
+            throw new Error('ACTIVE_MATCH_EXISTS:dicethrone:match-old');
+        };
+        const fetchConflictMetadata = async () => buildMetadata();
+        const cleanupConflictMatch = async () => undefined;
+
+        await expect(createMatchWithOwnerConflictRetry({
+            createMatch,
+            fetchConflictMetadata,
+            cleanupConflictMatch,
+            forceReplaceActive: false,
+        })).resolves.toEqual({
+            action: 'conflict',
+            conflict: {
+                gameName: 'dicethrone',
+                matchID: 'match-old',
+            },
+        });
+    });
+
+    it('forceReplaceActive=true 时会清理冲突房间后重试创建', async () => {
+        let attempt = 0;
+        const createMatch = async () => {
+            attempt += 1;
+            if (attempt === 1) {
+                throw new Error('ACTIVE_MATCH_EXISTS:dicethrone:match-old');
+            }
+        };
+        const fetchConflictMetadata = async () => buildMetadata({ gameName: 'dicethrone' });
+        const cleaned: string[] = [];
+        const cleanupConflictMatch = async (matchID: string) => {
+            cleaned.push(matchID);
+        };
+
+        await expect(createMatchWithOwnerConflictRetry({
+            createMatch,
+            fetchConflictMetadata,
+            cleanupConflictMatch,
+            forceReplaceActive: true,
+        })).resolves.toEqual({
+            action: 'created',
+        });
+        expect(cleaned).toEqual(['match-old']);
+        expect(attempt).toBe(2);
+    });
+
+    it('超过强制清理重试上限后返回 conflict，而不是抛 unknown 错误', async () => {
+        const createMatch = async () => {
+            throw new Error('ACTIVE_MATCH_EXISTS:dicethrone:match-old');
+        };
+        const fetchConflictMetadata = async () => buildMetadata({ gameName: 'dicethrone' });
+        const cleaned: string[] = [];
+        const cleanupConflictMatch = async (matchID: string) => {
+            cleaned.push(matchID);
+        };
+
+        await expect(createMatchWithOwnerConflictRetry({
+            createMatch,
+            fetchConflictMetadata,
+            cleanupConflictMatch,
+            forceReplaceActive: true,
+            maxForceCleanupRetries: 2,
+        })).resolves.toEqual({
+            action: 'conflict',
+            conflict: {
+                gameName: 'dicethrone',
+                matchID: 'match-old',
+            },
+        });
+        expect(cleaned).toEqual(['match-old', 'match-old']);
+    });
+
+    it('非 ACTIVE_MATCH_EXISTS 错误继续向上抛出', async () => {
+        const fetchConflictMetadata = async () => buildMetadata();
+        const cleanupConflictMatch = async () => undefined;
+
+        await expect(createMatchWithOwnerConflictRetry({
+            createMatch: async () => {
+                throw new Error('boom');
+            },
+            fetchConflictMetadata,
+            cleanupConflictMatch,
+            forceReplaceActive: true,
+        })).rejects.toThrow('boom');
     });
 });

@@ -265,7 +265,7 @@ describe('scoreBases 阶段自动推进', () => {
         expect(result?.playerId).toBe('0');
     });
 
-    it('达标基地上有可激活的侏儒 POD special 时不应该自动推进', () => {
+    it('达标基地上只有触发式侏儒 POD beforeScoring 时仍应自动推进', () => {
         const core = makeMinimalCore({
             bases: [makeBase('base_pirate_cove', [
                 makeMinion('0', 'trickster_gnome_pod', 3),
@@ -291,10 +291,12 @@ describe('scoreBases 阶段自动推进', () => {
             random: { next: () => 0.5 },
         });
 
-        expect(result).toBeUndefined();
+        expect(result).toBeDefined();
+        expect(result?.autoContinue).toBe(true);
+        expect(result?.playerId).toBe('0');
     });
 
-    it('AI 在计分阶段存在可激活 special 时不应暴露 advance-phase', () => {
+    it('AI 在计分阶段遇到触发式侏儒 POD beforeScoring 时不应伪造手动 special', () => {
         const state: MatchState<SmashUpCore> = {
             core: makeMinimalCore({
                 bases: [makeBase('base_pirate_cove', [
@@ -317,8 +319,8 @@ describe('scoreBases 阶段自动推进', () => {
             state: state as any,
         });
 
-        expect(legalActions.some(action => action.kind === 'activate-special')).toBe(true);
-        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
+        expect(legalActions.some(action => action.kind === 'activate-special')).toBe(false);
+        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(true);
     });
 
     it('AI 在 optional multi 交互中应保留空选动作，避免 special 链卡死', () => {

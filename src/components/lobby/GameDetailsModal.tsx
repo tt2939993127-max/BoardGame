@@ -1120,6 +1120,11 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     ownerKey: getOwnerKey(),
                     ownerType: getOwnerType(),
                 });
+                if (options?.forceReplaceOwnerRoom) {
+                    lobbySocket.requestRefresh(normalizedGameId);
+                    toast.warning({ kind: 'i18n', key: 'error.activeMatchExists', ns: 'lobby' });
+                    return;
+                }
                 const claimResult = await tryClaimSeat(existingMatchID, existingGameName);
                 if (claimResult.success) {
                     lobbySocket.requestRefresh(normalizedGameId);

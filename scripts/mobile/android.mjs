@@ -33,6 +33,7 @@ const distLocalizedAssetsDir = path.join(distDir, 'assets', 'i18n');
 const androidPublicDir = path.join(androidDir, 'app', 'src', 'main', 'assets', 'public');
 const androidBuildMetaFileName = 'android-build-meta.json';
 const gameManifestGeneratorPath = path.join(rootDir, 'scripts', 'game', 'generate_game_manifests.js');
+const debugAndroidAppIdSegments = new Set(['debug', 'dev', 'test', 'qa']);
 
 const envFiles = ['.env', '.env.android', '.env.android.local'];
 for (const file of envFiles) {
@@ -40,6 +41,9 @@ for (const file of envFiles) {
     if (!existsSync(fullPath)) continue;
     dotenv.config({ path: fullPath, override: true, quiet: true });
 }
+process.env.VITE_CAPACITOR_APP_ID = process.env.VITE_CAPACITOR_APP_ID?.trim()
+    || process.env.CAPACITOR_APP_ID?.trim()
+    || defaultAppId;
 
 const runCommand = (cmd, args, options = {}) => new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
@@ -73,6 +77,8 @@ const quoteCmdArg = (value) => {
     if (!/[\s"]/u.test(value)) return value;
     return `"${value.replace(/"/g, '""')}"`;
 };
+
+const parseBooleanEnv = (value) => /^(1|true|yes|on)$/i.test((value || '').trim());
 
 const runWindowsBatch = async (scriptPath, args, options = {}) => {
     const comSpec = process.env.ComSpec || 'cmd.exe';
@@ -388,6 +394,18 @@ const getAppConfig = () => ({
     appName: process.env.CAPACITOR_APP_NAME?.trim() || defaultAppName,
 });
 
+const isNonReleaseAndroidAppId = (appId) => appId
+    .split('.')
+    .some((segment) => debugAndroidAppIdSegments.has(segment.trim().toLowerCase()));
+
+const isAndroidOtaAllowedForApp = () => {
+    const { appId } = getAppConfig();
+    if (!appId || !isNonReleaseAndroidAppId(appId)) {
+        return true;
+    }
+    return parseBooleanEnv(process.env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP);
+};
+
 const isHttpUrl = (value) => /^http:\/\//i.test(value);
 const isHttpsUrl = (value) => /^https:\/\//i.test(value);
 const resolveEmbeddedAndroidScheme = () => {
@@ -459,7 +477,10 @@ const getAndroidWebviewMode = () => {
 };
 
 const getAndroidRemoteWebUrl = () => process.env.ANDROID_REMOTE_WEB_URL?.trim() || '';
-const getAndroidOtaEnabled = () => /^(1|true|yes|on)$/i.test(process.env.VITE_ANDROID_OTA_ENABLED?.trim() || '');
+const getAndroidOtaEnabled = () => (
+    parseBooleanEnv(process.env.VITE_ANDROID_OTA_ENABLED)
+    && isAndroidOtaAllowedForApp()
+);
 const getAndroidOtaManifestUrl = () => process.env.VITE_ANDROID_OTA_MANIFEST_URL?.trim() || '';
 const getAndroidOtaChannel = () => process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || '';
 
@@ -893,6 +914,8 @@ const printDoctor = async () => {
         `VITE_BACKEND_URL=${process.env.VITE_BACKEND_URL || '(未设置)'}`,
         `ANDROID_WEBVIEW_MODE=${getAndroidWebviewMode()}`,
         `ANDROID_REMOTE_WEB_URL=${getAndroidRemoteWebUrl() || '(未设置)'}`,
+        `ANDROID_OTA_CONFIGURED=${parseBooleanEnv(process.env.VITE_ANDROID_OTA_ENABLED) ? 'true' : 'false'}`,
+        `ANDROID_OTA_ALLOW_DEBUG_APP=${parseBooleanEnv(process.env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP) ? 'true' : 'false'}`,
         `ANDROID_OTA_ENABLED=${getAndroidOtaEnabled() ? 'true' : 'false'}`,
         `ANDROID_OTA_MANIFEST_URL=${getAndroidOtaManifestUrl() || '(未设置)'}`,
         `ANDROID_OTA_CHANNEL=${getAndroidOtaChannel() || '(未设置)'}`,
