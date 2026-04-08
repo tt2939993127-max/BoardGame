@@ -93,10 +93,20 @@ function hasPendingScoreBasesSpecialActivation(state: MatchState<SmashUpCore>): 
         if (!base) continue;
 
         for (const minion of base.minions) {
+            if (minion.controller !== playerId) continue;
             const result = validate(state, {
                 type: SU_COMMANDS.ACTIVATE_SPECIAL,
                 playerId,
                 payload: { minionUid: minion.uid, baseIndex },
+            });
+            if (result.valid) return true;
+        }
+
+        for (const titan of state.core.titans ?? []) {
+            const result = validate(state, {
+                type: SU_COMMANDS.ACTIVATE_SPECIAL,
+                playerId,
+                payload: { titanUid: titan.uid, baseIndex },
             });
             if (result.valid) return true;
         }
@@ -1763,19 +1773,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         // 
         // 杩欐牱鍙互閬垮厤鏃犻檺寰幆锛屽悓鏃跺湪鍝嶅簲绐楀彛鍏抽棴鍚庤嚜鍔ㄦ帹杩涜Е鍙戣鍒嗐€?
         if (phase === 'scoreBases') {
-            console.log('[onAutoContinueCheck] scoreBases 闃舵妫€鏌?', {
-                flowHalted: state.sys.flowHalted,
-                hasInteraction: !!state.sys.interaction.current,
-                interactionId: state.sys.interaction.current?.id,
-                hasResponseWindow: !!state.sys.responseWindow?.current,
-            });
-
             // 鍏抽敭瀹堝崼锛氬彧瑕佸搷搴旂獥鍙ｄ粛鐒舵墦寮€锛屽氨蹇呴』缁х画鍋滃湪 scoreBases 绛夊緟鐜╁鍝嶅簲銆?
             // 涓嶈兘鍏堢湅 eligibleIndices锛屽洜涓?afterScoring 绐楀彛鎵撳紑鍚庡熀鍦板彲鑳藉凡缁忚娓呴櫎/鏇挎崲锛?
             // 姝ゆ椂 eligibleIndices 浼氬彉鎴愮┖鏁扮粍锛涘鏋滃厛鎸夆€滄棤 eligible 鍩哄湴鈥濊嚜鍔ㄦ帹杩涳紝
             // 灏变細閿欒鍦板甫鐫€浠嶇劧鎵撳紑鐨?afterScoring 绐楀彛涓€璺帹杩涘埌鍚庣画闃舵銆?
             if (state.sys.responseWindow?.current) {
-                console.log('[onAutoContinueCheck] scoreBases: 响应窗口仍打开，等待响应');
                 return undefined;
             }
 
@@ -1783,7 +1785,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             // 杩欎簺浜嬩欢瑕佺瓑鏈疆 afterEvents 缁撴潫鍚庢墠浼氳 reduce 鍒?core銆?
             // 杩欓噷蹇呴』鍏堝仠涓€杞紝閬垮厤 FlowSystem 鐢ㄦ棫 core 閲嶆柊杩涘叆 scoreBases锛屽鑷撮噸澶嶈鍒嗐€?
             if ((state.sys as any)._waitForPostScoringReduce) {
-                console.log('[onAutoContinueCheck] scoreBases: 绛夊緟寤惰繜鐨勮鍒嗗悗浜嬩欢 reduce 鍒?core');
                 return undefined;
             }
             
@@ -1798,28 +1799,22 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 // 杩斿洖 autoContinue: true锛岃Е鍙?ADVANCE_PHASE锛岃繖浼氬啀娆¤皟鐢?onPhaseExit
                 // onPhaseExit 寮€澶寸殑閲嶆柊璁″垎閫昏緫浼氭墽琛岋紝鐒跺悗鎺ㄨ繘鍒?draw 闃舵
                 if ((state.sys as any).afterScoringInitialPowers) {
-                    console.log('[onAutoContinueCheck] scoreBases: 检测到 afterScoringInitialPowers，自动推进触发重新计分');
                     return { autoContinue: true, playerId: pid };
                 }
-                
-                console.log('[onAutoContinueCheck] scoreBases: flowHalted=true 且交互已解决且响应窗口已关闭，自动推进');
+
                 return { autoContinue: true, playerId: pid };
             }
             
             // 鎯呭喌2锛氭病鏈?eligible 鍩哄湴 鈫?鑷姩鎺ㄨ繘
             const eligibleIndices = getScoringEligibleBaseIndices(core);
-            console.log('[onAutoContinueCheck] scoreBases: eligibleIndices =', eligibleIndices);
             if (eligibleIndices.length === 0) {
-                console.log('[onAutoContinueCheck] scoreBases: 无 eligible 基地，自动推进');
                 return { autoContinue: true, playerId: pid };
             }
 
             if (hasPendingScoreBasesSpecialActivation(state)) {
-                console.log('[onAutoContinueCheck] scoreBases: 当前玩家还有可激活的 special，暂停自动推进');
                 return undefined;
             }
 
-            console.log('[onAutoContinueCheck] scoreBases: 鍝嶅簲绐楀彛宸插叧闂紝鑷姩鎺ㄨ繘瑙﹀彂璁″垎');
             return { autoContinue: true, playerId: pid };
         }
 

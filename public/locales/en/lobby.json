@@ -33,6 +33,11 @@
     "exitActiveMatch": {
       "title": "Leave Current Match",
       "description": "You are in a match. Leave it and join the new room?"
+    },
+    "forceReplaceOwnerRoom": {
+      "title": "Replace Existing Room",
+      "description": "An active room (#{{id}}) already exists for you. Continuing will delete that room before creating a new one.",
+      "confirm": "Replace and Create"
     }
   },
   "actions": {

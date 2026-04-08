@@ -18,6 +18,15 @@ export type DuplicateOwnerRoomCreatePlan =
     | { action: 'block'; activeMatch: DuplicateOwnerExistingMatch; cleanupMatches: DuplicateOwnerExistingMatch[] }
     | { action: 'allow'; cleanupMatches: DuplicateOwnerExistingMatch[] };
 
+export type ActiveMatchExistsConflict = {
+    gameName: string;
+    matchID: string;
+};
+
+export type CreateMatchWithOwnerConflictRetryResult =
+    | { action: 'created' }
+    | { action: 'conflict'; conflict: ActiveMatchExistsConflict };
+
 const hasConnectedPlayers = (metadata?: MatchMetadata | null): boolean => {
     if (!metadata?.players) return false;
     return Object.values(metadata.players).some((player) => Boolean(player?.isConnected));
@@ -77,4 +86,63 @@ export const planDuplicateOwnerRoomCreate = (
         activeMatch: blockingMatches[0],
         cleanupMatches: cleanableMatches,
     };
+};
+
+export const parseActiveMatchExistsConflict = (
+    error: unknown,
+): ActiveMatchExistsConflict | null => {
+    const message = error instanceof Error ? error.message : String(error);
+    const activeMatch = message.match(/ACTIVE_MATCH_EXISTS:([^:]+):([^:]+)/);
+    if (!activeMatch) {
+        return null;
+    }
+
+    return {
+        gameName: activeMatch[1],
+        matchID: activeMatch[2],
+    };
+};
+
+export const createMatchWithOwnerConflictRetry = async (options: {
+    createMatch: () => Promise<void>;
+    fetchConflictMetadata: (matchID: string) => Promise<MatchMetadata | null | undefined>;
+    cleanupConflictMatch: (matchID: string, metadata?: MatchMetadata | null) => Promise<void>;
+    forceReplaceActive?: boolean;
+    maxForceCleanupRetries?: number;
+    onForceCleanup?: (params: {
+        attempt: number;
+        conflict: ActiveMatchExistsConflict;
+        metadata?: MatchMetadata | null;
+    }) => Promise<void> | void;
+}): Promise<CreateMatchWithOwnerConflictRetryResult> => {
+    const maxForceCleanupRetries = options.maxForceCleanupRetries ?? 2;
+    let forceCleanupAttempts = 0;
+
+    while (true) {
+        try {
+            await options.createMatch();
+            return { action: 'created' };
+        } catch (error) {
+            const conflict = parseActiveMatchExistsConflict(error);
+            if (!conflict) {
+                throw error;
+            }
+
+            if (!options.forceReplaceActive || forceCleanupAttempts >= maxForceCleanupRetries) {
+                return {
+                    action: 'conflict',
+                    conflict,
+                };
+            }
+
+            forceCleanupAttempts += 1;
+            const metadata = await options.fetchConflictMetadata(conflict.matchID);
+            await options.onForceCleanup?.({
+                attempt: forceCleanupAttempts,
+                conflict,
+                metadata,
+            });
+            await options.cleanupConflictMatch(conflict.matchID, metadata);
+        }
+    }
 };

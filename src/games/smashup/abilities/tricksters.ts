@@ -427,6 +427,7 @@ function registerTricksterPodAbilities(): void {
     registerAbility('trickster_enshrouding_mist_pod', 'talent', tricksterEnshroudingMistPodTalent);
     registerAbility('trickster_hideout_pod', 'talent', tricksterHideoutPodTalent);
     registerAbility('trickster_gnome_pod', 'onPlay', tricksterGnomePodOnPlay);
+    registerAbility('trickster_gnome_pod', 'special', tricksterGnomePodSpecial);
     registerAbility('trickster_gremlin_pod', 'onDestroy', () => ({ events: [] }));
     registerTricksterPodOngoingEffects();
     registerTrigger('trickster_gnome_pod', 'beforeScoring', tricksterGnomePodBeforeScoring);

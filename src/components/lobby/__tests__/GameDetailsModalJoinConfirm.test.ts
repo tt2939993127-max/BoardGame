@@ -1538,6 +1538,66 @@ describe('GameDetailsModal create room ai entry', () => {
         expect(vi.mocked(lobbySocket.requestRefresh)).toHaveBeenCalledWith('dicethrone');
     });
 
+    it('服务端返回 ACTIVE_MATCH_EXISTS 时，会弹出强制清理确认并带 force 重试创建', async () => {
+        markGamePackageInstalled();
+        const activeMatchExistsError = Object.assign(
+            new Error('409: {"error":"ACTIVE_MATCH_EXISTS","gameName":"dicethrone","matchID":"match-old","canForceReplace":true}'),
+            {
+                status: 409,
+                details: '{"error":"ACTIVE_MATCH_EXISTS","gameName":"dicethrone","matchID":"match-old","canForceReplace":true}',
+                code: 'ACTIVE_MATCH_EXISTS',
+            },
+        );
+        const createMatchSpy = vi.spyOn(matchApi, 'createMatch')
+            .mockRejectedValueOnce(activeMatchExistsError)
+            .mockResolvedValueOnce({
+                matchID: 'match-new',
+                ownerPlayerID: '0',
+                ownerCredentials: 'seat-creds',
+            });
+
+        render(createElement(GameDetailsModal, baseProps));
+
+        fireEvent.click(screen.getByText('actions.createRoom'));
+        await waitFor(() => {
+            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
+        });
+        fireEvent.click(screen.getByText('mock-create-room-confirm'));
+
+        await waitFor(() => {
+            expect(openModalMock).toHaveBeenCalled();
+        });
+
+        const forceModalConfig = openModalMock.mock.calls.at(-1)?.[0] as {
+            render: (props: { close: () => void; closeOnBackdrop: boolean }) => ReactNode;
+        };
+        render(forceModalConfig.render({
+            close: vi.fn(),
+            closeOnBackdrop: true,
+        }));
+
+        expect(latestConfirmModalProps.current).toMatchObject({
+            title: 'confirm.forceReplaceOwnerRoom.title',
+            description: 'confirm.forceReplaceOwnerRoom.description',
+            confirmText: 'confirm.forceReplaceOwnerRoom.confirm',
+        });
+
+        fireEvent.click(screen.getByText('mock-confirm-modal-confirm'));
+
+        await waitFor(() => {
+            expect(createMatchSpy).toHaveBeenCalledTimes(2);
+        });
+        expect(createMatchSpy.mock.calls[0]?.[1]).toMatchObject({
+            forceReplaceOwnerRoom: undefined,
+        });
+        expect(createMatchSpy.mock.calls[1]?.[1]).toMatchObject({
+            forceReplaceOwnerRoom: true,
+        });
+        await waitFor(() => {
+            expect(navigateMock).toHaveBeenCalledWith('/play/dicethrone/match/match-new?playerID=0');
+        });
+    });
+
     it('创建房间失败时 toast 会显示错误码和状态码', async () => {
         markGamePackageInstalled();
         const error = Object.assign(new Error('401: Invalid token'), {

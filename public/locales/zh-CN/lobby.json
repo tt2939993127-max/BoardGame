@@ -33,6 +33,11 @@
     "exitActiveMatch": {
       "title": "退出当前对局",
       "description": "你正在进行对局，确认退出并加入新的房间吗？"
+    },
+    "forceReplaceOwnerRoom": {
+      "title": "强制清理旧房间",
+      "description": "检测到你还有一个活跃房间（#{{id}}）。继续后会先删除旧房间，再创建新房间。",
+      "confirm": "清理并创建"
     }
   },
   "actions": {

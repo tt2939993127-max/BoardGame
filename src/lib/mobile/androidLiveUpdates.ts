@@ -172,6 +172,7 @@ export interface AndroidLiveUpdateStartOptions {
 const DEFAULT_OTA_CHANNEL = 'stable';
 const DEFAULT_APP_READY_TIMEOUT_MS = 10000;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60000;
+const DEBUG_ANDROID_APP_ID_SEGMENTS = new Set(['debug', 'dev', 'test', 'qa']);
 const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
     phase: 'hidden',
     blocking: false,
@@ -196,6 +197,24 @@ let liveUpdateActivityState: AndroidLiveUpdateActivityState = IDLE_LIVE_UPDATE_A
 const parseBooleanEnv = (value: string | boolean | undefined) => {
     if (typeof value === 'boolean') return value;
     return /^(1|true|yes|on)$/i.test((value || '').trim());
+};
+
+const readTrimmedEnv = (value: string | boolean | undefined) => (
+    typeof value === 'string' ? value.trim() : ''
+);
+
+const isNonReleaseAndroidAppId = (appId: string) => (
+    appId
+        .split('.')
+        .some((segment) => DEBUG_ANDROID_APP_ID_SEGMENTS.has(segment.trim().toLowerCase()))
+);
+
+const isAndroidOtaAllowedForAppId = (env: Record<string, string | boolean | undefined>) => {
+    const appId = readTrimmedEnv(env.VITE_CAPACITOR_APP_ID);
+    if (!appId || !isNonReleaseAndroidAppId(appId)) {
+        return true;
+    }
+    return parseBooleanEnv(env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP);
 };
 
 const parseTimeoutEnv = (value: string | boolean | undefined) => {
@@ -343,15 +362,15 @@ export const compareVersion = (left: string, right: string) => {
 export const readAndroidLiveUpdateConfig = (
     env: Record<string, string | boolean | undefined>,
 ): AndroidLiveUpdateConfig => {
-    const manifestUrl = typeof env.VITE_ANDROID_OTA_MANIFEST_URL === 'string'
-        ? env.VITE_ANDROID_OTA_MANIFEST_URL.trim()
-        : '';
+    const manifestUrl = readTrimmedEnv(env.VITE_ANDROID_OTA_MANIFEST_URL);
 
     return {
-        enabled: parseBooleanEnv(env.VITE_ANDROID_OTA_ENABLED) && isAbsoluteHttpUrl(manifestUrl),
+        enabled: parseBooleanEnv(env.VITE_ANDROID_OTA_ENABLED)
+            && isAbsoluteHttpUrl(manifestUrl)
+            && isAndroidOtaAllowedForAppId(env),
         manifestUrl,
-        channel: typeof env.VITE_ANDROID_OTA_CHANNEL === 'string' && env.VITE_ANDROID_OTA_CHANNEL.trim()
-            ? env.VITE_ANDROID_OTA_CHANNEL.trim()
+        channel: readTrimmedEnv(env.VITE_ANDROID_OTA_CHANNEL)
+            ? readTrimmedEnv(env.VITE_ANDROID_OTA_CHANNEL)
             : DEFAULT_OTA_CHANNEL,
         appReadyTimeoutMs: parseTimeoutEnv(env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS),
     };
