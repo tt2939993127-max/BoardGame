@@ -153,7 +153,7 @@ export const SMASH_UP_BASIC_TUTORIAL: TutorialManifest = {
         {
             id: 'useTalent',
             content: 'game-smashup:tutorial.steps.useTalent',
-            highlightTarget: 'su-base-area',
+            highlightTarget: 'tut-1',
             position: 'bottom',
             requireAction: true,
             allowedCommands: [SU_COMMANDS.USE_TALENT],

@@ -120,6 +120,7 @@ export const RoomList = ({
                     roomItems.map((room) => (
                         <div
                             key={room.matchID}
+                            data-testid={`room-list-item-${room.matchID}`}
                             className={clsx(
                                 "flex items-center justify-between p-3 rounded-[4px] border transition-colors",
                                 room.isMyRoom
@@ -213,6 +214,7 @@ export const RoomList = ({
                                 )}
 
                                 <button
+                                    data-testid={`room-list-join-${room.matchID}`}
                                     onClick={() => onJoinRequest(room.matchID, room.gameName)}
                                     disabled={(room.isFull && !room.canReconnect) || (room.isEmptyRoom && !room.isOwnerRoom)}
                                     className={clsx(

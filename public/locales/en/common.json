@@ -99,6 +99,7 @@
     "progress": "Loading page module..."
   },
   "unknownUser": "Unknown User",
+  "unknownError": "An unknown error occurred",
   "notFound": {
     "seoTitle": "404 - Page Not Found",
     "seoDescription": "The page you are looking for does not exist.",

@@ -1,0 +1,22 @@
+# Ralph Context Snapshot
+- task statement: 实现通用回合制 AI 语义 hints 框架，并先落地 SmashUp，修复 AI 把增益给错目标的问题。
+- desired outcome: 公共层支持 AI-only hints；InteractionSystem 能透传 hints；SmashUp 的目标选择自动产出 hints，AI 评分消费 hints，不再依赖候选顺序。
+- known facts/evidence:
+  - SmashUp 当前 interaction-choice metadata 没有目标关系/效果意图，只带 optionValue/optionIds。
+  - scoring.ts 同分时稳定取第一个，导致无语义评分时顺序偏置。
+  - buildMinionTargetOptions 目前不输出 AI hints。
+  - OpenSpec change update-turn-based-ai-framework-semantics 已创建并通过 validate。
+- constraints:
+  - 必须中文回复。
+  - 不能动无关脏工作区改动。
+  - 不使用 git reset/revert/强制 checkout。
+  - 测试文件不能新建，优先补现有测试。
+- unknowns/open questions:
+  - PromptOption hints 字段最终命名采用 _ai 还是 aiHints。
+  - SmashUp 当前最稳妥的首批自动推导字段边界。
+- likely codebase touchpoints:
+  - src/engine/ai/types.ts
+  - src/engine/systems/InteractionSystem.ts
+  - src/games/smashup/ai.ts
+  - src/games/smashup/domain/abilityHelpers.ts
+  - src/games/smashup/__tests__/scoreBases-auto-continue.test.ts

@@ -14,6 +14,7 @@ import {
     type ReactNode,
 } from 'react';
 import type { GameMobileBattlefieldZoom } from '../../../games/manifest.types';
+import { logMobileRuntimeCritical } from '../../../lib/mobile/mobileRuntimeDebug';
 
 interface MobileBoardShellProps {
     children: ReactNode;
@@ -78,6 +79,7 @@ type PinchState = {
     targetLeft: number;
     targetTop: number;
     startCenterTargetLocal: { x: number; y: number };
+    startCenterSurfaceLocal: { x: number; y: number };
     activated: boolean;
 };
 type PanState = {
@@ -94,6 +96,7 @@ const PINCH_ACTIVATION_DISTANCE_PX = 12;
 const PAN_THRESHOLD_LOCAL_PX = 10;
 const CLICK_SUPPRESS_MS = 320;
 const ZOOM_TARGET_SELECTOR = '[data-mobile-battlefield-zoom-target="true"]';
+const PINCH_DEBUG_LOG_LIMIT = 12;
 
 type BattlefieldTargetStyle = CSSProperties & {
     '--mobile-battlefield-target-translate-x'?: string;
@@ -235,6 +238,8 @@ const getTargetLocalPoint = (surface: HTMLElement, target: HTMLElement, transfor
 
 const joinClassNames = (...values: Array<string | undefined | false | null>) => values.filter(Boolean).join(' ');
 
+const toDebugNumber = (value: number) => Number(value.toFixed(3));
+
 const useLandscapeMobileViewport = () => {
     const [isLandscapeMobileViewport, setIsLandscapeMobileViewport] = useState(() => {
         if (typeof window === 'undefined') return false;
@@ -319,11 +324,14 @@ export const MobileBattlefieldViewport = ({
     const transformRef = useRef<TransformState>(initialTransform);
     const hasDedicatedZoomTargetRef = useRef(false);
     const visibleInsetsRef = useRef<Partial<ViewportInsets> | undefined>(visibleInsets);
+    const pinchDebugCountRef = useRef(0);
 
     const [transform, setTransform] = useState<TransformState>(initialTransform);
     const isLandscapeMobileViewport = useLandscapeMobileViewport();
     const isEnabled = zoomMode === 'shell-pinch-pan' && isLandscapeMobileViewport;
     const shouldLockTouchGestures = isEnabled && transform.scale > MIN_SCALE;
+    const supportsTouchPointerEvents = typeof window !== 'undefined' && typeof window.PointerEvent !== 'undefined';
+    const shouldUseTouchFallback = isEnabled && !supportsTouchPointerEvents;
     const childCount = Children.count(children);
     const singleChild = childCount === 1 ? Children.only(children) : null;
     const hasDedicatedZoomTarget = transformTarget === 'content' && isValidElement<ZoomTargetElementProps>(singleChild);
@@ -343,6 +351,7 @@ export const MobileBattlefieldViewport = ({
         panRef.current = null;
         suppressClickUntilRef.current = 0;
         transformRef.current = { scale: MIN_SCALE, x: 0, y: 0 };
+        pinchDebugCountRef.current = 0;
         setTransform(transformRef.current);
     }, [isEnabled]);
 
@@ -376,6 +385,19 @@ export const MobileBattlefieldViewport = ({
         };
     }, []);
 
+    const logPinchDebug = useCallback((stage: string, payload: Record<string, unknown>) => {
+        if (!import.meta.env.DEV) {
+            return;
+        }
+
+        if (pinchDebugCountRef.current >= PINCH_DEBUG_LOG_LIMIT) {
+            return;
+        }
+
+        pinchDebugCountRef.current += 1;
+        logMobileRuntimeCritical('BattlefieldPinch', stage, payload);
+    }, []);
+
     const beginTrackedPoint = useCallback((pointerId: number, point: Point) => {
         pointersRef.current.set(pointerId, point);
 
@@ -398,8 +420,21 @@ export const MobileBattlefieldViewport = ({
                 targetLeft: center.left,
                 targetTop: center.top,
                 startCenterTargetLocal: { x: center.x, y: center.y },
+                startCenterSurfaceLocal: { x: center.surfacePoint.x, y: center.surfacePoint.y },
                 activated: false,
             };
+            pinchDebugCountRef.current = 0;
+            logPinchDebug('begin', {
+                pointerId,
+                startDistance: toDebugNumber(pinchRef.current.startDistance),
+                startScale: toDebugNumber(pinchRef.current.startScale),
+                targetLeft: toDebugNumber(pinchRef.current.targetLeft),
+                targetTop: toDebugNumber(pinchRef.current.targetTop),
+                startCenterTargetLocalX: toDebugNumber(pinchRef.current.startCenterTargetLocal.x),
+                startCenterTargetLocalY: toDebugNumber(pinchRef.current.startCenterTargetLocal.y),
+                startCenterSurfaceLocalX: toDebugNumber(pinchRef.current.startCenterSurfaceLocal.x),
+                startCenterSurfaceLocalY: toDebugNumber(pinchRef.current.startCenterSurfaceLocal.y),
+            });
             panRef.current = null;
             return true;
         }
@@ -410,7 +445,7 @@ export const MobileBattlefieldViewport = ({
         }
 
         return false;
-    }, [beginPanFromPointer]);
+    }, [beginPanFromPointer, logPinchDebug]);
 
     const updateTrackedPoint = useCallback((pointerId: number, point: Point) => {
         if (!surfaceRef.current || !pointersRef.current.has(pointerId)) {
@@ -440,20 +475,22 @@ export const MobileBattlefieldViewport = ({
                     targetLeft: center.left,
                     targetTop: center.top,
                     startCenterTargetLocal: { x: center.x, y: center.y },
+                    startCenterSurfaceLocal: { x: center.surfacePoint.x, y: center.surfacePoint.y },
                     activated: false,
                 } satisfies PinchState;
             })();
             pinchRef.current = pinch;
 
-            const currentCenterLocal = getLocalPoint(
-                surfaceRef.current,
-                (first.clientX + second.clientX) / 2,
-                (first.clientY + second.clientY) / 2,
-            );
             const currentDistance = Math.max(getDistance(first, second), 1);
 
             if (!pinch.activated) {
                 if (Math.abs(currentDistance - pinch.startDistance) < PINCH_ACTIVATION_DISTANCE_PX) {
+                    logPinchDebug('pre-activate', {
+                        pointerId,
+                        currentDistance: toDebugNumber(currentDistance),
+                        startDistance: toDebugNumber(pinch.startDistance),
+                        deltaDistance: toDebugNumber(currentDistance - pinch.startDistance),
+                    });
                     suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
                     return true;
                 }
@@ -465,12 +502,28 @@ export const MobileBattlefieldViewport = ({
                     (first.clientX + second.clientX) / 2,
                     (first.clientY + second.clientY) / 2,
                 );
-                pinch.startDistance = currentDistance;
-                pinch.startScale = transformRef.current.scale;
-                pinch.targetLeft = center.left;
-                pinch.targetTop = center.top;
-                pinch.startCenterTargetLocal = { x: center.x, y: center.y };
-                pinch.activated = true;
+                const activatedPinch: PinchState = {
+                    ...pinch,
+                    startDistance: currentDistance,
+                    startScale: transformRef.current.scale,
+                    activated: true,
+                };
+                pinchRef.current = activatedPinch;
+                logPinchDebug('activate', {
+                    pointerId,
+                    currentDistance: toDebugNumber(currentDistance),
+                    startScale: toDebugNumber(activatedPinch.startScale),
+                    thresholdCenterTargetLocalX: toDebugNumber(center.x),
+                    thresholdCenterTargetLocalY: toDebugNumber(center.y),
+                    thresholdCenterSurfaceLocalX: toDebugNumber(center.surfacePoint.x),
+                    thresholdCenterSurfaceLocalY: toDebugNumber(center.surfacePoint.y),
+                    anchorTargetLeft: toDebugNumber(activatedPinch.targetLeft),
+                    anchorTargetTop: toDebugNumber(activatedPinch.targetTop),
+                    anchorCenterTargetLocalX: toDebugNumber(activatedPinch.startCenterTargetLocal.x),
+                    anchorCenterTargetLocalY: toDebugNumber(activatedPinch.startCenterTargetLocal.y),
+                    anchorCenterSurfaceLocalX: toDebugNumber(activatedPinch.startCenterSurfaceLocal.x),
+                    anchorCenterSurfaceLocalY: toDebugNumber(activatedPinch.startCenterSurfaceLocal.y),
+                });
                 suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
                 return true;
             }
@@ -480,9 +533,18 @@ export const MobileBattlefieldViewport = ({
             setTransform(() => {
                 const clamped = clampTransform(surfaceRef.current, activeTarget, {
                     scale: nextScale,
-                    x: currentCenterLocal.x - pinch.targetLeft - pinch.startCenterTargetLocal.x * nextScale,
-                    y: currentCenterLocal.y - pinch.targetTop - pinch.startCenterTargetLocal.y * nextScale,
+                    x: pinch.startCenterSurfaceLocal.x - pinch.targetLeft - pinch.startCenterTargetLocal.x * nextScale,
+                    y: pinch.startCenterSurfaceLocal.y - pinch.targetTop - pinch.startCenterTargetLocal.y * nextScale,
                 }, visibleInsetsRef.current);
+                logPinchDebug('apply', {
+                    pointerId,
+                    currentDistance: toDebugNumber(currentDistance),
+                    startDistance: toDebugNumber(pinch.startDistance),
+                    nextScale: toDebugNumber(nextScale),
+                    appliedScale: toDebugNumber(clamped.scale),
+                    appliedX: toDebugNumber(clamped.x),
+                    appliedY: toDebugNumber(clamped.y),
+                });
                 transformRef.current = clamped;
                 return clamped;
             });
@@ -518,7 +580,7 @@ export const MobileBattlefieldViewport = ({
             return clamped;
         });
         return true;
-    }, []);
+    }, [logPinchDebug]);
 
     const finishPointer = useCallback((pointerId: number) => {
         const point = pointersRef.current.get(pointerId);
@@ -551,6 +613,7 @@ export const MobileBattlefieldViewport = ({
                 targetLeft: center.left,
                 targetTop: center.top,
                 startCenterTargetLocal: { x: center.x, y: center.y },
+                startCenterSurfaceLocal: { x: center.surfacePoint.x, y: center.surfacePoint.y },
                 activated: false,
             };
             panRef.current = null;
@@ -561,17 +624,31 @@ export const MobileBattlefieldViewport = ({
 
         if (pointersRef.current.size === 1) {
             const [remainingPointerId, remainingPoint] = Array.from(pointersRef.current.entries())[0];
+            logPinchDebug('finish', {
+                pointerId,
+                remainingPointers: pointersRef.current.size,
+                scale: toDebugNumber(transformRef.current.scale),
+                x: toDebugNumber(transformRef.current.x),
+                y: toDebugNumber(transformRef.current.y),
+            });
             beginPanFromPointer(remainingPointerId, remainingPoint);
             return;
         }
 
         if (point) {
+            logPinchDebug('finish', {
+                pointerId,
+                remainingPointers: pointersRef.current.size,
+                scale: toDebugNumber(transformRef.current.scale),
+                x: toDebugNumber(transformRef.current.x),
+                y: toDebugNumber(transformRef.current.y),
+            });
             panRef.current = null;
         }
-    }, [beginPanFromPointer]);
+    }, [beginPanFromPointer, logPinchDebug]);
 
     const onTouchStart = useCallback((event: ReactTouchEvent<HTMLElement>) => {
-        if (!isEnabled) {
+        if (!shouldUseTouchFallback) {
             return;
         }
 
@@ -584,10 +661,10 @@ export const MobileBattlefieldViewport = ({
             event.preventDefault();
             event.stopPropagation();
         }
-    }, [beginTrackedPoint, isEnabled]);
+    }, [beginTrackedPoint, shouldUseTouchFallback]);
 
     const onTouchMove = useCallback((event: ReactTouchEvent<HTMLElement>) => {
-        if (!isEnabled) {
+        if (!shouldUseTouchFallback) {
             return;
         }
 
@@ -600,17 +677,17 @@ export const MobileBattlefieldViewport = ({
             event.preventDefault();
             event.stopPropagation();
         }
-    }, [isEnabled, updateTrackedPoint]);
+    }, [shouldUseTouchFallback, updateTrackedPoint]);
 
     const onTouchEnd = useCallback((event: ReactTouchEvent<HTMLElement>) => {
-        if (!isEnabled) {
+        if (!shouldUseTouchFallback) {
             return;
         }
 
         for (const touch of Array.from(event.changedTouches)) {
             finishPointer(touch.identifier);
         }
-    }, [finishPointer, isEnabled]);
+    }, [finishPointer, shouldUseTouchFallback]);
 
     const onPointerDown = useCallback((event: ReactPointerEvent<HTMLElement>) => {
         if (!isEnabled || event.pointerType !== 'touch') {
@@ -689,7 +766,13 @@ export const MobileBattlefieldViewport = ({
                 ref={(node) => {
                     surfaceRef.current = node;
                 }}
-                className={joinClassNames('mobile-battlefield-viewport mobile-battlefield-viewport--content-proxy', className)}
+                className={joinClassNames(
+                    'mobile-battlefield-viewport',
+                    'mobile-battlefield-viewport--content-proxy',
+                    isEnabled && 'mobile-battlefield-viewport--zoom-enabled',
+                    shouldLockTouchGestures && 'mobile-battlefield-viewport--gesture-lock',
+                    className,
+                )}
                 style={style}
                 data-testid={testId}
                 data-battlefield-zoom-enabled={isEnabled ? 'true' : 'false'}

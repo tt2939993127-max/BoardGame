@@ -140,6 +140,7 @@
     "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
     "failedTitle": "Download Failed",
     "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
+    "notificationSettingsAction": "Open notification settings",
     "retryAction": "Retry",
     "cancelAction": "Cancel Download",
     "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",

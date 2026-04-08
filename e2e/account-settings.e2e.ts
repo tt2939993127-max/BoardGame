@@ -87,7 +87,7 @@ test.describe('账户设置', () => {
 
     test('移动端账户设置与邮箱绑定输入应保持可见可编辑', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.goto('/');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.route('**/auth/send-email-code', async route => {
             await route.fulfill({ status: 200, json: { message: 'ok' } });

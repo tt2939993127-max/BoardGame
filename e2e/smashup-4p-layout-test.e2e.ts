@@ -74,6 +74,34 @@ async function clickCenter(locator: any, page: any) {
     await locator.dispatchEvent('click');
 }
 
+async function tapTouchCenter(locator: any, page: any) {
+    const box = await locator.boundingBox();
+    expect(box, '触摸目标应该先可见').not.toBeNull();
+
+    const client = await page.context().newCDPSession(page);
+    const x = Math.round((box?.x ?? 0) + (box?.width ?? 0) / 2);
+    const y = Math.round((box?.y ?? 0) + (box?.height ?? 0) / 2);
+
+    try {
+        await client.send('Emulation.setTouchEmulationEnabled', {
+            enabled: true,
+            maxTouchPoints: 1,
+        });
+        await client.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x, y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+        });
+        await page.waitForTimeout(60);
+        await client.send('Input.dispatchTouchEvent', {
+            type: 'touchEnd',
+            touchPoints: [],
+        });
+        await page.waitForTimeout(180);
+    } finally {
+        await client.detach().catch(() => {});
+    }
+}
+
 async function pinchZoomTouch(locator: any, page: any, options?: {
     startDistance?: number;
     endDistance?: number;
@@ -817,6 +845,69 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         }
 
         await game.screenshot('03-final-four-player-state', testInfo);
+    });
+
+    test('移动端横屏点击对手分数应能进入并退出对手视角', async ({ page, game }, testInfo) => {
+        test.setTimeout(150000);
+
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        }, 120000);
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 800
+                && window.innerHeight === 450
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards';
+        }, { timeout: 10000, polling: 200 });
+
+        await waitForSmashUpMainUiReady(page);
+
+        const opponentScoreButton = page.locator('[data-testid="su-score-vp-1"]');
+        const opponentViewBanner = page.getByText('对手视角');
+        const backToSelfButton = page.getByRole('button', { name: '返回' });
+
+        await expect(opponentScoreButton).toBeVisible({ timeout: 15000 });
+        const hitTestId = await opponentScoreButton.evaluate((element: HTMLElement) => {
+            const rect = element.getBoundingClientRect();
+            const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) as HTMLElement | null;
+            return target?.closest('[data-testid]')?.getAttribute('data-testid') ?? null;
+        });
+        expect(hitTestId, '分数球中心点命中目标应仍是分数按钮本身').toBe('su-score-vp-1');
+
+        await tapTouchCenter(opponentScoreButton, page);
+        await expect(opponentViewBanner).toBeVisible({ timeout: 5000 });
+        await expect(backToSelfButton).toBeVisible({ timeout: 5000 });
+
+        await game.screenshot('03a-mobile-opponent-view-entry', testInfo);
+
+        await backToSelfButton.click();
+        await expect(opponentViewBanner).toHaveCount(0);
     });
 
     test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌与战场拖拽放大', async ({ page, game }, testInfo) => {

@@ -31,6 +31,7 @@ export type ForceSkippableHiddenAiInteraction = {
 export type ForceEndTurnStalledAiResolution = {
     playerId: string;
     reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn';
+    requiresConfirmedAdvancePhase?: boolean;
     resolution: AiResolution;
 };
 
@@ -111,13 +112,11 @@ function buildForceEndTurnFromInteractionState(
         return {
             playerId,
             reason,
+            requiresConfirmedAdvancePhase: true,
             resolution: buildForceEndTurnResolution({
                 playerId,
                 suffix: `${reason}:${forceSkipPayload.interactionId}`,
-                commands: [
-                    { type: 'SYS_INTERACTION_RESPOND', payload: forceSkipPayload.payload },
-                    { type: 'ADVANCE_PHASE', payload: {} },
-                ],
+                commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: forceSkipPayload.payload }],
             }),
         };
     }
@@ -125,15 +124,77 @@ function buildForceEndTurnFromInteractionState(
     return {
         playerId,
         reason,
+        requiresConfirmedAdvancePhase: true,
         resolution: buildForceEndTurnResolution({
             playerId,
             suffix: `${reason}:${current.id}`,
-            commands: [
-                { type: 'SYS_INTERACTION_CANCEL', payload: {} },
-                { type: 'ADVANCE_PHASE', payload: {} },
-            ],
+            commands: [{ type: 'SYS_INTERACTION_CANCEL', payload: {} }],
         }),
     };
+}
+
+function buildForceEndTurnFollowUpSuffix(state: MatchState<unknown>, playerId: string): string {
+    const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : 'unknown-turn';
+    const phase = typeof state.sys?.phase === 'string' ? state.sys.phase : 'unknown-phase';
+    const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
+        ? state.sys.eventStream.nextId
+        : 'unknown-events';
+    return `follow-up:${playerId}:${turnNumber}:${phase}:${eventStreamNextId}`;
+}
+
+export function resolveForceAdvancePhaseAfterRecovery(args: {
+    authoritativeState: MatchState<unknown> | null | undefined;
+    seatControllers: Record<string, AiSeatController>;
+    playerId: string;
+}): AiResolution | null {
+    const { authoritativeState, seatControllers, playerId } = args;
+    if (!authoritativeState) {
+        return null;
+    }
+    if (seatControllers[playerId]?.type === 'human') {
+        return null;
+    }
+    if (resolveCurrentPlayerId(authoritativeState) !== playerId) {
+        return null;
+    }
+
+    const currentInteraction = authoritativeState.sys?.interaction as {
+        current?: unknown;
+        isBlocked?: unknown;
+    } | undefined;
+    if (currentInteraction?.current || currentInteraction?.isBlocked === true) {
+        return null;
+    }
+
+    const responseWindow = authoritativeState.sys?.responseWindow as {
+        current?: unknown;
+    } | undefined;
+    if (responseWindow?.current) {
+        return null;
+    }
+
+    return buildForceEndTurnResolution({
+        playerId,
+        suffix: buildForceEndTurnFollowUpSuffix(authoritativeState, playerId),
+        commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+    });
+}
+
+export function resolveForceEndTurnFollowUpAfterConfirmation(args: {
+    candidate: ForceEndTurnStalledAiResolution;
+    authoritativeState: MatchState<unknown> | null | undefined;
+    seatControllers: Record<string, AiSeatController>;
+}): AiResolution | null {
+    const { candidate, authoritativeState, seatControllers } = args;
+    if (!candidate.requiresConfirmedAdvancePhase) {
+        return null;
+    }
+
+    return resolveForceAdvancePhaseAfterRecovery({
+        authoritativeState,
+        seatControllers,
+        playerId: candidate.playerId,
+    });
 }
 
 function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId: string): {
@@ -300,13 +361,11 @@ export function resolveForceEndTurnForStalledAi(args: {
         return {
             playerId: responderId,
             reason: 'response-window',
+            requiresConfirmedAdvancePhase: true,
             resolution: buildForceEndTurnResolution({
                 playerId: responderId,
                 suffix: `response-window:${responderId}`,
-                commands: [
-                    { type: 'RESPONSE_PASS', payload: {} },
-                    { type: 'ADVANCE_PHASE', payload: {} },
-                ],
+                commands: [{ type: 'RESPONSE_PASS', payload: {} }],
             }),
         };
     }
