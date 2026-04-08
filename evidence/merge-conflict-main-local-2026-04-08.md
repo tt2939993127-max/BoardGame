@@ -47,5 +47,5 @@
 - `npx vitest run src/components/lobby/__tests__/GameDetailsModalJoinConfirm.test.ts` ✅ 通过
 
 ## 7. 最终提交信息
-- commit hash: 待本次 merge commit 完成后补充
+- commit hash: `6ac96a4f`
 - push 目标分支: 本地 `main`（本轮未 push）
