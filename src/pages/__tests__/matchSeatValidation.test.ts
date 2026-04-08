@@ -9,7 +9,12 @@ import type { GameManifestEntry } from '../../games/manifest.types';
 import type { MatchState } from '../../engine/types';
 import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
-import { resolveForceEndTurnForStalledAi, resolveForceSkippableHiddenAiInteraction, submitOnlineAiResolution } from '../onlineAiForceSkip';
+import {
+    applyAiAutoRecoveryRejection,
+    resolveForceEndTurnForStalledAi,
+    resolveForceSkippableHiddenAiInteraction,
+    submitOnlineAiResolution,
+} from '../onlineAiForceSkip';
 import { resolveOnlineHudPresence } from '../matchHudPresence';
 
 type Player = { id: number; name?: string | null };
@@ -777,6 +782,33 @@ describe('submitOnlineAiResolution', () => {
         expect(onConfirmed).toHaveBeenCalledWith({ sys: { phase: 'playCards' } });
         rejectHandler?.('command_failed');
         expect(onRejected).toHaveBeenCalledWith('command_failed');
+    });
+});
+
+describe('applyAiAutoRecoveryRejection', () => {
+    it('同一失败原因只应提示一次，换原因后才重新提示', () => {
+        const first = applyAiAutoRecoveryRejection({
+            key: 'force-skip:1:hidden',
+            firstSeenAt: 100,
+            autoSubmittedAt: 200,
+            lastReportedFailureReason: null,
+            candidate: { playerId: '1' },
+        }, 'command_failed', 300);
+
+        expect(first.shouldNotify).toBe(true);
+        expect(first.nextTracker.firstSeenAt).toBe(300);
+        expect(first.nextTracker.autoSubmittedAt).toBeNull();
+        expect(first.nextTracker.lastReportedFailureReason).toBe('command_failed');
+        expect(first.nextTracker.key).toBe('force-skip:1:hidden');
+        expect(first.nextTracker.candidate).toEqual({ playerId: '1' });
+
+        const repeated = applyAiAutoRecoveryRejection(first.nextTracker, 'command_failed', 400);
+        expect(repeated.shouldNotify).toBe(false);
+        expect(repeated.nextTracker.lastReportedFailureReason).toBe('command_failed');
+
+        const changedReason = applyAiAutoRecoveryRejection(repeated.nextTracker, 'unauthorized', 500);
+        expect(changedReason.shouldNotify).toBe(true);
+        expect(changedReason.nextTracker.lastReportedFailureReason).toBe('unauthorized');
     });
 });
 

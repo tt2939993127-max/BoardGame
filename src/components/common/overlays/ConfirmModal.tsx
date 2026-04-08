@@ -120,7 +120,7 @@ export const ConfirmModal = ({
                 zIndex: UI_Z_INDEX.modalContent,
                 paddingTop: 'max(1rem, var(--safe-area-top))',
                 paddingRight: 'max(1rem, var(--safe-area-right))',
-                paddingBottom: 'max(1rem, var(--safe-area-bottom-with-keyboard))',
+                paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
                 paddingLeft: 'max(1rem, var(--safe-area-left))',
             }}
         >

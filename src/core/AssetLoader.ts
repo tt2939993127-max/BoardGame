@@ -645,6 +645,12 @@ export function clearGameAssetsCache(gameId: string): void {
     }
 }
 
+const getImageFallbackLocale = (locale: string): string => {
+    if (locale === 'zh-CN') return 'en';
+    if (locale === 'en') return 'zh-CN';
+    return 'en';
+};
+
 /**
  * 将已加载的图片 URL 注册到缓存（供 OptimizedImage 在 onLoad 时调用）
  * 这样同一张图片的其他实例可以跳过 shimmer。
@@ -666,16 +672,39 @@ function normalizePreloadedImageCacheKey(src: string, locale?: string): string {
     return getOptimizedImageUrls(getLocalizedAssetPath(normalized, effectiveLocale)).webp;
 }
 
+function getPreloadedImageCacheKeys(src: string, locale?: string): string[] {
+    const keys = new Set<string>();
+    const exactKey = assetsPath(src);
+    if (exactKey) {
+        keys.add(exactKey);
+    }
+
+    const normalizedKey = normalizePreloadedImageCacheKey(src, locale);
+    if (normalizedKey) {
+        keys.add(normalizedKey);
+    }
+
+    return [...keys];
+}
+
+function cacheLoadedImage(src: string, imgElement: HTMLImageElement, locale?: string): void {
+    for (const key of getPreloadedImageCacheKeys(src, locale)) {
+        preloadedImages.set(key, imgElement);
+    }
+}
+
 export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLImageElement): void {
-    const cacheKey = normalizePreloadedImageCacheKey(src, locale);
-    if (!cacheKey) return;
+    const cacheKeys = getPreloadedImageCacheKeys(src, locale);
+    if (cacheKeys.length === 0) return;
     if (imgElement && imgElement.naturalWidth > 0) {
-        preloadedImages.set(cacheKey, imgElement);
+        cacheLoadedImage(src, imgElement, locale);
     } else {
         // 回退：创建 Image 并设置 src，浏览器磁盘缓存命中时 naturalWidth 立即可用
         const img = new Image();
-        img.src = cacheKey;
-        preloadedImages.set(cacheKey, img);
+        img.src = cacheKeys[0];
+        for (const key of cacheKeys) {
+            preloadedImages.set(key, img);
+        }
     }
 }
 
@@ -685,8 +714,13 @@ export function markImageLoaded(src: string, locale?: string, imgElement?: HTMLI
  * 返回 null 表示图片尚未预加载
  */
 export function getPreloadedImageElement(src: string, locale?: string): HTMLImageElement | null {
-    const cacheKey = normalizePreloadedImageCacheKey(src, locale);
-    return preloadedImages.get(cacheKey) ?? null;
+    for (const key of [src, ...getPreloadedImageCacheKeys(src, locale)]) {
+        const cached = preloadedImages.get(key);
+        if (cached) {
+            return cached;
+        }
+    }
+    return null;
 }
 
 /**
@@ -703,8 +737,13 @@ export function isImagePreloaded(src: string, locale?: string): boolean {
 
     if (check(src)) return true;
 
-    const cacheKey = normalizePreloadedImageCacheKey(src, locale);
-    return check(cacheKey);
+    for (const key of getPreloadedImageCacheKeys(src, locale)) {
+        if (check(key)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // ============================================================================
@@ -715,7 +754,7 @@ async function preloadImage(src: string): Promise<void> {
     return new Promise((resolve) => {
         const img = new Image();
         img.onload = () => {
-            preloadedImages.set(src, img);
+            cacheLoadedImage(src, img);
             resolve();
         };
         img.onerror = () => {
@@ -783,7 +822,7 @@ async function preloadImageWithResult(src: string, timeoutMs?: number): Promise<
                 // 超时 ≠ 失败：浏览器的 Image 请求仍在后台继续。
                 // 注册后台回调，加载完成后自动更新缓存并通知 UI 组件。
                 img.onload = () => {
-                    preloadedImages.set(src, img);
+                    cacheLoadedImage(src, img);
                     removePreloadLink(src);
                     // 通知订阅者：超时的图片已在后台加载完成
                     _emitImageReady(src);
@@ -793,7 +832,7 @@ async function preloadImageWithResult(src: string, timeoutMs?: number): Promise<
             : null;
         img.onload = () => {
             if (timer) clearTimeout(timer);
-            preloadedImages.set(src, img);
+            cacheLoadedImage(src, img);
             finish(true);
         };
         img.onerror = () => {
@@ -826,7 +865,7 @@ async function preloadOptimizedImage(src: string): Promise<void> {
     testImg.src = webp;
     if (testImg.complete && testImg.naturalWidth > 0) {
         // 浏览器缓存命中，直接标记为已加载，跳过异步加载流程
-        preloadedImages.set(webp, testImg);
+        cacheLoadedImage(webp, testImg);
         return;
     }
     
@@ -1156,21 +1195,67 @@ export function getLocalizedImageUrls(src: string, locale?: string): LocalizedIm
     const localizedPath = getLocalizedAssetPath(src, locale);
     const primary = getOptimizedImageUrls(localizedPath);
     
-    // 回退逻辑：中文 ↔ 英文互为回退
-    let fallbackLocale: string;
-    if (locale === 'zh-CN') {
-        fallbackLocale = 'en';
-    } else if (locale === 'en') {
-        fallbackLocale = 'zh-CN';
-    } else {
-        // 其他语言先回退到英文
-        fallbackLocale = 'en';
-    }
-    
+    const fallbackLocale = getImageFallbackLocale(locale);
     const fallbackPath = getLocalizedAssetPath(src, fallbackLocale);
     const fallback = getOptimizedImageUrls(fallbackPath);
     
     return { primary, fallback };
+}
+
+const toLocalizedCompressedRelativePath = (src: string, locale: string): string => {
+    const relative = stripKnownAssetPrefixes(splitUrlParts(src).path);
+    if (!relative) {
+        return `i18n/${locale}`;
+    }
+
+    const localized = relative.startsWith(`i18n/${locale}/`)
+        ? relative
+        : `i18n/${locale}/${relative}`;
+    const base = localized.replace(/\.(webp|png|jpe?g)$/i, '');
+    const lastSlash = base.lastIndexOf('/');
+    const dir = lastSlash >= 0 ? base.slice(0, lastSlash) : '';
+    const filename = lastSlash >= 0 ? base.slice(lastSlash + 1) : base;
+
+    if (dir.endsWith(`/${COMPRESSED_SUBDIR}`) || dir === COMPRESSED_SUBDIR) {
+        return `${base}.webp`;
+    }
+
+    return dir ? `${dir}/${COMPRESSED_SUBDIR}/${filename}.webp` : `${COMPRESSED_SUBDIR}/${filename}.webp`;
+};
+
+export function getLocalizedImageCandidateUrls(src: string, locale: string): string[] {
+    if (!isString(src) || !src) {
+        return [];
+    }
+
+    if (src.startsWith('data:') || isPassthroughSource(src)) {
+        const directUrl = getOptimizedImageUrls(src).webp || src;
+        return directUrl ? [directUrl] : [];
+    }
+
+    const effectiveLocale = locale || 'zh-CN';
+    const fallbackLocale = getImageFallbackLocale(effectiveLocale);
+    const localizedUrls = getLocalizedImageUrls(src, effectiveLocale);
+    const remoteBaseUrl = getAssetsBaseUrl();
+    const remotePrimaryRelative = toLocalizedCompressedRelativePath(src, effectiveLocale);
+    const remoteFallbackRelative = toLocalizedCompressedRelativePath(src, fallbackLocale);
+    const remotePrimary = /^https?:\/\//i.test(remoteBaseUrl)
+        ? `${remoteBaseUrl}/${remotePrimaryRelative}`
+        : '';
+    const remoteFallback = /^https?:\/\//i.test(remoteBaseUrl)
+        ? `${remoteBaseUrl}/${remoteFallbackRelative}`
+        : '';
+    const publicPrimary = resolveVersionedAssetUrl(`/assets/${remotePrimaryRelative}`);
+    const publicFallback = resolveVersionedAssetUrl(`/assets/${remoteFallbackRelative}`);
+
+    return [
+        localizedUrls.primary.webp,
+        localizedUrls.fallback.webp,
+        remotePrimary,
+        remoteFallback,
+        publicPrimary,
+        publicFallback,
+    ].filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index);
 }
 
 /**

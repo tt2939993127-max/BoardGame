@@ -97,6 +97,7 @@ const EMPTY_TITANS = [] as NonNullable<SmashUpCore['titans']>;
 const EMPTY_EVENT_ENTRIES: MatchState<SmashUpCore>['sys']['eventStream']['entries'] = [];
 const SMASHUP_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1160;
 const SMASHUP_FACTION_SELECTION_SHELL_DESIGN_WIDTH = 1500;
+const TURN_NOTICE_DURATION_MS = 1200;
 
 type DragGuidePoint = { x: number; y: number };
 
@@ -294,8 +295,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const duelBannerTopOffset = isMobileViewport ? 10 : 14;
     const stackedTopBannerGap = isMobileViewport ? 40 : 48;
     const turnNoticeClassName = isMobileViewport
-        ? 'absolute inset-0 flex items-center justify-center pointer-events-none'
-        : 'fixed inset-0 flex items-center justify-center pointer-events-none';
+        ? 'absolute inset-x-0 top-[5rem] z-30 flex justify-center pointer-events-none'
+        : 'fixed inset-x-0 top-[6rem] z-30 flex justify-center pointer-events-none';
     const resolvePromptOptionLabel = useCallback((opt: { label: string; labelKey?: string; labelParams?: Record<string, string | number> }) => {
         if (typeof opt.labelKey === 'string') {
             return t(opt.labelKey, {
@@ -1415,7 +1416,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 queueMicrotask(() => {
                     if (cancelled) return;
                     setShowTurnNotice(true);
-                    timer = setTimeout(() => setShowTurnNotice(false), 3000);
+                    timer = setTimeout(() => setShowTurnNotice(false), TURN_NOTICE_DURATION_MS);
                 });
             }
         }
@@ -3156,14 +3157,14 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                             transition={{ duration: 0.3 }}
                         >
                             <motion.div
-                                className="bg-[#fef3c7] text-slate-900 px-8 py-4 shadow-2xl border-4 border-dashed border-slate-800/30"
-                                initial={{ scale: 0.5, rotate: -10 }}
-                                animate={{ scale: 1, rotate: 2 }}
-                                exit={{ scale: 0.5, rotate: 10, opacity: 0 }}
-                                transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+                                className="bg-[#fef3c7] text-slate-900 px-5 py-2.5 shadow-xl border-4 border-dashed border-slate-800/30"
+                                initial={{ scale: 0.86, y: -10, rotate: -6 }}
+                                animate={{ scale: 1, y: 0, rotate: 1.5 }}
+                                exit={{ scale: 0.92, y: -8, opacity: 0 }}
+                                transition={{ type: 'spring', stiffness: 420, damping: 24 }}
                                 style={{ fontFamily: "'Caveat', 'Comic Sans MS', cursive" }}
                             >
-                                <span className="text-[3vw] font-black uppercase tracking-tight">{t('ui.your_turn')}</span>
+                                <span className="text-[clamp(18px,1.5vw,28px)] font-black uppercase tracking-tight">{t('ui.your_turn')}</span>
                             </motion.div>
                         </motion.div>
                     )}

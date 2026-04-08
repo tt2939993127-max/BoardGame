@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ImgHTMLAttributes } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getLocalizedImageUrls, getLocalizedLocalAssetPath, isImagePreloaded, markImageLoaded } from '../../../core/AssetLoader';
+import { getLocalizedImageCandidateUrls, isImagePreloaded, markImageLoaded } from '../../../core/AssetLoader';
 
 type OptimizedImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
     /** 原始资源路径（相对于游戏目录，如 dicethrone/images/...） */
@@ -27,6 +27,8 @@ export const SHIMMER_BG: React.CSSProperties = {
 const AUTO_RETRY_MAX = 5;           // 最多自动重试 5 轮
 const AUTO_RETRY_BASE_MS = 2000;    // 首次 2s
 const AUTO_RETRY_MAX_MS = 30000;    // 上限 30s
+const LOCAL_CANDIDATE_TIMEOUT_MS = 3000;
+const REMOTE_CANDIDATE_TIMEOUT_MS = 8000;
 
 /** 计算指数退避延迟（带 ±25% 抖动，避免多图同时重试雪崩） */
 const getRetryDelay = (attempt: number) => {
@@ -51,11 +53,31 @@ const isRemoteUrl = (url: string) => {
     }
 };
 
+const isPublicAssetsUrl = (url: string) => {
+    if (url.startsWith('/assets/')) return true;
+    if (typeof window === 'undefined' || !window.location?.origin) return false;
+    try {
+        const resolved = new URL(url, window.location.href);
+        return resolved.origin === window.location.origin && resolved.pathname.startsWith('/assets/');
+    } catch {
+        return false;
+    }
+};
+
+const shouldUseBlobFetchForLocalAsset = (url: string) => {
+    if (!import.meta.env.DEV) return false;
+    return isPublicAssetsUrl(url);
+};
+
 /** 为 URL 追加重试参数，绕过浏览器对失败请求的缓存 */
 const appendRetryParam = (url: string, retry: number) => {
     const sep = url.includes('?') ? '&' : '?';
     return `${url}${sep}retry=${retry}`;
 };
+
+const getCandidateTimeoutMs = (url: string) => (
+    isRemoteUrl(url) ? REMOTE_CANDIDATE_TIMEOUT_MS : LOCAL_CANDIDATE_TIMEOUT_MS
+);
 
 export const OptimizedImage = ({
     src,
@@ -92,27 +114,9 @@ export const OptimizedImage = ({
         setLoaded(false);
     }, []);
 
-    // CDN 国际化路径（包含语言回退）
-    const localizedUrls = React.useMemo(() => {
-        return getLocalizedImageUrls(src, effectiveLocale);
+    const candidateUrls = React.useMemo(() => {
+        return getLocalizedImageCandidateUrls(src, effectiveLocale);
     }, [src, effectiveLocale]);
-    const cdnUrl = localizedUrls.primary.webp;
-    const cdnFallbackUrl = localizedUrls.fallback.webp; // 语言回退 URL
-
-    // 本地降级路径（/assets/i18n/{locale}/...compressed/xxx.webp）
-    const localUrl = React.useMemo(() => {
-        if (!isRemoteUrl(cdnUrl)) return cdnUrl; // 已经是本地路径，无需再构造 fallback
-        // 只有远端 URL 才需要从原始 src 构建本地国际化压缩路径
-        const localBase = getLocalizedLocalAssetPath(src, effectiveLocale);
-        const base = localBase.replace(/\.[^/.]+$/, '');
-        const lastSlash = base.lastIndexOf('/');
-        const dir = lastSlash >= 0 ? base.substring(0, lastSlash) : '';
-        const filename = lastSlash >= 0 ? base.substring(lastSlash + 1) : base;
-        if (dir.endsWith('/compressed') || dir === 'compressed') {
-            return `${base}.webp`;
-        }
-        return dir ? `${dir}/compressed/${filename}.webp` : `compressed/${filename}.webp`;
-    }, [cdnUrl, src, effectiveLocale]);
 
     const fallbackCandidates = React.useMemo(() => {
         const candidates: Array<{ url: string; label: string }> = [];
@@ -122,21 +126,38 @@ export const OptimizedImage = ({
             candidates.push({ url, label });
         };
 
-        // 本地 /assets/... 主链路：只保留 primary + language fallback，
-        // 不再套用远端 CDN 的 retry/local fallback 逻辑，避免把本地图片走歪。
-        pushCandidate(cdnUrl, 'primary');
-        pushCandidate(cdnFallbackUrl, 'language-fallback');
-        if (isRemoteUrl(cdnUrl)) {
-            pushCandidate(appendRetryParam(cdnUrl, 1), 'retry');
-            pushCandidate(localUrl, 'local');
+        candidateUrls.forEach((url, index) => {
+            if (index === 0) {
+                pushCandidate(url, 'primary');
+                return;
+            }
+
+            if (index === 1) {
+                pushCandidate(url, 'language-fallback');
+                return;
+            }
+
+            if (isRemoteUrl(url)) {
+                pushCandidate(url, 'remote-fallback');
+                return;
+            }
+
+            pushCandidate(url, isPublicAssetsUrl(url) ? 'public-fallback' : 'native-fallback');
+        });
+
+        const primaryUrl = candidateUrls[0] ?? '';
+        if (primaryUrl && isRemoteUrl(primaryUrl)) {
+            pushCandidate(appendRetryParam(primaryUrl, 1), 'retry');
         }
 
         return candidates;
-    }, [cdnFallbackUrl, cdnUrl, localUrl]);
+    }, [candidateUrls]);
 
     const currentCandidate = fallbackCandidates[Math.min(fallbackLevel, Math.max(fallbackCandidates.length - 1, 0))];
-    const currentSrc = currentCandidate?.url ?? cdnUrl;
-    const isLocalFallback = currentCandidate?.label === 'local';
+    const currentSrc = currentCandidate?.url ?? candidateUrls[0] ?? '';
+    const isLocalFallback = currentCandidate != null
+        && currentCandidate.label !== 'primary'
+        && !isRemoteUrl(currentCandidate.url);
     const isLocalPrimary = !isRemoteUrl(currentSrc);
     const renderedSrc = objectUrl ?? currentSrc;
 
@@ -159,13 +180,15 @@ export const OptimizedImage = ({
             setLoaded(true);
         } else if (isImagePreloaded(src, effectiveLocale)) {
             setLoaded(true);
-        } else if (!isRemoteUrl(cdnUrl)) {
-            // 本地主链路默认先按可显示处理，避免 /assets/... 资源被错误套进远端加载状态机后长时间黑屏。
+        } else if (isPublicAssetsUrl(currentSrc)) {
+            // 仅 public /assets/... 资源允许乐观收敛；
+            // Android 已安装素材包走 /_capacitor_file_/... 时必须等待真实 onload/onerror，
+            // 否则本地包失效时既不会回退，也无法维持 shimmer 提示。
             setLoaded(true);
         } else {
             setLoaded(false);
         }
-    }, [src, effectiveLocale, cdnUrl]);
+    }, [src, effectiveLocale, currentSrc]);
 
     // currentSrc 变化时（fallbackLevel 切换导致）检查新 URL 是否已缓存
     const prevSrcRef = React.useRef(currentSrc);
@@ -185,10 +208,15 @@ export const OptimizedImage = ({
         }
     }, [currentSrc, src, effectiveLocale]);
 
-    // 本地 /assets/... 资源：先 fetch 成 blob 再喂给 <img>，
-    // 规避开发环境里部分 webp 在直接 <img src="/assets/..."> 链路上挂住的问题。
+    // 仅在开发态 public /assets/... 链路下，才走 fetch -> blob workaround。
+    // Android 游戏包会落到 /_capacitor_file_/...；这里若继续 fetch，会把已安装的本地包
+    // 也套进开发兜底链路，导致图片长时间停在加载态。
     React.useEffect(() => {
         if (!isLocalPrimary || isSvg) return undefined;
+        if (!shouldUseBlobFetchForLocalAsset(currentSrc)) {
+            setLocalFetchDebug(isPublicAssetsUrl(currentSrc) ? 'direct' : 'direct-native');
+            return undefined;
+        }
         let cancelled = false;
         let nextObjectUrl: string | null = null;
         setLocalFetchDebug('fetching');
@@ -221,6 +249,23 @@ export const OptimizedImage = ({
         };
     }, [currentSrc, isLocalPrimary, isSvg]);
 
+    React.useEffect(() => {
+        if (effectiveLoaded || errored) return undefined;
+        const nextLevel = fallbackLevel + 1;
+        if (nextLevel >= fallbackCandidates.length || !currentSrc) return undefined;
+
+        const timeoutId = window.setTimeout(() => {
+            const img = imgRef.current;
+            if (img?.complete && img.naturalWidth > 0) return;
+            console.warn(`[OptimizedImage] 当前候选加载超时，切换到 fallback level ${nextLevel} (${fallbackCandidates[nextLevel]?.label ?? 'unknown'}):`, src);
+            setFallbackLevel(nextLevel);
+        }, getCandidateTimeoutMs(currentSrc));
+
+        return () => {
+            window.clearTimeout(timeoutId);
+        };
+    }, [currentSrc, effectiveLoaded, errored, fallbackCandidates, fallbackLevel, src]);
+
     // 某些浏览器/资源组合下，img 已经拿到尺寸，但 onload 事件没有稳定触发；
     // 这会让组件一直停在 shimmer/黑底占位。这里补一个基于 DOM 实际状态的兜底收敛。
     React.useEffect(() => {
@@ -232,7 +277,10 @@ export const OptimizedImage = ({
             if (cancelled) return;
             const img = imgRef.current;
             if (img?.complete && img.naturalWidth > 0) {
-                markImageLoaded(src, effectiveLocale, img);
+                markImageLoaded(currentSrc, undefined, img);
+                if (currentCandidate?.label === 'primary') {
+                    markImageLoaded(src, effectiveLocale, img);
+                }
                 setLoaded(true);
                 return;
             }
@@ -246,12 +294,15 @@ export const OptimizedImage = ({
                 window.cancelAnimationFrame(frameId);
             }
         };
-    }, [effectiveLocale, errored, loaded, renderedSrc, src]);
+    }, [currentCandidate, currentSrc, effectiveLocale, errored, loaded, renderedSrc, src]);
 
     const handleLoad: React.ReactEventHandler<HTMLImageElement> = (event) => {
         setLoaded(true);
         autoRetryRef.current = 0; // 加载成功，重置重试计数
-        markImageLoaded(src, effectiveLocale, event.currentTarget);
+        markImageLoaded(currentSrc, undefined, event.currentTarget);
+        if (currentCandidate?.label === 'primary') {
+            markImageLoaded(src, effectiveLocale, event.currentTarget);
+        }
         if (isLocalFallback) {
             console.warn('[OptimizedImage] CDN 不可用，已降级到本地资源:', src);
         }
@@ -263,7 +314,7 @@ export const OptimizedImage = ({
             src,
             currentSrc,
             fallbackLevel,
-            isCdn: isRemoteUrl(cdnUrl),
+            isCdn: isRemoteUrl(currentSrc),
             autoRetryCount: autoRetryRef.current,
             error: event.type
         });

@@ -21,8 +21,8 @@ const viteCliPath = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js')
 const gradleWrapper = process.platform === 'win32'
     ? path.join(androidDir, 'gradlew.bat')
     : path.join(androidDir, 'gradlew');
-const defaultAppId = 'top.easyboardgame.app';
-const defaultAppName = '易桌游';
+const defaultAppId = 'top.easyboardgame.app.debug';
+const defaultAppName = '易桌游测试';
 const defaultAndroidWebviewMode = 'embedded';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];

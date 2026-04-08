@@ -146,6 +146,7 @@
     "hide_end_turn_controls": "隐藏结束回合按钮和额度提示",
     "close": "关闭",
     "close_faction_details": "关闭派系详情",
+    "mechanic_tutorial": "机制教程",
     "reveal_your_hand_shown": "你的手牌正在被展示",
     "reveal_confirmed": "已确认",
     "reveal_queue_hint": "{{count}} 条展示待查看 · 点击继续",
@@ -452,6 +453,23 @@
     "title": "大杀四方教学",
     "welcome": "欢迎来到大杀四方！组合两个种族争夺基地，率先获得15点胜利分数即可获胜。",
     "finish": "教学完成，准备好开始对战吧！",
+    "subTutorials": {
+      "cowboysDuel": {
+        "title": "牛仔：决斗教学",
+        "description": "通过一条固定链路，演示牛仔决斗中的平克顿、决斗牌与副警长结算。",
+        "steps": {
+          "setup": "正在布置牛仔决斗教学场景……",
+          "duelIntro": "这条教学只聚焦牛仔的决斗机制。你将依次看到挑战发起、平克顿加力量、双方决斗牌与副警长加成，最后再结算胜负。",
+          "playGunfighter": "先打出枪手，并指定酒馆里的敌方微型机器人发起决斗。",
+          "pecosBillWindow": "决斗刚开始时，牛仔泰坦 Pecos Bill 会先询问是否弃 1 张牌并加入这场决斗。本教学先跳过它，继续看基础决斗链路。",
+          "pinkertonCounter": "你的平克顿会在决斗牌结算前触发。为参战的己方随从放置 1 个 +1 力量指示物。",
+          "duelCard": "接下来处理你的决斗牌窗口。本教学先跳过，直接看牛仔的基础链路如何继续推进。",
+          "opponentDuelCard": "对手没有额外响应，系统会自动让过对方的决斗牌窗口。",
+          "deputyBoost": "现在弃掉手里的副警长，让枪手直到回合结束获得 +2 力量，确保赢下这场决斗。",
+          "finish": "决斗结算完成：敌方随从已被消灭，副警长进入弃牌堆，当前没有未结算的决斗。你已经走完牛仔决斗的核心链路。"
+        }
+      }
+    },
     "steps": {
       "setup": "正在准备教学场景...",
       "aiPlayMinion": "看！我们的「星之眷族」已经出现在基地上了。\n\n这张力量 5 的随从拥有天赋能力，稍后你可以激活它。",
@@ -688,7 +706,7 @@
     },
     "elder_thing_byakhee": {
       "name": "拜亚基",
-      "abilityText": "如果其他玩家有随从在这个基地抽一张疯狂卡。"
+      "abilityText": "每位在这里有随从的其他玩家抽一张疯狂卡。"
     },
     "elder_thing_power_of_madness": {
       "name": "疯狂之力",

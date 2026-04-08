@@ -18,7 +18,6 @@ export function isTestEnvironment(): boolean {
 export function enableTestMode() {
     if (typeof window !== 'undefined') {
         (window as any).__E2E_TEST_MODE__ = true;
-        console.log('[TestEnvironment] 测试模式已启用');
     }
 }
 
@@ -28,6 +27,5 @@ export function enableTestMode() {
 export function disableTestMode() {
     if (typeof window !== 'undefined') {
         (window as any).__E2E_TEST_MODE__ = false;
-        console.log('[TestEnvironment] 测试模式已禁用');
     }
 }

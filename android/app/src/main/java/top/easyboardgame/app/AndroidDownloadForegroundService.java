@@ -15,6 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import top.easyboardgame.app.debug.MainActivity;
 
 public class AndroidDownloadForegroundService extends Service {
 

@@ -400,6 +400,7 @@
     "roomFull": "Room is full",
     "ownerClaimFailed": "Unable to reconnect: guest identity may be lost or credentials expired after server restart. Please retry with the original browser or create a new room.",
     "roomCreatedButClaimFailed": "Room was created but failed to claim seat. Please go back to the lobby and try again.",
+    "roomCreatedButEnterFailed": "Room was created, but automatic entry failed. Please go back to the lobby and enter it again.",
     "aiSeatClaimFailed": "Some AI seats failed to initialize. You have entered the room, but please verify the seat state.",
     "joinRoomFailed": "Failed to join room",
     "actionFailed": "Action failed, please try again later.",

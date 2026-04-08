@@ -4802,6 +4802,78 @@ describe('smashup', () => {
         expect(core.players['0'].hand.length).toBe(5);
     });
 
+    it('pecos_bill 未进入决斗触发链时不应被当成可手动打出的泰坦', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({ defId: 'base_saloon_pod', minions: [], ongoingActions: [] })],
+            titans: [{
+                uid: 'pecos-1',
+                defId: 'pecos_bill',
+                faction: SMASHUP_FACTION_IDS.COWBOYS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            }],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { titanUid: 'pecos-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该泰坦的特殊能力不能手动激活',
+        });
+    });
+
+    it('副警长和警长不应被当成可手动点按的随从 special', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({
+                defId: 'base_saloon',
+                minions: [
+                    makeMinion('deputy-1', 'cowboys_deputy', '0', 2),
+                    makeMinion('sheriff-1', 'cowboys_sheriff', '0', 5),
+                ],
+                ongoingActions: [],
+            })],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'deputy-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该随从的特殊能力不能手动激活',
+        });
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'sheriff-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该随从的特殊能力不能手动激活',
+        });
+    });
+
     it('pecos_bill 可在你成为 challenger 时弃 1 张牌部署到该决斗基地', () => {
         const core = makeState({
             players: {

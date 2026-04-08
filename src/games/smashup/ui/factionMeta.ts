@@ -35,6 +35,12 @@ export interface FactionMeta {
     locales?: string[];
 }
 
+export interface FactionMechanicTutorialMeta {
+    tutorialId: string;
+    titleKey: string;
+    descriptionKey: string;
+}
+
 export interface FactionVariantGroup {
     groupId: string;
     icon: FactionMeta['icon'];
@@ -174,4 +180,16 @@ export function getPreferredFactionVariant(groupId: string, locale: string): Fac
 
 export function getFactionMeta(id: string): FactionMeta | undefined {
     return FACTION_METADATA.find(f => f.id === id);
+}
+
+const FACTION_MECHANIC_TUTORIALS: Record<string, FactionMechanicTutorialMeta> = {
+    [SMASHUP_FACTION_IDS.COWBOYS]: {
+        tutorialId: 'cowboys-duel',
+        titleKey: 'tutorial.subTutorials.cowboysDuel.title',
+        descriptionKey: 'tutorial.subTutorials.cowboysDuel.description',
+    },
+};
+
+export function getFactionMechanicTutorial(groupId: string): FactionMechanicTutorialMeta | undefined {
+    return FACTION_MECHANIC_TUTORIALS[groupId];
 }

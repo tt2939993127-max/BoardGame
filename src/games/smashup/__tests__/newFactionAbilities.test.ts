@@ -1221,6 +1221,8 @@ describe('Cowboys abilities', () => {
         });
 
         expect(duelResolved.finalState.core.players['0'].discard.some(card => card.uid === 'deputy-in-hand')).toBe(true);
+        expect(duelResolved.finalState.core.players['0'].hand.some(card => card.uid === 'deputy-in-hand')).toBe(false);
+        expect(duelResolved.finalState.core.bases[0].minions.find(minion => minion.uid === 'ally-1')?.tempPowerModifier).toBe(2);
         expect(duelResolved.finalState.core.bases[0].minions.some(minion => minion.uid === 'enemy-1')).toBe(false);
         expect(duelResolved.finalState.core.players['0'].baseLimitedMinionQuota?.[0]).toBe(1);
     });

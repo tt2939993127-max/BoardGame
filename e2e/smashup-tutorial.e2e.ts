@@ -15,6 +15,12 @@ import type { Locator, Page } from '@playwright/test';
 import { setEnglishLocale, disableAudio, blockAudioRequests } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 
+type InteractionOption = {
+    id: string;
+    label?: string;
+    value?: Record<string, unknown>;
+};
+
 const waitForTutorialStep = async (page: Page, stepId: string, timeout = 30000) => {
     await expect(page.locator(`[data-tutorial-step="${stepId}"]`)).toBeVisible({ timeout });
 };
@@ -47,12 +53,43 @@ const clickFinish = async (page: Page) => {
     await page.getByRole('button', { name: /^(Finish and return|完成并返回)$/i }).click({ force: true });
 };
 
+const waitForInteractionSource = async (game: { getState: () => Promise<unknown> }, sourceId: string, timeout = 10000) => {
+    await expect.poll(async () => {
+        const state = await game.getState() as {
+            sys?: {
+                interaction?: {
+                    current?: {
+                        data?: {
+                            sourceId?: string | null;
+                        };
+                    };
+                };
+            };
+        };
+        return state.sys?.interaction?.current?.data?.sourceId ?? null;
+    }, { timeout }).toBe(sourceId);
+};
+
+const selectInteractionOption = async (
+    game: {
+        getInteractionOptions: () => Promise<unknown[]>;
+        selectOption: (optionId: string) => Promise<void>;
+    },
+    matcher: (option: InteractionOption) => boolean,
+    description: string,
+) => {
+    const options = await game.getInteractionOptions() as InteractionOption[];
+    const option = options.find(matcher);
+    expect(option, `未找到交互选项：${description}`).toBeTruthy();
+    await game.selectOption(option!.id);
+};
+
 const waitForActionPrompt = async (page: Page, timeout = 15000) => {
     await expect(page.locator('[data-tutorial-step] .animate-pulse')).toBeVisible({ timeout });
 };
 
-const navigateToTutorial = async (page: Page) => {
-    await page.goto('/play/smashup/tutorial', { waitUntil: 'domcontentloaded' });
+const navigateToTutorial = async (page: Page, path = '/play/smashup/tutorial') => {
+    await page.goto(path, { waitUntil: 'domcontentloaded' });
     // 冷启动时教程页会串行加载较长的前端模块链，15 秒在 E2E 环境下会偶发误杀。
     await page.waitForSelector('[data-game-page][data-game-id="smashup"]', { timeout: 30000 });
 };
@@ -305,6 +342,153 @@ test.describe('Smash Up Tutorial E2E', () => {
 
         await page.waitForURL(/\/play\/smashup\/tutorial/, { timeout: 15000 });
         await waitForTutorialStep(page, 'welcome', 40000);
+    });
+
+    test('派系没有机制教程时不显示详情入口占位', async ({ page }, testInfo) => {
+        test.setTimeout(120000);
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await setEnglishLocale(page);
+        await disableAudio(page);
+
+        await page.goto('/play/smashup', { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-game-page][data-game-id="smashup"]', { timeout: 30000 });
+
+        const robotsOption = page.getByTestId('faction-option-robots');
+        await expect(robotsOption).toBeVisible({ timeout: 20000 });
+        await robotsOption.click({ force: true });
+
+        const detailPanel = page.getByTestId('faction-detail-panel');
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(detailPanel.locator('h2').first()).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('faction-mechanic-tutorial-entry')).toHaveCount(0);
+
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'robots-detail-no-entry', {
+                filename: 'robots-detail-no-entry.png',
+            }),
+            fullPage: false,
+        });
+    });
+
+    test('派系详情标题右侧机制教程入口可进入牛仔决斗子教程并完成主流程', async ({ page, game }, testInfo) => {
+        test.setTimeout(180000);
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await setEnglishLocale(page);
+        await disableAudio(page);
+
+        await page.goto('/play/smashup', { waitUntil: 'domcontentloaded' });
+        await page.waitForSelector('[data-game-page][data-game-id="smashup"]', { timeout: 30000 });
+
+        const cowboysOption = page.getByTestId('faction-option-cowboys');
+        await expect(cowboysOption).toBeVisible({ timeout: 20000 });
+        await cowboysOption.click({ force: true });
+
+        const detailPanel = page.getByTestId('faction-detail-panel');
+        const titleLocator = detailPanel.locator('h2').first();
+        const tutorialEntry = page.getByTestId('faction-mechanic-tutorial-entry');
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(titleLocator).toBeVisible({ timeout: 10000 });
+        await expect(tutorialEntry).toBeVisible({ timeout: 10000 });
+
+        const titleBox = await titleLocator.boundingBox();
+        const entryBox = await tutorialEntry.boundingBox();
+        expect(titleBox).toBeTruthy();
+        expect(entryBox).toBeTruthy();
+        expect((entryBox?.x ?? 0) + 8).toBeGreaterThan((titleBox?.x ?? 0) + (titleBox?.width ?? 0));
+        expect(Math.abs((entryBox?.y ?? 0) - (titleBox?.y ?? 0))).toBeLessThan(36);
+
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'cowboys-detail-entry', {
+                filename: 'cowboys-detail-entry.png',
+            }),
+            fullPage: false,
+        });
+
+        await tutorialEntry.click();
+        await page.waitForURL(/\/play\/smashup\/tutorial\/cowboys-duel$/, { timeout: 15000 });
+
+        await expect.poll(async () => {
+            const state = await game.getState() as {
+                sys?: {
+                    tutorial?: {
+                        active?: boolean;
+                        manifestId?: string | null;
+                    };
+                };
+            };
+            return {
+                pathname: await page.evaluate(() => window.location.pathname),
+                tutorialActive: state.sys?.tutorial?.active ?? false,
+                tutorialManifestId: state.sys?.tutorial?.manifestId ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            pathname: '/play/smashup/tutorial/cowboys-duel',
+            tutorialActive: true,
+            tutorialManifestId: 'smashup-cowboys-duel',
+        });
+
+        await waitForTutorialStep(page, 'duelIntro', 40000);
+        await clickNext(page);
+
+        await waitForTutorialStep(page, 'playGunfighter', 10000);
+        await page.locator('[data-testid="su-hand-area"] [data-card-uid="gun-1"]').click({ force: true });
+        await page.locator('[data-base-index="0"]').click({ force: true });
+        await page.locator('[data-minion-uid="enemy-1"]').click({ force: true });
+
+        await waitForTutorialStep(page, 'pecosBillWindow', 10000);
+        await waitForInteractionSource(game, 'titan_pecos_bill_duel_start');
+        await selectInteractionOption(game, option => option.value?.skip === true, 'Pecos Bill 跳过');
+
+        await waitForTutorialStep(page, 'pinkertonCounter', 10000);
+        await waitForInteractionSource(game, 'smashup_duel_pinkerton');
+        await page.getByRole('button', { name: /Place 1 counter|放置 1 个指示物/i }).click();
+
+        await waitForTutorialStep(page, 'duelCard', 10000);
+        await waitForInteractionSource(game, 'smashup_duel_card');
+        await selectInteractionOption(game, option => option.value?.skip === true, '决斗牌跳过');
+
+        await waitForTutorialStep(page, 'deputyBoost', 20000);
+        await waitForInteractionSource(game, 'smashup_duel_deputy_card');
+        await page.locator('[data-testid="su-hand-area"] [data-card-uid="deputy-1"]').click({ force: true });
+        await waitForInteractionSource(game, 'smashup_duel_deputy_target');
+        await page.locator('[data-minion-uid="gun-1"]').click({ force: true });
+
+        await expect.poll(async () => {
+            const state = await game.getState() as {
+                core: {
+                    bases: Array<{ minions: Array<{ uid: string }> }>;
+                    players: Record<string, { discard: Array<{ uid: string }> }>;
+                    activeDuel?: unknown;
+                };
+            };
+            return {
+                enemyGone: !state.core.bases[0].minions.some((minion) => minion.uid === 'enemy-1'),
+                deputyDiscarded: state.core.players['0'].discard.some((card) => card.uid === 'deputy-1'),
+                activeDuel: state.core.activeDuel ?? null,
+            };
+        }, { timeout: 10000 }).toEqual({
+            enemyGone: true,
+            deputyDiscarded: true,
+            activeDuel: null,
+        });
+
+        await waitForTutorialStep(page, 'finish', 10000);
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'cowboys-duel-resolved', {
+                filename: 'cowboys-duel-resolved.png',
+            }),
+            fullPage: false,
+        });
+        await page.screenshot({
+            path: getEvidenceScreenshotPath(testInfo, 'cowboys-duel-finish', {
+                filename: 'cowboys-duel-finish.png',
+            }),
+            fullPage: false,
+        });
+
+        await clickFinish(page);
+        await page.waitForURL(/\/play\/smashup$/, { timeout: 15000 });
+        await expect(page.getByTestId('faction-option-cowboys')).toBeVisible({ timeout: 15000 });
     });
 
     test('教程高亮目标与关键 UI 元素一一对应', async ({ page }) => {

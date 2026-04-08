@@ -5,7 +5,7 @@
  * 禁止使用 `any` 类型。
  */
 
-import type { TutorialManifest } from '../engine/types';
+import type { TutorialCollection, TutorialManifest } from '../engine/types';
 import type { GameEngineConfig } from '../engine/transport/server';
 
 // ============================================================================
@@ -23,6 +23,8 @@ export interface GameImplementation {
     board: React.ComponentType<Record<string, unknown>>;
     /** 可选的教程配置 */
     tutorial?: TutorialManifest;
+    /** 完整教程目录（支持子教程） */
+    tutorialCatalog?: TutorialCollection;
     /** 延迟优化配置（可选，不传则不启用任何优化） */
     latencyConfig?: import('../engine/transport/latency/types').LatencyOptimizationConfig;
 }

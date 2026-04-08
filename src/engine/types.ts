@@ -325,6 +325,21 @@ export interface TutorialManifest {
     stepValidator?: (state: MatchState<unknown>, step: TutorialStepSnapshot) => boolean;
 }
 
+export interface TutorialCollectionEntry {
+    title?: string;
+    titleKey?: string;
+    description?: string;
+    descriptionKey?: string;
+    manifest: TutorialManifest;
+}
+
+export interface TutorialCollection {
+    defaultTutorialId: string;
+    tutorials: Record<string, TutorialCollectionEntry>;
+}
+
+export type GameTutorialSource = TutorialManifest | TutorialCollection;
+
 export interface TutorialState {
     active: boolean;
     manifestId: string | null;

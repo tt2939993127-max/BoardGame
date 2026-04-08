@@ -454,6 +454,62 @@ describe('手牌超限弃牌', () => {
         const lastStep = result.steps[result.steps.length - 1];
         expect(lastStep?.success).toBe(false);
     });
+
+    it('回合结束时额外抽牌超过上限不会停在弃牌，直接进入下一回合', () => {
+        const runner1 = createRunner();
+        const draftResult = runner1.run({
+            name: '选秀',
+            commands: DRAFT_COMMANDS,
+        });
+
+        const handAtEightState = injectExtraHandCards(draftResult.finalState, 3);
+        const base0 = handAtEightState.core.bases[0];
+        const differenceEngineBase = {
+            ...base0,
+            minions: [
+                ...base0.minions,
+                {
+                    uid: 'de-minion',
+                    defId: 'steampunk_steam_man',
+                    controller: '0',
+                    owner: '0',
+                    power: 2,
+                    powerCounters: 0,
+                    powerModifier: 0,
+                    tempPowerModifier: 0,
+                    attachedActions: [],
+                },
+            ],
+            ongoingActions: [
+                ...base0.ongoingActions,
+                { uid: 'de-ongoing', defId: 'steampunk_difference_engine', ownerId: '0', metadata: {} },
+            ],
+        };
+
+        const modifiedState: MatchState<SmashUpCore> = {
+            ...handAtEightState,
+            core: {
+                ...handAtEightState.core,
+                bases: [
+                    differenceEngineBase,
+                    ...handAtEightState.core.bases.slice(1),
+                ],
+            },
+        };
+
+        const runner2 = createRunner(() => modifiedState);
+        const result = runner2.run({
+            name: '差分机在回合结束额外抽牌后不弃牌',
+            commands: [
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+            ] as any[],
+        });
+
+        const p0 = result.finalState.core.players['0'];
+        expect(p0.hand.length).toBe(HAND_LIMIT + 1);
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
+    });
 });
 
 // ============================================================================

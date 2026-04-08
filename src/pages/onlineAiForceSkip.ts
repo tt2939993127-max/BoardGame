@@ -34,6 +34,28 @@ export type ForceEndTurnStalledAiResolution = {
     resolution: AiResolution;
 };
 
+type AiAutoRecoveryAttemptTracker = {
+    firstSeenAt: number;
+    autoSubmittedAt: number | null;
+    lastReportedFailureReason: string | null;
+};
+
+export function applyAiAutoRecoveryRejection<T extends AiAutoRecoveryAttemptTracker>(
+    tracker: T,
+    reason: string,
+    now: number,
+): { shouldNotify: boolean; nextTracker: T } {
+    return {
+        shouldNotify: tracker.lastReportedFailureReason !== reason,
+        nextTracker: {
+            ...tracker,
+            firstSeenAt: now,
+            autoSubmittedAt: null,
+            lastReportedFailureReason: reason,
+        },
+    };
+}
+
 function buildAiBatchId(playerId: string, attemptKey: string): string {
     const normalizedAttemptKey = attemptKey.replace(/[^a-zA-Z0-9_-]+/g, '-').slice(0, 120);
     return `ai-${playerId}-${normalizedAttemptKey}`;

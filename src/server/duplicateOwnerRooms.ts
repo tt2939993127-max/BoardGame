@@ -7,6 +7,17 @@ export type DuplicateOwnerRoomDecision =
     | { action: 'cleanup'; reason: 'missing_metadata' | 'empty_room' | 'gameover' | 'disconnect_timeout' }
     | { action: 'block'; reason: 'active_or_occupied' };
 
+export type DuplicateOwnerExistingMatch = {
+    matchID: string;
+    gameName: string;
+    metadata?: MatchMetadata | null;
+    decision: DuplicateOwnerRoomDecision;
+};
+
+export type DuplicateOwnerRoomCreatePlan =
+    | { action: 'block'; activeMatch: DuplicateOwnerExistingMatch; cleanupMatches: DuplicateOwnerExistingMatch[] }
+    | { action: 'allow'; cleanupMatches: DuplicateOwnerExistingMatch[] };
+
 const hasConnectedPlayers = (metadata?: MatchMetadata | null): boolean => {
     if (!metadata?.players) return false;
     return Object.values(metadata.players).some((player) => Boolean(player?.isConnected));
@@ -40,4 +51,30 @@ export const decideDuplicateOwnerRoomAction = (
     }
 
     return { action: 'block', reason: 'active_or_occupied' };
+};
+
+export const planDuplicateOwnerRoomCreate = (
+    matches: DuplicateOwnerExistingMatch[],
+    options?: {
+        forceReplaceActive?: boolean;
+    },
+): DuplicateOwnerRoomCreatePlan => {
+    const cleanableMatches = matches.filter((match) => match.decision.action === 'cleanup');
+    const blockingMatches = matches
+        .filter((match) => match.decision.action === 'block')
+        .sort((a, b) => (b.metadata?.updatedAt ?? 0) - (a.metadata?.updatedAt ?? 0));
+
+    if (blockingMatches.length === 0) {
+        return { action: 'allow', cleanupMatches: cleanableMatches };
+    }
+
+    if (options?.forceReplaceActive) {
+        return { action: 'allow', cleanupMatches: [...cleanableMatches, ...blockingMatches] };
+    }
+
+    return {
+        action: 'block',
+        activeMatch: blockingMatches[0],
+        cleanupMatches: cleanableMatches,
+    };
 };

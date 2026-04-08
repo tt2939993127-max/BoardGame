@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { SU_COMMANDS, getCurrentPlayerId } from '../domain/types';
 import type { SmashUpCore } from '../domain/types';
 import {
     FACTION_METADATA,
+    getFactionMechanicTutorial,
     getFactionMeta,
     getFactionVariantGroupById,
     getPreferredFactionVariant,
@@ -13,7 +15,7 @@ import {
 import type { PlayerId } from '../../../engine/types';
 import { getFactionCards, getFactionTitans, resolveCardName } from '../data/cards';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { X, Check, Search, Layers, ZoomIn, Pencil, Lock } from 'lucide-react';
+import { X, Check, Search, Layers, ZoomIn, Pencil, Lock, BookOpen } from 'lucide-react';
 import { UI_Z_INDEX } from '../../../core';
 import { GameButton } from './GameButton';
 import { CardMagnifyOverlay } from './CardMagnifyOverlay';
@@ -26,6 +28,7 @@ interface Props {
 
 export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) => {
     const { t, i18n } = useTranslation('game-smashup');
+    const navigate = useNavigate();
     const selectionState = core.factionSelection;
     const [focusedGroupId, setFocusedGroupId] = useState<string | null>(null);
     const [viewingCard, setViewingCard] = useState<{ defId: string; type: 'minion' | 'base' | 'action' | 'titan' } | null>(null);
@@ -79,6 +82,9 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
 
     const isMobileLandscape = viewportSize.width < 1024 && viewportSize.width > viewportSize.height;
     const focusedFactionMeta = resolvedActiveFactionId ? getFactionMeta(resolvedActiveFactionId) ?? null : null;
+    const focusedMechanicTutorial = focusedFactionGroup
+        ? getFactionMechanicTutorial(focusedFactionGroup.groupId)
+        : undefined;
 
     if (!selectionState) return null;
 
@@ -474,9 +480,25 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
                                                                 <Layers size={16} />
                                                                 <span className="text-xs font-black uppercase tracking-widest">{t('ui.faction_details')}</span>
                                                             </div>
-                                                            <h2 className="text-3xl md:text-3xl lg:text-4xl font-black text-slate-900 mb-3 uppercase tracking-tighter italic">
-                                                                {t(focusedFactionMeta.nameKey)}
-                                                            </h2>
+                                                            <div className="mb-3 flex items-start justify-between gap-3">
+                                                                <h2 className="text-3xl md:text-3xl lg:text-4xl font-black text-slate-900 uppercase tracking-tighter italic">
+                                                                    {t(focusedFactionMeta.nameKey)}
+                                                                </h2>
+                                                                {focusedMechanicTutorial ? (
+                                                                    <GameButton
+                                                                        type="button"
+                                                                        size="sm"
+                                                                        variant="secondary"
+                                                                        className="shrink-0 gap-1.5 text-[11px]"
+                                                                        title={t(focusedMechanicTutorial.descriptionKey)}
+                                                                        data-testid="faction-mechanic-tutorial-entry"
+                                                                        onClick={() => navigate(`/play/smashup/tutorial/${focusedMechanicTutorial.tutorialId}`)}
+                                                                    >
+                                                                        <BookOpen size={14} />
+                                                                        {t('ui.mechanic_tutorial', { defaultValue: '机制教程' })}
+                                                                    </GameButton>
+                                                                ) : null}
+                                                            </div>
 
                                                             {focusedFactionGroup.variants.length > 1 && (
                                                                 <div className="mb-4 flex flex-wrap gap-2" data-testid="faction-variant-switch">

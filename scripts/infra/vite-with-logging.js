@@ -125,6 +125,15 @@ log(`内存限制: ${process.execArgv.join(' ')}`);
 const viteEntry = 'scripts/infra/vite-cli-safe.mjs';
 const viteArgs = createViteArgs();
 const shouldForceInline = process.env.BG_VITE_FORCE_INLINE === '1';
+
+function resolveMaxOldSpaceSizeArg(defaultMb = 8192) {
+  const fromNodeOptions = process.env.NODE_OPTIONS?.match(/--max-old-space-size=(\d+)/)?.[1];
+  const fromEnv = process.env.BG_NODE_MAX_OLD_SPACE_SIZE?.trim();
+  const parsed = Number.parseInt(fromEnv || fromNodeOptions || String(defaultMb), 10);
+  const resolved = Number.isFinite(parsed) && parsed > 0 ? parsed : defaultMb;
+  return `--max-old-space-size=${resolved}`;
+}
+
 log(`Vite 入口: ${viteEntry}`);
 log(`Vite 参数: ${viteArgs.join(' ')}`);
 
@@ -137,7 +146,7 @@ if (shouldForceInline) {
 
   try {
     vite = spawn(process.execPath, [
-      '--max-old-space-size=4096',
+      resolveMaxOldSpaceSizeArg(),
       viteEntry,
       ...viteArgs,
     ], withWindowsHide({

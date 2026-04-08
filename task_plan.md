@@ -1,5 +1,22 @@
 # Task Plan: Smash Up Oops 四派系接入与玩法实施
 
+## Addendum（2026-04-07）：Android 本地素材包图片加载故障
+
+### Goal
+> 修复 App 端“素材包已下载但进入游戏后图片仍全部加载中”的问题，确保前端能在未走大厅包管理 hook 的情况下接住已安装游戏包，并且不会把 Android `/_capacitor_file_/...` 本地路径误套进开发态图片 fetch/blob workaround。
+
+### Phase
+
+- [x] **Phase A: 链路排查与根因确认**
+  - [x] 复核原生安装目录、前端 asset override 注入点、MatchRoom 关键图片加载链路
+  - [x] 确认启动期 hydration 会跳过“未预注册 fallbackState 的已安装包”
+  - [x] 确认 `OptimizedImage` 会把 `/_capacitor_file_/...` 本地包路径误走开发态 `fetch -> blob` workaround
+
+- [x] **Phase B: 修复与回归**
+  - [x] 修复 `hydrateInstalledNativeGamePackages()` 对已安装包的兜底 hydration
+  - [x] 收窄 `OptimizedImage` 的 blob-fetch workaround，只保留开发态 public `/assets/...`
+  - [x] 补定向测试并完成 eslint / vitest 校验
+
 ## Goal
 > 分两阶段完成 Smash Up `Oops, You Did It Again` 四个派系（埃及、牛仔、武士、维京人）的完整交付：先完成图片 intake、可复刻工作流与静态接入；再按 `Ancient Egyptians → Vikings → Cowboys → Samurai` 的顺序逐派系实施正式玩法、补齐 UI、新交互类型 E2E、统一审计与证据留档。
 

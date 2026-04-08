@@ -857,6 +857,9 @@ export function validate(
                 if (!titanDef?.abilityTags?.includes('special')) {
                     return { valid: false, error: '该泰坦没有特殊能力' };
                 }
+                if (!resolveSpecial(titan.defId)) {
+                    return { valid: false, error: '该泰坦的特殊能力不能手动激活' };
+                }
                 const titanError = validateTitanSpecialActivation({
                     state: core,
                     playerId: command.playerId,
@@ -883,6 +886,9 @@ export function validate(
             const spDef = getCardDef(spMinion.defId);
             if (!spDef || !('abilityTags' in spDef) || !spDef.abilityTags?.includes('special')) {
                 return { valid: false, error: '该随从没有特殊能力' };
+            }
+            if (!resolveSpecial(spMinion.defId)) {
+                return { valid: false, error: '该随从的特殊能力不能手动激活' };
             }
             if (isCardSuppressed(core, spMinionUid)) {
                 return { valid: false, error: '该卡牌能力已被压制' };
