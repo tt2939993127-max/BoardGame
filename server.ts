@@ -632,8 +632,8 @@ router.post('/games/:name/create', async (ctx) => {
 
     const body = ctx.request.body as Record<string, unknown> | undefined;
     const numPlayers = Number(body?.numPlayers ?? 2);
-    // 当前策略：建房默认强制清理同 owner 的旧房间。
-    const forceReplaceOwnerRoom = true;
+    // 当前策略：默认不自动删除活跃旧房，只有前端确认后才带 forceReplaceOwnerRoom 重试。
+    const forceReplaceOwnerRoom = body?.forceReplaceOwnerRoom === true;
     const requestedOwnerName = typeof body?.playerName === 'string' && body.playerName.trim()
         ? body.playerName.trim()
         : undefined;
