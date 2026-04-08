@@ -17,6 +17,7 @@ type Props = {
     discard: CardInstance[];
     isMyTurn: boolean;
     compactLayout?: boolean;
+    onViewCard?: (card: CardInstance) => void;
     /** 弃牌堆中有可从弃牌堆打出的卡牌时为 true（仅用于视觉提示） */
     hasPlayableFromDiscard?: boolean;
     /** 是否为 interaction 驱动的弃牌堆选择（僵尸领主等），自动打开面板 */
@@ -46,6 +47,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
     discard,
     isMyTurn,
     compactLayout = false,
+    onViewCard,
     hasPlayableFromDiscard,
     autoOpenPanel,
     playableCards,
@@ -154,13 +156,23 @@ export const DeckDiscardZone: React.FC<Props> = ({
         onViewTitan?.(titan.defId);
     }, [activatableTitanUids, onSelectTitan, onViewTitan]);
     const {
-        showDesktopInspectButton,
+        showDesktopInspectButton: showDesktopTitanInspectButton,
         getTouchInspectProps: getTitanTouchInspectProps,
         shouldBlockInspectClick: shouldBlockTitanClick,
     } = useTouchInspectGesture<string, { defId: string }>({
         enabled: setAsideTitans.length > 0,
         onInspect: (_key, payload) => {
             onViewTitan?.(payload.defId);
+        },
+    });
+    const {
+        showDesktopInspectButton: showDesktopDiscardInspectButton,
+        getTouchInspectProps: getDiscardTouchInspectProps,
+        shouldBlockInspectClick: shouldBlockDiscardClick,
+    } = useTouchInspectGesture<string, CardInstance>({
+        enabled: Boolean(topCard) && Boolean(onViewCard),
+        onInspect: (_cardUid, card) => {
+            onViewCard?.(card);
         },
     });
 
@@ -264,7 +276,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                                 <div className="absolute inset-0 border-2 border-purple-400 pointer-events-none" />
                                             )}
                                         </button>
-                                        {showDesktopInspectButton && (
+                                        {showDesktopTitanInspectButton && (
                                             <span
                                                 data-testid={`su-rail-titan-magnify-${titan.uid}`}
                                                 onClick={(event) => {
@@ -297,7 +309,11 @@ export const DeckDiscardZone: React.FC<Props> = ({
                 className="flex flex-col items-center pointer-events-auto group cursor-pointer relative"
                 data-testid="su-discard-toggle"
                 data-discard-toggle
-                onClick={() => { if (!autoOpenPanel) setShowDiscard(prev => !prev); }}
+                onClick={() => {
+                    if (autoOpenPanel) return;
+                    if (topCard && shouldBlockDiscardClick(topCard.uid)) return;
+                    setShowDiscard(prev => !prev);
+                }}
             >
                 <div className="relative aspect-[0.714]" style={{ width: stackWidth }}>
                     {hasPlayableFromDiscard && (
@@ -309,12 +325,33 @@ export const DeckDiscardZone: React.FC<Props> = ({
                     {discard.length > 0 ? (
                         <>
                             <div className="absolute inset-0 bg-white rounded-sm border border-slate-300 shadow-sm -translate-x-1 -translate-y-1 -rotate-1" />
-                            <div className={`absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border overflow-hidden z-10 ${hasPlayableFromDiscard ? 'border-green-400 border-2' : 'border-slate-200'}`}>
+                            <div
+                                className={`absolute inset-0 bg-white rounded-sm shadow-xl transition-transform group-hover:-translate-y-2 group-hover:rotate-1 border overflow-hidden z-10 ${hasPlayableFromDiscard ? 'border-green-400 border-2' : 'border-slate-200'}`}
+                                {...(topCard ? getDiscardTouchInspectProps(topCard.uid, topCard) : {})}
+                            >
                                 <CardPreview
                                     previewRef={{ type: 'renderer', rendererId: 'smashup-card-renderer', payload: { defId: topCard!.defId, cardUid: topCard!.uid } }}
                                     className="w-full h-full"
                                 />
                             </div>
+                            {topCard && showDesktopDiscardInspectButton && (
+                                <button
+                                    type="button"
+                                    data-testid={`su-discard-card-inspect-${topCard.uid}`}
+                                    className="absolute top-1 right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                                    onClick={(event) => {
+                                        event.stopPropagation();
+                                        onViewCard?.(topCard);
+                                    }}
+                                    onPointerDown={(event) => {
+                                        event.stopPropagation();
+                                    }}
+                                >
+                                    <svg className="h-3 w-3 fill-current" viewBox="0 0 20 20">
+                                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+                            )}
                         </>
                     ) : (
                         <div className="absolute inset-0 bg-black/20 rounded-sm border-2 border-dashed border-white/30 flex items-center justify-center">

@@ -34,6 +34,8 @@ import { SMASH_UP_MANIFEST } from './manifest';
 import { getLayoutConfig } from './ui/layoutConfig';
 import './cursor';
 import { HandArea, type HandAreaDragPreview, type HandAreaDropTarget } from './ui/HandArea';
+
+const END_TURN_THROTTLE_MS = 800;
 import { useGameEvents } from './ui/useGameEvents';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { smashUpFxRegistry } from './ui/fxSetup';
@@ -384,6 +386,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     const [discardSelection, setDiscardSelection] = useState<Set<string>>(new Set());
     const [meFirstPendingCard, setMeFirstPendingCard] = useState<MeFirstPendingCard | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [endTurnCooldownUntil, setEndTurnCooldownUntil] = useState(0);
+    const endTurnCooldownUntilRef = useRef(0);
     const [handDragPreview, setHandDragPreview] = useState<HandAreaDragPreview | null>(null);
 
     // 弃牌判断：抽牌阶段 + 是我的回合 + 手牌超限
@@ -1457,6 +1461,14 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [interactionMode, viewMode]);
 
     useEffect(() => {
+        if (endTurnCooldownUntil <= Date.now()) return;
+        const timeout = window.setTimeout(() => {
+            setEndTurnCooldownUntil(0);
+        }, Math.max(0, endTurnCooldownUntil - Date.now()));
+        return () => window.clearTimeout(timeout);
+    }, [endTurnCooldownUntil]);
+
+    useEffect(() => {
         let cancelled = false;
         queueMicrotask(() => {
             if (cancelled) return;
@@ -2030,7 +2042,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
         setViewingCard(nextTarget);
     }, [setViewingCard]);
-
+    const isEndTurnCoolingDown = endTurnCooldownUntil > Date.now();
 
     const resolveHandDropTarget = useCallback((card: CardInstance, clientX: number, clientY: number): HandAreaDropTarget | null => {
         const cardMode = resolvePlayableCardMode(card);
@@ -2453,17 +2465,22 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 <button
                                     data-testid="su-end-turn-action-button"
                                     onClick={() => {
-                                        if (G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting) {
+                                        const isBlocked = G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE);
+                                        const now = Date.now();
+                                        if (isBlocked || isSubmitting || now < endTurnCooldownUntilRef.current) {
                                             playDeniedSound();
                                             return;
                                         }
+                                        const nextCooldownUntil = now + END_TURN_THROTTLE_MS;
+                                        endTurnCooldownUntilRef.current = nextCooldownUntil;
+                                        setEndTurnCooldownUntil(nextCooldownUntil);
                                         setIsSubmitting(true);
                                         dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
                                         // 超时兜底：3秒后强制重置（防止命令失败导致按钮永久禁用）
                                         setTimeout(() => setIsSubmitting(false), 3000);
                                     }}
-                                    disabled={!!G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting}
-                                    className={`group w-24 h-24 rounded-full border-solid border-4 border-white/95 ring-1 ring-white/55 shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting
+                                    disabled={!!G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting || isEndTurnCoolingDown}
+                                    className={`group w-24 h-24 rounded-full border-solid border-4 border-white/95 ring-1 ring-white/55 shadow-[0_10px_20px_rgba(0,0,0,0.4)] flex flex-col items-center justify-center transition-all text-white relative overflow-hidden ${G.sys.interaction?.isBlocked || !isTutorialCommandAllowed(FLOW_COMMANDS.ADVANCE_PHASE) || isSubmitting || isEndTurnCoolingDown
                                             ? 'bg-slate-600 opacity-50 cursor-not-allowed'
                                             : 'bg-slate-900 hover:scale-110 hover:rotate-3 active:scale-95'
                                         }`}
@@ -3132,6 +3149,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 selectedTitanUid={activeSelectedSetAsideTitanUid}
                                 onSelectTitan={handleSetAsideTitanSelect}
                                 onViewTitan={(defId) => setViewingCard({ defId, type: 'titan' })}
+                                onViewCard={handleViewCardDetail}
                                 dispatch={dispatch}
                                 playerID={playerID}
                             />
