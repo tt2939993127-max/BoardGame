@@ -9,6 +9,10 @@ import {
     resolveGamePackageManifest,
 } from './manifestClient';
 import {
+    getNativeDownloadNotificationPermissionStatus,
+    openNativeDownloadNotificationSettings,
+} from './nativeGamePackagePlugin';
+import {
     cancelGamePackageInstall as cancelGamePackageInstallTask,
     refreshGamePackageStateFromNativeTask,
     resetGamePackageState,
@@ -42,6 +46,8 @@ interface UseGamePackageStateResult {
     cancelInstall: () => void | Promise<void>;
     confirmInstall: () => Promise<void>;
     retryInstall: () => void;
+    notificationPermissionAction: 'retry' | 'settings' | null;
+    openNotificationSettings: () => Promise<void>;
 }
 
 const mergeManifestIntoCardState = (
@@ -125,8 +131,18 @@ export const useGamePackageState = ({
     const [pendingInstall, setPendingInstall] = useState<PendingGamePackageInstall | null>(null);
     const [isConfirmingInstall, setIsConfirmingInstall] = useState(false);
     const [previewManifest, setPreviewManifest] = useState<ResolvedGamePackageManifest | null>(null);
+    const [notificationPermissionAction, setNotificationPermissionAction] = useState<'retry' | 'settings' | null>(null);
     const requestSerialRef = useRef(0);
     const confirmInFlightRef = useRef(false);
+
+    const refreshNotificationPermissionAction = useCallback(async () => {
+        const permissionStatus = await getNativeDownloadNotificationPermissionStatus();
+        const nextAction = permissionStatus?.required === true && permissionStatus.granted === false
+            ? (permissionStatus.canPrompt ? 'retry' : 'settings')
+            : null;
+        setNotificationPermissionAction(nextAction);
+        return permissionStatus;
+    }, []);
 
     useEffect(() => {
         logMobileRuntime('UseGamePackageState', 'hook-init', {
@@ -147,6 +163,7 @@ export const useGamePackageState = ({
             });
             setPreviewManifest(null);
             setPendingInstall(null);
+            setNotificationPermissionAction(null);
             setCardState(toGamePackageCardState(fallbackState));
             return;
         }
@@ -162,6 +179,7 @@ export const useGamePackageState = ({
         });
         setPendingInstall(null);
         setCardState(toGamePackageCardState(syncGamePackageState(gameId, fallbackState)));
+        void refreshNotificationPermissionAction();
         void refreshGamePackageStateFromNativeTask(gameId, fallbackState).catch((error) => {
             logMobileRuntime('UseGamePackageState', 'refresh-native-state-failed', {
                 gameId,
@@ -187,6 +205,7 @@ export const useGamePackageState = ({
                     error: error instanceof Error ? error.message : String(error),
                 });
             });
+            void refreshNotificationPermissionAction();
         });
 
         const unsubscribeState = subscribeGamePackageState(gameId, (state) => {
@@ -201,7 +220,30 @@ export const useGamePackageState = ({
             cleanupVisible();
             unsubscribeState();
         };
-    }, [fallbackState, gameId, isPackageManaged]);
+    }, [fallbackState, gameId, isPackageManaged, refreshNotificationPermissionAction]);
+
+    useEffect(() => {
+        if (cardState.errorCode !== 'notification-permission-required') {
+            if (notificationPermissionAction !== null) {
+                setNotificationPermissionAction(null);
+            }
+            return;
+        }
+
+        void refreshNotificationPermissionAction().then((permissionStatus) => {
+            if (!permissionStatus || permissionStatus.required === true && permissionStatus.granted === false) {
+                return;
+            }
+
+            resetGamePackageState(gameId, fallbackState);
+        });
+    }, [
+        cardState.errorCode,
+        fallbackState,
+        gameId,
+        notificationPermissionAction,
+        refreshNotificationPermissionAction,
+    ]);
 
     useEffect(() => {
         if (!isPackageManaged || !hasRemoteGamePackageManifestEndpoint) {
@@ -468,6 +510,10 @@ export const useGamePackageState = ({
         requestInstall();
     }, [confirmInstall, fallbackState, gameId, isPackageManaged, pendingInstall, requestInstall]);
 
+    const openNotificationSettings = useCallback(async () => {
+        await openNativeDownloadNotificationSettings();
+    }, []);
+
     return {
         isPackageManaged,
         cardState: displayCardState,
@@ -478,5 +524,7 @@ export const useGamePackageState = ({
         cancelInstall,
         confirmInstall,
         retryInstall,
+        notificationPermissionAction,
+        openNotificationSettings,
     };
 };

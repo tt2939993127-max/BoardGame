@@ -15,6 +15,7 @@ import type {
     PlayerId,
     GameEvent,
 } from '../types';
+import type { AiHint } from '../ai/types';
 import { resolveCommandTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
@@ -51,6 +52,11 @@ export interface PromptOption<T = unknown> {
      * - 'button' | undefined: 普通按钮
      */
     displayMode?: 'card' | 'button';
+    /**
+     * 仅供 AI 使用的语义 hints。
+     * 必须与业务 value 隔离，不能被规则处理器当成真实输入消费。
+     */
+    _ai?: AiHint;
 }
 
 /**
@@ -858,6 +864,12 @@ function mergeRenderableOptionMetadata<T>(
         const previousSource = (previous as { _source?: unknown })._source;
         if ((nextOption as { _source?: unknown })._source === undefined && previousSource !== undefined) {
             nextOption = { ...(nextOption as Record<string, unknown>), _source: previousSource } as PromptOption<T>;
+            optionChanged = true;
+        }
+
+        const previousAiHints = previous._ai;
+        if (nextOption._ai === undefined && previousAiHints !== undefined) {
+            nextOption = { ...nextOption, _ai: previousAiHints };
             optionChanged = true;
         }
 

@@ -41,25 +41,47 @@ export function registerRobotAbilities(): void {
     registerRobotOngoingEffects();
 }
 
+function getRobotMicrobotGuardTargets(
+    state: AbilityContext['state'],
+    baseIndex: number,
+    playerId: string,
+    sourceCardUid: string,
+) {
+    const base = state.bases[baseIndex];
+    if (!base) return [];
+
+    const myMinionCount = base.minions.filter(minion => minion.controller === playerId).length;
+    return base.minions.filter(
+        minion => minion.uid !== sourceCardUid && getMinionPower(state, minion, baseIndex) < myMinionCount,
+    );
+}
+
+function buildRobotMicrobotGuardOptions(
+    state: AbilityContext['state'],
+    baseIndex: number,
+    playerId: string,
+    sourceCardUid: string,
+) {
+    const targets = getRobotMicrobotGuardTargets(state, baseIndex, playerId, sourceCardUid);
+    return targets.map(target => {
+        const def = getCardDef(target.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? target.defId;
+        const power = getMinionPower(state, target, baseIndex);
+        return {
+            uid: target.uid,
+            defId: target.defId,
+            baseIndex,
+            label: `${name} (力量 ${power})`,
+        };
+    });
+}
+
 /** 微型机守护者 onPlay：消灭力量低于己方随从数量的随从 */
 function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
-    const base = ctx.state.bases[ctx.baseIndex];
-    if (!base) return { events: [] };
-
-    const myMinionCount = base.minions.filter(m => m.controller === ctx.playerId).length + 1;
-    const targets = base.minions.filter(
-        m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount,
-    );
-    if (targets.length === 0) {
+    const options = buildRobotMicrobotGuardOptions(ctx.state, ctx.baseIndex, ctx.playerId, ctx.cardUid);
+    if (options.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
-
-    const options = targets.map(t => {
-        const def = getCardDef(t.defId) as MinionCardDef | undefined;
-        const name = def?.name ?? t.defId;
-        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
-        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
-    });
 
     const interaction = createSimpleChoice(
         `robot_microbot_guard_${ctx.now}`,
@@ -70,8 +92,39 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
             sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
             effectType: 'destroy',
         }),
-        { sourceId: 'robot_microbot_guard', targetType: 'minion' },
+        { sourceId: 'robot_microbot_guard', targetType: 'minion', responseValidationMode: 'live' },
     );
+    (interaction.data as SimpleChoiceData<unknown> & {
+        continuationContext?: { baseIndex: number; sourceCardUid: string; sourcePlayerId: string };
+        optionsGenerator?: typeof interaction.data.optionsGenerator;
+    }).continuationContext = {
+        baseIndex: ctx.baseIndex,
+        sourceCardUid: ctx.cardUid,
+        sourcePlayerId: ctx.playerId,
+    };
+    (interaction.data as SimpleChoiceData<unknown> & {
+        continuationContext?: { baseIndex: number; sourceCardUid: string; sourcePlayerId: string };
+        optionsGenerator?: typeof interaction.data.optionsGenerator;
+    }).optionsGenerator = (state, data) => {
+        const continuationContext = data.continuationContext as
+            | { baseIndex: number; sourceCardUid: string; sourcePlayerId: string }
+            | undefined;
+        if (!continuationContext) return [];
+        return buildMinionTargetOptions(
+            buildRobotMicrobotGuardOptions(
+                state.core,
+                continuationContext.baseIndex,
+                continuationContext.sourcePlayerId,
+                continuationContext.sourceCardUid,
+            ),
+            {
+                state: state.core,
+                sourcePlayerId: continuationContext.sourcePlayerId,
+                sourceDefId: ctx.defId,
+                effectType: 'destroy',
+            },
+        );
+    };
 
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -340,12 +393,20 @@ export function registerRobotInteractionHandlers(): void {
     });
 
     // 微型机守护者：选择目标后消灭
-    registerInteractionHandler('robot_microbot_guard', (state, sourcePlayerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('robot_microbot_guard', (state, sourcePlayerId, value, iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
-        const base = state.core.bases[baseIndex];
-        if (!base) return undefined;
+        const continuationContext = (iData as {
+            continuationContext?: { sourceCardUid?: string };
+        } | undefined)?.continuationContext;
+        const sourceCardUid = continuationContext?.sourceCardUid;
+        if (!sourceCardUid) return undefined;
 
-        const target = base.minions.find(m => m.uid === minionUid);
+        const target = getRobotMicrobotGuardTargets(
+            state.core,
+            baseIndex,
+            sourcePlayerId,
+            sourceCardUid,
+        ).find(minion => minion.uid === minionUid);
         if (!target) return undefined;
 
         return {

@@ -319,6 +319,53 @@ const captureMinionEntryTimeline = async (
     );
 };
 
+const compressTopSamples = (tops: number[], minDelta = 1.5) => {
+    const compressed: number[] = [];
+    for (const top of tops) {
+        if (compressed.length === 0 || Math.abs(top - compressed[compressed.length - 1]) >= minDelta) {
+            compressed.push(top);
+        }
+    }
+    return compressed;
+};
+
+const countDirectionChanges = (tops: number[], minDelta = 0.8) => {
+    let previousSign = 0;
+    let changes = 0;
+
+    for (let i = 1; i < tops.length; i += 1) {
+        const delta = tops[i] - tops[i - 1];
+        const sign = delta > minDelta ? 1 : delta < -minDelta ? -1 : 0;
+        if (sign === 0) continue;
+        if (previousSign !== 0 && sign !== previousSign) {
+            changes += 1;
+        }
+        previousSign = sign;
+    }
+
+    return changes;
+};
+
+const summarizeEntryTimeline = (
+    timeline: Awaited<ReturnType<typeof captureMinionEntryTimeline>>,
+) => {
+    const firstVisible = timeline.samples.find((sample) => sample.exists);
+    const lastShimmer = [...timeline.samples].reverse().find((sample) => sample.exists && sample.hasAtlasShimmer);
+    const visibleTops = timeline.samples
+        .map((sample) => sample.top)
+        .filter((top): top is number => typeof top === 'number');
+    const roundedTops = Array.from(new Set(visibleTops.map((top) => Math.round(top * 10) / 10)));
+    const compressedTops = compressTopSamples(roundedTops);
+
+    return {
+        firstVisibleAt: firstVisible?.t ?? null,
+        lastShimmerAt: lastShimmer?.t ?? null,
+        distinctTops: roundedTops,
+        compressedTops,
+        directionChanges: countDirectionChanges(compressedTops),
+    };
+};
+
 // ============================================================================
 // 测试用例
 // ============================================================================
@@ -808,7 +855,7 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await saveEvidenceLocatorScreenshot(playerColumn, 'smashup-first-minion-layout-after', testInfo);
     });
 
-    test('本地模式：诊断自己与对手打出随从时的入场时序差异', async ({ page }) => {
+    test('本地模式：自己与对手打出随从时都只应出现一次入场动画，不应像开头那样反复播放', async ({ page }, testInfo) => {
         const game = new GameTestContext(page);
 
         await gotoLocalSmashUp(page);
@@ -858,6 +905,11 @@ test.describe('SmashUp 本地模式 E2E', () => {
         expect(selfTimeline.dispatched, '自己打出随从的诊断命令未触发').toBe(true);
         expect(selfTimeline.dispatchError, `自己打出随从失败: ${selfTimeline.dispatchError}`).toBeNull();
         await expect(page.locator('[data-minion-uid="self-minion-entry-card"]')).toBeVisible({ timeout: 5000 });
+        await saveEvidenceLocatorScreenshot(
+            page.getByTestId('su-base-player-column-0-0'),
+            'smashup-self-minion-entry-stable',
+            testInfo,
+        );
 
         await buildScene();
         const opponentTimeline = await captureMinionEntryTimeline(page, {
@@ -869,29 +921,27 @@ test.describe('SmashUp 本地模式 E2E', () => {
         expect(opponentTimeline.dispatched, '对手打出随从的诊断命令未触发').toBe(true);
         expect(opponentTimeline.dispatchError, `对手打出随从失败: ${opponentTimeline.dispatchError}`).toBeNull();
         await expect(page.locator('[data-minion-uid="opponent-minion-entry-card"]')).toBeVisible({ timeout: 5000 });
+        await saveEvidenceLocatorScreenshot(
+            page.getByTestId('su-base-player-column-0-1'),
+            'smashup-opponent-minion-entry-stable',
+            testInfo,
+        );
 
-        const summarizeTimeline = (
-            timeline: typeof selfTimeline,
-        ) => {
-            const firstVisible = timeline.samples.find((sample) => sample.exists);
-            const lastShimmer = [...timeline.samples].reverse().find((sample) => sample.exists && sample.hasAtlasShimmer);
-            const visibleSamples = timeline.samples.filter((sample) => sample.exists && sample.top !== null);
-            const roundedTops = Array.from(new Set(
-                visibleSamples
-                    .map((sample) => sample.top)
-                    .filter((top): top is number => typeof top === 'number')
-                    .map((top) => Math.round(top * 10) / 10),
-            ));
-            return {
-                firstVisibleAt: firstVisible?.t ?? null,
-                lastShimmerAt: lastShimmer?.t ?? null,
-                distinctTops: roundedTops,
-            };
-        };
+        const selfSummary = summarizeEntryTimeline(selfTimeline);
+        const opponentSummary = summarizeEntryTimeline(opponentTimeline);
+
+        expect(selfSummary.firstVisibleAt, '自己打出的随从应快速进入可见态').not.toBeNull();
+        expect(opponentSummary.firstVisibleAt, '对手打出的随从也应快速进入可见态').not.toBeNull();
+        expect(selfSummary.lastShimmerAt, '自己打出的随从不应残留 atlas shimmer').toBeNull();
+        expect(opponentSummary.lastShimmerAt, '对手打出的随从不应残留 atlas shimmer').toBeNull();
+        expect(selfSummary.directionChanges, `自己打出的入场轨迹出现过多方向反转: ${selfSummary.compressedTops.join(', ')}`).toBeLessThanOrEqual(1);
+        expect(opponentSummary.directionChanges, `对手打出的入场轨迹出现过多方向反转: ${opponentSummary.compressedTops.join(', ')}`).toBeLessThanOrEqual(1);
+        expect(selfSummary.compressedTops.length, `自己打出的随从轨迹采样不足: ${selfSummary.distinctTops.join(', ')}`).toBeGreaterThanOrEqual(3);
+        expect(opponentSummary.compressedTops.length, `对手打出的随从轨迹采样不足: ${opponentSummary.distinctTops.join(', ')}`).toBeGreaterThanOrEqual(3);
 
         console.log('[smashup-minion-entry-diagnostic]', JSON.stringify({
-            self: summarizeTimeline(selfTimeline),
-            opponent: summarizeTimeline(opponentTimeline),
+            self: selfSummary,
+            opponent: opponentSummary,
         }));
     });
 

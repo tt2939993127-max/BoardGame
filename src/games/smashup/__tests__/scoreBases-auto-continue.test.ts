@@ -15,6 +15,7 @@ import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../type
 import { runCommand } from './testRunner';
 import { SU_COMMANDS } from '../domain/types';
 import { initAllAbilities } from '../abilities';
+import { buildMinionTargetOptions } from '../domain/abilityHelpers';
 
 /** 构造最小 SmashUpCore 用于测试 */
 function makeMinimalCore(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
@@ -1100,5 +1101,89 @@ describe('scoreBases 阶段自动推进', () => {
             && (action.metadata as any)?.titanUid === 't-megabot-setaside',
         )).toBe(true);
         expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
+    });
+
+    it('buff 型随从目标交互应透传 AI hints，且 AI 优先选择己方随从', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const ownMinion: MinionOnBase = {
+            ...makeMinion('0', 'robot_microbot_alpha', 2),
+            uid: 'own-buff-target',
+        };
+        const enemyMinion: MinionOnBase = {
+            ...makeMinion('1', 'pirate_first_mate', 3),
+            uid: 'enemy-buff-target',
+        };
+
+        const core = makeMinimalCore({
+            bases: [makeBase('base_pirate_cove', [ownMinion, enemyMinion])],
+        });
+
+        const state: MatchState<SmashUpCore> = {
+            core,
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'buff-target-choice',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'werewolves_great_wolf_spirit_talent',
+                            options: buildMinionTargetOptions([
+                                { uid: ownMinion.uid, defId: ownMinion.defId, baseIndex: 0, label: '己方随从' },
+                                { uid: enemyMinion.uid, defId: enemyMinion.defId, baseIndex: 0, label: '敌方随从' },
+                            ], {
+                                state: core,
+                                sourcePlayerId: '0',
+                                effectType: 'buff',
+                            }),
+                            targetType: 'minion',
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions).toHaveLength(2);
+        const ownAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { minionUid?: string } })?.optionValue?.minionUid === ownMinion.uid,
+        );
+        const enemyAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { minionUid?: string } })?.optionValue?.minionUid === enemyMinion.uid,
+        );
+
+        expect(ownAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'self',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+            targetControllerId: '0',
+        });
+        expect(enemyAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'enemy',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+            targetControllerId: '1',
+        });
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: state as any,
+            matchId: 'smashup-buff-target-ai',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
+            .toBe(ownAction?.metadata?.optionId);
     });
 });

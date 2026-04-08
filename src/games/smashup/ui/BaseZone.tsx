@@ -18,6 +18,10 @@ import { CardPreview } from '../../../components/common/media/CardPreview';
 import { PLAYER_CONFIG } from './playerConfig';
 import { UI_Z_INDEX } from '../../../core';
 import { getLayoutConfig } from './layoutConfig';
+import {
+    buildMinionUidSnapshotByController,
+    resolveEnteringMinionUidsByController,
+} from './baseZoneEntryAnimation';
 import { useArmedActivation } from '../../../hooks/ui/useArmedActivation';
 import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture';
 
@@ -203,11 +207,30 @@ export const BaseZone: React.FC<{
         validationDeps: [base.minions, base.ongoingActions, titansOnBase],
     });
 
-    const minionsByController: Record<string, MinionOnBase[]> = {};
-    base.minions.forEach(m => {
-        if (!minionsByController[m.controller]) minionsByController[m.controller] = [];
-        minionsByController[m.controller].push(m);
-    });
+    const minionsByController = React.useMemo<Record<string, MinionOnBase[]>>(() => {
+        const grouped: Record<string, MinionOnBase[]> = {};
+        base.minions.forEach((minion) => {
+            if (!grouped[minion.controller]) grouped[minion.controller] = [];
+            grouped[minion.controller].push(minion);
+        });
+        return grouped;
+    }, [base.minions]);
+
+    const currentMinionUidSnapshot = React.useMemo<Record<string, Set<string>>>(() => (
+        buildMinionUidSnapshotByController(turnOrder, minionsByController)
+    ), [minionsByController, turnOrder]);
+
+    const [previousMinionUidSnapshot, setPreviousMinionUidSnapshot] = React.useState<Record<string, Set<string>>>(
+        currentMinionUidSnapshot,
+    );
+
+    const enteringMinionUidsByController = React.useMemo<Record<string, Set<string>>>(() => (
+        resolveEnteringMinionUidsByController(turnOrder, currentMinionUidSnapshot, previousMinionUidSnapshot)
+    ), [currentMinionUidSnapshot, previousMinionUidSnapshot, turnOrder]);
+
+    React.useEffect(() => {
+        setPreviousMinionUidSnapshot(currentMinionUidSnapshot);
+    }, [currentMinionUidSnapshot]);
 
     const renderOngoingCard = (
         oa: NonNullable<BaseInPlay['ongoingActions']>[number],
@@ -849,6 +872,7 @@ export const BaseZone: React.FC<{
                                             layout={layout}
                                             turnOrder={turnOrder}
                                             isCoarsePointer={isCoarsePointer}
+                                            shouldAnimateEntry={enteringMinionUidsByController[pid]?.has(m.uid) ?? false}
                                         />
                                     ))}
                                     </>
@@ -972,7 +996,9 @@ const MinionCard: React.FC<{
     /** 玩家回合顺序（用于判断是否是最右边玩家） */
     turnOrder: string[];
     isCoarsePointer: boolean;
-}> = ({ minion, effectivePower, core, index, pid, baseIndex, dispatch, isMinionSelectMode, isMultiSelected, isDuelParticipant = false, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isMobileViewport: _isMobileViewport = false, layout, turnOrder, isCoarsePointer }) => {
+    /** 该随从是否是本次状态变更中新进入基地的实体 */
+    shouldAnimateEntry?: boolean;
+}> = ({ minion, effectivePower, core, index, pid, baseIndex, dispatch, isMinionSelectMode, isMultiSelected, isDuelParticipant = false, isDimmed, onMinionSelect, onView, onViewAction, selectableOngoingUids, onOngoingSelect, usableMinionTalentUids, usableSpecialMinionUids, usableOngoingTalentUids, isExpanded, onToggleExpanded, onExpandMinion, isActivationArmed, clearArmedActivation, armOrActivate, isMobileViewport: _isMobileViewport = false, layout, turnOrder, isCoarsePointer, shouldAnimateEntry = false }) => {
     const { t } = useTranslation('game-smashup');
     // 兼容融合卡：Wolf Pact 这类作为随从打出时仍使用融合卡定义的图与文案
     const minionDef = getMinionDef(minion.defId);
@@ -1009,10 +1035,9 @@ const MinionCard: React.FC<{
 
     const seed = minion.uid.charCodeAt(0) + index;
     const rotation = (seed % 6) - 3;
-    const style = {
+    const stackStyle = {
         marginTop: index === 0 ? 0 : `${layout.minionStackOffset}vw`,
         zIndex: index + 1,
-        transform: `rotate(${rotation}deg)`,
         width: `${layout.minionCardWidth}vw`,
     };
     const {
@@ -1085,7 +1110,7 @@ const MinionCard: React.FC<{
             : 'cursor-pointer'
     }`;
     const minionFrameClassName = `relative w-full h-full bg-white p-[0.2vw] rounded-[0.2vw] border-[0.15vw] transition-shadow duration-200
-        ${isDimmed ? 'opacity-40 grayscale' : 'hover:scale-110 hover:rotate-0'}
+        ${isDimmed ? 'opacity-40 grayscale' : 'hover:scale-110'}
         ${isMultiSelected
             ? 'border-purple-400 ring-2 ring-purple-400 shadow-[0_0_15px_rgba(168,85,247,0.58),0_0_30px_rgba(168,85,247,0.26)]'
             : isSelectableMinion
@@ -1105,6 +1130,18 @@ const MinionCard: React.FC<{
             : `${conf.border} ${conf.shadow}`
         }`;
 
+    const rotationAnimate = isSelectableMinion
+        ? { rotate: [rotation - 1, rotation + 1, rotation - 1] }
+        : canActivate
+            ? { rotate: [rotation - 2, rotation + 2, rotation - 2] }
+            : { rotate: rotation };
+
+    const rotationTransition = isSelectableMinion
+        ? { rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } }
+        : canActivate
+            ? { rotate: { repeat: Infinity, duration: 1.5, ease: 'easeInOut' } }
+            : { type: 'spring', stiffness: 320, damping: 26 };
+
     return (
         <motion.div
             data-minion-uid={minion.uid}
@@ -1116,14 +1153,9 @@ const MinionCard: React.FC<{
             {...getMinionTouchInspectProps(`minion-${minion.uid}`, undefined)}
             onClick={handleClick}
             className={minionContainerClassName}
-            style={style}
-            initial={{ scale: 0.3, y: -60, opacity: 0, rotate: -15 }}
-            animate={isSelectableMinion
-                ? { scale: 1, y: 0, opacity: 1, rotate: [rotation - 1, rotation + 1, rotation - 1], transition: { rotate: { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } } }
-                : canActivate
-                ? { scale: 1, y: 0, opacity: 1, rotate: [rotation - 2, rotation + 2, rotation - 2], transition: { rotate: { repeat: Infinity, duration: 1.5, ease: 'easeInOut' } } }
-                : { scale: 1, y: 0, opacity: 1, rotate: rotation }
-            }
+            style={stackStyle}
+            initial={shouldAnimateEntry ? { scale: 0.3, y: -60, opacity: 0 } : false}
+            animate={{ scale: 1, y: 0, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 350, damping: 20, delay: index * 0.05 }}
         >
             {isDuelParticipant && (
@@ -1148,7 +1180,11 @@ const MinionCard: React.FC<{
                     </div>
                 </>
             )}
-            <div className={minionFrameClassName}>
+            <motion.div
+                className={minionFrameClassName}
+                animate={rotationAnimate}
+                transition={rotationTransition}
+            >
                 <div className="w-full h-full bg-slate-100 relative overflow-hidden">
                     <CardPreview
                         previewRef={genericDef?.previewRef
@@ -1177,7 +1213,7 @@ const MinionCard: React.FC<{
                     />
                 )}
                 </div>
-            </div>
+            </motion.div>
             {/* 放大镜按钮 - hover 时显示在右上角，z-40 确保不被力量徽章遮挡 */}
             {showDesktopInspectButton && (
                 <button

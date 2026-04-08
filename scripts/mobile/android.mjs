@@ -18,11 +18,13 @@ const androidDir = path.join(rootDir, 'android');
 const capacitorCliPath = path.join(rootDir, 'node_modules', '@capacitor', 'cli', 'bin', 'capacitor');
 const capacitorAndroidBuildGradlePath = path.join(rootDir, 'node_modules', '@capacitor', 'android', 'capacitor', 'build.gradle');
 const viteCliPath = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js');
+const viteSafeCliPath = path.join(rootDir, 'scripts', 'infra', 'vite-cli-safe.mjs');
 const gradleWrapper = process.platform === 'win32'
     ? path.join(androidDir, 'gradlew.bat')
     : path.join(androidDir, 'gradlew');
 const defaultAppId = 'top.easyboardgame.app.debug';
 const defaultAppName = '易桌游测试';
+const stableAndroidSourcePackage = 'top.easyboardgame.app';
 const defaultAndroidWebviewMode = 'embedded';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
@@ -39,7 +41,7 @@ const envFiles = ['.env', '.env.android', '.env.android.local'];
 for (const file of envFiles) {
     const fullPath = path.join(rootDir, file);
     if (!existsSync(fullPath)) continue;
-    dotenv.config({ path: fullPath, override: true, quiet: true });
+    dotenv.config({ path: fullPath, override: false, quiet: true });
 }
 process.env.VITE_CAPACITOR_APP_ID = process.env.VITE_CAPACITOR_APP_ID?.trim()
     || process.env.CAPACITOR_APP_ID?.trim()
@@ -91,7 +93,7 @@ const runCapacitor = async (args) => {
 };
 
 const runAndroidWebBuild = async () => {
-    await runNodeScript(viteCliPath, ['build', '--mode', 'android']);
+    await runNodeScript(viteSafeCliPath, ['build', '--mode', 'android', '--configLoader', 'bundle', '--config', 'vite.config.ts']);
 };
 
 const runGradle = async (args) => {
@@ -638,7 +640,7 @@ const updateAppBuildGradle = (appId) => {
         }
 
         next = next
-            .replace(/namespace\s*=\s*"[^"]+"/, `namespace = "${appId}"`)
+            .replace(/namespace\s*=\s*"[^"]+"/, `namespace = "${stableAndroidSourcePackage}"`)
             .replace(/applicationId\s+"[^"]+"/, `applicationId "${appId}"`)
             .replace(/minifyEnabled\s+false/g, 'minifyEnabled true');
 
@@ -785,9 +787,9 @@ const prepareAndroidProject = async () => {
 `,
     );
 
-    moveJavaFileToPackage(mainJavaRoot, 'MainActivity.java', appId);
-    moveJavaFileToPackage(testJavaRoot, 'ExampleUnitTest.java', appId);
-    moveJavaFileToPackage(androidTestJavaRoot, 'ExampleInstrumentedTest.java', appId, (content) => (
+    moveJavaFileToPackage(mainJavaRoot, 'MainActivity.java', stableAndroidSourcePackage);
+    moveJavaFileToPackage(testJavaRoot, 'ExampleUnitTest.java', stableAndroidSourcePackage);
+    moveJavaFileToPackage(androidTestJavaRoot, 'ExampleInstrumentedTest.java', stableAndroidSourcePackage, (content) => (
         content.replace(/assertEquals\(".*?", appContext\.getPackageName\(\)\);/, `assertEquals("${appId}", appContext.getPackageName());`)
     ));
 
