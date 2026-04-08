@@ -185,6 +185,7 @@ const IDLE_LIVE_UPDATE_ACTIVITY_STATE: AndroidLiveUpdateActivityState = {
 let updaterLoader: Promise<CapacitorUpdaterModule | null> | null = null;
 let notifyAppReadyPromise: Promise<void> | null = null;
 let backgroundUpdatePromise: Promise<AndroidLiveUpdateResult> | null = null;
+let backgroundUpdatePromiseMode: AndroidLiveUpdateApplyMode | null = null;
 let listenerRegistrationPromise: Promise<PluginListenerHandle[] | null> | null = null;
 const liveUpdateRequestListeners = new Set<(request: {
     interactive?: boolean;
@@ -780,10 +781,14 @@ export const subscribeAndroidLiveUpdateRequests = (
 export const startAndroidLiveUpdateBackgroundCheck = async (
     options: AndroidLiveUpdateStartOptions = {},
 ): Promise<AndroidLiveUpdateResult> => {
-    if (!backgroundUpdatePromise) {
-        backgroundUpdatePromise = (async () => {
+    const requestedApplyMode = options.applyMode ?? 'background';
+    const shouldStartNewRun = !backgroundUpdatePromise
+        || (requestedApplyMode === 'immediate' && backgroundUpdatePromiseMode === 'background');
+
+    if (shouldStartNewRun) {
+        const runPromise = (async () => {
             const { onForceStateChange } = options;
-            const applyMode = options.applyMode ?? 'background';
+            const applyMode = requestedApplyMode;
             if (applyMode === 'immediate') {
                 const initialImmediatePhase = options.initialImmediatePhase ?? 'checking';
                 emitForceState(onForceStateChange, {
@@ -1231,10 +1236,17 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     reason,
                 } as const;
             }
-        })().finally(() => {
-            backgroundUpdatePromise = null;
+        })();
+
+        backgroundUpdatePromise = runPromise;
+        backgroundUpdatePromiseMode = requestedApplyMode;
+        void runPromise.finally(() => {
+            if (backgroundUpdatePromise === runPromise) {
+                backgroundUpdatePromise = null;
+                backgroundUpdatePromiseMode = null;
+            }
         });
     }
 
-    return backgroundUpdatePromise;
+    return backgroundUpdatePromise!;
 };
