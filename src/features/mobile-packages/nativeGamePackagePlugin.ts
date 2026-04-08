@@ -429,6 +429,25 @@ export const ensureNativeDownloadNotificationPermission = async (): Promise<Nati
     }
 };
 
+export const getNativeDownloadNotificationPermissionStatus = async (): Promise<NativeDownloadNotificationPermissionResult | null> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return null;
+    }
+
+    try {
+        const result = await plugin.getNotificationPermissionStatus();
+        const normalized = normalizeNotificationPermissionResult(result);
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-status-result', normalized);
+        return normalized;
+    } catch (error) {
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-status-failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
 export const openNativeDownloadNotificationSettings = async (): Promise<boolean> => {
     const plugin = getNativePlugin();
     if (!plugin) {

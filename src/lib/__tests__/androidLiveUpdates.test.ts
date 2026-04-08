@@ -1094,6 +1094,79 @@ describe('androidLiveUpdates', () => {
         });
     });
 
+    it('AndroidLiveUpdateManager 手动检查已是最新版本时也要主动清掉检查中遮罩', async () => {
+        vi.resetModules();
+
+        let requestListener: ((request: {
+            interactive?: boolean;
+            applyMode?: 'background' | 'immediate';
+            initialImmediatePhase?: 'checking' | 'downloading';
+        }) => void) | null = null;
+        const toastSuccessMock = vi.fn();
+
+        const startMock = vi.fn()
+            .mockResolvedValueOnce({ status: 'up-to-date' })
+            .mockImplementationOnce(async (options?: {
+                onForceStateChange?: (state: { phase: string; blocking: boolean }) => void;
+            }) => {
+                options?.onForceStateChange?.({
+                    phase: 'checking',
+                    blocking: true,
+                });
+                return { status: 'up-to-date' } as const;
+            });
+
+        vi.doMock('../mobile/androidLiveUpdates', () => ({
+            registerAndroidLiveUpdateListeners: vi.fn().mockResolvedValue(undefined),
+            subscribeAndroidLiveUpdateRequests: vi.fn((listener) => {
+                requestListener = listener;
+                return () => undefined;
+            }),
+            startAndroidLiveUpdateBackgroundCheck: startMock,
+        }));
+        vi.doMock('../mobile/androidNativeUpdates', () => ({
+            requestAndroidNativeUpdateCheck: vi.fn(),
+        }));
+        vi.doMock('../mobile/androidRuntime', () => ({
+            isNativeAndroidRuntime: () => true,
+        }));
+        vi.doMock('../../contexts/ToastContext', () => ({
+            useToast: () => ({
+                success: toastSuccessMock,
+                error: vi.fn(),
+            }),
+        }));
+        vi.doMock('../../components/system/AndroidForceUpdateGate', () => ({
+            AndroidForceUpdateGate: ({ state }: { state: { phase: string; blocking: boolean } }) => (
+                createElement('div', { 'data-testid': 'force-update-phase' }, `${state.phase}:${String(state.blocking)}`)
+            ),
+        }));
+
+        const { AndroidLiveUpdateManager } = await import('../../components/system/AndroidLiveUpdateManager');
+        const view = render(createElement(AndroidLiveUpdateManager));
+
+        await waitFor(() => {
+            expect(typeof requestListener).toBe('function');
+            expect(startMock).toHaveBeenCalledTimes(1);
+        });
+
+        await act(async () => {
+            requestListener?.({
+                interactive: true,
+                applyMode: 'immediate',
+                initialImmediatePhase: 'checking',
+            });
+        });
+
+        await waitFor(() => {
+            expect(view.getByTestId('force-update-phase').textContent).toBe('hidden:false');
+            expect(toastSuccessMock).toHaveBeenCalledWith('当前已经是最新版本。', '应用更新', {
+                dedupeKey: 'android-ota-up-to-date',
+                ttlMs: 3000,
+            });
+        });
+    });
+
     it('AndroidNativeUpdateManager 非强更自动检查应后台预下载，但手动检查才允许进入安装链路', async () => {
         vi.resetModules();
 

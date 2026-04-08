@@ -53,6 +53,7 @@ export interface GamePreloadAssets {
 
 export interface GameManifestAiSupport {
     capture: boolean;
+    capturePolicy?: 'human-only' | 'all-seats';
     localAi: boolean;
     remoteAi: boolean;
 }

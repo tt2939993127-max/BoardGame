@@ -39,6 +39,7 @@ const isValidErrorCode = (value: unknown): value is GamePackageInstallErrorCode 
     || value === 'cancelled'
     || value === 'task-conflict'
     || value === 'manifest-missing'
+    || value === 'notification-permission-required'
     || value === 'unsupported-runtime'
     || value === 'unknown';
 

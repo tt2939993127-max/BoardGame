@@ -16,11 +16,18 @@ afterEach(async () => {
 
 describe('trainingData', () => {
     it('应从前后状态中提取交互与响应窗口快照', () => {
+        const friendlyBuffHint = {
+            relationToActor: 'self',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+        } as const;
+
         const sample = buildTrainingDecisionSample({
             rulesVersion: 'test-rules-v1',
             gameId: 'smashup',
             matchId: 'match-1',
             playerId: '0',
+            seatControllerType: 'human',
             stateIdBefore: 12,
             stateIdAfter: 13,
             commandType: 'SYS_INTERACTION_RESPOND',
@@ -36,7 +43,13 @@ describe('trainingData', () => {
                             playerId: '0',
                             data: {
                                 options: [
-                                    { id: 'yes', label: '是', value: { play: true }, displayMode: 'button' },
+                                    {
+                                        id: 'yes',
+                                        label: '是',
+                                        value: { play: true },
+                                        displayMode: 'button',
+                                        _ai: friendlyBuffHint,
+                                    },
                                     { id: 'no', label: '否', value: { play: false }, disabled: true },
                                 ],
                             },
@@ -65,6 +78,7 @@ describe('trainingData', () => {
                     kind: 'interaction',
                     label: '响应 yes',
                     commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'yes' } }],
+                    aiHints: [friendlyBuffHint],
                 },
             ],
             capturedAt: 123456789,
@@ -78,6 +92,7 @@ describe('trainingData', () => {
             gameId: 'smashup',
             matchId: 'match-1',
             playerId: '0',
+            seatControllerType: 'human',
             stateIdBefore: 12,
             stateIdAfter: 13,
             command: {
@@ -90,7 +105,13 @@ describe('trainingData', () => {
                 sourceId: 'robot_hoverbot',
                 playerId: '0',
                 options: [
-                    { id: 'yes', label: '是', value: { play: true }, displayMode: 'button' },
+                    {
+                        id: 'yes',
+                        label: '是',
+                        value: { play: true },
+                        displayMode: 'button',
+                        _ai: friendlyBuffHint,
+                    },
                     { id: 'no', label: '否', value: { play: false }, disabled: true },
                 ],
             },
@@ -108,6 +129,7 @@ describe('trainingData', () => {
                     kind: 'interaction',
                     label: '响应 yes',
                     commands: [{ type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'yes' } }],
+                    aiHints: [friendlyBuffHint],
                 },
             ],
         });
@@ -123,6 +145,7 @@ describe('trainingData', () => {
             gameId: 'tictactoe',
             matchId: 'match-jsonl-1',
             playerId: '0',
+            seatControllerType: 'human',
             stateIdBefore: 1,
             stateIdAfter: 2,
             commandType: 'CLICK_CELL',
@@ -142,6 +165,7 @@ describe('trainingData', () => {
         expect(JSON.parse(lines[0])).toMatchObject({
             gameId: 'tictactoe',
             matchId: 'match-jsonl-1',
+            seatControllerType: 'human',
             command: {
                 type: 'CLICK_CELL',
                 payload: { cellId: 4 },
@@ -164,6 +188,7 @@ describe('trainingData', () => {
             gameId: 'dicethrone',
             matchId: 'match-old',
             playerId: '0',
+            seatControllerType: 'human',
             stateIdBefore: 1,
             stateIdAfter: 2,
             commandType: 'PLAY_CARD',
@@ -177,6 +202,7 @@ describe('trainingData', () => {
             gameId: 'dicethrone',
             matchId: 'match-recent',
             playerId: '0',
+            seatControllerType: 'human',
             stateIdBefore: 2,
             stateIdAfter: 3,
             commandType: 'ADVANCE_PHASE',

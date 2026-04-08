@@ -415,6 +415,62 @@ describe('Runtime viewport helpers', () => {
         expect(scrollTextEntryIntoView(button, 'smooth')).toBe(false);
         expect(button.scrollIntoView).not.toHaveBeenCalled();
     });
+
+    it('优先滚动最近的可滚容器，而不是把整个弹窗顶飞', () => {
+        document.documentElement.style.setProperty('--runtime-viewport-height', '564px');
+        document.documentElement.style.setProperty('--safe-area-top', '0px');
+        document.documentElement.style.setProperty('--safe-area-bottom', '0px');
+        document.documentElement.style.setProperty('--keyboard-inset-height', '280px');
+
+        const scrollContainer = document.createElement('div');
+        scrollContainer.style.overflowY = 'auto';
+        Object.defineProperty(scrollContainer, 'scrollHeight', { value: 1200, configurable: true });
+        Object.defineProperty(scrollContainer, 'clientHeight', { value: 320, configurable: true });
+        Object.defineProperty(scrollContainer, 'scrollTop', {
+            value: 0,
+            writable: true,
+            configurable: true,
+        });
+        scrollContainer.scrollTo = vi.fn(({ top }: { top: number }) => {
+            scrollContainer.scrollTop = top;
+        });
+        scrollContainer.getBoundingClientRect = vi.fn(() => ({
+            top: 80,
+            bottom: 400,
+            left: 0,
+            right: 300,
+            width: 300,
+            height: 320,
+            x: 0,
+            y: 80,
+            toJSON: () => ({}),
+        }));
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.scrollIntoView = vi.fn();
+        input.getBoundingClientRect = vi.fn(() => ({
+            top: 380,
+            bottom: 420,
+            left: 0,
+            right: 260,
+            width: 260,
+            height: 40,
+            x: 0,
+            y: 380,
+            toJSON: () => ({}),
+        }));
+
+        scrollContainer.appendChild(input);
+        document.body.appendChild(scrollContainer);
+
+        expect(scrollTextEntryIntoView(input, 'smooth')).toBe(true);
+        expect(scrollContainer.scrollTo).toHaveBeenCalledWith({
+            top: 132,
+            behavior: 'smooth',
+        });
+        expect(input.scrollIntoView).not.toHaveBeenCalled();
+    });
 });
 
 describe('App URL routing helpers', () => {

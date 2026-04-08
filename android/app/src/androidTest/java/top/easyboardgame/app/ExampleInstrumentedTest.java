@@ -1,4 +1,4 @@
-package top.easyboardgame.app.debug;
+package top.easyboardgame.app;
 
 import static org.junit.Assert.*;
 

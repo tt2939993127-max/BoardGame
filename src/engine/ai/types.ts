@@ -1,5 +1,37 @@
 import type { MatchState, PlayerId } from '../types';
 
+export type AiRelationToActor = 'self' | 'ally' | 'enemy' | 'neutral';
+
+export type AiEffectIntent =
+    | 'buff'
+    | 'debuff'
+    | 'destroy'
+    | 'move'
+    | 'inspect'
+    | 'resource'
+    | 'optional-skip'
+    | 'affect';
+
+export type AiTargetKind = 'player' | 'minion' | 'base' | 'card';
+
+export type AiHintDerivation = 'explicit' | 'inferred';
+
+export type AiForcedTargetPolicy = 'prefer' | 'avoid' | 'must-select' | 'must-avoid';
+
+export interface AiHint {
+    tags?: string[];
+    relationToActor?: AiRelationToActor;
+    effectIntent?: AiEffectIntent;
+    targetKind?: AiTargetKind;
+    targetPlayerId?: PlayerId;
+    targetOwnerId?: PlayerId;
+    targetControllerId?: PlayerId;
+    estimatedSwing?: number;
+    priorityHint?: number;
+    forcedTargetPolicy?: AiForcedTargetPolicy;
+    derivedFrom?: AiHintDerivation;
+}
+
 export interface AiSupportProfile {
     capture: boolean;
     localAi: boolean;
@@ -42,6 +74,7 @@ export interface AiInteractionOptionSnapshot {
     value?: unknown;
     disabled?: boolean;
     displayMode?: string;
+    _ai?: AiHint;
 }
 
 export interface AiInteractionSnapshot {
@@ -70,6 +103,7 @@ export interface AiLegalAction {
     kind: string;
     label: string;
     commands: AiCommandSpec[];
+    aiHints?: AiHint[];
     metadata?: Record<string, unknown>;
 }
 

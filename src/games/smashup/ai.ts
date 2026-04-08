@@ -3,9 +3,11 @@ import {
     buildDeterministicAiNoise,
     createAiLegalActionId,
     createActionKindScorer,
+    createInteractionHintScorer,
     createScoredLocalAiPolicy,
+    OPTIONAL_SKIP_AI_HINT,
 } from '../../engine/ai';
-import type { AiDecisionContext, AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
+import type { AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
 import { getFreshSimpleChoiceOptions, type InteractionDescriptor as EngineInteractionDescriptor, type PromptMultiConfig } from '../../engine/systems/InteractionSystem';
 import {
     SU_COMMANDS,
@@ -39,6 +41,7 @@ type SmashUpInteractionOption = {
     value?: unknown;
     disabled?: boolean;
     displayMode?: string;
+    _ai?: AiHint;
 };
 
 const SELECTABLE_FACTIONS = Object.values(SMASHUP_FACTION_IDS).filter((factionId) => factionId !== SMASHUP_FACTION_IDS.MADNESS);
@@ -242,7 +245,7 @@ const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLeg
         options?: SmashUpInteractionOption[];
         multi?: PromptMultiConfig;
     };
-    const refreshedOptions = getFreshSimpleChoiceOptions(state, current as EngineInteractionDescriptor<any>);
+    const refreshedOptions = getFreshSimpleChoiceOptions(state, current as EngineInteractionDescriptor<unknown>);
     const options = refreshedOptions.filter((option): option is Required<Pick<SmashUpInteractionOption, 'id'>> & SmashUpInteractionOption => {
         return typeof option.id === 'string' && option.disabled !== true;
     });
@@ -259,53 +262,63 @@ const buildInteractionActions = (state: SmashUpState, playerId: PlayerId): AiLeg
                 type: 'SYS_INTERACTION_RESPOND',
                 payload: { optionIds: [] },
             }],
+            aiHints: [OPTIONAL_SKIP_AI_HINT],
             metadata: {
                 interactionId: current.id,
                 optionIds: [],
                 displayMode: 'button',
                 optionValue: [],
+                aiHints: [OPTIONAL_SKIP_AI_HINT],
             },
         });
     }
 
     if (data.multi) {
         const combinations = enumerateInteractionOptionCombinations(options, minCount, maxCount);
-        actions.push(...combinations.map((combination, index) => ({
-            actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
-            kind: 'interaction-choice',
-            label: combination.map((option) => option.label ?? option.id).join(' + ') || `交互多选 ${index + 1}`,
-            commands: [{
-                type: 'SYS_INTERACTION_RESPOND',
-                payload: buildSimpleChoicePayload(
-                    combination.map((option) => option.id),
-                    data.multi,
-                ),
-            }],
-            metadata: {
-                interactionId: current.id,
-                optionIds: combination.map((option) => option.id),
-                displayMode: combination[0]?.displayMode,
-                optionValue: combination.map((option) => option.value),
-            },
-        })));
+        actions.push(...combinations.map((combination, index) => {
+            const optionIds = combination.map((option) => option.id);
+            const aiHints = combination.flatMap((option) => option._ai ? [option._ai] : []);
+            return {
+                actionId: createAiLegalActionId('interaction', current.id, 'combo', ...optionIds),
+                kind: 'interaction-choice',
+                label: combination.map((option) => option.label ?? option.id).join(' + ') || `交互多选 ${index + 1}`,
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: buildSimpleChoicePayload(optionIds, data.multi),
+                }],
+                aiHints,
+                metadata: {
+                    interactionId: current.id,
+                    optionIds,
+                    displayMode: combination[0]?.displayMode,
+                    optionValue: combination.map((option) => option.value),
+                    aiHints,
+                },
+            };
+        }));
         return actions;
     }
 
-    actions.push(...options.map((option, index) => ({
-        actionId: createAiLegalActionId('interaction', current.id, option.id),
-        kind: 'interaction-choice',
-        label: option.label ?? `交互选择 ${index + 1}`,
-        commands: [{
-            type: 'SYS_INTERACTION_RESPOND',
-            payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
-        }],
-        metadata: {
-            interactionId: current.id,
-            optionId: option.id,
-            displayMode: option.displayMode,
-            optionValue: option.value,
-        },
-    })));
+    actions.push(...options.map((option, index) => {
+        const aiHints = option._ai ? [option._ai] : undefined;
+        return {
+            actionId: createAiLegalActionId('interaction', current.id, option.id),
+            kind: 'interaction-choice',
+            label: option.label ?? `交互选择 ${index + 1}`,
+            commands: [{
+                type: 'SYS_INTERACTION_RESPOND',
+                payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
+            }],
+            aiHints,
+            metadata: {
+                interactionId: current.id,
+                optionId: option.id,
+                displayMode: option.displayMode,
+                optionValue: option.value,
+                aiHints,
+            },
+        };
+    }));
 
     return actions;
 };
@@ -893,6 +906,10 @@ const actionTempoScorer: LocalAiActionScorer = {
     },
 };
 
+const interactionValueScorer: LocalAiActionScorer = createInteractionHintScorer({
+    id: 'interaction-value',
+});
+
 const urgentBaseTempoScorer: LocalAiActionScorer = {
     id: 'urgent-base-tempo',
     score(context, action) {
@@ -1029,6 +1046,7 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
     id: 'baseline',
     scorers: [
         actionKindScorer,
+        interactionValueScorer,
         factionScorer,
         setupFactionRandomScorer,
         minionTempoScorer,

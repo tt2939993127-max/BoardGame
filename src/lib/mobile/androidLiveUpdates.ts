@@ -172,6 +172,8 @@ export interface AndroidLiveUpdateStartOptions {
 const DEFAULT_OTA_CHANNEL = 'stable';
 const DEFAULT_APP_READY_TIMEOUT_MS = 10000;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60000;
+const DEFAULT_MANIFEST_TIMEOUT_MS = 8000;
+const DEFAULT_APPLY_RELOAD_TIMEOUT_MS = 8000;
 const DEBUG_ANDROID_APP_ID_SEGMENTS = new Set(['debug', 'dev', 'test', 'qa']);
 const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
     phase: 'hidden',
@@ -439,9 +441,16 @@ const getConfigFromMetaEnv = (envOverride?: Record<string, string | boolean | un
     return readAndroidLiveUpdateConfig(metaEnv);
 };
 
-const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => {
-    logMobileRuntime('OTA', 'manifest-fetch-start', { url });
-    emitCriticalOtaLog('manifest-fetch-start', { url });
+const readManifest = async (
+    url: string,
+    timeoutMs: number = DEFAULT_MANIFEST_TIMEOUT_MS,
+): Promise<AndroidOtaManifest | null> => {
+    logMobileRuntime('OTA', 'manifest-fetch-start', { url, timeoutMs });
+    emitCriticalOtaLog('manifest-fetch-start', { url, timeoutMs });
+    const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutHandle = setTimeout(() => {
+        abortController?.abort();
+    }, timeoutMs);
     try {
         const response = await fetch(url, {
             method: 'GET',
@@ -450,6 +459,7 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
                 'Cache-Control': 'no-cache',
             },
             cache: 'no-store',
+            ...(abortController ? { signal: abortController.signal } : {}),
         });
         if (response.status === 404) {
             logMobileRuntime('OTA', 'manifest-fetch-404', { url }, 'warn');
@@ -507,6 +517,8 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             error,
         });
         return null;
+    } finally {
+        clearTimeout(timeoutHandle);
     }
 };
 
@@ -602,8 +614,26 @@ const applyBundleImmediately = async (
     updater: CapacitorUpdaterModule['CapacitorUpdater'],
     bundleId: string,
 ) => {
-    await updater.set({ id: bundleId });
-    await updater.reload();
+    await withTimeout(
+        updater.set({ id: bundleId }),
+        DEFAULT_APPLY_RELOAD_TIMEOUT_MS,
+        `OTA 切换超时：set bundle 超过 ${DEFAULT_APPLY_RELOAD_TIMEOUT_MS}ms`,
+    );
+
+    try {
+        await withTimeout(
+            updater.reload(),
+            DEFAULT_APPLY_RELOAD_TIMEOUT_MS,
+            `OTA 重启超时：reload 超过 ${DEFAULT_APPLY_RELOAD_TIMEOUT_MS}ms`,
+        );
+    } catch (error) {
+        console.warn('[OTA] 原生 reload 未按预期完成，回退到 window.location.reload()', error);
+        if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+            window.location.reload();
+            return;
+        }
+        throw error;
+    }
 };
 
 const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
@@ -873,7 +903,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 return { status: 'error', reason: '未能加载 OTA 插件' } as const;
             }
 
-            const manifest = await readManifest(config.manifestUrl);
+            const manifest = await readManifest(
+                config.manifestUrl,
+                Math.max(DEFAULT_MANIFEST_TIMEOUT_MS, config.appReadyTimeoutMs),
+            );
             if (!manifest) {
                 if (applyMode === 'immediate') {
                     clearImmediateActivityPhase();

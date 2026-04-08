@@ -69,6 +69,16 @@ const extractSetupSeatControllers = (setupData: unknown): Record<string, { type?
     return rawSeatControllers as Record<string, { type?: unknown } | undefined>;
 };
 
+const DEFAULT_TRAINING_CAPTURE_POLICY = 'human-only' as const;
+
+function resolveSeatControllerTypeForTraining(
+    seatControllers: Record<string, { type?: unknown } | undefined> | undefined,
+    playerId: string,
+): 'human' | 'local-ai' | 'remote-ai' {
+    const type = seatControllers?.[playerId]?.type;
+    return type === 'local-ai' || type === 'remote-ai' ? type : 'human';
+}
+
 // ============================================================================
 // 游戏引擎定义
 // ============================================================================
@@ -1007,12 +1017,19 @@ export class GameTransportServer {
         if (!this.trainingDataRecorder) return;
         const manifest = GAME_MANIFEST_BY_ID[args.match.engineConfig.gameId];
         if (manifest && manifest.ai.capture === false) return;
+        const seatControllers = extractSetupSeatControllers(args.match.metadata.setupData);
+        const seatControllerType = resolveSeatControllerTypeForTraining(seatControllers, args.playerID);
+        const capturePolicy = manifest?.ai?.capturePolicy ?? DEFAULT_TRAINING_CAPTURE_POLICY;
+        if (capturePolicy === 'human-only' && seatControllerType !== 'human') {
+            return;
+        }
 
         const sample = buildTrainingDecisionSample({
             rulesVersion: this.rulesVersion,
             gameId: args.match.engineConfig.gameId,
             matchId: args.match.matchID,
             playerId: args.playerID,
+            seatControllerType,
             stateIdBefore: args.stateIdBefore,
             stateIdAfter: args.stateIdAfter,
             commandType: args.commandType,

@@ -1823,7 +1823,7 @@ test('在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束�
             timeout: 20000,
             message: '等待 8 秒强制结束回合提交成功并切回房主',
         }).toEqual({
-            delegatedCount: 1,
+            delegatedCount: 2,
             forceEndTurnDelegated: true,
             interactionSourceId: null,
             interactionPlayerId: null,

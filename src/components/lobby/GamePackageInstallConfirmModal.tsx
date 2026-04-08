@@ -16,6 +16,7 @@ interface GamePackageInstallConfirmModalProps {
     assetPackBytes?: number;
     onConfirm: () => void | Promise<void>;
     onRetry?: () => void | Promise<void>;
+    failedActionLabel?: string;
     onClose: () => void | Promise<void>;
     onCancel: () => void | Promise<void>;
     isLoading?: boolean;
@@ -34,6 +35,7 @@ export const GamePackageInstallConfirmModal = ({
     assetPackBytes,
     onConfirm,
     onRetry,
+    failedActionLabel,
     onClose,
     onCancel,
     isLoading = false,
@@ -106,7 +108,7 @@ export const GamePackageInstallConfirmModal = ({
     const primaryActionLabel = isInProgress
         ? t('packageManager.cancelAction')
         : isFailed
-            ? t('packageManager.retryAction')
+            ? (failedActionLabel || t('packageManager.retryAction'))
             : t('packageManager.confirmAction');
     const isPrimaryDisabled = !isInProgress && isLoading;
 
