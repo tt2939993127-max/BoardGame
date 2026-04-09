@@ -759,9 +759,9 @@ describe('trickster_hideout_pod（藏身处 POD ongoing talent）', () => {
             expect.objectContaining({ uid: 'd-flame', defId: 'trickster_flame_trap_pod', ownerId: '0' }),
         );
 
-        const reshuffleEvent = (result?.events ?? []).find(event => event.type === SU_EVENTS.DECK_RESHUFFLED) as any;
-        expect(reshuffleEvent).toBeDefined();
-        expect(reshuffleEvent.payload.deckUids).toEqual(['oa1', 'd-extra']);
+        const reorderedEvent = (result?.events ?? []).find(event => event.type === SU_EVENTS.DECK_REORDERED) as any;
+        expect(reorderedEvent).toBeDefined();
+        expect(reorderedEvent.payload.deckUids).toEqual(['oa1', 'd-extra']);
     });
 });
 

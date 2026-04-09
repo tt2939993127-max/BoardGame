@@ -698,7 +698,6 @@ export function registerCthulhuInteractionHandlers(): void {
                 state,
                 events: [
                     returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp),
-                    grantExtraAction(playerId, 'special_madness', timestamp),
                 ],
             };
         }
