@@ -520,6 +520,10 @@ describe('僵尸派系能力', () => {
         expect(discardUids).toContain('a1');
         expect(discardUids).toContain('x1');
 
+        // 验证：只应发出“重排牌库”而不是“弃牌堆洗回牌库”
+        expect(result!.events.some(event => event.type === SU_EVENTS.DECK_REORDERED)).toBe(true);
+        expect(result!.events.some(event => event.type === SU_EVENTS.DECK_RESHUFFLED)).toBe(false);
+
         // 验证：d2, d4 应在牌库中（非同名卡留在牌库）
         const deckUids = finalState.players['0'].deck.map(c => c.uid);
         expect(deckUids).toContain('d2');
