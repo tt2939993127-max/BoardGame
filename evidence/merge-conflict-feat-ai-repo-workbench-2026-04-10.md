@@ -96,6 +96,11 @@
 - reset 后会话清空但 projectPath 仍在：
   - `D:\gongzuo\webgame\BoardGame-wt-ai-repo-workbench\test-results\evidence-screenshots\flowise-ai-repo-workbench\左侧页签应直达-AI-Repo-Workbench-官方聊天页并支持-projectPath-+-reset-04-chatbot-after-reset.png`
 
-## 待 merge commit 后补跑
+## merge audit 结果
 
-- `npm run merge:audit:strict -- HEAD`
+- 已执行 `npm run merge:audit:strict -- HEAD`
+- 审计文件数：30
+- `完全等于父1: 0`
+- `完全等于父2: 0`
+- 结论：本次 30 个冲突文件均为混合结果，未出现整份吃单边的隐性覆盖
+
