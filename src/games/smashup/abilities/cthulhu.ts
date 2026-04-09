@@ -696,10 +696,7 @@ export function registerCthulhuInteractionHandlers(): void {
         if (action === 'return') {
             return {
                 state,
-                events: [
-                    returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp),
-                    grantExtraAction(playerId, 'special_madness', timestamp),
-                ],
+                events: [returnMadnessCard(playerId, ctx.cardUid, 'special_madness', timestamp)],
             };
         }
         const player = state.core.players[playerId];
