@@ -98,7 +98,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
     }, [autoOpenPanel]);
 
     // 使用 discard 数组的长度作为 topCard 判断依据，避免在中间状态（弃牌堆暂时为空）时渲染错误
-    // zombie_mall_crawl 等卡牌会先清空弃牌堆（DECK_RESHUFFLED），再放回卡牌（CARDS_DISCARDED）
+    // zombie_mall_crawl 等卡牌会先调整牌库顺序（DECK_REORDERED），随后弃牌区可能因后续事件再变化
     // 如果直接读取 discard[discard.length - 1]，在中间状态会得到 undefined
     const topCard = discard.length > 0 ? discard[discard.length - 1] : null;
 

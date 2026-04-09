@@ -787,7 +787,7 @@ describe('食人花 ongoing 能力', () => {
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            // 只有一个候选→自动抽取 (CARDS_DRAWN + LIMIT_MODIFIED + MINION_PLAYED + DECK_RESHUFFLED)
+            // 只有一个候选→自动抽取 (CARDS_DRAWN + LIMIT_MODIFIED + MINION_PLAYED + DECK_REORDERED)
             expect(result.events).toHaveLength(4);
             expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
             expect(result.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);

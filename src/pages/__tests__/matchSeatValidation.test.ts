@@ -1169,8 +1169,8 @@ describe('resolveForceEndTurnForStalledAi', () => {
         ]);
     });
 
-    it('仅凭轮到 AI 且共享态 8 秒未变化，不应直接强制 ADVANCE_PHASE', () => {
-        expect(resolveForceEndTurnForStalledAi({
+    it('无交互阻塞但轮到 AI 且共享态 8 秒未变化时，应允许强制 ADVANCE_PHASE 收口主动回合卡死', () => {
+        const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
                     activePlayerId: '1',
@@ -1188,6 +1188,66 @@ describe('resolveForceEndTurnForStalledAi', () => {
                 },
             } as MatchState<unknown>,
             seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('active-turn');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
+    });
+
+    it('当前轮到 human 时，不应把玩家回合误判成 AI active-turn 卡死并强制推进', () => {
+        expect(resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '0',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                    turnNumber: 3,
+                    phase: 'playCards',
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        })).toBeNull();
+    });
+
+    it('响应窗口当前 responder 是 human 时，不应自动 RESPONSE_PASS 或误转成 AI active-turn', () => {
+        expect(resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '0',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: {
+                            responderQueue: ['0', '1'],
+                            currentResponderIndex: 0,
+                        },
+                    },
+                    turnNumber: 3,
+                    phase: 'playCards',
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '0': { type: 'human' },
                 '1': { type: 'local-ai' },
             },
             seatStates: {},
