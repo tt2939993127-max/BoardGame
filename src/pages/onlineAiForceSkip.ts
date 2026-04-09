@@ -30,7 +30,7 @@ export type ForceSkippableHiddenAiInteraction = {
 
 export type ForceEndTurnStalledAiResolution = {
     playerId: string;
-    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window';
+    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn';
     requiresConfirmedAdvancePhase?: boolean;
     resolution: AiResolution;
 };
@@ -370,6 +370,20 @@ export function resolveForceEndTurnForStalledAi(args: {
             }),
         };
     }
+
+    const currentPlayerId = resolveCurrentPlayerId(args.sharedState);
+    if (currentPlayerId && args.seatControllers[currentPlayerId]?.type !== 'human') {
+        return {
+            playerId: currentPlayerId,
+            reason: 'active-turn',
+            resolution: buildForceEndTurnResolution({
+                playerId: currentPlayerId,
+                suffix: `active-turn:${currentPlayerId}`,
+                commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+            }),
+        };
+    }
+
     return null;
 }
 
