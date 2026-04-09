@@ -4,14 +4,139 @@
 
 - `create-new-game` skill、数据录入规范、E2E 规范、PR 自动化规范都已经定义了做事步骤。
 - 这些步骤散落在 `AGENTS.md`、skill、脚本、测试约定与证据文档中，尚未形成产品化工作台。
-- 用户真正需要的不是一个更强的聊天框，而是一个围绕“仓库 + 工作流 + 证据交付”组织起来的网页工作台。
+- 用户真正需要的不是一个脱离执行语义的空聊天框，也不是一个脱离会话的纯节点画布，而是一个围绕“仓库 + 会话 + 工作流 + 证据交付”组织起来的网页工作台。
 
 本次 change 的目标不是把所有工作流一次性产品化，而是**先把第一版 MVP 收敛到“新建派系”工作流**，把最关键的编排、暂停/恢复、证据回传与本地执行边界定义清楚。
+
+## 官方 Flowise 用户故事校准
+
+> 当前重构的用户故事真相源补充留档：`openspec/changes/add-ai-repo-workbench/user-story-alignment.md`
+>
+> 后续凡是涉及总控入口、模块子流、数据来源位置、素材人工介入时机、审批默认值或层级钻取方式的实现裁决，必须先对照这份留档；若实现与其不一致，应先更新留档或 design/spec，而不是让代码继续漂移。
+
+### Decision: 以官方 `Flowise` 的“会话触发工作流 + Human Input 暂停恢复”作为交互基线
+
+这次需要先纠正一个前提错误：官方 `Flowise` 并不是“只有 AgentFlow 画布，没有聊天入口”。根据官方 Prediction API、Chatflow/Assistant 与 Human-in-the-Loop 教程，官方成立的交互模式是：
+
+1. 用户通过会话入口发送请求，启动一次 flow 执行。
+2. flow 在某个节点触发 `Human Input`，执行暂停。
+3. 人在会话里看到待决策内容，选择 `proceed` / `reject`，必要时附带反馈。
+4. 系统使用同一个会话 / session 恢复原运行，继续跑到最终结果。
+
+因此，本项目正确的产品对齐点不是“去掉聊天，只保留画布”，而是：
+
+- **保留固定 flow**
+- **保留显式节点图**
+- **保留统一的 `DecisionRequest` / `ArtifactBundle` 领域对象**
+- **同时恢复一个最小但真实可用的会话入口，让启动、暂停、恢复、交付都发生在会话时间线上**
+
+这里说的“会话”不是要把系统改成通用聊天机器人，也不是放弃固定模板；它只是官方用户故事里的外层交互壳。
+
+### Decision: 总控流是用户入口，模块流是内部编排单元
+
+基于当前用户故事校准，工作台不能再把用户主心智做成“先选模块、再在一堆碎工作流里手动跳转”。当前成立的层级应固定为：
+
+1. 用户先进入一个总控流。
+2. 总控流承载高层任务输入，并负责组织整条主链路。
+3. 数据录入、单派系实施、审计、上传验收都作为内部模块流存在。
+4. 节点图本身是模块流程，允许通过官方 Flowise 画布钻取查看，但不应取代总控入口。
+
+因此，页面与 seed 的正确方向不是“再造一个总控面板壳”，而是：
+
+- 保留官方 Flowise 画布与节点编辑能力。
+- 让总控流成为默认直达入口。
+- 让模块流通过子流 / 层级方式挂在总控流下。
+- 总控顶层只保留抽象模块节点，例如素材检查、派系数据录入、实施、审计、上传验收。
+- 当某个能力需要独立面板与独立工作流入口时，应以新增 workflow + 主链路调用节点的方式扩展，而不是把它塞进已有模块说明文本。
+- 条件、循环、Human Input 与其他细节分支全部下沉到对应模块子流内部。
+- 保持用户仍可编辑节点、添加节点、修改流程，而不是被缩成只读演示图。
+
+### Decision: 图包路径是可选输入，数据来源策略下沉到模块节点配置
+
+当前用户故事已经明确否定“把数据来源堆进总控启动表单”的做法，因此主入口输入必须收敛为高层任务信息：
+
+- 游戏
+- 任务描述
+- 派系与图片大纲
+- 可选图包路径
+- 补充说明
+
+而以下内容不再作为总控表单一级输入：
+
+- `enableWikiComparison`
+- `enableDocLookup`
+- `extraDataSources`
+
+这些策略应主要下沉到数据录入模块或相关节点配置中，由模块决定默认启用 Wiki 对照、默认读取 `doc/rule`，并在需要时再暴露更细粒度配置。
+
+### Decision: 素材人工介入只在异常时触发，审批默认应尽量自动穿透
+
+用户要的是“给目录和要求后尽量一路自动跑到底”，不是每一段都默认卡人审。因此当前总控流语义应固定为：
+
+1. 素材检查先自动执行。
+2. 若图包路径为空，不阻塞主流程，只记为“未提供可选路径”。
+3. 只有真正发现素材异常时，才进入 `Human Input` 节点请求裁决。
+4. 审计阶段默认先走自动判定 / 条件分支，而不是默认卡“审计是否通过”的人工节点。
+
+这条裁决同时约束：
+
+- 后端 `inspectFactionAssets` 契约必须把“说明性 note”和“必须裁决的异常”分开。
+- Flowise seed 必须用条件节点承接“是否异常 / 是否要求重写”等自动门禁。
+- 审批开关语义应保留为可选门禁，而不是把每个阶段都强制人审。
+
+### Decision: 实施模块补入音效配置子流，并复用现有音频浏览器做试听
+
+用户故事已经明确补充“实施阶段多一个音效配置分支，并提供可以直接点击播放的输出，注明每个音效的用点”。这一条的实现裁决如下：
+
+1. 音效配置作为实施模块内部的子流存在，不抬升为总控顶层节点。
+2. 子流输出推荐音效 key、用点说明与可点击试听链接。
+3. 试听入口直接复用现有 `/dev/audio` 页面，通过 query 参数预填搜索并自动播放。
+
+这样满足“实施链路里能直接审听”，同时避免再造一层专用播放器 UI。
+
+### Decision: 补一个独立的“旧派系参考对照” workflow，并在主链路里作为节点调用
+
+这次补的不是新的壳，而是新的模块能力。正确落法是：
+
+1. 在官方工作流列表里新增一个独立 workflow：`旧派系参考对照`。
+2. 在总控主链路里，于数据录入之后、实施之前插入一个 `Execute Flow` 节点调用该 workflow。
+3. 该模块输出“建议优先对照的旧派系 + 推荐理由 + 复用核对点”，供后续实施模块直接消费。
+
+这样既满足“左侧栏多一个工作流放新的面板”，也不破坏当前总控仍以抽象模块节点组织的结构。
+
+### Decision: 描述性文案留在节点配置与文档，不进入总览 UI
+
+总览层的职责是“编排”和“下钻”，不是复述设计说明。因此当前 UI 裁决固定为：
+
+1. 顶层总览只显示结构化信息：工作流标题、输入项、模块节点、连接关系、状态、可操作入口。
+2. 节点说明、设计动机、默认策略、实现备注、流程解释等描述性内容留在节点配置、flow 文档、spec/design 与子流内部。
+3. 除非一段文字直接影响当前页面可操作性，否则不得把描述性文案带入总览 UI。
+
+这条裁决同时约束后续新增的“添加新游戏总控”等顶层工作流：默认先做模块编排视图，不得再回到大段说明文案占据主区域的做法。
+
+### Decision: 固定流 seed 必须具备覆盖旧流的 upsert 能力
+
+当前仓库在 dev auto login 启动链路里会自动 seed 5 条固定 agentflow，因此 seed 行为必须是“按固定 ID / 名称更新覆盖”，而不是“只在不存在时创建”。否则一旦前一轮错误 seed 已落库，后续重构就会被旧流残留卡死。
+
+当前固定流集合为：
+
+- `AI Repo Workbench · 新派系接入总控`
+- `AI Repo Workbench · 派系数据录入`
+- `AI Repo Workbench · 单派系实施`
+- `AI Repo Workbench · 实施审计`
+- `AI Repo Workbench · 上传与验收`
+
+实现上必须保证：
+
+- 重新登录 / 重新触发 dev auto login 后，这 5 条流会被更新到最新定义。
+- 不依赖手工删库后才能看到新版总控语义。
+- 运行态验证要以真实 seed 日志和 SQLite 落库结果为准，而不是只看源码。
 
 ## Goals / Non-Goals
 
 - Goals:
   - 不走随意拼装路线；先建立 MVP 的当前骨架、分层边界与 fork 裁决基线，再进入实现，并允许后续按真实反馈持续完善。
+  - 对齐官方 `Flowise` 用户故事：以会话入口承载固定模板工作流，而不是把聊天和工作流割裂成两套交互。
   - 用单一、固定、可观察的“新建派系”节点流验证工作台架构。
   - 明确每个节点的输入、输出、持久化状态与暂停/恢复契约。
   - 定义 `DecisionRequest` 作为人工决策的统一协议，而不是各节点各自发问。
@@ -21,17 +146,17 @@
 - Non-Goals:
   - 本 change 不要求第一版就覆盖“数据录入 / Bug 修复 / 审计 / PR merge”完整产品能力。
   - 本 change 不要求第一版就引入 Temporal、Kubernetes 或分布式调度。
-  - 本 change 不允许把外部 fork 底座直接变成领域真相源；即使采用 Flowise，也只让它承载节点画布与 workflow shell，不接管 `RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle`。
+  - 本 change 不允许把外部 fork 底座直接变成领域真相源；即使采用 Flowise，也只让它承载会话入口、节点画布与 workflow shell，不接管 `RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle`。
 
 ## Skeleton-First Principles
 
 ### Decision: 这条线先建立清晰基线，再在实现中持续迭代完善
 
-第一版不能采用“先做个聊天框 / 先打通一条最短 happy path / 以后再慢慢抽象”的路径，因为那会把最关键的架构判断延后，最后演变成产品边界、运行边界和证据边界都不稳定的临时系统。
+第一版不能采用“先做个空聊天框 / 先打通一条最短 happy path / 以后再慢慢抽象”的路径，因为那会把最关键的架构判断延后，最后演变成产品边界、运行边界和证据边界都不稳定的临时系统。
 
 但这里的目标也不是把后续演进空间一次性锁死，而是先明确当前成立的架构基线，再允许随着实现反馈持续修正。当前基线至少包括：
 
-1. **产品骨架**：MVP 只暴露 `new-faction`，不把工作台伪装成通用任务中心。
+1. **产品骨架**：MVP 只暴露 `new-faction`，不把工作台伪装成通用任务中心；但它必须通过会话入口来承载这条固定 flow。
 2. **分层骨架**：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`。
 3. **人工决策骨架**：所有人工暂停点都归一到 `DecisionRequest`。
 4. **交付骨架**：所有阶段性交付都归一到 `ArtifactBundle`。
@@ -49,7 +174,7 @@
 | --- | --- | --- | --- | --- |
 | LangGraph interrupts / durable execution | 提供图式 agent/workflow 编排、`interrupt` 暂停、checkpoint 持久化、thread/run 级恢复，以及对 deterministic / idempotent / side-effect 包装的明确约束。 | 直接借鉴 `waiting_decision` / resume 语义、checkpoint 思路、可重放节点契约，以及“副作用必须幂等化并与恢复边界解耦”的要求。 | 不适合把 LangGraph graph DSL 直接当成产品底座；它不提供本项目需要的仓库会话、worktree、证据 bundle 与产品化工作台语义。 | `https://docs.langchain.com/oss/python/langgraph/interrupts`、`https://docs.langchain.com/oss/python/langgraph/durable-execution` |
 | OpenHands | 提供面向真实代码仓库的 AI 开发产品：SDK、CLI、本地 GUI、REST API、云/企业形态，以及在本地/沙箱中执行工具与修改代码的能力。 | 直接借鉴“仓库是第一等公民”“工具执行反馈必须可见”“GUI/CLI 共用执行后端”这三点；也借鉴 repository customization 与本地运行时视角。 | 不适合直接作为底座：其主心智仍是对话式通用 coding agent；本地 process sandbox 默认无隔离；Python 主栈与现有 React + Node 产品壳不对齐。 | `https://github.com/OpenHands/OpenHands`、`https://docs.all-hands.dev/openhands/usage/sandboxes/process` |
-| Flowise | 提供可视化 AgentFlow V2，强调独立节点、显式连线、Flow State、执行队列、loops / conditions / HITL 与 checkpoint 恢复。 | 直接借鉴节点时间线可视化、显式共享状态、HITL checkpoint 恢复、结构化 JSON 输出节点思路。 | 不适合直接作为底座：它的核心是通用 AI workflow builder，天然会把产品推回“自由拖拽平台”；而第一版只做固定模板 `new-faction`。 | `https://docs.flowiseai.com/using-flowise/agentflowv2` |
+| Flowise | 提供 AgentFlow V2、Chatflow/Assistant、Prediction API、Human Input checkpoint 恢复；官方交互既有节点图，也有聊天入口与会话恢复语义。 | 直接借鉴节点时间线可视化、显式共享状态、会话触发运行、HITL checkpoint 恢复、结构化输出节点思路。 | 不适合直接作为底座：它的核心仍是通用 AI workflow builder，天然会把产品推回“自由拖拽平台”；而第一版只做固定模板 `new-faction`。 | `https://docs.flowiseai.com/using-flowise/agentflowv2`、`https://docs.flowiseai.com/tutorials/human-in-the-loop`、`https://docs.flowiseai.com/using-flowise/prediction` |
 | n8n | 提供通用 workflow automation，重点在执行历史、Wait 节点、Webhook/Form 恢复，以及面向 AI tool call 的 human review。 | 直接借鉴等待后落库恢复、审批/人工 review 卡片、运行详情对失败节点和输入输出的展示。 | 不适合直接作为底座：其强项是 SaaS/集成自动化，不是本地仓库任务语义；连接器、凭据系统和集成市场都会稀释 `RepoSession / WorktreeTask / ArtifactBundle` 主语义。 | `https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.wait/`、`https://docs.n8n.io/advanced-ai/human-in-the-loop-tools/` |
 | Activepieces | 提供 piece-based 自动化平台，支持 flow control hooks、webhook/delay pause、approval / human input / chat / form 等低门槛人机交互。 | 直接借鉴 `ctx.run.pause/stop` 这种明确控制流接口，以及 approval / chat / form 的低认知负担交互。 | 不适合直接作为底座：其主语义是 piece / trigger / action，不是 repo/worktree；若硬 fork，仍需大规模逆向改造领域模型。 | `https://github.com/activepieces/activepieces`、`https://www.activepieces.com/docs/build-pieces/piece-reference/flow-control` |
 | Temporal | 提供强 durable orchestration、Event History、command/event 回放、signals / queries，以及对 deterministic workflow code 的强约束。 | 直接借鉴“事件历史是恢复真相源”“signal / update 负责外部输入恢复”“工作流代码必须确定性”这些编排原则；适合作为未来 `LocalRuntime` 的替代执行器。 | 不适合第一版直接接入：它是基础设施级编排内核，不是现成产品底座；过早引入会把 MVP 升级成分布式 workflow 平台工程。 | `https://docs.temporal.io/workflows`、`https://docs.temporal.io/encyclopedia/event-history` |
@@ -63,23 +188,23 @@
 
 基于这组官方基线，第一版可复用结论固定如下：
 
-1. **工作台的核心不是聊天，也不是自由画布，而是“仓库模板工作流 + 决策暂停 + 证据交付”。**
+1. **工作台的核心不是纯聊天，也不是纯画布，而是“会话触发的仓库模板工作流 + 决策暂停 + 证据交付”。**
 2. **LangGraph 最多是编排层基础设施，不是领域模型来源。**
 3. **仓库本地执行语义必须由本项目自定义的 `RepoSession / WorktreeTask / ArtifactBundle` 持有，而不是从现成自动化平台反推。**
-4. **UI 可以借鉴 Flowise / Activepieces，执行可见性可以借鉴 n8n，仓库执行体验可以借鉴 OpenHands，durable orchestration 原则可以借鉴 LangGraph / Temporal，local-first 运营方式可以借鉴 Dagu，但产品骨架不能被任何单个外部项目接管。**
+4. **UI 既要借鉴 Flowise 的聊天入口，也要借鉴它的节点画布；执行可见性可以借鉴 n8n，仓库执行体验可以借鉴 OpenHands，durable orchestration 原则可以借鉴 LangGraph / Temporal，local-first 运营方式可以借鉴 Dagu，但产品骨架不能被任何单个外部项目接管。**
 
 本轮未额外把这些开源仓库拉到本地做对照；原因是官方文档与官方仓库首页已经足以回答“产品提供什么 / 可借鉴什么 / 为什么不适合作为底座”。若后续进入实现并需要核对具体目录边界，再按需做浅克隆。
 
 ## Fork 评估与底座裁决
 
-### Decision: 当前采用 `Flowise` 作为 fork 起点，但只复用它的节点画布与 workflow shell
+### Decision: 当前采用 `Flowise` 作为 fork 起点，但只复用它的会话入口、节点画布与 workflow shell
 
 老板要求的关键问题不是“能不能 fork”，而是“fork 之后会不会把产品重心带偏”。因此本 change 必须先给出显式裁决：
 
 | 候选底座 | 贴合度 | 能直接省掉什么 | 真正要付出的改造成本 | 为什么不作为第一版底座 / 为什么采用 | 结论 |
 | --- | --- | --- | --- | --- | --- |
 | OpenHands | 中高 | 能直接复用 repo 选取、工具执行、CLI/GUI 共后端、本地/容器 runtime 经验。 | 要把以 `conversation / agent / task` 为中心的产品骨架改造成 `RepoSession / WorkflowTemplate / DecisionRequest / ArtifactBundle`；还要处理 Python 主栈与现有 React + Node 产品壳错位。 | 仓库语义强，但 UI 心智仍是对话式 coding agent；如果拿它做底座，节点画布反而要自己重做。 | **不选** |
-| Flowise | 高 | 能直接复用 AgentFlow V2 的节点画布、显式连线、共享 flow state、HITL checkpoint 与 AI workflow shell。 | 需要把 `$flow.state` 一类运行态限制在 UI / shell 层，并把 repo/worktree/domain 真相留在我们自己的领域层。 | 当前最缺的是“像成熟开源项目那样的节点图与工作流外壳”，而不是通用聊天壳或集成市场；Flowise 在这点上最贴题，且技术栈与前端改造成本可控。 | **选为 fork 起点** |
+| Flowise | 高 | 能直接复用 Chatflow/Assistant 风格会话入口、AgentFlow V2 节点画布、显式连线、共享 flow state、HITL checkpoint 与 AI workflow shell。 | 需要把 `$flow.state` 一类运行态限制在 UI / shell 层，并把 repo/worktree/domain 真相留在我们自己的领域层。 | 当前最缺的不是再造一套解释型壳，而是把“会话入口 + 节点图 + HITL 恢复”收回到官方风格；Flowise 在这点上最贴题，且技术栈与前端改造成本可控。 | **选为 fork 起点** |
 | n8n | 中低 | 能直接复用等待/恢复、执行历史、失败节点可见性、人审 tool-call 的成熟模式。 | 要绕开 connector/credential/marketplace 这条 iPaaS 主线，把自动化平台改造成 repo-local 工作台；此外 fair-code 许可也会让底座策略与未来分发方式变复杂。 | UI 和执行历史成熟，但许可与产品主语义都不适合做我们这条线的底座。 | **不选** |
 | Activepieces | 中 | 能直接复用 TypeScript 栈、approval/form/chat 这套低心智负担的 HITL 交互，以及 flow pause/stop 控制流。 | 仍需把 piece/trigger/action 生态改造成 repo/worktree/workflow 模型，并补齐工作台级证据 bundle、仓库会话、模板化节点契约。 | 技术栈顺手，但产品语义仍偏 automation builder；当下对“节点画布像参考目标”这件事不如 Flowise 直接。 | **次选，不作为首选底座** |
 | 现有 BoardGame 基础上扩展 | 中 | 能直接复用现有 React 19、Node、认证、上传、本地脚本链路、OpenSpec、E2E、证据文档与 repo 内规则资产。 | 仍需自己补齐成熟的节点画布、连线交互和 workflow shell。 | 适合做领域真相源，不适合继续承担节点画布底座；当前继续纯自研只会重复造轮子。 | **保留为承载层，不再作为唯一底座** |
@@ -94,13 +219,13 @@
 4. **本地仓库语义是否可保真**：是否能把 `RepoSession / WorktreeTask / ArtifactBundle` 维持为唯一真实来源，而不是被外部框架状态反客为主。
 5. **后续演进是否稳**：第一版之后接 LangGraph / Temporal 或扩模板时，是否还能保持领域边界稳定。
 
-结论上，若目标是尽快拿到成熟节点画布并在其上实施 repo-aware workbench，`Flowise` 是最合适的 fork 起点；但它只负责 workflow shell 与节点画布，不负责领域真相。
+结论上，若目标是尽快拿到成熟的会话入口与节点画布，并在其上实施 repo-aware workbench，`Flowise` 是最合适的 fork 起点；但它只负责会话壳、workflow shell 与节点画布，不负责领域真相。
 
 最终裁决：
 
-- **最正确方案：fork `Flowise`，但把它限制在节点画布 / workflow shell 层；`RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle` 仍由本项目领域层持有。**
-- 理由不是“它最火”，而是**当前问题的主矛盾就是节点图和 workflow shell 做得太差**。OpenHands 解决的是 repo agent，n8n/Activepieces 解决的是 automation builder，而 Flowise 最直接解决“节点画布像成熟开源项目”这件事。
-- 这不是把整个产品重心交给 Flowise。正确实施方式是：用 Flowise 提供节点画布、连线、节点交互和基础 workflow shell；用我们自己的 domain/runtime 接住 repo/worktree/run/decision/artifact 真相。
+- **最正确方案：fork `Flowise`，但把它限制在会话入口 / 节点画布 / workflow shell 层；`RepoSession / WorktreeTask / DecisionRequest / ArtifactBundle` 仍由本项目领域层持有。**
+- 理由不是“它最火”，而是**当前问题的主矛盾其实是官方那种“聊天触发工作流、工作流中途要求人输入、最后返回产物”的一体化用户故事没有被保留下来**。OpenHands 解决的是 repo agent，n8n/Activepieces 解决的是 automation builder，而 Flowise 最直接覆盖“会话入口 + 节点画布 + HITL”这一组能力。
+- 这不是把整个产品重心交给 Flowise。正确实施方式是：用 Flowise 提供会话入口、节点画布、连线、节点交互和基础 workflow shell；用我们自己的 domain/runtime 接住 repo/worktree/run/decision/artifact 真相。
 - 若未来目标切换为“聊天式 coding agent 平台”，再重新评估以 OpenHands 为底座；若未来目标切换为“通用自动化 / SaaS 集成市场”，再重新评估 n8n / Activepieces。当前这条线的最佳 fork 目标固定为 Flowise。
 
 ### 当前锁定的 fork 基线
@@ -125,9 +250,9 @@
 第一版产品能力应收敛为：
 
 1. 绑定一个本地仓库会话。
-2. 选择并启动“新建派系”模板。
+2. 在最小会话面板中发起“新建派系”请求并启动模板。
 3. 通过固定节点流完成规则获取、转录、素材核对、结构化派系定义草案与人工确认。
-4. 生成 `ArtifactBundle` 作为阶段性交付证据。
+4. 在会话中返回 `Human Input`、状态更新与 `ArtifactBundle` 作为阶段性交付证据。
 
 MVP **明确不包含** 以下内容：
 
@@ -143,11 +268,11 @@ MVP **明确不包含** 以下内容：
 
 ## Architecture Overview
 
-### Decision: 先建立五层骨架基线，再实现固定节点图
+### Decision: 先建立五层骨架基线，再实现“会话驱动的固定节点图”
 
-MVP 的骨架不是“聊天框 + 若干工具调用”，而是当前明确采用的五层：
+MVP 的骨架不是“只有聊天框 + 若干工具调用”，也不是“只有节点图 + 若干表单按钮”，而是当前明确采用的五层：
 
-1. `Workbench Surface`：模板入口、运行详情、决策卡片、证据预览。
+1. `Workbench Surface`：会话时间线、模板入口、运行详情、决策卡片、证据预览。
 2. `WorkflowOrchestrator`：节点图推进、checkpoint、interrupt / resume、状态迁移。
 3. `LocalRuntime`：worktree、文件、命令、日志、脚本与本地安全边界。
 4. `Repo Domain`：`RepoSession`、`WorktreeTask`、`WorkflowRun`、`DecisionRequest`、`ArtifactBundle`。
@@ -161,11 +286,12 @@ MVP 的骨架不是“聊天框 + 若干工具调用”，而是当前明确采�
 - `src/features/ai-repo-workbench/workflowServices.ts`：新增 `WorkflowOrchestrator` / `LocalRuntime` 契约和当前本地 orchestrator 实现。
 - `src/pages/devtools/AIRepoWorkbench.tsx`：页面仍使用原有 `startNewFactionRun / submitRuleSourceDecision / advanceWorkbenchJournal` 入口，但这些入口现在已经委托给 orchestrator，而不是页面直连内联状态机。
 
-### Decision: 采用固定节点图 + 持久化运行日志，而不是自由聊天拼接
+### Decision: 采用“会话触发固定节点图 + 持久化运行日志”，而不是自由聊天拼接
 
 MVP 采用固定模板工作流：
 
 - 模板：`new-faction`
+- 触发方式：由会话输入启动当前模板，并在会话中显示状态和人工输入卡片
 - 执行模型：有向节点图，但第一版按预定义顺序推进
 - 节点类型：自动节点、决策节点、门禁节点、产物节点
 - 持久化单元：`WorkflowRun`、`NodeExecutionRecord`、`DecisionRequest`、`ArtifactBundle`
@@ -175,13 +301,15 @@ MVP 采用固定模板工作流：
 - 让状态迁移、恢复、审计与前端展示都有稳定结构。
 - 与 LangGraph 的 durable execution / interrupt-resume 思路一致，但不要求第一版直接接入 LangGraph 运行时。
 - 比自由聊天更容易限制“系统到底做到哪一步了”。
+- 也能保留官方 `Flowise` 那种“用户看起来是在对话，但背后其实是固定 flow 在推进”的体验。
 
 ### Decision: 仓库会话与本地运行时是第一等公民
 
-MVP 的核心不是“消息”，而是“仓库上下文中的执行”：
+MVP 的核心不是“只有消息”，而是“仓库上下文中的执行”；但会话仍然是用户入口和状态回传通道：
 
 - `RepoSession` 表示已绑定的本地仓库。
 - `WorktreeTask` 表示该仓库中某条任务线的隔离工作目录。
+- `ConversationSession` 表示一次用户会话视角下的固定 flow 交互壳。
 - `WorkflowRun` 表示一次具体模板执行。
 - `LocalRuntime` 负责在本机执行脚本、读取文件、生成证据与暂停恢复。
 
@@ -191,13 +319,13 @@ MVP 的核心不是“消息”，而是“仓库上下文中的执行”：
 - 用户当前真实使用场景就是在本机仓库中驱动 AI 任务，而不是把任务丢给远程 SaaS 黑盒。
 - Dagu 的轻量本地调度思路与 OpenHands 的本地工作区执行思路都证明：先把本地闭环做稳，才能决定是否引入更重的后端编排层。
 
-### Decision: 人工输入必须通过 `DecisionRequest` 聚合，而不是让节点随时发散追问
+### Decision: 人工输入必须通过 `DecisionRequest` 聚合，并在会话中显示，而不是让节点随时发散追问
 
 系统中的所有人工确认都必须落到统一结构：
 
 - 节点不得直接自由发问。
 - 节点只能创建 `DecisionRequest` 并暂停。
-- 前端只渲染 `DecisionRequest`，并把用户回答回写为 `DecisionResolution`。
+- 前端在会话中渲染 `DecisionRequest`，并把用户回答回写为 `DecisionResolution`。
 
 这样做的原因：
 
@@ -265,6 +393,41 @@ type WorktreeTask = {
   status: 'ready' | 'running' | 'paused' | 'completed' | 'failed' | 'archived'
   runtimeIds: string[]
   artifactBundleIds: string[]
+}
+```
+
+### ConversationSession
+
+`ConversationSession` 表示用户在工作台里看到的一次会话视角。它不是领域真相源，但负责把用户输入、运行状态、人工决策和交付产物组织成官方风格的时间线。
+
+```ts
+type ConversationSession = {
+  id: string
+  repoSessionId: string
+  worktreeTaskId: string
+  templateId: 'new-faction'
+  activeRunId?: string
+  status: 'idle' | 'running' | 'waiting_decision' | 'completed' | 'failed'
+  createdAt: string
+  updatedAt: string
+}
+```
+
+### ConversationTurn
+
+`ConversationTurn` 是会话时间线上的一条消息/事件。它是用户界面的展示对象，不替代 `WorkflowRun`、`DecisionRequest`、`ArtifactBundle` 的真实结构。
+
+```ts
+type ConversationTurn = {
+  id: string
+  sessionId: string
+  runId?: string
+  role: 'user' | 'assistant' | 'system'
+  kind: 'prompt' | 'status' | 'decision_request' | 'decision_resolution' | 'artifact' | 'error'
+  content: string
+  decisionId?: string
+  artifactBundleId?: string
+  createdAt: string
 }
 ```
 
@@ -636,6 +799,47 @@ MVP **不** 让 `LocalRuntime` 负责：
 
 未来若切到 Temporal，只替换这些接口背后的执行器，不重写业务节点语义。
 
+## Codex CLI Integration Boundary
+
+### Decision: coding 节点可以直接调用 `codex exec`，但 `codex` 只作为可重试执行器，不作为唯一上下文容器
+
+根据官方 `Codex CLI` 文档，`codex exec` 明确适合非交互自动化；同时官方也提供了 `--ephemeral` 这种“无会话持久化”模式。这说明：
+
+1. `codex exec` 非常适合被工作流节点直接调用，承担一次性的代码理解、改动、测试或审查任务。
+2. 但它天生更像**一次执行器**，而不是工作流的 durable state store。
+3. 因此，MVP 不应把“当前跑到哪一步、用户刚才选了什么、已经产出什么”这类恢复真相只留在 `codex` 进程里。
+
+正确边界是：
+
+- **工作流层负责持久化**：`ConversationSession`、`WorkflowRun`、`DecisionRequest`、`ArtifactBundle`、节点输入输出引用与恢复点。
+- **Codex CLI 负责执行**：按节点收到的上下文做一次非交互任务，返回 patch、日志、测试结果、解释或失败信息。
+- **恢复策略由工作流层掌控**：若 `codex` 进程、shell、网络或模型调用失败，系统从上一个 durable checkpoint 重新调度该节点，而不是依赖 CLI 进程内上下文续跑。
+
+这条边界是基于官方能力做出的架构裁决：官方文档证明了 `codex exec` 适合自动化，也证明了存在非持久化执行模式；因此第一版最稳的做法，是把它纳入我们自己的 checkpoint / retry 体系，而不是反过来把稳定性押给 CLI 会话。
+
+### Codex Node Contract
+
+当某个节点被定义为 coding 节点时，推荐契约如下：
+
+1. 工作流层先固化 `promptSnapshot`、目标仓库路径、允许改动范围、上一步产物引用与本轮用户决策。
+2. 再以非交互方式执行 `codex exec`，优先使用可解析输出格式。
+3. 执行完成后，将以下结果回写到 durable store：
+   - `stdout/stderr` 摘要
+   - 关键变更文件
+   - 测试结果
+   - patch / diff 引用
+   - 失败原因与可重试标记
+4. 若执行中断，节点状态保持在 `running` 或进入 `failed/retryable`，由 orchestrator 决定是否重试。
+
+### Crash Recovery Rule
+
+当 `codex exec` 参与工作流时，恢复规则固定如下：
+
+1. **不以 CLI 进程内上下文作为恢复前提**。
+2. **只假设磁盘上已落盘的仓库改动和工作流 journal 可靠存在**。
+3. **恢复时重建 prompt，而不是尝试“接着上次脑内推理继续”**。
+4. **任何可能产生副作用的节点都必须幂等化**，避免重试时重复改文件、重复跑命令、重复生成证据。
+
 ## Selection Validity / Risks / Optimizations
 
 ### Decision: 当前技术选型仍成立，但必须带着风险表推进
@@ -645,8 +849,9 @@ MVP **不** 让 `LocalRuntime` 负责：
 - **领域骨架**：`RepoSession / WorktreeTask / WorkflowRun / DecisionRequest / ArtifactBundle`
 - **执行策略**：local-first `LocalRuntime`
 - **编排策略**：固定模板工作流；LangGraph 仅作为可插拔 orchestrator 适配层
+- **coding 执行策略**：需要开放式编程能力的节点直接调用 `codex exec`，但恢复语义仍由本地工作流层持有
 - **产品收敛**：只做 `new-faction`
-- **开源策略**：fork `Flowise` 作为节点画布 / workflow shell 起点，但 repo/worktree/domain 真相继续留在本项目领域层
+- **开源策略**：fork `Flowise` 作为会话入口 / 节点画布 / workflow shell 起点，但 repo/worktree/domain 真相继续留在本项目领域层
 
 成立原因：
 
@@ -660,8 +865,9 @@ MVP **不** 让 `LocalRuntime` 负责：
 | --- | --- | --- |
 | 领域骨架定义得不够清楚，后续又被实现细节反推 | 先写节点代码，再补 schema | 先定义当前 schema、接口与层次边界，再做节点实现；若实现中发现更优抽象，再显式回写文档 |
 | LangGraph 侵入过深，导致领域对象被其线程状态绑架 | 直接把 session / artifact 全塞进 graph state | 只允许保存引用与可重放状态，不让 LangGraph 成为领域真源 |
-| fork Flowise 仍有较高整合成本 | 需要把上游节点画布接入现有 React/Node 产品壳，并防止其状态模型侵入 repo/worktree/domain | 只复用画布与 workflow shell；所有 repo/run/decision/artifact 真相继续由本项目领域层与 journal 持有 |
+| fork Flowise 仍有较高整合成本 | 需要把上游会话入口和节点画布接入现有 React/Node 产品壳，并防止其状态模型侵入 repo/worktree/domain | 只复用会话入口、画布与 workflow shell；所有 repo/run/decision/artifact 真相继续由本项目领域层与 journal 持有 |
 | local-first 在可靠性上弱于成熟编排平台 | 进程重启 / 长时暂停 / 重试策略不足 | 先用本地 durable journal，接口层提前为 Temporal 预留适配面 |
+| 过度依赖 `codex` CLI 会话上下文，导致进程挂掉后无法恢复 | 把“当前任务上下文”只留在 CLI 内存或交互线程里 | 强制将 coding 节点的 prompt、输入引用、输出摘要、失败状态与恢复点落盘；把 `codex exec` 视作一次性执行器 |
 
 还需要的优化：
 
@@ -669,6 +875,7 @@ MVP **不** 让 `LocalRuntime` 负责：
 2. 优先选择可恢复的本地持久化（推荐 SQLite + artifact index），避免只靠临时文件。
 3. 强制节点 side effect task 幂等化，保证暂停恢复后不重复执行文件写入 / 命令副作用。
 4. 在运行详情页把“领域状态”与“执行器状态”分开展示，避免用户把 LangGraph / runtime 细节误认为产品对象。
+5. 为 `codex exec` 节点增加统一输出适配层，优先采集结构化结果，而不是只拼接原始终端文本。
 
 ## Risks / Trade-offs
 

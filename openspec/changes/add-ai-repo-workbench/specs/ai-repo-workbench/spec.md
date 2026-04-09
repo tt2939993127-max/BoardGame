@@ -20,6 +20,54 @@
 - **THEN** 系统 MUST 把该 worktree 作为可管理对象加入工作树列表
 - **AND** 系统 MUST 支持把某个 worktree 聚焦为后续模板运行的目标上下文
 
+### Requirement: 工作台 SHALL 提供官方风格的最小会话入口来承载固定 flow
+
+系统 MUST 提供一个最小但真实可用的会话面板，让用户通过会话启动 `new-faction`，并在同一时间线中看到状态更新、`Human Input` 与最终 `ArtifactBundle`；不得把工作流入口退化成只有表单与按钮的独立控制区。
+
+#### Scenario: 用户通过会话启动固定模板
+- **WHEN** 用户在工作台中输入一次“创建派系”请求
+- **THEN** 系统 MUST 在会话中生成用户输入记录
+- **AND** 基于该输入启动绑定到当前 `RepoSession` / `WorktreeTask` 的 `new-faction` 运行
+- **AND** 会话入口 MAY 附带结构化字段，但外观和交互 MUST 仍保持会话语义
+
+#### Scenario: Human Input 在会话中暂停并恢复
+- **WHEN** 工作流执行到需要人工输入的节点
+- **THEN** 系统 MUST 在会话时间线中渲染对应的 `DecisionRequest`
+- **AND** 同步将运行状态标记为 `waiting_decision`
+- **AND** 用户提交决策后 MUST 恢复同一条 `WorkflowRun`，而不是重新创建一条新运行
+
+#### Scenario: 最终产物回到会话
+- **WHEN** 当前运行完成并生成 `ArtifactBundle`
+- **THEN** 系统 MUST 在会话时间线中插入一条产物消息
+- **AND** 该消息 MUST 能预览摘要、图片产物或原图入口
+- **AND** 同一 bundle 仍 MUST 作为结构化领域对象被独立查询
+
+### Requirement: 官方 Flowise 能力 SHALL 被扩展而不是被覆盖或缩减
+
+系统 MUST 以官方 Flowise 作为工作流底座做增强，不得通过新增自定义大壳去覆盖、缩小或替代其原生工作流能力。
+
+#### Scenario: 默认入口仍然落在官方工作流画布
+- **WHEN** 用户进入 AI Repo Workbench
+- **THEN** 系统 MUST 让用户直接进入官方 Flowise 的总控流画布或与之等价的官方路由
+- **AND** 用户 MUST 仍能编辑节点、连线、子流和相关配置
+- **AND** 不得把节点图缩成只读角落配角
+
+#### Scenario: 模块流作为内部编排单元存在
+- **WHEN** 总控流需要组织数据录入、实施、审计或上传阶段
+- **THEN** 系统 MUST 通过模块子流或等价的官方能力组织这些阶段
+- **AND** 总控顶层 SHOULD 只暴露抽象模块节点，并允许用户通过官方子流钻取查看内部细节
+- **AND** 不得要求用户手工在多个碎工作流列表之间跳转才能完成一次主任务
+
+#### Scenario: 左侧工作流列表保留独立参考模块入口
+- **WHEN** 系统为主链路补充“旧派系参考对照”能力
+- **THEN** 该能力 SHOULD 同时以独立 workflow 出现在官方工作流列表中
+- **AND** 主链路内 SHOULD 有对应节点调用它，而不是把全部内容硬塞进现有模块的单个节点说明里
+
+#### Scenario: 不得阉割原生工作流管理能力
+- **WHEN** 用户需要新增节点、修改节点配置或扩展自己的工作流
+- **THEN** 系统 MUST 保留官方 Flowise 的原生编辑与管理能力
+- **AND** 不得将产品收口成“只能点按钮走固定流程”的阉割版工作台
+
 ### Requirement: MVP 架构基线 SHALL 在实现前被显式定义
 
 系统 MUST 在进入实现前先明确工作台当前采用的五层骨架：`Workbench Surface -> WorkflowOrchestrator -> LocalRuntime -> Repo Domain -> Artifact Publisher`，避免首版退化成随意拼装；后续若有更优认识，可以在保持主语义可迁移的前提下继续演进。 
@@ -27,16 +75,16 @@
 #### Scenario: 骨架先于节点实现被定义
 - **WHEN** 团队开始实现 `new-faction` MVP
 - **THEN** 设计文档 MUST 明确当前五层职责边界与调用方向
-- **AND** 不得在未定义骨架前直接以聊天式流程或临时工具调用替代正式工作流分层
+- **AND** 不得在未定义骨架前直接以空聊天壳或临时工具调用替代正式工作流分层
 
 #### Scenario: 后续演进时保持主语义连续
 - **WHEN** 后续有人尝试增加 `new-faction` 之外的第二个模板或调整现有分层
 - **THEN** 变更 MUST 先显式更新 design/spec 中的五层边界说明
-- **AND** 不得通过引入自由画布或通用聊天入口绕过既有 `Repo Domain` 与 `Artifact Publisher` 主语义
+- **AND** 不得通过引入自由画布、通用聊天壳或只剩表单按钮的简化入口绕过既有 `Repo Domain` 与 `Artifact Publisher` 主语义
 
 ### Requirement: `new-faction` 模板 SHALL 按画布式固定节点图推进
 
-系统 MUST 将“新建派系”实现为画布式固定节点图，而不是自由聊天式的隐式步骤拼接。
+系统 MUST 将“新建派系”实现为由会话触发的画布式固定节点图，而不是自由聊天式的隐式步骤拼接。
 
 #### Scenario: 标准主链路推进
 - **WHEN** `new-faction` 模板启动成功
@@ -52,6 +100,40 @@
 - **WHEN** `inspect-assets` 识别到关键素材缺失
 - **THEN** 节点 MUST 进入 `waiting_decision` 或等价暂停状态
 - **AND** 系统 MUST 提供“补素材后继续”与“先走纯规则模式”这两类恢复路径
+
+#### Scenario: 图包路径为空时不阻塞主流程
+- **WHEN** 用户未提供图包路径启动 `new-faction`
+- **THEN** 系统 MUST 将图包路径视为可选输入
+- **AND** `inspect-assets` MUST 返回可继续主链路的结果而不是默认阻塞
+- **AND** 只有真实素材异常时才进入人工决策
+
+#### Scenario: 数据来源策略下沉到模块节点配置
+- **WHEN** 总控流启动数据录入阶段
+- **THEN** 总控入口 MUST 只收集高层任务输入
+- **AND** Wiki 对照、`doc/rule` 查找、额外来源等策略 MUST 主要体现在模块节点或模块流配置中
+- **AND** 不得把这些策略默认堆成总控启动表单字段
+
+#### Scenario: 数据录入后先做旧派系参考对照
+- **WHEN** 主链路完成派系数据录入
+- **THEN** 系统 SHOULD 在实施前插入“旧派系参考对照”节点或等价模块
+- **AND** 该模块 SHOULD 输出建议优先对照的旧派系列表与复用理由
+
+#### Scenario: 总览 UI 不展示描述性说明
+- **WHEN** 用户进入顶层工作流总览页
+- **THEN** 页面 SHOULD 只展示结构化编排信息与可操作入口
+- **AND** 不应把节点说明、默认策略、设计备注或流程解释作为主内容直接展示在总览 UI 中
+- **AND** 这些描述性内容 SHOULD 保留在节点配置、子流或文档中
+
+#### Scenario: 审计默认通过自动门禁分支推进
+- **WHEN** 实施阶段进入审计
+- **THEN** 系统 MUST 先通过条件节点或等价自动门禁判断是否需要重写
+- **AND** 不得默认在每次审计后都强制停在人工审批节点
+
+#### Scenario: 实施模块包含音效配置子链路
+- **WHEN** 实施模块处理单个派系
+- **THEN** 系统 MUST 让该派系的实施结果包含音效配置子链路或等价模块能力
+- **AND** 输出 MUST 标明每个推荐音效的用点说明
+- **AND** 输出 MUST 提供可直接点击试听的链接或等价入口
 
 #### Scenario: 可选节点可以在启动前被关闭
 - **WHEN** 用户在启动某次 `new-faction` 运行前关闭可选节点（例如 `run-e2e-validation`）
@@ -99,6 +181,11 @@
 - **THEN** 系统 MUST 记录操作者、决定时间、选择结果与可选备注
 - **AND** 这些信息 MUST 可被打包进后续 `ArtifactBundle`
 
+#### Scenario: 决策请求保持会话可读性
+- **WHEN** 前端展示某个 `DecisionRequest`
+- **THEN** 系统 MUST 让用户在会话中看到“为什么暂停、当前要选什么、选完会继续什么”
+- **AND** 不得只显示孤立的节点 ID 或后台结构字段
+
 ### Requirement: `ArtifactBundle` SHALL 作为 MVP 阶段交付与证据容器
 
 系统 MUST 为 `new-faction` 的阶段性完成与最终完成生成结构化 `ArtifactBundle`，并将其作为工作台交付对象。
@@ -117,6 +204,11 @@
 - **WHEN** 前端加载某个 `ArtifactBundle`
 - **THEN** 系统 MUST 能展示其中的证据索引、摘要与关键观察结论
 - **AND** 不得只返回一段纯文本总结替代 bundle 内容
+
+#### Scenario: 产物与会话事件一致
+- **WHEN** `ArtifactBundle` 在会话中作为消息返回
+- **THEN** 会话消息中的标题、摘要、图片数量与状态 MUST 与结构化 bundle 一致
+- **AND** 不得出现“会话里说已完成，但 bundle 仍未生成”的不一致
 
 ### Requirement: LangGraph 若被采用 SHALL 只位于编排层
 
@@ -145,6 +237,30 @@
 - **WHEN** 后续版本需要更强的 durable orchestration 或远程 worker
 - **THEN** 系统 MAY 让 Temporal 接管运行历史、信号恢复、超时与重试
 - **AND** `RepoSession`、`DecisionRequest`、节点 I/O schema 与 `ArtifactBundle` 的领域结构 MUST 保持不变
+
+### Requirement: coding 节点若调用 `codex exec` SHALL 将其视为可重试执行器
+
+系统若在工作流节点中直接调用 `codex exec`，MUST 将 `codex` CLI 建模为一次性的 coding 执行器，而不是唯一的上下文容器。
+
+#### Scenario: coding 节点启动前先固化输入
+- **WHEN** 某个 coding 节点准备调用 `codex exec`
+- **THEN** 系统 MUST 先持久化该节点的 prompt 快照、目标仓库路径、允许改动范围、上一步产物引用与用户决策
+- **AND** 不得在这些输入仍只存在于内存时直接启动 CLI
+
+#### Scenario: CLI 进程失败时从 checkpoint 恢复
+- **WHEN** `codex exec` 进程异常退出、超时、网络失败或模型调用失败
+- **THEN** 系统 MUST 仍能基于 durable checkpoint 重试当前节点
+- **AND** 不得要求依赖同一个 CLI 进程内上下文才能恢复
+
+#### Scenario: 已落盘改动与工作流状态分别处理
+- **WHEN** `codex exec` 在中途失败，但仓库里已经有部分文件改动落盘
+- **THEN** 系统 MUST 将“仓库文件状态”和“工作流运行状态”分开记录
+- **AND** 在继续执行前明确当前节点是重试、继续收口还是需要人工决策
+
+#### Scenario: coding 节点副作用保持幂等
+- **WHEN** orchestrator 重试某个已调用过 `codex exec` 的节点
+- **THEN** 系统 MUST 通过节点契约、防重标记或输出检查避免重复写入、重复生成证据或重复执行危险命令
+- **AND** 不得把“重试一次”隐式放大成多次副作用
 
 ### Requirement: 开源基线与 fork 裁决 SHALL 先于第一版实现被文档化
 
@@ -176,14 +292,20 @@
 - **AND** 不得直接追踪 upstream `main`
 - **AND** 升级到后续版本前 MUST 先记录兼容性、风险和迁移影响
 
-#### Scenario: Flowise 只负责画布与 workflow shell
+#### Scenario: Flowise 只负责会话入口、画布与 workflow shell
 - **WHEN** 团队实施 `Flowise` fork
-- **THEN** `Flowise` MUST 只承载节点画布、连线交互与 workflow shell
+- **THEN** `Flowise` MUST 只承载会话入口、节点画布、连线交互与 workflow shell
 - **AND** 不得接管 `RepoSession`、`WorktreeTask`、`WorkflowRun`、`DecisionRequest`、`ArtifactBundle` 的领域真相
+
+#### Scenario: 固定流 seed 能覆盖旧流定义
+- **WHEN** 团队更新 `new-faction` 总控流或其模块流定义
+- **THEN** dev seed MUST 按固定 ID 或名称更新既有 agentflow
+- **AND** 不得仅在“流不存在”时创建
+- **AND** 以避免旧 seed 残留继续误导运行态行为
 
 ### Requirement: 当前技术选型 SHALL 附带成立理由、风险与优化项
 
-系统若继续采用“Flowise fork 作为节点画布 / workflow shell + local-first runtime + 显式领域模型 + 可插拔 orchestrator”的路线，设计文档 MUST 同时说明为什么成立、风险在哪里、还需要哪些优化。
+系统若继续采用“Flowise fork 作为会话入口 / 节点画布 / workflow shell + local-first runtime + 显式领域模型 + 可插拔 orchestrator”的路线，设计文档 MUST 同时说明为什么成立、风险在哪里、还需要哪些优化。
 
 #### Scenario: 技术选型结论可审计
 - **WHEN** 设计文档主张继续沿用当前技术选型

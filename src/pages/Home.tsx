@@ -85,7 +85,6 @@ export const Home = () => {
         return t;
     }, [i18n, t]);
     const filteredGames = useMemo(() => getGamesByCategory(activeCategory), [activeCategory, registryVersion]);
-    const prefetchAiRepoWorkbench = useCallback(() => import('./devtools/AIRepoWorkbench'), []);
 
     useEffect(() => {
         if (user?.id) return;
@@ -202,7 +201,7 @@ export const Home = () => {
     }, [activeGameModalId]);
 
     const handleGameClick = (id: string) => {
-        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview' || id === 'airepoworkbench')) {
+        if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
             return;
         }
         if (id === 'assetslicer') {
@@ -225,13 +224,6 @@ export const Home = () => {
             navigate('/dev/arch');
             return;
         }
-        if (id === 'airepoworkbench') {
-            void prefetchAiRepoWorkbench().then(() => {
-                navigate('/dev/ai-repo-workbench');
-            });
-            return;
-        }
-
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
             return;
@@ -245,13 +237,6 @@ export const Home = () => {
     };
 
     const handleGameIntent = useCallback((id: string) => {
-        if (id === 'airepoworkbench') {
-            if (isAndroidShellBuild) {
-                return;
-            }
-            void prefetchAiRepoWorkbench();
-            return;
-        }
         if (isAndroidShellBuild && (id === 'assetslicer' || id === 'fxpreview' || id === 'audiobrowser' || id === 'ugcbuilder' || id === 'archview')) {
             return;
         }
@@ -259,7 +244,7 @@ export const Home = () => {
             return;
         }
         void import('../components/lobby/GameDetailsModal');
-    }, [prefetchAiRepoWorkbench]);
+    }, []);
 
     const handleLogout = () => {
         logout();

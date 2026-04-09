@@ -56,7 +56,6 @@ const DevToolsSlicer = !isAndroidShellBuild ? React.lazy(() => import('./pages/d
 const DevToolsFxPreview = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/EffectPreview')) : null;
 const DevToolsAudioBrowser = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AudioBrowser')) : null;
 const DevToolsArchView = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/ArchitectureView')) : null;
-const DevToolsAIRepoWorkbench = !isAndroidShellBuild ? React.lazy(() => import('./pages/devtools/AIRepoWorkbench')) : null;
 const TestBookUIHybrid = !isAndroidShellBuild
   ? React.lazy(() => import('./pages/test-book-ui/BookUIHybrid').then(m => ({ default: m.BookUIHybrid })))
   : null;
@@ -156,9 +155,6 @@ const AppContent = () => {
                     )}
                     {!isAndroidShellBuild && DevToolsArchView && (
                       <Route path="/dev/arch" element={<React.Suspense fallback={<RouteLoadingFallback title="架构可视化" />}><DevToolsArchView /></React.Suspense>} />
-                    )}
-                    {!isAndroidShellBuild && DevToolsAIRepoWorkbench && (
-                      <Route path="/dev/ai-repo-workbench" element={<React.Suspense fallback={<RouteLoadingFallback title="AI 仓库工作台" />}><DevToolsAIRepoWorkbench /></React.Suspense>} />
                     )}
                     {!isAndroidShellBuild && TestBookUIHybrid && (
                       <Route path="/dev/book-hybrid" element={<React.Suspense fallback={<RouteLoadingFallback title="Book UI Hybrid" />}><TestBookUIHybrid /></React.Suspense>} />

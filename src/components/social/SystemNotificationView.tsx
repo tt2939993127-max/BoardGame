@@ -26,7 +26,7 @@ export const SystemNotificationView = () => {
     }, []);
 
     return (
-        <div className="flex flex-col h-full bg-parchment-card-bg">
+        <div className="flex h-full min-h-0 flex-col overflow-hidden bg-parchment-card-bg">
             {/* 顶部栏 */}
             <div className="shrink-0 h-14 flex items-center px-4 border-b border-parchment-card-border/30 bg-parchment-base-bg">
                 <Bell size={18} className="text-parchment-base-text" />

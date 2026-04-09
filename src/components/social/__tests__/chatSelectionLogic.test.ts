@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import type { FriendUser, Conversation } from '../../../services/social.types';
+import {
+    FRIENDS_CHAT_DETAIL_CONTENT_CLASS,
+    getFriendsChatDetailPaneClass,
+    getFriendsChatListPaneClass,
+} from '../layoutContracts';
 
 /**
  * 聊天选择逻辑测试。
@@ -92,6 +97,19 @@ describe('聊天选择逻辑', () => {
         const resolveActive = (id: string | null | undefined) => id ?? undefined;
         expect(resolveActive('user_1')).toBe('user_1');
         expect(resolveActive(null)).toBeUndefined();
+    });
+
+    it('移动端聊天布局把滚动限制在内容区，不让输入区跟随整体滚动', () => {
+        const listPaneClass = getFriendsChatListPaneClass('user_1');
+        const detailPaneClass = getFriendsChatDetailPaneClass('user_1');
+
+        expect(listPaneClass).toContain('min-h-0');
+        expect(listPaneClass).toContain('overflow-hidden');
+        expect(detailPaneClass).toContain('min-h-0');
+        expect(detailPaneClass).toContain('overflow-hidden');
+        expect(FRIENDS_CHAT_DETAIL_CONTENT_CLASS).toContain('flex-1');
+        expect(FRIENDS_CHAT_DETAIL_CONTENT_CLASS).toContain('min-h-0');
+        expect(FRIENDS_CHAT_DETAIL_CONTENT_CLASS).toContain('overflow-hidden');
     });
 });
 

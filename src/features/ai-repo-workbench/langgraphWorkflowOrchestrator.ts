@@ -16,7 +16,7 @@ import type {
 } from './runtime';
 import type {
     ResumeRunPayload,
-    StartNewFactionRunPayload,
+    StartWorkflowRunPayload,
     WorkflowOrchestrator,
 } from './workflowServices';
 
@@ -36,13 +36,15 @@ type GraphInterruptValue = {
 };
 
 type GraphResumeValue = {
-    optionId: RuleSourceOptionId;
+    action: 'proceed' | 'reject';
+    optionId?: RuleSourceOptionId;
+    feedback?: string;
     now?: number;
 };
 
 type WorkflowGraphState = {
     journal: WorkbenchJournal;
-    startPayload: StartNewFactionRunPayload | null;
+    startPayload: StartWorkflowRunPayload | null;
     resumePayload: ResumeRunPayload | null;
     threadId: string;
     now: number;
@@ -50,7 +52,7 @@ type WorkflowGraphState = {
 
 const WorkflowGraphAnnotation = Annotation.Root({
     journal: Annotation<WorkbenchJournal>,
-    startPayload: Annotation<StartNewFactionRunPayload | null>,
+    startPayload: Annotation<StartWorkflowRunPayload | null>,
     resumePayload: Annotation<ResumeRunPayload | null>,
     threadId: Annotation<string>,
     now: Annotation<number>,
@@ -160,11 +162,11 @@ export function createLangGraphWorkflowOrchestrator(
         'ai-repo-workbench-start-run',
         async (input: {
             journal: WorkbenchJournal;
-            payload: StartNewFactionRunPayload;
+            payload: StartWorkflowRunPayload;
             threadId: string;
             now: number;
         }) => {
-            const nextJournal = await deps.localOrchestrator.startNewFactionRun(
+            const nextJournal = await deps.localOrchestrator.startWorkflowRun(
                 input.journal,
                 input.payload,
                 input.now,
@@ -179,14 +181,14 @@ export function createLangGraphWorkflowOrchestrator(
     );
 
     const resumeDecisionTask = task(
-        'ai-repo-workbench-resume-rule-source-decision',
+        'ai-repo-workbench-resume-decision',
         async (input: {
             journal: WorkbenchJournal;
             payload: ResumeRunPayload;
             threadId: string;
             now: number;
         }) => {
-            const nextJournal = await deps.localOrchestrator.submitRuleSourceDecision(
+            const nextJournal = await deps.localOrchestrator.submitDecision(
                 input.journal,
                 input.payload,
                 input.now,
@@ -235,7 +237,9 @@ export function createLangGraphWorkflowOrchestrator(
         return {
             resumePayload: {
                 decisionId: decision.id,
+                action: resolution.action,
                 optionId: resolution.optionId,
+                feedback: resolution.feedback,
             },
             now: resolution.now ?? Date.now(),
         };
@@ -270,7 +274,7 @@ export function createLangGraphWorkflowOrchestrator(
         });
 
     return {
-        async startNewFactionRun(journal, payload, now = Date.now()) {
+        async startWorkflowRun(journal, payload, now = Date.now()) {
             const threadId = deps.createThreadId();
             const config = {
                 configurable: {
@@ -289,16 +293,16 @@ export function createLangGraphWorkflowOrchestrator(
             } catch (error) {
                 if (!isGraphInterrupt(error)) {
                     console.error('[ai-repo-workbench] LangGraph start failed, fallback to local orchestrator.', error);
-                    const fallbackJournal = await deps.localOrchestrator.startNewFactionRun(journal, payload, now);
-                return annotateActiveRunCheckpoint(fallbackJournal, undefined, 'fallback', now, 'local');
-            }
+                    const fallbackJournal = await deps.localOrchestrator.startWorkflowRun(journal, payload, now);
+                    return annotateActiveRunCheckpoint(fallbackJournal, undefined, 'fallback', now, 'local');
+                }
             }
 
             const snapshot = await graph.getState(config);
             return getJournalFromSnapshot(snapshot, journal);
         },
 
-        async submitRuleSourceDecision(journal, payload, now = Date.now()) {
+        async submitDecision(journal, payload, now = Date.now()) {
             const run = findRunByDecisionId(journal, payload.decisionId);
             const threadId = run?.orchestrator?.engine === 'langgraph'
                 && run.orchestrator.checkpointStatus !== 'fallback'
@@ -306,7 +310,7 @@ export function createLangGraphWorkflowOrchestrator(
                 : undefined;
 
             if (!threadId) {
-                const fallbackJournal = await deps.localOrchestrator.submitRuleSourceDecision(journal, payload, now);
+                const fallbackJournal = await deps.localOrchestrator.submitDecision(journal, payload, now);
                 return run
                     ? annotateRunCheckpoint(fallbackJournal, run.id, undefined, 'fallback', now, 'local')
                     : fallbackJournal;
@@ -322,7 +326,9 @@ export function createLangGraphWorkflowOrchestrator(
                 await graph.invoke(
                     new Command({
                         resume: {
+                            action: payload.action,
                             optionId: payload.optionId,
+                            feedback: payload.feedback,
                             now,
                         } satisfies GraphResumeValue,
                     }),
@@ -335,7 +341,7 @@ export function createLangGraphWorkflowOrchestrator(
                     throw error;
                 }
                 console.warn('[ai-repo-workbench] LangGraph resume unavailable, fallback to local orchestrator.', error);
-                const fallbackJournal = await deps.localOrchestrator.submitRuleSourceDecision(journal, payload, now);
+                const fallbackJournal = await deps.localOrchestrator.submitDecision(journal, payload, now);
                 return run
                     ? annotateRunCheckpoint(fallbackJournal, run.id, undefined, 'fallback', now, 'local')
                     : fallbackJournal;

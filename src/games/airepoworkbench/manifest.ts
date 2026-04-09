@@ -3,7 +3,7 @@ import type { GameManifestEntry } from '../manifest.types';
 const entry: GameManifestEntry = {
     id: 'airepoworkbench',
     type: 'tool',
-    enabled: true,
+    enabled: false,
     titleKey: 'games.airepoworkbench.title',
     descriptionKey: 'games.airepoworkbench.description',
     category: 'tools',

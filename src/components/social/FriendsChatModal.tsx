@@ -4,8 +4,12 @@ import { ChatWindow } from './ChatWindow';
 import { SystemNotificationView } from './SystemNotificationView';
 import { X, ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
-import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
+import {
+    FRIENDS_CHAT_DETAIL_CONTENT_CLASS,
+    getFriendsChatDetailPaneClass,
+    getFriendsChatListPaneClass,
+} from './layoutContracts';
 
 /** 系统通知的固定会话 ID */
 export const SYSTEM_NOTIFICATION_ID = '__system_notification__';
@@ -44,7 +48,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
+                className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] min-h-0 rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
             >
                 {/* 关闭按钮 */}
                 <button
@@ -55,10 +59,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 </button>
 
                 {/* 左侧区域：好友列表 */}
-                <div className={clsx(
-                    "w-full md:w-80 h-full border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative z-10 bg-parchment-card-bg",
-                    selectedFriendId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
-                )}>
+                <div className={getFriendsChatListPaneClass(selectedFriendId)}>
                     <div className="p-4 border-b border-parchment-card-border/30 bg-parchment-base-bg">
                         <h2 className="font-bold text-lg text-parchment-base-text">{t('social:modal.title')}</h2>
                     </div>
@@ -74,10 +75,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 </div>
 
                 {/* 右侧区域：聊天窗口 */}
-                <div className={clsx(
-                    "flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg",
-                    selectedFriendId ? "translate-x-0" : "translate-x-full md:translate-x-0"
-                )}>
+                <div className={getFriendsChatDetailPaneClass(selectedFriendId)}>
                     {selectedFriendId ? (
                         <>
                             {/* 移动端返回按钮 */}
@@ -90,11 +88,13 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                                 </button>
                                 <span className="font-bold text-parchment-base-text ml-2">{t('common:back')}</span>
                             </div>
-                            {selectedFriendId === SYSTEM_NOTIFICATION_ID ? (
-                                <SystemNotificationView />
-                            ) : (
-                                <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
-                            )}
+                            <div className={FRIENDS_CHAT_DETAIL_CONTENT_CLASS}>
+                                {selectedFriendId === SYSTEM_NOTIFICATION_ID ? (
+                                    <SystemNotificationView />
+                                ) : (
+                                    <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
+                                )}
+                            </div>
                         </>
                     ) : (
                         <div className="hidden md:flex flex-col items-center justify-center h-full text-parchment-light-text opacity-50 space-y-4">

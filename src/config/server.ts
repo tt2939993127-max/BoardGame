@@ -123,5 +123,13 @@ export const DEVTOOLS_AI_REPO_WORKBENCH_API_URL = normalizeUrl(
     (metaEnv.VITE_DEVTOOLS_AI_REPO_WORKBENCH_API_URL as string | undefined) || FALLBACK_DEVTOOLS_AI_REPO_WORKBENCH_API_URL
 );
 
+const FALLBACK_DEVTOOLS_AI_REPO_WORKBENCH_FLOWISE_URL = isDev
+    ? 'http://127.0.0.1:3100'
+    : (BACKEND_URL || safeWindowOrigin);
+
+export const DEVTOOLS_AI_REPO_WORKBENCH_FLOWISE_URL = normalizeUrl(
+    (metaEnv.VITE_DEVTOOLS_AI_REPO_WORKBENCH_FLOWISE_URL as string | undefined) || FALLBACK_DEVTOOLS_AI_REPO_WORKBENCH_FLOWISE_URL
+);
+
 // 第三方监控配置
 export const SENTRY_DSN = (metaEnv.VITE_SENTRY_DSN as string | undefined) || '';

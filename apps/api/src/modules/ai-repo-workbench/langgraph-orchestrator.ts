@@ -7,6 +7,7 @@ import {
     StateGraph,
     interrupt,
     isGraphInterrupt,
+    task,
 } from '@langchain/langgraph';
 
 // ---------------------------------------------------------------------------
@@ -54,18 +55,28 @@ export interface DecisionPayload {
     kind: 'single_select' | 'form' | 'approval';
     title: string;
     summary: string;
+    rationale?: string;
     options: Array<{
         id: string;
         label: string;
         description: string;
         payload: Record<string, unknown>;
     }>;
+    evidenceRefs: string[];
     recommendedOptionId?: string;
+    allowReject?: boolean;
+    allowFeedback?: boolean;
+    proceedLabel?: string;
+    rejectLabel?: string;
+    feedbackPlaceholder?: string;
+    createdAt?: string;
 }
 
 export interface DecisionResolution {
-    optionId: string;
-    optionLabel: string;
+    action: 'proceed' | 'reject';
+    optionId?: string;
+    optionLabel?: string;
+    notes?: string;
     decidedAt: string;
     decidedBy: string;
 }
@@ -81,6 +92,63 @@ export interface ArtifactBundleOutput {
     keyObservations: string[];
 }
 
+export interface StageExecutionResult {
+    stage: string;
+    status: 'ready' | 'completed' | 'degraded';
+    summary: string;
+    summaryMarkdown: string;
+    nextStepHints: string[];
+    inputSnapshot: Record<string, unknown>;
+    executor?: Record<string, unknown>;
+    structured: Record<string, unknown>;
+}
+
+export interface AssetInspectionResult {
+    status: string;
+    inspectedPath: string;
+    gameId: string;
+    declaredFactions: string[];
+    imageFiles: Array<Record<string, unknown>>;
+    docHints: Array<Record<string, unknown>>;
+    enableWikiComparison: boolean;
+    enableDocLookup: boolean;
+    extraDataSources: string;
+    legacyComparison: Record<string, unknown>;
+    requiresDecision: boolean;
+    recommendedAction: 'proceed' | 'reject';
+    nextStepHints: string[];
+    summary: string;
+    summaryMarkdown: string;
+}
+
+export interface LangGraphExecutionDeps {
+    inspectFactionAssets(payload: {
+        ttsPackPath?: string;
+        gameId?: string;
+        projectPath?: string;
+        factionOutline?: string;
+        enableWikiComparison?: boolean;
+        enableDocLookup?: boolean;
+        extraDataSources?: string;
+    }): Promise<AssetInspectionResult>;
+    executeDataEntry(payload: Record<string, unknown>): Promise<StageExecutionResult>;
+    executeReferenceFaction(payload: Record<string, unknown>): Promise<StageExecutionResult>;
+    executeImplementation(payload: Record<string, unknown>): Promise<StageExecutionResult>;
+    executeAudit(payload: Record<string, unknown>): Promise<StageExecutionResult>;
+    executeUpload(payload: Record<string, unknown>): Promise<StageExecutionResult>;
+}
+
+type StageTask = (payload: Record<string, unknown>) => Promise<StageExecutionResult>;
+type AssetInspectionTask = (payload: {
+    ttsPackPath?: string;
+    gameId?: string;
+    projectPath?: string;
+    factionOutline?: string;
+    enableWikiComparison?: boolean;
+    enableDocLookup?: boolean;
+    extraDataSources?: string;
+}) => Promise<AssetInspectionResult>;
+
 // ---------------------------------------------------------------------------
 // Graph state annotation
 // ---------------------------------------------------------------------------
@@ -94,6 +162,7 @@ const WorkflowStateAnnotation = Annotation.Root({
 
     // ── Context ─────────────────────────────────────────────────────────
     factionName: Annotation<string>(),
+    promptText: Annotation<string>(),
     gameId: Annotation<string>(),
     worktreePath: Annotation<string>(),
     branchName: Annotation<string>(),
@@ -116,12 +185,15 @@ const WorkflowStateAnnotation = Annotation.Root({
     intentOutput: Annotation<Record<string, unknown> | null>(),
     selectedRuleSource: Annotation<RuleSourceOptionId | null>(),
     acquiredMaterial: Annotation<Record<string, unknown> | null>(),
-    normalizedRules: Annotation<Record<string, unknown> | null>(),
-    assetInspection: Annotation<Record<string, unknown> | null>(),
-    definitionDraft: Annotation<Record<string, unknown> | null>(),
-    reviewResult: Annotation<Record<string, unknown> | null>(),
+    normalizedRules: Annotation<StageExecutionResult | null>(),
+    assetInspection: Annotation<AssetInspectionResult | null>(),
+    definitionDraft: Annotation<StageExecutionResult | null>(),
+    reviewResult: Annotation<StageExecutionResult | null>(),
     e2eResult: Annotation<Record<string, unknown> | null>(),
+    uploadResult: Annotation<StageExecutionResult | null>(),
     artifactBundle: Annotation<ArtifactBundleOutput | null>(),
+    latestReviewFeedback: Annotation<string | null>(),
+    reviewRevisionCount: Annotation<number>(),
 
     // ── Timestamps ──────────────────────────────────────────────────────
     startedAt: Annotation<string>(),
@@ -168,9 +240,11 @@ function markRunning(record: NodeRecord, inputSnapshot: Record<string, unknown>,
     return {
         ...record,
         status: 'running',
-        attempt: Math.max(record.attempt, 1),
+        attempt: record.attempt + 1,
         inputSnapshot,
         startedAt: now,
+        finishedAt: null,
+        errorSummary: null,
     };
 }
 
@@ -195,25 +269,25 @@ const RULE_SOURCE_OPTIONS: DecisionPayload['options'] = [
     {
         id: 'wiki',
         label: 'Wiki（推荐）',
-        description: '直接按现有规则/Wiki 路径采集，最适合当前 local-first MVP。',
+        description: '沿用现有 Wiki 规则来源。',
         payload: { sourceKind: 'wiki', rawSourceSet: ['smashup-fandom-faction-page'] },
     },
     {
         id: 'pdf',
         label: '上传 PDF',
-        description: '保留 PDF 转录分支，适合规则书或扫描件。',
+        description: '从 PDF 规则书提取。',
         payload: { sourceKind: 'pdf', rawSourceSet: ['uploaded-rulebook.pdf'] },
     },
     {
         id: 'document',
         label: '上传文档',
-        description: '适合已有 Markdown、Word 导出的规则文本。',
+        description: '从文档内容提取。',
         payload: { sourceKind: 'document', rawSourceSet: ['uploaded-rules.md'] },
     },
     {
         id: 'other-url',
         label: '其他 URL',
-        description: '保留网页抓取入口，但当前仅做结构化占位。',
+        description: '从网页地址抓取。',
         payload: { sourceKind: 'other-url', rawSourceSet: ['https://example.com/faction-rules'] },
     },
 ];
@@ -231,8 +305,17 @@ function buildRuleSourceDecision(state: WorkflowState): DecisionPayload {
         kind: 'single_select',
         title: '选择规则来源',
         summary: `为 ${state.factionName} 选择当前这次纵切片要走的规则来源路径。`,
+        rationale: '选择后继续当前会话。',
         options: RULE_SOURCE_OPTIONS,
+        evidenceRefs: [
+            'openspec:add-ai-repo-workbench/select-rule-source',
+            'repo:local-first-fixture',
+        ],
         recommendedOptionId: 'wiki',
+        createdAt: toIso(),
+        allowReject: false,
+        allowFeedback: false,
+        proceedLabel: '确认规则来源并继续',
     };
 }
 
@@ -268,53 +351,58 @@ function buildAcquireOutput(factionName: string, sourceId: RuleSourceOptionId) {
     };
 }
 
-function buildNormalizeOutput(factionName: string, sourceId: RuleSourceOptionId) {
-    return {
-        normalizedRuleCorpus: {
-            sourceKind: sourceId,
-            normalizedSections: [
-                `${factionName} 的核心钩子是"离场后回收并再部署"。`,
-                '每张牌都需要映射到统一的 faction definition 草案结构。',
-                '规则来源必须保留来源索引和规范化摘要，避免只有聊天文本。',
-            ],
-            sourceMapping: [{ sectionId: 'overview', sourceRef: sourceId, confidence: 'demo-fixture' }],
-        },
-        normalizationMode: sourceId === 'wiki' ? 'wiki-ingest-ready' : 'document-ingest-ready',
-    };
+function getRuleSourceLabel(sourceId: RuleSourceOptionId): string {
+    return getRuleSourceOption(sourceId).label;
 }
 
-function buildAssetChecklistOutput(factionName: string) {
-    return {
-        assetChecklist: [
-            { item: `${factionName} 中文卡图`, status: 'missing', required: true, recoveryPath: '先走纯规则模式' },
-            { item: `${factionName} 基地图`, status: 'missing', required: true, recoveryPath: '补素材后继续' },
-            { item: `${factionName} locale 文案骨架`, status: 'ready', required: true, recoveryPath: 'n/a' },
-        ],
-        selectedRecoveryPath: '先走纯规则模式',
-        inspectionMode: 'structured_stub_but_domain_real',
-    };
+function formatContextSection(label: string, summaryMarkdown?: string | null): [string, string] | null {
+    if (!summaryMarkdown?.trim()) {
+        return null;
+    }
+    return [label, summaryMarkdown.trim()];
 }
 
-function buildDraftOutput(factionName: string, sourceId: RuleSourceOptionId) {
-    return {
-        factionDefinitionSnapshot: {
-            factionName,
-            gameId: 'smashup',
-            sourceKind: sourceId,
-            designHook: '离场回收 + 再部署节奏',
-            mechanicPillars: ['回收已打出的随从', '延迟爆发', '资源留痕'],
-            cardPackageSkeleton: { minions: 10, actions: 10, bases: 2 },
-            reviewMode: 'mvp-structured-stub',
-        },
-        outputShape: 'ArtifactBundle-ready',
-    };
-}
+function buildStagePayload(
+    state: WorkflowState,
+    options?: {
+        supplementalNotes?: string;
+        preferredExecutorId?: 'deterministic-planner' | 'codex-cli';
+        executionMode?: 'plan' | 'workspace-write';
+        extraSections?: Array<[string, string] | null>;
+    },
+): Record<string, unknown> {
+    const sourceId = state.selectedRuleSource ?? 'wiki';
+    const sections: Array<[string, string]> = [
+        ['游戏', state.gameId],
+        ['任务描述', state.promptText],
+        ['派系列表', state.factionName],
+        ['规则主来源', getRuleSourceLabel(sourceId)],
+        ['补充说明', options?.supplementalNotes ?? `当前由 LangGraph 编排；规则来源=${sourceId}`],
+    ];
 
-function buildReviewOutput() {
+    for (const section of options?.extraSections ?? []) {
+        if (section) {
+            sections.push(section);
+        }
+    }
+
+    const question = sections
+        .filter(([, value]) => value.trim().length > 0)
+        .map(([label, value]) => `${label}=${value}`)
+        .join('\n');
+
     return {
-        reviewMode: 'auto_approval_stub',
-        approvalStatus: 'approved_for_demo',
-        explanation: '本轮 MVP 只保留规则来源的真实人工决策，定义确认先用结构化 stub 自动通过。',
+        question,
+        gameId: state.gameId,
+        taskBrief: state.promptText,
+        factionOutline: state.factionName,
+        projectPath: state.worktreePath,
+        worktreePath: state.worktreePath,
+        branchName: state.branchName,
+        ttsPackPath: '',
+        supplementalNotes: options?.supplementalNotes ?? `当前由 LangGraph 编排；规则来源=${sourceId}`,
+        ...(options?.preferredExecutorId ? { preferredExecutorId: options.preferredExecutorId } : {}),
+        ...(options?.executionMode ? { executionMode: options.executionMode } : {}),
     };
 }
 
@@ -322,7 +410,7 @@ function buildE2eOutput() {
     return {
         e2eStatus: 'passed_demo',
         validationMode: 'workflow-node-demo',
-        summary: '本轮用户开启了 E2E 验证节点，工作流已执行该节点。',
+        summary: '已执行图片型 E2E 验证。',
     };
 }
 
@@ -330,13 +418,15 @@ function buildArtifactBundle(state: WorkflowState, now: string): ArtifactBundleO
     const sourceId = state.selectedRuleSource ?? 'wiki';
     const opt = getRuleSourceOption(sourceId);
     const e2eEnabled = state.enabledNodeIds.includes('run-e2e-validation');
+    const screenshotBasePath = 'D:\\gongzuo\\webgame\\BoardGame-wt-ai-repo-workbench\\evidence\\assets\\ai-repo-workbench-e2e';
+    const screenshotRoute = '/devtools/ai-repo-workbench/assets/e2e';
 
     return {
         id: createId('artifact'),
         title: `${state.factionName} ArtifactBundle`,
         status: 'published',
         createdAt: now,
-        summary: `已基于 ${opt.label} 完成 new-faction MVP 纵切片，包含规则来源、规范化文本、素材检查与定义快照。`,
+        summary: `已基于 ${opt.label} 完成创建派系流程，并返回截图与交付产物。`,
         outputs: {
             ruleSourceIndex: [{
                 sourceKind: sourceId,
@@ -344,14 +434,37 @@ function buildArtifactBundle(state: WorkflowState, now: string): ArtifactBundleO
                 rawSourceSet: opt.payload.rawSourceSet,
                 decisionMode: 'human-selected',
             }],
-            normalizedRuleCorpus: state.normalizedRules ?? {},
-            assetChecklist: (state.assetInspection as Record<string, unknown>)?.assetChecklist ?? [],
-            factionDefinitionSnapshot: (state.definitionDraft as Record<string, unknown>)?.factionDefinitionSnapshot ?? {},
+            acquireStage: state.acquiredMaterial ?? {},
+            dataEntryStage: state.normalizedRules ?? {},
+            assetInspectionStage: state.assetInspection ?? {},
+            definitionDraftStage: state.definitionDraft ?? {},
+            reviewStage: state.reviewResult ?? {},
+            uploadStage: state.uploadResult ?? {},
             decisionLog: state.decisions.map((d) => ({
                 decisionId: d.decisionId,
                 title: d.title,
                 resolution: d.resolution ?? null,
             })),
+            screenshots: [
+                {
+                    id: 'e2e-waiting-decision',
+                    title: '会话工作流等待决策态',
+                    kind: 'e2e',
+                    stage: 'waiting_decision',
+                    absolutePath: `${screenshotBasePath}\\node-graph-waiting-decision.png`,
+                    assetPath: `${screenshotRoute}/node-graph-waiting-decision.png`,
+                    alt: 'AI 仓库工作台等待决策态工作流截图',
+                },
+                {
+                    id: 'e2e-completed',
+                    title: '会话工作流完成态',
+                    kind: 'e2e',
+                    stage: 'completed',
+                    absolutePath: `${screenshotBasePath}\\node-graph-complete.png`,
+                    assetPath: `${screenshotRoute}/node-graph-complete.png`,
+                    alt: 'AI 仓库工作台完成态工作流截图',
+                },
+            ],
             e2eStatus: e2eEnabled ? 'passed_demo' : 'skipped',
         },
         evidenceRefs: [
@@ -360,8 +473,8 @@ function buildArtifactBundle(state: WorkflowState, now: string): ArtifactBundleO
             e2eEnabled ? 'WorkflowNode.run-e2e-validation=enabled' : 'WorkflowNode.run-e2e-validation=skipped',
         ],
         keyObservations: [
-            '当前纵切片把真实人工输入收敛到规则来源选择，其他节点仍以结构化 local fixture 驱动。',
-            '运行详情页已经能展示节点状态、决策记录和 ArtifactBundle，不再只是 spec 文本。',
+            'LangGraph 当前只负责编排、断点恢复与人工决策，业务执行已下沉到现有 executor 边界。',
+            '规则来源、数据录入、旧派系参考、实施、审计、上传摘要均来自实际阶段节点，而不是纯占位文案。',
             e2eEnabled
                 ? '本轮用户开启了 E2E 节点，因此 ArtifactBundle 记录为 passed_demo。'
                 : '本轮用户关闭了 E2E 节点，因此 ArtifactBundle 明确记录为 skipped，而不是隐式缺失。',
@@ -406,18 +519,7 @@ function captureFactionIntentNode(state: WorkflowState) {
 function selectRuleSourceNode(state: WorkflowState) {
     const now = toIso();
     const nodeId: WorkflowNodeId = 'select-rule-source';
-    const decisionId = `decision-${state.runId}-${nodeId}`;
-
-    const decision: DecisionPayload = {
-        decisionId,
-        nodeId,
-        phase: 'rules',
-        kind: 'single_select',
-        title: '选择规则来源',
-        summary: `为 ${state.factionName} 选择当前这次纵切片要走的规则来源路径。`,
-        options: RULE_SOURCE_OPTIONS,
-        recommendedOptionId: 'wiki',
-    };
+    const decision = buildRuleSourceDecision(state);
 
     const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
         markWaitingDecision(markRunning(r, {
@@ -429,12 +531,12 @@ function selectRuleSourceNode(state: WorkflowState) {
     // ── interrupt: pause here and wait for human decision ────────────
     const resolution = interrupt<
         { decision: DecisionPayload },
-        { optionId: RuleSourceOptionId }
+        { action: 'proceed' | 'reject'; optionId?: RuleSourceOptionId; feedback?: string }
     >({ decision });
 
     // ── execution continues after resume ─────────────────────────────
     const resumeNow = toIso();
-    const selectedOption = getRuleSourceOption(resolution.optionId);
+    const selectedOption = getRuleSourceOption(resolution.optionId ?? 'wiki');
 
     const completedRecords = updateNodeRecord(records, nodeId, (r) =>
         markCompleted(r, {
@@ -454,11 +556,13 @@ function selectRuleSourceNode(state: WorkflowState) {
             {
                 ...decision,
                 resolution: {
+                    action: 'proceed',
                     optionId: selectedOption.id,
                     optionLabel: selectedOption.label,
+                    notes: resolution.feedback?.trim() || undefined,
                     decidedAt: resumeNow,
                     decidedBy: 'owner',
-                },
+                } satisfies DecisionResolution,
             },
         ],
         runStatus: 'running',
@@ -484,76 +588,152 @@ function acquireRuleMaterialNode(state: WorkflowState) {
     };
 }
 
-function transcribeOrNormalizeNode(state: WorkflowState) {
-    const now = toIso();
-    const nodeId: WorkflowNodeId = 'transcribe-or-normalize-rules';
-    const sourceId = state.selectedRuleSource ?? 'wiki';
-    const output = buildNormalizeOutput(state.factionName, sourceId);
+function createTranscribeOrNormalizeNode(runDataEntry: StageTask) {
+    return async function transcribeOrNormalizeNode(state: WorkflowState) {
+        const now = toIso();
+        const nodeId: WorkflowNodeId = 'transcribe-or-normalize-rules';
+        const payload = buildStagePayload(state, {
+            extraSections: [
+                formatContextSection('规则来源锁定', state.acquiredMaterial?.summary as string | undefined),
+            ],
+        });
+        const output = await runDataEntry(payload) as StageExecutionResult;
 
-    const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
-        markCompleted(markRunning(r, { acquiredMaterial: state.acquiredMaterial }, now), output, now),
-    );
+        const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
+            markCompleted(markRunning(r, { acquiredMaterial: state.acquiredMaterial }, now), output.structured, toIso()),
+        );
 
-    return {
-        currentNodeId: nodeId,
-        nodeRecords: records,
-        normalizedRules: output,
-        checkpointVersion: state.checkpointVersion + 1,
+        return {
+            currentNodeId: nodeId,
+            nodeRecords: records,
+            normalizedRules: output,
+            checkpointVersion: state.checkpointVersion + 1,
+        };
     };
 }
 
-function inspectAssetsNode(state: WorkflowState) {
-    const now = toIso();
-    const nodeId: WorkflowNodeId = 'inspect-assets';
-    const output = buildAssetChecklistOutput(state.factionName);
+function createInspectAssetsNode(runInspectAssets: AssetInspectionTask) {
+    return async function inspectAssetsNode(state: WorkflowState) {
+        const now = toIso();
+        const nodeId: WorkflowNodeId = 'inspect-assets';
+        const payload = {
+            gameId: state.gameId,
+            projectPath: state.worktreePath,
+            factionOutline: state.factionName,
+            enableWikiComparison: (state.selectedRuleSource ?? 'wiki') === 'wiki',
+            enableDocLookup: true,
+            extraDataSources: state.promptText,
+        };
+        const output = await runInspectAssets(payload) as AssetInspectionResult;
 
-    const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
-        markCompleted(markRunning(r, { factionName: state.factionName }, now), output, now),
-    );
+        const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
+            markCompleted(markRunning(r, payload, now), output as unknown as Record<string, unknown>, toIso()),
+        );
 
-    return {
-        currentNodeId: nodeId,
-        nodeRecords: records,
-        assetInspection: output,
-        checkpointVersion: state.checkpointVersion + 1,
+        return {
+            currentNodeId: nodeId,
+            nodeRecords: records,
+            assetInspection: output,
+            checkpointVersion: state.checkpointVersion + 1,
+        };
     };
 }
 
-function draftFactionDefinitionNode(state: WorkflowState) {
-    const now = toIso();
-    const nodeId: WorkflowNodeId = 'draft-faction-definition';
-    const sourceId = state.selectedRuleSource ?? 'wiki';
-    const output = buildDraftOutput(state.factionName, sourceId);
+function createDraftFactionDefinitionNode(
+    runReferenceFaction: StageTask,
+    runImplementation: StageTask,
+) {
+    return async function draftFactionDefinitionNode(state: WorkflowState) {
+        const now = toIso();
+        const nodeId: WorkflowNodeId = 'draft-faction-definition';
+        const sourceId = state.selectedRuleSource ?? 'wiki';
+        const referencePayload = buildStagePayload(state, {
+            extraSections: [
+                formatContextSection('数据录入', state.normalizedRules?.summaryMarkdown as string | undefined),
+                formatContextSection('素材检查', state.assetInspection?.summaryMarkdown as string | undefined),
+            ],
+        });
+        const referenceStage = await runReferenceFaction(referencePayload) as StageExecutionResult;
 
-    const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
-        markCompleted(markRunning(r, {
-            normalizedRules: state.normalizedRules,
-            assetInspection: state.assetInspection,
-        }, now), output, now),
-    );
+        const implementationPayload = buildStagePayload(state, {
+            supplementalNotes: [
+                `LangGraph implementation 编排，规则来源=${sourceId}`,
+                state.latestReviewFeedback ? `上轮审计反馈=${state.latestReviewFeedback}` : null,
+            ].filter(Boolean).join('；'),
+            preferredExecutorId: 'codex-cli',
+            executionMode: 'plan',
+            extraSections: [
+                formatContextSection('数据录入', state.normalizedRules?.summaryMarkdown as string | undefined),
+                formatContextSection('旧派系参考', referenceStage.summaryMarkdown),
+                formatContextSection('素材检查', state.assetInspection?.summaryMarkdown as string | undefined),
+            ],
+        });
+        const implementationStage = await runImplementation(implementationPayload) as StageExecutionResult;
 
-    return {
-        currentNodeId: nodeId,
-        nodeRecords: records,
-        definitionDraft: output,
-        checkpointVersion: state.checkpointVersion + 1,
+        const output = {
+            stage: 'draft-faction-definition',
+            status: implementationStage.status,
+            summary: implementationStage.summary,
+            summaryMarkdown: implementationStage.summaryMarkdown,
+            nextStepHints: implementationStage.nextStepHints,
+            inputSnapshot: implementationStage.inputSnapshot,
+            structured: {
+                referenceStage,
+                implementationStage,
+            },
+        };
+
+        const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
+            markCompleted(markRunning(r, {
+                normalizedRules: state.normalizedRules,
+                assetInspection: state.assetInspection,
+                reviewFeedback: state.latestReviewFeedback,
+                reviewRevisionCount: state.reviewRevisionCount,
+            }, now), output.structured, toIso()),
+        );
+
+        return {
+            currentNodeId: nodeId,
+            nodeRecords: records,
+            definitionDraft: output,
+            checkpointVersion: state.checkpointVersion + 1,
+        };
     };
 }
 
-function reviewFactionDefinitionNode(state: WorkflowState) {
-    const now = toIso();
-    const nodeId: WorkflowNodeId = 'review-faction-definition';
-    const output = buildReviewOutput();
+function createReviewFactionDefinitionNode(runAudit: StageTask) {
+    return async function reviewFactionDefinitionNode(state: WorkflowState) {
+        const now = toIso();
+        const nodeId: WorkflowNodeId = 'review-faction-definition';
+        const referenceStage = (state.definitionDraft?.structured as Record<string, unknown> | undefined)?.referenceStage;
+        const implementationStage = (state.definitionDraft?.structured as Record<string, unknown> | undefined)?.implementationStage;
+        const payload = buildStagePayload(state, {
+            extraSections: [
+                formatContextSection('数据录入', state.normalizedRules?.summaryMarkdown as string | undefined),
+                formatContextSection('旧派系参考', (referenceStage as Record<string, unknown> | undefined)?.summaryMarkdown as string | undefined),
+                formatContextSection('实施结果', (implementationStage as Record<string, unknown> | undefined)?.summaryMarkdown as string | undefined),
+                formatContextSection('素材检查', state.assetInspection?.summaryMarkdown as string | undefined),
+            ],
+        });
+        const output = await runAudit(payload) as StageExecutionResult;
+        const auditDecision = String(output.structured.decision ?? '');
+        const latestReviewFeedback = auditDecision === 'rewrite'
+            ? output.summaryMarkdown
+            : null;
 
-    const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
-        markCompleted(markRunning(r, { definitionDraft: state.definitionDraft }, now), output, now),
-    );
+        const completedRecords = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
+            markCompleted(markRunning(r, {
+                definitionDraft: state.definitionDraft,
+            }, now), output.structured, toIso()),
+        );
 
-    return {
-        currentNodeId: nodeId,
-        nodeRecords: records,
-        reviewResult: output,
-        checkpointVersion: state.checkpointVersion + 1,
+        return {
+            currentNodeId: nodeId,
+            nodeRecords: completedRecords,
+            reviewResult: output,
+            latestReviewFeedback,
+            checkpointVersion: state.checkpointVersion + 1,
+        };
     };
 }
 
@@ -590,55 +770,88 @@ function runE2eValidationNode(state: WorkflowState) {
     };
 }
 
-function publishArtifactBundleNode(state: WorkflowState) {
-    const now = toIso();
-    const nodeId: WorkflowNodeId = 'publish-artifact-bundle';
-    const bundle = buildArtifactBundle(state, now);
+function createPublishArtifactBundleNode(runUpload: StageTask) {
+    return async function publishArtifactBundleNode(state: WorkflowState) {
+        const now = toIso();
+        const nodeId: WorkflowNodeId = 'publish-artifact-bundle';
+        const referenceStage = (state.definitionDraft?.structured as Record<string, unknown> | undefined)?.referenceStage;
+        const implementationStage = (state.definitionDraft?.structured as Record<string, unknown> | undefined)?.implementationStage;
+        const payload = buildStagePayload(state, {
+            extraSections: [
+                formatContextSection('素材检查', state.assetInspection?.summaryMarkdown as string | undefined),
+                formatContextSection('数据录入', state.normalizedRules?.summaryMarkdown as string | undefined),
+                formatContextSection('旧派系参考', (referenceStage as Record<string, unknown> | undefined)?.summaryMarkdown as string | undefined),
+                formatContextSection('实施结果', (implementationStage as Record<string, unknown> | undefined)?.summaryMarkdown as string | undefined),
+                formatContextSection('审计结果', state.reviewResult?.summaryMarkdown as string | undefined),
+            ],
+        });
+        const uploadResult = await runUpload(payload) as StageExecutionResult;
+        const bundle = buildArtifactBundle({
+            ...state,
+            uploadResult,
+        }, toIso());
 
-    const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
-        markCompleted(markRunning(r, { reviewResult: state.reviewResult }, now), {
-            artifactBundleId: bundle.id,
-            summary: bundle.summary,
-        }, now),
-    );
+        const records = updateNodeRecord(state.nodeRecords, nodeId, (r) =>
+            markCompleted(markRunning(r, { reviewResult: state.reviewResult }, now), {
+                artifactBundleId: bundle.id,
+                summary: bundle.summary,
+                uploadSummary: uploadResult.summaryMarkdown,
+            }, toIso()),
+        );
 
-    return {
-        currentNodeId: null,
-        nodeRecords: records,
-        artifactBundle: bundle,
-        runStatus: 'completed',
-        finishedAt: now,
-        checkpointVersion: state.checkpointVersion + 1,
+        return {
+            currentNodeId: null,
+            nodeRecords: records,
+            uploadResult,
+            artifactBundle: bundle,
+            runStatus: 'completed',
+            finishedAt: toIso(),
+            checkpointVersion: state.checkpointVersion + 1,
+        };
     };
-}
-
-// ---------------------------------------------------------------------------
-// Conditional edge: skip e2e validation if disabled
-// ---------------------------------------------------------------------------
-
-function shouldRunE2e(state: WorkflowState): string {
-    return state.enabledNodeIds.includes('run-e2e-validation')
-        ? 'run-e2e-validation'
-        : 'run-e2e-validation';
 }
 
 // ---------------------------------------------------------------------------
 // Graph builder
 // ---------------------------------------------------------------------------
 
-export function buildNewFactionGraph() {
+export function buildNewFactionGraph(deps: LangGraphExecutionDeps) {
     const checkpointer = new MemorySaver();
+    const runInspectAssets = task(
+        'inspectFactionAssets',
+        async (payload: unknown) => deps.inspectFactionAssets(payload as Parameters<LangGraphExecutionDeps['inspectFactionAssets']>[0]),
+    ) as unknown as AssetInspectionTask;
+    const runDataEntry = task(
+        'executeDataEntry',
+        async (payload: unknown) => deps.executeDataEntry(payload as Record<string, unknown>),
+    ) as unknown as StageTask;
+    const runReferenceFaction = task(
+        'executeReferenceFaction',
+        async (payload: unknown) => deps.executeReferenceFaction(payload as Record<string, unknown>),
+    ) as unknown as StageTask;
+    const runImplementation = task(
+        'executeImplementation',
+        async (payload: unknown) => deps.executeImplementation(payload as Record<string, unknown>),
+    ) as unknown as StageTask;
+    const runAudit = task(
+        'executeAudit',
+        async (payload: unknown) => deps.executeAudit(payload as Record<string, unknown>),
+    ) as unknown as StageTask;
+    const runUpload = task(
+        'executeUpload',
+        async (payload: unknown) => deps.executeUpload(payload as Record<string, unknown>),
+    ) as unknown as StageTask;
 
     const graph = new StateGraph(WorkflowStateAnnotation)
         .addNode('capture-faction-intent', captureFactionIntentNode)
         .addNode('select-rule-source', selectRuleSourceNode)
         .addNode('acquire-rule-material', acquireRuleMaterialNode)
-        .addNode('transcribe-or-normalize-rules', transcribeOrNormalizeNode)
-        .addNode('inspect-assets', inspectAssetsNode)
-        .addNode('draft-faction-definition', draftFactionDefinitionNode)
-        .addNode('review-faction-definition', reviewFactionDefinitionNode)
+        .addNode('transcribe-or-normalize-rules', createTranscribeOrNormalizeNode(runDataEntry))
+        .addNode('inspect-assets', createInspectAssetsNode(runInspectAssets))
+        .addNode('draft-faction-definition', createDraftFactionDefinitionNode(runReferenceFaction, runImplementation))
+        .addNode('review-faction-definition', createReviewFactionDefinitionNode(runAudit))
         .addNode('run-e2e-validation', runE2eValidationNode)
-        .addNode('publish-artifact-bundle', publishArtifactBundleNode)
+        .addNode('publish-artifact-bundle', createPublishArtifactBundleNode(runUpload))
         .addEdge(START, 'capture-faction-intent')
         .addEdge('capture-faction-intent', 'select-rule-source')
         .addEdge('select-rule-source', 'acquire-rule-material')
@@ -663,6 +876,7 @@ export function buildNewFactionGraph() {
 
 export interface LangGraphOrchestratorConfig {
     factionName: string;
+    promptText: string;
     gameId: string;
     worktreePath: string;
     branchName: string;
@@ -696,8 +910,8 @@ export class NewFactionLangGraphOrchestrator {
     private readonly graph: ReturnType<typeof buildNewFactionGraph>['graph'];
     private readonly checkpointer: MemorySaver;
 
-    constructor() {
-        const { graph, checkpointer } = buildNewFactionGraph();
+    constructor(private readonly deps: LangGraphExecutionDeps) {
+        const { graph, checkpointer } = buildNewFactionGraph(deps);
         this.graph = graph;
         this.checkpointer = checkpointer;
     }
@@ -713,6 +927,7 @@ export class NewFactionLangGraphOrchestrator {
             templateId: config.templateId ?? 'new-faction',
             templateVersion: config.templateVersion ?? 'mvp-v1',
             factionName: config.factionName,
+            promptText: config.promptText,
             gameId: config.gameId,
             worktreePath: config.worktreePath,
             branchName: config.branchName,
@@ -732,7 +947,10 @@ export class NewFactionLangGraphOrchestrator {
             definitionDraft: null,
             reviewResult: null,
             e2eResult: null,
+            uploadResult: null,
             artifactBundle: null,
+            latestReviewFeedback: null,
+            reviewRevisionCount: 0,
             startedAt: now,
             finishedAt: null,
             checkpointVersion: 0,
@@ -777,7 +995,11 @@ export class NewFactionLangGraphOrchestrator {
 
     async resumeDecision(
         threadId: string,
-        resolution: { optionId: RuleSourceOptionId },
+        resolution: {
+            action: 'proceed' | 'reject';
+            optionId?: RuleSourceOptionId;
+            feedback?: string;
+        },
     ): Promise<GraphRunResult> {
         const threadConfig = { configurable: { thread_id: threadId } };
 

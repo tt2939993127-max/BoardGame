@@ -347,6 +347,7 @@ const AudioBrowser: React.FC = () => {
   const [preloading, setPreloading] = useState(false);
   const [preloadedCount, setPreloadedCount] = useState(0);
   const preloadCancelledRef = useRef(false);
+  const pendingAutoPlayKeyRef = useRef<string | null>(null);
 
   // 加载完整短语中文映射表
   useEffect(() => {
@@ -395,6 +396,25 @@ const AudioBrowser: React.FC = () => {
       })
       .finally(() => setLoading(false));
   }, [initialized]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const search = params.get('search');
+    const play = params.get('play');
+    const group = params.get('group');
+    const sub = params.get('sub');
+    const type = params.get('type');
+
+    if (search) setFilter(search);
+    if (group) setSelectedGroup(group);
+    if (sub) setSelectedSub(sub);
+    if (type === 'all' || type === 'sfx' || type === 'bgm') {
+      setTypeFilter(type);
+    }
+    if (play) {
+      pendingAutoPlayKeyRef.current = play;
+    }
+  }, []);
 
   // 构建分类树
   const categories = useMemo<CategoryNode[]>(() => {
@@ -483,6 +503,17 @@ const AudioBrowser: React.FC = () => {
     setPlayingKey(entry.key);
     playingRef.current = { key: entry.key, type: entry.type };
   }, [stopPrevious]);
+
+  useEffect(() => {
+    const playKey = pendingAutoPlayKeyRef.current;
+    if (!playKey || entries.length === 0) return;
+
+    const entry = entries.find((candidate) => candidate.key === playKey);
+    pendingAutoPlayKeyRef.current = null;
+    if (!entry) return;
+
+    playEntry(entry);
+  }, [entries, playEntry]);
 
   const clearHistory = useCallback(() => {
     setHistory([]);

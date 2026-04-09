@@ -41,8 +41,10 @@ export interface WorkbenchJournalRun {
         lastSyncAt: string;
     };
     context: {
-        gameId: string;
-        factionName: string;
+        gameId?: string;
+        factionName?: string;
+        subject: string;
+        prompt: string;
     };
 }
 
@@ -81,10 +83,17 @@ export interface WorkbenchJournalDecision {
     }>;
     evidenceRefs: string[];
     recommendedOptionId?: RuleSourceOptionId;
+    createdAt: string;
     resumeToken: string;
+    allowReject?: boolean;
+    allowFeedback?: boolean;
+    proceedLabel?: string;
+    rejectLabel?: string;
+    feedbackPlaceholder?: string;
     resolution?: {
-        optionId: string;
-        optionLabel: string;
+        action: 'proceed' | 'reject';
+        optionId?: string;
+        optionLabel?: string;
         notes?: string;
         decidedAt: string;
         decidedBy: string;
@@ -127,6 +136,7 @@ function toNodeRecords(runId: string, records: NodeRecord[]): WorkbenchJournalNo
 
 function toDecisions(
     runId: string,
+    nodeRecords: NodeRecord[],
     decisions: Array<DecisionPayload & { resolution?: DecisionResolution }>,
 ): WorkbenchJournalDecision[] {
     return decisions.map((d) => ({
@@ -138,18 +148,25 @@ function toDecisions(
         title: d.title,
         summary: d.summary,
         blocking: true,
-        rationale: '通过 LangGraph interrupt 暂停，等待人工输入。',
+        rationale: d.rationale ?? '通过 LangGraph interrupt 暂停，等待人工输入。',
         options: d.options as WorkbenchJournalDecision['options'],
-        evidenceRefs: [
-            'openspec:add-ai-repo-workbench/select-rule-source',
-            'repo:local-first-fixture',
-        ],
+        evidenceRefs: d.evidenceRefs,
         recommendedOptionId: d.recommendedOptionId as RuleSourceOptionId | undefined,
+        createdAt: d.createdAt
+            ?? nodeRecords.find((record) => record.nodeId === d.nodeId)?.startedAt
+            ?? new Date().toISOString(),
         resumeToken: `lg-resume-${d.decisionId}`,
+        allowReject: d.allowReject,
+        allowFeedback: d.allowFeedback,
+        proceedLabel: d.proceedLabel,
+        rejectLabel: d.rejectLabel,
+        feedbackPlaceholder: d.feedbackPlaceholder,
         ...(d.resolution ? {
             resolution: {
+                action: d.resolution.action,
                 optionId: d.resolution.optionId,
                 optionLabel: d.resolution.optionLabel,
+                notes: d.resolution.notes,
                 decidedAt: d.resolution.decidedAt,
                 decidedBy: d.resolution.decidedBy,
             },
@@ -234,7 +251,7 @@ export function syncGraphResultToJournalPatch(result: GraphRunResult): JournalPa
         finishedAt: state.finishedAt ?? undefined,
         latestDecisionRequestId: latestDecisionId,
         latestArtifactBundleId: state.artifactBundle?.id,
-        title: `${state.factionName} / new-faction / ${state.branchName}`,
+        title: `${state.factionName} / ${state.templateId} / ${state.branchName}`,
         enabledNodeIds: state.enabledNodeIds,
         orchestrator: {
             engine: 'langgraph',
@@ -245,6 +262,8 @@ export function syncGraphResultToJournalPatch(result: GraphRunResult): JournalPa
         context: {
             gameId: state.gameId,
             factionName: state.factionName,
+            subject: state.factionName,
+            prompt: state.promptText,
         },
     };
 
@@ -258,7 +277,7 @@ export function syncGraphResultToJournalPatch(result: GraphRunResult): JournalPa
     return {
         run,
         nodeRecords: toNodeRecords(state.runId, nodeRecords),
-        decisions: toDecisions(state.runId, allDecisions),
+        decisions: toDecisions(state.runId, nodeRecords, allDecisions),
         artifactBundle: state.artifactBundle
             ? toArtifactBundle(state.runId, state.artifactBundle)
             : null,

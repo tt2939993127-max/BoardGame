@@ -14,14 +14,19 @@ export interface PauseForDecisionPayload {
     nodeRecords: NodeExecutionRecord[];
 }
 
-export interface StartNewFactionRunPayload {
-    factionName: string;
+export interface StartWorkflowRunPayload {
+    templateId: WorkflowRun['templateId'];
+    subject: string;
+    prompt: string;
+    projectPath?: string;
     nodeToggles?: Partial<Record<OptionalWorkflowNodeId, boolean>>;
 }
 
 export interface ResumeRunPayload {
     decisionId: string;
-    optionId: RuleSourceOptionId;
+    action: 'proceed' | 'reject';
+    optionId?: RuleSourceOptionId;
+    feedback?: string;
 }
 
 export interface RunNodePayload {
@@ -60,12 +65,12 @@ export interface LocalRuntime {
 }
 
 export interface WorkflowOrchestrator {
-    startNewFactionRun(
+    startWorkflowRun(
         journal: WorkbenchJournal,
-        payload: StartNewFactionRunPayload,
+        payload: StartWorkflowRunPayload,
         now?: number,
     ): WorkflowMutationResult;
-    submitRuleSourceDecision(
+    submitDecision(
         journal: WorkbenchJournal,
         payload: ResumeRunPayload,
         now?: number,
@@ -110,6 +115,7 @@ interface WorkflowOrchestratorDeps {
         id: WorkflowRun['templateId'];
         version: string;
         title: string;
+        runnable: boolean;
         nodeOrder: WorkflowNodeId[];
     };
     ruleSourceOptions: DecisionRequest['options'];
@@ -135,7 +141,8 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
             inputRef: `${record.nodeId}.input.started`,
             inputSnapshot: {
                 runId,
-                factionName: run.context.factionName,
+                subject: run.context.subject,
+                prompt: run.context.prompt,
             },
         }));
 
@@ -146,14 +153,18 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
     }
 
     return {
-        startNewFactionRun(journal, payload, now = Date.now()) {
+        startWorkflowRun(journal, payload, now = Date.now()) {
             const activeWorktree = deps.getActiveWorktreeTask(journal);
-            const template = deps.getWorkflowTemplateDefinition(deps.defaultTemplateId);
+            const template = deps.getWorkflowTemplateDefinition(payload.templateId || deps.defaultTemplateId);
             if (!activeWorktree) {
                 return journal;
             }
+            if (!template.runnable) {
+                throw new Error(`工作流 ${template.id} 当前还没有接入执行器。`);
+            }
 
-            const factionName = payload.factionName.trim() || '星环游牧者';
+            const subject = payload.subject.trim() || '未命名任务';
+            const prompt = payload.prompt.trim() || `启动 ${template.title}：${subject}`;
             const runId = deps.createId('workflow-run');
             const decisionId = deps.createId('decision');
             const createdAt = deps.toIso(now);
@@ -169,11 +180,13 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
                 checkpointVersion: 1,
                 startedAt: createdAt,
                 latestDecisionRequestId: decisionId,
-                title: `${factionName} / ${template.title} / ${activeWorktree.branchName}`,
+                title: `${subject} / ${template.title} / ${activeWorktree.branchName}`,
                 enabledNodeIds: deps.resolveEnabledNodeIds(template.id, payload.nodeToggles),
                 context: {
-                    gameId: 'smashup',
-                    factionName,
+                    gameId: template.id === 'new-faction' ? 'smashup' : undefined,
+                    factionName: template.id === 'new-faction' ? subject : undefined,
+                    subject,
+                    prompt,
                 },
             };
 
@@ -184,7 +197,7 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
                 phase: 'rules',
                 kind: 'single_select',
                 title: '选择规则来源',
-                summary: `为 ${factionName} 选择当前这次纵切片要走的规则来源路径。`,
+                summary: `为 ${subject} 选择当前这次纵切片要走的规则来源路径。`,
                 blocking: true,
                 rationale: '首个真实人工决策点必须可见、可恢复、可审计。',
                 options: deps.ruleSourceOptions,
@@ -193,7 +206,11 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
                     'repo:local-first-fixture',
                 ],
                 recommendedOptionId: 'wiki',
+                createdAt,
                 resumeToken: deps.createId('resume-token'),
+                allowReject: false,
+                allowFeedback: false,
+                proceedLabel: '确认规则来源并继续',
             };
 
             const captureNode: NodeExecutionRecord = {
@@ -204,14 +221,15 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
                 inputRef: 'capture-faction-intent.input.fixture',
                 inputSnapshot: {
                     templateId: template.id,
-                    factionName,
+                    subject,
+                    prompt,
                     gameId: 'smashup',
                     worktreePath: activeWorktree.worktreePath,
                     branchName: activeWorktree.branchName,
                 },
                 outputRef: 'capture-faction-intent.output.intent',
                 outputSnapshot: {
-                    workingDirectory: `${activeWorktree.worktreePath}\\temp\\workbench\\${deps.sanitizeFactionPathSegment(factionName)}`,
+                    workingDirectory: `${activeWorktree.worktreePath}\\temp\\workbench\\${deps.sanitizeFactionPathSegment(subject)}`,
                     requestedOutcome: '生成规则驱动的派系定义草案与 ArtifactBundle',
                 },
                 startedAt: createdAt,
@@ -250,7 +268,7 @@ export function createLocalWorkflowOrchestrator(deps: WorkflowOrchestratorDeps):
             }, now);
         },
 
-        submitRuleSourceDecision(journal, payload, now = Date.now()) {
+        submitDecision(journal, payload, now = Date.now()) {
             const resumedJournal = deps.localRuntime.resumeRun(journal, payload, now);
             const decision = resumedJournal.decisions.find((item) => item.id === payload.decisionId);
             const runId = decision?.runId ?? journal.runs.find((item) => item.latestDecisionRequestId === payload.decisionId)?.id;

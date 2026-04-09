@@ -4,8 +4,13 @@ export class RegisterWorkbenchWorktreeDto {
     @IsString()
     branchName!: string;
 
+    @IsOptional()
     @IsString()
-    worktreePath!: string;
+    projectPath?: string;
+
+    @IsOptional()
+    @IsString()
+    worktreePath?: string;
 
     @IsOptional()
     @IsString()

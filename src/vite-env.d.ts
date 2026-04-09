@@ -9,6 +9,8 @@ interface ImportMetaEnv {
     readonly VITE_ANDROID_OTA_MANIFEST_URL?: string;
     readonly VITE_ANDROID_OTA_CHANNEL?: string;
     readonly VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS?: string;
+    readonly VITE_AI_REPO_WORKBENCH_DEFAULT_PROJECT_PATH?: string;
+    readonly VITE_AI_REPO_WORKBENCH_DEFAULT_BRANCH?: string;
 }
 
 interface ImportMeta {
