@@ -10,6 +10,7 @@ import { SmashUpDomain } from '../domain';
 import { postProcessSystemEvents } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { createFlowSystem, createBaseSystems, createInitialSystemState } from '../../../engine';
+import { resolveAiDifficultyProfile } from '../../../engine/ai/difficulty';
 import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import type { CardsDrawnEvent, SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { MADNESS_CARD_DEF_ID, SU_COMMANDS, SU_EVENTS, getCurrentPlayerId } from '../domain/types';
@@ -709,6 +710,7 @@ describe('smashup', () => {
         expect(prompt?.data?.sourceId).toBe('titan_sphinx_start_turn');
         const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-start-buried');
         expect(option).toBeDefined();
+        expect(option.displayMode).toBe('card');
 
         const handler = getInteractionHandler('titan_sphinx_start_turn');
         expect(handler).toBeDefined();
@@ -774,6 +776,7 @@ describe('smashup', () => {
         expect(prompt?.data?.sourceId).toBe('titan_sphinx_after_scoring');
         const option = prompt.data.options.find((entry: any) => entry.value?.cardUid === 'sphinx-score-buried');
         expect(option).toBeDefined();
+        expect(option.displayMode).toBe('card');
 
         const handler = getInteractionHandler('titan_sphinx_after_scoring');
         expect(handler).toBeDefined();
@@ -1173,6 +1176,72 @@ describe('smashup', () => {
         expect(selectableFactionIds).not.toContain(SMASHUP_FACTION_IDS.ALIENS);
     });
 
+    it('Smash Up baseline AI 第二次选派系时会参考已选派系协同，而不是只按静态优先级', async () => {
+        const runner = createRunner();
+        const result = runner.run({
+            name: 'AI 第二次选派系看协同',
+            commands: [
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ZOMBIES } },
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+            ],
+        });
+
+        expect(result.finalState.core.factionSelection?.playerSelections['0']).toEqual([SMASHUP_FACTION_IDS.ZOMBIES]);
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: result.finalState,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-faction-synergy',
+            playerId: '0',
+            visibleState: result.finalState,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.some((action) => action.metadata?.factionId === SMASHUP_FACTION_IDS.ROBOTS)).toBe(true);
+        expect(legalActions.some((action) => action.metadata?.factionId === SMASHUP_FACTION_IDS.WIZARDS)).toBe(true);
+        expect(chosenAction?.metadata?.factionId).toBe(SMASHUP_FACTION_IDS.WIZARDS);
+    });
+
+    it('Smash Up AI legal action 会自动附带 strategy tags，供通用风格评分复用', () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('wizard-summon-1', 'wizard_summon', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.WIZARDS, SMASHUP_FACTION_IDS.ROBOTS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_the_mothership'),
+            ],
+        }));
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const summonAction = legalActions.find((action) =>
+            action.kind === 'play-action' && action.metadata?.defId === 'wizard_summon',
+        );
+
+        expect(summonAction).toBeDefined();
+        expect(summonAction?.metadata?.cardStrategyTags).toContain('action-chain');
+    });
+
     it('Smash Up baseline AI 在基础出牌阶段优先打随从', async () => {
         const runner = createRunner();
         const drafted = runner.run({
@@ -1226,6 +1295,107 @@ describe('smashup', () => {
 
         expect(legalActions.some((action) => action.kind === 'play-minion')).toBe(true);
         expect(chosenAction?.kind).toBe('play-minion');
+    });
+
+    it('Smash Up baseline AI 会优先把随从投向能直接改写高价值评分的关键基地', async () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('warbot-1', 'robot_warbot', 'minion', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.WIZARDS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_the_mothership',
+                    minions: [
+                        makeMinion('ally-pressure-a', 'robot_hoverbot', '0', 3, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('ally-pressure-b', 'robot_microbot_guard', '0', 3, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('enemy-pressure', 'test_minion', '1', 10, { owner: '1', tempPowerModifier: 0 }),
+                    ],
+                }),
+                makeBase({
+                    defId: 'base_the_jungle',
+                    minions: [
+                        makeMinion('ally-calm', 'wizard_enchantress', '0', 2, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('enemy-calm', 'test_minion', '1', 2, { owner: '1', tempPowerModifier: 0 }),
+                    ],
+                }),
+            ],
+        }));
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-critical-base',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.filter((action) => action.kind === 'play-minion')).toHaveLength(2);
+        expect(chosenAction?.kind).toBe('play-minion');
+        expect(chosenAction?.metadata).toMatchObject({
+            baseIndex: 0,
+        });
+    });
+
+    it('Smash Up baseline AI 会结合牌组风格优先选择 action-chain 组件，而不是无标签的泛用行动', async () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('wizard-summon-1', 'wizard_summon', 'action', '0'),
+                        makeCard('robot-tech-center-1', 'robot_tech_center', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.WIZARDS, SMASHUP_FACTION_IDS.ROBOTS],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_the_jungle'),
+            ],
+        }));
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-profile-action-choice',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.filter((action) => action.kind === 'play-action').length).toBeGreaterThanOrEqual(2);
+        expect(chosenAction?.kind).toBe('play-action');
+        expect(chosenAction?.metadata?.defId).toBe('wizard_summon');
     });
 
     it('Smash Up baseline AI 在高压评分响应窗口应优先响应，而不是直接 response-pass', async () => {
@@ -1298,6 +1468,121 @@ describe('smashup', () => {
         expect(chosenAction?.metadata).toMatchObject({
             targetBaseIndex: 0,
         });
+    });
+
+    it('Smash Up baseline AI 在非紧急响应窗口会选择 response-pass，避免空耗响应牌', async () => {
+        const core = makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('card-lost-knowledge', 'ancient_egyptians_lost_knowledge', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.DINOSAURS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_pirate_cove',
+                    minions: [
+                        makeMinion('ally-1', 'pirate_first_mate', '0', 2, { owner: '0' }),
+                        makeMinion('enemy-1', 'test_minion', '1', 2, { owner: '1' }),
+                    ],
+                }),
+            ],
+        });
+        const stateForAi = makeMatchState(core);
+        stateForAi.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-calm-window',
+                windowType: 'meFirst',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-calm-response',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: stateForAi.sys.responseWindow?.current ?? null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.some((action) => action.kind === 'response-pass')).toBe(true);
+        expect(chosenAction?.kind).toBe('response-pass');
+    });
+
+    it('Smash Up baseline AI 在同一局面下重复决策应保持稳定，不应表现为完全随机', async () => {
+        const runner = createRunner();
+        const drafted = runner.run({
+            name: '选秀供稳定性 AI 使用',
+            commands: DRAFT_COMMANDS,
+        });
+
+        const pid = getCurrentPlayerId(drafted.finalState.core);
+        const player = drafted.finalState.core.players[pid];
+        const fallbackCards = [...player.hand, ...player.deck];
+        const minionCard = fallbackCards.find((card) => card.type === 'minion' || card.type === 'fusion');
+        const actionCard = fallbackCards.find((card) => card.type === 'action' || card.type === 'fusion');
+        if (!minionCard) {
+            throw new Error('测试缺少可用随从，无法验证稳定性');
+        }
+
+        const stateForAi = {
+            ...drafted.finalState,
+            core: {
+                ...drafted.finalState.core,
+                players: {
+                    ...drafted.finalState.core.players,
+                    [pid]: {
+                        ...player,
+                        hand: actionCard ? [minionCard, actionCard] : [minionCard],
+                        minionsPlayed: 0,
+                        actionsPlayed: 0,
+                    },
+                },
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: pid,
+            state: stateForAi,
+        });
+
+        const decisions = await Promise.all(
+            Array.from({ length: 5 }, async (_, index) => {
+                const decision = await Promise.resolve(smashUpAiRuntime.localPolicies!.baseline.decide({
+                    gameId: 'smashup',
+                    matchId: 'test-smashup-ai-stable-repeat',
+                    playerId: pid,
+                    visibleState: stateForAi,
+                    interaction: null,
+                    responseWindow: null,
+                    legalActions,
+                    rulesVersion: null,
+                    decisionBudgetMs: 250,
+                    source: 'local',
+                }));
+                return { index, actionId: decision?.actionId };
+            }),
+        );
+
+        const uniqueActionIds = new Set(decisions.map((decision) => decision.actionId));
+        expect(uniqueActionIds.size).toBe(1);
+        expect(legalActions.some((action) => action.actionId === decisions[0]?.actionId)).toBe(true);
     });
 
     it('domain 注册表加载正确', () => {
@@ -3980,6 +4265,9 @@ describe('smashup', () => {
         const commandEvents = SmashUpDomain.execute(state, command, FIXED_RANDOM);
         expect(commandEvents.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
         expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_penguins_emperor_penguin_talent');
+        expect(
+            state.sys.interaction?.current?.data?.options?.every((option: any) => option.displayMode === 'card'),
+        ).toBe(true);
 
         const handler = getInteractionHandler('titan_penguins_emperor_penguin_talent');
         expect(handler).toBeDefined();
@@ -4795,6 +5083,78 @@ describe('smashup', () => {
         expect(core.players['0'].factions).toEqual([SMASHUP_FACTION_IDS.VIKINGS_POD, SMASHUP_FACTION_IDS.ROBOTS]);
         expect(core.players['1'].factions).toEqual([SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS]);
         expect(core.players['0'].hand.length).toBe(5);
+    });
+
+    it('pecos_bill 未进入决斗触发链时不应被当成可手动打出的泰坦', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({ defId: 'base_saloon_pod', minions: [], ongoingActions: [] })],
+            titans: [{
+                uid: 'pecos-1',
+                defId: 'pecos_bill',
+                faction: SMASHUP_FACTION_IDS.COWBOYS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            }],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { titanUid: 'pecos-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该泰坦的特殊能力不能手动激活',
+        });
+    });
+
+    it('副警长和警长不应被当成可手动点按的随从 special', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({
+                defId: 'base_saloon',
+                minions: [
+                    makeMinion('deputy-1', 'cowboys_deputy', '0', 2),
+                    makeMinion('sheriff-1', 'cowboys_sheriff', '0', 5),
+                ],
+                ongoingActions: [],
+            })],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'deputy-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该随从的特殊能力不能手动激活',
+        });
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'sheriff-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该随从的特殊能力不能手动激活',
+        });
     });
 
     it('pecos_bill 可在你成为 challenger 时弃 1 张牌部署到该决斗基地', () => {

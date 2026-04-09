@@ -5,6 +5,7 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../core';
+import type { CharacterBadgeDef } from '../../../core/ui';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
@@ -77,6 +78,7 @@ export type TeamId = 'A' | 'B';
 export interface CharacterDefinition {
     id: SelectableCharacterId;
     nameKey: string;
+    badges?: CharacterBadgeDef[];
 }
 
 export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
@@ -86,8 +88,26 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
-    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
-    { id: 'samurai', nameKey: 'characters.samurai' },
+    {
+        id: 'gunslinger',
+        nameKey: 'characters.gunslinger',
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
+    },
+    {
+        id: 'samurai',
+        nameKey: 'characters.samurai',
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
+    },
 ];
 
 /**
@@ -139,6 +159,11 @@ export interface CardPlayCondition {
     requireMinDamageDealt?: number;
     /** 场上任意玩家必须有至少 1 个状态效果或 token（用于状态移除/转移类卡牌） */
     requireAnyStatusOnBoard?: boolean;
+    /** 必须存在待结算伤害，并满足指定的伤害响应角色/时机 */
+    pendingDamage?: {
+        role?: 'source' | 'target' | 'responder';
+        responseType?: 'beforeDamageDealt' | 'beforeDamageReceived';
+    };
 }
 
 /** 卡牌多语言文案 */
@@ -159,6 +184,8 @@ export interface AbilityCard {
     /** @deprecated 使用 i18n 字段代替，此字段由构建脚本自动生成 */
     description: string;
     previewRef?: CardPreviewRef;
+    /** 源图中的 slot/index，仅用于调试、审计和作弊发牌；不等于正式运行时预览资源。 */
+    sourceAtlasIndex?: number;
     /** 卡牌效果列表（行动卡的即时效果，或升级卡的 replaceAbility 效果） */
     effects?: AbilityEffect[];
     /** 卡牌打出的额外条件 */
@@ -195,6 +222,8 @@ export interface PendingAttack {
     resolvedDamage?: number;
     /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
     attackDiceFaceCounts?: Record<string, number>;
+    /** 攻击方原始点数计数快照（用于“4个相同数字 / 3个相同数字”判定） */
+    attackDiceValueCounts?: Record<number, number>;
     /** 攻击掷骰阶段结束时的 Token 选择是否已完成（暴击/精准） */
     offensiveRollEndTokenResolved?: boolean;
     /** 奖励骰是否已通过 BONUS_DICE_SETTLED 结算（避免 autoContinue 重入时重复执行 resolveAttack） */
@@ -341,6 +370,8 @@ export interface BonusDieInfo {
     face: DieFace;
     /** 效果描述 i18n key（用于 displayOnly 展示） */
     effectKey?: string;
+    /** 效果描述参数（例如 {{value}}） */
+    effectParams?: Record<string, string | number>;
 }
 
 /**
@@ -417,6 +448,13 @@ export interface HeroState {
     pendingBonusDamage?: number;
 }
 
+export type SeatControllerKind = 'human' | 'ai';
+
+export interface PendingSeatSwapRequest {
+    requesterId: PlayerId;
+    targetPlayerId: PlayerId;
+}
+
 // ============================================================================
 // 核心状态
 // ============================================================================
@@ -428,6 +466,10 @@ export interface DiceThroneCore {
     players: Record<PlayerId, HeroState>;
     /** 2v2 模式下的环桌座位顺序，用于分队与回合顺序推导 */
     seatingOrder?: PlayerId[];
+    /** 座位控制信息：仅区分真人 / AI，用于准备阶段换位流程 */
+    seatControllers?: Record<PlayerId, SeatControllerKind>;
+    /** 待处理的换位申请（仅真人目标需要审批） */
+    seatSwapRequest?: PendingSeatSwapRequest;
     /** 2v2 模式下按座位推导后的队伍归属 */
     teamIdByPlayerId?: Record<PlayerId, TeamId>;
     /** 2v2 模式下的共享体力；同队成员 HP 需要与该值保持同步 */
@@ -489,6 +531,13 @@ export interface DiceThroneCore {
      * TOKEN_GRANTED 时累加（仅 TAIJI），TURN_CHANGED 时清除
      */
     taijiGainedThisTurn?: Record<PlayerId, number>;
+    /**
+     * 本回合进攻掷骰尝试次数
+     * key: playerId, value: 当前回合进入 offensiveRoll 后执行过多少次 ROLL_DICE
+     * 仅在真正的进攻掷骰（pendingAttack 仍为空）时累加，TURN_CHANGED 时清除
+     * 供 Bushido 等“按本回合攻击掷骰次数结算”的规则复用
+     */
+    offensiveRollCountThisTurn?: Record<PlayerId, number>;
 }
 
 // ============================================================================

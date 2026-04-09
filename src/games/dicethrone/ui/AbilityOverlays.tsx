@@ -5,7 +5,8 @@ import { saveDiceThroneAbilityLayout } from '../../../api/layout';
 import { UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import {
-    DICETHRONE_PLAYER_BOARD_LAYOUTS,
+    DICETHRONE_ABILITY_SLOT_LAYOUTS,
+    DICETHRONE_PLAYER_BOARD_UI_TUNING,
     getAbilitySlotLayoutForCharacter,
     getPlayerBoardLayoutVersion,
     type DiceThronePlayerBoardLayoutVersion,
@@ -230,8 +231,8 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
             [characterId],
         );
         const [allLayouts, setAllLayouts] = React.useState(() => ({
-            v1: DICETHRONE_PLAYER_BOARD_LAYOUTS.v1.map(slot => ({ ...slot })),
-            v2: DICETHRONE_PLAYER_BOARD_LAYOUTS.v2.map(slot => ({ ...slot })),
+            v1: DICETHRONE_ABILITY_SLOT_LAYOUTS.v1.map(slot => ({ ...slot })),
+            v2: DICETHRONE_ABILITY_SLOT_LAYOUTS.v2.map(slot => ({ ...slot })),
         }));
         const slots = allLayouts[layoutVersion] ?? getAbilitySlotLayoutForCharacter(characterId);
         const [editingId, setEditingId] = React.useState<string | null>(null);
@@ -241,15 +242,22 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
         const editingGuideInnerClassName = 'absolute inset-[3px] rounded-[10px] border border-dashed border-slate-950/65 pointer-events-none';
         const activeEditingGuideClassName = 'absolute inset-0 rounded-lg border-[2.5px] border-emerald-300 bg-emerald-400/12 shadow-[0_0_0_1px_rgba(6,95,70,0.95),0_0_18px_rgba(52,211,153,0.55)] pointer-events-none';
         const activeEditingGuideInnerClassName = 'absolute inset-[3px] rounded-[10px] border border-dashed border-emerald-950/80 pointer-events-none';
+        const selectableAbilityOverlayClassName = 'absolute inset-0 rounded-lg border-[3px] border-amber-300 bg-[linear-gradient(180deg,rgba(255,245,200,0.18),rgba(245,158,11,0.08))] shadow-[0_0_0_1px_rgba(120,53,15,0.92),0_0_18px_rgba(251,191,36,0.68),inset_0_0_0_1px_rgba(255,251,235,0.52)] pointer-events-none z-10';
+        const selectableAbilityInnerOverlayClassName = 'absolute inset-[2px] rounded-[10px] border-[1.5px] border-slate-950/55 pointer-events-none z-10';
+        const highlightedAbilityOverlayClassName = 'absolute inset-0 rounded-lg border-[3px] border-rose-300 bg-[linear-gradient(180deg,rgba(255,228,230,0.2),rgba(251,113,133,0.08))] shadow-[0_0_0_1px_rgba(136,19,55,0.95),0_0_22px_rgba(251,113,133,0.82),0_0_42px_rgba(251,113,133,0.42)] pointer-events-none z-10 animate-pulse';
+        const highlightedAbilityInnerOverlayClassName = 'absolute inset-[2px] rounded-[10px] border-[1.5px] border-white/50 pointer-events-none z-10';
 
         // 通过 ref 暴露保存方法，供调试面板调用
         React.useImperativeHandle(ref, () => ({
             saveLayout: async () => {
                 try {
-                    const result = await saveDiceThroneAbilityLayout({ layouts: allLayouts });
+                    const result = await saveDiceThroneAbilityLayout({
+                        slotLayouts: allLayouts,
+                        uiTuning: DICETHRONE_PLAYER_BOARD_UI_TUNING,
+                    });
                     const hint = result.relativePath
-                        ? `已写入 ${result.relativePath}（${layoutVersion.toUpperCase()}）`
-                        : `已写入布局文件（${layoutVersion.toUpperCase()}）`;
+                        ? `已写入 ${result.relativePath}（${layoutVersion.toUpperCase()} 布局配置）`
+                        : `已写入布局配置文件（${layoutVersion.toUpperCase()}）`;
                     return { hint };
                 } catch (error) {
                     const message = error instanceof Error ? error.message : '保存失败';
@@ -345,7 +353,10 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                 )}
                                 {/* 只有升级后才叠加升级卡图片，未升级时玩家面板底图已有基础被动图案 */}
                                 {isUpgraded && passiveCard?.previewRef && (
-                                    <div className="absolute inset-0 flex items-center justify-center">
+                                    <div
+                                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                        data-upgrade-preview-slot={slot.id}
+                                    >
                                         <CardPreview
                                             previewRef={passiveCard.previewRef}
                                             locale={locale}
@@ -386,6 +397,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                     const canClick = !isEditing && canSelect && isAvailable;
                     const isActivating = !isEditing && activatingAbilityId === isResolved;
                     const shouldHighlight = !isEditing && canHighlight && isAvailable;
+                    const shouldShowSelectableEmphasis = canClick && !isAbilitySelected;
                     const isUltimate = slot.id === 'ultimate';
                     return (
                         <div
@@ -396,7 +408,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             absolute transition-all duration-200 rounded-lg
                             ${isEditing ? 'pointer-events-auto cursor-move' : 'pointer-events-auto cursor-pointer group'}
                             ${isEditing && editingId === slot.id ? 'z-50' : ''}
-                            ${canClick ? 'hover:border-2 hover:border-amber-400 hover:shadow-[0_0_15px_rgba(251,191,36,0.5)] hover:z-30' : ''}
+                            ${canClick ? 'hover:brightness-110 hover:z-30' : ''}
                             ${isActivating ? 'animate-ability-activate z-50' : ''}
                         `}
                             style={{ left: `${slot.x}%`, top: `${slot.y}%`, width: `${slot.w}%`, height: `${slot.h}%` }}
@@ -421,6 +433,7 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                             {!isUltimate && upgradePreviewRef && (
                                 <div
                                     className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                                    data-upgrade-preview-slot={slot.id}
                                 >
                                     <CardPreview
                                         previewRef={upgradePreviewRef}
@@ -429,8 +442,17 @@ const HERO_SLOT_TO_ABILITY: Record<string, Record<string, string>> = {
                                     />
                                 </div>
                             )}
+                            {shouldShowSelectableEmphasis && (
+                                <>
+                                    <div className={selectableAbilityOverlayClassName} />
+                                    <div className={selectableAbilityInnerOverlayClassName} />
+                                </>
+                            )}
                             {shouldHighlight && (
-                                <div className="absolute inset-0 rounded-lg border-[2.5px] border-rose-400 shadow-[0_0_20px_rgba(251,113,133,0.8),0_0_40px_rgba(251,113,133,0.4)] pointer-events-none z-10 animate-pulse" />
+                                <>
+                                    <div className={highlightedAbilityOverlayClassName} />
+                                    <div className={highlightedAbilityInnerOverlayClassName} />
+                                </>
                             )}
                             {isAbilitySelected && (
                                 <div className="absolute inset-0 rounded-lg border-[3px] border-red-500 shadow-[0_0_25px_rgba(239,68,68,0.9),0_0_50px_rgba(239,68,68,0.5)] pointer-events-none z-10">

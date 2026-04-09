@@ -7,9 +7,9 @@
  * 3. RESOLVE_CHOICE — 解决选择交互
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
-import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildAiDecisionContext, registerRemoteAiProvider, resolveNextLocalAiAction } from '../../../engine/ai';
 import { DiceThroneDomain } from '../domain';
 import { buildDiceThroneAiLegalActions, diceThroneAiRuntime } from '../ai';
 import { engineConfig } from '../game';
@@ -23,15 +23,17 @@ import {
     fixedRandom,
     type CommandInput,
     createHeroMatchup,
+    getCardById,
 } from './test-utils';
 import { DICETHRONE_CHARACTER_CATALOG, type DiceThroneCore } from '../domain/types';
-import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import type { MatchState, RandomFn } from '../../../engine/types';
 import { executePipeline } from '../../../engine/pipeline';
 import { createInitializedState, injectPendingInteraction } from './test-utils';
 import { resolveLocalPregameControlledPlayerId } from '../../../engine/transport/followCurrentTurnPlayer';
 import { RESOURCE_IDS } from '../domain/resources';
 import type { InteractionDescriptor } from '../domain/core-types';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
+import { diceThroneCheatModifier } from '../domain/cheatModifier';
 
 const pipelineConfig = { domain: DiceThroneDomain, systems: testSystems };
 
@@ -504,6 +506,167 @@ describe('AI legal actions', () => {
         }));
     });
 
+    it('selectDie 多骰交互应枚举 1..selectCount 的合法骰子组合，而不是只生成单骰动作', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [1, 2, 5][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-dice-multi',
+            playerId: '0',
+            sourceCardId: 'reroll-two-test',
+            type: 'selectDie',
+            titleKey: 'interaction.selectDiceToReroll',
+            selectCount: 2,
+            selected: [],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const rerollPayloads = actions
+            .filter((action) => action.kind === 'interaction-multistep')
+            .map((action) => action.commands
+                .filter((command) => command.type === 'REROLL_DIE')
+                .map((command) => (command.payload as { dieId: number }).dieId)
+                .join(','))
+            .sort();
+
+        expect(rerollPayloads).toEqual([
+            '0',
+            '0,1',
+            '0,2',
+            '1',
+            '1,2',
+            '2',
+        ]);
+    });
+
+    it('本地 AI 在 selectDie=2 时应优先一次处理两颗低点骰，而不是只选第一颗', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [1, 2, 6][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-dice-low-values',
+            playerId: '0',
+            sourceCardId: 'reroll-two-test',
+            type: 'selectDie',
+            titleKey: 'interaction.selectDiceToReroll',
+            selectCount: 2,
+            selected: [],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-multistep');
+        expect(
+            resolution?.action.commands
+                .filter((command) => command.type === 'REROLL_DIE')
+                .map((command) => (command.payload as { dieId: number }).dieId),
+        ).toEqual([0, 1]);
+    });
+
+    it('modifyDie copy 双骰交互应生成有顺序的源骰→目标骰批动作，而不是单骰确认', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [6, 2, 4][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-copy-die-multi',
+            playerId: '0',
+            sourceCardId: 'copy-die-test',
+            type: 'modifyDie',
+            titleKey: 'interaction.selectDieToCopy',
+            selectCount: 2,
+            selected: [],
+            dieModifyConfig: { mode: 'copy' },
+        };
+        injectPendingInteraction(state, interaction);
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const modifyPayloads = actions
+            .filter((action) => action.kind === 'interaction-multistep')
+            .map((action) => action.commands
+                .filter((command) => command.type === 'MODIFY_DIE')
+                .map((command) => {
+                    const payload = command.payload as { dieId: number; newValue: number };
+                    return `${payload.dieId}:${payload.newValue}`;
+                })
+                .join(','))
+            .sort();
+
+        expect(modifyPayloads).toEqual([
+            '0:6,1:6',
+            '0:6,2:6',
+            '1:2,0:2',
+            '1:2,2:2',
+            '2:4,0:4',
+            '2:4,1:4',
+        ]);
+    });
+
+    it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.sys.interaction = {
+            ...state.sys.interaction,
+            current: {
+                id: 'ai-simple-choice-multi',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    sourceId: 'test_multi_simple_choice',
+                    options: [
+                        { id: 'opt-a', label: '选项 A' },
+                        { id: 'opt-b', label: '选项 B' },
+                        { id: 'opt-c', label: '选项 C' },
+                    ],
+                    multi: { min: 2, max: 2 },
+                },
+            } as any,
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const payloads = actions
+            .filter((action) => action.kind === 'interaction-choice')
+            .map((action) => ((action.commands[0]?.payload as { optionIds?: string[] } | undefined)?.optionIds ?? []).join(','))
+            .sort();
+
+        expect(payloads).toEqual([
+            'opt-a,opt-b',
+            'opt-a,opt-c',
+            'opt-b,opt-c',
+        ]);
+    });
+
     it('本地 AI runner 应在 setup 阶段选择角色', async () => {
         const core = DiceThroneDomain.setup(['0', '1'], fixedRandom);
         const state: MatchState<DiceThroneCore> = {
@@ -828,7 +991,7 @@ describe('AI legal actions', () => {
     });
 
     it('本地 AI 在致命伤害响应窗口应优先使用保命 token，而不是直接跳过响应', async () => {
-        let state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
         state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
         state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
         state.core.pendingDamage = {
@@ -874,6 +1037,100 @@ describe('AI legal actions', () => {
         expect(resolution?.action.metadata).toMatchObject({
             tokenId: TOKEN_IDS.TAIJI,
         });
+    });
+
+    it('本地 AI 不应在 main1 把下次不算当成主动出牌', async () => {
+        const state = createHeroMatchup('gunslinger', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].hand = [getCardById('card-next-time')];
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+        state.sys.phase = 'main1';
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) =>
+            action.kind === 'play-card'
+            && action.metadata?.cardId === 'card-next-time'
+        )).toBe(false);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).not.toBe('play-card');
+    });
+
+    it('本地 AI 在受伤响应窗口应能把下次不算作为 response-play-card 打出', async () => {
+        let state = createHeroMatchup('gunslinger', 'monk')(['0', '1'], fixedRandom);
+        state.core.players['0'].hand = [getCardById('card-next-time')];
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-next-time-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 6,
+            currentDamage: 6,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-next-time-response',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) =>
+            action.kind === 'response-play-card'
+            && action.metadata?.cardId === 'card-next-time'
+        )).toBe(true);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('response-play-card');
+        expect(resolution?.action.metadata).toMatchObject({
+            cardId: 'card-next-time',
+        });
+
+        for (const command of resolution!.action.commands) {
+            state = execCmd(
+                state,
+                cmd(command.type as CommandInput['type'], resolution!.playerId, command.payload ?? {}),
+            );
+        }
+
+        expect(state.core.players['0'].damageShields).toEqual([
+            expect.objectContaining({
+                sourceId: 'card-next-time',
+                value: 6,
+            }),
+        ]);
+        expect(state.core.players['0'].discard.map((card) => card.id)).toContain('card-next-time');
     });
 
     it('本地 AI 在 offensiveRoll 应先锁住高价值技能关键骰，再继续后续重投决策', async () => {
@@ -1099,6 +1356,114 @@ describe('AI legal actions', () => {
         expect(easyEvaluations.some((item) => item.searched)).toBe(false);
         expect(expertEvaluations.some((item) => item.searched)).toBe(true);
         expect(expertEvaluations.every((item) => item.noiseScore === 0)).toBe(true);
+    });
+
+    it('远程 AI 在可见大动作决策点应调用 provider', async () => {
+        const providerId = 'test-remote-major-visible';
+        const decide = vi.fn(async (context) => {
+            const action = context.legalActions.find((candidate) => candidate.kind === 'play-card');
+            return action ? { actionId: action.actionId } : null;
+        });
+        registerRemoteAiProvider({
+            id: providerId,
+            decide,
+        });
+
+        const state = createSetupWithHand(['card-enlightenment'], { cp: 0 })(['0', '1'], fixedRandom);
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'remote-major-visible',
+            seatControllers: {
+                '0': { type: 'remote-ai', providerId, fallbackPolicyId: 'baseline' },
+            },
+        });
+
+        expect(decide).toHaveBeenCalledTimes(1);
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('remote-ai');
+        expect(resolution?.action.kind).toBe('play-card');
+        expect(resolution?.action.metadata).toMatchObject({ cardId: 'card-enlightenment' });
+    });
+
+    it('远程 AI 在微决策响应窗口应直接走本地 fallback，不发远程请求', async () => {
+        const providerId = 'test-remote-micro-bypass';
+        const decide = vi.fn(async (context) => {
+            const action = context.legalActions[0];
+            return action ? { actionId: action.actionId } : null;
+        });
+        registerRemoteAiProvider({
+            id: providerId,
+            decide,
+        });
+
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-remote-micro-response',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-remote-micro-response',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'remote-micro-bypass',
+            seatControllers: {
+                '0': { type: 'remote-ai', providerId, fallbackPolicyId: 'baseline' },
+            },
+        });
+
+        expect(decide).not.toHaveBeenCalled();
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('remote-ai-fallback');
+        expect(resolution?.action.kind).toBe('token-response');
+        expect(resolution?.action.metadata).toMatchObject({
+            tokenId: TOKEN_IDS.TAIJI,
+        });
+    });
+});
+
+describe('作弊发牌 atlas 索引保护', () => {
+    const createUpgradeAtlasState = () => createHeroMatchup('gunslinger', 'monk', (core) => {
+        const player = core.players['0'];
+        player.hand = [];
+        player.discard = [];
+        player.deck = [
+            getCardById('upgrade-deadeye-2'),
+            ...player.deck.filter((card) => card.id !== 'upgrade-deadeye-2'),
+        ];
+    })(['0', '1'], fixedRandom);
+
+    it('gunslinger slot 24 现在只对应 upgrade-deadeye-2，按 atlas index 应可唯一发牌', () => {
+        const state = createUpgradeAtlasState();
+        const nextCore = diceThroneCheatModifier.dealCardByAtlasIndex!(state.core, '0', 24);
+
+        expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-deadeye-2']);
+        expect(nextCore.players['0'].deck).toHaveLength(state.core.players['0'].deck.length - 1);
+    });
+
+    it('精确 deckIndex 发牌仍可发出 upgrade-deadeye-2', () => {
+        const state = createUpgradeAtlasState();
+        const nextCore = diceThroneCheatModifier.dealCardByIndex!(state.core, '0', 0);
+
+        expect(nextCore.players['0'].hand.map((card) => card.id)).toEqual(['upgrade-deadeye-2']);
+        expect(nextCore.players['0'].deck[0]?.id).not.toBe('upgrade-deadeye-2');
     });
 });
 

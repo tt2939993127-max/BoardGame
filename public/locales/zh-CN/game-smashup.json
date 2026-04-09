@@ -93,11 +93,11 @@
     "card_placeholder": "卡牌",
     "me_first_title": "⚡ 先手响应！",
     "after_scoring_title": "计分后响应",
-    "duel_in_progress": "决斗进行中：先处理 Pinkerton / 决斗牌 / Deputy，再结算胜负",
-    "duel_prompt_pinkerton_title": "Pinkerton：选择这场决斗前要放置多少个 +1 力量指示物",
-    "duel_prompt_card_title": "决斗：从手牌选择 1 张决斗牌，或跳过",
-    "duel_prompt_deputy_title": "Deputy：你可以弃掉一张 Deputy，使一个随从直到回合结束获得 +2 力量",
-    "duel_prompt_deputy_target_title": "Deputy：选择一个随从获得 +2 力量直到回合结束",
+    "duel_in_progress": "决斗进行中：依次处理平克顿加指示物、从手牌打出决斗牌、弃副警长加力量，最后再结算胜负",
+    "duel_prompt_pinkerton_title": "平克顿：选择这场决斗前要放置的 +1 力量指示物数量",
+    "duel_prompt_card_title": "决斗牌：从手牌选择 1 张要用于这场决斗的牌，或跳过",
+    "duel_prompt_deputy_title": "副警长：你可以弃掉 1 张副警长，使 1 个随从直到回合结束获得 +2 力量",
+    "duel_prompt_deputy_target_title": "副警长：选择 1 个随从，使其直到回合结束获得 +2 力量",
     "duel_prompt_ongoing_base_title": "决斗牌：选择此持续行动的目标基地",
     "duel_prompt_ongoing_minion_title": "决斗牌：选择此持续行动的目标随从",
     "duel_prompt_run_em_off_title": "赶走他们：选择失败者要移动到的基地",
@@ -105,8 +105,8 @@
     "duel_prompt_resolve_title": "决斗结算",
     "duel_option_no_counters": "不放置指示物",
     "duel_option_add_counters": "放置 {{count}} 个指示物",
-    "duel_option_skip_duel_card": "跳过（不放决斗牌）",
-    "duel_option_skip_deputy": "跳过（不弃 Deputy）",
+    "duel_option_skip_duel_card": "跳过（不从手牌打出决斗牌）",
+    "duel_option_skip_deputy": "跳过（不弃副警长）",
     "reaction_timing": {
       "onMinionPlayed": "随从打出后",
       "onActionPlayed": "行动打出后",
@@ -145,6 +145,8 @@
     "show_end_turn_controls": "显示结束回合按钮和额度提示",
     "hide_end_turn_controls": "隐藏结束回合按钮和额度提示",
     "close": "关闭",
+    "close_faction_details": "关闭派系详情",
+    "mechanic_tutorial": "机制教程",
     "reveal_your_hand_shown": "你的手牌正在被展示",
     "reveal_confirmed": "已确认",
     "reveal_queue_hint": "{{count}} 条展示待查看 · 点击继续",
@@ -155,11 +157,18 @@
     "power_counter": "力量指示物",
     "skip": "跳过",
     "wait_for_your_turn": "等待你的响应回合",
+    "drag_release_to_base": "松手打到这个基地",
+    "drag_release_to_minion": "松手附着到这个随从",
+    "drag_release_to_board": "松手打出该卡",
+    "drag_no_target": "拖到发光目标上",
     "fusion_choose_playas": "选择打出方式",
     "fusion_choose_playas_desc": "融合卡可以作为随从或战术打出。请选择本次打出的类型。",
     "play_as_minion": "作为随从",
     "play_as_action": "作为战术",
-    "tap_again_to_activate": "再次点击发动"
+    "tap_again_to_activate": "再次点击发动",
+    "titan_ability": "泰坦能力",
+    "titan_play_available": "可打出",
+    "no_valid_targets": "没有可选目标"
   },
   "feedback": {
     "deck_search_no_match": "牌库中未找到符合条件的卡牌，已重洗牌库",
@@ -444,6 +453,23 @@
     "title": "大杀四方教学",
     "welcome": "欢迎来到大杀四方！组合两个种族争夺基地，率先获得15点胜利分数即可获胜。",
     "finish": "教学完成，准备好开始对战吧！",
+    "subTutorials": {
+      "cowboysDuel": {
+        "title": "牛仔：决斗教学",
+        "description": "通过一条固定链路，演示牛仔决斗中的平克顿、决斗牌与副警长结算。",
+        "steps": {
+          "setup": "正在布置牛仔决斗教学场景……",
+          "duelIntro": "这条教学只聚焦牛仔的决斗机制。你将依次看到挑战发起、平克顿加力量、双方决斗牌与副警长加成，最后再结算胜负。",
+          "playGunfighter": "先打出枪手，并指定酒馆里的敌方微型机器人发起决斗。",
+          "pecosBillWindow": "决斗刚开始时，牛仔泰坦 Pecos Bill 会先询问是否弃 1 张牌并加入这场决斗。本教学先跳过它，继续看基础决斗链路。",
+          "pinkertonCounter": "你的平克顿会在决斗牌结算前触发。为参战的己方随从放置 1 个 +1 力量指示物。",
+          "duelCard": "接下来处理你的决斗牌窗口。本教学先跳过，直接看牛仔的基础链路如何继续推进。",
+          "opponentDuelCard": "对手没有额外响应，系统会自动让过对方的决斗牌窗口。",
+          "deputyBoost": "现在弃掉手里的副警长，让枪手直到回合结束获得 +2 力量，确保赢下这场决斗。",
+          "finish": "决斗结算完成：敌方随从已被消灭，副警长进入弃牌堆，当前没有未结算的决斗。你已经走完牛仔决斗的核心链路。"
+        }
+      }
+    },
     "steps": {
       "setup": "正在准备教学场景...",
       "aiPlayMinion": "看！我们的「星之眷族」已经出现在基地上了。\n\n这张力量 5 的随从拥有天赋能力，稍后你可以激活它。",
@@ -453,8 +479,8 @@
       "turnTracker": "这里显示当前回合数和游戏阶段。\n\n每回合依次经过：出牌 → 记分 → 抽牌。",
       "endTurnBtn": "这是结束按钮。每个阶段操作完成后，点击它推进到下一阶段。",
       "playCardsExplain": "现在是出牌阶段！\n\n每回合你可以打出 1 张随从和 1 张战术卡（各一张）。\n\n随从放在基地上贡献力量，战术卡执行特殊效果。",
-      "playMinion": "试试打出一张随从吧！\n\n点击手牌中的「图书管理员」，然后选择一个基地放置。\n\n这张力量 4 的随从拥有天赋能力，打出后你可以激活它！",
-      "playAction": "很好！现在打出一张战术卡。\n\n战术卡「嚎叫」会让你场上所有随从力量+1，点击手牌中的战术卡即可使用。",
+      "playMinion": "试试打出一张随从吧！\n\n先点击手牌中的「图书管理员」将其选中，再选择一个基地放置。\n\n这张力量 4 的随从拥有天赋能力，打出后你可以激活它！",
+      "playAction": "很好！现在打出一张战术卡。\n\n战术卡「嚎叫」会让你场上所有随从力量+1，先点击手牌中的战术卡将其选中，再点击一次确认使用。",
       "useTalent": "注意基地上金色发光的「图书管理员」！\n\n某些随从拥有天赋能力，每回合可以主动激活一次。\n\n点击基地上发光的「图书管理员」来使用它的天赋——弃掉疯狂卡，抽1张牌！",
       "endPlayCards": "出牌完成！点击结束按钮进入下一阶段。",
       "baseScoring": "基地记分：当一个基地上所有随从的力量总和达到或超过临界点时，该基地就会记分。\n\n记分后基地上的随从会被弃置，然后翻出一个新基地。",
@@ -680,7 +706,7 @@
     },
     "elder_thing_byakhee": {
       "name": "拜亚基",
-      "abilityText": "如果其他玩家有随从在这个基地抽一张疯狂卡。"
+      "abilityText": "每位在这里有随从的其他玩家抽一张疯狂卡。"
     },
     "elder_thing_power_of_madness": {
       "name": "疯狂之力",
@@ -1547,7 +1573,7 @@
     },
     "base_standing_stones": {
       "name": "巨石阵",
-      "abilityText": "你的回合中，你在这的一个随从可以使用其才能两次。"
+      "abilityText": "你的回合中，你在这的一个随从可以使用其天赋两次。"
     },
     "base_egg_chamber": {
       "name": "卵室",
@@ -2907,7 +2933,7 @@
     },
     "ancient_egyptians_plague_of_locusts": {
       "name": "蝗灾",
-      "effectText": "特殊：在一个基地计分前打出。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
     },
     "ancient_egyptians_mummy_strength": {
       "name": "木乃伊之力",

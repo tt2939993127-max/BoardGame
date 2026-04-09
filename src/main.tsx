@@ -7,13 +7,7 @@ import { SENTRY_DSN } from './config/server';
 import { notifyAndroidBundleReady } from './lib/mobile/androidLiveUpdates';
 import { isStaleChunkError, reloadForStaleChunkOnce } from './lib/staleChunkReloadGuard';
 import { hydrateInstalledNativeGamePackages } from './features/mobile-packages/packageManagerService';
-
-const STALE_CHUNK_BOOTSTRAP_WINDOW_MS = 8000;
-const bootstrapStartedAt = typeof performance !== 'undefined' ? performance.now() : Date.now();
-const shouldAutoReloadStaleChunk = () => {
-  const now = typeof performance !== 'undefined' ? performance.now() : Date.now();
-  return now - bootstrapStartedAt <= STALE_CHUNK_BOOTSTRAP_WINDOW_MS;
-};
+import { isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
 
 const captureParams = typeof window !== 'undefined'
   ? new URLSearchParams(window.location.search)
@@ -68,9 +62,16 @@ if (import.meta.env.DEV) {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('vite:preloadError', (event) => {
-    const reloaded = reloadForStaleChunkOnce('vite:preloadError', window, {
-      shouldReload: shouldAutoReloadStaleChunk,
-    });
+    const reloaded = reloadForStaleChunkOnce('vite:preloadError', window);
+    if (reloaded) {
+      event.preventDefault();
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    const reason = event.error ?? event.message;
+    if (!isStaleChunkError(reason)) return;
+    const reloaded = reloadForStaleChunkOnce('window:error', window);
     if (reloaded) {
       event.preventDefault();
     }
@@ -78,9 +79,7 @@ if (typeof window !== 'undefined') {
 
   window.addEventListener('unhandledrejection', (event) => {
     if (!isStaleChunkError(event.reason)) return;
-    const reloaded = reloadForStaleChunkOnce('unhandledrejection', window, {
-      shouldReload: shouldAutoReloadStaleChunk,
-    });
+    const reloaded = reloadForStaleChunkOnce('unhandledrejection', window);
     if (reloaded) {
       event.preventDefault();
     }
@@ -102,10 +101,12 @@ if (SENTRY_DSN) {
   });
 }
 
-void notifyAndroidBundleReady();
-void hydrateInstalledNativeGamePackages().catch((error) => {
-  console.warn('[MobilePackages] 同步原生已安装游戏包失败', error);
-});
+if (isNativeAndroidRuntime()) {
+  void notifyAndroidBundleReady();
+  void hydrateInstalledNativeGamePackages().catch((error) => {
+    console.warn('[MobilePackages] 同步原生已安装游戏包失败', error);
+  });
+}
 
 const rootElement = document.getElementById('root');
 if (rootElement) {

@@ -52,20 +52,23 @@ export interface FeedbackItem {
 
 const EMBEDDED_IMG_RE = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g;
 
+function createEmbeddedImageRegExp(): RegExp {
+    return new RegExp(EMBEDDED_IMG_RE.source, EMBEDDED_IMG_RE.flags);
+}
+
 export function extractEmbeddedImages(content: string) {
-    return Array.from(content.matchAll(EMBEDDED_IMG_RE), (match) => ({
+    return Array.from(content.matchAll(createEmbeddedImageRegExp()), (match) => ({
         alt: match[1] || '',
         src: match[2],
     }));
 }
 
 export function hasEmbeddedImage(content: string): boolean {
-    EMBEDDED_IMG_RE.lastIndex = 0;
-    return EMBEDDED_IMG_RE.test(content);
+    return createEmbeddedImageRegExp().test(content);
 }
 
 export function extractText(content: string, t: TFunction<'admin'>): string {
-    return content.replace(EMBEDDED_IMG_RE, '').trim() || t('feedback.content.onlyImage');
+    return content.replace(createEmbeddedImageRegExp(), '').trim() || t('feedback.content.onlyImage');
 }
 
 export function parseOperationLogs(actionLog?: string): unknown[] {
@@ -150,36 +153,6 @@ function formatInlineValue(value: unknown, depth = 0): string {
     return `${entries.join(', ')}${suffix}`;
 }
 
-function summarizeClientContext(context: FeedbackClientContext | null | undefined): string | null {
-    if (!context) return null;
-
-    const parts = [
-        context.route ? `route=${truncateInlineText(context.route, 80)}` : '',
-        context.matchId ? `match=${context.matchId}` : '',
-        context.playerId ? `player=${context.playerId}` : '',
-        context.gameId ? `game=${context.gameId}` : '',
-        context.mode ? `mode=${context.mode}` : '',
-        context.appVersion ? `app=${context.appVersion}` : '',
-        context.viewport ? `viewport=${context.viewport.width}x${context.viewport.height}` : '',
-        context.language ? `lang=${context.language}` : '',
-        context.timezone ? `tz=${context.timezone}` : '',
-    ].filter(Boolean);
-
-    return parts.length > 0 ? parts.join(', ') : null;
-}
-
-function summarizeErrorContext(context: FeedbackErrorContext | null | undefined): string | null {
-    if (!context) return null;
-
-    const parts = [
-        context.source ? truncateInlineText(context.source, 48) : '',
-        context.name ? truncateInlineText(context.name, 48) : '',
-        context.message ? truncateInlineText(context.message, 120) : '',
-    ].filter(Boolean);
-
-    return parts.length > 0 ? parts.join(' | ') : null;
-}
-
 function summarizeOperationLogs(actionLog?: string): string | null {
     const logs = parseOperationLogs(actionLog);
     if (logs.length === 0) return null;
@@ -258,30 +231,144 @@ function summarizeStateSnapshot(stateSnapshot: unknown): string | null {
     return keys.length > 0 ? `keys=${keys.join(', ')}` : null;
 }
 
-export function buildFeedbackAiSummary(item: FeedbackItem, t: TFunction<'admin'>): string {
+function measureTextBlock(value?: string | null): { chars: number; lines: number } | null {
+    if (!value?.trim()) return null;
+    const normalized = value.replace(/\r\n/g, '\n');
+    return {
+        chars: normalized.length,
+        lines: normalized.split('\n').length,
+    };
+}
+
+function prettyPrintJson(raw?: string | null): string | null {
+    if (!raw?.trim()) return null;
+    try {
+        return JSON.stringify(JSON.parse(raw), null, 2);
+    } catch {
+        return raw.trim();
+    }
+}
+
+function buildClientContextLines(context: FeedbackClientContext | null | undefined): string[] {
+    if (!context) return ['- 未附带客户端上下文'];
+
+    return [
+        `- route: ${context.route || '-'}`,
+        `- mode: ${context.mode || '-'}`,
+        `- matchId: ${context.matchId || '-'}`,
+        `- playerId: ${context.playerId || '-'}`,
+        `- gameId: ${context.gameId || '-'}`,
+        `- appVersion: ${context.appVersion || '-'}`,
+        `- language: ${context.language || '-'}`,
+        `- timezone: ${context.timezone || '-'}`,
+        `- viewport: ${context.viewport ? `${context.viewport.width}x${context.viewport.height}` : '-'}`,
+        `- userAgent: ${context.userAgent || '-'}`,
+    ];
+}
+
+function buildErrorContextLines(context: FeedbackErrorContext | null | undefined): string[] {
+    if (!context) return ['- 未附带错误上下文'];
+
+    return [
+        `- source: ${context.source || '-'}`,
+        `- name: ${context.name || '-'}`,
+        `- message: ${context.message || '-'}`,
+    ];
+}
+
+export function buildFeedbackAiDiagnosticPacket(item: FeedbackItem, t: TFunction<'admin'>): string {
     const parsedSnapshot = parseStateSnapshot(item.stateSnapshot);
     const inferredGameId = inferGameId(parsedSnapshot, item.clientContext?.gameId, item.gameName);
     const gameLabel = item.gameName && inferredGameId && item.gameName !== inferredGameId
         ? `${item.gameName}(${inferredGameId})`
         : item.gameName ?? inferredGameId;
     const reporter = item.userId?.username || t('feedback.anonymous');
-    const clientSummary = summarizeClientContext(item.clientContext);
-    const errorSummary = summarizeErrorContext(item.errorContext);
+    const screenshots = extractEmbeddedImages(item.content);
     const operationSummary = summarizeOperationLogs(item.actionLog);
     const stateSummary = summarizeStateSnapshot(parsedSnapshot);
+    const actionLogMetrics = measureTextBlock(item.actionLog);
+    const stateSnapshotMetrics = measureTextBlock(item.stateSnapshot);
+    const prettyActionLog = prettyPrintJson(item.actionLog);
+    const prettyStateSnapshot = prettyPrintJson(item.stateSnapshot);
+    const errorStack = item.errorContext?.stack?.trim() || null;
+    const contentText = extractText(item.content, t);
 
     return [
-        `反馈ID=${item._id}`,
-        `时间=${formatAbsoluteTime(item.createdAt)}`,
-        `类型=${t(`feedback.type.${item.type}`)}/${t(`feedback.severity.${item.severity}`)}/${t(`feedback.status.${item.status}`)}`,
-        gameLabel ? `游戏=${gameLabel}` : '',
-        `提交人=${reporter}`,
-        `内容=${truncateInlineText(extractText(item.content, t), 220)}`,
-        clientSummary ? `客户端=${clientSummary}` : '',
-        errorSummary ? `错误=${errorSummary}` : '',
-        operationSummary ? `操作=${operationSummary}` : '',
-        stateSummary ? `状态=${stateSummary}` : '',
-    ].filter(Boolean).join(' | ');
+        '# AI 排障诊断包',
+        '',
+        '请基于下面的完整证据链定位问题。输出时优先给出：问题复述、最可疑模块或状态字段、验证步骤、如果证据不足还缺什么。',
+        '',
+        '## 1. 工单信息',
+        `- 反馈ID: ${item._id}`,
+        `- 时间: ${formatAbsoluteTime(item.createdAt)}`,
+        `- 类型: ${t(`feedback.type.${item.type}`)}`,
+        `- 严重度: ${t(`feedback.severity.${item.severity}`)}`,
+        `- 状态: ${t(`feedback.status.${item.status}`)}`,
+        gameLabel ? `- 游戏: ${gameLabel}` : '',
+        `- 提交人: ${reporter}`,
+        item.contactInfo ? `- 联系方式: ${item.contactInfo}` : '',
+        '',
+        '## 2. 用户反馈原文',
+        contentText,
+        '',
+        '## 3. 证据索引',
+        `- 内嵌截图: ${screenshots.length} 张`,
+        ...screenshots.map((image, index) => `- 截图${index + 1}: ${image.alt || '未命名截图'}`),
+        screenshots.length > 0
+            ? '- 说明: 为避免把 base64 图片正文污染对话上下文，复制文本只保留截图索引，原图请回后台反馈详情查看。'
+            : '',
+        `- 操作日志: ${actionLogMetrics ? `${actionLogMetrics.lines} 行 / ${actionLogMetrics.chars} 字符` : '未附带'}`,
+        `- 状态快照: ${stateSnapshotMetrics ? `${stateSnapshotMetrics.lines} 行 / ${stateSnapshotMetrics.chars} 字符` : '未附带'}`,
+        stateSummary ? `- 状态摘要: ${stateSummary}` : '',
+        errorStack ? `- 错误堆栈: ${measureTextBlock(errorStack)?.lines ?? 0} 行` : '- 错误堆栈: 未附带',
+        '',
+        '## 4. 客户端上下文',
+        ...buildClientContextLines(item.clientContext),
+        '',
+        '## 5. 错误上下文',
+        ...buildErrorContextLines(item.errorContext),
+        ...(errorStack
+            ? [
+                '',
+                '### 错误堆栈',
+                '```text',
+                errorStack,
+                '```',
+            ]
+            : []),
+        ...(operationSummary
+            ? [
+                '',
+                '## 6. 操作日志摘要',
+                operationSummary,
+            ]
+            : []),
+        ...(prettyActionLog
+            ? [
+                '',
+                '## 7. 操作日志原文',
+                '```json',
+                prettyActionLog,
+                '```',
+            ]
+            : []),
+        ...(stateSummary
+            ? [
+                '',
+                '## 8. 状态快照摘要',
+                stateSummary,
+            ]
+            : []),
+        ...(prettyStateSnapshot
+            ? [
+                '',
+                '## 9. 状态快照原文',
+                '```json',
+                prettyStateSnapshot,
+                '```',
+            ]
+            : []),
+    ].filter(Boolean).join('\n');
 }
 
 export function CopyFeedbackButton({
@@ -298,7 +385,7 @@ export function CopyFeedbackButton({
 
     const handleCopy = (event: React.MouseEvent) => {
         event.stopPropagation();
-        const payloadText = buildFeedbackAiSummary(item, t);
+        const payloadText = buildFeedbackAiDiagnosticPacket(item, t);
         navigator.clipboard.writeText(payloadText).then(() => {
             onAiPayloadCopy(payloadText);
             setCopied(true);

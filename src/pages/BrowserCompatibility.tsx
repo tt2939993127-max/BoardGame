@@ -119,7 +119,7 @@ export const BrowserCompatibilityPage = ({
         : report.browserName;
 
     return (
-        <div style={pageStyle}>
+        <div data-bg-friendly-screen="true" style={pageStyle}>
             <SEO
                 title={t('compatibility.seoTitle')}
                 description={t('compatibility.seoDescription')}

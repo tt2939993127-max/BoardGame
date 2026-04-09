@@ -30,16 +30,25 @@ export interface MatchInfo {
 export interface CreateMatchOptions {
     numPlayers: number;
     setupData?: Record<string, unknown>;
+    playerName?: string;
+    forceReplaceOwnerRoom?: boolean;
+}
+
+export interface CreateMatchResult {
+    matchID: string;
+    ownerPlayerID?: string;
+    ownerCredentials?: string;
 }
 
 export interface JoinMatchOptions {
-    playerID: string;
+    playerID?: string;
     playerName?: string;
     data?: Record<string, unknown>;
 }
 
 export interface JoinMatchResult {
     playerCredentials: string;
+    playerID?: string;
 }
 
 export interface LeaveMatchOptions {
@@ -52,6 +61,42 @@ export interface LeaveMatchOptions {
 // ============================================================================
 
 const baseUrl = (): string => GAME_SERVER_URL || '';
+
+export interface MatchApiError extends Error {
+    status?: number;
+    details?: string;
+    code?: string;
+}
+
+const tryParseErrorCode = (text: string): string | undefined => {
+    const normalized = text.trim();
+    if (!normalized) return undefined;
+
+    const jsonMatch = normalized.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+        try {
+            const parsed = JSON.parse(jsonMatch[0]) as { error?: unknown; code?: unknown };
+            if (typeof parsed.error === 'string' && parsed.error.trim()) return parsed.error.trim();
+            if (typeof parsed.code === 'string' && parsed.code.trim()) return parsed.code.trim();
+        } catch {
+            // 忽略解析失败，降级到文本匹配
+        }
+    }
+
+    const textCodeMatch = normalized.match(/\b([A-Z][A-Z0-9_]{2,})\b/);
+    return textCodeMatch?.[1];
+};
+
+const buildApiError = (status: number, text: string, fallbackStatusText: string): MatchApiError => {
+    const normalizedText = text.trim();
+    const error = new Error(`${status}: ${normalizedText || fallbackStatusText}`) as MatchApiError;
+    error.status = status;
+    error.details = normalizedText || fallbackStatusText;
+    error.code = tryParseErrorCode(normalizedText)
+        ?? (status === 401 ? 'INVALID_TOKEN' : undefined)
+        ?? `HTTP_${status}`;
+    return error;
+};
 
 async function apiPost<T = unknown>(url: string, body: unknown, extraHeaders?: Record<string, string>): Promise<T> {
     const response = await fetch(url, {
@@ -68,7 +113,7 @@ async function apiPost<T = unknown>(url: string, body: unknown, extraHeaders?: R
             localStorage.removeItem('refresh_token');
             // 不自动跳转，让 AuthContext 处理
         }
-        throw new Error(`${response.status}: ${text || response.statusText}`);
+        throw buildApiError(response.status, text, response.statusText);
     }
     return response.json() as Promise<T>;
 }
@@ -84,7 +129,7 @@ async function apiGet<T = unknown>(url: string): Promise<T> {
             localStorage.removeItem('refresh_token');
             // 不自动跳转，让 AuthContext 处理
         }
-        throw new Error(`${response.status}: ${text || response.statusText}`);
+        throw buildApiError(response.status, text, response.statusText);
     }
     return response.json() as Promise<T>;
 }
@@ -100,11 +145,13 @@ export async function createMatch(
     gameName: string,
     options: CreateMatchOptions,
     init?: { headers?: Record<string, string> },
-): Promise<{ matchID: string }> {
+): Promise<CreateMatchResult> {
     const url = `${baseUrl()}/games/${gameName}/create`;
-    return apiPost<{ matchID: string }>(url, {
+    return apiPost<CreateMatchResult>(url, {
         numPlayers: options.numPlayers,
         setupData: options.setupData,
+        playerName: options.playerName,
+        forceReplaceOwnerRoom: options.forceReplaceOwnerRoom,
     }, init?.headers);
 }
 
@@ -128,11 +175,14 @@ export async function joinMatch(
     options: JoinMatchOptions,
 ): Promise<JoinMatchResult> {
     const url = `${baseUrl()}/games/${gameName}/${matchID}/join`;
-    return apiPost<JoinMatchResult>(url, {
-        playerID: options.playerID,
+    const payload: Record<string, unknown> = {
         playerName: options.playerName,
         data: options.data,
-    });
+    };
+    if (options.playerID) {
+        payload.playerID = options.playerID;
+    }
+    return apiPost<JoinMatchResult>(url, payload);
 }
 
 /**

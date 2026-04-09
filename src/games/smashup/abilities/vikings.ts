@@ -1,5 +1,5 @@
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, getCurrentTrackedCardTopSnapshot, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -40,8 +40,54 @@ import { reduce } from '../domain/reduce';
 type PlayerChoice = { targetPlayerId: PlayerId };
 type HandChoice = { cardUid: string; defId: string };
 type MinionChoice = { minionUid: string; baseIndex: number };
-type CastRunesChoice = { topCardUid: string };
+type CastRunesChoice = { topCardUid: string; cardUid?: string; defId?: string };
 type RaidingPartyChoice = { cardUid: string; ownerId: PlayerId; defId: string; type: 'action' | 'minion' } | { skip: true };
+
+function getCurrentDeckTopSnapshotCards<T extends { uid: string; defId: string }>(
+    state: SmashUpCore,
+    playerId: PlayerId,
+    trackedCards: T[],
+): T[] {
+    return getCurrentTrackedCardTopSnapshot(state.players[playerId]?.deck ?? [], trackedCards);
+}
+
+function buildCastTheRunesOrderOptions(
+    state: SmashUpCore,
+    targetPlayerId: PlayerId,
+    revealedCards: Array<{ uid: string; defId: string }>,
+) {
+    return getCurrentDeckTopSnapshotCards(state, targetPlayerId, revealedCards).map((card, index) => ({
+        id: `card-${index}`,
+        label: getCardDef(card.defId)?.name ?? card.defId,
+        value: { topCardUid: card.uid, cardUid: card.uid, defId: card.defId },
+        _source: 'static' as const,
+        displayMode: 'card' as const,
+    }));
+}
+
+function buildRaidingPartyChoiceOptions(
+    state: SmashUpCore,
+    targetPlayerId: PlayerId,
+    revealedCards: Array<{ uid: string; defId: string; type: 'action' | 'minion' }>,
+) {
+    const eligible = getCurrentDeckTopSnapshotCards(state, targetPlayerId, revealedCards)
+        .filter((card) => isRaidingPartyPlayable(card as CardInstance))
+        .map((card, index) => ({
+            id: `play-${index}`,
+            label: getCardDef(card.defId)?.name ?? card.defId,
+            value: { cardUid: card.uid, ownerId: targetPlayerId, defId: card.defId, type: card.type },
+            _source: 'static' as const,
+            displayMode: 'card' as const,
+        }));
+
+    return [createSkipOption('不打出') as any, ...eligible] as Array<{
+        id: string;
+        label: string;
+        value: RaidingPartyChoice;
+        _source?: 'static';
+        displayMode?: 'button' | 'card';
+    }>;
+}
 
 export function registerVikingsAbilities(): void {
     registerAbility('vikings_huscarl', 'talent', vikingsHuscarlTalent);
@@ -438,35 +484,39 @@ const handleVikingsCastTheRunesPlayer = (state: MatchState<SmashUpCore>, playerI
         `vikings_cast_the_runes_order_${timestamp}`,
         playerId,
         '掷卢恩符文：选择放回牌库顶的顺序',
-        deckInfo.cards.map((card, index) => ({
-            id: `card-${index}`,
-            label: getCardDef(card.defId)?.name ?? card.defId,
-            value: { topCardUid: card.uid },
-            _source: 'static' as const,
-            displayMode: 'card' as const,
-        })),
-        { sourceId: 'vikings_cast_the_runes_order', targetType: 'generic' },
+        buildCastTheRunesOrderOptions(state.core, selected.targetPlayerId, deckInfo.cards.map(card => ({ uid: card.uid, defId: card.defId }))),
+        { sourceId: 'vikings_cast_the_runes_order', targetType: 'generic', responseValidationMode: 'live' },
     );
     (interaction.data as any).continuationContext = {
         targetPlayerId: selected.targetPlayerId,
         revealedCards: deckInfo.cards.map(card => ({ uid: card.uid, defId: card.defId })),
-        remainingDeckUids: deckInfo.remainingDeckUids,
+    };
+    (interaction.data as any).optionsGenerator = (nextState: MatchState<SmashUpCore>, data: any) => {
+        const ctx = data?.continuationContext as { targetPlayerId: PlayerId; revealedCards: Array<{ uid: string; defId: string }> } | undefined;
+        if (!ctx) return [];
+        return buildCastTheRunesOrderOptions(nextState.core, ctx.targetPlayerId, ctx.revealedCards);
     };
     return { state: queueInteraction(state, interaction), events };
 };
 
 const handleVikingsCastTheRunesOrder = (state: MatchState<SmashUpCore>, _playerId: PlayerId, value: unknown, data: any, _random: RandomFn, timestamp: number) => {
     const selected = value as CastRunesChoice | undefined;
-    const ctx = data?.continuationContext as { targetPlayerId: PlayerId; revealedCards: Array<{ uid: string; defId: string }>; remainingDeckUids: string[] } | undefined;
+    const ctx = data?.continuationContext as { targetPlayerId: PlayerId; revealedCards: Array<{ uid: string; defId: string }> } | undefined;
     if (!selected?.topCardUid || !ctx) return { state, events: [] };
-    const topCard = ctx.revealedCards.find(card => card.uid === selected.topCardUid);
+    const currentRevealed = getCurrentDeckTopSnapshotCards(state.core, ctx.targetPlayerId, ctx.revealedCards);
+    if (currentRevealed.length === 0) return { state, events: [] };
+    const topCard = currentRevealed.find(card => card.uid === selected.topCardUid);
     if (!topCard) return { state, events: [] };
-    const rest = ctx.revealedCards.filter(card => card.uid !== selected.topCardUid);
+    const rest = currentRevealed.filter(card => card.uid !== selected.topCardUid);
+    const trackedUidSet = new Set(currentRevealed.map(card => card.uid));
+    const liveRemainingDeckUids = (state.core.players[ctx.targetPlayerId]?.deck ?? [])
+        .filter(card => !trackedUidSet.has(card.uid))
+        .map(card => card.uid);
     return {
         state,
         events: [{
             type: SU_EVENTS.DECK_REORDERED,
-            payload: { playerId: ctx.targetPlayerId, deckUids: [topCard.uid, ...rest.map(card => card.uid), ...ctx.remainingDeckUids] },
+            payload: { playerId: ctx.targetPlayerId, deckUids: [topCard.uid, ...rest.map(card => card.uid), ...liveRemainingDeckUids] },
             timestamp,
         } as DeckReorderedEvent],
     };
@@ -489,37 +539,50 @@ const handleVikingsRaidingPartyPlayer = (state: MatchState<SmashUpCore>, playerI
             timestamp,
         ),
     ];
-    const eligible = deckInfo.cards.filter(card => isRaidingPartyPlayable(card)).map((card, index) => ({
-        id: `play-${index}`,
-        label: getCardDef(card.defId)?.name ?? card.defId,
-        value: { cardUid: card.uid, ownerId: selected.targetPlayerId, defId: card.defId, type: card.type as 'action' | 'minion' },
-        _source: 'static' as const,
-        displayMode: 'card' as const,
-    }));
     const interaction = createSimpleChoice(
         `vikings_raiding_party_choice_${timestamp}`,
         playerId,
         '突袭队：你可以选择一张可打出的牌',
-        [createSkipOption('不打出') as any, ...eligible] as any[],
-        { sourceId: 'vikings_raiding_party_choice', targetType: 'generic' },
+        buildRaidingPartyChoiceOptions(
+            state.core,
+            selected.targetPlayerId,
+            deckInfo.cards.map(card => ({ uid: card.uid, defId: card.defId, type: card.type as 'action' | 'minion' })),
+        ) as any[],
+        { sourceId: 'vikings_raiding_party_choice', targetType: 'generic', responseValidationMode: 'live' },
     );
     (interaction.data as any).continuationContext = {
         targetPlayerId: selected.targetPlayerId,
-        remainingDeckUids: deckInfo.remainingDeckUids,
-        revealedCards: deckInfo.cards.map(card => ({ uid: card.uid, defId: card.defId })),
+        revealedCards: deckInfo.cards.map(card => ({ uid: card.uid, defId: card.defId, type: card.type as 'action' | 'minion' })),
+    };
+    (interaction.data as any).optionsGenerator = (nextState: MatchState<SmashUpCore>, interactionData: any) => {
+        const ctx = interactionData?.continuationContext as {
+            targetPlayerId: PlayerId;
+            revealedCards: Array<{ uid: string; defId: string; type: 'action' | 'minion' }>;
+        } | undefined;
+        if (!ctx) return [];
+        return buildRaidingPartyChoiceOptions(nextState.core, ctx.targetPlayerId, ctx.revealedCards);
     };
     return { state: queueInteraction(state, interaction), events };
 };
 
 const handleVikingsRaidingPartyChoice = (state: MatchState<SmashUpCore>, playerId: PlayerId, value: unknown, data: any, random: RandomFn, timestamp: number) => {
     const selected = value as RaidingPartyChoice | undefined;
-    const ctx = data?.continuationContext as { targetPlayerId: PlayerId; remainingDeckUids: string[]; revealedCards: Array<{ uid: string; defId: string }> } | undefined;
+    const ctx = data?.continuationContext as {
+        targetPlayerId: PlayerId;
+        revealedCards: Array<{ uid: string; defId: string; type: 'action' | 'minion' }>;
+    } | undefined;
     if (!ctx) return { state, events: [] };
+    const currentRevealed = getCurrentDeckTopSnapshotCards(state.core, ctx.targetPlayerId, ctx.revealedCards);
+    if (currentRevealed.length === 0) return { state, events: [] };
     const chosenUid = selected && 'cardUid' in selected ? selected.cardUid : undefined;
-    const remaining = ctx.revealedCards.filter(card => card.uid !== chosenUid);
+    const remaining = currentRevealed.filter(card => card.uid !== chosenUid);
+    const trackedUidSet = new Set(currentRevealed.map(card => card.uid));
+    const liveRemainingDeckUids = (state.core.players[ctx.targetPlayerId]?.deck ?? [])
+        .filter(card => !trackedUidSet.has(card.uid))
+        .map(card => card.uid);
     const reorderEvent: SmashUpEvent = {
         type: SU_EVENTS.DECK_REORDERED,
-        payload: { playerId: ctx.targetPlayerId, deckUids: [...remaining.map(card => card.uid), ...ctx.remainingDeckUids] },
+        payload: { playerId: ctx.targetPlayerId, deckUids: [...remaining.map(card => card.uid), ...liveRemainingDeckUids] },
         timestamp,
     } as DeckReorderedEvent;
 
@@ -899,8 +962,8 @@ function playRaidingPartyCard(
         }
         return event;
     });
-    const currentInteractionId = state.sys.interaction?.current?.interactionId;
-    const nextInteractionId = simulatedState.sys.interaction?.current?.interactionId;
+    const currentInteractionId = state.sys.interaction?.current?.id;
+    const nextInteractionId = simulatedState.sys.interaction?.current?.id;
     const hasNewInteraction = (
         !!nextInteractionId && nextInteractionId !== currentInteractionId
     ) || ((simulatedState.sys.interaction?.queue?.length ?? 0) > (state.sys.interaction?.queue?.length ?? 0));

@@ -108,6 +108,7 @@ const buildMongoStub = () => ({
     setState: vi.fn(async () => {}),
     setMetadata: vi.fn(async () => {}),
     fetch: vi.fn(async () => ({})),
+    fetchAuthMetadata: vi.fn(async () => undefined),
     wipe: vi.fn(async () => {}),
     listMatches: vi.fn(async () => []),
     cleanupEphemeralMatches: vi.fn(async () => 0),
@@ -215,5 +216,24 @@ describe('HybridStorage 纯内存模式', () => {
         expect(cleaned).toBe(0);
         expect(mongoStub.fetch).not.toHaveBeenCalled();
         expect(mongoStub.cleanupEphemeralMatches).not.toHaveBeenCalled();
+    });
+
+    it('persistent=false 时 fetchAuthMetadata 也应只走内存', async () => {
+        const mongoStub = buildMongoStub();
+        const hybrid = new HybridStorage(mongoStub as unknown as typeof mongoStorage, {
+            persistentEnabled: false,
+        });
+
+        await hybrid.createMatch('user-room-auth', buildCreateData({
+            ownerKey: 'user:owner-auth',
+            ownerType: 'user',
+        }));
+
+        const metadata = await hybrid.fetchAuthMetadata('user-room-auth');
+
+        expect(metadata?.gameName).toBe('tictactoe');
+        expect(metadata?.players['0']?.isConnected).toBe(false);
+        expect(mongoStub.fetchAuthMetadata).not.toHaveBeenCalled();
+        expect(mongoStub.fetch).not.toHaveBeenCalled();
     });
 });

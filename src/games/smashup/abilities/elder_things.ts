@@ -60,7 +60,7 @@ function getOrderedOpponentIds(state: SmashUpCore, playerId: string): string[] {
 }
 
 export function registerElderThingAbilities(): void {
-    // 拜亚基?onPlay：如果其他玩家有随从在本基地，抽一张疯狂卡
+    // 拜亚基 onPlay：每位在这里有随从的其他玩家各抽一张疯狂卡
     registerAbility('elder_thing_byakhee', 'onPlay', elderThingByakhee);
     // ??onPlay：每个对手可抽疯狂卡，不收回抽的让你抽一张牌（MVP：对手全部抽疯狂卡）
     registerAbility('elder_thing_mi_go', 'onPlay', elderThingMiGo);
@@ -118,18 +118,19 @@ export function registerElderThingAbilities(): void {
     registerProtection('elder_thing_elder_thing', 'affect', elderThingProtectionChecker);
 }
 
-/** 拜亚基?onPlay：如果其他玩家有随从在本基地，抽一张疯狂卡 */
+/** 拜亚基 onPlay：每位在这里有随从的其他玩家各抽一张疯狂卡 */
 function elderThingByakhee(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
 
-    const hasOpponentMinion = base.minions.some(
-        m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid
-    );
-    if (!hasOpponentMinion) return { events: [] };
-
-    const evt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'elder_thing_byakhee', ctx.now);
-    return { events: evt ? [evt] : [] };
+    const events: SmashUpEvent[] = [];
+    for (const pid of ctx.state.turnOrder) {
+        if (pid === ctx.playerId) continue;
+        if (!base.minions.some(m => m.controller === pid)) continue;
+        const evt = drawMadnessCards(pid, 1, ctx.state, 'elder_thing_byakhee', ctx.now);
+        if (evt) events.push(evt);
+    }
+    return { events };
 }
 
 /**
@@ -303,7 +304,7 @@ function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `elder_thing_begin_the_summoning_${ctx.now}`, ctx.playerId,
         '选择要放到牌库顶的随从', options as any[],
-        { sourceId: 'elder_thing_begin_the_summoning', targetType: 'generic' },
+        { sourceId: 'elder_thing_begin_the_summoning', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -517,7 +518,7 @@ function elderThingBeginTheSummoningPod(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '选择要放到牌库顶的随从',
         options as any[],
-        { sourceId: 'elder_thing_begin_the_summoning_pod', targetType: 'generic' },
+        { sourceId: 'elder_thing_begin_the_summoning_pod', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -1599,7 +1600,7 @@ export function registerElderThingInteractionHandlers(): void {
             playerId,
             '散播恐怖：选择要从弃牌堆打出的随从（战斗力≤3）',
             options as any[],
-            { sourceId: 'elder_thing_spreading_horror_pod_choose_minion', targetType: 'generic' },
+            { sourceId: 'elder_thing_spreading_horror_pod_choose_minion', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
         );
         (interaction.data as any).continuationContext = { ...ctx, chosenBaseIndex: baseIndex };
         return { state: queueInteraction(state, interaction), events: [] };

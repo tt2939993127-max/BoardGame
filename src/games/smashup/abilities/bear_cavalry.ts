@@ -179,7 +179,7 @@ function bearHugProcessNext(
         const interaction = createSimpleChoice(
             `bear_cavalry_bear_hug_${opId}_${ctx.now}`, opId,
             '黑熊擒抱：选择要消灭的最弱随从',
-            buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }),
+            buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
             { sourceId: 'bear_cavalry_bear_hug', targetType: 'minion', autoCancelOption: true },
         );
         (interaction.data as any).continuationContext = { opponents, opponentIdx: idx };
@@ -377,7 +377,7 @@ function bearCavalryPolarCommandoPodTalent(ctx: AbilityContext): AbilityResult {
         return { uid: t.minion.uid, defId: t.minion.defId, baseIndex: t.baseIndex, label: `${name} (力量 ${t.power})` };
     });
     
-    return resolveOrPrompt(ctx, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }), {
+    return resolveOrPrompt(ctx, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }), {
         id: 'bear_cavalry_polar_commando_pod_talent',
         title: '选择放置+1力量标记的随从',
         sourceId: 'bear_cavalry_polar_commando_pod',
@@ -742,7 +742,7 @@ function bearCavalryBearCavalryAbility(ctx: AbilityContext): AbilityResult {
         opponentMinions,
         {
             state: ctx.state,
-            sourcePlayerId: ctx.playerId,
+            sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
             effectType: 'affect', // 移动效果属于 'affect' 类型
         }
     );
@@ -777,7 +777,7 @@ function bearCavalryBearCavalryPodAbility(ctx: AbilityContext): AbilityResult {
             const power = getMinionPower(ctx.state, m, ctx.baseIndex);
             return { uid: m.uid, defId: m.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
         }),
-        { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }
+        { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }
     );
     
     if (options.length === 0) return { events: [] };
@@ -840,7 +840,7 @@ function bearCavalryBearRidesYou(ctx: AbilityContext): AbilityResult {
     if (myMinions.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     const options = myMinions.map(m => ({ uid: m.uid, defId: m.defId, baseIndex: m.baseIndex, label: m.label }));
     const interaction = createSimpleChoice(
-        `bear_cavalry_bear_rides_you_choose_minion_${ctx.now}`, ctx.playerId, '选择要移动的己方随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }), { sourceId: 'bear_cavalry_bear_rides_you_choose_minion', targetType: 'minion' }
+        `bear_cavalry_bear_rides_you_choose_minion_${ctx.now}`, ctx.playerId, '选择要移动的己方随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }), { sourceId: 'bear_cavalry_bear_rides_you_choose_minion', targetType: 'minion' }
         );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -869,7 +869,7 @@ function bearCavalryBearRidesYouPod(ctx: AbilityContext): AbilityResult {
         `bear_cavalry_bear_rides_you_pod_choose_minion_${ctx.now}`,
         ctx.playerId,
         '与熊同行：选择要移动的随从',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }),
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
         { sourceId: 'bear_cavalry_bear_rides_you_pod_choose_minion', targetType: 'minion' }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };

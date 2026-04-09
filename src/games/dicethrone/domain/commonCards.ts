@@ -3,11 +3,12 @@ import type { CardPreviewRef } from '../../../core';
 
 const cardText = (id: string, field: 'name' | 'description') => `cards.${id}.${field}`;
 
+export type CommonCardAtlasIndexMap = Record<string, number>;
+
 /**
- * 通用卡在英雄图集中的固定位置（所有英雄图集布局一致）
- * 专属卡占 index 0-14，通用卡从 index 15 开始
+ * 通用卡默认图集位置（旧角色沿用的 atlas 顺序）
  */
-const COMMON_ATLAS_INDEX: Record<string, number> = {
+export const DEFAULT_COMMON_ATLAS_INDEX: CommonCardAtlasIndexMap = {
     'card-play-six': 15,
     'card-just-this': 16,
     'card-give-hand': 17,
@@ -29,12 +30,64 @@ const COMMON_ATLAS_INDEX: Record<string, number> = {
 };
 
 /**
+ * 武士通用卡顺序经逐格对图确认，与枪手相同，均为 `COMMON_CARDS` 定义顺序的反向映射。
+ */
+export const SAMURAI_COMMON_ATLAS_INDEX: CommonCardAtlasIndexMap = {
+    'card-play-six': 17,
+    'card-just-this': 16,
+    'card-give-hand': 15,
+    'card-i-can-again': 14,
+    'card-me-too': 13,
+    'card-surprise': 12,
+    'card-worthy-of-me': 11,
+    'card-unexpected': 10,
+    'card-next-time': 9,
+    'card-boss-generous': 8,
+    'card-flick': 7,
+    'card-bye-bye': 6,
+    'card-double': 5,
+    'card-super-double': 4,
+    'card-get-away': 3,
+    'card-one-throw-fortune': 2,
+    'card-what-status': 1,
+    'card-transfer-status': 0,
+};
+
+/**
+ * 枪手通用卡顺序和旧角色不同，且与 COMMON_CARDS 定义顺序完全相反。
+ */
+export const GUNSLINGER_COMMON_ATLAS_INDEX: CommonCardAtlasIndexMap = {
+    'card-play-six': 17,
+    'card-just-this': 16,
+    'card-give-hand': 15,
+    'card-i-can-again': 14,
+    'card-me-too': 13,
+    'card-surprise': 12,
+    'card-worthy-of-me': 11,
+    'card-unexpected': 10,
+    'card-next-time': 9,
+    'card-boss-generous': 8,
+    'card-flick': 7,
+    'card-bye-bye': 6,
+    'card-double': 5,
+    'card-super-double': 4,
+    'card-get-away': 3,
+    'card-one-throw-fortune': 2,
+    'card-what-status': 1,
+    'card-transfer-status': 0,
+};
+
+/**
  * 为通用卡注入 previewRef（指向指定英雄的图集）
  * 在各英雄 cards.ts 中 spread COMMON_CARDS 时调用
  */
-export const injectCommonCardPreviewRefs = (cards: AbilityCard[], atlasId: string): AbilityCard[] =>
+export const injectCommonCardPreviewRefs = (
+    cards: AbilityCard[],
+    atlasId: string,
+    indexMap: CommonCardAtlasIndexMap = DEFAULT_COMMON_ATLAS_INDEX,
+): AbilityCard[] =>
     cards.map(card => {
-        const index = COMMON_ATLAS_INDEX[card.id];
+        const index = indexMap[card.id];
         if (index === undefined) return card;
         const previewRef: CardPreviewRef = { type: 'atlas', atlasId, index };
         return { ...card, previewRef };
@@ -136,6 +189,12 @@ export const COMMON_CARDS: AbilityCard[] = [
         cpCost: 1,
         timing: 'instant',
         description: cardText('card-next-time', 'description'),
+        playCondition: {
+            pendingDamage: {
+                role: 'target',
+                responseType: 'beforeDamageReceived',
+            },
+        },
         effects: [{ description: '防止6伤害', action: { type: 'grantDamageShield', target: 'self', value: 6 }, timing: 'immediate' }],
     },
     {

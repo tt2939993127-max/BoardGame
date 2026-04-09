@@ -3,7 +3,7 @@ import type { Request, Response } from 'express';
 import { CurrentUser } from '../../shared/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../shared/guards/jwt-auth.guard';
 import { createRequestI18n } from '../../shared/i18n';
-import { UpdateAudioSettingsDto } from './dtos/audio-settings.dto';
+import { UpdateAudioSettingsDto, UpdateSmashUpPreferenceDto } from './dtos/audio-settings.dto';
 import { UserSettingsService } from './user-settings.service';
 
 @Controller('auth/user-settings')
@@ -49,6 +49,42 @@ export class UserSettingsController {
 
         const updated = await this.userSettingsService.upsertAudioSettings(currentUser.userId, body);
         return res.status(201).json({ settings: this.formatAudioSettings(updated) });
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @Get('smashup')
+    async getSmashUpPreference(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Res() res: Response
+    ) {
+        if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
+        const settings = await this.userSettingsService.getSmashUpPreference(currentUser.userId);
+        if (!settings) {
+            return res.json({ empty: true, settings: null });
+        }
+        return res.json({ empty: false, settings });
+    }
+
+    @UseGuards(JwtAuthGuard)
+    @UsePipes(new ValidationPipe({ whitelist: true, transform: true, expectedType: UpdateSmashUpPreferenceDto }))
+    @Put('smashup')
+    async updateSmashUpPreference(
+        @CurrentUser() currentUser: { userId: string } | null,
+        @Body() body: UpdateSmashUpPreferenceDto,
+        @Res() res: Response
+    ) {
+        if (!currentUser?.userId) return res.status(401).json({ error: 'Unauthorized' });
+        await this.userSettingsService.upsertSmashUpPreference(
+            currentUser.userId,
+            body.overlayEnabled,
+            body.interactionMode,
+        );
+        return res.status(201).json({
+            settings: {
+                overlayEnabled: body.overlayEnabled,
+                interactionMode: body.interactionMode,
+            },
+        });
     }
 
     private formatAudioSettings(settings: {

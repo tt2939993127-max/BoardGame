@@ -14,8 +14,16 @@ import type { CSSProperties } from 'react';
 // 类型定义
 // ============================================================================
 
+/** 精灵帧定义（逐 frame 精确坐标） */
+export interface SpriteAtlasFrame {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 /** 精灵图集网格配置（支持不规则帧尺寸） */
-export interface SpriteAtlasConfig {
+export interface SpriteAtlasGridConfig {
   /** 图集总宽度（像素） */
   imageW: number;
   /** 图集总高度（像素） */
@@ -33,6 +41,18 @@ export interface SpriteAtlasConfig {
   /** 每行高度（像素） */
   rowHeights: number[];
 }
+
+/** 精灵图集逐帧配置（适用于复合排版 / 非规则 frame） */
+export interface SpriteAtlasFrameConfig {
+  /** 图集总宽度（像素） */
+  imageW: number;
+  /** 图集总高度（像素） */
+  imageH: number;
+  /** 每个 frame 的精确坐标 */
+  frames: SpriteAtlasFrame[];
+}
+
+export type SpriteAtlasConfig = SpriteAtlasGridConfig | SpriteAtlasFrameConfig;
 
 /** 精灵图集源（图片 URL + 网格配置） */
 export interface SpriteAtlasSource {
@@ -52,20 +72,42 @@ export interface SpriteFrameStyle {
   aspectRatio: number;
 }
 
+function isFrameAtlasConfig(atlas: SpriteAtlasConfig): atlas is SpriteAtlasFrameConfig {
+  return 'frames' in atlas;
+}
+
+function getSafeFrame(index: number, atlas: SpriteAtlasConfig): SpriteAtlasFrame {
+  if (isFrameAtlasConfig(atlas)) {
+    if (atlas.frames.length === 0) {
+      return { x: 0, y: 0, width: atlas.imageW, height: atlas.imageH };
+    }
+    const safeIndex = index % atlas.frames.length;
+    return atlas.frames[safeIndex] ?? atlas.frames[0];
+  }
+
+  const safeIndex = index % (atlas.cols * atlas.rows);
+  const col = safeIndex % atlas.cols;
+  const row = Math.floor(safeIndex / atlas.cols);
+
+  return {
+    x: atlas.colStarts[col] ?? atlas.colStarts[0],
+    y: atlas.rowStarts[row] ?? atlas.rowStarts[0],
+    width: atlas.colWidths[col] ?? atlas.colWidths[0],
+    height: atlas.rowHeights[row] ?? atlas.rowHeights[0],
+  };
+}
+
 // ============================================================================
 // 裁切算法（纯函数，无副作用）
 // ============================================================================
 
 /** 计算精灵帧的 CSS 背景裁切样式 */
 export function computeSpriteStyle(index: number, atlas: SpriteAtlasConfig): CSSProperties {
-  const safeIndex = index % (atlas.cols * atlas.rows);
-  const col = safeIndex % atlas.cols;
-  const row = Math.floor(safeIndex / atlas.cols);
-
-  const cardW = atlas.colWidths[col] ?? atlas.colWidths[0];
-  const cardH = atlas.rowHeights[row] ?? atlas.rowHeights[0];
-  const x = atlas.colStarts[col] ?? atlas.colStarts[0];
-  const y = atlas.rowStarts[row] ?? atlas.rowStarts[0];
+  const frame = getSafeFrame(index, atlas);
+  const cardW = frame.width;
+  const cardH = frame.height;
+  const x = frame.x;
+  const y = frame.y;
 
   const xPos = atlas.imageW > cardW ? (x / (atlas.imageW - cardW)) * 100 : 0;
   const yPos = atlas.imageH > cardH ? (y / (atlas.imageH - cardH)) * 100 : 0;
@@ -80,12 +122,8 @@ export function computeSpriteStyle(index: number, atlas: SpriteAtlasConfig): CSS
 
 /** 获取精灵帧的宽高比 */
 export function computeSpriteAspectRatio(index: number, atlas: SpriteAtlasConfig): number {
-  const safeIndex = index % (atlas.cols * atlas.rows);
-  const col = safeIndex % atlas.cols;
-  const row = Math.floor(safeIndex / atlas.cols);
-  const cardW = atlas.colWidths[col] ?? atlas.colWidths[0];
-  const cardH = atlas.rowHeights[row] ?? atlas.rowHeights[0];
-  return cardW / cardH;
+  const frame = getSafeFrame(index, atlas);
+  return frame.width / frame.height;
 }
 
 /** 计算精灵帧的 <img> 裁切样式（用于 overflow:hidden 容器 + 缩放偏移方案） */
@@ -100,14 +138,11 @@ export function computeSpriteImgStyle(index: number, atlas: SpriteAtlasConfig): 
   /** 帧宽高比 */
   aspectRatio: number;
 } {
-  const safeIndex = index % (atlas.cols * atlas.rows);
-  const col = safeIndex % atlas.cols;
-  const row = Math.floor(safeIndex / atlas.cols);
-
-  const cardW = atlas.colWidths[col] ?? atlas.colWidths[0];
-  const cardH = atlas.rowHeights[row] ?? atlas.rowHeights[0];
-  const x = atlas.colStarts[col] ?? atlas.colStarts[0];
-  const y = atlas.rowStarts[row] ?? atlas.rowStarts[0];
+  const frame = getSafeFrame(index, atlas);
+  const cardW = frame.width;
+  const cardH = frame.height;
+  const x = frame.x;
+  const y = frame.y;
 
   // img 尺寸 = 整张精灵图相对于单帧的比例
   const imgWidthPct = (atlas.imageW / cardW) * 100;
@@ -133,7 +168,7 @@ export function generateUniformAtlasConfig(
   imageH: number,
   rows: number,
   cols: number,
-): SpriteAtlasConfig {
+): SpriteAtlasGridConfig {
   const cellW = imageW / cols;
   const cellH = imageH / rows;
   const rowStarts: number[] = [];
@@ -219,13 +254,28 @@ export const globalSpriteAtlasRegistry = new SpriteAtlasRegistry();
 const isNumberArray = (value: unknown): value is number[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'number');
 
+const isFrameArray = (value: unknown): value is SpriteAtlasFrame[] =>
+  Array.isArray(value)
+  && value.every((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const frame = item as Record<string, unknown>;
+    return typeof frame.x === 'number'
+      && typeof frame.y === 'number'
+      && typeof frame.width === 'number'
+      && typeof frame.height === 'number';
+  });
+
 /** 运行时验证一个对象是否符合 SpriteAtlasConfig 结构 */
 export function isSpriteAtlasConfig(value: unknown): value is SpriteAtlasConfig {
   if (!value || typeof value !== 'object') return false;
   const data = value as Record<string, unknown>;
-  return typeof data.imageW === 'number'
-    && typeof data.imageH === 'number'
-    && typeof data.rows === 'number'
+  if (typeof data.imageW !== 'number' || typeof data.imageH !== 'number') {
+    return false;
+  }
+  if (isFrameArray(data.frames)) {
+    return true;
+  }
+  return typeof data.rows === 'number'
     && typeof data.cols === 'number'
     && isNumberArray(data.rowStarts)
     && isNumberArray(data.rowHeights)

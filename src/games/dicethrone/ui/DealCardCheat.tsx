@@ -17,10 +17,17 @@ export const DealCardCheat: React.FC<DealCardCheatProps> = ({ players, onDealCar
 
     const targetPlayer = players[dealPlayer];
     const deckLength = targetPlayer?.deck?.length ?? 0;
+    const getCardSourceAtlasIndex = (card: HeroState['deck'][number]) => (
+        typeof card?.sourceAtlasIndex === 'number'
+            ? card.sourceAtlasIndex
+            : card?.previewRef?.type === 'atlas'
+                ? card.previewRef.index
+                : null
+    );
 
     const targetAtlasIndex = Number(deckIndex);
     const cardAtIndex = targetPlayer?.deck?.find(
-        card => card.previewRef?.type === 'atlas' && card.previewRef.index === targetAtlasIndex
+        card => getCardSourceAtlasIndex(card) === targetAtlasIndex
     );
 
     if (!import.meta.env.DEV) return null;

@@ -30,6 +30,7 @@ import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { triggerBaseAbilityWithMS, getInteractionsFromResult, makeMatchState } from './helpers';
 import type { RandomFn } from '../../../engine/types';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 
 // ============================================================================
 // 初始化
@@ -128,7 +129,7 @@ describe('base_the_homeworld: 随从入场额外随从额度', () => {
         expect(payload.delta).toBe(1);
     });
 
-    it('每回合只触发一次：当回合第二次及之后不再给额外额度', () => {
+    it('同回合再次打出随从时，仍会继续给额外额度', () => {
         const { events } = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', makeCtx({
             state: makeState({
                 players: {
@@ -143,7 +144,8 @@ describe('base_the_homeworld: 随从入场额外随从额度', () => {
             minionPower: 2,
         }));
 
-        expect(events).toHaveLength(0);
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
     });
 
     it('POD 版本母星应复用同一能力', () => {
@@ -489,6 +491,30 @@ describe('base_ninja_dojo: 计分后冠军消灭随从', () => {
         }));
 
         expect(events).toHaveLength(0);
+    });
+
+    it('并列冠军时应为每位冠军各生成一个 Prompt', () => {
+        const result = triggerBaseAbilityWithMS('base_ninja_dojo', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_ninja_dojo', {
+                    minions: [
+                        makeMinion('m1', '0', 4),
+                        makeMinion('m2', '1', 4),
+                    ],
+                })],
+            }),
+            baseDefId: 'base_ninja_dojo',
+            rankings: [
+                { playerId: '0', power: 8, vp: 2 },
+                { playerId: '1', power: 8, vp: 2 },
+            ],
+        }));
+
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(2);
+        expect(interactions.map(interaction => interaction.playerId)).toEqual(['0', '1']);
+        expect(interactions.every(interaction => interaction.data.sourceId === 'base_ninja_dojo')).toBe(true);
+        expect(interactions.every(interaction => interaction.data.options.length === 3)).toBe(true);
     });
 });
 
@@ -848,6 +874,32 @@ describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
         }));
 
         expect(events).toHaveLength(0);
+    });
+
+    it('基地牌库顶变化后不应继续保留旧的重排候选', () => {
+        const result = triggerBaseAbilityWithMS('base_wizard_academy', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_wizard_academy')],
+                baseDeck: ['base_a', 'base_b', 'base_c', 'base_d'],
+            }),
+            baseDefId: 'base_wizard_academy',
+            rankings: [{ playerId: '0', power: 5, vp: 3 }],
+        }));
+
+        const refreshedState = refreshInteractionOptions({
+            ...result.matchState!,
+            core: {
+                ...result.matchState!.core,
+                baseDeck: ['intrude_base', ...result.matchState!.core.baseDeck],
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('base_wizard_academy');
+        const optionDefIds = (current?.data?.options ?? []).map((option: any) => option.value?.defId).filter(Boolean);
+        expect(optionDefIds).not.toContain('base_a');
+        expect(optionDefIds).not.toContain('base_b');
+        expect(optionDefIds).not.toContain('base_c');
     });
 });
 

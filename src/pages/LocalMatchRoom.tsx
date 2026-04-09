@@ -1,7 +1,7 @@
-import { useMemo, useEffect, useState, useCallback, useRef } from 'react';
+import { useMemo, useEffect, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { loadGameImplementation, getGameImplementation } from '../games/registry';
+import { getGameImplementation } from '../games/registry';
 import { GameModeProvider } from '../contexts/GameModeContext';
 import { getGameById } from '../config/games.config';
 import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
@@ -24,7 +24,9 @@ import {
 } from '../engine/ai';
 import { GameCursorProvider } from '../core/cursor';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
+import { useGameImplementationReady } from '../hooks/useGameImplementationReady';
 import { createLocalMatchSeed, ensureLocalMatchSeedSearchParams } from '../engine/transport/localSession';
+import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
 
 // 教程系统正常拦截，不弹 toast
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
@@ -41,6 +43,11 @@ export const LocalMatchRoom = () => {
         gameNamespaceError,
         retryGameNamespaceLoad,
     } = useGameNamespaceReady(gameId, i18n);
+    const {
+        isGameImplementationReady,
+        gameImplementationError,
+        retryGameImplementationLoad,
+    } = useGameImplementationReady(gameId);
 
     const gameConfig = gameId ? getGameById(gameId) : undefined;
     const gamePageDataAttributes = useMemo(
@@ -50,27 +57,14 @@ export const LocalMatchRoom = () => {
 
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
-    // 异步加载游戏实现
-    const [gameImplReady, setGameImplReady] = useState(false);
-    useEffect(() => {
-        if (!gameId) return;
-        let cancelled = false;
-        setGameImplReady(false);
-        loadGameImplementation(gameId).then(() => {
-            if (!cancelled) setGameImplReady(true);
-        }).catch(() => {
-            if (!cancelled) setGameImplReady(true);
-        });
-        return () => { cancelled = true; };
-    }, [gameId]);
-
     const seedFromUrl = searchParams.get('seed');
-    const fallbackSeedRef = useRef(seedFromUrl || createLocalMatchSeed());
-    const gameSeed = seedFromUrl || fallbackSeedRef.current;
+    const [fallbackSeed] = useState(() => seedFromUrl || createLocalMatchSeed());
+    const gameSeed = seedFromUrl || fallbackSeed;
+    const [hasCompletedInitialLocalPreload, setHasCompletedInitialLocalPreload] = useState(false);
 
     useEffect(() => {
         if (seedFromUrl) return;
-        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeedRef.current);
+        const nextSearch = ensureLocalMatchSeedSearchParams(searchParams, fallbackSeed);
         navigate(
             {
                 pathname: gameId ? `/play/${gameId}/local` : undefined,
@@ -78,7 +72,7 @@ export const LocalMatchRoom = () => {
             },
             { replace: true },
         );
-    }, [gameId, navigate, searchParams, seedFromUrl]);
+    }, [fallbackSeed, gameId, navigate, searchParams, seedFromUrl]);
 
     const localPlayerCount = resolveLocalMatchPlayerCount(searchParams.get('players'), gameConfig?.playerOptions);
     const seatControllers = useMemo(
@@ -100,37 +94,54 @@ export const LocalMatchRoom = () => {
         () => buildLocalMatchSetupData(setupSelections),
         [setupSelections],
     );
+    const humanSeatIds = useMemo(
+        () => Object.entries(seatControllers)
+            .filter(([, controller]) => controller.type === 'human')
+            .map(([playerId]) => playerId)
+            .sort((left, right) => Number(left) - Number(right)),
+        [seatControllers],
+    );
     const hasAiSeat = useMemo(
         () => Object.values(seatControllers).some((controller) => controller.type !== 'human'),
         [seatControllers],
     );
+    const shouldFollowCurrentTurnPlayer = !hasAiSeat || humanSeatIds.length === 0;
+    const fixedLocalPlayerId = shouldFollowCurrentTurnPlayer ? undefined : humanSeatIds[0];
+
+    useEffect(() => {
+        setHasCompletedInitialLocalPreload(false);
+    }, [gameId, gameSeed, localPlayerCount]);
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
-        if (!gameId || !gameImplReady) return null;
+        if (!gameId || !isGameImplementationReady) return null;
         return getGameImplementation(gameId)?.engineConfig ?? null;
-    }, [gameId, gameImplReady]);
+    }, [gameId, isGameImplementationReady]);
 
-    // 包装 Board 组件，注入 CriticalImageGate
+    // 包装 Board 组件，注入 CriticalImageGate。
+    // 不要把 WrappedBoard 绑定到 t 引用，否则 namespace 变化会让 Board 重挂载。
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
-        if (!gameId || !gameImplReady) return null;
+        if (!gameId || !isGameImplementationReady) return null;
         const impl = getGameImplementation(gameId);
         if (!impl) return null;
         const Board = impl.board as unknown as ComponentType<GameBoardProps>;
-        const Wrapped: ComponentType<GameBoardProps> = (props) => (
+        const WrappedLocalBoard: ComponentType<GameBoardProps> = (props) => (
             <CriticalImageGate
                 gameId={gameId}
                 gameState={props?.G}
                 locale={i18n.language}
                 playerID={props?.playerID}
-                loadingDescription={t('matchRoom.loadingResources')}
+                blockRendering={!hasCompletedInitialLocalPreload}
+                loadingDescription={i18n.t('matchRoom.loadingResources', { ns: 'lobby' })}
+                onReady={() => {
+                    setHasCompletedInitialLocalPreload(true);
+                }}
             >
                 <Board {...props} />
             </CriticalImageGate>
         );
-        Wrapped.displayName = 'WrappedLocalBoard';
-        return Wrapped;
-    }, [gameId, i18n.language, t, gameImplReady]);
+        return WrappedLocalBoard;
+    }, [gameId, hasCompletedInitialLocalPreload, i18n, isGameImplementationReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
@@ -154,48 +165,67 @@ export const LocalMatchRoom = () => {
         );
     }
 
+    if (gameImplementationError) {
+        return (
+            <GameNamespaceLoadError
+                gameId={gameId}
+                error={gameImplementationError}
+                onRetry={retryGameImplementationLoad}
+                titleKey="matchRoom.clientLoadFailed"
+                descriptionKey="matchRoom.clientLoadFailedDesc"
+            />
+        );
+    }
+
     if (!isGameNamespaceReady) {
+        return <LoadingScreen description={t('matchRoom.loadingResources')} />;
+    }
+
+    if (!isGameImplementationReady) {
         return <LoadingScreen description={t('matchRoom.loadingResources')} />;
     }
 
     return (
         <div className="relative w-full game-page-viewport bg-black overflow-hidden font-sans" {...gamePageDataAttributes}>
-            <GameHUD mode="local" localModeLabel={hasAiSeat ? t('actions.playAi') : t('actions.singleDevice')} />
-            <MobileBoardShell>
-                <div
-                    className="w-full h-full"
-                    style={{
-                        '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
-                    } as React.CSSProperties}
-                >
-                    <GameModeProvider mode="local">
-                        <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
-                            {engineConfig && WrappedBoard ? (
-                                <LocalGameProvider
-                                    key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
-                                    config={engineConfig}
-                                    numPlayers={localPlayerCount}
-                                    seed={gameSeed}
-                                    setupData={localSetupData}
-                                    onCommandRejected={handleCommandRejected}
-                                    seatControllers={seatControllers}
-                                    followCurrentTurnPlayer
-                                    persistSession
-                                >
-                                    <BoardBridge
-                                        board={WrappedBoard}
-                                        loading={<LoadingScreen anchor="container" title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
-                                    />
-                                </LocalGameProvider>
-                            ) : (
-                                <div className="w-full h-full flex items-center justify-center text-white/50">
-                                    {t('matchRoom.noClient')}
-                                </div>
-                            )}
-                        </GameCursorProvider>
-                    </GameModeProvider>
-                </div>
-            </MobileBoardShell>
+            <SmashUpOverlayProvider>
+                <GameHUD mode="local" gameId={gameId} localModeLabel={hasAiSeat ? t('actions.playAi') : t('actions.singleDevice')} />
+                <MobileBoardShell battlefieldZoomMode={gameConfig?.mobileBattlefieldZoom}>
+                    <div
+                        className="w-full h-full"
+                        style={{
+                            '--font-game-display': gameConfig?.fontFamily?.display ? `'${gameConfig.fontFamily.display}', serif` : undefined,
+                        } as React.CSSProperties}
+                    >
+                        <GameModeProvider mode="local">
+                            <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={fixedLocalPlayerId}>
+                                {engineConfig && WrappedBoard ? (
+                                    <LocalGameProvider
+                                        key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
+                                        config={engineConfig}
+                                        numPlayers={localPlayerCount}
+                                        seed={gameSeed}
+                                        setupData={localSetupData}
+                                        onCommandRejected={handleCommandRejected}
+                                        seatControllers={seatControllers}
+                                        playerId={fixedLocalPlayerId}
+                                        followCurrentTurnPlayer={shouldFollowCurrentTurnPlayer}
+                                        persistSession
+                                    >
+                                        <BoardBridge
+                                            board={WrappedBoard}
+                                            loading={<LoadingScreen anchor="container" title={t('matchRoom.title.local')} description={t('matchRoom.loadingResources')} />}
+                                        />
+                                    </LocalGameProvider>
+                                ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-white/50">
+                                        {t('matchRoom.noClient')}
+                                    </div>
+                                )}
+                            </GameCursorProvider>
+                        </GameModeProvider>
+                    </div>
+                </MobileBoardShell>
+            </SmashUpOverlayProvider>
         </div>
     );
 };

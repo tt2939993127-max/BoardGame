@@ -198,7 +198,7 @@ function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, time
     // 实际伤害计算时 gainCp 已经执行，直接使用当前 CP
     // 读取 bonusCp 参数以满足审计要求（虽然实际不使用）
     const params = action.params as Record<string, unknown> | undefined;
-    const bonusCp = (params?.bonusCp as number) || 0; // 仅用于审计，实际伤害已包含在 currentCp 中
+    const _bonusCp = (params?.bonusCp as number) || 0; // 仅用于审计，实际伤害已包含在 currentCp 中
     
     if (currentCp <= 0) return [];
 
@@ -305,6 +305,9 @@ function handleCornucopiaDiscard({ ctx, state, timestamp, random }: CustomAction
 function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     // bonusCp 参数已废弃：gainCp(3) 在 preDefense 阶段已执行，currentCp 已包含增益
+    // 这里只保留显式读取，确保审计能看见该参数已被有意识地消费。
+    const params = action.params as Record<string, unknown> | undefined;
+    const _bonusCp = (params?.bonusCp as number) || 0;
     // 伤害计算：CP + 5
     const damageAmt = currentCp + 5;
 

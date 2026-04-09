@@ -8,6 +8,7 @@
  * - 鲜血领主
  */
 
+import type { MatchState } from '../../../engine/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { getBaseDef, getCardDef, getMinionLikePower, getTitanDef } from '../data/cards';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -43,6 +44,10 @@ import { continueActiveDuel } from '../domain/duel';
 import { registerInterceptor, registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase, registerTitanPowerModifier } from '../domain/ongoingModifiers';
+import {
+    getDeferredPostScoringEvents as readDeferredPostScoringEvents,
+    getDeferredReplacementBaseDefId,
+} from '../domain/scoringSession';
 import { validateActionPlaySemantics } from '../domain/playLegality';
 import {
     registerTitanSpecialValidator,
@@ -58,6 +63,7 @@ import type {
     MinionDestroyedEvent,
     MinionCardDef,
     PowerCounterAddedEvent,
+    SmashUpCore,
     SmashUpEvent,
     TitanState,
     TitanPowerCounterAddedEvent,
@@ -194,24 +200,11 @@ function getMajorUrsaEnemyMinionTargets(state: AbilityContext['state'], playerId
         });
 }
 
-function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
-    const continuation = interactionData?.continuationContext as { _deferredPostScoringEvents?: SmashUpEvent[] } | undefined;
-    return continuation?._deferredPostScoringEvents;
-}
-
-function appendDeferredPostScoringEventsIfLast(
-    state: AbilityContext['matchState'],
+function getDeferredPostScoringEvents(
+    state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
-    events: SmashUpEvent[],
-): SmashUpEvent[] {
-    const deferredEvents = getDeferredPostScoringEvents(interactionData);
-    const hasPendingInteraction =
-        !!state.sys.interaction?.current
-        || (state.sys.interaction?.queue?.length ?? 0) > 0;
-    if (deferredEvents && deferredEvents.length > 0 && !hasPendingInteraction) {
-        events.push(...deferredEvents);
-    }
-    return events;
+): SmashUpEvent[] | undefined {
+    return readDeferredPostScoringEvents(state, interactionData) as SmashUpEvent[] | undefined;
 }
 
 function schedulePowerModifierUntilNextTurnStart(
@@ -1216,11 +1209,11 @@ function sphinxOnTurnStart(ctx: TriggerContext) {
                 id: `buried-${choice.cardUid}`,
                 label: choice.label,
                 value: choice,
-                displayMode: 'button' as const,
+                displayMode: 'card' as const,
             })),
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
-        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false },
+        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false, autoRefresh: 'buried', responseValidationMode: 'live' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -1258,11 +1251,11 @@ function sphinxAfterScoring(ctx: {
                     id: `buried-${choice.cardUid}`,
                     label: choice.label,
                     value: choice,
-                    displayMode: 'button' as const,
+                    displayMode: 'card' as const,
                 })),
                 { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ],
-            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic' },
+            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
         );
         nextMatchState = queueInteraction(nextMatchState, interaction);
     }
@@ -1462,9 +1455,9 @@ function penguinsEmperorPenguinTalent(ctx: AbilityContext): AbilityResult {
             id: option.cardUid,
             label: option.label,
             value: { cardUid: option.cardUid, defId: option.defId, zone: option.zone },
-            displayMode: 'button' as const,
+            displayMode: 'card' as const,
         })),
-        { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic' },
+        { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic', autoRefresh: 'hand_or_discard', responseValidationMode: 'live' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -1701,7 +1694,7 @@ function werewolvesGreatWolfSpiritTalent(ctx: AbilityContext): AbilityResult {
         `titan_werewolves_great_wolf_spirit_talent_${ctx.now}`,
         ctx.playerId,
         '巨狼之灵：选择一个你的随从获得 +1 战力直到回合结束',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'buff' }),
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'buff' }),
         { sourceId: 'titan_werewolves_great_wolf_spirit_talent', targetType: 'minion' },
     );
 
@@ -1788,7 +1781,7 @@ function trickstersBigFunnyGiantTalent(ctx: AbilityContext): AbilityResult {
         `titan_tricksters_big_funny_giant_choose_minion_${ctx.now}`,
         ctx.playerId,
         '滑稽巨人：选择本基地一个战力 2 或更低的随从',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }),
         { sourceId: 'titan_tricksters_big_funny_giant_choose_minion', targetType: 'minion' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
@@ -2174,7 +2167,7 @@ function bearCavalryMajorUrsaOnTitanMoved(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '澶х唺搴э細閫夋嫨瑕佺Щ鍔ㄧ殑瀵规墜闅忎粠锛堝彲璺宠繃锛?',
         [
-            ...buildMinionTargetOptions(minionTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'move' }),
+            ...buildMinionTargetOptions(minionTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'move' }),
             { id: 'skip', label: '璺宠繃', value: 'skip' as const, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_bear_cavalry_major_ursa_choose_minion', targetType: 'minion' },
@@ -2213,7 +2206,7 @@ function vampireAncientLordTalent(ctx: AbilityContext): AbilityResult {
         `titan_vampires_ancient_lord_talent_${ctx.now}`,
         ctx.playerId,
         '鲜血领主：选择本基地一个已有 +1 力量标记的己方随从',
-        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }),
+        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }),
         { sourceId: 'titan_vampires_ancient_lord_talent', targetType: 'minion' },
     );
 
@@ -3324,8 +3317,7 @@ export function registerTitanInteractionHandlers(): void {
             baseIndex?: number;
         } | undefined;
         if (selected?.skip) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
         if (!selected?.cardUid || selected.baseIndex === undefined) {
             return { state, events: [] };
@@ -3343,12 +3335,7 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
-        const events = appendDeferredPostScoringEventsIfLast(
-            state,
-            data as Record<string, unknown> | undefined,
-            [returnEvent],
-        );
-        return { state, events };
+        return { state, events: [returnEvent] };
     });
 
     registerInteractionHandler('titan_sphinx_talent', (state, playerId, value, data, random, timestamp) => {
@@ -3552,7 +3539,7 @@ export function registerTitanInteractionHandlers(): void {
             continuationContext?: { titanUid?: string; titanDefId?: string };
         } | undefined)?.continuationContext;
         const titan = continuation?.titanUid ? getTitanByUid(state.core, continuation.titanUid) : undefined;
-        const replacementEvent = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined)?.find(
+        const replacementEvent = getDeferredPostScoringEvents(state, data as Record<string, unknown> | undefined)?.find(
             event => event.type === SU_EVENTS.BASE_REPLACED,
         );
         const replacementBaseIndex = replacementEvent?.payload?.baseIndex;
@@ -3777,7 +3764,7 @@ export function registerTitanInteractionHandlers(): void {
             playerId,
             '奶油泡芙美人：选择要从弃牌堆额外打出的标准战术',
             actionOptions,
-            { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic' },
+            { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
         );
         (interaction.data as { optionsGenerator?: unknown; continuationContext?: unknown }).optionsGenerator = (nextState: AbilityContext['matchState']) =>
             buildCreampuffActionOptions(nextState, playerId);
@@ -3924,10 +3911,7 @@ export function registerTitanInteractionHandlers(): void {
         let nextState = state;
 
         if (selected?.play && continuation?.titanUid && continuation.titanDefId && continuation.ownerId && continuation.controllerId && continuation.scoringBaseIndex !== undefined) {
-            const deferredEvents = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined) ?? [];
-            const replacementBaseDefId = (deferredEvents as Array<{ type: string; payload?: { newBaseDefId?: string } }>).find(
-                event => event.type === SU_EVENTS.BASE_REPLACED,
-            )?.payload?.newBaseDefId;
+            const replacementBaseDefId = getDeferredReplacementBaseDefId(state, data as Record<string, unknown> | undefined);
             if (replacementBaseDefId) {
                 nextState = {
                     ...state,
@@ -3951,7 +3935,6 @@ export function registerTitanInteractionHandlers(): void {
             }
         }
 
-        appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, events);
         return { state: nextState, events };
     });
 
@@ -3959,8 +3942,7 @@ export function registerTitanInteractionHandlers(): void {
         const selected = value as { skip?: boolean; minionUid?: string; defId?: string; baseIndex?: number } | undefined;
         const continuation = (data as { continuationContext?: { scoringBaseIndex?: number } } | undefined)?.continuationContext;
         if (selected?.skip || continuation?.scoringBaseIndex === undefined) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
         if (!selected?.minionUid || !selected.defId) {
             return { state, events: [] };
@@ -3968,8 +3950,7 @@ export function registerTitanInteractionHandlers(): void {
 
         const baseOptions = getOtherBaseOptions(state.core, continuation.scoringBaseIndex);
         if (baseOptions.length === 0) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
 
         const interaction = createSimpleChoice(
@@ -4000,10 +3981,9 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
-        const events = appendDeferredPostScoringEventsIfLast(
+        return {
             state,
-            data as Record<string, unknown> | undefined,
-            [
+            events: [
                 moveMinion(
                     continuation.minionUid,
                     continuation.minionDefId,
@@ -4014,9 +3994,7 @@ export function registerTitanInteractionHandlers(): void {
                     selected.baseDefId,
                 ),
             ],
-        );
-
-        return { state, events };
+        };
     });
 
     registerInteractionHandler('titan_pirates_the_kraken_talent', (state, _playerId, value, data, _random, timestamp) => {

@@ -6,6 +6,8 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
+import { OPTIONAL_SKIP_AI_HINT } from '../../../engine/ai';
+import type { AiEffectIntent, AiHint, AiRelationToActor } from '../../../engine/ai';
 import type {
     PromptOption as EnginePromptOption,
     SimpleChoiceConfig,
@@ -26,6 +28,7 @@ import type {
     MinionDestroyedEvent,
     MinionMovedEvent,
     MinionControlChangedEvent,
+    MinionCardDef,
     PowerCounterAddedEvent,
     PowerCounterRemovedEvent,
     CardRecoveredFromDiscardEvent,
@@ -51,12 +54,13 @@ import type {
     TitanPowerCounterAddedEvent,
     TitanPowerCounterRemovedEvent,
     TitanPlayAsKind,
+    ActionCardDef,
+    SpecialLimitUsedEvent,
 } from './types';
 import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
-import { triggerAllBaseAbilities } from './baseAbilities';
-import { collectTriggers, fireTriggers } from './ongoingEffects';
-import { getMinionDef, getTitanDef } from '../data/cards';
+import { collectTriggers } from './ongoingEffects';
+import { getCardDef, getMinionDef, getTitanDef } from '../data/cards';
 import { drawCards } from './utils';
 
 // ============================================================================
@@ -89,7 +93,8 @@ export function createSkipOption(label: string = '跳过'): EnginePromptOption<{
         id: 'skip',
         label,
         value: { skip: true },
-        displayMode: 'button'
+        displayMode: 'button',
+        _ai: OPTIONAL_SKIP_AI_HINT,
     };
 }
 
@@ -118,11 +123,12 @@ export function destroyMinion(
     ownerId: PlayerId,
     destroyerId: PlayerId | undefined,
     reason: string,
-    now: number
+    now: number,
+    sourceKind?: 'action' | 'nonAction',
 ): MinionDestroyedEvent {
     return {
         type: SU_EVENTS.MINION_DESTROYED,
-        payload: { minionUid, minionDefId, fromBaseIndex, ownerId, destroyerId, reason },
+        payload: { minionUid, minionDefId, fromBaseIndex, ownerId, destroyerId, reason, sourceKind } as MinionDestroyedEvent['payload'],
         timestamp: now,
     };
 }
@@ -368,6 +374,7 @@ export function buildValidatedDestroyEvents(
         destroyerId?: PlayerId;
         reason: string;
         now: number;
+        sourceKind?: 'action' | 'nonAction';
     },
 ): MinionDestroyedEvent[] {
     const minion = findMinionOnBase(state, params.fromBaseIndex, params.minionUid);
@@ -382,6 +389,7 @@ export function buildValidatedDestroyEvents(
             params.destroyerId,
             params.reason,
             params.now,
+            params.sourceKind,
         ),
     ];
 }
@@ -1110,9 +1118,6 @@ export function shuffleHandIntoDeck(
 // Special 能力限制组（每基地每回合一次）
 // ============================================================================
 
-import type { MinionCardDef, ActionCardDef, SpecialLimitUsedEvent } from './types';
-import { getCardDef } from '../data/cards';
-
 /**
  * 检查指定 defId 的 special 能力在指定基地是否已被限制组阻止
  * @returns true = 已被使用，不能再用
@@ -1247,7 +1252,7 @@ export function hasCthulhuExpansionFaction(players: Record<string, { factions: [
     for (const player of Object.values(players)) {
         for (const f of player.factions) {
             const baseFactionId = f.endsWith('_pod') ? f.slice(0, -4) : f;
-            if ((CTHULHU_EXPANSION_FACTIONS as readonly string[]).includes(baseFactionId as any)) return true;
+            if (CTHULHU_EXPANSION_FACTIONS.some((factionId) => factionId === baseFactionId)) return true;
         }
     }
     return false;
@@ -1343,6 +1348,58 @@ export function openAfterScoringWindow(
 // 交互辅助函数（目标选择）
 // ============================================================================
 
+type MinionTargetEffectType = ProtectionType | 'buff';
+
+function inferMinionRelationToActor(
+    controllerId: PlayerId,
+    sourcePlayerId: PlayerId,
+): AiRelationToActor {
+    return controllerId === sourcePlayerId ? 'self' : 'enemy';
+}
+
+function inferMinionEffectIntent(
+    effectType: MinionTargetEffectType | undefined,
+): AiEffectIntent | undefined {
+    switch (effectType) {
+        case 'buff':
+            return 'buff';
+        case 'destroy':
+            return 'destroy';
+        case 'move':
+            return 'move';
+        case 'action':
+        case 'affect':
+            return 'affect';
+        default:
+            return undefined;
+    }
+}
+
+function buildMinionTargetAiHint(args: {
+    minion: MinionOnBase;
+    sourcePlayerId: PlayerId;
+    effectType?: MinionTargetEffectType;
+}): AiHint {
+    const relationToActor = inferMinionRelationToActor(args.minion.controller, args.sourcePlayerId);
+    const effectIntent = inferMinionEffectIntent(args.effectType);
+    const tags = [
+        'target:minion',
+        `relation:${relationToActor}`,
+        ...(effectIntent ? [`intent:${effectIntent}`] : []),
+    ];
+
+    return {
+        tags,
+        relationToActor,
+        ...(effectIntent ? { effectIntent } : {}),
+        targetKind: 'minion',
+        targetPlayerId: args.minion.controller,
+        targetOwnerId: args.minion.owner,
+        targetControllerId: args.minion.controller,
+        derivedFrom: 'inferred',
+    };
+}
+
 /**
  * 构建随从目标选择的交互选项（自动保护过滤）
  * 
@@ -1360,16 +1417,35 @@ export function buildMinionTargetOptions(
         state: SmashUpCore;
         /** 发起效果的玩家 */
         sourcePlayerId: PlayerId;
+        /** 来源卡牌 defId；若是行动卡，会自动尊重 action 保护 */
+        sourceDefId?: string;
+        /** 显式来源类型；仅在无法提供 sourceDefId 时使用 */
+        sourceKind?: 'action' | 'nonAction';
         /** 效果类型覆盖（可选，不传则自动检查 destroy + affect） */
-        effectType?: ProtectionType;
+        effectType?: MinionTargetEffectType;
+        /** 是否额外尊重“行动卡保护”（如烟雾弹） */
+        respectActionProtection?: boolean;
     }
 ): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
-    const { state, sourcePlayerId, effectType } = context;
+    const {
+        state,
+        sourcePlayerId,
+        sourceDefId,
+        sourceKind,
+        effectType,
+        respectActionProtection = false,
+    } = context;
+    const inferredActionSource = sourceKind === 'action'
+        || (sourceKind !== 'nonAction' && !!sourceDefId && getCardDef(sourceDefId)?.type === 'action');
+    const shouldRespectActionProtection = respectActionProtection || inferredActionSource;
     const filteredCandidates = candidates.filter(c => {
         const minion = state.bases[c.baseIndex]?.minions.find(m => m.uid === c.uid);
         if (!minion) return false;
         // 己方随从不做保护检查（保护只针对对手效果）
         if (minion.controller === sourcePlayerId) return true;
+        if (shouldRespectActionProtection && isMinionProtected(state, minion, c.baseIndex, sourcePlayerId, 'action')) {
+            return false;
+        }
         // 对手随从：检查保护
         if (effectType) {
             // 指定了 effectType → 只检查该类型（非消耗型）+ affect（非消耗型广义保护）
@@ -1383,12 +1459,50 @@ export function buildMinionTargetOptions(
         return true;
     });
 
-    return filteredCandidates.map((c, i) => ({
-        id: `minion-${i}`,
-        label: c.label,
-        value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
-        _source: 'field' as const,
-    }));
+    return filteredCandidates.map((c, i) => {
+        const minion = state.bases[c.baseIndex]?.minions.find(m => m.uid === c.uid);
+        if (!minion) {
+            return {
+                id: `minion-${i}`,
+                label: c.label,
+                value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
+                _source: 'field' as const,
+            };
+        }
+
+        return {
+            id: `minion-${i}`,
+            label: c.label,
+            value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
+            _source: 'field' as const,
+            _ai: buildMinionTargetAiHint({
+                minion,
+                sourcePlayerId,
+                effectType,
+            }),
+        };
+    });
+}
+
+/**
+ * 构建“行动卡来源”的随从目标选择选项。
+ *
+ * 仅用于行动卡/特殊行动卡/行动卡持续效果这类真实会影响目标随从的场景。
+ * 若某张行动只是把随从当作参照物（例如查同名、统计条件），不要用这个 helper。
+ */
+export function buildActionMinionTargetOptions(
+    candidates: { uid: string; defId: string; baseIndex: number; label: string }[],
+    context: {
+        state: SmashUpCore;
+        sourcePlayerId: PlayerId;
+        effectType?: MinionTargetEffectType;
+    },
+): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
+    return buildMinionTargetOptions(candidates, {
+        ...context,
+        sourceKind: 'action',
+        respectActionProtection: true,
+    });
 }
 
 /**

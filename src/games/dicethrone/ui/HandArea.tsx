@@ -11,13 +11,20 @@ import { ASSETS } from './assets';
 import { getAbilitySlotId } from './abilitySlotMapping';
 
 /** 飞出卡牌信息（成功使用后的动画） */
+type CardOffset = {
+    x: number;
+    y: number;
+};
+
 type FlyingOutCard = {
     card: AbilityCard;
     cardKey: string;
-    startOffset: { x: number; y: number };
+    startOffset: CardOffset;
     startIndex: number;
     targetType: 'discard' | 'abilitySlot';
     targetSlotId?: string;
+    targetPos: CardOffset;
+    targetScale: number;
 };
 
 type HandCardEntry = {
@@ -26,12 +33,56 @@ type HandCardEntry = {
     index: number;
 };
 
+type DragValues = {
+    x: MotionValue<number>;
+    y: MotionValue<number>;
+};
+
 const buildHandCardKey = (cardId: string, sequence: number) => `${cardId}-${sequence}`;
 const parseHandCardSequence = (cardKey: string, cardId: string) => {
     const prefix = `${cardId}-`;
     if (!cardKey.startsWith(prefix)) return 0;
     const sequence = Number(cardKey.slice(prefix.length));
     return Number.isFinite(sequence) ? sequence : 0;
+};
+
+const buildNextHandEntries = (hand: AbilityCard[], prevEntries: HandCardEntry[]) => {
+    const prevQueues = new Map<string, HandCardEntry[]>();
+    const sequenceMap = new Map<string, number>();
+
+    prevEntries.forEach((entry) => {
+        const queue = prevQueues.get(entry.card.id) ?? [];
+        queue.push(entry);
+        prevQueues.set(entry.card.id, queue);
+
+        const prevMax = sequenceMap.get(entry.card.id) ?? 0;
+        const sequence = parseHandCardSequence(entry.key, entry.card.id);
+        if (sequence > prevMax) {
+            sequenceMap.set(entry.card.id, sequence);
+        }
+    });
+
+    return hand.map((card, index) => {
+        const queue = prevQueues.get(card.id);
+        const reused = queue?.shift();
+        if (reused) {
+            if (reused.card === card && reused.index === index) {
+                return reused;
+            }
+            return { ...reused, card, index };
+        }
+        const nextSequence = (sequenceMap.get(card.id) ?? 0) + 1;
+        sequenceMap.set(card.id, nextSequence);
+        return { card, index, key: buildHandCardKey(card.id, nextSequence) };
+    });
+};
+
+const syncDragValueMap = (prevMap: Map<string, DragValues>, cardKeys: string[]) => {
+    const nextMap = new Map<string, DragValues>();
+    cardKeys.forEach((cardKey) => {
+        nextMap.set(cardKey, prevMap.get(cardKey) ?? { x: motionValue(0), y: motionValue(0) });
+    });
+    return nextMap;
 };
 
 // 5. Hand Area - 拖拽交互（向上拖拽打出，拖到弃牌堆售卖）
@@ -65,7 +116,7 @@ export const HandArea = ({
     locale?: string;
     currentPhase?: TurnPhase;
     playerCp?: number;
-    onPlayCard?: (cardId: string) => void;
+    onPlayCard?: (card: AbilityCard) => void;
     onSellCard?: (cardId: string) => void;
     onError?: (message: string) => void;
     canInteract?: boolean;
@@ -106,19 +157,16 @@ export const HandArea = ({
     } | null>(null);
     // 正在弃牌的 cardKey（用于跳过 exit 动画，避免和飞出动画重叠）
     const [discardingCardKey, setDiscardingCardKey] = React.useState<string | null>(null);
-    const handEntriesRef = React.useRef<HandCardEntry[]>([]);
-    const cardKeySequenceRef = React.useRef<Map<string, number>>(new Map());
     const pendingPlayRef = React.useRef<{
         cardKey: string;
         card: AbilityCard;
-        offset: { x: number; y: number };
+        offset: CardOffset;
         originalIndex: number;
     } | null>(null);
     const pendingPlayTimeoutRef = React.useRef<number | null>(null);
     const handKeysRef = React.useRef<string[]>([]);
     const cardBackImage = React.useMemo(() => buildLocalizedImageSet(ASSETS.CARD_BG, locale), [locale]);
     const handAreaRef = React.useRef<HTMLDivElement>(null);
-    const dragValueMapRef = React.useRef(new Map<string, { x: MotionValue<number>; y: MotionValue<number> }>());
     // 防止拖拽后触发点击：记录最近拖拽的卡牌和时间
     const lastDragEndRef = React.useRef<{ cardKey: string; timestamp: number } | null>(null);
     const DRAG_CLICK_DEBOUNCE = 300; // 拖拽后 300ms 内忽略点击
@@ -138,58 +186,33 @@ export const HandArea = ({
         },
     });
 
-    const handEntries = React.useMemo<HandCardEntry[]>(() => {
-        const prevEntries = handEntriesRef.current;
-        const prevQueues = new Map<string, HandCardEntry[]>();
+    const [handEntries, setHandEntries] = React.useState<HandCardEntry[]>(() => buildNextHandEntries(hand, []));
 
-        prevEntries.forEach((entry) => {
-            const queue = prevQueues.get(entry.card.id) ?? [];
-            queue.push(entry);
-            prevQueues.set(entry.card.id, queue);
-
-            const prevMax = cardKeySequenceRef.current.get(entry.card.id) ?? 0;
-            const sequence = parseHandCardSequence(entry.key, entry.card.id);
-            if (sequence > prevMax) {
-                cardKeySequenceRef.current.set(entry.card.id, sequence);
-            }
-        });
-
-        return hand.map((card, index) => {
-            const queue = prevQueues.get(card.id);
-            const reused = queue?.shift();
-            if (reused) {
-                return { ...reused, card, index };
-            }
-            const nextSequence = (cardKeySequenceRef.current.get(card.id) ?? 0) + 1;
-            cardKeySequenceRef.current.set(card.id, nextSequence);
-            return { card, index, key: buildHandCardKey(card.id, nextSequence) };
-        });
+    React.useLayoutEffect(() => {
+        setHandEntries(prevEntries => buildNextHandEntries(hand, prevEntries));
     }, [hand]);
-
-    React.useEffect(() => {
-        handEntriesRef.current = handEntries;
-    }, [handEntries]);
 
     const handKeys = React.useMemo(() => handEntries.map(entry => entry.key), [handEntries]);
     const handKeyToCardId = React.useMemo(
         () => new Map(handEntries.map(entry => [entry.key, entry.card.id] as const)),
         [handEntries]
     );
+    const handEntryByKey = React.useMemo(
+        () => new Map(handEntries.map(entry => [entry.key, entry] as const)),
+        [handEntries]
+    );
+    const [dragValueMap, setDragValueMap] = React.useState<Map<string, DragValues>>(() => new Map());
 
-    const getDragValues = React.useCallback((cardKey: string) => {
-        const existing = dragValueMapRef.current.get(cardKey);
-        if (existing) return existing;
-        const next = { x: motionValue(0), y: motionValue(0) };
-        dragValueMapRef.current.set(cardKey, next);
-        return next;
-    }, []);
+    React.useLayoutEffect(() => {
+        setDragValueMap(prevMap => syncDragValueMap(prevMap, handKeys));
+    }, [handKeys]);
 
     const resetDragValues = React.useCallback((cardKey: string, _source: 'drag' | 'window') => {
-        const values = dragValueMapRef.current.get(cardKey);
+        const values = dragValueMap.get(cardKey);
         if (!values) return;
         animate(values.x, 0, { duration: 0.25, ease: 'easeOut' });
         animate(values.y, 0, { duration: 0.25, ease: 'easeOut' });
-    }, []);
+    }, [dragValueMap]);
 
     const getDeckOffset = React.useCallback(() => {
         if (!drawDeckRef?.current || !handAreaRef.current) {
@@ -244,10 +267,29 @@ export const HandArea = ({
         };
     }, []);
 
+    const createFlyingOutCard = React.useCallback((params: {
+        card: AbilityCard;
+        cardKey: string;
+        startOffset: CardOffset;
+        startIndex: number;
+        targetType: 'discard' | 'abilitySlot';
+        targetSlotId?: string;
+    }): FlyingOutCard => {
+        const targetPos = params.targetType === 'abilitySlot' && params.targetSlotId
+            ? getAbilitySlotOffset(params.targetSlotId)
+            : getDiscardPileOffset();
+
+        return {
+            ...params,
+            targetPos,
+            targetScale: params.targetType === 'abilitySlot' ? 0.4 : 0.5,
+        };
+    }, [getAbilitySlotOffset, getDiscardPileOffset]);
+
     const [visibleCardKeys, setVisibleCardKeys] = React.useState<Set<string>>(new Set());
     const [flippedCardKeys, setFlippedCardKeys] = React.useState<Set<string>>(new Set());
     const [dealingCardKey, setDealingCardKey] = React.useState<string | null>(null);
-    const [cardSourceMap, setCardSourceMap] = React.useState<Map<string, 'deck' | 'discard'>>(new Map());
+    const [dealInitialOffsetMap, setDealInitialOffsetMap] = React.useState<Map<string, CardOffset>>(() => new Map());
     const prevHandKeysRef = React.useRef<string[]>([]);
     const dealTimersRef = React.useRef<number[]>([]);
     const flipTimersRef = React.useRef<number[]>([]);
@@ -311,13 +353,13 @@ export const HandArea = ({
         const pendingDiscard = pendingDiscardRef.current;
         if (pendingDiscard && !handKeys.includes(pendingDiscard.cardKey)) {
             const { card, cardKey, originalIndex } = pendingDiscard;
-            setFlyingOutCard({
+            setFlyingOutCard(createFlyingOutCard({
                 card,
                 cardKey,
                 startOffset: { x: 0, y: 0 },
                 startIndex: originalIndex,
                 targetType: 'discard',
-            });
+            }));
             pendingDiscardRef.current = null;
             setDiscardingCardKey(null);
         }
@@ -335,46 +377,37 @@ export const HandArea = ({
                 const slotId = targetAbilityId ? getAbilitySlotId(targetAbilityId) : null;
 
                 if (slotId) {
-                    setFlyingOutCard({
+                    setFlyingOutCard(createFlyingOutCard({
                         card,
                         cardKey,
                         startOffset: offset,
                         startIndex: originalIndex,
                         targetType: 'abilitySlot',
                         targetSlotId: slotId,
-                    });
+                    }));
                 } else {
                     // 找不到技能槽，默认飞向弃牌堆
-                    setFlyingOutCard({
+                    setFlyingOutCard(createFlyingOutCard({
                         card,
                         cardKey,
                         startOffset: offset,
                         startIndex: originalIndex,
                         targetType: 'discard',
-                    });
+                    }));
                 }
             } else {
                 // 普通卡牌飞向弃牌堆
-                setFlyingOutCard({
+                setFlyingOutCard(createFlyingOutCard({
                     card,
                     cardKey,
                     startOffset: offset,
                     startIndex: originalIndex,
                     targetType: 'discard',
-                });
+                }));
             }
             clearPendingPlay();
         }
-    }, [clearPendingPlay, handKeys]);
-
-    React.useEffect(() => {
-        const currentKeys = new Set(handKeys);
-        dragValueMapRef.current.forEach((_value, cardKey) => {
-            if (!currentKeys.has(cardKey)) {
-                dragValueMapRef.current.delete(cardKey);
-            }
-        });
-    }, [handKeys]);
+    }, [clearPendingPlay, createFlyingOutCard, handKeys]);
 
     // 监听引擎通知：处理卡牌回弹（错误显示由全局 EngineNotificationListener 处理）
     React.useEffect(() => {
@@ -424,6 +457,11 @@ export const HandArea = ({
                 removedKeys.forEach(key => next.delete(key));
                 return next;
             });
+            setDealInitialOffsetMap(prev => {
+                const next = new Map(prev);
+                removedKeys.forEach(key => next.delete(key));
+                return next;
+            });
         }
 
         if (newKeys.length > 0) {
@@ -431,10 +469,18 @@ export const HandArea = ({
             const undoKeys = newKeys.filter(isUndoCard);
             const normalKeys = newKeys.filter(key => !isUndoCard(key));
 
-            setCardSourceMap(prev => {
+            setDealInitialOffsetMap(prev => {
                 const next = new Map(prev);
-                newKeys.forEach(key => {
-                    next.set(key, isUndoCard(key) ? 'discard' : 'deck');
+                newKeys.forEach((key) => {
+                    const entry = handEntryByKey.get(key);
+                    if (!entry) return;
+                    const offset = entry.index - centerIndex;
+                    const yOffset = Math.abs(offset) * 0.8;
+                    const originPos = isUndoCard(key) ? getDiscardPileOffset() : getDeckOffset();
+                    next.set(key, {
+                        x: originPos.x - offset * window.innerWidth * 0.07,
+                        y: originPos.y - yOffset * window.innerWidth * 0.01,
+                    });
                 });
                 return next;
             });
@@ -478,7 +524,7 @@ export const HandArea = ({
         }
 
         prevHandKeysRef.current = currentKeys;
-    }, [clearAnimationTimers, handKeyToCardId, handKeys, undoCardId]);
+    }, [centerIndex, clearAnimationTimers, getDeckOffset, getDiscardPileOffset, handEntryByKey, handKeyToCardId, handKeys, undoCardId]);
 
     const isOverDiscardPile = React.useCallback(() => {
         if (!discardPileRef?.current || !draggingCardKey) return false;
@@ -523,7 +569,7 @@ export const HandArea = ({
                     resetDragValues(entry.key, 'drag');
                     clearPendingPlay();
                 }, PENDING_PLAY_TIMEOUT);
-                onPlayCard(card.id);
+                onPlayCard(card);
                 actionTaken = true;
             }
         }
@@ -564,8 +610,8 @@ export const HandArea = ({
         canInteract,
         canPlayCards,
         clearLongPressState,
-        currentPhase,
-        hand,
+        clearPendingPlay,
+        handEntries,
         isOverDiscardPile,
         onError,
         onPlayCard,
@@ -587,6 +633,66 @@ export const HandArea = ({
             onSellHintChange?.(nextSellHint);
         }
     };
+
+    const handleCardDragStart = React.useCallback((entry: HandCardEntry, canDrag: boolean, dragValues: DragValues) => {
+        if (!canDrag) return;
+        clearLongPressState(entry.key);
+        dragEndHandledRef.current = false;
+        draggingCardRef.current = entry;
+        dragValues.x.set(0);
+        dragValues.y.set(0);
+        setDraggingCardKey(entry.key);
+        onSellButtonChange?.(true);
+        onPlayHintChange?.(true);
+    }, [clearLongPressState, onPlayHintChange, onSellButtonChange]);
+
+    const queuePendingPlay = React.useCallback((entry: HandCardEntry, offset: CardOffset) => {
+        pendingPlayRef.current = {
+            cardKey: entry.key,
+            card: entry.card,
+            offset,
+            originalIndex: entry.index,
+        };
+        if (pendingPlayTimeoutRef.current) {
+            window.clearTimeout(pendingPlayTimeoutRef.current);
+        }
+        pendingPlayTimeoutRef.current = window.setTimeout(() => {
+            resetDragValues(entry.key, 'drag');
+            clearPendingPlay();
+        }, PENDING_PLAY_TIMEOUT);
+    }, [clearPendingPlay, resetDragValues]);
+
+    const handleCardClick = React.useCallback((entry: HandCardEntry, options: {
+        canDrag: boolean;
+        canClickDiscard: boolean;
+    }) => {
+        const { canDrag, canClickDiscard } = options;
+        if (shouldBlockLongPressClick(entry.key)) return;
+
+        const lastDragEnd = lastDragEndRef.current;
+        if (lastDragEnd && lastDragEnd.cardKey === entry.key) {
+            const timeSinceDrag = Date.now() - lastDragEnd.timestamp;
+            if (timeSinceDrag < DRAG_CLICK_DEBOUNCE) {
+                return;
+            }
+        }
+
+        if (canClickDiscard && onDiscardCard) {
+            pendingDiscardRef.current = {
+                cardKey: entry.key,
+                card: entry.card,
+                originalIndex: entry.index,
+            };
+            setDiscardingCardKey(entry.key);
+            onDiscardCard(entry.card.id);
+            return;
+        }
+
+        if (canDrag && onPlayCard) {
+            queuePendingPlay(entry, { x: 0, y: 0 });
+            onPlayCard(entry.card);
+        }
+    }, [onDiscardCard, onPlayCard, queuePendingPlay, shouldBlockLongPressClick]);
 
     React.useEffect(() => {
         const handlePointerEnd = (_event: PointerEvent) => {
@@ -614,6 +720,22 @@ export const HandArea = ({
         ? (totalCards - 1) * 7 + 12 + 4 // (n-1)*间距 + 卡宽 + 两侧余量（单位 vw）
         : 20;
     const cardAreaHeight = 18; // 卡牌可见高度（vw），卡牌高度约19.7vw减去底部溢出2vw
+    const flyingOutMetrics = React.useMemo(() => {
+        if (!flyingOutCard) return null;
+        const flyingCenterIndex = centerIndex;
+        const startIndexOffset = flyingOutCard.startIndex - flyingCenterIndex;
+        const startYOffset = Math.abs(startIndexOffset) * 0.8;
+        return {
+            card: flyingOutCard.card,
+            cardKey: flyingOutCard.cardKey,
+            startIndexOffset,
+            startYOffset,
+            startOffset: flyingOutCard.startOffset,
+            targetPos: flyingOutCard.targetPos,
+            targetScale: flyingOutCard.targetScale,
+            fadeOutAtTarget: flyingOutCard.targetType === 'abilitySlot',
+        };
+    }, [flyingOutCard, hand.length]);
 
     return (
         <div
@@ -650,9 +772,30 @@ export const HandArea = ({
                         const canClickDiscard = isDiscardMode && isFlipped && !isReturning;
                         // 动画期间（dealing/returning）统一禁用 hover
                         const isHovered = hoveredCardKey === cardKey && (canDrag || canClickDiscard) && !isDragging && !isReturning && !isDealing;
-                        const dragValues = getDragValues(cardKey);
+                        const dragValues = dragValueMap.get(cardKey);
+                        if (!dragValues) return null;
                         // 正在弃牌的卡牌立即消失（飞出动画由 flyingOutCard 接管）
                         const isBeingDiscarded = discardingCardKey === cardKey;
+                        const dealInitial = dealInitialOffsetMap.get(cardKey);
+                        const motionInitial = isDealing
+                            ? (dealInitial ? {
+                                opacity: 1,
+                                x: dealInitial.x,
+                                y: dealInitial.y,
+                                scale: 0.5,
+                                rotate: 0,
+                            } : false)
+                            : (returningEntry ? (() => {
+                                const origOffset = returningEntry.originalIndex - centerIndex;
+                                const origYOffset = Math.abs(origOffset) * 0.8;
+                                return {
+                                    opacity: 1,
+                                    x: (origOffset - offset) * window.innerWidth * 0.07 + returningEntry.offset.x,
+                                    y: (origYOffset - yOffset) * window.innerWidth * 0.01 + returningEntry.offset.y,
+                                    scale: 1,
+                                    rotate: 0,
+                                };
+                            })() : false);
 
                         return (
                             <motion.div
@@ -669,60 +812,10 @@ export const HandArea = ({
                                 onPointerMove={(event) => handleCardPointerMove(event, cardKey)}
                                 onPointerUp={() => handleCardPointerUp(cardKey)}
                                 onPointerCancel={() => handleCardPointerUp(cardKey)}
-                                onDragStart={() => {
-                                    if (!canDrag) return;
-                                    clearLongPressState(cardKey);
-                                    dragEndHandledRef.current = false;
-                                    draggingCardRef.current = entry;
-                                    dragValues.x.set(0);
-                                    dragValues.y.set(0);
-                                    setDraggingCardKey(cardKey);
-                                    onSellButtonChange?.(true);
-                                    onPlayHintChange?.(true);
-                                }}
+                                onDragStart={() => handleCardDragStart(entry, canDrag, dragValues)}
                                 onDrag={(_, info) => canDrag && handleDrag(cardKey, info)}
                                 onDragEnd={() => canDrag && handleDragEnd(entry, 'drag')}
-                                onClick={() => {
-                                    // 防止拖拽后立即触发点击：检查是否刚完成拖拽
-                                    if (shouldBlockLongPressClick(cardKey)) return;
-
-                                    const lastDrag = lastDragEndRef.current;
-                                    if (lastDrag && lastDrag.cardKey === cardKey) {
-                                        const timeSinceDrag = Date.now() - lastDrag.timestamp;
-                                        if (timeSinceDrag < DRAG_CLICK_DEBOUNCE) {
-                                            return;
-                                        }
-                                    }
-
-                                    // 弃牌模式下点击卡牌直接弃置
-                                    if (canClickDiscard && onDiscardCard) {
-                                        // 记录弃牌信息，卡牌从手牌移除后触发飞向弃牌堆动画
-                                        pendingDiscardRef.current = {
-                                            cardKey,
-                                            card,
-                                            originalIndex: i,
-                                        };
-                                        setDiscardingCardKey(cardKey);
-                                        onDiscardCard(card.id);
-                                    }
-                                    // 正常模式下点击打牌
-                                    else if (canDrag && onPlayCard) {
-                                        pendingPlayRef.current = {
-                                            cardKey,
-                                            card,
-                                            offset: { x: 0, y: 0 },
-                                            originalIndex: i,
-                                        };
-                                        if (pendingPlayTimeoutRef.current) {
-                                            window.clearTimeout(pendingPlayTimeoutRef.current);
-                                        }
-                                        pendingPlayTimeoutRef.current = window.setTimeout(() => {
-                                            resetDragValues(cardKey, 'drag');
-                                            clearPendingPlay();
-                                        }, PENDING_PLAY_TIMEOUT);
-                                        onPlayCard(card.id);
-                                    }
-                                }}
+                                onClick={() => handleCardClick(entry, { canDrag, canClickDiscard })}
                                 onHoverStart={() => {
                                     if ((canDrag || canClickDiscard) && !isDragging && !isReturning) {
                                         setHoveredCardKey(cardKey);
@@ -746,32 +839,7 @@ export const HandArea = ({
                             >
                                 <motion.div
                                     className="relative w-full h-full"
-                                    initial={isDealing
-                                        ? (() => {
-                                            const source = cardSourceMap.get(cardKey) ?? (card.id === undoCardId ? 'discard' : 'deck');
-                                            const pos = source === 'discard' ? getDiscardPileOffset() : getDeckOffset();
-                                            const baseOffsetX = offset * window.innerWidth * 0.07;
-                                            const baseOffsetY = yOffset * window.innerWidth * 0.01;
-                                            return {
-                                                opacity: 1,
-                                                x: pos.x - baseOffsetX,
-                                                y: pos.y - baseOffsetY,
-                                                scale: 0.5,
-                                                rotate: 0,
-                                            };
-                                        })()
-                                        : (returningEntry ? (() => {
-                                            const origOffset = returningEntry.originalIndex - centerIndex;
-                                            const origYOffset = Math.abs(origOffset) * 0.8;
-                                            return {
-                                                opacity: 1,
-                                                x: (origOffset - offset) * window.innerWidth * 0.07 + returningEntry.offset.x,
-                                                y: (origYOffset - yOffset) * window.innerWidth * 0.01 + returningEntry.offset.y,
-                                                scale: 1,
-                                                rotate: 0,
-                                            };
-                                        })() : false)
-                                    }
+                                    initial={motionInitial}
                                     animate={{
                                         opacity: 1,
                                         x: 0,
@@ -800,27 +868,44 @@ export const HandArea = ({
                                                 ${canClickDiscard && !isHovered ? 'ring-2 ring-red-500/50' : ''}
                                                 ${respondableCardIds?.has(card.id) && !isDragging && !canClickDiscard ? 'ring-4 ring-cyan-400 shadow-cyan-400/60' : ''}
                                             `}
-                                            style={{ transformStyle: 'preserve-3d' }}
+                                            style={{
+                                                transformStyle: 'preserve-3d',
+                                                WebkitTransformStyle: 'preserve-3d',
+                                                willChange: 'transform',
+                                            }}
                                             initial={{ rotateY: isFlipped ? 0 : 180 }}
                                             animate={{ rotateY: isFlipped ? 0 : 180 }}
                                             transition={{ duration: 0.6 }}
                                         >
-                                            <CardPreview
-                                                previewRef={card.previewRef}
-                                                locale={locale}
-                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] border border-slate-700"
-                                                style={{
-                                                    backgroundColor: '#1e293b',
-                                                    backfaceVisibility: 'hidden',
-                                                }}
-                                            />
                                             <div
+                                                data-card-face="front"
+                                                className="absolute inset-0 w-full h-full rounded-[0.8vw] overflow-hidden"
+                                                style={{
+                                                    transform: 'translateZ(0.1px)',
+                                                    WebkitTransform: 'translateZ(0.1px)',
+                                                    backfaceVisibility: 'hidden',
+                                                    WebkitBackfaceVisibility: 'hidden',
+                                                }}
+                                            >
+                                                <CardPreview
+                                                    previewRef={card.previewRef}
+                                                    locale={locale}
+                                                    className="w-full h-full rounded-[0.8vw] border border-slate-700"
+                                                    style={{
+                                                        backgroundColor: '#1e293b',
+                                                    }}
+                                                />
+                                            </div>
+                                            <div
+                                                data-card-face="back"
                                                 className="absolute inset-0 w-full h-full rounded-[0.8vw] border border-slate-700"
                                                 style={{
-                                                    transform: 'rotateY(180deg)',
+                                                    transform: 'rotateY(180deg) translateZ(0.1px)',
+                                                    WebkitTransform: 'rotateY(180deg) translateZ(0.1px)',
                                                     backgroundImage: cardBackImage,
                                                     backgroundSize: 'cover',
                                                     backfaceVisibility: 'hidden',
+                                                    WebkitBackfaceVisibility: 'hidden',
                                                 }}
                                             />
                                         </motion.div>
@@ -833,54 +918,40 @@ export const HandArea = ({
 
                 {/* 飞出动画卡牌（成功使用后飞向目标） */}
                 <AnimatePresence>
-                    {flyingOutCard && (() => {
-                        const { card, cardKey, startOffset, startIndex, targetType, targetSlotId } = flyingOutCard;
-                        const flyingCenterIndex = (hand.length) / 2; // 使用移除后的手牌数量计算
-                        const startIndexOffset = startIndex - flyingCenterIndex;
-                        const startYOffset = Math.abs(startIndexOffset) * 0.8;
-
-                        // 计算目标位置
-                        const targetPos = targetType === 'abilitySlot' && targetSlotId
-                            ? getAbilitySlotOffset(targetSlotId)
-                            : getDiscardPileOffset();
-
-                        // 目标缩放比例：升级卡缩小到技能槽大小，普通卡缩小到弃牌堆大小
-                        const targetScale = targetType === 'abilitySlot' ? 0.4 : 0.5;
-
-                        return (
-                            <motion.div
-                                key={`flying-${cardKey}`}
-                                className="absolute bottom-0 w-[12vw] aspect-[0.61] rounded-[0.8vw] pointer-events-none"
-                                style={{
-                                    bottom: '-2vw',
-                                    left: `calc(50% + ${startIndexOffset * 7}vw - 6vw)`,
-                                    zIndex: UI_Z_INDEX.overlayRaised,
-                                }}
-                                initial={{
-                                    x: startOffset.x,
-                                    y: startOffset.y + startYOffset * window.innerWidth * 0.01,
-                                    scale: 1,
-                                    opacity: 1,
-                                }}
-                                animate={{
-                                    x: targetPos.x - startIndexOffset * window.innerWidth * 0.07,
-                                    y: targetPos.y - startYOffset * window.innerWidth * 0.01,
-                                    scale: targetScale,
-                                    opacity: targetType === 'abilitySlot' ? 0 : 1,
-                                }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 0.35, ease: 'easeInOut' }}
-                                onAnimationComplete={() => setFlyingOutCard(null)}
-                            >
-                                <CardPreview
-                                    previewRef={card.previewRef}
-                                    locale={locale}
-                                    className="w-full h-full rounded-[0.8vw] border border-slate-700 shadow-2xl"
-                                    style={{ backgroundColor: '#1e293b' }}
-                                />
-                            </motion.div>
-                        );
-                    })()}
+                    {flyingOutMetrics ? (
+                        <motion.div
+                            key={`flying-${flyingOutMetrics.cardKey}`}
+                            data-testid="hand-flying-card"
+                            className="absolute bottom-0 w-[12vw] aspect-[0.61] rounded-[0.8vw] pointer-events-none"
+                            style={{
+                                bottom: '-2vw',
+                                left: `calc(50% + ${flyingOutMetrics.startIndexOffset * 7}vw - 6vw)`,
+                                zIndex: UI_Z_INDEX.overlayRaised,
+                            }}
+                            initial={{
+                                x: flyingOutMetrics.startOffset.x,
+                                y: flyingOutMetrics.startOffset.y + flyingOutMetrics.startYOffset * window.innerWidth * 0.01,
+                                scale: 1,
+                                opacity: 1,
+                            }}
+                            animate={{
+                                x: flyingOutMetrics.targetPos.x - flyingOutMetrics.startIndexOffset * window.innerWidth * 0.07,
+                                y: flyingOutMetrics.targetPos.y - flyingOutMetrics.startYOffset * window.innerWidth * 0.01,
+                                scale: flyingOutMetrics.targetScale,
+                                opacity: flyingOutMetrics.fadeOutAtTarget ? 0 : 1,
+                            }}
+                            exit={{ opacity: 0 }}
+                            transition={{ duration: 0.35, ease: 'easeInOut' }}
+                            onAnimationComplete={() => setFlyingOutCard(null)}
+                        >
+                            <CardPreview
+                                previewRef={flyingOutMetrics.card.previewRef}
+                                locale={locale}
+                                className="w-full h-full rounded-[0.8vw] border border-slate-700 shadow-2xl"
+                                style={{ backgroundColor: '#1e293b' }}
+                            />
+                        </motion.div>
+                    ) : null}
                 </AnimatePresence>
             </div>
         </div>

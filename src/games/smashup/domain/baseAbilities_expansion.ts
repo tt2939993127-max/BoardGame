@@ -6,7 +6,9 @@
  * 在 registerBaseInteractionHandlers() 末尾调用 registerExpansionBaseInteractionHandlers()。
  */
 
+import type { MatchState } from '../../../engine/types';
 import type {
+    SmashUpCore,
     SmashUpEvent,
     MinionDestroyedEvent,
     MinionPlayedEvent,
@@ -32,15 +34,22 @@ import { registerProtection, registerTrigger } from './ongoingEffects';
 import type { ProtectionCheckContext } from './ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { getPlayerLabel } from './utils';
-
-type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
+import {
+    buildPendingPostScoringActionEvents,
+    flushDeferredPostScoringCompatibility,
+    getDeferredPostScoringEvents as readDeferredPostScoringEvents,
+    getDeferredReplacementBaseDefId,
+} from './scoringSession';
 
 function getContinuationContext<T>(interactionData: Record<string, unknown> | undefined): T | undefined {
     return interactionData?.continuationContext as T | undefined;
 }
 
-function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
-    return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
+function getDeferredPostScoringEvents(
+    state: MatchState<SmashUpCore>,
+    interactionData: Record<string, unknown> | undefined,
+): SmashUpEvent[] | undefined {
+    return readDeferredPostScoringEvents(state, interactionData) as SmashUpEvent[] | undefined;
 }
 
 // ============================================================================
@@ -286,7 +295,7 @@ export function registerExpansionBaseAbilities(): void {
         const interaction = createSimpleChoice(
             `base_inventors_salon_${ctx.now}`, winnerId,
             '发明家沙龙：从弃牌堆选择一张行动卡放入手牌', options,
-            { sourceId: 'base_inventors_salon', targetType: 'generic' },
+            { sourceId: 'base_inventors_salon', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });
@@ -850,12 +859,12 @@ export function registerExpansionBaseInteractionHandlers(): void {
         );
         if (!cardInDeck) return { state, events: [] };
         const power = selected.power ?? (getMinionDef(selected.defId!)?.power ?? 0);
-        const deferredEvents = (getDeferredPostScoringEvents(iData) ?? []) as Array<{
+        const deferredEvents = (getDeferredPostScoringEvents(state, iData) ?? []) as Array<{
             type: string;
             payload?: { newBaseDefId?: string };
             timestamp: number;
         }>;
-        const replacementBaseDefId = deferredEvents.find(event => event.type === SU_EVENTS.BASE_REPLACED)?.payload?.newBaseDefId
+        const replacementBaseDefId = getDeferredReplacementBaseDefId(state, iData)
             ?? state.core.bases[ctx.baseIndex]?.defId;
         if (!replacementBaseDefId) return { state, events: [] };
         if (deferredEvents.length > 0) {
@@ -868,6 +877,20 @@ export function registerExpansionBaseInteractionHandlers(): void {
                 targetBaseDefId: replacementBaseDefId,
                 power,
             };
+            const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
+            if (compatibility.flushed) {
+                return {
+                    state: compatibility.state,
+                    events: [
+                        ...compatibility.events,
+                        ...buildPendingPostScoringActionEvents(
+                            { core: state.core },
+                            [pendingAction],
+                            timestamp,
+                        ),
+                    ],
+                };
+            }
             return {
                 state: {
                     ...state,

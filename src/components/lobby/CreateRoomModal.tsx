@@ -8,7 +8,7 @@
  * - manifest 声明的 setupOptions（单选 / 多选）
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AnimatePresence, motion } from 'framer-motion';
 import type { GameManifestEntry } from '../../games/manifest.types';
@@ -25,6 +25,7 @@ import {
     type GameSetupSelections,
 } from '../../games/setupOptions';
 import { SetupOptionsFields } from './SetupOptionsFields';
+import { PasswordField } from '../common/PasswordField';
 
 /** 保存时间选项（秒） */
 const RETENTION_OPTIONS = [
@@ -88,19 +89,6 @@ function countAiSeats(seatControllers: Record<string, AiSeatController>, numPlay
     return total;
 }
 
-function resolveLocalAiDifficulty(
-    seatControllers: Record<string, AiSeatController>,
-    numPlayers: number,
-): AiDifficultyLevel {
-    for (let index = 0; index < numPlayers; index += 1) {
-        const controller = seatControllers[String(index)];
-        if (controller?.type === 'local-ai') {
-            return controller.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY;
-        }
-    }
-    return DEFAULT_LOCAL_AI_DIFFICULTY;
-}
-
 function applyLocalAiDifficulty(
     seatControllers: Record<string, AiSeatController>,
     numPlayers: number,
@@ -130,7 +118,7 @@ export const CreateRoomModal = ({
 }: CreateRoomModalProps) => {
     const gameNamespace = `game-${gameManifest.id}`;
     const { t } = useTranslation(['lobby', gameNamespace]);
-    const playerOptions = gameManifest.playerOptions ?? [2];
+    const playerOptions = useMemo(() => gameManifest.playerOptions ?? [2], [gameManifest.playerOptions]);
     const hasPlayerOptions = playerOptions.length > 1;
 
     const [roomName, setRoomName] = useState('');
@@ -144,24 +132,22 @@ export const CreateRoomModal = ({
 
     useEffect(() => {
         if (!isOpen) return;
-        const hasSavedPreferences = initialPreferences != null;
         const nextPreferences = normalizeLocalMatchPreferences(
             gameManifest,
             (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
         );
-        const nextSeatControllers = hasSavedPreferences
-            ? forceHumanOwnerSeat(nextPreferences.seatControllers)
-            : forceHumanOwnerSeat(
-                Object.fromEntries(
-                    Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
-                ),
-            );
+        const nextSeatControllers = forceHumanOwnerSeat(
+            Object.fromEntries(
+                Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+            ),
+        );
+
         setRoomName('');
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(hasSavedPreferences && countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0);
-        setAiDifficulty(resolveLocalAiDifficulty(nextSeatControllers, nextPreferences.numPlayers));
+        setEnableAi(false);
+        setAiDifficulty(DEFAULT_LOCAL_AI_DIFFICULTY);
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
@@ -274,12 +260,20 @@ export const CreateRoomModal = ({
                         animate={{ opacity: 1, scale: 1, y: 0 }}
                         exit={{ opacity: 0, scale: 0.98 }}
                         transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-                        className="fixed inset-0 flex items-center justify-center p-4 sm:p-8 pointer-events-none"
-                        style={{ zIndex: UI_Z_INDEX.modalContent }}
+                        className="modal-base-container fixed inset-0 flex items-center justify-center p-4 sm:p-8 pointer-events-none"
+                        style={{
+                            zIndex: UI_Z_INDEX.modalContent,
+                            paddingTop: 'max(1rem, var(--safe-area-top))',
+                            paddingRight: 'max(1rem, var(--safe-area-right))',
+                            paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
+                            paddingLeft: 'max(1rem, var(--safe-area-left))',
+                        }}
                     >
                         <div
-                            className="bg-parchment-card-bg pointer-events-auto relative flex w-full max-w-md max-h-[min(88dvh,42rem)] flex-col overflow-hidden rounded-sm border border-parchment-card-border/30 shadow-parchment-card-hover font-serif sm:max-h-[min(84dvh,44rem)]"
+                            className="bg-parchment-card-bg pointer-events-auto relative flex w-full max-w-md flex-col overflow-hidden rounded-sm border border-parchment-card-border/30 shadow-parchment-card-hover font-serif"
                             onClick={(event) => event.stopPropagation()}
+                            style={{ maxHeight: 'min(var(--runtime-modal-max-height), 42rem)' }}
+                            data-testid="create-room-modal"
                         >
                             <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
                             <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-parchment-card-border/60" />
@@ -308,7 +302,8 @@ export const CreateRoomModal = ({
                                         onChange={(event) => setRoomName(event.target.value)}
                                         placeholder={t('createRoom.roomNamePlaceholder')}
                                         maxLength={20}
-                                        className="w-full px-4 py-2.5 rounded-[4px] text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
+                                        className="w-full px-4 py-2.5 rounded-[4px] text-base sm:text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
+                                        data-testid="create-room-name-input"
                                     />
                                 </div>
 
@@ -321,13 +316,15 @@ export const CreateRoomModal = ({
                                             {t('createRoom.passwordHint')}
                                         </span>
                                     </div>
-                                    <input
-                                        type="text"
+                                    <PasswordField
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         placeholder={t('createRoom.passwordPlaceholder')}
                                         maxLength={10}
-                                        className="w-full px-4 py-2.5 rounded-[4px] text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
+                                        className="w-full px-4 py-2.5 rounded-[4px] text-base sm:text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
+                                        data-testid="create-room-password-input"
+                                        toggleButtonTestId="create-room-password-toggle"
+                                        toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                                     />
                                 </div>
 
@@ -367,7 +364,7 @@ export const CreateRoomModal = ({
                                     <select
                                         value={ttlSeconds}
                                         onChange={(event) => setTtlSeconds(Number(event.target.value))}
-                                        className="w-full px-4 py-2.5 rounded-[4px] text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text focus:outline-none focus:border-parchment-base-text cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23433422%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center]"
+                                        className="w-full px-4 py-2.5 rounded-[4px] text-base sm:text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text focus:outline-none focus:border-parchment-base-text cursor-pointer appearance-none bg-[url('data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23433422%22%20d%3D%22M2%204l4%204%204-4%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_12px_center]"
                                     >
                                         {RETENTION_OPTIONS.map((option) => (
                                             <option key={option.value} value={option.value}>
@@ -491,6 +488,7 @@ export const CreateRoomModal = ({
                                     onClick={handleConfirm}
                                     className="flex-1 py-2.5 px-4 bg-parchment-base-text text-parchment-card-bg font-bold rounded-[4px] hover:bg-parchment-brown transition-all cursor-pointer disabled:opacity-50"
                                     disabled={isLoading}
+                                    data-testid="create-room-confirm-button"
                                 >
                                     {isLoading ? t('button.processing') : t('createRoom.confirm')}
                                 </button>

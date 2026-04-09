@@ -45,8 +45,6 @@ export class DiceInjector {
 
         this.randomInjector.setQueue(randomValues);
         this.values = [...values];
-        console.log('[DiceInjector] 设置骰子值:', values);
-        console.log('[DiceInjector] 转换为随机数:', randomValues);
     }
 
     /**
@@ -59,7 +57,6 @@ export class DiceInjector {
         });
         this.randomInjector.enqueue(...randomValues);
         this.values.push(...values);
-        console.log('[DiceInjector] 添加骰子值:', values);
     }
 
     /**
@@ -68,7 +65,6 @@ export class DiceInjector {
     clear() {
         this.values = [];
         this.randomInjector.clear();
-        console.log('[DiceInjector] 清空队列');
     }
 
     /**

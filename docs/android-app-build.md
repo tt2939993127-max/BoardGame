@@ -1,5 +1,7 @@
 # Android App 构建自动化
 
+日常发布速查请先看 [docs/mobile-release.md](./mobile-release.md)；这份文档保留完整底层说明。
+
 ## GitHub Actions 配置口径（先看这里）
 
 - Android Release / OTA workflow 默认优先读取与 `.env.example` 一致的同名配置。
@@ -17,8 +19,9 @@
 - `npm run mobile:android:prepare-release`
 - `npm run mobile:android:init`
 - `npm run mobile:android:sync`
-- `npm run mobile:android:ota:publish -- --channel stable`
+- `node scripts/mobile/release-android.mjs ota --channel stable`
 - `npm run mobile:android:packages:publish -- --channel stable`
+- `npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
 - `npm run mobile:android:build:debug`
 - `npm run mobile:android:build:release`
 - `npm run mobile:android:build:bundle`
@@ -60,11 +63,80 @@ ANDROID_REMOTE_WEB_URL=https://your-domain.com
 - 仍然需要重新发包的内容包括：原生插件、Java/Kotlin/Swift/Objective-C 代码、权限、Manifest、原生启动逻辑、图标与启动图等二进制侧变更。
 - 结论：文档和实现都应以 `embedded` 为默认，以 OTA/Live Update 作为热更新主线；`remote` 仅保留为兼容/调试路径，不再作为产品默认推荐。
 
+## 原生 APK 自更新
+
+- 适用场景：原生插件、权限、Manifest、Java/Kotlin 代码、包体结构等需要重新发 APK 的变更。
+- 当前实现口径：
+  - App 启动后可检查 `native-app-updates/android/<channel>/latest.json`
+  - 若发现更高版本 APK，则下载到本地缓存
+  - 下载完成后拉起系统安装器，按系统提示覆盖安装
+- 这条链路不是静默更新；普通 Android 应用仍需用户在系统安装界面确认。
+- Android 8+ 若设备尚未允许“安装未知应用”，会先提示打开对应授权页，再返回继续安装。
+
+### 当前环境变量
+
+```env
+VITE_ANDROID_NATIVE_UPDATE_ENABLED=true
+VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL=https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json
+VITE_ANDROID_NATIVE_UPDATE_CHANNEL=stable
+```
+
+### 发布原生更新包
+
+先完成 release APK 构建：
+
+```bash
+npm run mobile:android:build:release
+```
+
+预演上传：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable --dry-run
+```
+
+正式发布：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable
+```
+
+如果只想先上传 APK 和版本 manifest，不切 `latest.json`：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable --skip-latest
+```
+
+当前默认发布路径：
+
+- `official/native-app-updates/android/<channel>/packages/<version>.apk`
+- `official/native-app-updates/android/<channel>/manifests/<version>.json`
+- `official/native-app-updates/android/<channel>/latest.json`
+
+`latest.json` 结构示例：
+
+```json
+{
+  "version": "0.5.0",
+  "versionCode": 500,
+  "url": "https://assets.easyboardgame.top/official/native-app-updates/android/stable/packages/0.5.0.apk",
+  "checksum": "sha256-hex",
+  "channel": "stable",
+  "forceUpdate": true,
+  "forceUpdateTitle": "需要安装新版 App",
+  "forceUpdateMessage": "正在准备新的安装包，请按系统提示完成更新。",
+  "publishedAt": "2026-04-04T00:00:00.000Z",
+  "size": 123456789,
+  "notes": "Android native APK update"
+}
+```
+
 ## 当前 OTA 实现
 
 - 运行时插件：`@capgo/capacitor-updater`
 - 发布源：自托管 manifest + zip bundle，当前约定放在对象存储 `official/app-updates/android/<channel>/...`
-- 默认策略：后台检查、后台下载、`next()` 排队、`background` 条件生效，不在当前对局里强制热切换
+- 当前默认发布策略：**后台 OTA**
+- 默认行为：启动后后台检查；一旦发现兼容的新 bundle，后台下载并排队，切到后台或下次重启后生效
 - 启动确认：App 每次原生启动时尽早调用 `notifyAppReady()`，避免已下载 bundle 被插件自动回滚
 
 ### OTA 何时生效
@@ -76,15 +148,15 @@ ANDROID_REMOTE_WEB_URL=https://your-domain.com
 ### 当前升级策略
 
 - 普通 OTA
-  - manifest 未声明 `forceUpdate: true`
+  - 这是当前默认发布策略
+  - manifest 默认不声明 `forceUpdate: true`
   - App 启动后后台检查，兼容则后台下载
   - 下载完成后排队，切到后台或下次重启后生效
   - 不阻塞用户
-- 强制 OTA
-  - manifest 声明 `forceUpdate: true`
-  - App 启动后显示阻塞式全屏更新页
-  - 页面会显示检查中、下载中、切换中
-  - 下载完成后立即切到新 bundle
+- 带 `forceUpdate: true` 的 OTA
+  - 对兼容当前原生壳的 bundle，仍然按普通 OTA 处理
+  - 不再在当前会话显示阻塞式下载/切换页
+  - 仍然是后台下载并排队，切到后台或下次重启后生效
 - 需要更新 App
   - manifest 声明 `forceUpdate: true`，但当前原生壳版本不满足兼容条件
   - 不会继续下载 OTA bundle
@@ -109,6 +181,50 @@ VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS=15000
 ```bash
 npm run mobile:android:doctor
 ```
+
+## 本地兼容性 Smoke
+
+- 命令：`npm run mobile:android:compat:smoke -- --avd <AVD 名称>`
+- 目标：用于本地偶发性的 Android 功能兼容验证，不是长期 E2E 框架
+- 默认行为：
+  - 连接已存在的 adb 设备；如果没有，则自动启动一个本地 AVD
+  - 安装现有 APK（默认优先 `android/app/build/outputs/apk/debug/easyboardgame-debug.apk`）
+  - 启动 App，等待首屏稳定
+  - 若传 `--route`，会在 App 启动后优先通过 WebView CDP 直切到目标 H5 路由；即使 Android 自定义深链不稳定，也能直接进入游戏页采图
+  - 采集截图、UI dump、`logcat`、WebView/Chrome 版本信息
+  - 自动判断是否疑似纯黑屏，以及是否低于兼容基线
+- 当前兼容基线：`WebView/Chrome 主版本 >= 88`
+- 默认输出目录：`test-results/android-compat-smoke/<时间戳>/`
+
+推荐最小流程：
+
+```bash
+npm run mobile:android:build:debug
+npm run mobile:android:compat:smoke -- --avd Pixel_3a_API_24
+```
+
+如果已经有设备连着，也可直接指定 serial：
+
+```bash
+npm run mobile:android:compat:smoke -- --serial emulator-5554
+```
+
+常用参数：
+
+- `--apk <path>`：安装指定 APK
+- `--skip-install`：跳过安装，只复用设备上的现有 App
+- `--min-webview-major <n>`：覆盖默认 WebView 基线，默认 `88`
+- `--launch-delay-ms <ms>`：启动后等待多久再抓证据
+- `--route <path>`：直达指定 H5 路由，例如 `/play/dicethrone/tutorial`、`/play/dicethrone/local`
+- `--keep-emulator`：脚本启动的模拟器结束后不自动关闭
+
+产物说明：
+
+- `screen.png`：设备截图
+- `webview-cdp.png`：若使用 `--route`，额外保存一份 WebView CDP 截图，便于和设备整屏截图交叉判断
+- `window_dump.xml`：`uiautomator dump` 导出的界面层级
+- `logcat.txt`：本次启动后的日志快照
+- `summary.json` / `summary.txt`：结构化结论，包含 Android 版本、WebView 版本、黑屏分析与产物路径
 
 ## 游戏包下载主线
 
@@ -178,37 +294,45 @@ manifest 结构示例：
 3. 先预演一次发布：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --dry-run
+node scripts/mobile/release-android.mjs ota --channel stable --dry-run
 ```
 
 4. 如果只想先上传 bundle 和版本 manifest，不立刻切 `latest.json`：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --skip-latest
+node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
 ```
 
 5. 确认无误后再正式更新 channel 的 `latest.json`：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable
+node scripts/mobile/release-android.mjs ota --channel stable
 ```
 
-如果这次是强制 OTA，可直接这样发布：
+当前 `stable` OTA 默认就会把旧壳挡回原生升级链路：
+
+- 若未显式传兼容参数，发布脚本会自动补 `minNativeVersion=<package.json.version>`
+- 同时默认开启 `forceUpdate`
+- 也就是说，旧壳不会继续吃新的 `stable` OTA，而是直接要求安装新 App
+
+只有你明确要覆盖默认口径时，才再手动改这些参数。
+
+如果你要自定义强更文案：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+node scripts/mobile/release-android.mjs ota --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
 ```
 
 如果这次 OTA 只允许某个原生壳版本区间接收：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
+node scripts/mobile/release-android.mjs ota --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
 ```
 
-如果这次 OTA 既要强更，又要求至少某个壳版本：
+如果这次 OTA 既要求原生版本不兼容时阻断，又要求至少某个壳版本：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
+node scripts/mobile/release-android.mjs ota --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
 ```
 
 如果走 GitHub Actions 自动化：
@@ -229,22 +353,26 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 - `--channel <name>`：发布 channel，例如 `stable`、`gray`
 - `--version <bundleVersion>`：手动指定 bundle 版本号
 - `--native-version <version>`：当前打包对应的原生版本，默认取 `package.json.version`
-- `--target-native-version <version[,version]>`：只允许指定原生版本接收该 bundle
-- `--min-native-version <version>`：声明最低兼容原生版本
-- `--max-native-version <version>`：声明最高兼容原生版本
-- `--force-update`：把这次 OTA 标记为强制更新
-- `--force-update-title <text>`：覆盖强更页标题
-- `--force-update-message <text>`：覆盖强更页正文
+- `--target-native-version <version[,version]>`：显式指定只有哪些原生版本能接收该 bundle
+- `--min-native-version <version>`：显式声明最低兼容原生版本
+- `--max-native-version <version>`：显式声明最高兼容原生版本
+- `--force-update`：把这次 OTA 标记为“原生版本不兼容时需先升级 App”
+- `--no-force-update`：显式关闭该阻断语义；仅在你明确不要旧壳强更时才使用
+- `--allow-legacy-shells`：显式放开 `stable` 对旧壳的默认拦截；没有这个参数时，`stable` 会默认把旧壳挡回原生升级链路
+- `--force-update-title <text>`：覆盖“需先升级 App”阻断页标题
+- `--force-update-message <text>`：覆盖“需先升级 App”阻断页正文
 - `--notes <text>`：写入 manifest 备注
 - `--dry-run`：只打 zip、算 checksum、打印 manifest，不上传
 - `--skip-latest`：上传 zip 和版本 manifest，但不覆盖 `<channel>/latest.json`
 
 兼容字段生成规则：
 
-- 如果你没有显式传兼容参数，脚本默认会把这次 OTA 绑定到当前 `package.json.version`
+- `stable`：如果你没有显式传兼容参数，脚本默认写入 `minNativeVersion=<nativeVersion>`
+- `stable`：如果你没有显式传 `--no-force-update`，脚本默认也会打开 `forceUpdate`
+- `gray` / `edge`：仍然保持“显式传兼容参数才写 target/min/max”
 - 如果你传了 `--target-native-version`，则按精确版本列表生成 `targetNativeVersion`
-- 如果你传了 `--min-native-version` 或 `--max-native-version`，脚本不会再额外塞默认的精确 `targetNativeVersion`
-- `targetNativeVersion` 与 `min/maxNativeVersion` 不要混着乱用，除非你明确需要更窄的门控
+- 如果你传了 `--min-native-version` 或 `--max-native-version`，则按版本区间生成兼容门禁
+- 如确实要让 `stable` 放行旧壳，必须显式传 `--allow-legacy-shells`
 
 当前发布脚本会写入：
 
@@ -262,7 +390,6 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
   "url": "https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.0-ota-2026-03-29T20-30-00-000Z.zip",
   "checksum": "sha256-hex",
   "channel": "stable",
-  "targetNativeVersion": "0.5.0",
   "publishedAt": "2026-03-29T20:30:00.000Z",
   "size": 1234567,
   "notes": "Android embedded OTA bundle"
@@ -271,10 +398,11 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 兼容性控制支持：
 
-- `targetNativeVersion`：只允许某个原生版本接收该 bundle
+- `stable` 默认至少带 `minNativeVersion=<nativeVersion>`
+- `targetNativeVersion`：只允许某个原生版本或某几个原生版本接收该 bundle
 - `minNativeVersion` / `maxNativeVersion`：允许一个原生版本区间
-- `forceUpdate`：声明这次 OTA 是否为阻塞式强更
-- `forceUpdateTitle` / `forceUpdateMessage`：覆盖强更页默认文案
+- `forceUpdate`：声明这次 OTA 在原生版本不兼容时是否阻断并要求先升级 App
+- `forceUpdateTitle` / `forceUpdateMessage`：覆盖该阻断页默认文案
 
 示例：
 
@@ -313,9 +441,48 @@ npm run mobile:android:ota:publish -- --channel stable --force-update --min-nati
 
 - 预演发布先用 `--dry-run`
 - 小流量验证建议先发 `gray` 之类独立 channel，再切 `stable`
-- 普通 OTA 的 App 端提示语义是“已在后台准备完成，切到后台或重启 App 后生效”
-- 强制 OTA 会显示阻塞式全屏进度页，不走普通 toast
+- 当前 App 主线 OTA 语义已经调整为“启动即检查，发现新 bundle 时优先即时 OTA”，不再把正式更新口径建立在“后台下载完成、下次重启再生效”上
+- 只有原生版本不兼容且 manifest 显式声明 `forceUpdate: true` 时，才会进入 OTA 阻塞页；此时运行时会继续触发原生 APK 更新检查，要求用户安装新壳
 - 若本次改动涉及原生层，仍必须重新打包安装验证，不能把 OTA 当成原生更新替代品
+
+## 正式发版强制策略
+
+以后正式 Android 发版统一按“双保险强更”执行，禁止再依赖单条链路碰运气：
+
+1. 兼容当前壳的 H5 修复：
+
+```bash
+node scripts/mobile/release-android.mjs ota --channel stable --force-update --target-native-version 0.5.1 --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+```
+
+2. 不兼容当前壳或需要修原生能力时，同时发布原生强更 manifest：
+
+```bash
+npm run mobile:android:native-update:publish -- --channel stable --force-update-title "需要安装新版 App" --force-update-message "当前版本需要升级 App 后继续使用。"
+```
+
+执行原则：
+
+- OTA manifest 负责“兼容壳优先即时更新”
+- OTA manifest 的 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion` 负责显式声明“哪些旧壳还能吃这次 OTA”
+- 一旦 OTA manifest 判定当前壳不兼容，运行时会切到 `native-update-required`，并继续触发原生 APK 更新检查
+- 原生 update manifest 必须与 OTA 的兼容门禁一起设计，不能只发其中一条
+
+## 正式发版前双门禁
+
+正式发包 / 正式切 `stable` 之前，必须至少人工验证以下两条：
+
+1. 旧壳兼容路径：
+- 安装上一个正式 APK
+- 启动 App
+- 必须自动进入即时 OTA 或成功切到最新 bundle
+
+2. 旧壳不兼容路径：
+- 把 OTA manifest 收窄到不兼容当前旧壳
+- 启动 App
+- 必须进入“需要更新 App”的阻塞链路，并能拉起原生 APK 更新流程
+
+只要这两条没有都验证过，就不能再宣称“这次发版以后不需要第二次发包”。
 
 ## GitHub Actions 配置
 

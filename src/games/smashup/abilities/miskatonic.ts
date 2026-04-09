@@ -13,7 +13,7 @@ import type { MatchState } from '../../../engine/types';
 import {
     drawMadnessCards, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion, addTempPower, addPowerCounter, addPermanentPower,
-    getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions,
+    getMinionPower, buildActionMinionTargetOptions, buildMinionTargetOptions, buildBaseTargetOptions,
     resolveOrPrompt, buildAbilityFeedback,
     recoverCardsFromDiscard,
 } from '../domain/abilityHelpers';
@@ -146,7 +146,15 @@ function miskatonicMandatoryReading(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, m, baseIndex);
         return { uid: m.uid, defId: m.defId, baseIndex, label: `${name} (力量 ${power})` };
     });
-    return resolveOrPrompt(ctx, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }), {
+    const minionOptions = buildActionMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'affect',
+    });
+    if (minionOptions.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+    return resolveOrPrompt(ctx, minionOptions, {
         id: 'miskatonic_mandatory_reading',
         title: '最好不知道的事：选择一个随从',
         sourceId: 'miskatonic_mandatory_reading',
@@ -254,7 +262,15 @@ function miskatonicThingsBestNotKnownPod(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, m, baseIndex);
         return { uid: m.uid, defId: m.defId, baseIndex, label: `${name} (力量 ${power})` };
     });
-    return resolveOrPrompt(ctx, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }), {
+    const minionOptions = buildActionMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'affect',
+    });
+    if (minionOptions.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+    return resolveOrPrompt(ctx, minionOptions, {
         id: 'miskatonic_things_best_not_known_pod',
         title: 'Things Best Not Known：选择一个随从',
         sourceId: 'miskatonic_things_best_not_known_pod',
@@ -621,6 +637,18 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
     if (topMinions.length === 1) {
         // 唯一最高力量随从，直接消灭
         const target = topMinions[0];
+        if (target.controller !== ctx.playerId && buildActionMinionTargetOptions([{
+            uid: target.uid,
+            defId: target.defId,
+            baseIndex,
+            label: target.uid,
+        }], {
+            state: ctx.state,
+            sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+            effectType: 'destroy',
+        }).length === 0) {
+            return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+        }
         return { events: [destroyMinion(target.uid, target.defId, baseIndex, target.owner, undefined, 'miskatonic_thing_on_the_doorstep', ctx.now)] };
     }
 
@@ -631,7 +659,15 @@ function miskatonicThingOnTheDoorstep(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, m, baseIndex);
         return { uid: m.uid, defId: m.defId, baseIndex, label: `${name} (力量 ${power})` };
     });
-    return resolveOrPrompt(ctx, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), {
+    const minionOptions = buildActionMinionTargetOptions(options, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'destroy',
+    });
+    if (minionOptions.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+    return resolveOrPrompt(ctx, minionOptions, {
         id: 'miskatonic_thing_on_the_doorstep',
         title: '老詹金斯!?：选择要消灭的最高力量随从',
         sourceId: 'miskatonic_thing_on_the_doorstep',
@@ -1072,7 +1108,7 @@ export function registerMiskatonicInteractionHandlers(): void {
             `miskatonic_researcher_pod_choose_minion_${timestamp}`,
             playerId,
             '研究员：选择一个随从放置 +1 战斗力标记',
-            buildMinionTargetOptions(allMinions, { state: state.core, sourcePlayerId: playerId, effectType: 'affect' }),
+            buildActionMinionTargetOptions(allMinions, { state: state.core, sourcePlayerId: playerId, sourceDefId: 'miskatonic_researcher_pod', effectType: 'affect' }),
             { sourceId: 'miskatonic_researcher_pod_choose_minion', targetType: 'minion' },
         );
         return { state: queueInteraction(state, next), events: [] };

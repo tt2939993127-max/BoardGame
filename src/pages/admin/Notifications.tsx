@@ -3,6 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { ADMIN_API_URL } from '../../config/server';
 import { Plus, Trash2, Pencil, Eye, EyeOff } from 'lucide-react';
+import { AdminCardListSkeleton } from './components/AdminSkeletons';
 
 interface NotificationItem {
     _id: string;
@@ -202,9 +203,7 @@ export default function AdminNotifications() {
 
                 {/* 通知列表 */}
                 {loading ? (
-                    <div className="flex justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600" />
-                    </div>
+                    <AdminCardListSkeleton rows={4} />
                 ) : notifications.length === 0 ? (
                     <div className="text-center text-zinc-400 py-16 text-sm">暂无通知</div>
                 ) : (

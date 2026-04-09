@@ -15,6 +15,10 @@ export {
     clearGameAssetsCache,
     setAssetsBaseUrl,
     getAssetsBaseUrl,
+    setAudioAssetsBaseUrl,
+    getAudioAssetsBaseUrl,
+    setCommonAudioAssetBaseOverride,
+    getCommonAudioAssetBaseOverride,
     setGameAssetBaseOverride,
     clearGameAssetBaseOverrides,
     // 两阶段预加载 API
@@ -35,6 +39,7 @@ export {
     getOptimizedImageUrls,
     getOptimizedAudioUrl,
     getLocalizedAssetPath,
+    getLocalizedImageCandidateUrls,
     getLocalizedImageUrls,
     buildLocalizedImageSet,
     buildOptimizedImageSet,
@@ -44,5 +49,6 @@ export {
 } from './AssetLoader';
 export {
     registerCriticalImageResolver,
+    getCriticalImageResolver,
     resolveCriticalImages,
 } from './CriticalImageResolverRegistry';

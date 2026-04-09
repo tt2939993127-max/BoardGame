@@ -93,7 +93,7 @@ test.describe('Flowise AI Repo Workbench 导航', () => {
             'placeholder',
             '例如：为大杀四方新增一个海盗主题派系，并说明希望参考的派系风格。',
         );
-        await expect(resetButton).toBeDisabled();
+        await expect(page.getByLabel('目标项目目录')).toHaveValue(targetProjectPath);
         await saveEvidence(page, testInfo, '04-chatbot-after-reset');
     });
 

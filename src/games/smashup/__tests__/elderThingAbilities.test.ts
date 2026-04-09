@@ -2,7 +2,7 @@
  * 大杀四方 - 远古之物派系能力测试
  *
  * 覆盖：
- * - elder_thing_byakhee（拜亚基）：有对手随从时抽疯狂卡
+ * - elder_thing_byakhee（拜亚基）：每位在这里有随从的对手抽疯狂卡
  * - elder_thing_mi_go（米-格）：对手抽疯狂卡或你抽牌
  * - elder_thing_insanity（精神错乱）：对手各抽两张疯狂卡
  * - elder_thing_touch_of_madness（疯狂接触）：对手抽疯狂卡 + 你抽牌 + 额外行动
@@ -128,8 +128,8 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 // ============================================================================
 
 describe('远古之物派系能力', () => {
-    describe('elder_thing_byakhee（拜亚基：有对手随从时抽疯狂卡）', () => {
-        it('基地有对手随从时抽一张疯狂卡', () => {
+    describe('elder_thing_byakhee（拜亚基：每位在这里有随从的对手抽疯狂卡）', () => {
+        it('基地有一位对手随从时，该对手抽一张疯狂卡', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -147,8 +147,56 @@ describe('远古之物派系能力', () => {
             const events = execPlayMinion(state, '0', 'm1', 0);
             const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
-            expect((madnessEvents[0] as any).payload.playerId).toBe('0');
+            expect((madnessEvents[0] as any).payload.playerId).toBe('1');
             expect((madnessEvents[0] as any).payload.count).toBe(1);
+        });
+
+        it('三人局中只有 P2 在该基地有随从时，P2 抽一张疯狂卡', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_byakhee', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                    '2': makePlayer('2'),
+                },
+                turnOrder: ['0', '1', '2'],
+                bases: [{
+                    defId: 'b1',
+                    minions: [makeMinion('opp2', 'test', '2', 3)],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(1);
+            expect((madnessEvents[0] as any).payload.playerId).toBe('2');
+            expect((madnessEvents[0] as any).payload.count).toBe(1);
+        });
+
+        it('三人局中两位对手都在该基地有随从时，两位对手各抽一张疯狂卡', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_byakhee', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                    '2': makePlayer('2'),
+                },
+                turnOrder: ['0', '1', '2'],
+                bases: [{
+                    defId: 'b1',
+                    minions: [makeMinion('opp1', 'test', '1', 3), makeMinion('opp2', 'test', '2', 2)],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(2);
+            expect(madnessEvents.map(e => (e as any).payload.playerId)).toEqual(['1', '2']);
+            expect(madnessEvents.map(e => (e as any).payload.count)).toEqual([1, 1]);
         });
 
         it('基地无对手随从时不抽疯狂卡', () => {

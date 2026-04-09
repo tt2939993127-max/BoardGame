@@ -87,8 +87,17 @@ export const EmailBindModal = ({ isOpen, onClose, closeOnBackdrop }: EmailBindMo
             onClose={onClose}
             closeOnBackdrop={closeOnBackdrop}
             containerClassName="p-4 sm:p-6"
+            containerStyle={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
         >
-            <div className="bg-parchment-card-bg pointer-events-auto w-full max-w-[340px] sm:max-w-sm shadow-parchment-card-hover border border-parchment-card-border/50 p-6 sm:p-8 relative rounded-sm">
+            <div
+                className="bg-parchment-card-bg pointer-events-auto w-full max-w-[340px] sm:max-w-sm max-h-[var(--runtime-modal-max-height)] overflow-y-auto shadow-parchment-card-hover border border-parchment-card-border/50 p-6 sm:p-8 relative rounded-sm"
+                data-testid="email-bind-modal"
+            >
                 {/* 装饰性边角 */}
                 <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-parchment-card-border/60" />
                 <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-parchment-card-border/60" />
@@ -126,10 +135,12 @@ export const EmailBindModal = ({ isOpen, onClose, closeOnBackdrop }: EmailBindMo
                                 type="email"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text placeholder-parchment-light-text/50 outline-none focus:border-parchment-base-text transition-colors text-base sm:text-lg"
+                                className="auth-form-input w-full px-0 py-2 bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text placeholder-parchment-light-text/50 outline-none focus:border-parchment-base-text transition-colors text-base sm:text-lg"
                                 placeholder={t('email.placeholder.address')}
                                 required
+                                autoComplete="email"
                                 autoFocus
+                                data-testid="email-bind-address-input"
                             />
                         </div>
 
@@ -137,6 +148,7 @@ export const EmailBindModal = ({ isOpen, onClose, closeOnBackdrop }: EmailBindMo
                             onClick={handleSendCode}
                             disabled={isLoading}
                             className="w-full py-3 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-4 cursor-pointer"
+                            data-testid="email-bind-send-code"
                         >
                             {isLoading ? t('email.button.sending') : t('email.button.sendCode')}
                         </button>
@@ -158,11 +170,14 @@ export const EmailBindModal = ({ isOpen, onClose, closeOnBackdrop }: EmailBindMo
                                 type="text"
                                 value={code}
                                 onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text placeholder-parchment-light-text/50 outline-none focus:border-parchment-base-text transition-colors text-2xl text-center tracking-[0.5em] font-mono"
+                                className="auth-form-input w-full px-0 py-2 bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text placeholder-parchment-light-text/50 outline-none focus:border-parchment-base-text transition-colors text-xl sm:text-2xl text-center tracking-[0.5em] font-mono"
                                 placeholder={t('email.placeholder.code')}
                                 maxLength={6}
                                 required
+                                inputMode="numeric"
+                                autoComplete="one-time-code"
                                 autoFocus
+                                data-testid="email-bind-code-input"
                             />
                         </div>
 
@@ -170,6 +185,7 @@ export const EmailBindModal = ({ isOpen, onClose, closeOnBackdrop }: EmailBindMo
                             onClick={handleVerify}
                             disabled={isLoading || code.length !== 6}
                             className="w-full py-3 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-4 cursor-pointer"
+                            data-testid="email-bind-confirm-button"
                         >
                             {isLoading ? t('email.button.verifying') : t('email.button.confirm')}
                         </button>

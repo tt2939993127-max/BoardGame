@@ -40,7 +40,7 @@ interface ConfirmModalProps {
 }
 
 const baseTheme: Omit<ConfirmModalTheme, 'overlay'> = {
-    panel: 'bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm text-center font-serif pointer-events-auto max-h-[calc(100dvh-2rem)] overflow-y-auto',
+    panel: 'bg-parchment-card-bg border border-parchment-card-border/50 shadow-parchment-card-hover rounded-sm p-6 w-full max-w-[20rem] sm:max-w-sm text-center font-serif pointer-events-auto max-h-[var(--runtime-modal-max-height)] overflow-y-auto',
     title: 'text-xs sm:text-sm text-parchment-light-text font-bold uppercase tracking-wider mb-2',
     description: 'text-parchment-base-text font-bold text-sm sm:text-base mb-5',
     actions: 'flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-center gap-3',
@@ -118,10 +118,10 @@ export const ConfirmModal = ({
             containerClassName={twMerge('p-4 sm:p-6', mergedTheme.container, containerClassName)}
             containerStyle={{
                 zIndex: UI_Z_INDEX.modalContent,
-                paddingTop: 'max(1rem, env(safe-area-inset-top))',
-                paddingRight: 'max(1rem, env(safe-area-inset-right))',
-                paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
-                paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
             }}
         >
             <div

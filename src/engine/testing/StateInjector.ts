@@ -15,7 +15,6 @@ export class StateInjector {
     register(getState: () => any, setState: (state: any) => void) {
         this.getStateFn = getState;
         this.setStateFn = setState;
-        console.log('[StateInjector] 状态访问器已注册');
     }
 
     /**
@@ -25,9 +24,7 @@ export class StateInjector {
         if (!this.getStateFn) {
             throw new Error('[StateInjector] 状态访问器未注册，请确认游戏已加载');
         }
-        const state = this.getStateFn();
-        console.log('[StateInjector] 获取状态', state);
-        return state;
+        return this.getStateFn();
     }
 
     /**
@@ -44,7 +41,6 @@ export class StateInjector {
         if (!this.setStateFn) {
             throw new Error('[StateInjector] 状态访问器未注册，请确认游戏已加载');
         }
-        console.log('[StateInjector] 设置状态', state);
         this.setStateFn(state);
     }
 
@@ -73,7 +69,6 @@ export class StateInjector {
         }
 
         await this.set(updated);
-        console.log('[StateInjector] 应用补丁', patch);
     }
 
     private setByPath(obj: any, path: string, value: any) {

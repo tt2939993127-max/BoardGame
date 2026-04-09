@@ -1,5 +1,5 @@
 /* @vitest-environment happy-dom */
-import { cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Home } from '../Home';
 import { MaintenancePage } from '../Maintenance';
@@ -8,7 +8,31 @@ import {
     readBrowserCompatibilityBypass,
     writeBrowserCompatibilityBypass,
 } from '../../lib/browserCompatibility';
-import { MapContainer } from '../../games/summonerwars/ui/MapContainer';
+import {
+    MapContainer,
+    shouldReserveSystemBackGesture,
+} from '../../games/summonerwars/ui/MapContainer';
+
+const { nativeAndroidRuntimeState, androidLiveUpdateSnapshotState, androidLiveUpdateActivityState } = vi.hoisted(() => ({
+    nativeAndroidRuntimeState: {
+        value: false,
+    },
+    androidLiveUpdateSnapshotState: {
+        value: {
+            enabled: false,
+            manifestUrl: '',
+            channel: 'stable',
+            nativeAndroid: false,
+            updaterLoaded: false,
+        },
+    },
+    androidLiveUpdateActivityState: {
+        value: {
+            active: false,
+            phase: 'idle' as const,
+        },
+    },
+}));
 
 const mockLoggerError = vi.fn();
 const mockNavigate = vi.fn();
@@ -35,6 +59,7 @@ const mockReadStoredMatchCredentials = vi.fn();
 const mockValidateStoredMatchSeat = vi.fn(() => ({ shouldClear: false }));
 const mockGetOwnerActiveMatch = vi.fn(() => null);
 const mockPruneStoredMatchCredentials = vi.fn();
+const mockRequestAndroidLiveUpdateCheck = vi.fn();
 let mockAuthToken: string | null = null;
 
 let hasStoredMatch = true;
@@ -184,6 +209,27 @@ vi.mock('../../services/lobbySocket', () => ({
 
 vi.mock('../../hooks/useLobbyMatchPresence', () => ({
     useLobbyMatchPresence: () => lobbyPresenceState,
+}));
+
+vi.mock('../../lib/mobile/androidRuntime', () => ({
+    isNativeAndroidRuntime: () => nativeAndroidRuntimeState.value,
+    isAndroidShellBuildMode: () => false,
+}));
+
+vi.mock('../../lib/mobile/androidLiveUpdates', () => ({
+    readAndroidLiveUpdateConfig: vi.fn(() => ({
+        enabled: nativeAndroidRuntimeState.value,
+        manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+        channel: 'stable',
+        appReadyTimeoutMs: 10000,
+    })),
+    readAndroidLiveUpdateSnapshot: vi.fn(async () => androidLiveUpdateSnapshotState.value),
+    readAndroidLiveUpdateActivityState: vi.fn(() => androidLiveUpdateActivityState.value),
+    subscribeAndroidLiveUpdateActivityState: vi.fn((listener: (state: typeof androidLiveUpdateActivityState.value) => void) => {
+        listener(androidLiveUpdateActivityState.value);
+        return () => undefined;
+    }),
+    requestAndroidLiveUpdateCheck: (...args: unknown[]) => mockRequestAndroidLiveUpdateCheck(...args),
 }));
 
 vi.mock('../../core/cursor/useGlobalCursor', () => ({
@@ -420,7 +466,7 @@ describe('browser compatibility detection', () => {
         });
     });
 
-    it('blocks ugc dev routes when ResizeObserver is missing', () => {
+    it('移除 UGC 入口后不再为旧 dev 路由额外拦截 ResizeObserver', () => {
         const originalResizeObserver = globalThis.ResizeObserver;
         Object.defineProperty(globalThis, 'ResizeObserver', {
             configurable: true,
@@ -429,8 +475,8 @@ describe('browser compatibility detection', () => {
 
         const report = detectBrowserCompatibility('/dev/ugc');
 
-        expect(report.isCompatible).toBe(false);
-        expect(report.reasons).toEqual(['game-resize-observer']);
+        expect(report.isCompatible).toBe(true);
+        expect(report.reasons).toEqual([]);
 
         Object.defineProperty(globalThis, 'ResizeObserver', {
             configurable: true,
@@ -463,6 +509,32 @@ describe('browser compatibility detection', () => {
             configurable: true,
             value: originalResizeObserver,
         });
+    });
+
+    it('reserves the left and right screen edges for the Android system back gesture', () => {
+        expect(shouldReserveSystemBackGesture({
+            enabled: true,
+            clientX: 12,
+            viewportWidth: 360,
+        })).toBe(true);
+
+        expect(shouldReserveSystemBackGesture({
+            enabled: true,
+            clientX: 348,
+            viewportWidth: 360,
+        })).toBe(true);
+
+        expect(shouldReserveSystemBackGesture({
+            enabled: true,
+            clientX: 180,
+            viewportWidth: 360,
+        })).toBe(false);
+
+        expect(shouldReserveSystemBackGesture({
+            enabled: false,
+            clientX: 12,
+            viewportWidth: 360,
+        })).toBe(false);
     });
 
     it('supports bypassing the compatibility gate for the current session', () => {
@@ -551,10 +623,592 @@ describe('useGameNamespaceReady', () => {
             },
         );
 
+        await act(async () => {
+            await Promise.resolve();
+        });
+
         expect(result.current.isGameNamespaceReady).toBe(true);
         expect(result.current.gameNamespaceError).toBeNull();
         expect(i18n.loadNamespaces).not.toHaveBeenCalled();
         expect(mockLoggerError).not.toHaveBeenCalled();
+    });
+
+    it('namespace 请求长期 pending 时会在 4000ms 后显式报超时', async () => {
+        vi.useFakeTimers();
+        try {
+            const { GAME_NAMESPACE_LOAD_TIMEOUT_MS, useGameNamespaceReady } = await import('../../hooks/useGameNamespaceReady');
+            const i18n = {
+                language: 'zh-CN',
+                resolvedLanguage: 'zh-CN',
+                hasLoadedNamespace: vi.fn(() => false),
+                loadNamespaces: vi.fn(() => new Promise<void>(() => {})),
+            };
+
+            const { result } = renderHook(
+                ({ gameId, instance }) => useGameNamespaceReady(gameId, instance as never),
+                {
+                    initialProps: {
+                        gameId: 'smashup',
+                        instance: i18n,
+                    },
+                },
+            );
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(GAME_NAMESPACE_LOAD_TIMEOUT_MS);
+                await Promise.resolve();
+            });
+
+            expect(result.current.gameNamespaceError).toContain('游戏文案加载超时');
+            expect(result.current.isGameNamespaceReady).toBe(false);
+            expect(mockLoggerError).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('useGameImplementationReady', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/registry');
+        vi.resetModules();
+    });
+
+    it('加载失败后支持重试，并在成功后恢复 ready', async () => {
+        const mockSubscribeGameImplementationReady = vi.fn(() => vi.fn());
+        const mockGetGameImplementation = vi.fn(() => null);
+        const mockHasGameTutorialLoader = vi.fn(() => false);
+        const mockResolveGameTutorialManifest = vi.fn(() => null);
+        const mockLoadGameImplementation = vi.fn()
+            .mockRejectedValueOnce(new Error('游戏客户端模块加载超时：smashup（4000ms）'))
+            .mockResolvedValueOnce({ engineConfig: {}, board: () => null });
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            resolveGameTutorialManifest: mockResolveGameTutorialManifest,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup'));
+
+        await waitFor(() => {
+            expect(result.current.gameImplementationError).toContain('游戏客户端模块加载超时');
+        });
+
+        act(() => {
+            result.current.retryGameImplementationLoad();
+        });
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
+
+        expect(result.current.gameImplementationError).toBeNull();
+        expect(mockLoadGameImplementation).toHaveBeenCalledTimes(2);
+    });
+
+    it('超时报错后如果模块稍后实际加载完成，会自动恢复 ready', async () => {
+        let readyListener: ((gameId: string) => void) | null = null;
+        let implementation: { engineConfig: object; board: () => null } | null = null;
+        const mockSubscribeGameImplementationReady = vi.fn((listener: (gameId: string) => void) => {
+            readyListener = listener;
+            return () => {
+                if (readyListener === listener) {
+                    readyListener = null;
+                }
+            };
+        });
+        const mockGetGameImplementation = vi.fn(() => implementation);
+        const mockHasGameTutorialLoader = vi.fn(() => false);
+        const mockResolveGameTutorialManifest = vi.fn(() => null);
+        const mockLoadGameImplementation = vi.fn()
+            .mockRejectedValueOnce(new Error('游戏客户端模块加载超时：smashup（45000ms）'));
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            resolveGameTutorialManifest: mockResolveGameTutorialManifest,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup'));
+
+        await waitFor(() => {
+            expect(result.current.gameImplementationError).toContain('游戏客户端模块加载超时');
+        });
+
+        act(() => {
+            implementation = { engineConfig: {}, board: () => null };
+            readyListener?.('smashup');
+        });
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
+
+        expect(result.current.gameImplementationError).toBeNull();
+        expect(mockLoadGameImplementation).toHaveBeenCalledTimes(1);
+    });
+
+    it('教程路由会要求实现层补拉 tutorial 模块', async () => {
+        const mockSubscribeGameImplementationReady = vi.fn(() => vi.fn());
+        const mockGetGameImplementation = vi.fn(() => null);
+        const mockHasGameTutorialLoader = vi.fn(() => true);
+        const mockResolveGameTutorialManifest = vi.fn(() => ({ id: 'smashup-basic', steps: [] }));
+        const mockLoadGameImplementation = vi.fn()
+            .mockResolvedValueOnce({ engineConfig: {}, board: () => null, tutorial: { id: 'smashup-basic', steps: [] } });
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            resolveGameTutorialManifest: mockResolveGameTutorialManifest,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup', { includeTutorial: true }));
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
+
+        expect(mockLoadGameImplementation).toHaveBeenCalledWith('smashup', { includeTutorial: true });
+    });
+
+    it('教程路由收到 runtime ready 事件时不能在 tutorial 未加载前提前就绪', async () => {
+        let readyListener: ((gameId: string) => void) | null = null;
+        const implementationRef: {
+            current: {
+                engineConfig: object;
+                board: () => null;
+                tutorial?: { id: string; steps: never[] };
+                tutorialCatalog?: { defaultTutorialId: string; tutorials: Record<string, { manifest: { id: string; steps: never[] } }> };
+            } | null;
+        } = {
+            current: null,
+        };
+        const mockSubscribeGameImplementationReady = vi.fn((listener: (gameId: string) => void) => {
+            readyListener = listener;
+            return vi.fn();
+        });
+        const mockGetGameImplementation = vi.fn(() => implementationRef.current);
+        const mockHasGameTutorialLoader = vi.fn(() => true);
+        const mockResolveGameTutorialManifest = vi.fn((_: string, tutorialId?: string) => {
+            if (!tutorialId) {
+                return implementationRef.current?.tutorial ?? null;
+            }
+            return implementationRef.current?.tutorialCatalog?.tutorials?.[tutorialId]?.manifest ?? null;
+        });
+        const mockLoadGameImplementation = vi.fn(() => new Promise<typeof implementationRef.current>((resolve) => {
+            window.setTimeout(() => {
+                implementationRef.current = {
+                    engineConfig: {},
+                    board: () => null,
+                    tutorial: { id: 'smashup-basic', steps: [] },
+                };
+                resolve(implementationRef.current);
+            }, 50);
+        }));
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            resolveGameTutorialManifest: mockResolveGameTutorialManifest,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup', { includeTutorial: true }));
+
+        await waitFor(() => {
+            expect(mockLoadGameImplementation).toHaveBeenCalledWith('smashup', { includeTutorial: true });
+        });
+
+        act(() => {
+            implementationRef.current = {
+                engineConfig: {},
+                board: () => null,
+            };
+            readyListener?.('smashup');
+        });
+
+        expect(result.current.isGameImplementationReady).toBe(false);
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
+    });
+
+    it('子教程路由会按 tutorialId 等待指定 manifest 就绪', async () => {
+        const tutorialCatalog = {
+            defaultTutorialId: 'smashup-basic',
+            tutorials: {
+                'smashup-basic': { manifest: { id: 'smashup-basic', steps: [] } },
+                'cowboys-duel': { manifest: { id: 'smashup-cowboys-duel', steps: [] } },
+            },
+        };
+        const implementationRef: {
+            current: {
+                engineConfig: object;
+                board: () => null;
+                tutorial?: { id: string; steps: never[] };
+                tutorialCatalog?: typeof tutorialCatalog;
+            } | null;
+        } = {
+            current: null,
+        };
+        const mockSubscribeGameImplementationReady = vi.fn(() => vi.fn());
+        const mockGetGameImplementation = vi.fn(() => implementationRef.current);
+        const mockHasGameTutorialLoader = vi.fn(() => true);
+        const mockResolveGameTutorialManifest = vi.fn((_: string, tutorialId?: string) => {
+            if (!tutorialId) return implementationRef.current?.tutorial ?? null;
+            return implementationRef.current?.tutorialCatalog?.tutorials[tutorialId as keyof typeof tutorialCatalog.tutorials]?.manifest ?? null;
+        });
+        const mockLoadGameImplementation = vi.fn().mockImplementationOnce(async () => {
+            implementationRef.current = {
+                engineConfig: {},
+                board: () => null,
+                tutorial: { id: 'smashup-basic', steps: [] },
+                tutorialCatalog,
+            };
+            return implementationRef.current;
+        });
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            resolveGameTutorialManifest: mockResolveGameTutorialManifest,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup', {
+            includeTutorial: true,
+            tutorialId: 'cowboys-duel',
+        }));
+
+        await waitFor(() => {
+            expect(result.current.isGameImplementationReady).toBe(true);
+        });
+
+        expect(result.current.gameImplementationError).toBeNull();
+        expect(mockLoadGameImplementation).toHaveBeenCalledWith('smashup', { includeTutorial: true });
+    });
+
+    it('子教程不存在时返回明确错误，不静默回落到默认教程', async () => {
+        const tutorialCatalog = {
+            defaultTutorialId: 'smashup-basic',
+            tutorials: {
+                'smashup-basic': { manifest: { id: 'smashup-basic', steps: [] } },
+            },
+        };
+        const implementation = {
+            engineConfig: {},
+            board: () => null,
+            tutorial: { id: 'smashup-basic', steps: [] },
+            tutorialCatalog,
+        };
+        const mockSubscribeGameImplementationReady = vi.fn(() => vi.fn());
+        const mockGetGameImplementation = vi.fn(() => implementation);
+        const mockHasGameTutorialLoader = vi.fn(() => true);
+        const mockResolveGameTutorialManifest = vi.fn((_: string, tutorialId?: string) => {
+            if (!tutorialId) return implementation.tutorial;
+            return tutorialCatalog.tutorials[tutorialId as keyof typeof tutorialCatalog.tutorials]?.manifest ?? null;
+        });
+        const mockLoadGameImplementation = vi.fn().mockResolvedValueOnce(implementation);
+
+        vi.doMock('../../games/registry', () => ({
+            getGameImplementation: mockGetGameImplementation,
+            hasGameTutorialLoader: mockHasGameTutorialLoader,
+            loadGameImplementation: mockLoadGameImplementation,
+            resolveGameTutorialManifest: mockResolveGameTutorialManifest,
+            subscribeGameImplementationReady: mockSubscribeGameImplementationReady,
+        }));
+
+        const { useGameImplementationReady } = await import('../../hooks/useGameImplementationReady');
+        const { result } = renderHook(() => useGameImplementationReady('smashup', {
+            includeTutorial: true,
+            tutorialId: 'missing-subtutorial',
+        }));
+
+        await waitFor(() => {
+            expect(result.current.gameImplementationError).toContain('未找到教程：smashup/missing-subtutorial');
+        });
+
+        expect(result.current.isGameImplementationReady).toBe(false);
+    });
+});
+
+describe('loadGameImplementation stale chunk recovery', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/manifest.client');
+        vi.doUnmock('../../lib/staleChunkReloadGuard');
+        vi.resetModules();
+    });
+
+    it('游戏 runtime 动态导入命中 stale chunk 时会触发一次页面刷新', async () => {
+        const staleError = new Error('Failed to fetch dynamically imported module');
+        const loadRuntime = vi.fn().mockRejectedValueOnce(staleError);
+        const reloadForStaleChunkOnce = vi.fn(() => true);
+
+        vi.doMock('../../games/manifest.client', () => ({
+            GAME_CLIENT_MANIFEST: [
+                {
+                    manifest: {
+                        id: 'smashup',
+                        type: 'game',
+                        enabled: true,
+                    },
+                    loadRuntime,
+                },
+            ],
+        }));
+
+        vi.doMock('../../lib/staleChunkReloadGuard', () => ({
+            isStaleChunkError: (value: unknown) => value === staleError,
+            reloadForStaleChunkOnce,
+        }));
+
+        const { loadGameImplementation } = await import('../../games/registry');
+
+        await expect(loadGameImplementation('smashup')).rejects.toThrow('Failed to fetch dynamically imported module');
+
+        expect(loadRuntime).toHaveBeenCalledTimes(1);
+        expect(reloadForStaleChunkOnce).toHaveBeenCalledTimes(1);
+        expect(reloadForStaleChunkOnce).toHaveBeenCalledWith('game-runtime-load-failed:smashup', window);
+    });
+});
+
+describe('loadGameImplementation lazy tutorial loading', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/manifest.client');
+        vi.resetModules();
+    });
+
+    it('普通对局先只加载 runtime，教程模式再补拉 tutorial', async () => {
+        const loadRuntime = vi.fn().mockResolvedValue({
+            engineConfig: {},
+            board: () => null,
+        });
+        const loadTutorial = vi.fn().mockResolvedValue({
+            id: 'smashup-basic',
+            steps: [],
+        });
+
+        vi.doMock('../../games/manifest.client', () => ({
+            GAME_CLIENT_MANIFEST: [
+                {
+                    manifest: {
+                        id: 'smashup',
+                        type: 'game',
+                        enabled: true,
+                    },
+                    loadRuntime,
+                    loadTutorial,
+                },
+            ],
+        }));
+
+        const { loadGameImplementation } = await import('../../games/registry');
+
+        const runtimeOnly = await loadGameImplementation('smashup');
+        expect(runtimeOnly?.tutorial).toBeUndefined();
+        expect(loadRuntime).toHaveBeenCalledTimes(1);
+        expect(loadTutorial).toHaveBeenCalledTimes(0);
+
+        const withTutorial = await loadGameImplementation('smashup', { includeTutorial: true });
+        expect(withTutorial?.tutorial).toEqual({ id: 'smashup-basic', steps: [] });
+        expect(loadRuntime).toHaveBeenCalledTimes(1);
+        expect(loadTutorial).toHaveBeenCalledTimes(1);
+    });
+
+    it('当教程模块返回目录结构时，会归一化出默认教程和 tutorialCatalog', async () => {
+        const loadRuntime = vi.fn().mockResolvedValue({
+            engineConfig: {},
+            board: () => null,
+        });
+        const tutorialCatalog = {
+            defaultTutorialId: 'smashup-basic',
+            tutorials: {
+                'smashup-basic': { manifest: { id: 'smashup-basic', steps: [] } },
+                'cowboys-duel': { manifest: { id: 'smashup-cowboys-duel', steps: [] } },
+            },
+        };
+        const loadTutorial = vi.fn().mockResolvedValue(tutorialCatalog);
+
+        vi.doMock('../../games/manifest.client', () => ({
+            GAME_CLIENT_MANIFEST: [
+                {
+                    manifest: {
+                        id: 'smashup',
+                        type: 'game',
+                        enabled: true,
+                    },
+                    loadRuntime,
+                    loadTutorial,
+                },
+            ],
+        }));
+
+        const { loadGameImplementation, resolveGameTutorialManifest } = await import('../../games/registry');
+
+        const implementation = await loadGameImplementation('smashup', { includeTutorial: true });
+        expect(implementation?.tutorial).toEqual({ id: 'smashup-basic', steps: [] });
+        expect(implementation?.tutorialCatalog).toEqual(tutorialCatalog);
+        expect(resolveGameTutorialManifest('smashup', 'cowboys-duel')).toEqual({ id: 'smashup-cowboys-duel', steps: [] });
+    });
+
+    it('runtime 预取不会提前占用正式加载的超时窗口', async () => {
+        vi.useFakeTimers();
+        try {
+            const runtime = {
+                engineConfig: {},
+                board: () => null,
+            };
+            let resolveRuntime: ((value: typeof runtime) => void) | null = null;
+            const loadRuntime = vi.fn(() => new Promise<typeof runtime>((resolve) => {
+                resolveRuntime = resolve;
+            }));
+
+            vi.doMock('../../games/manifest.client', () => ({
+                GAME_CLIENT_MANIFEST: [
+                    {
+                        manifest: {
+                            id: 'smashup',
+                            type: 'game',
+                            enabled: true,
+                        },
+                        loadRuntime,
+                    },
+                ],
+            }));
+
+            const { prefetchGameImplementation, loadGameImplementation } = await import('../../games/registry');
+
+            const prefetchPromise = prefetchGameImplementation('smashup');
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(16000);
+
+            const blockingPromise = loadGameImplementation('smashup');
+            await Promise.resolve();
+            await vi.advanceTimersByTimeAsync(1000);
+
+            resolveRuntime?.(runtime);
+            await Promise.resolve();
+
+            await expect(blockingPromise).resolves.toEqual(runtime);
+            await expect(prefetchPromise).resolves.toEqual(runtime);
+            expect(loadRuntime).toHaveBeenCalledTimes(1);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+});
+
+describe('ensureGameCriticalImageResolverLoaded', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/manifest.client');
+        vi.doUnmock('../../core');
+        vi.resetModules();
+    });
+
+    it('可在 runtime 之前单独懒加载 critical image resolver', async () => {
+        const mockResolver = vi.fn(() => ({ critical: ['smashup/cards/cards1'], warm: [] }));
+        const registerCriticalImageResolver = vi.fn();
+        const getCriticalImageResolver = vi.fn(() => undefined);
+        const loadCriticalImageResolver = vi.fn().mockResolvedValue(mockResolver);
+
+        vi.doMock('../../games/manifest.client', () => ({
+            GAME_CLIENT_MANIFEST: [
+                {
+                    manifest: {
+                        id: 'smashup',
+                        type: 'game',
+                        enabled: true,
+                    },
+                    loadRuntime: vi.fn(),
+                    loadCriticalImageResolver,
+                },
+            ],
+        }));
+
+        vi.doMock('../../core', () => ({
+            getCriticalImageResolver,
+            registerCriticalImageResolver,
+        }));
+
+        const { ensureGameCriticalImageResolverLoaded } = await import('../../games/registry');
+
+        await ensureGameCriticalImageResolverLoaded('smashup');
+
+        expect(loadCriticalImageResolver).toHaveBeenCalledTimes(1);
+        expect(registerCriticalImageResolver).toHaveBeenCalledTimes(1);
+        expect(registerCriticalImageResolver).toHaveBeenCalledWith('smashup', mockResolver);
+    });
+});
+
+describe('resolveGameImplementationLoadTimeoutMs', () => {
+    beforeEach(() => {
+        vi.resetModules();
+    });
+
+    afterEach(() => {
+        vi.doUnmock('../../games/registry');
+        vi.resetModules();
+    });
+
+    it('桌面维持 15000ms，慢设备放宽到 45000ms', async () => {
+        const {
+            GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS,
+            SLOW_DEVICE_GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS,
+            resolveGameImplementationLoadTimeoutMs,
+        } = await import('../../games/registry');
+
+        expect(resolveGameImplementationLoadTimeoutMs({
+            windowObject: { innerWidth: 1440 },
+            navigatorObject: {
+                connection: { effectiveType: '4g', saveData: false },
+                deviceMemory: 8,
+                hardwareConcurrency: 8,
+            },
+            isNativeAndroid: false,
+            isCoarsePointer: false,
+        })).toBe(GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS);
+
+        expect(resolveGameImplementationLoadTimeoutMs({
+            windowObject: { innerWidth: 390 },
+            navigatorObject: {
+                connection: { effectiveType: '3g', saveData: true },
+                deviceMemory: 4,
+                hardwareConcurrency: 4,
+            },
+            isNativeAndroid: false,
+            isCoarsePointer: true,
+        })).toBe(SLOW_DEVICE_GAME_IMPLEMENTATION_LOAD_TIMEOUT_MS);
     });
 });
 
@@ -576,6 +1230,14 @@ describe('resolveFollowCurrentTurnPlayerId', () => {
 describe('Home missing match confirmation', () => {
     beforeEach(() => {
         cleanup();
+        nativeAndroidRuntimeState.value = false;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: false,
+            manifestUrl: '',
+            channel: 'stable',
+            nativeAndroid: false,
+            updaterLoaded: false,
+        };
         hasStoredMatch = true;
         lobbyPresenceState = {
             matches: [{ matchID: 'match-1', gameName: 'tictactoe', players: [] }],
@@ -721,5 +1383,144 @@ describe('Home missing match confirmation', () => {
         expect(mockPublishMatchCleanupNotice).toHaveBeenCalledWith('match-1');
         expect(mockMarkMatchCleanupNoticeSeen).toHaveBeenCalled();
         expect(mockToastWarning).toHaveBeenCalledWith({ kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' });
+    });
+});
+
+describe('Home native runtime footer', () => {
+    beforeEach(() => {
+        cleanup();
+        nativeAndroidRuntimeState.value = false;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: false,
+            manifestUrl: '',
+            channel: 'stable',
+            nativeAndroid: false,
+            updaterLoaded: false,
+        };
+        mockGetLatestStoredMatchCredentials.mockImplementation(() => null);
+        mockReadStoredMatchCredentials.mockImplementation(() => null);
+        mockGetOwnerActiveMatch.mockReturnValue(null);
+        mockGetMatch.mockReset();
+        mockSetSearchParams.mockReset();
+        mockNavigate.mockReset();
+        mockRequestAndroidLiveUpdateCheck.mockReset();
+        androidLiveUpdateActivityState.value = {
+            active: false,
+            phase: 'idle',
+        };
+    });
+
+    afterEach(() => {
+        cleanup();
+    });
+
+    it('网页端只显示单一版本号，不显示 Bundle/App/OTA 信息', async () => {
+        render(<Home />);
+
+        await waitFor(() => {
+            expect(screen.getByText('0.5.1')).toBeInTheDocument();
+        });
+
+        expect(screen.queryByText(/^Bundle /)).toBeNull();
+        expect(screen.queryByText(/^App /)).toBeNull();
+        expect(screen.queryByText(/^Latest /)).toBeNull();
+        expect(screen.queryByText('OTA 未对齐')).toBeNull();
+    });
+
+    it('原生 Android 下即使快照未返回也显示 Bundle/App 骨架信息', async () => {
+        nativeAndroidRuntimeState.value = true;
+
+        render(<Home />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Bundle 0.5.1')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
+    });
+
+    it('原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {
+        nativeAndroidRuntimeState.value = true;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            channel: 'stable',
+            nativeAndroid: true,
+            updaterLoaded: true,
+            nativeVersion: '0.5.1',
+            currentBundleVersion: '0.5.0-ota-2026-04-04',
+            manifestVersion: '0.5.1-ota-2026-04-04',
+        };
+
+        render(<Home />);
+
+        await waitFor(() => {
+            expect(screen.getByText('Bundle 0.5.0')).toBeInTheDocument();
+        });
+
+        expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
+        expect(screen.getByText('Latest 0.5.1')).toBeInTheDocument();
+        expect(screen.getByText('OTA 未对齐，点击立即更新')).toBeInTheDocument();
+    });
+
+    it('点击 OTA 未对齐角标时直接触发即时 OTA 检查', async () => {
+        nativeAndroidRuntimeState.value = true;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            channel: 'stable',
+            nativeAndroid: true,
+            updaterLoaded: true,
+            nativeVersion: '0.5.1',
+            currentBundleVersion: '0.5.0-ota-2026-04-04',
+            manifestVersion: '0.5.1-ota-2026-04-04',
+        };
+
+        render(<Home />);
+
+        const footerButton = await screen.findByRole('button', {
+            name: /versions are not aligned/i,
+        });
+
+        await act(async () => {
+            footerButton.click();
+        });
+
+        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
+            interactive: true,
+            applyMode: 'immediate',
+            initialImmediatePhase: 'downloading',
+        });
+    });
+
+    it('原生 Android 版本已对齐时点击右下角仍会触发即时 OTA 检查', async () => {
+        nativeAndroidRuntimeState.value = true;
+        androidLiveUpdateSnapshotState.value = {
+            enabled: true,
+            manifestUrl: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            channel: 'stable',
+            nativeAndroid: true,
+            updaterLoaded: true,
+            nativeVersion: '0.5.1',
+            currentBundleVersion: '0.5.1-ota-2026-04-04',
+            manifestVersion: '0.5.1-ota-2026-04-04',
+        };
+
+        render(<Home />);
+
+        const footerButton = await screen.findByRole('button', {
+            name: /current bundle version 0\.5\.1, app version 0\.5\.1/i,
+        });
+
+        await act(async () => {
+            footerButton.click();
+        });
+
+        expect(mockRequestAndroidLiveUpdateCheck).toHaveBeenCalledWith({
+            interactive: true,
+            applyMode: 'immediate',
+            initialImmediatePhase: 'checking',
+        });
+        expect(screen.queryByText('Bundle 0.5.1-ota-2026-04-04')).toBeNull();
     });
 });

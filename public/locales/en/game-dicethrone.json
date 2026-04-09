@@ -227,6 +227,21 @@
         "When your HP drops to 0, remove this token and set HP to 1. This token cannot be removed, transferred, or stolen. Does not stack."
       ]
     },
+    "loaded": {
+      "name": "Loaded",
+      "description": [
+        "At the end of your Offensive Roll Phase, you may spend 1 Loaded and roll 1 die.",
+        "Add half the result, rounded up, as bonus damage to this attack."
+      ]
+    },
+    "bounty": {
+      "name": "Bounty",
+      "description": [
+        "A player with Bounty takes +1 damage from incoming attacks.",
+        "The attacker gains 1 additional CP.",
+        "Bounty does not remove itself automatically."
+      ]
+    },
     "honor": {
       "name": "Honor",
       "description": [
@@ -623,6 +638,7 @@
     "requireNotRollConfirmed": "Dice results already confirmed, cannot play this card",
     "requireMinDamageDealt": "Not enough damage dealt this attack to play this card",
     "noStatusOnBoard": "No status effects on the board, cannot play this card",
+    "requirePendingDamage": "This card requires pending damage to be played",
     "tutorial_manifest_invalid": "Tutorial configuration is invalid",
     "tutorial_command_blocked": "This action is blocked in the tutorial",
     "tutorial_step_locked": "The current step cannot be skipped",
@@ -737,6 +753,26 @@
       }
     }
   },
+  "compareRoll": {
+    "confirming": "Confirming the face-off...",
+    "rolled": "Rolled {{value}}",
+    "gunslinger": {
+      "showdown": {
+        "title": "Showdown",
+        "attackerLabel": "Gunslinger",
+        "defenderLabel": "Opponent",
+        "win": "You win the face-off. This attack gains +{{bonus}} damage.",
+        "lose": "You lose the face-off. The attack stays at its base damage."
+      },
+      "duel": {
+        "title": "Duel",
+        "defenderLabel": "Gunslinger",
+        "attackerLabel": "Attacker",
+        "win": "You win the duel. Choose the resolution.",
+        "lose": "You lose the duel and deal 1 undefendable damage to the attacker."
+      }
+    }
+  },
   "choices": {
     "title": "Ability Resolution Choice",
     "option": "Option {{index}}",
@@ -834,9 +870,10 @@
     },
     "fist-technique-3": {
       "name": "Fist Technique III",
-      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown.",
+      "description": "3/4/5 Fists: deal 7/8/9 damage. If you roll 4 matching numbers, inflict Knockdown.",
       "effects": {
-        "damage4": "Deal 4 damage"
+        "damage4": "Deal 4 damage",
+        "inflictKnockdownOnFourOfAKind": "If you roll 4 matching numbers, inflict Knockdown."
       }
     },
     "fist-technique-4": {
@@ -954,6 +991,12 @@
         "taijiByResult": "Gain Taiji tokens equal to Taiji faces rolled",
         "damageByFist": "Deal damage equal to Fist faces rolled"
       }
+    },
+    "meditation-2": {
+      "name": "Meditation II",
+      "description": "During Defensive Roll Phase, roll 5 dice. Gain Taiji tokens based on results. Deal 1 damage for each [Fist].",
+      "taijiByResult": "Gain Taiji tokens based on results",
+      "damageByFist": "Deal 1 damage for each [Fist]"
     },
     "transcendence": {
       "name": "Transcendence!",
@@ -1253,7 +1296,7 @@
     },
     "longbow-3": {
       "name": "Longbow III",
-      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching symbols are rolled, inflict Entangle",
+      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching numbers are rolled, inflict Entangle",
       "effects": {
         "damage3": "Deal 3 damage",
         "damage5": "Deal 5 damage",
@@ -1273,7 +1316,7 @@
     },
     "longbow-2": {
       "name": "Longbow II",
-      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching symbols are rolled, inflict Entangle",
+      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching numbers are rolled, inflict Entangle",
       "effects": {
         "damage4": "Deal 4 damage",
         "damage6": "Deal 6 damage",
@@ -1668,6 +1711,14 @@
         "selfDamage4": "Take 4 self-damage (only if damage was dealt)"
       }
     },
+    "rage": {
+      "name": "Rage",
+      "description": "Ultimate Ability: 5 Strength faces, inflict Daze and deal 15 damage.",
+      "effects": {
+        "inflictDaze": "Inflict Daze",
+        "damage15": "Deal 15 damage"
+      }
+    },
     "thick-skin": {
       "name": "Thick Skin",
       "description": "Defense: heal 2 × Heart faces.",
@@ -1726,20 +1777,22 @@
     },
     "slap-2": {
       "name": "Slap II",
-      "description": "3/4/5 Swords: deal 5/7/9 damage. 4/5 Swords deal undefendable damage.",
+      "description": "3/4/5 Swords: deal 5/7/9 damage. If you roll 4 matching numbers, this attack deals undefendable damage.",
       "effects": {
         "damage5": "Deal 5 damage",
-        "damage7Unblockable": "Deal 7 undefendable damage",
-        "damage9Unblockable": "Deal 9 undefendable damage"
+        "damage7": "Deal 7 damage",
+        "damage9": "Deal 9 damage",
+        "makeUnblockableOnFourOfAKind": "If you roll 4 matching numbers, this attack deals undefendable damage."
       }
     },
     "slap-3": {
       "name": "Slap III",
-      "description": "3/4/5 Swords: deal 6/8/10 damage. 4/5 Swords deal undefendable damage.",
+      "description": "3/4/5 Swords: deal 6/8/10 damage. If you roll 4 matching numbers, this attack deals undefendable damage.",
       "effects": {
         "damage6": "Deal 6 damage",
-        "damage8Unblockable": "Deal 8 undefendable damage",
-        "damage10Unblockable": "Deal 10 undefendable damage"
+        "damage8": "Deal 8 damage",
+        "damage10": "Deal 10 damage",
+        "makeUnblockableOnFourOfAKind": "If you roll 4 matching numbers, this attack deals undefendable damage."
       }
     },
     "all-out-strike-2": {
@@ -1955,7 +2008,15 @@
     },
     "solemnity-2": {
       "name": "Solemnity II",
+      "description": "Includes the Solemnity II and Solemn variants."
+    },
+    "solemnity-2-main": {
+      "name": "Solemnity II",
       "description": "2 Katana + 3 Helm: inflict 2 Shame and deal 8 damage."
+    },
+    "solemnity-2-solemn": {
+      "name": "Solemn",
+      "description": "3 Helm: inflict 2 Shame."
     },
     "budo": {
       "name": "Budo",
@@ -1971,7 +2032,15 @@
     },
     "samurai-slot-06-2": {
       "name": "Heart of Hagakure II",
+      "description": "Includes the Heart of Hagakure II and Feather Blade Style variants."
+    },
+    "samurai-slot-06-2-main": {
+      "name": "Heart of Hagakure II",
       "description": "4 Rising Sun: gain 1 Honor, gain 1 Back Strike, inflict 2 Shame, then deal 7 undefendable damage."
+    },
+    "samurai-slot-06-2-feather-blade-style": {
+      "name": "Feather Blade Style",
+      "description": "3 Rising Sun: gain 1 Honor, inflict 2 Shame, then deal 2 undefendable damage."
     },
     "masamune": {
       "name": "Masamune",
@@ -1979,14 +2048,14 @@
     },
     "masamune-2": {
       "name": "Masamune II",
-      "description": "Large Straight: deal 7 damage, then roll 6 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike. Also, if your roll contains Katana, Helm, and Rising Sun, you may instead gain 1 Back Strike."
+      "description": "Includes the Masamune II and Honor variants."
     },
     "masamune-2-large-straight": {
       "name": "Masamune II",
       "description": "Large Straight: deal 7 damage, then roll 6 dice. Each Katana adds 1 damage, each Helm inflicts 1 Shame, and each Rising Sun gains 1 Back Strike."
     },
-    "masamune-2-power-up": {
-      "name": "Power Up",
+    "masamune-2-honor": {
+      "name": "Honor",
       "description": "Katana + Helm + Rising Sun: gain 1 Back Strike."
     },
     "stand-tall": {
@@ -2051,25 +2120,13 @@
       "name": "Fan the Hammer II",
       "description": "Upgrade your Fan the Hammer. Gain 2 Evasive and deal 8 damage."
     },
-    "card-pistol-whip": {
-      "name": "Pistol Whip",
-      "description": "Gain 1 Evasive. Inflict Knockdown on your opponent, then deal 1 damage."
-    },
     "upgrade-take-cover-2": {
       "name": "Take Cover II",
       "description": "Upgrade your Take Cover. Gain 1 Evasive and deal 6 damage."
     },
-    "card-mark-the-target": {
-      "name": "Mark the Target",
-      "description": "Gain 2 Evasive. Inflict 1 Bounty on your opponent."
-    },
     "upgrade-deadeye-2": {
       "name": "Deadeye II",
       "description": "Upgrade your Deadeye. Inflict Knockdown, then deal 8 undefendable damage."
-    },
-    "card-the-law": {
-      "name": "The Law",
-      "description": "Gain 1 Evasive. Up to 2 target players gain Bounty and Knockdown. In current 1v1 play this resolves against the only opponent."
     },
     "upgrade-duel-2": {
       "name": "Duel II",
@@ -2129,7 +2186,7 @@
     },
     "card-thrust-punch-3": {
       "name": "Thrust Punch III",
-      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown."
+      "description": "3/4/5 Fists: deal 7/8/9 damage. If you roll 4 matching numbers, inflict Knockdown."
     },
     "card-contemplation-2": {
       "name": "Contemplation II",
@@ -2630,13 +2687,17 @@
     "targetOptionDisabled": "Unavailable",
     "seating": {
       "title": "2v2 Seating",
-      "hostTip": "Click a player first, then click an empty slot to move them. Swapping seats is not allowed.",
-      "readOnly": "Only the host can edit seating. Other players can view it only.",
-      "moveHint": "{{player}} selected. Click an empty slot to finish the move.",
-      "occupied": "That position is already occupied. Seat swapping is not supported.",
-      "emptySlot": "Empty",
-      "currentSlot": "Current slot",
-      "cancel": "Cancel",
+      "swapHint": "Click a target portrait to swap seats. AI swaps instantly; human targets receive a request.",
+      "swapWaiting": "Seat swap request sent to {{player}}. Waiting for a response.",
+      "swapWaitingHint": "Seats will not change until the other player responds, and you can still cancel here.",
+      "swapIncoming": "{{player}} wants to swap seats with you.",
+      "swapReviewHint": "Approving swaps your two seats immediately. Rejecting keeps the current seating.",
+      "swapPendingOther": "{{requester}} is waiting for {{target}} to respond to a seat swap request.",
+      "swapApprove": "Approve",
+      "swapReject": "Reject",
+      "swapCancel": "Cancel Request",
+      "swapResolving": "Waiting for seat swap",
+      "aiBadge": "AI",
       "seatNumber": "Seat {{seat}}",
       "teamA": "Team A",
       "teamB": "Team B"

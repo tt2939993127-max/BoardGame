@@ -116,6 +116,25 @@ export interface MoveSeatCommand extends Command<'MOVE_SEAT'> {
     };
 }
 
+/** 请求与目标头像换位；若目标是 AI，则直接完成换位 */
+export interface RequestSeatSwapCommand extends Command<'REQUEST_SEAT_SWAP'> {
+    payload: {
+        targetPlayerId: PlayerId;
+    };
+}
+
+/** 响应换位申请 */
+export interface RespondSeatSwapCommand extends Command<'RESPOND_SEAT_SWAP'> {
+    payload: {
+        approve: boolean;
+    };
+}
+
+/** 取消自己发出的换位申请 */
+export interface CancelSeatSwapCommand extends Command<'CANCEL_SEAT_SWAP'> {
+    payload: Record<string, never>;
+}
+
 /** 玩家准备命令 */
 export interface PlayerReadyCommand extends Command<'PLAYER_READY'> {
     payload: Record<string, never>;
@@ -273,6 +292,9 @@ export type DiceThroneCommand =
     | SelectCharacterCommand
     | HostStartGameCommand
     | MoveSeatCommand
+    | RequestSeatSwapCommand
+    | RespondSeatSwapCommand
+    | CancelSeatSwapCommand
     | PlayerReadyCommand
     | PlayerUnreadyCommand
     | ResponsePassCommand

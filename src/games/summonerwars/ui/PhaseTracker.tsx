@@ -4,7 +4,7 @@
  * 使用 SVG 图标而非 emoji
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GamePhase } from '../domain/types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
@@ -53,14 +53,17 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   const { t, i18n } = useTranslation('game-summonerwars');
   const isCoarsePointer = useCoarsePointer();
   const [hoveredPhaseId, setHoveredPhaseId] = useState<string | null>(null);
-  const [selectedPhaseId, setSelectedPhaseId] = useState<Exclude<GamePhase, 'factionSelect'> | null>(null);
+  const [selectedPhaseState, setSelectedPhaseState] = useState<{
+    sessionKey: string;
+    phaseId: Exclude<GamePhase, 'factionSelect'>;
+  } | null>(null);
   const phaseCursor: Exclude<GamePhase, 'factionSelect'> = currentPhase === 'factionSelect'
     ? PHASE_ORDER[0]
     : currentPhase;
-
-  useEffect(() => {
-    setSelectedPhaseId(null);
-  }, [currentPhase, isCoarsePointer]);
+  const selectionSessionKey = `${phaseCursor}:${isCoarsePointer ? 'coarse' : 'fine'}`;
+  const selectedPhaseId = selectedPhaseState?.sessionKey === selectionSessionKey
+    ? selectedPhaseState.phaseId
+    : null;
 
   const phasesBase: Omit<PhaseConfig, 'count' | 'maxCount'>[] = PHASE_ORDER.map((phaseId) => ({
     id: phaseId,
@@ -85,7 +88,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
     : null;
 
   return (
-    <div className={`flex flex-col gap-1.5 ${className}`}>
+    <div className={`relative flex flex-col gap-1.5 ${className}`}>
       {/* 回合数 */}
       <div className="text-center mb-2 pb-2 border-b border-slate-600/50">
         <span className="text-base text-amber-400 font-bold">
@@ -117,13 +120,15 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
                 role={isCoarsePointer ? 'button' : undefined}
                 tabIndex={isCoarsePointer ? 0 : undefined}
                 onClick={() => {
-                  if (isCoarsePointer) setSelectedPhaseId(phase.id);
+                  if (isCoarsePointer) {
+                    setSelectedPhaseState({ sessionKey: selectionSessionKey, phaseId: phase.id });
+                  }
                 }}
                 onKeyDown={(event) => {
                   if (!isCoarsePointer) return;
                   if (event.key !== 'Enter' && event.key !== ' ') return;
                   event.preventDefault();
-                  setSelectedPhaseId(phase.id);
+                  setSelectedPhaseState({ sessionKey: selectionSessionKey, phaseId: phase.id });
                 }}
                 className={`
                   flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all
@@ -178,7 +183,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
 
       {isCoarsePointer && detailPhase && (
         <div
-          className="mt-2 rounded-lg border border-amber-500/30 bg-slate-950/85 px-3 py-2 text-left"
+          className="absolute right-[calc(100%+0.5rem)] top-1/2 z-10 w-[11rem] -translate-y-1/2 rounded-lg border border-amber-500/30 bg-slate-950/92 px-3 py-2 text-left shadow-[0_12px_40px_rgba(0,0,0,0.45)]"
           data-testid="sw-phase-detail-panel"
         >
           <div className="mb-1 text-xs font-bold tracking-wide text-amber-300">

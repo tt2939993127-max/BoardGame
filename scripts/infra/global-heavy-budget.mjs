@@ -219,7 +219,7 @@ function resolveAdaptiveMemoryMinFreeGb() {
         return 3;
     }
     if (totalMemoryGb >= 16) {
-        return 2.5;
+        return 1.5;
     }
     if (totalMemoryGb >= 8) {
         return 1.5;

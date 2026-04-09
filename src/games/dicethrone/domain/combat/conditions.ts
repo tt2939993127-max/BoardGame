@@ -123,6 +123,24 @@ export interface PhaseCondition extends BaseCondition {
 }
 
 /**
+ * 阶段开始条件
+ * 用于角色板被动等非战斗技能（如枪手 quick-draw）
+ */
+export interface PhaseStartCondition extends BaseCondition {
+    type: 'phaseStart';
+    phase: string;
+}
+
+/**
+ * 阶段结束条件
+ * 用于回合结束类被动（如武士 Bushido）
+ */
+export interface PhaseEndCondition extends BaseCondition {
+    type: 'phaseEnd';
+    phase: string;
+}
+
+/**
  * 所有符号都存在条件（用于"禅武归一"、"武僧之路"等）
  */
 export interface AllSymbolsPresentCondition extends BaseCondition {
@@ -161,6 +179,8 @@ export type Condition =
     | DiceSetCondition
     | DiceStraightCondition
     | PhaseCondition
+    | PhaseStartCondition
+    | PhaseEndCondition
     | AllSymbolsPresentCondition
     | RollSumCondition
     | DiceCountCondition
@@ -173,6 +193,8 @@ export type TriggerCondition =
     | DiceSetCondition
     | DiceStraightCondition
     | PhaseCondition
+    | PhaseStartCondition
+    | PhaseEndCondition
     | ResourceCondition
     | HasStatusCondition
     | CompositeCondition
@@ -361,6 +383,14 @@ export const evaluatePhase: ConditionEvaluator<PhaseCondition> = (condition, ctx
         if (!diceValues || diceValues.length < condition.diceCount) return false;
     }
     return true;
+};
+
+export const evaluatePhaseStart: ConditionEvaluator<PhaseStartCondition> = (condition, ctx) => {
+    return ctx.currentPhase === condition.phase;
+};
+
+export const evaluatePhaseEnd: ConditionEvaluator<PhaseEndCondition> = (condition, ctx) => {
+    return ctx.currentPhase === condition.phase;
 };
 
 /**

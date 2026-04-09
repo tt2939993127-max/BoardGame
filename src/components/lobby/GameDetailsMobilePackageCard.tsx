@@ -5,7 +5,7 @@ import {
     type GamePackageCardState,
     type GamePackageInstallStatus,
 } from '../../features/mobile-packages/types';
-import { formatPackageBytes } from './packageManagerFormat';
+import { formatPackageBytes, hasKnownPackageBytes } from './packageManagerFormat';
 
 export type GamePackageCardStatus = GamePackageInstallStatus;
 export type { GamePackageCardState };
@@ -15,6 +15,8 @@ interface GameDetailsMobilePackageCardProps {
     state: GamePackageCardState;
     onInstall: () => void;
     onRetry?: () => void;
+    failedActionLabel?: string;
+    onCancel?: () => void;
     onCollapse?: () => void;
     presentation?: 'install' | 'update-required';
     requiredAppVersion?: string;
@@ -54,6 +56,7 @@ const getStatusMeta = (
     t: ReturnType<typeof useTranslation<'lobby'>>['t'],
     gameName: string,
     errorMessage?: string,
+    failedActionLabel?: string,
     presentation: 'install' | 'update-required' = 'install',
     requiredAppVersion?: string,
 ) => {
@@ -111,7 +114,7 @@ const getStatusMeta = (
             return {
                 title: t('packageManager.failedTitle'),
                 description: errorMessage || t('packageManager.failedHint'),
-                actionLabel: t('packageManager.retryAction'),
+                actionLabel: failedActionLabel || t('packageManager.retryAction'),
                 icon: AlertTriangle,
                 iconClassName: '',
                 iconToneClassName: 'border-amber-800/20 bg-amber-50/70 text-amber-900',
@@ -143,13 +146,23 @@ export const GameDetailsMobilePackageCard = ({
     state,
     onInstall,
     onRetry,
+    failedActionLabel,
+    onCancel,
     onCollapse,
     presentation = 'install',
     requiredAppVersion,
     className = 'md:hidden',
 }: GameDetailsMobilePackageCardProps) => {
     const { t } = useTranslation('lobby');
-    const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage, presentation, requiredAppVersion);
+    const statusMeta = getStatusMeta(
+        state.status,
+        t,
+        gameName,
+        state.errorMessage,
+        failedActionLabel,
+        presentation,
+        requiredAppVersion,
+    );
     const StatusIcon = statusMeta.icon;
     const showLeadingStatusIcon = state.status !== 'not-installed';
     const isInProgress = state.status === 'queued'
@@ -163,11 +176,31 @@ export const GameDetailsMobilePackageCard = ({
             ? total + value
             : total
     ), 0);
-    const totalBytes = [state.modulePackBytes, state.assetPackBytes].some((value) => typeof value === 'number' && Number.isFinite(value))
+    const hasAnyKnownBytes = [state.modulePackBytes, state.assetPackBytes].some((value) => hasKnownPackageBytes(value));
+    const totalBytes = hasAnyKnownBytes
         ? knownTotalBytes
         : undefined;
-    const sizeLabel = formatPackageBytes(totalBytes, t('packageManager.sizeUnknown'));
-    const actionHandler = state.status === 'failed' ? (onRetry ?? onInstall) : onInstall;
+    const isSyncingPreview = state.status === 'not-installed'
+        && state.previewResolved !== true
+        && !hasKnownPackageBytes(totalBytes);
+    const isUnpublishedPreview = state.status === 'not-installed'
+        && state.previewResolved === true
+        && state.manifestSource === 'fallback';
+    const sizeFallbackLabel = isUnpublishedPreview
+        ? t('packageManager.packageUnpublished')
+        : isSyncingPreview
+            ? t('packageManager.packageSyncing')
+            : t('packageManager.sizeUnknown');
+    const sizeLabel = formatPackageBytes(totalBytes, sizeFallbackLabel);
+    const showCancelAction = isInProgress && typeof onCancel === 'function';
+    const actionHandler = showCancelAction
+        ? onCancel
+        : state.status === 'failed'
+            ? (onRetry ?? onInstall)
+            : onInstall;
+    const actionLabel = showCancelAction
+        ? t('packageManager.cancelAction')
+        : statusMeta.actionLabel;
     const badgeLabel = presentation === 'update-required'
         ? t('packageManager.updateRequiredBadge')
         : state.status === 'installed'
@@ -257,15 +290,20 @@ export const GameDetailsMobilePackageCard = ({
                         </div>
                     )}
 
-                    {statusMeta.actionLabel && (
+                    {actionLabel && !isUnpublishedPreview && (
                         <div className="mt-3">
                             <button
                                 type="button"
                                 onClick={actionHandler}
-                                className="inline-flex cursor-pointer items-center gap-2 rounded-[4px] bg-parchment-base-text px-3 py-1.5 text-[11px] font-bold text-parchment-card-bg transition-colors hover:bg-parchment-brown focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-parchment-base-text/30"
+                                className={[
+                                    'inline-flex cursor-pointer items-center gap-2 rounded-[4px] px-3 py-1.5 text-[11px] font-bold transition-colors focus-visible:outline-none focus-visible:ring-2',
+                                    showCancelAction
+                                        ? 'border border-amber-800/25 bg-amber-50/92 text-amber-900 hover:bg-amber-100 focus-visible:ring-amber-900/20'
+                                        : 'bg-parchment-base-text text-parchment-card-bg hover:bg-parchment-brown focus-visible:ring-parchment-base-text/30',
+                                ].join(' ')}
                             >
-                                {state.status === 'failed' ? <RefreshCw size={13} /> : <Download size={13} />}
-                                <span>{statusMeta.actionLabel}</span>
+                                {showCancelAction ? <X size={13} /> : state.status === 'failed' ? <RefreshCw size={13} /> : <Download size={13} />}
+                                <span>{actionLabel}</span>
                             </button>
                         </div>
                     )}

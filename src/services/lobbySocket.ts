@@ -34,6 +34,7 @@ export const LOBBY_EVENTS = {
 } as const;
 
 const LOBBY_ALL = 'all';
+const LOBBY_DISCONNECT_GRACE_MS = 800;
 
 const tLobbySocket = (key: string, params?: Record<string, string | number>) => (
     i18n.t(`lobby:socket.${key}`, params)
@@ -106,6 +107,25 @@ class LobbySocketService {
     private lobbyStateByGame: Map<LobbyGameId, LobbyState> = new Map();
     private _cleanupVisibility: (() => void) | null = null;
     private _cleanupHealthCheck: (() => void) | null = null;
+    private pendingDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    private clearPendingDisconnect(): void {
+        if (this.pendingDisconnectTimer) {
+            clearTimeout(this.pendingDisconnectTimer);
+            this.pendingDisconnectTimer = null;
+        }
+    }
+
+    private scheduleDisconnect(): void {
+        this.clearPendingDisconnect();
+        this.pendingDisconnectTimer = setTimeout(() => {
+            this.pendingDisconnectTimer = null;
+            if (this.connectionOwners.size > 0 || this.hasAnyLobbySubscribers()) {
+                return;
+            }
+            this.disconnect();
+        }, LOBBY_DISCONNECT_GRACE_MS);
+    }
 
     private ensureState(gameId: LobbyGameId): LobbyState {
         const existing = this.lobbyStateByGame.get(gameId);
@@ -167,6 +187,7 @@ class LobbySocketService {
      * Lobby/Match 服务端本来就在同一条 /lobby-socket 通道上，前端不应重复建连。
      */
     acquireConnection(owner: string): Socket | null {
+        this.clearPendingDisconnect();
         this.connectionOwners.add(owner);
         this.connect();
         return this.socket;
@@ -175,7 +196,7 @@ class LobbySocketService {
     releaseConnection(owner: string): void {
         this.connectionOwners.delete(owner);
         if (this.connectionOwners.size === 0) {
-            this.disconnect();
+            this.scheduleDisconnect();
         }
     }
 
@@ -189,6 +210,7 @@ class LobbySocketService {
      * 防止 lobby presence 检测导致页面跳转回首页。
      */
     connect(): void {
+        this.clearPendingDisconnect();
         if ((window as Window & { __E2E_BLOCK_LOBBY_SOCKET__?: boolean }).__E2E_BLOCK_LOBBY_SOCKET__) {
             return;
         }
@@ -478,6 +500,7 @@ class LobbySocketService {
      * 断开连接
      */
     disconnect(clearOwners = true): void {
+        this.clearPendingDisconnect();
         if (clearOwners) {
             this.connectionOwners.clear();
         }

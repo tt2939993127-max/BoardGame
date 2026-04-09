@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GameBoardProps } from '../../engine/transport/protocol';
-import type { MatchState } from '../../engine/types';
 import type { TicTacToeCore } from './domain';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { EndgameOverlay } from '../../components/game/framework/widgets/EndgameOverlay';
@@ -135,16 +134,9 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, 
     // 本地同屏(hotseat)模式：开始一局时清空本机累计，避免上一轮对战/联机残留造成“离谱分数”。
     // 注意：多人联机的“再来一局”可能是新 match；我们只在本地同屏下清理。
     const isHotseatLocal = isLocalMatch;
-    const didClearOnStartRef = useRef(false);
-
-    const [scoreboard, setScoreboard] = useState<LocalScoreboard>(() => {
-        if (isHotseatLocal && !didClearOnStartRef.current) {
-            didClearOnStartRef.current = true;
-            clearLocalScoreboard();
-            return { xWins: 0, oWins: 0 };
-        }
-        return readLocalScoreboard();
-    });
+    const [scoreboard, setScoreboard] = useState<LocalScoreboard>(() => (
+        isHotseatLocal ? { xWins: 0, oWins: 0 } : readLocalScoreboard()
+    ));
 
     // 获取玩家名称的辅助函数
     const getPlayerName = (pid: string) => {
@@ -210,6 +202,11 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, 
     const winningLine = getWinningLine(G.core.cells);
 
     useEffect(() => {
+        if (!isHotseatLocal) return;
+        clearLocalScoreboard();
+    }, [isHotseatLocal]);
+
+    useEffect(() => {
         isGameOverRef.current = isGameOver;
     }, [isGameOver]);
 
@@ -229,8 +226,10 @@ export const TicTacToeBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, 
         }
 
         didCountResultRef.current = true;
-        setScoreboard(next);
         writeLocalScoreboard(next);
+        queueMicrotask(() => {
+            setScoreboard(next);
+        });
     }, [isGameOver, scoreboard]);
 
     useEffect(() => {

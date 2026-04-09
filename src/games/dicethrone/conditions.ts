@@ -11,6 +11,8 @@ import {
     evaluateSmallStraight,
     evaluateLargeStraight,
     evaluatePhase,
+    evaluatePhaseStart,
+    evaluatePhaseEnd,
     evaluateAllSymbolsPresent,
     evaluateRollSumGreaterThan,
     evaluateDiceCountAtLeast,
@@ -32,6 +34,8 @@ export function registerDiceThroneConditions(): void {
     conditionRegistry.register('smallStraight', evaluateSmallStraight);
     conditionRegistry.register('largeStraight', evaluateLargeStraight);
     conditionRegistry.register('phase', evaluatePhase);
+    conditionRegistry.register('phaseStart', evaluatePhaseStart);
+    conditionRegistry.register('phaseEnd', evaluatePhaseEnd);
     conditionRegistry.register('allSymbolsPresent', evaluateAllSymbolsPresent);
     conditionRegistry.register('rollSumGreaterThan', evaluateRollSumGreaterThan);
     conditionRegistry.register('diceCountAtLeast', evaluateDiceCountAtLeast);

@@ -1,6 +1,7 @@
 import { execSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { withWindowsHide } from './windows-hide.js';
 
 const HEARTBEAT_INTERVAL_MS = 5000;
 const HEARTBEAT_TTL_MS = 15000;
@@ -17,9 +18,13 @@ function nowIso() {
   return new Date().toISOString();
 }
 
+function execHidden(command, options = {}) {
+  return execSync(command, withWindowsHide(options));
+}
+
 function runGit(command, cwd = process.cwd()) {
   try {
-    return execSync(command, {
+    return execHidden(command, {
       cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -527,7 +532,7 @@ export function findRuntimesByPorts(ports, cwd = process.cwd(), options = {}) {
 function killPid(pid) {
   try {
     if (process.platform === 'win32') {
-      execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+      execHidden(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
     } else {
       process.kill(pid, 'SIGTERM');
     }

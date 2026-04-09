@@ -35,12 +35,23 @@ import {
     buildStandardDrawEvents,
 } from './abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
-import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
+import {
+    createSimpleChoice,
+    getCurrentTrackedIdTopSnapshot,
+    queueInteraction,
+    type PromptOption,
+} from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
 import { isBaseAbilitySuppressed } from './ongoingEffects';
 import { registerBaseAbilityAsQueuedTrigger } from './baseAbilityQueue';
 import { resolveLiveBaseIndex } from './utils';
+import {
+    buildPendingPostScoringActionEvents,
+    flushDeferredPostScoringCompatibility,
+    getDeferredPostScoringEvents as readDeferredPostScoringEvents,
+    getDeferredReplacementBaseDefId,
+} from './scoringSession';
 
 // ============================================================================
 // 类型定义
@@ -116,7 +127,6 @@ export type ActiveBaseAbilityRegistrationOptions = {
     canUse?: (ctx: BaseAbilityContext) => boolean;
 };
 
-type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
 type PirateCoveSysState = MatchState<SmashUpCore>['sys'] & { _pirateCoveTriggered?: Set<number> };
 type HandCardChoiceValue = { cardUid: string; defId: string };
 
@@ -128,9 +138,31 @@ function getContinuationContext<T>(
 }
 
 function getDeferredPostScoringEvents(
+    state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
 ): SmashUpEvent[] | undefined {
-    return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
+    return readDeferredPostScoringEvents(state, interactionData) as SmashUpEvent[] | undefined;
+}
+
+function getCurrentBaseDeckTopSnapshotDefIds(
+    state: SmashUpCore,
+    trackedTopCards: string[],
+): string[] {
+    return getCurrentTrackedIdTopSnapshot(state.baseDeck ?? [], trackedTopCards);
+}
+
+function buildWizardAcademyOptions(
+    state: SmashUpCore,
+    trackedTopCards: string[],
+) {
+    return getCurrentBaseDeckTopSnapshotDefIds(state, trackedTopCards).map((defId, index) => {
+        const def = getBaseDef(defId);
+        return {
+            id: `base-${index}`,
+            label: def?.name ?? defId,
+            value: { defId, index },
+        };
+    });
 }
 
 function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): number {
@@ -1083,9 +1115,6 @@ export function registerBaseAbilities(): void {
     // "每当有一个随从打出到这里后，它的拥有者可以额外打出一个力量为2或以下的随从"
     // 力量≤2 限制通过 LIMIT_MODIFIED 事件的 powerMax 字段全局生效
     registerBaseAbility('base_the_homeworld', 'onMinionPlayed', (ctx) => {
-        // POD 勘误：改为“每回合一次”。若统计缺失（如部分单测直接调用），按可触发处理。
-        const playedAtBaseThisTurn = getTurnMinionsPlayedAtBase(ctx.state, ctx.baseIndex);
-        if (playedAtBaseThisTurn >= 2) return { events: [] };
         return {
             events: [{
                 type: SU_EVENTS.LIMIT_MODIFIED,
@@ -1161,8 +1190,14 @@ export function registerBaseAbilities(): void {
     // base_ninja_dojo: 忍者道场
     // "在这个基地计分后，冠军可以消灭任意一个随从"（全局范围）
     registerBaseAbility('base_ninja_dojo', 'afterScoring', (ctx) => {
-        if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
-        const winnerId = ctx.rankings[0].playerId;
+        if (!ctx.rankings || ctx.rankings.length === 0 || !ctx.matchState) return { events: [] };
+
+        const championPower = ctx.rankings[0]?.power;
+        const championIds = ctx.rankings
+            .filter(ranking => ranking.power === championPower)
+            .map(ranking => ranking.playerId);
+        if (championIds.length === 0) return { events: [] };
+
         // 收集所有基地上的所有随从（全局范围）
         const allMinions: { uid: string; defId: string; baseIndex: number; owner: string; controller: string; label: string }[] = [];
         for (let i = 0; i < ctx.state.bases.length; i++) {
@@ -1177,6 +1212,7 @@ export function registerBaseAbilities(): void {
             }
         }
         if (allMinions.length === 0) return { events: [] };
+
         const minionOptions = allMinions.map((m, i) => ({
             id: `minion-${i}`,
             label: m.label,
@@ -1188,13 +1224,20 @@ export function registerBaseAbilities(): void {
             { id: 'skip', label: '不消灭', value: { skip: true }, displayMode: 'button' as const },
             ...minionOptions,
         ];
-        if (!ctx.matchState) return { events: [] };
-        const interaction = createSimpleChoice(
-            `base_ninja_dojo_${ctx.now}`, winnerId,
-            '忍者道场：选择消灭的随从', options,
-            { sourceId: 'base_ninja_dojo', targetType: 'minion' },
-        );
-        return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+
+        let nextMatchState = ctx.matchState;
+        championIds.forEach((winnerId, index) => {
+            const interaction = createSimpleChoice(
+                `base_ninja_dojo_${ctx.now}_${index}`,
+                winnerId,
+                '忍者道场：选择消灭的随从',
+                options,
+                { sourceId: 'base_ninja_dojo', targetType: 'minion' },
+            );
+            nextMatchState = queueInteraction(nextMatchState, interaction);
+        });
+
+        return { events: [], matchState: nextMatchState };
     }, { mandatory: false });
 
     // base_ninja_dojo_pod: POD 勘误为无基地能力。
@@ -1207,13 +1250,6 @@ export function registerBaseAbilities(): void {
     // 注意：afterScoring 能力在 BASE_SCORED 事件处理前收集，此时随从仍在基地上。
     // 但交互解决时随从可能已进入弃牌堆（BASE_CLEARED），因此将随从信息存入 continuation data。
     registerBaseAbility('base_pirate_cove', 'afterScoring', (ctx) => {
-        console.log('[海盗湾] afterScoring 被调用:', {
-            baseIndex: ctx.baseIndex,
-            rankingsCount: ctx.rankings?.length ?? 0,
-            minionsCount: ctx.state.bases[ctx.baseIndex]?.minions.length ?? 0,
-            timestamp: ctx.now,
-        });
-        
         if (!ctx.rankings || ctx.rankings.length === 0) return { events: [] };
         const winnerId = ctx.rankings[0].playerId;
         const base = ctx.state.bases[ctx.baseIndex];
@@ -1233,13 +1269,11 @@ export function registerBaseAbilities(): void {
         const triggeredBases = sysState._pirateCoveTriggered;
         
         if (triggeredBases.has(ctx.baseIndex)) {
-            console.log('[海盗湾] 已为基地', ctx.baseIndex, '创建过交互，跳过');
             return { events, matchState: ctx.matchState };
         }
         
         // 标记此基地已触发
         triggeredBases.add(ctx.baseIndex);
-        console.log('[海盗湾] 标记基地', ctx.baseIndex, '已触发');
         
         // 遍历非冠军玩家，为每位在此有随从的玩家生成 Prompt
         const playerMinions = new Map<string, MinionOnBase[]>();
@@ -1249,12 +1283,7 @@ export function registerBaseAbilities(): void {
             list.push(m);
             playerMinions.set(m.controller, list);
         }
-        
-        console.log('[海盗湾] 非冠军玩家随从:', Array.from(playerMinions.entries()).map(([pid, minions]) => ({
-            playerId: pid,
-            minionCount: minions.length,
-        })));
-        
+
         for (const [pid, minions] of playerMinions) {
             // 将随从信息存入 continuationContext，供交互解决时使用
             const minionsSnapshot = minions.map(m => ({
@@ -1281,8 +1310,6 @@ export function registerBaseAbilities(): void {
             if (ctx.matchState) {
                 // 使用 state.nextUid 确保交互 ID 唯一
                 const interactionId = `base_pirate_cove_${pid}_${ctx.state.nextUid}`;
-                console.log('[海盗湾] 为玩家', pid, '创建交互:', interactionId);
-                
                 const interaction = createSimpleChoice(
                     interactionId, pid,
                     '海盗湾：选择移动一个随从到其他基地', options,
@@ -1344,14 +1371,7 @@ export function registerBaseAbilities(): void {
     // 注意：被移动的随从不能来自托尔图加本身（官方澄清）
     // continuation 运行时基地已被替换，替换基地在同一 baseIndex 位置
     registerBaseAbility('base_tortuga', 'afterScoring', (ctx) => {
-        console.log('[DEBUG] base_tortuga afterScoring:', {
-            rankings: ctx.rankings,
-            rankingsLength: ctx.rankings?.length,
-            runnerUpId: ctx.rankings?.[1]?.playerId,
-            baseIndex: ctx.baseIndex,
-        });
         if (!ctx.rankings || ctx.rankings.length < 2) {
-            console.log('[DEBUG] base_tortuga: no runner-up, returning early');
             return { events: [] };
         }
         const runnerUpId = ctx.rankings[1].playerId;
@@ -1373,9 +1393,7 @@ export function registerBaseAbilities(): void {
                 });
             }
         }
-        console.log('[DEBUG] base_tortuga: otherMinions collected:', otherMinions.length);
         if (otherMinions.length === 0) {
-            console.log('[DEBUG] base_tortuga: no minions to move, returning early');
             return { events: [] };
         }
         const minionOptions = otherMinions.map((m, i) => ({
@@ -1390,13 +1408,11 @@ export function registerBaseAbilities(): void {
             ...minionOptions,
         ] as PromptOption<{ skip: true } | { minionUid: string; minionDefId: string; owner: string; fromBaseIndex: number }>[];
         if (!ctx.matchState) return { events: [] };
-        console.log('[DEBUG] base_tortuga: creating interaction with', options.length, 'options');
         const interaction = createSimpleChoice(
             `base_tortuga_${ctx.now}`, runnerUpId,
             '托尔图加：选择移动一个其他基地上的随从到替换基地', options,
             { sourceId: 'base_tortuga', targetType: 'minion' },
         );
-        console.log('[DEBUG] base_tortuga: interaction created:', interaction.id);
         return {
             events: [],
             matchState: queueInteraction(ctx.matchState, {
@@ -1416,26 +1432,24 @@ export function registerBaseAbilities(): void {
         if (!baseDeck || baseDeck.length === 0) return { events: [] };
         const topCount = Math.min(3, baseDeck.length);
         const topCards = baseDeck.slice(0, topCount);
-        // 为每张基地卡生成选项，玩家选择排列顺序
-        const options = topCards.map((defId, i) => {
-            const def = getBaseDef(defId);
-            return {
-                id: `base-${i}`,
-                label: def?.name ?? defId,
-                value: { defId, index: i },
-            };
-        });
         if (!ctx.matchState) return { events: [] };
+        const wizardAcademyTopCards = topCards.slice();
         const interaction = createSimpleChoice(
-            `base_wizard_academy_${ctx.now}`, winnerId,
-            '巫师学院：选择排列基地牌库顶的顺序', options,
-            { sourceId: 'base_wizard_academy', targetType: 'generic' },
+            `base_wizard_academy_${ctx.now}`,
+            winnerId,
+            '巫师学院：选择排列基地牌库顶的顺序',
+            buildWizardAcademyOptions(ctx.state, wizardAcademyTopCards),
+            { sourceId: 'base_wizard_academy', targetType: 'generic', responseValidationMode: 'live' },
         );
+        (interaction.data as { optionsGenerator?: unknown }).optionsGenerator = (
+            nextState: { core: SmashUpCore },
+            interactionData: { continuationContext?: { topCards?: string[] } } | undefined,
+        ) => buildWizardAcademyOptions(nextState.core, interactionData?.continuationContext?.topCards ?? wizardAcademyTopCards);
         return {
             events: [],
             matchState: queueInteraction(ctx.matchState, {
                 ...interaction,
-                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex, topCards } },
+                data: { ...interaction.data, continuationContext: { baseIndex: ctx.baseIndex, topCards: wizardAcademyTopCards } },
             }),
         };
     });
@@ -1650,15 +1664,6 @@ export function registerBaseInteractionHandlers(): void {
             }
         }
 
-        const deferredEvents = getDeferredPostScoringEvents(iData);
-        const hasPendingInteraction =
-            !!state.sys.interaction?.current
-            || (state.sys.interaction?.queue?.length ?? 0) > 0;
-        const isLastInteraction = !hasPendingInteraction;
-        if (deferredEvents && deferredEvents.length > 0 && isLastInteraction) {
-            events.push(...deferredEvents as SmashUpEvent[]);
-        }
-
         return { state, events };
     });
 
@@ -1681,24 +1686,6 @@ export function registerBaseInteractionHandlers(): void {
         // 当有多个 afterScoring 交互时（如海盗湾 + 忍者道场），延迟的 BASE_CLEARED 事件
         // 存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
         // InteractionSystem.resolveInteraction 会自动传递给下一个交互，最后一个交互解决时必须补发。
-        const deferredEvents = getDeferredPostScoringEvents(iData);
-        
-        // 注意：RESOLVE_INTERACTION 进入 handler 前，当前交互已被弹出；
-        // 如果还有下一个交互，通常会出现在 interaction.current（queue 可能已空）。
-        const hasPendingInteraction =
-            !!state.sys.interaction?.current
-            || (state.sys.interaction?.queue?.length ?? 0) > 0;
-        const isLastInteraction = !hasPendingInteraction;
-        
-        if (deferredEvents && deferredEvents.length > 0 && isLastInteraction) {
-            events.push(...deferredEvents as SmashUpEvent[]);
-            
-            // 【关键】补发后必须清除延迟事件，避免在交互链中传播时被多次补发
-            // 这是通过返回更新后的 state 实现的（不可变更新）
-            // 注意：这里不能直接修改 iData，因为它是只读的
-            // 延迟事件的清除由 InteractionSystem 在 resolveInteraction 时自动处理
-        }
-        
         return { state, events };
     });
 
@@ -1740,10 +1727,9 @@ export function registerBaseInteractionHandlers(): void {
             '海盗湾：选择移动到的基地', options,
             { sourceId: 'base_pirate_cove_choose_base', targetType: 'base' },
         );
+        const deferredEvents = getDeferredPostScoringEvents(state, iData);
         
         // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
-        const deferredEvents = getDeferredPostScoringEvents(iData);
-        
         return {
             // 使用 urgent 标志，确保链式交互的第二步不被其他交互插队
             state: queueInteraction(state, {
@@ -1754,7 +1740,6 @@ export function registerBaseInteractionHandlers(): void {
                         minionUid: selected.minionUid,
                         minionDefId: selected.minionDefId,
                         fromBaseIndex: ctx.baseIndex,
-                        // 传递延迟事件到下一个交互
                         ...(deferredEvents ? { _deferredPostScoringEvents: deferredEvents } : {}),
                     },
                 },
@@ -1769,20 +1754,30 @@ export function registerBaseInteractionHandlers(): void {
         const ctx = getContinuationContext<{ minionUid: string; minionDefId: string; fromBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
 
-        const deferredEvents = getDeferredPostScoringEvents(iData);
+        const deferredEvents = getDeferredPostScoringEvents(state, iData);
         if (deferredEvents && deferredEvents.length > 0) {
             const resolvedTargetBase = resolveLiveBaseIndex(state.core, targetBase, baseDefId) ?? targetBase;
+            const moveEvent: SmashUpEvent = {
+                type: SU_EVENTS.MINION_MOVED,
+                payload: {
+                    minionUid: ctx.minionUid,
+                    minionDefId: ctx.minionDefId,
+                    fromBaseIndex: ctx.fromBaseIndex,
+                    toBaseIndex: resolvedTargetBase,
+                    reason: '海盗湾：移动随从到其他基地',
+                },
+                timestamp,
+            };
+            const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
+            if (compatibility.flushed) {
+                return {
+                    state: compatibility.state,
+                    events: [moveEvent, ...compatibility.events],
+                };
+            }
             const events: SmashUpEvent[] = [
                 {
-                    type: SU_EVENTS.MINION_MOVED,
-                    payload: {
-                        minionUid: ctx.minionUid,
-                        minionDefId: ctx.minionDefId,
-                        fromBaseIndex: ctx.fromBaseIndex,
-                        toBaseIndex: resolvedTargetBase,
-                        reason: '海盗湾：移动随从到其他基地',
-                    },
-                    timestamp,
+                    ...moveEvent,
                 },
             ];
             return { state, events };
@@ -1819,11 +1814,9 @@ export function registerBaseInteractionHandlers(): void {
         if (moveEvents.length === 0) {
             return { state, events: [] };
         }
-        const deferredEvents = getDeferredPostScoringEvents(iData);
+        const deferredEvents = getDeferredPostScoringEvents(state, iData);
         if (deferredEvents && deferredEvents.length > 0) {
-            const targetBaseDefId = (deferredEvents as Array<{ type: string; payload?: { newBaseDefId?: string } }>).find(
-                event => event.type === SU_EVENTS.BASE_REPLACED,
-            )?.payload?.newBaseDefId ?? state.core.bases[ctx.baseIndex]?.defId;
+            const targetBaseDefId = getDeferredReplacementBaseDefId(state, iData) ?? state.core.bases[ctx.baseIndex]?.defId;
             if (!targetBaseDefId) {
                 return { state, events: [] };
             }
@@ -1836,6 +1829,20 @@ export function registerBaseInteractionHandlers(): void {
                 targetBaseDefId,
                 reason: '托尔图加：亚军移动随从到替换基地',
             };
+            const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
+            if (compatibility.flushed) {
+                return {
+                    state: compatibility.state,
+                    events: [
+                        ...compatibility.events,
+                        ...buildPendingPostScoringActionEvents(
+                            { core: state.core },
+                            [pendingAction],
+                            timestamp,
+                        ),
+                    ],
+                };
+            }
             return {
                 state: {
                     ...state,
@@ -1861,8 +1868,11 @@ export function registerBaseInteractionHandlers(): void {
         const selected = value as { defId: string; index: number };
         const ctx = getContinuationContext<{ topCards: string[] }>(iData);
         if (!ctx?.topCards || ctx.topCards.length === 0) return { state, events: [] };
-        const chosenDefId = selected.defId;
-        const remaining = ctx.topCards.filter(id => id !== chosenDefId);
+        const currentTopCards = getCurrentBaseDeckTopSnapshotDefIds(state.core, ctx.topCards);
+        if (currentTopCards.length === 0) return { state, events: [] };
+        const chosenDefId = currentTopCards.find((defId) => defId === selected.defId);
+        if (!chosenDefId) return { state, events: [] };
+        const remaining = currentTopCards.filter(id => id !== chosenDefId);
         const newOrder = [chosenDefId, ...remaining];
         return { state, events: [{
             type: SU_EVENTS.BASE_DECK_REORDERED,
@@ -2011,10 +2021,9 @@ export function registerBaseInteractionHandlers(): void {
                 '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: playerId }),
                 { sourceId: 'base_temple_of_goju_tiebreak', targetType: 'minion' },
             );
+            const deferredEvents = getDeferredPostScoringEvents(state, iData);
             
             // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
-            const deferredEvents = getDeferredPostScoringEvents(iData);
-            
             return { 
                 // 使用 urgent 标志，确保链式交互的后续步骤不被其他交互插队
                 state: queueInteraction(state, { 
@@ -2024,7 +2033,6 @@ export function registerBaseInteractionHandlers(): void {
                         continuationContext: { 
                             baseIndex: ctx!.baseIndex, 
                             remainingPlayers: rest,
-                            // 传递延迟事件到下一个交互
                             ...(deferredEvents ? { _deferredPostScoringEvents: deferredEvents } : {}),
                         } 
                     } 

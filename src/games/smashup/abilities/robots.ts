@@ -20,7 +20,7 @@ import type { SmashUpEvent, MinionPlayedEvent } from '../domain/types';
 import type { MinionCardDef } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import { getCardDef, getBaseDef } from '../data/cards';
-import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, queueInteraction, type PromptOption, type SimpleChoiceData } from '../../../engine/systems/InteractionSystem';
 import { drawCards, isDiscardMicrobot, isMicrobot, matchesDefId, MICROBOT_DEF_IDS } from '../domain/utils';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 
@@ -41,25 +41,47 @@ export function registerRobotAbilities(): void {
     registerRobotOngoingEffects();
 }
 
+function getRobotMicrobotGuardTargets(
+    state: AbilityContext['state'],
+    baseIndex: number,
+    playerId: string,
+    sourceCardUid: string,
+) {
+    const base = state.bases[baseIndex];
+    if (!base) return [];
+
+    const myMinionCount = base.minions.filter(minion => minion.controller === playerId).length;
+    return base.minions.filter(
+        minion => minion.uid !== sourceCardUid && getMinionPower(state, minion, baseIndex) < myMinionCount,
+    );
+}
+
+function buildRobotMicrobotGuardOptions(
+    state: AbilityContext['state'],
+    baseIndex: number,
+    playerId: string,
+    sourceCardUid: string,
+) {
+    const targets = getRobotMicrobotGuardTargets(state, baseIndex, playerId, sourceCardUid);
+    return targets.map(target => {
+        const def = getCardDef(target.defId) as MinionCardDef | undefined;
+        const name = def?.name ?? target.defId;
+        const power = getMinionPower(state, target, baseIndex);
+        return {
+            uid: target.uid,
+            defId: target.defId,
+            baseIndex,
+            label: `${name} (力量 ${power})`,
+        };
+    });
+}
+
 /** 微型机守护者 onPlay：消灭力量低于己方随从数量的随从 */
 function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
-    const base = ctx.state.bases[ctx.baseIndex];
-    if (!base) return { events: [] };
-
-    const myMinionCount = base.minions.filter(m => m.controller === ctx.playerId).length + 1;
-    const targets = base.minions.filter(
-        m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myMinionCount,
-    );
-    if (targets.length === 0) {
+    const options = buildRobotMicrobotGuardOptions(ctx.state, ctx.baseIndex, ctx.playerId, ctx.cardUid);
+    if (options.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
-
-    const options = targets.map(t => {
-        const def = getCardDef(t.defId) as MinionCardDef | undefined;
-        const name = def?.name ?? t.defId;
-        const power = getMinionPower(ctx.state, t, ctx.baseIndex);
-        return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: `${name} (力量 ${power})` };
-    });
 
     const interaction = createSimpleChoice(
         `robot_microbot_guard_${ctx.now}`,
@@ -67,11 +89,42 @@ function robotMicrobotGuard(ctx: AbilityContext): AbilityResult {
         '选择要消灭的随从（力量低于己方随从数量）',
         buildMinionTargetOptions(options, {
             state: ctx.state,
-            sourcePlayerId: ctx.playerId,
+            sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
             effectType: 'destroy',
         }),
-        { sourceId: 'robot_microbot_guard', targetType: 'minion' },
+        { sourceId: 'robot_microbot_guard', targetType: 'minion', responseValidationMode: 'live' },
     );
+    (interaction.data as SimpleChoiceData<unknown> & {
+        continuationContext?: { baseIndex: number; sourceCardUid: string; sourcePlayerId: string };
+        optionsGenerator?: typeof interaction.data.optionsGenerator;
+    }).continuationContext = {
+        baseIndex: ctx.baseIndex,
+        sourceCardUid: ctx.cardUid,
+        sourcePlayerId: ctx.playerId,
+    };
+    (interaction.data as SimpleChoiceData<unknown> & {
+        continuationContext?: { baseIndex: number; sourceCardUid: string; sourcePlayerId: string };
+        optionsGenerator?: typeof interaction.data.optionsGenerator;
+    }).optionsGenerator = (state, data) => {
+        const continuationContext = data.continuationContext as
+            | { baseIndex: number; sourceCardUid: string; sourcePlayerId: string }
+            | undefined;
+        if (!continuationContext) return [];
+        return buildMinionTargetOptions(
+            buildRobotMicrobotGuardOptions(
+                state.core,
+                continuationContext.baseIndex,
+                continuationContext.sourcePlayerId,
+                continuationContext.sourceCardUid,
+            ),
+            {
+                state: state.core,
+                sourcePlayerId: continuationContext.sourcePlayerId,
+                sourceDefId: ctx.defId,
+                effectType: 'destroy',
+            },
+        );
+    };
 
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -131,6 +184,8 @@ function robotMicrobotReclaimer(ctx: AbilityContext): AbilityResult {
             sourceId: 'robot_microbot_reclaimer',
             targetType: 'generic',
             multi: { min: 0, max: microbotsInDiscard.length },
+            autoRefresh: 'discard',
+            responseValidationMode: 'live',
         },
     );
 
@@ -143,6 +198,70 @@ let robotHoverbotCounter = 0;
 /** 重置盘旋机器人计数器（仅用于测试） */
 export function resetRobotHoverbotCounter(): void {
     robotHoverbotCounter = 0;
+}
+
+type RobotHoverbotChoiceValue =
+    | { cardUid: string; defId: string; power: number }
+    | { skip: true };
+
+type RobotHoverbotContinuationContext = { cardUid: string; defId: string; power: number };
+type RobotHoverbotInteractionData = SimpleChoiceData<RobotHoverbotChoiceValue> & {
+    continuationContext?: RobotHoverbotContinuationContext;
+};
+type RobotTechCenterChoiceValue = { baseIndex: number } | { __cancel__: true };
+
+function isCancelChoice(value: unknown): value is { __cancel__: true } {
+    return typeof value === 'object' && value !== null && '__cancel__' in value && value.__cancel__ === true;
+}
+
+function isHoverbotSkipChoice(value: unknown): value is { skip: true } {
+    return typeof value === 'object' && value !== null && 'skip' in value && value.skip === true;
+}
+
+function getCardUidFromReclaimerChoice(value: unknown): string | null {
+    if (typeof value !== 'object' || value === null || !('cardUid' in value)) {
+        return null;
+    }
+    return typeof value.cardUid === 'string' ? value.cardUid : null;
+}
+
+function buildRobotHoverbotChoiceOptions(
+    state: AbilityContext['state'],
+    playerId: string,
+    continuationContext?: { cardUid: string; defId: string; power: number },
+): PromptOption<RobotHoverbotChoiceValue>[] {
+    const skipOption: PromptOption<RobotHoverbotChoiceValue> = {
+        id: 'skip',
+        label: '放回牌库顶',
+        value: { skip: true },
+        displayMode: 'button',
+    };
+
+    if (!continuationContext) {
+        return [skipOption];
+    }
+
+    const currentTopCard = state.players[playerId]?.deck[0];
+    if (!currentTopCard
+        || currentTopCard.uid !== continuationContext.cardUid
+        || currentTopCard.defId !== continuationContext.defId) {
+        return [skipOption];
+    }
+
+    return [
+        {
+            id: 'play',
+            label: `打出 cards.${continuationContext.defId}.name`,
+            value: {
+                cardUid: continuationContext.cardUid,
+                defId: continuationContext.defId,
+                power: continuationContext.power,
+            },
+            displayMode: 'card',
+            _source: 'static' as const,
+        },
+        skipOption,
+    ];
 }
 
 /** 盘旋机器人 onPlay：展示牌库顶，如果是随从“你可以”将其作为额外随从打出 */
@@ -158,57 +277,26 @@ function robotHoverbot(ctx: AbilityContext): AbilityResult {
     if (peek.card.type === 'minion') {
         const def = getCardDef(peek.card.defId) as MinionCardDef | undefined;
         const power = def?.power ?? 0;
-
-        const initialOptions: PromptOption<
-            { cardUid: string; defId: string; power: number } | { skip: true }
-        >[] = [
-            {
-                id: 'play',
-                label: `打出 cards.${peek.card.defId}.name`,
-                value: { cardUid: peek.card.uid, defId: peek.card.defId, power },
-                displayMode: 'card' as const,
-                _source: 'static' as const,
-            },
-            {
-                id: 'skip',
-                label: '放回牌库顶',
-                value: { skip: true },
-                displayMode: 'button' as const,
-            },
-        ];
-
-        const interaction = createSimpleChoice<{ cardUid: string; defId: string; power: number } | { skip: true }>(
-            `robot_hoverbot_${robotHoverbotCounter++}`,
-            ctx.playerId,
-            `牌库顶是 cards.${peek.card.defId}.name（力量 ${power}），是否作为额外随从打出？`,
-            initialOptions,
-            { sourceId: 'robot_hoverbot', targetType: 'generic' },
-        );
-
-        const interactionData = interaction.data as any;
-        interactionData.continuationContext = {
+        const continuationContext = {
             cardUid: peek.card.uid,
             defId: peek.card.defId,
             power,
         };
 
-        interactionData.optionsGenerator = (_state: any, iData: any) => {
-            const c = iData?.continuationContext as { cardUid: string; defId: string; power: number } | undefined;
-            if (!c) {
-                return [
-                    { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
-                ];
-            }
-            return [
-                {
-                    id: 'play',
-                    label: `打出 cards.${c.defId}.name`,
-                    value: { cardUid: c.cardUid, defId: c.defId, power: c.power },
-                    displayMode: 'card' as const,
-                    _source: 'static' as const,
-                },
-                { id: 'skip', label: '放回牌库顶', value: { skip: true }, displayMode: 'button' as const },
-            ];
+        const interaction = createSimpleChoice<RobotHoverbotChoiceValue>(
+            `robot_hoverbot_${robotHoverbotCounter++}`,
+            ctx.playerId,
+            `牌库顶是 cards.${peek.card.defId}.name（力量 ${power}），是否作为额外随从打出？`,
+            buildRobotHoverbotChoiceOptions(ctx.state, ctx.playerId, continuationContext),
+            { sourceId: 'robot_hoverbot', targetType: 'generic', responseValidationMode: 'live' },
+        );
+
+        const interactionData = interaction.data as RobotHoverbotInteractionData;
+        interactionData.continuationContext = continuationContext;
+
+        interactionData.optionsGenerator = (state: AbilityContext['matchState'], iData: RobotHoverbotInteractionData) => {
+            const c = iData?.continuationContext;
+            return buildRobotHoverbotChoiceOptions(state.core, ctx.playerId, c);
         };
 
         return { events, matchState: queueInteraction(ctx.matchState, interaction) };
@@ -281,7 +369,9 @@ export function registerRobotInteractionHandlers(): void {
         const selectedCards = Array.isArray(value) ? value : value ? [value] : [];
         if (selectedCards.length === 0) return { state, events: [] };
 
-        const cardUids = selectedCards.map((v: any) => v.cardUid).filter(Boolean) as string[];
+        const cardUids = selectedCards
+            .map(getCardUidFromReclaimerChoice)
+            .filter((cardUid): cardUid is string => Boolean(cardUid));
         if (cardUids.length === 0) return { state, events: [] };
 
         const player = state.core.players[playerId];
@@ -303,12 +393,20 @@ export function registerRobotInteractionHandlers(): void {
     });
 
     // 微型机守护者：选择目标后消灭
-    registerInteractionHandler('robot_microbot_guard', (state, sourcePlayerId, value, _iData, _random, timestamp) => {
+    registerInteractionHandler('robot_microbot_guard', (state, sourcePlayerId, value, iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
-        const base = state.core.bases[baseIndex];
-        if (!base) return undefined;
+        const continuationContext = (iData as {
+            continuationContext?: { sourceCardUid?: string };
+        } | undefined)?.continuationContext;
+        const sourceCardUid = continuationContext?.sourceCardUid;
+        if (!sourceCardUid) return undefined;
 
-        const target = base.minions.find(m => m.uid === minionUid);
+        const target = getRobotMicrobotGuardTargets(
+            state.core,
+            baseIndex,
+            sourcePlayerId,
+            sourceCardUid,
+        ).find(minion => minion.uid === minionUid);
         if (!target) return undefined;
 
         return {
@@ -329,9 +427,9 @@ export function registerRobotInteractionHandlers(): void {
 
     // 技术中心：选择基地后按随从数抽牌
     registerInteractionHandler('robot_tech_center', (state, playerId, value, _iData, _random, timestamp) => {
-        if ((value as any).__cancel__) return { state, events: [] };
+        if (isCancelChoice(value)) return { state, events: [] };
 
-        const { baseIndex } = value as { baseIndex: number };
+        const { baseIndex } = value as Extract<RobotTechCenterChoiceValue, { baseIndex: number }>;
         const base = state.core.bases[baseIndex];
         if (!base) return undefined;
 
@@ -358,7 +456,7 @@ export function registerRobotInteractionHandlers(): void {
 
     // 盘旋机器人：选择是否打出牌库顶随从
     registerInteractionHandler('robot_hoverbot', (state, playerId, value, _iData, _random, timestamp) => {
-        if (value && (value as any).skip) return { state, events: [] };
+        if (isHoverbotSkipChoice(value)) return { state, events: [] };
 
         const { cardUid, defId, power } = value as { cardUid: string; defId: string; power: number };
         if (!cardUid) return undefined;

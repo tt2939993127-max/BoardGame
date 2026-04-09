@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { createScopedLogger } from '../logger';
 import {
-    I18N_RUNTIME_MODE,
     normalizeI18nLanguage,
     LANGUAGE_OPTIONS,
     RUNTIME_SUPPORTED_LANGUAGES,
@@ -23,21 +22,15 @@ afterEach(() => {
 
 describe('i18n language normalization', () => {
     it('maps browser variants to supported locales', () => {
-        expect(normalizeI18nLanguage('en-US')).toBe(I18N_RUNTIME_MODE === 'android' ? 'zh-CN' : 'en');
-        expect(normalizeI18nLanguage('en-GB')).toBe(I18N_RUNTIME_MODE === 'android' ? 'zh-CN' : 'en');
+        expect(normalizeI18nLanguage('en-US')).toBe('en');
+        expect(normalizeI18nLanguage('en-GB')).toBe('en');
         expect(normalizeI18nLanguage('zh')).toBe('zh-CN');
         expect(normalizeI18nLanguage('zh-TW')).toBe('zh-CN');
         expect(normalizeI18nLanguage(undefined)).toBe('zh-CN');
         expect(normalizeI18nLanguage('fr-FR')).toBe('zh-CN');
     });
 
-    it('keeps runtime language options aligned with the current build mode', () => {
-        if (I18N_RUNTIME_MODE === 'android') {
-            expect(RUNTIME_SUPPORTED_LANGUAGES).toEqual(['zh-CN']);
-            expect(LANGUAGE_OPTIONS).toEqual([{ code: 'zh-CN', label: '中文' }]);
-            return;
-        }
-
+    it('keeps runtime language options aligned with the current web runtime', () => {
         expect(RUNTIME_SUPPORTED_LANGUAGES).toEqual(['zh-CN', 'en']);
         expect(LANGUAGE_OPTIONS).toEqual([
             { code: 'zh-CN', label: '中文' },
@@ -128,6 +121,47 @@ describe('i18n 静态检查工具', () => {
                 key: 'statusBanners.abilityNames.*',
                 namespaces: ['game-summonerwars'],
                 patternSegments: ['statusBanners', 'abilityNames', null],
+            }),
+        ]));
+        expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(false);
+    });
+
+    it('识别变量承载的 template literal 模式，并展开可确定的前缀字面量', () => {
+        const content = `
+            import { useTranslation } from 'react-i18next';
+            const { t } = useTranslation('game-dicethrone');
+            const i18nPrefix = isToken ? 'tokens' : 'statusEffects';
+            const descriptionKey = \`${'${i18nPrefix}'}.${'${effectId}'}.description\`;
+            const nameKey = \`${'${i18nPrefix}'}.${'${effectId}'}.name\`;
+            t(descriptionKey, { returnObjects: true });
+            t(nameKey);
+        `;
+
+        const result = collectReferencesFromContent(content, 'demo.tsx', {
+            defaultNamespace: 'common',
+            knownNamespaces: new Set(['common', 'game-dicethrone']),
+        });
+
+        expect(result.references).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                key: 'tokens.*.description',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['tokens', null, 'description'],
+            }),
+            expect.objectContaining({
+                key: 'statusEffects.*.description',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['statusEffects', null, 'description'],
+            }),
+            expect.objectContaining({
+                key: 'tokens.*.name',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['tokens', null, 'name'],
+            }),
+            expect.objectContaining({
+                key: 'statusEffects.*.name',
+                namespaces: ['game-dicethrone'],
+                patternSegments: ['statusEffects', null, 'name'],
             }),
         ]));
         expect(result.warnings.some((warning) => warning.type === 'dynamic-key')).toBe(false);

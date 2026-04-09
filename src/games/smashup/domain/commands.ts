@@ -2,7 +2,7 @@
  * 大杀四方 (Smash Up) - 命令验证
  */
 
-import type { MatchState, ValidationResult } from '../../../engine/types';
+import type { MatchState, ValidationResult, RandomFn } from '../../../engine/types';
 import type { SmashUpCommand, SmashUpCore, ActionCardDef, FusionCardDef, PlayConstraint } from './types';
 import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
 import { getCardDef, getFusionDef, getMinionDef, getMinionLikePower, getTitanDef } from '../data/cards';
@@ -31,6 +31,60 @@ import {
     isCardActionLike,
     isCardMinionLike,
 } from './utils';
+import { resolveOnPlay, resolveSpecial, type AbilityExecutor } from './abilityRegistry';
+import { SU_EVENTS } from './events';
+
+const VALIDATION_RANDOM: RandomFn = {
+    random: () => 0,
+    d: () => 1,
+    range: (min) => min,
+    shuffle: <T>(array: T[]) => [...array],
+};
+
+function getImplicitActionNoTargetError(
+    state: MatchState<SmashUpCore>,
+    playerId: string,
+    cardUid: string,
+    defId: string,
+    executor: AbilityExecutor | undefined,
+    targetBaseIndex?: number,
+    targetMinionUid?: string,
+): string | null {
+    if (!executor) return null;
+
+    const player = state.core.players[playerId];
+    if (!player) return null;
+
+    try {
+        const result = executor({
+            state: state.core,
+            matchState: state,
+            playerId,
+            cardUid,
+            defId,
+            baseIndex: (targetBaseIndex ?? 0) as number,
+            targetMinionUid,
+            handSizeAfterPlay: Math.max(0, player.hand.length - 1),
+            random: VALIDATION_RANDOM,
+            now: 0,
+        });
+
+        if (result.events.length === 0) {
+            return result.matchState ? null : '场上没有符合条件的目标';
+        }
+        const feedbackEvents = result.events.filter((event) => event.type === SU_EVENTS.ABILITY_FEEDBACK);
+        if (feedbackEvents.length !== result.events.length) return null;
+
+        const noValidTargetsFeedback = feedbackEvents.find((event) => {
+            const payload = event.payload as { messageKey?: string } | undefined;
+            return payload?.messageKey === 'feedback.no_valid_targets';
+        });
+
+        return noValidTargetsFeedback ? '场上没有符合条件的目标' : null;
+    } catch {
+        return null;
+    }
+}
 
 function hasActiveBearNecessitiesPodRestriction(core: SmashUpCore, playerId: string): boolean {
     for (const base of core.bases) {
@@ -95,6 +149,18 @@ function getRemainingExtraTalentUses(core: SmashUpCore, playerId: string): numbe
     }
 
     return Math.max(0, allowance - (player.extraTalentUsesConsumed ?? 0));
+}
+
+function findAttachedTalentHostMinion(
+    core: SmashUpCore,
+    baseIndex: number,
+    ongoingCardUid: string,
+) {
+    const base = core.bases[baseIndex];
+    if (!base) return undefined;
+    return base.minions.find(minion =>
+        minion.attachedActions.some(attached => attached.uid === ongoingCardUid),
+    );
 }
 
 export function validate(
@@ -418,6 +484,21 @@ export function validate(
                     return { valid: false, error: '该行动卡不需要基地目标' };
                 }
 
+                if (!needsBase && command.payload.targetMinionUid === undefined) {
+                    const implicitTargetError = getImplicitActionNoTargetError(
+                        state,
+                        command.playerId,
+                        rCard.uid,
+                        rCard.defId,
+                        resolveSpecial(rCard.defId) ?? resolveOnPlay(rCard.defId),
+                        targetBase,
+                        command.payload.targetMinionUid,
+                    );
+                    if (implicitTargetError) {
+                        return { valid: false, error: implicitTargetError };
+                    }
+                }
+
                 console.log('[DEBUG] PLAY_ACTION validation: PASSED (Me First! mode)');
                 return { valid: true };
             }
@@ -521,6 +602,21 @@ export function validate(
                     : (((def as ActionCardDef).ongoingTarget ?? 'base'));
                 if (ongoingTarget === 'base' && isOperationRestricted(core, targetBase, command.playerId, 'play_action')) {
                     return { valid: false, error: '该基地禁止打出行动卡' };
+                }
+            }
+
+            if (targetBase === undefined && command.payload.targetMinionUid === undefined && subtype !== 'ongoing') {
+                const implicitTargetError = getImplicitActionNoTargetError(
+                    state,
+                    command.playerId,
+                    card.uid,
+                    card.defId,
+                    resolveOnPlay(card.defId),
+                    targetBase,
+                    command.payload.targetMinionUid,
+                );
+                if (implicitTargetError) {
+                    return { valid: false, error: implicitTargetError };
                 }
             }
             return { valid: true };
@@ -655,7 +751,12 @@ export function validate(
                     return { valid: false, error: '只能使用自己的持续行动卡天赋' };
                 }
                 if (ongoing.talentUsed) {
-                    if (getRemainingExtraTalentUses(core, command.playerId) <= 0) {
+                    const hostMinion = findAttachedTalentHostMinion(core, baseIndex, ongoingCardUid);
+                    const canUseStandingStonesDoubleTalent =
+                        targetBase.defId === 'base_standing_stones'
+                        && hostMinion?.controller === command.playerId
+                        && !core.standingStonesDoubleTalentMinionUid;
+                    if (!canUseStandingStonesDoubleTalent && getRemainingExtraTalentUses(core, command.playerId) <= 0) {
                         return { valid: false, error: '本回合天赋已使用' };
                     }
                 }
@@ -756,6 +857,9 @@ export function validate(
                 if (!titanDef?.abilityTags?.includes('special')) {
                     return { valid: false, error: '该泰坦没有特殊能力' };
                 }
+                if (!resolveSpecial(titan.defId)) {
+                    return { valid: false, error: '该泰坦的特殊能力不能手动激活' };
+                }
                 const titanError = validateTitanSpecialActivation({
                     state: core,
                     playerId: command.playerId,
@@ -782,6 +886,9 @@ export function validate(
             const spDef = getCardDef(spMinion.defId);
             if (!spDef || !('abilityTags' in spDef) || !spDef.abilityTags?.includes('special')) {
                 return { valid: false, error: '该随从没有特殊能力' };
+            }
+            if (!resolveSpecial(spMinion.defId)) {
+                return { valid: false, error: '该随从的特殊能力不能手动激活' };
             }
             if (isCardSuppressed(core, spMinionUid)) {
                 return { valid: false, error: '该卡牌能力已被压制' };

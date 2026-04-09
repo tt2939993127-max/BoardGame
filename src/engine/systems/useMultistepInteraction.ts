@@ -33,29 +33,36 @@ export function useMultistepInteraction<TStep = unknown, TResult = unknown>(
 ): MultistepInteractionState<TResult> {
     const data = interaction?.data as MultistepChoiceData<TStep, TResult> | undefined;
     const interactionId = interaction?.id;
+    const initialResult = data?.initialResult ?? null;
 
-    const [result, setResult] = useState<TResult | null>(data?.initialResult ?? null);
+    const [result, setResult] = useState<TResult | null>(initialResult);
     const [stepCount, setStepCount] = useState(0);
 
     // 用 ref 追踪最新的 result/stepCount，避免 confirm 闭包捕获旧值
     const resultRef = useRef(result);
     const stepCountRef = useRef(stepCount);
-    resultRef.current = result;
-    stepCountRef.current = stepCount;
+
+    useEffect(() => {
+        resultRef.current = result;
+        stepCountRef.current = stepCount;
+    }, [result, stepCount]);
 
     // 防止 auto-confirm（step 达到 maxSteps）和手动 confirm 重复 dispatch
     const confirmedRef = useRef(false);
 
     // 交互 ID 变化时重置本地状态
     useEffect(() => {
-        if (data) {
-            setResult(data.initialResult);
-        } else {
-            setResult(null);
-        }
-        setStepCount(0);
-        confirmedRef.current = false;
-    }, [interactionId]); // eslint-disable-line react-hooks/exhaustive-deps
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setResult(initialResult);
+            setStepCount(0);
+            confirmedRef.current = false;
+        });
+        return () => {
+            cancelled = true;
+        };
+    }, [initialResult, interactionId]);
 
     const step = useCallback((payload: unknown) => {
         if (!data) return;

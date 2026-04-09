@@ -15,6 +15,7 @@ import type {
     PlayerId,
     GameEvent,
 } from '../types';
+import type { AiHint } from '../ai/types';
 import { resolveCommandTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
@@ -51,6 +52,11 @@ export interface PromptOption<T = unknown> {
      * - 'button' | undefined: 普通按钮
      */
     displayMode?: 'card' | 'button';
+    /**
+     * 仅供 AI 使用的语义 hints。
+     * 必须与业务 value 隔离，不能被规则处理器当成真实输入消费。
+     */
+    _ai?: AiHint;
 }
 
 /**
@@ -64,10 +70,12 @@ export interface PromptMultiConfig {
 export type SimpleChoiceAutoRefresh =
     | 'hand'
     | 'discard'
+    | 'hand_or_discard'
     | 'deck'
     | 'field'
     | 'base'
-    | 'ongoing';
+    | 'ongoing'
+    | 'buried';
 
 export type SimpleChoiceResponseValidationMode = 'snapshot' | 'live';
 
@@ -183,6 +191,36 @@ export interface SliderChoiceData {
     meta?: Record<string, unknown>;
 }
 
+export interface CompareRollChoiceParticipant {
+    playerId?: PlayerId;
+    label: string;
+    labelKey?: string;
+    labelParams?: Record<string, string | number>;
+    roll: number;
+    face?: string;
+    characterId?: string;
+    effectKey?: string;
+    effectParams?: Record<string, string | number>;
+}
+
+export interface CompareRollChoiceData<T = unknown> {
+    title: string;
+    sourceId?: string;
+    contestants: [CompareRollChoiceParticipant, CompareRollChoiceParticipant];
+    resultText?: string;
+    resultTextKey?: string;
+    resultTextParams?: Record<string, string | number>;
+    resultTone?: 'neutral' | 'success' | 'warning' | 'danger';
+    options?: PromptOption<T>[];
+    /**
+     * 无显式按钮时，UI 可在展示完成后发送 SYS_INTERACTION_CONFIRM。
+     * 若提供 confirmValue，这次确认会被转换为 RESOLVED 事件，
+     * 方便复用既有的 follow-up handler 链路。
+     */
+    confirmValue?: T;
+    autoConfirmDelayMs?: number;
+}
+
 /**
  * 交互系统状态
  */
@@ -280,6 +318,7 @@ export interface SimpleChoiceConfig {
      * - 'field': 检查 minionUid 是否仍在场上
      * - 'base': 检查 baseIndex 是否仍然有效
      * - 'ongoing': 检查 cardUid 是否仍附着在场上
+     * - 'buried': 检查 cardUid 是否仍埋葬在指定基地
      * - undefined: 不自动刷新（默认，向后兼容）
      * 
      * 注意：
@@ -373,6 +412,66 @@ export function createSliderChoice(
         playerId,
         data,
     };
+}
+
+export function createCompareRollChoice<T>(
+    id: string,
+    playerId: PlayerId,
+    data: CompareRollChoiceData<T>,
+): InteractionDescriptor<CompareRollChoiceData<T>> {
+    return {
+        id,
+        kind: 'compare-roll-choice',
+        playerId,
+        data,
+    };
+}
+
+export function getCurrentTopSnapshotItems<TCurrent, TTracked, TKey>(
+    currentItems: readonly TCurrent[],
+    trackedItems: readonly TTracked[],
+    getCurrentKey: (currentItem: TCurrent) => TKey,
+    getTrackedKey: (trackedItem: TTracked) => TKey,
+    isCompatible?: (currentItem: TCurrent, trackedItem: TTracked) => boolean,
+): TTracked[] {
+    const trackedByKey = new Map(trackedItems.map((trackedItem) => [getTrackedKey(trackedItem), trackedItem] as const));
+    const snapshot: TTracked[] = [];
+
+    for (const currentItem of currentItems) {
+        const trackedItem = trackedByKey.get(getCurrentKey(currentItem));
+        if (!trackedItem) {
+            break;
+        }
+        if (isCompatible && !isCompatible(currentItem, trackedItem)) {
+            break;
+        }
+        snapshot.push(trackedItem);
+    }
+
+    return snapshot;
+}
+
+export function getCurrentTrackedCardTopSnapshot<
+    TTracked extends { uid: string; defId?: string },
+    TCurrent extends { uid: string; defId?: string },
+>(
+    currentCards: readonly TCurrent[],
+    trackedCards: readonly TTracked[],
+): TTracked[] {
+    return getCurrentTopSnapshotItems(
+        currentCards,
+        trackedCards,
+        (currentCard) => currentCard.uid,
+        (trackedCard) => trackedCard.uid,
+        (currentCard, trackedCard) => trackedCard.defId === undefined || currentCard.defId === trackedCard.defId,
+    );
+}
+
+export function getCurrentTrackedIdTopSnapshot<TTracked extends string>(
+    currentIds: readonly string[],
+    trackedIds: readonly TTracked[],
+): TTracked[] {
+    return getCurrentTopSnapshotItems(currentIds, trackedIds, (currentId) => currentId, (trackedId) => trackedId);
 }
 
 /**
@@ -471,41 +570,19 @@ export function queueInteraction<TCore>(
     if (!current) {
         // 如果当前没有交互，新交互立即成为 current
         // 如果有选项生成器，立即基于当前状态生成选项
-        console.log('[InteractionSystem] popInteraction: No current, making new interaction current:', {
-            interactionId: interaction.id,
-            kind: interaction.kind,
-        });
-        
         if (interaction.kind === 'simple-choice') {
             const data = interaction.data as SimpleChoiceData;
-            console.log('[InteractionSystem] popInteraction: Checking optionsGenerator:', {
-                hasOptionsGenerator: !!data.optionsGenerator,
-                hasContinuationContext: !!(data as any).continuationContext,
-                continuationContext: (data as any).continuationContext,
-                originalOptionsCount: data.options?.length,
-            });
-            
             if (data.optionsGenerator) {
                 // 传递 state 和 data（包含 continuationContext）给 optionsGenerator
-                console.log('[InteractionSystem] popInteraction: Calling optionsGenerator...');
                 const generatedOptions = data.optionsGenerator(state, data);
                 const freshOptions = normalizeFreshSimpleChoiceOptions(generatedOptions, data);
-                console.log('[InteractionSystem] popInteraction: optionsGenerator returned:', {
-                    freshOptionsCount: freshOptions.length,
-                    freshOptions,
-                });
-                
+
                 // 更新交互选项
                 const updatedInteraction = {
                     ...interaction,
                     data: { ...data, options: freshOptions },
                 };
-                
-                console.log('[InteractionSystem] popInteraction: Updated interaction:', {
-                    interactionId: updatedInteraction.id,
-                    optionsCount: (updatedInteraction.data as SimpleChoiceData).options.length,
-                });
-                
+
                 interaction = updatedInteraction;
             }
         }
@@ -550,64 +627,17 @@ export function resolveInteraction<TCore>(
     let next = queue[0];
     const newQueue = queue.slice(1);
 
-    console.log('[InteractionSystem] resolveInteraction START:', {
-        hasNext: !!next,
-        nextId: next?.id,
-        nextKind: next?.kind,
-        queueLength: queue.length,
-    });
-
-    // 【通用修复】传递延迟事件给下一个交互
-    // 当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），
-    // 延迟的 BASE_CLEARED 事件存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
-    // 第一个交互解决后，必须传递给下一个交互，最后一个交互解决时由交互处理器补发。
-    if (current && next) {
-        const currentData = current.data as Record<string, unknown>;
-        const currentCtx = (currentData.continuationContext ?? {}) as Record<string, unknown>;
-        const deferredEvents = currentCtx._deferredPostScoringEvents;
-        
-        if (deferredEvents && Array.isArray(deferredEvents) && deferredEvents.length > 0) {
-            console.log('[InteractionSystem] Transferring deferred events to next interaction:', {
-                currentId: current.id,
-                nextId: next.id,
-                deferredEventsCount: deferredEvents.length,
-            });
-            
-            const nextData = next.data as Record<string, unknown>;
-            const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
-            nextCtx._deferredPostScoringEvents = deferredEvents;
-            nextData.continuationContext = nextCtx;
-            
-            next = { ...next, data: nextData };
-        }
-    }
-
     // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {
         const data = next.data as SimpleChoiceData;
-        
-        console.log('[InteractionSystem] Processing simple-choice:', {
-            interactionId: next.id,
-            hasOptionsGenerator: !!data.optionsGenerator,
-            hasContinuationContext: !!(data as any).continuationContext,
-            continuationContext: (data as any).continuationContext,
-            originalOptionsCount: data.options?.length,
-            originalOptions: data.options,
-        });
-        
+
         // 优先使用手动提供的 optionsGenerator
         let freshOptions: PromptOption[];
         if (data.optionsGenerator) {
-            console.log('[InteractionSystem] Calling optionsGenerator...');
             freshOptions = data.optionsGenerator(state, data);
-            console.log('[InteractionSystem] optionsGenerator returned:', {
-                freshOptionsCount: freshOptions.length,
-                freshOptions,
-            });
         } else {
             // 使用通用刷新逻辑（opt-in：只有显式声明了 autoRefresh 才刷新）
-            console.log('[InteractionSystem] Using generic refresh...');
-            const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing' | undefined;
+            const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'hand_or_discard' | 'deck' | 'field' | 'base' | 'ongoing' | 'buried' | undefined;
             freshOptions = refreshOptionsGeneric(state, next, data.options, autoRefresh);
         }
         
@@ -619,10 +649,6 @@ export function resolveInteraction<TCore>(
                 ...next,
                 data: { ...data, options: freshOptions },
             };
-            console.log('[InteractionSystem] Updated next interaction with fresh options:', {
-                interactionId: next.id,
-                newOptionsCount: freshOptions.length,
-            });
         } else {
             console.warn('[InteractionSystem] Fresh options do not meet multi.min requirement, keeping original options');
         }
@@ -668,6 +694,14 @@ export function asMultistepChoice<TStep = unknown, TResult = unknown>(
 ): (MultistepChoiceData<TStep, TResult> & { id: string; playerId: PlayerId }) | undefined {
     if (!interaction || interaction.kind !== 'multistep-choice') return undefined;
     const data = interaction.data as MultistepChoiceData<TStep, TResult>;
+    return { ...data, id: interaction.id, playerId: interaction.playerId };
+}
+
+export function asCompareRollChoice<T = unknown>(
+    interaction?: InteractionDescriptor,
+): (CompareRollChoiceData<T> & { id: string; playerId: PlayerId }) | undefined {
+    if (!interaction || interaction.kind !== 'compare-roll-choice') return undefined;
+    const data = interaction.data as CompareRollChoiceData<T>;
     return { ...data, id: interaction.id, playerId: interaction.playerId };
 }
 
@@ -717,9 +751,27 @@ function refreshOptionsGeneric<T>(
                 return player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false;
             }
             case 'discard': {
+                const player = state.core?.players?.[interaction.playerId];
+                if (val.cardUid) {
+                    return player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false;
+                }
+                if (val.defId) {
+                    return player?.discard?.some((c: any) => c.defId === val.defId) ?? false;
+                }
+                return true;
+            }
+            case 'hand_or_discard': {
                 if (!val.cardUid) return true;
                 const player = state.core?.players?.[interaction.playerId];
-                return player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false;
+                const zoneHint = val.zone ?? val.from ?? val.sourceZone;
+                if (zoneHint === 'hand') {
+                    return player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false;
+                }
+                if (zoneHint === 'discard') {
+                    return player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false;
+                }
+                return (player?.hand?.some((c: any) => c.uid === val.cardUid) ?? false)
+                    || (player?.discard?.some((c: any) => c.uid === val.cardUid) ?? false);
             }
             case 'deck': {
                 if (!val.cardUid) return true;
@@ -747,6 +799,12 @@ function refreshOptionsGeneric<T>(
                 }
                 return false;
             }
+            case 'buried': {
+                if (!val.cardUid) return true;
+                if (typeof val.baseIndex !== 'number') return false;
+                const base = state.core?.bases?.[val.baseIndex];
+                return base?.buriedCards?.some((card: any) => card.uid === val.cardUid) ?? false;
+            }
             default:
                 return true;
         }
@@ -762,15 +820,78 @@ function buildEmergencySkipOption<T>(): PromptOption<T> {
     };
 }
 
+function mergeRenderableOptionMetadata<T>(
+    freshOptions: PromptOption<T>[],
+    previousOptions: PromptOption<T>[] | undefined,
+): PromptOption<T>[] {
+    if (freshOptions.length === 0 || !previousOptions || previousOptions.length === 0) {
+        return freshOptions;
+    }
+
+    const previousById = new Map(previousOptions.map((option) => [option.id, option] as const));
+
+    return freshOptions.map((option) => {
+        const previous = previousById.get(option.id);
+        if (!previous) return option;
+
+        let nextOption = option;
+        let optionChanged = false;
+
+        if (!nextOption.displayMode && previous.displayMode) {
+            nextOption = { ...nextOption, displayMode: previous.displayMode };
+            optionChanged = true;
+        }
+
+        const previousSource = (previous as { _source?: unknown })._source;
+        if ((nextOption as { _source?: unknown })._source === undefined && previousSource !== undefined) {
+            nextOption = { ...(nextOption as Record<string, unknown>), _source: previousSource } as PromptOption<T>;
+            optionChanged = true;
+        }
+
+        const previousAiHints = previous._ai;
+        if (nextOption._ai === undefined && previousAiHints !== undefined) {
+            nextOption = { ...nextOption, _ai: previousAiHints };
+            optionChanged = true;
+        }
+
+        const currentValue = nextOption.value;
+        const previousValue = previous.value;
+        if (
+            currentValue
+            && typeof currentValue === 'object'
+            && previousValue
+            && typeof previousValue === 'object'
+        ) {
+            const mergedValue = { ...(currentValue as Record<string, unknown>) };
+            let valueChanged = false;
+
+            for (const key of ['defId', 'minionDefId', 'baseDefId'] as const) {
+                if (typeof mergedValue[key] !== 'string' && typeof (previousValue as Record<string, unknown>)[key] === 'string') {
+                    mergedValue[key] = (previousValue as Record<string, unknown>)[key];
+                    valueChanged = true;
+                }
+            }
+
+            if (valueChanged) {
+                nextOption = { ...nextOption, value: mergedValue as T };
+                optionChanged = true;
+            }
+        }
+
+        return optionChanged ? nextOption : option;
+    });
+}
+
 function normalizeFreshSimpleChoiceOptions<T>(
     freshOptions: PromptOption<T>[],
     data: SimpleChoiceData<T>,
 ): PromptOption<T>[] {
-    if (freshOptions.length > 0) return freshOptions;
+    const hydratedOptions = mergeRenderableOptionMetadata(freshOptions, data.options);
+    if (hydratedOptions.length > 0) return hydratedOptions;
 
     const minSelections = data.multi?.min ?? 1;
     if (minSelections === 0) {
-        return freshOptions;
+        return hydratedOptions;
     }
 
     const fallbackOptions = (data.options ?? []).filter((option) => {
@@ -837,7 +958,7 @@ export function refreshInteractionOptions<TCore>(
         freshOptions = data.optionsGenerator(state, data);
     } else {
         // 使用通用刷新逻辑（opt-in：只有显式声明了 autoRefresh 才刷新）
-        const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'deck' | 'field' | 'base' | 'ongoing' | undefined;
+        const autoRefresh = (data as any).autoRefresh as 'hand' | 'discard' | 'hand_or_discard' | 'deck' | 'field' | 'base' | 'ongoing' | 'buried' | undefined;
         freshOptions = refreshOptionsGeneric(state, currentInteraction, data.options, autoRefresh);
     }
     
@@ -906,14 +1027,6 @@ export function createInteractionSystem<TCore>(
         },
 
         playerView: (state, playerId): Partial<{ interaction: InteractionState }> => {
-            console.log('[InteractionSystem playerView] START:', {
-                playerId,
-                hasCurrent: !!state.sys.interaction.current,
-                currentId: state.sys.interaction.current?.id,
-                currentOptionsCount: (state.sys.interaction.current?.data as any)?.options?.length,
-                currentOptions: JSON.stringify((state.sys.interaction.current?.data as any)?.options, null, 2),
-            });
-            
             const { current, queue } = state.sys.interaction;
 
             // 如果交互有 optionsGenerator，先调用它生成选项，再序列化
@@ -921,16 +1034,7 @@ export function createInteractionSystem<TCore>(
             if (isSamePlayerId(current?.playerId, playerId) && current.kind === 'simple-choice') {
                 const data = current.data as SimpleChoiceData;
                 if (data.optionsGenerator) {
-                    console.log('[InteractionSystem playerView] Calling optionsGenerator for current:', {
-                        hasData: !!data,
-                        hasContinuationContext: !!(data as any).continuationContext,
-                        continuationContext: (data as any).continuationContext,
-                    });
-                    const freshOptions = data.optionsGenerator(state, data);
-                    console.log('[InteractionSystem playerView] optionsGenerator returned:', {
-                        optionsCount: freshOptions.length,
-                        options: freshOptions,
-                    });
+                    const freshOptions = normalizeFreshSimpleChoiceOptions(data.optionsGenerator(state, data), data);
                     processedCurrent = {
                         ...current,
                         data: { ...data, options: freshOptions },
@@ -940,13 +1044,7 @@ export function createInteractionSystem<TCore>(
 
             const filteredCurrent =
                 isSamePlayerId(processedCurrent?.playerId, playerId) ? stripNonSerializable(processedCurrent) : undefined;
-            
-            console.log('[InteractionSystem playerView] After stripNonSerializable:', {
-                hasFilteredCurrent: !!filteredCurrent,
-                filteredOptionsCount: (filteredCurrent?.data as any)?.options?.length,
-                filteredOptions: JSON.stringify((filteredCurrent?.data as any)?.options, null, 2),
-            });
-            
+
             // 同样处理 queue 中的交互
             const processedQueue = queue
                 .filter((i) => isSamePlayerId(i?.playerId, playerId))
@@ -954,7 +1052,7 @@ export function createInteractionSystem<TCore>(
                     if (i.kind === 'simple-choice') {
                         const data = i.data as SimpleChoiceData;
                         if (data.optionsGenerator) {
-                            const freshOptions = data.optionsGenerator(state, data);
+                            const freshOptions = normalizeFreshSimpleChoiceOptions(data.optionsGenerator(state, data), data);
                             return {
                                 ...i,
                                 data: { ...data, options: freshOptions },

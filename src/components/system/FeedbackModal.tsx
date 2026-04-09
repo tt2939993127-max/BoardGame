@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { X, MessageSquareWarning, Send, Loader2, AlertTriangle, Lightbulb, HelpCircle, Image as ImageIcon, Trash2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { useLocation } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { cn } from '../../lib/utils';
@@ -63,6 +64,10 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
     const { success, error } = useToast();
     const location = useLocation();
     const backdropRef = useRef<HTMLDivElement>(null);
+    const portalRoot = useMemo(() => {
+        if (typeof document === 'undefined') return null;
+        return document.getElementById('modal-root') ?? document.body;
+    }, []);
 
     const [content, setContent] = useState('');
     const [type, setType] = useState<FeedbackType>(FeedbackType.BUG);
@@ -72,6 +77,33 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
     const [pastedImage, setPastedImage] = useState<string | null>(null);
     const [attachLog, setAttachLog] = useState(!!actionLogText);
     const [attachState, setAttachState] = useState(!!stateSnapshot);
+    const [isCompactLandscape, setIsCompactLandscape] = useState(false);
+    const shouldShowGameSelector = !runtimeContext?.gameId;
+    const fieldLabelClassName = cn(
+        'font-bold text-parchment-light-text uppercase tracking-wider',
+        isCompactLandscape ? 'text-[11px]' : 'text-xs',
+    );
+    const fieldGroupClassName = isCompactLandscape ? 'space-y-1.5' : 'space-y-2';
+    const formControlClassName = cn(
+        'w-full bg-parchment-card-bg border border-parchment-brown/20 text-parchment-base-text text-base sm:text-sm rounded-lg focus:ring-parchment-gold focus:border-parchment-gold block transition-colors outline-none placeholder:text-parchment-light-text/50',
+        isCompactLandscape ? 'p-2' : 'p-2.5',
+    );
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+
+        const syncCompactLandscape = () => {
+            setIsCompactLandscape(window.innerWidth > window.innerHeight && window.innerHeight <= 430);
+        };
+
+        syncCompactLandscape();
+        window.addEventListener('resize', syncCompactLandscape);
+        window.addEventListener('orientationchange', syncCompactLandscape);
+        return () => {
+            window.removeEventListener('resize', syncCompactLandscape);
+            window.removeEventListener('orientationchange', syncCompactLandscape);
+        };
+    }, []);
 
     // 游戏内自动注入 gameId，非游戏页面允许手动选择
     const isInGame = location.pathname.startsWith('/play/');
@@ -168,13 +200,20 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                 })
             });
 
-            if (!res.ok) throw new Error(t('hud.feedback.errors.submitFailed'));
+            if (!res.ok) {
+                const payload = await res.json().catch(() => null) as { error?: string; message?: string } | null;
+                throw new Error(
+                    payload?.error
+                    || payload?.message
+                    || t('hud.feedback.errors.submitFailed')
+                );
+            }
 
             success(t('hud.feedback.success'));
             onClose();
         } catch (err) {
             console.error(err);
-            error(t('hud.feedback.errors.submitFailed'));
+            error(err instanceof Error ? err.message : t('hud.feedback.errors.submitFailed'));
         } finally {
             setSubmitting(false);
         }
@@ -188,21 +227,40 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
         }
     };
 
-    return (
+    const modal = (
         <div
             ref={backdropRef}
             onClick={handleBackdropClick}
-            className="fixed inset-0 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-serif"
-            style={{ zIndex: UI_Z_INDEX.modalContent }}
+            className={cn(
+                'modal-base-container fixed inset-0 flex justify-center bg-black/60 backdrop-blur-sm p-4 font-serif',
+                isCompactLandscape ? 'items-start' : 'items-center',
+            )}
+            data-testid="feedback-modal"
+            style={{
+                zIndex: UI_Z_INDEX.modalContent,
+                paddingTop: isCompactLandscape ? 'max(0.5rem, var(--safe-area-top))' : 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: isCompactLandscape ? 'max(0.5rem, var(--runtime-modal-bottom-inset))' : 'max(1rem, var(--runtime-modal-bottom-inset))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
+            role="dialog"
+            aria-modal="true"
         >
             <motion.div
                 initial={{ opacity: 0, scale: 0.95, y: 20 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                className="bg-parchment-base-bg rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh] border-2 border-parchment-brown/30"
+                className={cn(
+                    'bg-parchment-base-bg rounded-xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col border-2 border-parchment-brown/30',
+                    isCompactLandscape && 'max-w-[40rem]',
+                )}
+                style={{ maxHeight: 'var(--runtime-modal-max-height)' }}
             >
                 {/* Header */}
-                <div className="bg-parchment-brown px-6 py-4 flex items-center justify-between shrink-0 border-b border-parchment-gold/20">
+                <div className={cn(
+                    'bg-parchment-brown flex items-center justify-between shrink-0 border-b border-parchment-gold/20',
+                    isCompactLandscape ? 'px-4 py-2.5' : 'px-6 py-4',
+                )}>
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-parchment-gold/20 rounded-lg text-parchment-cream">
                             <MessageSquareWarning size={20} />
@@ -221,40 +279,46 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                 </div>
 
                 <form onSubmit={handleSubmit} className="flex flex-col min-h-0 flex-1">
-                    <div className="p-6 overflow-y-auto space-y-4 scrollbar-thin flex-1 min-h-0">
+                    <div className={cn(
+                        'overflow-y-auto scrollbar-thin flex-1 min-h-0',
+                        isCompactLandscape ? 'p-3 space-y-2.5' : 'p-6 space-y-4',
+                    )}>
                     {/* Game Selection */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-parchment-light-text uppercase tracking-wider">{t('hud.feedback.gameLabel')}</label>
-                        <select
-                            value={gameName}
-                            onChange={(e) => setGameName(e.target.value)}
-                            className="w-full bg-parchment-card-bg border border-parchment-brown/20 text-parchment-base-text text-sm rounded-lg focus:ring-parchment-gold focus:border-parchment-gold block p-2.5 transition-colors outline-none"
-                        >
-                            <option value="">{t('hud.feedback.gameAll')}</option>
-                            {GAME_MANIFEST
-                                .filter(g => g.type === 'game' && g.enabled)
-                                .map(g => (
-                                    <option key={g.id} value={g.id}>{resolveGameDisplayName(g, t, g.id)}</option>
-                                ))
-                            }
-                        </select>
-                    </div>
+                    {shouldShowGameSelector && (
+                        <div className={fieldGroupClassName}>
+                            <label className={fieldLabelClassName}>{t('hud.feedback.gameLabel')}</label>
+                            <select
+                                value={gameName}
+                                onChange={(e) => setGameName(e.target.value)}
+                                className={formControlClassName}
+                            >
+                                <option value="">{t('hud.feedback.gameAll')}</option>
+                                {GAME_MANIFEST
+                                    .filter(g => g.type === 'game' && g.enabled)
+                                    .map(g => (
+                                        <option key={g.id} value={g.id}>{resolveGameDisplayName(g, t, g.id)}</option>
+                                    ))
+                                }
+                            </select>
+                        </div>
+                    )}
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className={cn('grid grid-cols-2', isCompactLandscape ? 'gap-3' : 'gap-4')} data-testid="feedback-mobile-fields-grid">
                         {/* Type Selection */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-parchment-light-text uppercase tracking-wider">{t('hud.feedback.typeLabel')}</label>
-                            <div className="flex bg-parchment-card-bg p-1 rounded-lg border border-parchment-brown/20">
+                        <div className={fieldGroupClassName}>
+                            <label className={fieldLabelClassName}>{t('hud.feedback.typeLabel')}</label>
+                            <div className="flex bg-parchment-card-bg p-1 rounded-lg border border-parchment-brown/20" data-testid="feedback-type-group">
                                 {Object.values(FeedbackType).map((typeValue) => (
                                     <button
                                         key={typeValue}
                                         type="button"
                                         onClick={() => setType(typeValue)}
                                         className={cn(
-                                            "flex-1 flex items-center justify-center py-2 rounded-md text-xs font-bold transition-all gap-1.5",
+                                            'flex-1 flex items-center justify-center rounded-md font-bold transition-all',
+                                            isCompactLandscape ? 'py-1.5 gap-1 text-[11px]' : 'py-2 gap-1.5 text-xs',
                                             type === typeValue
-                                                ? "bg-parchment-brown text-parchment-cream shadow-sm"
-                                                : "text-parchment-light-text hover:text-parchment-base-text hover:bg-parchment-brown/10"
+                                                ? 'bg-parchment-brown text-parchment-cream shadow-sm'
+                                                : 'text-parchment-light-text hover:text-parchment-base-text hover:bg-parchment-brown/10'
                                         )}
                                     >
                                         {getTypeIcon(typeValue)}
@@ -265,12 +329,12 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                         </div>
 
                         {/* Severity Selection */}
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-parchment-light-text uppercase tracking-wider">{t('hud.feedback.severityLabel')}</label>
+                        <div className={fieldGroupClassName}>
+                            <label className={fieldLabelClassName}>{t('hud.feedback.severityLabel')}</label>
                             <select
                                 value={severity}
                                 onChange={(e) => setSeverity(e.target.value as FeedbackSeverity)}
-                                className="w-full bg-parchment-card-bg border border-parchment-brown/20 text-parchment-base-text text-sm rounded-lg focus:ring-parchment-gold focus:border-parchment-gold block p-2.5 transition-colors outline-none"
+                                className={formControlClassName}
                             >
                                 {Object.values(FeedbackSeverity).map((severityValue) => (
                                     <option key={severityValue} value={severityValue}>{t(FEEDBACK_SEVERITY_LABEL_KEYS[severityValue])}</option>
@@ -280,15 +344,18 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                     </div>
 
                     {/* Content */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-parchment-light-text uppercase tracking-wider">{t('hud.feedback.contentLabel')}</label>
+                    <div className={fieldGroupClassName}>
+                        <label className={fieldLabelClassName}>{t('hud.feedback.contentLabel')}</label>
                         <div className="relative">
                             <textarea
                                 value={content}
                                 onChange={(e) => setContent(e.target.value)}
                                 onPaste={handlePaste}
-                                rows={4}
-                                className="block p-3 w-full text-sm text-parchment-base-text bg-parchment-card-bg rounded-lg border border-parchment-brown/20 focus:ring-parchment-gold focus:border-parchment-gold resize-none outline-none placeholder:text-parchment-light-text/50"
+                                rows={isCompactLandscape ? 2 : 4}
+                                className={cn(
+                                    'block w-full text-base sm:text-sm text-parchment-base-text bg-parchment-card-bg rounded-lg border border-parchment-brown/20 focus:ring-parchment-gold focus:border-parchment-gold resize-none outline-none placeholder:text-parchment-light-text/50',
+                                    isCompactLandscape ? 'p-2.5' : 'p-3',
+                                )}
                                 placeholder={t('hud.feedback.contentPlaceholder')}
                                 required={!pastedImage}
                             ></textarea>
@@ -358,13 +425,13 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                     )}
 
                     {/* Contact Info */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-parchment-light-text uppercase tracking-wider">{t('hud.feedback.contactLabel')}</label>
+                    <div className={fieldGroupClassName}>
+                        <label className={fieldLabelClassName}>{t('hud.feedback.contactLabel')}</label>
                         <input
                             type="text"
                             value={contactInfo}
                             onChange={(e) => setContactInfo(e.target.value)}
-                            className="bg-parchment-card-bg border border-parchment-brown/20 text-parchment-base-text text-sm rounded-lg focus:ring-parchment-gold focus:border-parchment-gold block w-full p-2.5 outline-none placeholder:text-parchment-light-text/50"
+                            className={formControlClassName}
                             placeholder={t('hud.feedback.contactPlaceholder')}
                         />
                     </div>
@@ -372,7 +439,10 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
                     </div>
 
                     {/* 提交按钮固定在底部，不随内容滚动 */}
-                    <div className="px-6 py-4 border-t border-parchment-brown/10 flex justify-end shrink-0 bg-parchment-base-bg">
+                    <div className={cn(
+                        'border-t border-parchment-brown/10 flex justify-end shrink-0 bg-parchment-base-bg',
+                        isCompactLandscape ? 'px-4 py-2.5' : 'px-6 py-4',
+                    )}>
                         <button
                             type="submit"
                             disabled={submitting || (!content.trim() && !pastedImage)}
@@ -386,6 +456,8 @@ export const FeedbackModal = ({ onClose, actionLogText, stateSnapshot, runtimeCo
             </motion.div>
         </div>
     );
+
+    return portalRoot ? createPortal(modal, portalRoot) : modal;
 };
 
 

@@ -1,11 +1,8 @@
-import { logMobileRuntime } from './mobileRuntimeDebug';
-
-type CapacitorCoreModule = {
-    Capacitor: {
-        isNativePlatform(): boolean;
-        getPlatform(): string;
-    };
-};
+import { logMobileRuntime, logMobileRuntimeCritical } from './mobileRuntimeDebug';
+import {
+    getNativeAndroidRuntimeDiagnostics,
+    type NativeAndroidRuntimeDiagnostics,
+} from './androidRuntime';
 
 type PluginListenerHandle = {
     remove(): Promise<void>;
@@ -89,6 +86,26 @@ export interface AndroidLiveUpdateConfig {
     appReadyTimeoutMs: number;
 }
 
+export interface AndroidLiveUpdateSnapshot {
+    enabled: boolean;
+    manifestUrl: string;
+    channel: string;
+    nativeAndroid: boolean;
+    updaterLoaded: boolean;
+    nativeVersion?: string;
+    currentBundleVersion?: string;
+    currentBundleId?: string;
+    currentBundleStatus?: BundleStatus;
+    manifestVersion?: string;
+    manifestForceUpdate?: boolean;
+    compatible?: boolean;
+    compatibilityReason?: string;
+}
+
+export interface ReadAndroidLiveUpdateSnapshotOptions {
+    includeManifest?: boolean;
+}
+
 export interface AndroidOtaManifest {
     version: string;
     url: string;
@@ -110,6 +127,8 @@ export type AndroidLiveUpdateResult =
     | { status: 'queued'; version: string; source: 'downloaded' | 'cached'; mode: 'background' | 'immediate' }
     | { status: 'error'; reason: string };
 
+export type AndroidLiveUpdateApplyMode = 'background' | 'immediate';
+
 export type AndroidForceUpdatePhase =
     | 'hidden'
     | 'checking'
@@ -129,32 +148,77 @@ export interface AndroidForceUpdateState {
     reason?: string;
 }
 
+export type AndroidLiveUpdateActivityPhase =
+    | 'idle'
+    | 'checking'
+    | 'downloading'
+    | 'applying';
+
+export interface AndroidLiveUpdateActivityState {
+    active: boolean;
+    phase: AndroidLiveUpdateActivityPhase;
+    version?: string;
+    progressPercent?: number;
+}
+
 export interface AndroidLiveUpdateStartOptions {
     force?: boolean;
     onForceStateChange?: (state: AndroidForceUpdateState) => void;
+    envOverride?: Record<string, string | boolean | undefined>;
+    applyMode?: AndroidLiveUpdateApplyMode;
+    initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
 }
 
 const DEFAULT_OTA_CHANNEL = 'stable';
 const DEFAULT_APP_READY_TIMEOUT_MS = 10000;
+const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60000;
+const DEFAULT_MANIFEST_TIMEOUT_MS = 8000;
+const DEFAULT_APPLY_RELOAD_TIMEOUT_MS = 8000;
+const DEBUG_ANDROID_APP_ID_SEGMENTS = new Set(['debug', 'dev', 'test', 'qa']);
 const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
     phase: 'hidden',
     blocking: false,
 };
+const IDLE_LIVE_UPDATE_ACTIVITY_STATE: AndroidLiveUpdateActivityState = {
+    active: false,
+    phase: 'idle',
+};
 
-let capacitorCoreLoader: Promise<CapacitorCoreModule | null> | null = null;
 let updaterLoader: Promise<CapacitorUpdaterModule | null> | null = null;
 let notifyAppReadyPromise: Promise<void> | null = null;
 let backgroundUpdatePromise: Promise<AndroidLiveUpdateResult> | null = null;
+let backgroundUpdatePromiseMode: AndroidLiveUpdateApplyMode | null = null;
 let listenerRegistrationPromise: Promise<PluginListenerHandle[] | null> | null = null;
-
-const runtimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
-    const importer = new Function('s', 'return import(s)') as (value: string) => Promise<TModule>;
-    return importer(specifier);
-};
+const liveUpdateRequestListeners = new Set<(request: {
+    interactive?: boolean;
+    applyMode?: AndroidLiveUpdateApplyMode;
+    initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
+}) => void>();
+const liveUpdateActivityListeners = new Set<(state: AndroidLiveUpdateActivityState) => void>();
+let liveUpdateActivityState: AndroidLiveUpdateActivityState = IDLE_LIVE_UPDATE_ACTIVITY_STATE;
 
 const parseBooleanEnv = (value: string | boolean | undefined) => {
     if (typeof value === 'boolean') return value;
     return /^(1|true|yes|on)$/i.test((value || '').trim());
+};
+
+const readTrimmedEnv = (value: string | boolean | undefined) => (
+    typeof value === 'string' ? value.trim() : ''
+);
+
+const isNonReleaseAndroidAppId = (appId: string) => (
+    appId
+        .split('.')
+        .some((segment) => DEBUG_ANDROID_APP_ID_SEGMENTS.has(segment.trim().toLowerCase()))
+);
+
+const isAndroidOtaAllowedForAppId = (env: Record<string, string | boolean | undefined>) => {
+    const appId = readTrimmedEnv(env.VITE_CAPACITOR_APP_ID)
+        || readTrimmedEnv(env.CAPACITOR_APP_ID);
+    if (!appId || !isNonReleaseAndroidAppId(appId)) {
+        return true;
+    }
+    return parseBooleanEnv(env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP);
 };
 
 const parseTimeoutEnv = (value: string | boolean | undefined) => {
@@ -162,6 +226,13 @@ const parseTimeoutEnv = (value: string | boolean | undefined) => {
     const parsed = Number.parseInt(value.trim(), 10);
     return Number.isFinite(parsed) && parsed >= 1000 ? parsed : DEFAULT_APP_READY_TIMEOUT_MS;
 };
+
+const resolveDownloadTimeoutMs = (appReadyTimeoutMs: number) => Math.max(
+    DEFAULT_DOWNLOAD_TIMEOUT_MS,
+    appReadyTimeoutMs * 6,
+);
+
+const isBundleReadyForActivation = (status: BundleStatus) => status === 'success' || status === 'pending';
 
 const normalizeUrl = (value: string) => value.replace(/\/+$/, '');
 const isAbsoluteHttpUrl = (value: string) => /^https?:\/\//i.test(value);
@@ -178,18 +249,38 @@ const parseVersionParts = (value: string) => normalizeComparableVersion(value)
         return Number.isFinite(parsed) ? parsed : 0;
     });
 
-const clampPercent = (value: number | undefined) => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
-        return undefined;
-    }
-    return Math.max(0, Math.min(100, Math.round(value)));
-};
-
 const emitForceState = (
     onForceStateChange: AndroidLiveUpdateStartOptions['onForceStateChange'],
     state: AndroidForceUpdateState,
 ) => {
     onForceStateChange?.(state);
+};
+
+const emitLiveUpdateActivityState = (state: AndroidLiveUpdateActivityState) => {
+    liveUpdateActivityState = state;
+    for (const listener of liveUpdateActivityListeners) {
+        listener(state);
+    }
+};
+
+const setLiveUpdateActivityState = (state: AndroidLiveUpdateActivityState) => {
+    emitLiveUpdateActivityState(state);
+};
+
+const setImmediateActivityPhase = (
+    phase: Exclude<AndroidLiveUpdateActivityPhase, 'idle'>,
+    options: { version?: string; progressPercent?: number } = {},
+) => {
+    setLiveUpdateActivityState({
+        active: true,
+        phase,
+        version: options.version,
+        progressPercent: options.progressPercent,
+    });
+};
+
+const clearImmediateActivityPhase = () => {
+    setLiveUpdateActivityState(IDLE_LIVE_UPDATE_ACTIVITY_STATE);
 };
 
 const withTimeout = async <T,>(
@@ -248,6 +339,15 @@ const buildForceUpdateMessage = (
     return customMessage || fallback;
 };
 
+const emitCriticalOtaLog = (
+    stage: string,
+    payload?: Record<string, unknown>,
+) => {
+    logMobileRuntimeCritical('OTA', stage, payload);
+};
+
+const updateOtaDebugState = (_patch: Record<string, unknown>) => {};
+
 export const compareVersion = (left: string, right: string) => {
     const leftParts = parseVersionParts(left);
     const rightParts = parseVersionParts(right);
@@ -266,15 +366,15 @@ export const compareVersion = (left: string, right: string) => {
 export const readAndroidLiveUpdateConfig = (
     env: Record<string, string | boolean | undefined>,
 ): AndroidLiveUpdateConfig => {
-    const manifestUrl = typeof env.VITE_ANDROID_OTA_MANIFEST_URL === 'string'
-        ? env.VITE_ANDROID_OTA_MANIFEST_URL.trim()
-        : '';
+    const manifestUrl = readTrimmedEnv(env.VITE_ANDROID_OTA_MANIFEST_URL);
 
     return {
-        enabled: parseBooleanEnv(env.VITE_ANDROID_OTA_ENABLED) && isAbsoluteHttpUrl(manifestUrl),
+        enabled: parseBooleanEnv(env.VITE_ANDROID_OTA_ENABLED)
+            && isAbsoluteHttpUrl(manifestUrl)
+            && isAndroidOtaAllowedForAppId(env),
         manifestUrl,
-        channel: typeof env.VITE_ANDROID_OTA_CHANNEL === 'string' && env.VITE_ANDROID_OTA_CHANNEL.trim()
-            ? env.VITE_ANDROID_OTA_CHANNEL.trim()
+        channel: readTrimmedEnv(env.VITE_ANDROID_OTA_CHANNEL)
+            ? readTrimmedEnv(env.VITE_ANDROID_OTA_CHANNEL)
             : DEFAULT_OTA_CHANNEL,
         appReadyTimeoutMs: parseTimeoutEnv(env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS),
     };
@@ -314,42 +414,43 @@ export const isManifestCompatibleWithNativeVersion = (
     return { compatible: true };
 };
 
-const loadCapacitorCore = async () => {
-    if (!capacitorCoreLoader) {
-        capacitorCoreLoader = runtimeImport<CapacitorCoreModule>('@capacitor/core')
-            .then((module) => module as CapacitorCoreModule)
-            .catch(() => null);
-    }
-
-    return capacitorCoreLoader;
-};
-
 const loadUpdater = async () => {
     if (!updaterLoader) {
-        updaterLoader = runtimeImport<CapacitorUpdaterModule>('@capgo/capacitor-updater')
-            .then((module) => module as CapacitorUpdaterModule)
-            .catch(() => null);
+        updaterLoader = import('@capgo/capacitor-updater')
+            .then((module) => {
+                const updaterModule = module as CapacitorUpdaterModule;
+                emitCriticalOtaLog('updater-module-loaded', {
+                    hasCapacitorUpdater: Boolean(updaterModule.CapacitorUpdater),
+                });
+                return updaterModule;
+            })
+            .catch((error) => {
+                const reason = error instanceof Error ? error.message : String(error);
+                emitCriticalOtaLog('updater-module-load-failed', { reason });
+                return null;
+            });
     }
 
     return updaterLoader;
 };
 
-const isNativeAndroidApp = async () => {
-    if (typeof window === 'undefined') return false;
-    const runtime = (window as typeof window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
-    if (typeof runtime?.isNativePlatform !== 'function') return false;
+const toNativeDebugPatch = (_diagnostics: NativeAndroidRuntimeDiagnostics) => ({});
 
-    const capacitorCore = await loadCapacitorCore();
-    return Boolean(capacitorCore?.Capacitor.isNativePlatform() && capacitorCore.Capacitor.getPlatform() === 'android');
-};
-
-const getConfigFromMetaEnv = () => {
-    const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
+const getConfigFromMetaEnv = (envOverride?: Record<string, string | boolean | undefined>) => {
+    const metaEnv = envOverride ?? ((import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {});
     return readAndroidLiveUpdateConfig(metaEnv);
 };
 
-const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => {
-    logMobileRuntime('OTA', 'manifest-fetch-start', { url });
+const readManifest = async (
+    url: string,
+    timeoutMs: number = DEFAULT_MANIFEST_TIMEOUT_MS,
+): Promise<AndroidOtaManifest | null> => {
+    logMobileRuntime('OTA', 'manifest-fetch-start', { url, timeoutMs });
+    emitCriticalOtaLog('manifest-fetch-start', { url, timeoutMs });
+    const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutHandle = setTimeout(() => {
+        abortController?.abort();
+    }, timeoutMs);
     try {
         const response = await fetch(url, {
             method: 'GET',
@@ -358,6 +459,7 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
                 'Cache-Control': 'no-cache',
             },
             cache: 'no-store',
+            ...(abortController ? { signal: abortController.signal } : {}),
         });
         if (response.status === 404) {
             logMobileRuntime('OTA', 'manifest-fetch-404', { url }, 'warn');
@@ -395,6 +497,14 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             url,
             manifest,
         });
+        emitCriticalOtaLog('manifest-fetch-success', {
+            url,
+            manifestVersion: manifest.version,
+            manifestForceUpdate: manifest.forceUpdate === true,
+            targetNativeVersion: manifest.targetNativeVersion,
+            minNativeVersion: manifest.minNativeVersion,
+            maxNativeVersion: manifest.maxNativeVersion,
+        });
         return manifest;
     } catch (error) {
         console.warn('[OTA] 读取 manifest 失败', error);
@@ -402,8 +512,91 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             url,
             error,
         }, 'error');
+        emitCriticalOtaLog('manifest-fetch-failed', {
+            url,
+            error,
+        });
         return null;
+    } finally {
+        clearTimeout(timeoutHandle);
     }
+};
+
+export const readAndroidLiveUpdateSnapshot = async (
+    options: ReadAndroidLiveUpdateSnapshotOptions = {},
+): Promise<AndroidLiveUpdateSnapshot> => {
+    const { includeManifest = true } = options;
+    const config = getConfigFromMetaEnv();
+    const baseSnapshot: AndroidLiveUpdateSnapshot = {
+        enabled: config.enabled,
+        manifestUrl: config.manifestUrl,
+        channel: config.channel,
+        nativeAndroid: false,
+        updaterLoaded: false,
+    };
+
+    emitCriticalOtaLog('snapshot-read-start', {
+        enabled: config.enabled,
+        manifestUrl: config.manifestUrl,
+        channel: config.channel,
+        includeManifest,
+    });
+
+    if (!config.enabled) {
+        emitCriticalOtaLog('snapshot-read-disabled', baseSnapshot);
+        return baseSnapshot;
+    }
+
+    const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
+    emitCriticalOtaLog('native-runtime-check', {
+        context: 'snapshot-read',
+        ...nativeDiagnostics,
+    });
+    const nativeAndroid = nativeDiagnostics.nativeAndroid;
+    if (!nativeAndroid) {
+        const snapshot = {
+            ...baseSnapshot,
+            nativeAndroid,
+        };
+        emitCriticalOtaLog('snapshot-read-not-native', {
+            ...snapshot,
+            ...nativeDiagnostics,
+        });
+        return snapshot;
+    }
+
+    const updaterModule = await loadUpdater();
+    if (!updaterModule) {
+        const snapshot = {
+            ...baseSnapshot,
+            nativeAndroid: true,
+            updaterLoaded: false,
+        };
+        emitCriticalOtaLog('snapshot-read-updater-missing', snapshot);
+        return snapshot;
+    }
+
+    const manifest = includeManifest ? await readManifest(config.manifestUrl) : null;
+    const current = await updaterModule.CapacitorUpdater.current();
+    const compatibility = manifest
+        ? isManifestCompatibleWithNativeVersion(manifest, current.native)
+        : undefined;
+
+    const snapshot: AndroidLiveUpdateSnapshot = {
+        ...baseSnapshot,
+        nativeAndroid: true,
+        updaterLoaded: true,
+        nativeVersion: current.native,
+        currentBundleVersion: current.bundle.version,
+        currentBundleId: current.bundle.id,
+        currentBundleStatus: current.bundle.status,
+        manifestVersion: manifest?.version,
+        manifestForceUpdate: manifest?.forceUpdate === true,
+        compatible: compatibility?.compatible,
+        compatibilityReason: compatibility?.reason,
+    };
+    emitCriticalOtaLog('snapshot-read-success', snapshot);
+    return snapshot;
 };
 
 const queueDownloadedBundle = async (
@@ -417,6 +610,32 @@ const queueDownloadedBundle = async (
     });
 };
 
+const applyBundleImmediately = async (
+    updater: CapacitorUpdaterModule['CapacitorUpdater'],
+    bundleId: string,
+) => {
+    await withTimeout(
+        updater.set({ id: bundleId }),
+        DEFAULT_APPLY_RELOAD_TIMEOUT_MS,
+        `OTA 切换超时：set bundle 超过 ${DEFAULT_APPLY_RELOAD_TIMEOUT_MS}ms`,
+    );
+
+    try {
+        await withTimeout(
+            updater.reload(),
+            DEFAULT_APPLY_RELOAD_TIMEOUT_MS,
+            `OTA 重启超时：reload 超过 ${DEFAULT_APPLY_RELOAD_TIMEOUT_MS}ms`,
+        );
+    } catch (error) {
+        console.warn('[OTA] 原生 reload 未按预期完成，回退到 window.location.reload()', error);
+        if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+            window.location.reload();
+            return;
+        }
+        throw error;
+    }
+};
+
 const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
     if (!handle) return;
     try {
@@ -426,19 +645,18 @@ const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
     }
 };
 
-const applyBundleImmediately = async (
-    updater: CapacitorUpdaterModule['CapacitorUpdater'],
-    bundleId: string,
-) => {
-    await updater.set({ id: bundleId });
-};
-
 export const notifyAndroidBundleReady = async () => {
     if (!notifyAppReadyPromise) {
         notifyAppReadyPromise = (async () => {
-            const nativeAndroid = await isNativeAndroidApp();
+            const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
+            const nativeAndroid = nativeDiagnostics.nativeAndroid;
             logMobileRuntime('OTA', 'notify-app-ready-native-check', {
                 nativeAndroid,
+                ...nativeDiagnostics,
+            });
+            updateOtaDebugState({
+                stage: 'notify-app-ready-native-check',
+                ...toNativeDebugPatch(nativeDiagnostics),
             });
             if (!nativeAndroid) return;
 
@@ -446,14 +664,27 @@ export const notifyAndroidBundleReady = async () => {
             logMobileRuntime('OTA', 'notify-app-ready-updater-check', {
                 updaterLoaded: Boolean(updaterModule),
             });
+            updateOtaDebugState({
+                stage: 'notify-app-ready-updater-check',
+                updaterLoaded: Boolean(updaterModule),
+            });
             if (!updaterModule) return;
 
             try {
                 await updaterModule.CapacitorUpdater.notifyAppReady();
                 logMobileRuntime('OTA', 'notify-app-ready-success');
+                emitCriticalOtaLog('notify-app-ready-success');
+                updateOtaDebugState({
+                    stage: 'notify-app-ready-success',
+                });
             } catch (error) {
                 console.warn('[OTA] notifyAppReady 调用失败', error);
                 logMobileRuntime('OTA', 'notify-app-ready-failed', { error }, 'error');
+                emitCriticalOtaLog('notify-app-ready-failed', { error });
+                updateOtaDebugState({
+                    stage: 'notify-app-ready-failed',
+                    reason: error instanceof Error ? error.message : String(error),
+                });
             }
         })();
     }
@@ -464,28 +695,72 @@ export const notifyAndroidBundleReady = async () => {
 export const registerAndroidLiveUpdateListeners = async () => {
     if (!listenerRegistrationPromise) {
         listenerRegistrationPromise = (async () => {
-            const nativeAndroid = await isNativeAndroidApp();
+            const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
+            const nativeAndroid = nativeDiagnostics.nativeAndroid;
             if (!nativeAndroid) return null;
 
             const updaterModule = await loadUpdater();
             logMobileRuntime('OTA', 'register-listeners-updater-check', {
                 updaterLoaded: Boolean(updaterModule),
             });
+            updateOtaDebugState({
+                stage: 'register-listeners-updater-check',
+                updaterLoaded: Boolean(updaterModule),
+            });
             if (!updaterModule) return null;
 
             const { CapacitorUpdater } = updaterModule;
             const handles = await Promise.all([
+                CapacitorUpdater.addListener('download', (event) => {
+                    updateOtaDebugState({
+                        stage: 'listener-download-progress',
+                        currentBundleVersion: event.bundle.version,
+                        currentBundleId: event.bundle.id,
+                        currentBundleStatus: event.bundle.status,
+                    });
+                    if (!liveUpdateActivityState.active) {
+                        return;
+                    }
+                    setLiveUpdateActivityState({
+                        active: true,
+                        phase: 'downloading',
+                        version: event.bundle.version,
+                        progressPercent: Math.max(0, Math.min(100, Math.round(event.percent))),
+                    });
+                }),
                 CapacitorUpdater.addListener('downloadComplete', (event) => {
                     console.info('[OTA] bundle 下载完成', event.bundle.version || event.bundle.id || 'unknown');
+                    updateOtaDebugState({
+                        stage: 'listener-download-complete',
+                        currentBundleVersion: event.bundle.version,
+                        currentBundleId: event.bundle.id,
+                        currentBundleStatus: event.bundle.status,
+                    });
                 }),
                 CapacitorUpdater.addListener('downloadFailed', (event) => {
                     console.warn('[OTA] bundle 下载失败', event.version || 'unknown');
+                    updateOtaDebugState({
+                        stage: 'listener-download-failed',
+                        reason: event.version,
+                    });
                 }),
                 CapacitorUpdater.addListener('updateFailed', (event) => {
                     console.warn('[OTA] bundle 更新失败', event.bundle.version || event.bundle.id || 'unknown');
+                    updateOtaDebugState({
+                        stage: 'listener-update-failed',
+                        currentBundleVersion: event.bundle.version,
+                        currentBundleId: event.bundle.id,
+                        currentBundleStatus: event.bundle.status,
+                    });
                 }),
                 CapacitorUpdater.addListener('set', (event) => {
                     console.info('[OTA] bundle 已切换', event.bundle.version || event.bundle.id || 'unknown');
+                    updateOtaDebugState({
+                        stage: 'listener-set',
+                        currentBundleVersion: event.bundle.version,
+                        currentBundleId: event.bundle.id,
+                        currentBundleStatus: event.bundle.status,
+                    });
                 }),
             ]);
 
@@ -496,62 +771,160 @@ export const registerAndroidLiveUpdateListeners = async () => {
     return listenerRegistrationPromise;
 };
 
+export const requestAndroidLiveUpdateCheck = (request: {
+    interactive?: boolean;
+    applyMode?: AndroidLiveUpdateApplyMode;
+    initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
+} = {}) => {
+    if ((request.applyMode ?? 'immediate') === 'immediate') {
+        setImmediateActivityPhase(request.initialImmediatePhase ?? 'checking');
+    }
+    for (const listener of liveUpdateRequestListeners) {
+        listener(request);
+    }
+};
+
+export const readAndroidLiveUpdateActivityState = () => liveUpdateActivityState;
+
+export const subscribeAndroidLiveUpdateActivityState = (
+    listener: (state: AndroidLiveUpdateActivityState) => void,
+) => {
+    listener(liveUpdateActivityState);
+    liveUpdateActivityListeners.add(listener);
+    return () => {
+        liveUpdateActivityListeners.delete(listener);
+    };
+};
+
+export const subscribeAndroidLiveUpdateRequests = (
+    listener: (request: {
+        interactive?: boolean;
+        applyMode?: AndroidLiveUpdateApplyMode;
+        initialImmediatePhase?: Extract<AndroidLiveUpdateActivityPhase, 'checking' | 'downloading'>;
+    }) => void,
+) => {
+    liveUpdateRequestListeners.add(listener);
+    return () => {
+        liveUpdateRequestListeners.delete(listener);
+    };
+};
+
 export const startAndroidLiveUpdateBackgroundCheck = async (
     options: AndroidLiveUpdateStartOptions = {},
 ): Promise<AndroidLiveUpdateResult> => {
-    if (options.force) {
-        backgroundUpdatePromise = null;
-    }
+    const requestedApplyMode = options.applyMode ?? 'background';
+    const shouldStartNewRun = !backgroundUpdatePromise
+        || (requestedApplyMode === 'immediate' && backgroundUpdatePromiseMode === 'background');
 
-    if (!backgroundUpdatePromise) {
-        backgroundUpdatePromise = (async () => {
+    if (shouldStartNewRun) {
+        const runPromise = (async () => {
             const { onForceStateChange } = options;
-            emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
+            const applyMode = requestedApplyMode;
+            if (applyMode === 'immediate') {
+                const initialImmediatePhase = options.initialImmediatePhase ?? 'checking';
+                emitForceState(onForceStateChange, {
+                    phase: initialImmediatePhase,
+                    blocking: true,
+                    title: initialImmediatePhase === 'downloading' ? '正在下载更新' : '正在检查更新',
+                    message: initialImmediatePhase === 'downloading'
+                        ? '正在下载并准备应用新版本，请稍候。'
+                        : '正在检查并准备应用新版本，请稍候。',
+                });
+                setImmediateActivityPhase(initialImmediatePhase);
+            } else {
+                emitForceState(onForceStateChange, HIDDEN_FORCE_UPDATE_STATE);
+            }
 
-            const config = getConfigFromMetaEnv();
+            const config = getConfigFromMetaEnv(options.envOverride);
+            emitCriticalOtaLog('background-check-start', {
+                force: options.force === true,
+                enabled: config.enabled,
+                manifestUrl: config.manifestUrl,
+                channel: config.channel,
+            });
+            updateOtaDebugState({
+                stage: 'background-check-start',
+                resultStatus: undefined,
+                reason: undefined,
+            });
             logMobileRuntime('OTA', 'background-check-start', {
                 force: options.force === true,
                 config,
             });
             if (!config.enabled) {
+                if (applyMode === 'immediate') {
+                    clearImmediateActivityPhase();
+                }
                 logMobileRuntime('OTA', 'background-check-disabled', { config }, 'warn');
+                emitCriticalOtaLog('background-check-disabled', { config });
+                updateOtaDebugState({
+                    stage: 'background-check-disabled',
+                    resultStatus: 'disabled',
+                });
                 return { status: 'disabled' } as const;
             }
 
-            const nativeAndroid = await isNativeAndroidApp();
+            const nativeDiagnostics = getNativeAndroidRuntimeDiagnostics();
+            const nativeAndroid = nativeDiagnostics.nativeAndroid;
             logMobileRuntime('OTA', 'background-check-native-check', {
                 nativeAndroid,
+                ...nativeDiagnostics,
             });
             if (!nativeAndroid) {
+                if (applyMode === 'immediate') {
+                    clearImmediateActivityPhase();
+                }
+                emitCriticalOtaLog('background-check-not-native', nativeDiagnostics);
+                updateOtaDebugState({
+                    stage: 'background-check-not-native',
+                    resultStatus: 'not-native',
+                    ...toNativeDebugPatch(nativeDiagnostics),
+                });
                 return { status: 'not-native' } as const;
             }
 
             const nativeOperationTimeoutMs = Math.max(config.appReadyTimeoutMs, 8000);
+            const downloadTimeoutMs = resolveDownloadTimeoutMs(config.appReadyTimeoutMs);
 
             const updaterModule = await loadUpdater();
             if (!updaterModule) {
+                if (applyMode === 'immediate') {
+                    clearImmediateActivityPhase();
+                }
                 logMobileRuntime('OTA', 'background-check-updater-missing', {}, 'error');
+                emitCriticalOtaLog('background-check-updater-missing');
+                updateOtaDebugState({
+                    stage: 'background-check-updater-missing',
+                    resultStatus: 'error',
+                    nativeAndroid: true,
+                    updaterLoaded: false,
+                    reason: '未能加载 OTA 插件',
+                });
                 return { status: 'error', reason: '未能加载 OTA 插件' } as const;
             }
 
-            const manifest = await readManifest(config.manifestUrl);
+            const manifest = await readManifest(
+                config.manifestUrl,
+                Math.max(DEFAULT_MANIFEST_TIMEOUT_MS, config.appReadyTimeoutMs),
+            );
             if (!manifest) {
+                if (applyMode === 'immediate') {
+                    clearImmediateActivityPhase();
+                }
                 logMobileRuntime('OTA', 'background-check-manifest-missing', {
                     manifestUrl: config.manifestUrl,
                 }, 'warn');
+                emitCriticalOtaLog('background-check-manifest-missing', {
+                    manifestUrl: config.manifestUrl,
+                });
+                updateOtaDebugState({
+                    stage: 'background-check-manifest-missing',
+                    resultStatus: 'manifest-missing',
+                });
                 return { status: 'manifest-missing' } as const;
             }
 
             const isForceUpdate = manifest.forceUpdate === true;
-            if (isForceUpdate) {
-                emitForceState(onForceStateChange, {
-                    phase: 'checking',
-                    blocking: true,
-                    version: manifest.version,
-                    title: buildForceUpdateTitle(manifest, '正在准备更新'),
-                    message: buildForceUpdateMessage(manifest, '正在检查并准备新版本，请稍候。'),
-                });
-            }
 
             try {
                 const { CapacitorUpdater } = updaterModule;
@@ -560,17 +933,60 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     nativeOperationTimeoutMs,
                     `OTA 校验超时：读取当前 bundle 超过 ${nativeOperationTimeoutMs}ms`,
                 );
+                emitCriticalOtaLog('current-bundle-read', {
+                    nativeVersion: current.native,
+                    currentBundleVersion: current.bundle.version,
+                    currentBundleId: current.bundle.id,
+                    currentBundleStatus: current.bundle.status,
+                    manifestVersion: manifest.version,
+                });
+                updateOtaDebugState({
+                    stage: 'current-bundle-read',
+                    nativeVersion: current.native,
+                    currentBundleVersion: current.bundle.version,
+                    currentBundleId: current.bundle.id,
+                    currentBundleStatus: current.bundle.status,
+                    manifestVersion: manifest.version,
+                });
                 logMobileRuntime('OTA', 'current-bundle-read', {
                     current,
                 });
                 const compatibility = isManifestCompatibleWithNativeVersion(manifest, current.native);
+                emitCriticalOtaLog('compatibility-checked', {
+                    manifestVersion: manifest.version,
+                    nativeVersion: current.native,
+                    compatible: compatibility.compatible,
+                    reason: compatibility.reason,
+                });
+                updateOtaDebugState({
+                    stage: 'compatibility-checked',
+                    nativeVersion: current.native,
+                    compatible: compatibility.compatible,
+                    compatibilityReason: compatibility.reason,
+                });
                 logMobileRuntime('OTA', 'compatibility-checked', {
                     manifestVersion: manifest.version,
                     nativeVersion: current.native,
                     compatibility,
                 });
                 if (!compatibility.compatible) {
+                    if (applyMode === 'immediate') {
+                        clearImmediateActivityPhase();
+                    }
                     const requiredNativeVersion = resolveManifestRequiredNativeVersion(manifest);
+                    emitCriticalOtaLog('compatibility-incompatible', {
+                        manifestVersion: manifest.version,
+                        nativeVersion: current.native,
+                        requiredNativeVersion,
+                        reason: compatibility.reason,
+                        forceUpdate: isForceUpdate,
+                    });
+                    updateOtaDebugState({
+                        stage: 'compatibility-incompatible',
+                        resultStatus: 'incompatible',
+                        reason: compatibility.reason,
+                        compatible: false,
+                    });
                     if (isForceUpdate) {
                         emitForceState(onForceStateChange, {
                             phase: 'native-update-required',
@@ -598,6 +1014,13 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 }
 
                 if (current.bundle.version === manifest.version) {
+                    if (applyMode === 'immediate') {
+                        clearImmediateActivityPhase();
+                    }
+                    emitCriticalOtaLog('already-up-to-date', {
+                        currentVersion: current.bundle.version,
+                        manifestVersion: manifest.version,
+                    });
                     logMobileRuntime('OTA', 'already-up-to-date', {
                         currentVersion: current.bundle.version,
                         manifestVersion: manifest.version,
@@ -606,26 +1029,65 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     return { status: 'up-to-date' } as const;
                 }
 
+                if (applyMode === 'immediate') {
+                    setImmediateActivityPhase('checking', { version: manifest.version });
+                    emitForceState(onForceStateChange, {
+                        phase: 'checking',
+                        blocking: true,
+                        version: manifest.version,
+                        title: '正在准备更新',
+                        message: '正在检查并应用新版本，请稍候。',
+                    });
+                }
+
                 const bundleList = await withTimeout(
                     CapacitorUpdater.list(),
                     nativeOperationTimeoutMs,
                     `OTA 校验超时：读取本地 bundle 列表超过 ${nativeOperationTimeoutMs}ms`,
                 );
-                const cachedBundle = bundleList.bundles.find((bundle) => bundle.version === manifest.version && bundle.status !== 'error');
+                const cachedBundle = bundleList.bundles.find(
+                    (bundle) => bundle.version === manifest.version && isBundleReadyForActivation(bundle.status),
+                );
                 if (cachedBundle) {
+                    emitCriticalOtaLog('cached-bundle-hit', {
+                        bundleId: cachedBundle.id,
+                        version: cachedBundle.version,
+                        status: cachedBundle.status,
+                        forceUpdate: isForceUpdate,
+                    });
+                    updateOtaDebugState({
+                        stage: 'cached-bundle-hit',
+                        currentBundleVersion: cachedBundle.version,
+                        currentBundleId: cachedBundle.id,
+                        currentBundleStatus: cachedBundle.status,
+                    });
                     logMobileRuntime('OTA', 'cached-bundle-hit', {
                         cachedBundle,
                     });
-                    if (isForceUpdate) {
+                    if (applyMode === 'immediate') {
+                        setImmediateActivityPhase('applying', {
+                            version: manifest.version,
+                            progressPercent: 100,
+                        });
                         emitForceState(onForceStateChange, {
                             phase: 'applying',
                             blocking: true,
                             version: manifest.version,
                             progressPercent: 100,
-                            title: buildForceUpdateTitle(manifest, '正在切换新版本'),
-                            message: buildForceUpdateMessage(manifest, '更新包已准备完成，正在重启并切换到新版本。'),
+                            title: '正在重启应用',
+                            message: '更新包已准备完成，正在重启并切换到新版本。',
                         });
                         await applyBundleImmediately(CapacitorUpdater, cachedBundle.id);
+                        emitCriticalOtaLog('cached-bundle-applied-immediately', {
+                            bundleId: cachedBundle.id,
+                            version: manifest.version,
+                        });
+                        updateOtaDebugState({
+                            stage: 'cached-bundle-applied-immediately',
+                            resultStatus: 'queued',
+                            currentBundleVersion: manifest.version,
+                            currentBundleId: cachedBundle.id,
+                        });
                         return {
                             status: 'queued',
                             version: manifest.version,
@@ -635,6 +1097,16 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     }
 
                     await queueDownloadedBundle(CapacitorUpdater, cachedBundle.id);
+                    emitCriticalOtaLog('cached-bundle-queued', {
+                        bundleId: cachedBundle.id,
+                        version: manifest.version,
+                    });
+                    updateOtaDebugState({
+                        stage: 'cached-bundle-queued',
+                        resultStatus: 'queued',
+                        currentBundleVersion: manifest.version,
+                        currentBundleId: cachedBundle.id,
+                    });
                     logMobileRuntime('OTA', 'cached-bundle-queued', {
                         bundleId: cachedBundle.id,
                         version: manifest.version,
@@ -644,42 +1116,57 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                         status: 'queued',
                         version: manifest.version,
                         source: 'cached',
-                        mode: isForceUpdate ? 'immediate' : 'background',
+                        mode: 'background',
                     } as const;
                 }
 
-                let downloadHandle: PluginListenerHandle | null = null;
-                if (isForceUpdate) {
-                    emitForceState(onForceStateChange, {
-                        phase: 'downloading',
-                        blocking: true,
-                        version: manifest.version,
-                        title: buildForceUpdateTitle(manifest, '正在下载更新'),
-                        message: buildForceUpdateMessage(manifest, '正在下载必要更新，完成后会自动切换。'),
-                    });
-                    downloadHandle = await CapacitorUpdater.addListener('download', (event) => {
+                const downloadHandle: PluginListenerHandle | null = null;
+
+                try {
+                    if (applyMode === 'immediate') {
+                        setImmediateActivityPhase('downloading', { version: manifest.version });
                         emitForceState(onForceStateChange, {
                             phase: 'downloading',
                             blocking: true,
                             version: manifest.version,
-                            progressPercent: clampPercent(event.percent),
-                            title: buildForceUpdateTitle(manifest, '正在下载更新'),
-                            message: buildForceUpdateMessage(manifest, '正在下载必要更新，完成后会自动切换。'),
+                            title: '正在下载更新',
+                            message: '正在下载并准备重启应用，请稍候。',
                         });
-                    });
-                }
+                    }
 
-                try {
                     logMobileRuntime('OTA', 'download-start', {
                         manifestVersion: manifest.version,
                         bundleUrl: normalizeUrl(manifest.url),
                         checksum: manifest.checksum ?? '',
                         forceUpdate: isForceUpdate,
                     });
-                    const downloadedBundle = await CapacitorUpdater.download({
-                        url: normalizeUrl(manifest.url),
-                        version: manifest.version,
-                        checksum: manifest.checksum,
+                    emitCriticalOtaLog('download-start', {
+                        manifestVersion: manifest.version,
+                        bundleUrl: normalizeUrl(manifest.url),
+                        checksum: manifest.checksum ?? '',
+                        forceUpdate: isForceUpdate,
+                    });
+                    updateOtaDebugState({
+                        stage: 'download-start',
+                        manifestVersion: manifest.version,
+                    });
+                    const downloadedBundle = await withTimeout(
+                        CapacitorUpdater.download({
+                            url: normalizeUrl(manifest.url),
+                            version: manifest.version,
+                            checksum: manifest.checksum,
+                        }),
+                        downloadTimeoutMs,
+                        `OTA 下载超时：超过 ${downloadTimeoutMs}ms 未完成 bundle 下载`,
+                    );
+                    emitCriticalOtaLog('download-finished', {
+                        downloadedBundle,
+                    });
+                    updateOtaDebugState({
+                        stage: 'download-finished',
+                        currentBundleVersion: downloadedBundle.version,
+                        currentBundleId: downloadedBundle.id,
+                        currentBundleStatus: downloadedBundle.status,
                     });
                     logMobileRuntime('OTA', 'download-finished', {
                         downloadedBundle,
@@ -687,16 +1174,30 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
 
                     await removeListenerSafely(downloadHandle);
 
-                    if (isForceUpdate) {
+                    if (applyMode === 'immediate') {
+                        setImmediateActivityPhase('applying', {
+                            version: manifest.version,
+                            progressPercent: 100,
+                        });
                         emitForceState(onForceStateChange, {
                             phase: 'applying',
                             blocking: true,
                             version: manifest.version,
                             progressPercent: 100,
-                            title: buildForceUpdateTitle(manifest, '正在切换新版本'),
-                            message: buildForceUpdateMessage(manifest, '更新已下载完成，正在重启并切换到新版本。'),
+                            title: '正在重启应用',
+                            message: '更新已下载完成，正在重启并切换到新版本。',
                         });
                         await applyBundleImmediately(CapacitorUpdater, downloadedBundle.id);
+                        emitCriticalOtaLog('downloaded-bundle-applied-immediately', {
+                            bundleId: downloadedBundle.id,
+                            version: manifest.version,
+                        });
+                        updateOtaDebugState({
+                            stage: 'downloaded-bundle-applied-immediately',
+                            resultStatus: 'queued',
+                            currentBundleVersion: manifest.version,
+                            currentBundleId: downloadedBundle.id,
+                        });
                         logMobileRuntime('OTA', 'downloaded-bundle-applied-immediately', {
                             bundleId: downloadedBundle.id,
                             version: manifest.version,
@@ -710,6 +1211,16 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     }
 
                     await queueDownloadedBundle(CapacitorUpdater, downloadedBundle.id);
+                    emitCriticalOtaLog('downloaded-bundle-queued', {
+                        bundleId: downloadedBundle.id,
+                        version: manifest.version,
+                    });
+                    updateOtaDebugState({
+                        stage: 'downloaded-bundle-queued',
+                        resultStatus: 'queued',
+                        currentBundleVersion: manifest.version,
+                        currentBundleId: downloadedBundle.id,
+                    });
                     logMobileRuntime('OTA', 'downloaded-bundle-queued', {
                         bundleId: downloadedBundle.id,
                         version: manifest.version,
@@ -719,18 +1230,31 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                         status: 'queued',
                         version: manifest.version,
                         source: 'downloaded',
-                        mode: isForceUpdate ? 'immediate' : 'background',
+                        mode: applyMode,
                     } as const;
                 } catch (error) {
                     await removeListenerSafely(downloadHandle);
                     throw error;
                 }
             } catch (error) {
+                if (applyMode === 'immediate') {
+                    clearImmediateActivityPhase();
+                }
                 const reason = error instanceof Error ? error.message : String(error);
                 logMobileRuntime('OTA', 'background-check-failed', {
                     manifestVersion: manifest.version,
                     reason,
                 }, 'error');
+                emitCriticalOtaLog('background-check-failed', {
+                    manifestVersion: manifest.version,
+                    reason,
+                });
+                updateOtaDebugState({
+                    stage: 'background-check-failed',
+                    resultStatus: 'error',
+                    reason,
+                    manifestVersion: manifest.version,
+                });
                 if (isForceUpdate) {
                     emitForceState(onForceStateChange, {
                         phase: 'error',
@@ -747,7 +1271,16 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 } as const;
             }
         })();
+
+        backgroundUpdatePromise = runPromise;
+        backgroundUpdatePromiseMode = requestedApplyMode;
+        void runPromise.finally(() => {
+            if (backgroundUpdatePromise === runPromise) {
+                backgroundUpdatePromise = null;
+                backgroundUpdatePromiseMode = null;
+            }
+        });
     }
 
-    return backgroundUpdatePromise;
+    return backgroundUpdatePromise!;
 };

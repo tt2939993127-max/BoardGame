@@ -1,9 +1,9 @@
 /**
- * 共享状态效果跨英雄一致性测试 + 燃烧/中毒 upkeep 正确性测试
+ * 共享状态效果与本地闪避定义跨英雄一致性测试 + 燃烧/中毒 upkeep 正确性测试
  *
  * Task 10.3
  *
- * Property 9: 共享 Token 定义（击倒、闪避）在不同英雄间完全一致
+ * Property 9: 共享状态（击倒）与本地闪避定义在不同英雄间保持一致
  * Property 10: 燃烧/中毒 upkeep 处理正确（燃烧每层1伤害移除1层，中毒持续效果不移除层数）
  */
 
@@ -90,6 +90,21 @@ describe('共享 Token 定义跨英雄一致性', () => {
                     ref.activeUse?.effect.rollSuccess?.range
                 );
             }
+        }
+    });
+
+    it('monk / moon_elf / gunslinger 的 Evasive 都走本地 activeUse，而不是共享 passiveTrigger', () => {
+        const evasiveHeroes: SelectableCharacterId[] = ['monk', 'moon_elf', 'gunslinger'];
+
+        for (const heroId of evasiveHeroes) {
+            const def = CHARACTER_DATA_MAP[heroId].tokens.find(token => token.id === TOKEN_IDS.EVASIVE);
+            expect(def, `${heroId} 应定义 Evasive`).toBeDefined();
+            expect(def!.activeUse, `${heroId} Evasive 应走 activeUse`).toBeDefined();
+            expect(def!.activeUse?.timing).toContain('beforeDamageReceived');
+            expect(def!.activeUse?.consumeAmount).toBe(1);
+            expect(def!.activeUse?.effect.type).toBe('rollToNegate');
+            expect(def!.activeUse?.effect.rollSuccess?.range).toEqual([1, 2]);
+            expect(def!.passiveTrigger, `${heroId} Evasive 不应回退到共享 passiveTrigger`).toBeUndefined();
         }
     });
 

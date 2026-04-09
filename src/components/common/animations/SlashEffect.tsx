@@ -323,7 +323,10 @@ const SlashCanvas: React.FC<{
     const prevTimeRef = useRef(0);
     // onComplete/lines 通过 ref 持有，避免 useEffect 依赖不稳定导致动画重启
     const onCompleteRef = useRef(onComplete);
-    onCompleteRef.current = onComplete;
+
+    useEffect(() => {
+        onCompleteRef.current = onComplete;
+    }, [onComplete]);
 
     // Canvas 溢出倍数：Canvas 比父容器大 OVERFLOW 倍，确保弧形刀光和火花不被裁切
     const OVERFLOW = 2;
@@ -467,8 +470,15 @@ export const SlashEffect: React.FC<SlashEffectProps> = ({
             newLines.push({ angle: angle + angleOffset, delay: staggerDelay });
         }
 
-        setLines(newLines);
-        setActiveKey(counterRef.current);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (cancelled) return;
+            setLines(newLines);
+            setActiveKey(counterRef.current);
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [isActive, angle, count, duration]);
 
     const handleComplete = useCallback(() => {

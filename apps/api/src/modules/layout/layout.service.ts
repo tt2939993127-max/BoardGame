@@ -18,8 +18,20 @@ export type AbilitySlotLayoutItem = {
 
 export type DiceThroneAbilityLayoutVersion = 'v1' | 'v2';
 
-export type DiceThroneAbilityLayoutsPayload = {
-    layouts: Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>;
+export type PlayerBoardUiTuning = {
+    shellTranslateX: number;
+    playerBoardTranslateY: number;
+    magnifyButtonTop: number;
+    playerBoardBaseHeightVw: number;
+    tipBoardHeightVw: number;
+    centerBoardGapVw: number;
+};
+
+export type DiceThroneBoardShellTuningMap = Record<DiceThroneAbilityLayoutVersion, PlayerBoardUiTuning>;
+
+export type DiceThroneBoardLayoutPayload = {
+    slotLayouts: Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>;
+    uiTuning: DiceThroneBoardShellTuningMap;
 };
 
 @Injectable()
@@ -61,11 +73,11 @@ export class LayoutService {
         };
     }
 
-    async saveDiceThroneAbilityLayout(payload: DiceThroneAbilityLayoutsPayload): Promise<LayoutSaveResult> {
-        if (!payload || typeof payload !== 'object' || !payload.layouts) {
+    async saveDiceThroneAbilityLayout(payload: DiceThroneBoardLayoutPayload): Promise<LayoutSaveResult> {
+        if (!payload || typeof payload !== 'object' || !payload.slotLayouts || !payload.uiTuning) {
             throw new Error('layoutConfig.invalid');
         }
-        const content = this.buildDiceThroneAbilityLayoutFile(payload.layouts);
+        const content = this.buildDiceThroneAbilityLayoutFile(payload);
         await mkdir(dirname(this.abilityLayoutPath), { recursive: true });
         await writeFile(this.abilityLayoutPath, content, 'utf8');
         return {
@@ -75,10 +87,26 @@ export class LayoutService {
         };
     }
 
-    private buildDiceThroneAbilityLayoutFile(layouts: Record<DiceThroneAbilityLayoutVersion, AbilitySlotLayoutItem[]>) {
+    private buildDiceThroneAbilityLayoutFile(payload: DiceThroneBoardLayoutPayload) {
+        const { slotLayouts, uiTuning } = payload;
         const versions: DiceThroneAbilityLayoutVersion[] = ['v1', 'v2'];
-        const hasInvalidVersion = versions.some((version) => !Array.isArray(layouts[version]) || layouts[version].length === 0);
+        const hasInvalidVersion = versions.some((version) => !Array.isArray(slotLayouts[version]) || slotLayouts[version].length === 0);
         if (hasInvalidVersion) {
+            throw new Error('layoutConfig.invalid');
+        }
+        const hasInvalidUiTuning = versions.some((version) => {
+            const tuning = uiTuning[version];
+            if (!tuning) return true;
+            return ![
+                tuning.shellTranslateX,
+                tuning.playerBoardTranslateY,
+                tuning.magnifyButtonTop,
+                tuning.playerBoardBaseHeightVw,
+                tuning.tipBoardHeightVw,
+                tuning.centerBoardGapVw,
+            ].every((value) => typeof value === 'number' && Number.isFinite(value));
+        });
+        if (hasInvalidUiTuning) {
             throw new Error('layoutConfig.invalid');
         }
 
@@ -89,6 +117,15 @@ export class LayoutService {
             const h = this.formatSlotValue(slot.h);
             return `    { id: '${slot.id}', x: ${x}, y: ${y}, w: ${w}, h: ${h} },`;
         }).join('\n');
+
+        const renderUiTuning = (tuning: PlayerBoardUiTuning) => `{
+        shellTranslateX: ${this.formatSlotValue(tuning.shellTranslateX)},
+        playerBoardTranslateY: ${this.formatSlotValue(tuning.playerBoardTranslateY)},
+        magnifyButtonTop: ${this.formatSlotValue(tuning.magnifyButtonTop)},
+        playerBoardBaseHeightVw: ${this.formatSlotValue(tuning.playerBoardBaseHeightVw)},
+        tipBoardHeightVw: ${this.formatSlotValue(tuning.tipBoardHeightVw)},
+        centerBoardGapVw: ${this.formatSlotValue(tuning.centerBoardGapVw)},
+    }`;
 
         return `import type { CharacterId } from '../domain/types';
 
@@ -112,27 +149,37 @@ type PlayerBoardDimensions = {
     height: number;
 };
 
-type PlayerBoardUiTuning = {
+export type PlayerBoardUiTuning = {
     shellTranslateX: number;
     playerBoardTranslateY: number;
     magnifyButtonTop: number;
+    playerBoardBaseHeightVw: number;
+    tipBoardHeightVw: number;
+    centerBoardGapVw: number;
 };
 
 const V1_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
-${renderLayout(layouts.v1)}
+${renderLayout(slotLayouts.v1)}
 ];
 
 // v2 面板来自枪手 / 武士图片裁图坐标，顶部留白显著增加。
 const V2_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = [
-${renderLayout(layouts.v2)}
+${renderLayout(slotLayouts.v2)}
 ];
 
-export const DICETHRONE_PLAYER_BOARD_LAYOUTS: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]> = {
+export type DiceThroneBoardShellTuningMap = Record<DiceThronePlayerBoardLayoutVersion, PlayerBoardUiTuning>;
+
+export type DiceThroneBoardLayoutConfig = {
+    slotLayouts: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]>;
+    uiTuning: DiceThroneBoardShellTuningMap;
+};
+
+export const DICETHRONE_ABILITY_SLOT_LAYOUTS: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]> = {
     v1: V1_ABILITY_SLOT_LAYOUT,
     v2: V2_ABILITY_SLOT_LAYOUT,
 };
 
-export const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = DICETHRONE_PLAYER_BOARD_LAYOUTS.v1;
+export const DEFAULT_ABILITY_SLOT_LAYOUT: AbilitySlotLayoutItem[] = DICETHRONE_ABILITY_SLOT_LAYOUTS.v1;
 
 export const DICETHRONE_PLAYER_BOARD_DIMENSIONS: Record<string, PlayerBoardDimensions> = {
     barbarian: { width: 2048, height: 1675 },
@@ -156,17 +203,14 @@ export const DICETHRONE_PLAYER_BOARD_LAYOUT_VERSION_BY_CHARACTER: Record<string,
     samurai: 'v2',
 };
 
-const DICETHRONE_PLAYER_BOARD_UI_TUNING: Record<DiceThronePlayerBoardLayoutVersion, PlayerBoardUiTuning> = {
-    v1: {
-        shellTranslateX: 0,
-        playerBoardTranslateY: 0,
-        magnifyButtonTop: 0.48,
-    },
-    v2: {
-        shellTranslateX: 1.1,
-        playerBoardTranslateY: -1.45,
-        magnifyButtonTop: 1.85,
-    },
+export const DICETHRONE_PLAYER_BOARD_UI_TUNING: DiceThroneBoardShellTuningMap = {
+    v1: ${renderUiTuning(uiTuning.v1)},
+    v2: ${renderUiTuning(uiTuning.v2)},
+};
+
+export const DICETHRONE_BOARD_LAYOUT_CONFIG: DiceThroneBoardLayoutConfig = {
+    slotLayouts: DICETHRONE_ABILITY_SLOT_LAYOUTS,
+    uiTuning: DICETHRONE_PLAYER_BOARD_UI_TUNING,
 };
 
 export const getPlayerBoardLayoutVersion = (characterId?: string | null): DiceThronePlayerBoardLayoutVersion => (
@@ -174,7 +218,7 @@ export const getPlayerBoardLayoutVersion = (characterId?: string | null): DiceTh
 );
 
 export const getAbilitySlotLayoutByVersion = (version: DiceThronePlayerBoardLayoutVersion): AbilitySlotLayoutItem[] => (
-    DICETHRONE_PLAYER_BOARD_LAYOUTS[version]
+    DICETHRONE_ABILITY_SLOT_LAYOUTS[version]
 );
 
 export const getAbilitySlotLayoutForCharacter = (characterId?: CharacterId | string | null): AbilitySlotLayoutItem[] => (

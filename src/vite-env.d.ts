@@ -5,12 +5,19 @@ interface ImportMetaEnv {
     readonly VITE_AUTH_API_URL?: string;
     readonly VITE_GAME_SERVER_URL?: string;
     readonly VITE_ASSETS_BASE_URL?: string;
+    readonly VITE_AUDIO_ASSETS_BASE_URL?: string;
+    readonly VITE_ANDROID_APP_DOWNLOAD_URL?: string;
+    readonly VITE_ANDROID_NATIVE_UPDATE_ENABLED?: string;
+    readonly VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL?: string;
+    readonly VITE_ANDROID_NATIVE_UPDATE_CHANNEL?: string;
     readonly VITE_ANDROID_OTA_ENABLED?: string;
+    readonly VITE_ANDROID_OTA_ALLOW_DEBUG_APP?: string;
     readonly VITE_ANDROID_OTA_MANIFEST_URL?: string;
     readonly VITE_ANDROID_OTA_CHANNEL?: string;
     readonly VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS?: string;
     readonly VITE_AI_REPO_WORKBENCH_DEFAULT_PROJECT_PATH?: string;
     readonly VITE_AI_REPO_WORKBENCH_DEFAULT_BRANCH?: string;
+    readonly VITE_CAPACITOR_APP_ID?: string;
 }
 
 interface ImportMeta {

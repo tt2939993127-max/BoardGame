@@ -246,34 +246,8 @@ export function useEventStreamCursor(config: UseEventStreamCursorConfig): UseEve
 
         // ── 正常消费 ──
         const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
-        
-        // ── 调试日志：记录游标状态 ──
-        console.log('[useEventStreamCursor] 正常消费:', {
-            cursor: lastSeenIdRef.current,
-            totalEntries: curLen,
-            maxId: curLen > 0 ? entries[curLen - 1].id : -1,
-            newEntriesCount: newEntries.length,
-            allEventIds: entries.map(e => e.id),
-            newEventIds: newEntries.map(e => e.id),
-        });
-        
+
         if (newEntries.length > 0) {
-            // ── 生产诊断日志：仅在包含攻击/技能事件时输出 ──
-            // TODO: 问题定位后删除
-            const hasAttackOrAbility = newEntries.some(e => {
-                const t = (e.event as { type?: string }).type;
-                return t === 'UNIT_ATTACKED' || t === 'ABILITY_TRIGGERED';
-            });
-            if (hasAttackOrAbility) {
-                console.log('[CURSOR-DIAG:consume]', {
-                    prevCursor: lastSeenIdRef.current - (newEntries[newEntries.length - 1].id - lastSeenIdRef.current),
-                    newCursor: newEntries[newEntries.length - 1].id,
-                    newCount: newEntries.length,
-                    totalEntries: curLen,
-                    types: newEntries.map(e => (e.event as { type?: string }).type),
-                    ts: Date.now(),
-                });
-            }
             lastSeenIdRef.current = newEntries[newEntries.length - 1].id;
         }
         return { entries: newEntries, didReset: false, didOptimisticRollback: false };

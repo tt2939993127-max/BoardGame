@@ -13,8 +13,15 @@ import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
 
 const isDev = isDevEnv();
+const isFlowDebugEnabled = (): boolean => {
+    if (!isDev) return false;
+    if (typeof window !== 'undefined') {
+        return (window as typeof window & { __BG_FLOW_DEBUG__?: boolean }).__BG_FLOW_DEBUG__ === true;
+    }
+    return typeof process !== 'undefined' && process.env?.BG_FLOW_DEBUG === 'true';
+};
 const logDev = (...args: unknown[]) => {
-    if (isDev) {
+    if (isFlowDebugEnabled()) {
         console.log(...args);
     }
 };
@@ -350,7 +357,6 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             if (!result?.autoContinue) return;
 
             if (!playerIds.includes(result.playerId)) {
-                console.log('[FlowSystem][afterEvents] playerId not in playerIds, skipping autoContinue');
                 return;
             }
 
@@ -371,8 +377,6 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
                 playerId,
                 payload: undefined,
             };
-            console.log('[FlowSystem][afterEvents] executing autoContinue from=' + from + ' playerId=' + playerId);
-
             return executePhaseAdvance({
                 state,
                 command: syntheticCommand,

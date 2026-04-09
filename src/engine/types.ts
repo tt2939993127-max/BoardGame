@@ -64,6 +64,8 @@ export interface UndoState {
     snapshots: unknown[];
     /** 最大快照数 */
     maxSnapshots: number;
+    /** AI 控制的座位 ID；这些座位在撤回审批中自动排除，不参与投票 */
+    aiSeatIds?: PlayerId[];
     /** 撤销请求（多人握手） */
     pendingRequest?: {
         requesterId: PlayerId;
@@ -323,6 +325,21 @@ export interface TutorialManifest {
     stepValidator?: (state: MatchState<unknown>, step: TutorialStepSnapshot) => boolean;
 }
 
+export interface TutorialCollectionEntry {
+    title?: string;
+    titleKey?: string;
+    description?: string;
+    descriptionKey?: string;
+    manifest: TutorialManifest;
+}
+
+export interface TutorialCollection {
+    defaultTutorialId: string;
+    tutorials: Record<string, TutorialCollectionEntry>;
+}
+
+export type GameTutorialSource = TutorialManifest | TutorialCollection;
+
 export interface TutorialState {
     active: boolean;
     manifestId: string | null;
@@ -385,6 +402,18 @@ export interface SystemState {
     flowHalted?: boolean;
     /** 游戏结束结果（由管线在每次命令执行后自动检测并写入） */
     gameover?: GameOverResult;
+    /** SmashUp: scoreBases 结算会话（当前基地、剩余基地、延迟清场与重算快照的唯一权威） */
+    smashupScoring?: {
+        lockedBaseRefs: Array<{ slotIndex: number; baseDefId: string }>;
+        completedBaseRefs: Array<{ slotIndex: number; baseDefId: string }>;
+        currentBaseRef?: { slotIndex: number; baseDefId: string };
+        currentStep: string;
+        deferredPostScoringEvents?: Array<{ type: string; payload: unknown; timestamp: number }>;
+        afterScoringInitialPowers?: {
+            baseRef: { slotIndex: number; baseDefId: string };
+            powers: Record<string, number>;
+        };
+    };
     /** SmashUp: 记分阶段已记分的基地索引（防止 halt 后重复记分） */
     scoredBaseIndices?: number[];
     /** SmashUp: postProcessSystemEvents 去重标记（防止 MINION_PLAYED/ACTION_PLAYED 被处理两次） */

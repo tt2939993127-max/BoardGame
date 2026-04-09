@@ -21,7 +21,11 @@ import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
 import { SHADOW_THIEF_CARDS } from '../heroes/shadow_thief/cards';
 import { MOON_ELF_CARDS } from '../heroes/moon_elf/cards';
 import { PALADIN_CARDS } from '../heroes/paladin/cards';
+import { GUNSLINGER_CARDS } from '../heroes/gunslinger/cards';
+import { SAMURAI_CARDS } from '../heroes/samurai/cards';
 import { COMMON_CARDS } from '../domain/commonCards';
+import { DICETHRONE_CARD_ATLAS_IDS } from '../domain/ids';
+import { getBaseAbilityId } from '../ui/abilitySlotMapping';
 
 // i18n
 import zhCN from '../../../../public/locales/zh-CN/game-dicethrone.json';
@@ -38,6 +42,7 @@ function getAllUniqueCards(): AbilityCard[] {
     const all = [
         ...MONK_CARDS, ...BARBARIAN_CARDS, ...PYROMANCER_CARDS,
         ...SHADOW_THIEF_CARDS, ...MOON_ELF_CARDS, ...PALADIN_CARDS,
+        ...GUNSLINGER_CARDS, ...SAMURAI_CARDS,
         ...COMMON_CARDS,
     ];
     for (const card of all) {
@@ -135,13 +140,41 @@ describe('月精灵长弓文案一致性', () => {
     const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
     const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
 
-    it('长弓 II / III 应明确使用相同符号文案', () => {
-        expect(zhAbilities['longbow-2']?.description).toContain('相同符号');
-        expect(zhAbilities['longbow-2']?.description).not.toContain('相同数字');
-        expect(zhAbilities['longbow-3']?.description).toContain('相同符号');
-        expect(zhAbilities['longbow-3']?.description).not.toContain('相同数字');
-        expect(enAbilities['longbow-2']?.description).toContain('matching symbols');
-        expect(enAbilities['longbow-3']?.description).toContain('matching symbols');
+    it('长弓 II / III 应明确使用相同数字文案', () => {
+        expect(zhAbilities['longbow-2']?.description).toContain('相同数字');
+        expect(zhAbilities['longbow-2']?.description).not.toContain('相同符号');
+        expect(zhAbilities['longbow-3']?.description).toContain('相同数字');
+        expect(zhAbilities['longbow-3']?.description).not.toContain('相同符号');
+        expect(enAbilities['longbow-2']?.description).toContain('matching numbers');
+        expect(enAbilities['longbow-3']?.description).toContain('matching numbers');
+    });
+});
+
+describe('枪手 / 武士 token tooltip 文案完整性', () => {
+    const zhTokens = (zhCN as Record<string, unknown>).tokens as Record<string, { name?: string; description?: string[] }> ?? {};
+    const enTokens = (en as Record<string, unknown>).tokens as Record<string, { name?: string; description?: string[] }> ?? {};
+
+    it('loaded / bounty / honor / shame / samurai_retribution 必须在中英文 locale 中有 tooltip 文案', () => {
+        const tokenIds = ['loaded', 'bounty', 'honor', 'shame', 'samurai_retribution'];
+        const violations: string[] = [];
+
+        for (const tokenId of tokenIds) {
+            for (const [locale, tokensMap] of [['zh-CN', zhTokens], ['en', enTokens]] as const) {
+                const entry = tokensMap[tokenId];
+                if (!entry) {
+                    violations.push(`[${locale}/${tokenId}] 缺少 token locale 条目`);
+                    continue;
+                }
+                if (!entry.name) {
+                    violations.push(`[${locale}/${tokenId}] 缺少 token name`);
+                }
+                if (!Array.isArray(entry.description) || entry.description.length === 0) {
+                    violations.push(`[${locale}/${tokenId}] 缺少 token description`);
+                }
+            }
+        }
+
+        expect(violations).toEqual([]);
     });
 });
 
@@ -151,18 +184,17 @@ describe('武僧拳术 III 文案一致性', () => {
     const zhCards = (zhCN as Record<string, unknown>).cards as Record<string, { description?: string }> ?? {};
     const enCards = (en as Record<string, unknown>).cards as Record<string, { description?: string }> ?? {};
 
-    it('拳术 III 应明确使用 3/4/5 拳 与击倒文案', () => {
+    it('拳术 III 应明确使用 3/4/5 拳 与 4个相同数字击倒文案', () => {
         expect(zhAbilities['fist-technique-3']?.description).toContain('3/4/5拳');
-        expect(zhAbilities['fist-technique-3']?.description).toContain('4个及以上拳');
-        expect(zhAbilities['fist-technique-3']?.description).not.toContain('相同数字');
+        expect(zhAbilities['fist-technique-3']?.description).toContain('4个相同数字');
         expect(enAbilities['fist-technique-3']?.description).toContain('3/4/5 Fists');
         expect(enAbilities['fist-technique-3']?.description).toContain('Knockdown');
-        expect(enAbilities['fist-technique-3']?.description).not.toContain('four of a kind');
+        expect(enAbilities['fist-technique-3']?.description).toContain('4 matching numbers');
 
         expect(zhCards['card-thrust-punch-3']?.description).toContain('3/4/5拳');
-        expect(zhCards['card-thrust-punch-3']?.description).not.toContain('相同数字');
+        expect(zhCards['card-thrust-punch-3']?.description).toContain('4个相同数字');
         expect(enCards['card-thrust-punch-3']?.description).toContain('3/4/5 Fists');
-        expect(enCards['card-thrust-punch-3']?.description).toContain('Knockdown');
+        expect(enCards['card-thrust-punch-3']?.description).toContain('4 matching numbers');
         expect(enCards['card-thrust-punch-3']?.description).not.toContain('Stun');
     });
 });
@@ -171,20 +203,20 @@ describe('野蛮人符号计数文案一致性', () => {
     const zhAbilities = (zhCN as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
     const enAbilities = (en as Record<string, unknown>).abilities as Record<string, { description?: string }> ?? {};
 
-    it('百折不挠 II 与重击 II/III 应显式描述 Hearts / Swords 触发', () => {
+    it('百折不挠 II 与重击 II/III 应显式描述 Hearts / Swords 触发及相同数字追加效果', () => {
         expect(zhAbilities['steadfast-2']?.description).toContain('3/4/5心');
         expect(zhAbilities['steadfast-2']?.description).not.toContain('三连');
         expect(enAbilities['steadfast-2']?.description).toContain('3/4/5 Hearts');
         expect(enAbilities['steadfast-2']?.description).not.toContain('three of a kind');
 
-        expect(zhAbilities['slap-2']?.description).toContain('4/5剑');
-        expect(zhAbilities['slap-2']?.description).not.toContain('4个相同');
-        expect(zhAbilities['slap-3']?.description).toContain('4/5剑');
-        expect(zhAbilities['slap-3']?.description).not.toContain('4个相同');
+        expect(zhAbilities['slap-2']?.description).toContain('3/4/5剑');
+        expect(zhAbilities['slap-2']?.description).toContain('4个相同数字');
+        expect(zhAbilities['slap-3']?.description).toContain('3/4/5剑');
+        expect(zhAbilities['slap-3']?.description).toContain('4个相同数字');
         expect(enAbilities['slap-2']?.description).toContain('3/4/5 Swords');
-        expect(enAbilities['slap-2']?.description).not.toContain('of a kind');
+        expect(enAbilities['slap-2']?.description).toContain('4 matching numbers');
         expect(enAbilities['slap-3']?.description).toContain('3/4/5 Swords');
-        expect(enAbilities['slap-3']?.description).not.toContain('of a kind');
+        expect(enAbilities['slap-3']?.description).toContain('4 matching numbers');
     });
 });
 
@@ -229,6 +261,305 @@ describe('卡牌效果 target 合理性', () => {
                 }
             }
         }
+        expect(violations).toEqual([]);
+    });
+});
+
+describe('枪手 / 武士卡图接线一致性', () => {
+    it('枪手专属卡应只保留真实手牌对象；slot-22/23/24 不得再把下半区录成独立 card', () => {
+        const normalizedGunslingerRuntimeAtlasCards: Record<string, { runtimeIndex: number; sourceAtlasIndex?: number }> = {
+            'upgrade-revolver-2': { runtimeIndex: 18, sourceAtlasIndex: 18 },
+            'upgrade-bounty-hunter-2': { runtimeIndex: 19, sourceAtlasIndex: 19 },
+            'upgrade-showdown-2': { runtimeIndex: 20, sourceAtlasIndex: 20 },
+            'upgrade-showdown-3': { runtimeIndex: 21, sourceAtlasIndex: 21 },
+            'upgrade-fan-the-hammer-2': { runtimeIndex: 22, sourceAtlasIndex: 22 },
+            'upgrade-take-cover-2': { runtimeIndex: 23, sourceAtlasIndex: 23 },
+            'upgrade-deadeye-2': { runtimeIndex: 24, sourceAtlasIndex: 24 },
+            'upgrade-duel-2': { runtimeIndex: 25, sourceAtlasIndex: 25 },
+            'upgrade-quick-draw': { runtimeIndex: 26, sourceAtlasIndex: 26 },
+            'card-wanted': { runtimeIndex: 27, sourceAtlasIndex: 27 },
+            'card-spin-the-chamber': { runtimeIndex: 28, sourceAtlasIndex: 28 },
+            'card-high-noon': { runtimeIndex: 29, sourceAtlasIndex: 29 },
+            'card-wild-west': { runtimeIndex: 30, sourceAtlasIndex: 30 },
+            'card-eat-my-lead': { runtimeIndex: 31, sourceAtlasIndex: 31 },
+        };
+
+        for (const [cardId, { runtimeIndex, sourceAtlasIndex }] of Object.entries(normalizedGunslingerRuntimeAtlasCards)) {
+            const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER,
+                index: runtimeIndex,
+            });
+            if (typeof sourceAtlasIndex === 'number') {
+                expect(card?.sourceAtlasIndex).toBe(sourceAtlasIndex);
+            }
+        }
+
+        expect(GUNSLINGER_CARDS.some((card) => card.id === 'card-pistol-whip')).toBe(false);
+        expect(GUNSLINGER_CARDS.some((card) => card.id === 'card-mark-the-target')).toBe(false);
+        expect(GUNSLINGER_CARDS.some((card) => card.id === 'card-the-law')).toBe(false);
+
+        const gunslingerCommonAtlasIndex: Record<string, number> = {
+            'card-play-six': 17,
+            'card-just-this': 16,
+            'card-give-hand': 15,
+            'card-i-can-again': 14,
+            'card-me-too': 13,
+            'card-surprise': 12,
+            'card-worthy-of-me': 11,
+            'card-unexpected': 10,
+            'card-next-time': 9,
+            'card-boss-generous': 8,
+            'card-flick': 7,
+            'card-bye-bye': 6,
+            'card-double': 5,
+            'card-super-double': 4,
+            'card-get-away': 3,
+            'card-one-throw-fortune': 2,
+            'card-what-status': 1,
+            'card-transfer-status': 0,
+        };
+
+        for (const [cardId, index] of Object.entries(gunslingerCommonAtlasIndex)) {
+            const card = GUNSLINGER_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.GUNSLINGER,
+                index,
+            });
+        }
+    });
+
+    it('武士专属卡应直接使用 ability-cards atlas 索引，不能再走 hand atlas 或单卡图', () => {
+        const samuraiAtlasCards: Record<string, number> = {
+            'upgrade-katana-slice-2': 18,
+            'upgrade-katana-slice-3': 19,
+            'upgrade-wakizashi-2': 20,
+            'upgrade-wakizashi-3': 21,
+            'upgrade-solemnity-2': 22,
+            'upgrade-budo-2': 23,
+            'upgrade-masamune-2': 24,
+            'upgrade-slot-06-2': 25,
+            'upgrade-stand-tall-2': 26,
+            'card-samurai-honor': 27,
+            'card-you-should-be-ashamed': 28,
+            'card-no-retreat': 29,
+            'card-righteousness': 30,
+            'card-zanshin': 31,
+        };
+
+        for (const [cardId, index] of Object.entries(samuraiAtlasCards)) {
+            const card = SAMURAI_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.SAMURAI,
+                index,
+            });
+        }
+
+        const samuraiCommonAtlasIndex: Record<string, number> = {
+            'card-play-six': 17,
+            'card-just-this': 16,
+            'card-give-hand': 15,
+            'card-i-can-again': 14,
+            'card-me-too': 13,
+            'card-surprise': 12,
+            'card-worthy-of-me': 11,
+            'card-unexpected': 10,
+            'card-next-time': 9,
+            'card-boss-generous': 8,
+            'card-flick': 7,
+            'card-bye-bye': 6,
+            'card-double': 5,
+            'card-super-double': 4,
+            'card-get-away': 3,
+            'card-one-throw-fortune': 2,
+            'card-what-status': 1,
+            'card-transfer-status': 0,
+        };
+
+        for (const [cardId, index] of Object.entries(samuraiCommonAtlasIndex)) {
+            const card = SAMURAI_CARDS.find((item) => item.id === cardId);
+            expect(card?.previewRef).toEqual({
+                type: 'atlas',
+                atlasId: DICETHRONE_CARD_ATLAS_IDS.SAMURAI,
+                index,
+            });
+        }
+    });
+
+    it('所有英雄升级卡都必须命中基础技能，而不是技能变体或技能子集', () => {
+        const verifyUpgradeTarget = (cards: AbilityCard[], heroId: string) => {
+            const violations: string[] = [];
+
+            for (const card of cards) {
+                if (card.type !== 'upgrade' || !card.effects) continue;
+                const replaceAction = card.effects.find((effect) => effect.action?.type === 'replaceAbility')?.action;
+                if (replaceAction?.type !== 'replaceAbility') {
+                    violations.push(`[${heroId}/${card.id}] 缺少 replaceAbility`);
+                    continue;
+                }
+
+                const targetAbilityId = replaceAction.targetAbilityId;
+                const newAbilityId = replaceAction.newAbilityDef?.id;
+                if (!targetAbilityId || !newAbilityId) {
+                    violations.push(`[${heroId}/${card.id}] 缺少 targetAbilityId 或 newAbilityDef.id`);
+                    continue;
+                }
+
+                if (getBaseAbilityId(targetAbilityId) !== targetAbilityId) {
+                    violations.push(`[${heroId}/${card.id}] targetAbilityId=${targetAbilityId} 不是基础技能 ID`);
+                }
+                if (newAbilityId !== targetAbilityId) {
+                    violations.push(`[${heroId}/${card.id}] newAbilityDef.id=${newAbilityId} 与 targetAbilityId=${targetAbilityId} 不一致`);
+                }
+            }
+
+            expect(violations).toEqual([]);
+        };
+
+        verifyUpgradeTarget(MONK_CARDS, 'monk');
+        verifyUpgradeTarget(BARBARIAN_CARDS, 'barbarian');
+        verifyUpgradeTarget(PYROMANCER_CARDS, 'pyromancer');
+        verifyUpgradeTarget(SHADOW_THIEF_CARDS, 'shadow_thief');
+        verifyUpgradeTarget(MOON_ELF_CARDS, 'moon_elf');
+        verifyUpgradeTarget(PALADIN_CARDS, 'paladin');
+        verifyUpgradeTarget(GUNSLINGER_CARDS, 'gunslinger');
+        verifyUpgradeTarget(SAMURAI_CARDS, 'samurai');
+    });
+
+    it('所有英雄都必须区分 升级卡=替换技能 与 行动卡=直接结算效果', () => {
+        const heroCardsMap: Record<string, AbilityCard[]> = {
+            monk: MONK_CARDS,
+            barbarian: BARBARIAN_CARDS,
+            pyromancer: PYROMANCER_CARDS,
+            shadow_thief: SHADOW_THIEF_CARDS,
+            moon_elf: MOON_ELF_CARDS,
+            paladin: PALADIN_CARDS,
+            gunslinger: GUNSLINGER_CARDS,
+            samurai: SAMURAI_CARDS,
+        };
+
+        const directEffectBaselines = [
+            'monk/card-buddha-light',
+            'monk/card-palm-strike',
+            'shadow_thief/action-sneaky-sneaky',
+            'shadow_thief/action-card-trick',
+            'paladin/card-blessing-of-divinity',
+        ];
+        const upgradeBaselines = [
+            'monk/card-thrust-punch-2',
+            'barbarian/upgrade-slap-2',
+            'paladin/upgrade-holy-defense-2',
+        ];
+        const violations: string[] = [];
+
+        for (const [heroId, cards] of Object.entries(heroCardsMap)) {
+            for (const card of cards) {
+                const replaceEffects = card.effects?.filter((effect) => effect.action?.type === 'replaceAbility') ?? [];
+                const nonReplaceEffects = card.effects?.filter((effect) => effect.action?.type !== 'replaceAbility') ?? [];
+
+                if (card.type === 'upgrade') {
+                    if (replaceEffects.length === 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=upgrade 但没有 replaceAbility；老派系升级基线=${upgradeBaselines.join(', ')}`
+                        );
+                    }
+                    if (nonReplaceEffects.length > 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=upgrade 但混入了直接效果；老派系升级基线=${upgradeBaselines.join(', ')}`
+                        );
+                    }
+                }
+
+                if (card.type === 'action') {
+                    if (replaceEffects.length > 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=action 却写成 replaceAbility；老派系直接结算基线=${directEffectBaselines.join(', ')}`
+                        );
+                    }
+                    if (nonReplaceEffects.length === 0) {
+                        violations.push(
+                            `[${heroId}/${card.id}] type=action 但没有任何直接结算效果；老派系直接结算基线=${directEffectBaselines.join(', ')}`
+                        );
+                    }
+                }
+            }
+        }
+
+        expect(violations).toEqual([]);
+    });
+
+    it('枪手 / 武士每张升级卡都应逐张落在老派系升级合同上', () => {
+        const oldHeroBaselines = {
+            variantOffensive: ['monk/card-thrust-punch-2', 'barbarian/upgrade-slap-2', 'paladin/upgrade-righteous-combat-2'],
+            pairedLevelUpgrade: ['monk/card-meditation-2', 'moon_elf/upgrade-exploding-arrow-2', 'paladin/upgrade-holy-defense-2'],
+            defensiveUpgrade: ['monk/card-meditation-2', 'paladin/upgrade-holy-defense-2'],
+            passiveOrUtilityUpgrade: ['barbarian/upgrade-thick-skin-2', 'paladin/upgrade-tithes-2'],
+        } as const;
+
+        const newHeroExpectations = [
+            { heroId: 'gunslinger', cardId: 'upgrade-revolver-2', targetAbilityId: 'revolver', newAbilityId: 'revolver', level: 2, baseline: 'variantOffensive' },
+            { heroId: 'gunslinger', cardId: 'upgrade-bounty-hunter-2', targetAbilityId: 'bounty-hunter', newAbilityId: 'bounty-hunter', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-showdown-2', targetAbilityId: 'showdown', newAbilityId: 'showdown', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-showdown-3', targetAbilityId: 'showdown', newAbilityId: 'showdown', level: 3, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-fan-the-hammer-2', targetAbilityId: 'fan-the-hammer', newAbilityId: 'fan-the-hammer', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-take-cover-2', targetAbilityId: 'take-cover', newAbilityId: 'take-cover', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-deadeye-2', targetAbilityId: 'deadeye', newAbilityId: 'deadeye', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-duel-2', targetAbilityId: 'duel', newAbilityId: 'duel', level: 2, baseline: 'defensiveUpgrade' },
+            { heroId: 'gunslinger', cardId: 'upgrade-quick-draw', targetAbilityId: 'quick-draw', newAbilityId: 'quick-draw', level: 2, baseline: 'passiveOrUtilityUpgrade' },
+            { heroId: 'samurai', cardId: 'upgrade-katana-slice-2', targetAbilityId: 'katana-slice', newAbilityId: 'katana-slice', level: 2, baseline: 'variantOffensive' },
+            { heroId: 'samurai', cardId: 'upgrade-katana-slice-3', targetAbilityId: 'katana-slice', newAbilityId: 'katana-slice', level: 3, baseline: 'variantOffensive' },
+            { heroId: 'samurai', cardId: 'upgrade-wakizashi-2', targetAbilityId: 'wakizashi', newAbilityId: 'wakizashi', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'samurai', cardId: 'upgrade-wakizashi-3', targetAbilityId: 'wakizashi', newAbilityId: 'wakizashi', level: 3, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'samurai', cardId: 'upgrade-solemnity-2', targetAbilityId: 'solemnity', newAbilityId: 'solemnity', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'samurai', cardId: 'upgrade-budo-2', targetAbilityId: 'budo', newAbilityId: 'budo', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'samurai', cardId: 'upgrade-masamune-2', targetAbilityId: 'masamune', newAbilityId: 'masamune', level: 2, baseline: 'variantOffensive' },
+            { heroId: 'samurai', cardId: 'upgrade-slot-06-2', targetAbilityId: 'samurai-slot-06', newAbilityId: 'samurai-slot-06', level: 2, baseline: 'pairedLevelUpgrade' },
+            { heroId: 'samurai', cardId: 'upgrade-stand-tall-2', targetAbilityId: 'stand-tall', newAbilityId: 'stand-tall', level: 2, baseline: 'defensiveUpgrade' },
+        ] as const;
+
+        const heroCardsMap: Record<string, AbilityCard[]> = {
+            monk: MONK_CARDS,
+            barbarian: BARBARIAN_CARDS,
+            pyromancer: PYROMANCER_CARDS,
+            shadow_thief: SHADOW_THIEF_CARDS,
+            moon_elf: MOON_ELF_CARDS,
+            paladin: PALADIN_CARDS,
+            gunslinger: GUNSLINGER_CARDS,
+            samurai: SAMURAI_CARDS,
+        };
+
+        const violations: string[] = [];
+
+        for (const expectation of newHeroExpectations) {
+            const card = heroCardsMap[expectation.heroId]?.find((item) => item.id === expectation.cardId);
+            const replaceAction = card?.effects?.find((effect) => effect.action?.type === 'replaceAbility')?.action;
+            if (replaceAction?.type !== 'replaceAbility') {
+                violations.push(`[${expectation.heroId}/${expectation.cardId}] 缺少 replaceAbility；老派系参考=${oldHeroBaselines[expectation.baseline].join(', ')}`);
+                continue;
+            }
+
+            if (replaceAction.targetAbilityId !== expectation.targetAbilityId) {
+                violations.push(
+                    `[${expectation.heroId}/${expectation.cardId}] targetAbilityId=${replaceAction.targetAbilityId}，期望=${expectation.targetAbilityId}；老派系参考=${oldHeroBaselines[expectation.baseline].join(', ')}`
+                );
+            }
+
+            if (replaceAction.newAbilityDef.id !== expectation.newAbilityId) {
+                violations.push(
+                    `[${expectation.heroId}/${expectation.cardId}] newAbilityDef.id=${replaceAction.newAbilityDef.id}，期望=${expectation.newAbilityId}；老派系参考=${oldHeroBaselines[expectation.baseline].join(', ')}`
+                );
+            }
+
+            if (replaceAction.newAbilityLevel !== expectation.level) {
+                violations.push(
+                    `[${expectation.heroId}/${expectation.cardId}] newAbilityLevel=${replaceAction.newAbilityLevel}，期望=${expectation.level}；老派系参考=${oldHeroBaselines[expectation.baseline].join(', ')}`
+                );
+            }
+        }
+
         expect(violations).toEqual([]);
     });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useModalStack, type ModalEntry } from '../../contexts/ModalStackContext';
 
@@ -34,6 +34,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
 
     // 当前管理的弹窗 ID 与对应的参数值
     const modalIdRef = useRef<string | null>(null);
+    const [managedModalId, setManagedModalId] = useState<string | null>(null);
     const boundValueRef = useRef<string | null>(null);
     // 记录正在关闭的参数值，避免 URL 还未清理时被误判为需要重新打开
     const closingValueRef = useRef<string | null>(null);
@@ -41,10 +42,19 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
     const isNavigatingRef = useRef(false);
 
     const paramValue = searchParams.get(paramKey);
+    const setModalId = useCallback((nextModalId: string | null) => {
+        modalIdRef.current = nextModalId;
+        setManagedModalId(nextModalId);
+    }, []);
+    const syncManagedModalId = useCallback((nextModalId: string | null) => {
+        queueMicrotask(() => {
+            setManagedModalId(nextModalId);
+        });
+    }, []);
 
     // 检查弹窗是否真正存在于栈中
-    const isModalInStack = modalIdRef.current
-        ? stack.some((entry) => entry.id === modalIdRef.current)
+    const isModalInStack = managedModalId
+        ? stack.some((entry) => entry.id === managedModalId)
         : false;
     const lastReopenNonceRef = useRef(reopenNonce);
 
@@ -52,13 +62,13 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
     const handleUserClose = useCallback(() => {
         // 路由导航触发的关闭不清理 URL（由路由自然处理）
         if (isNavigatingRef.current) {
-            modalIdRef.current = null;
+            setModalId(null);
             boundValueRef.current = null;
             return;
         }
 
         closingValueRef.current = boundValueRef.current;
-        modalIdRef.current = null;
+        setModalId(null);
         boundValueRef.current = null;
 
         // 只清理当前 key，保留其他参数
@@ -67,7 +77,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
             next.delete(paramKey);
             return next;
         }, { replace: true });
-    }, [paramKey, setSearchParams]);
+    }, [paramKey, setModalId, setSearchParams]);
 
     // 同步 URL ↔ Modal
     useEffect(() => {
@@ -76,6 +86,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
             if (modalIdRef.current) {
                 closeModal(modalIdRef.current);
                 modalIdRef.current = null;
+                syncManagedModalId(null);
                 boundValueRef.current = null;
             }
             closingValueRef.current = null;
@@ -98,6 +109,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
         if (modalIdRef.current) {
             closeModal(modalIdRef.current);
             modalIdRef.current = null;
+            syncManagedModalId(null);
         }
 
         const config = getModalConfig(paramValue);
@@ -114,7 +126,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
 
         closingValueRef.current = null;
         boundValueRef.current = paramValue;
-        modalIdRef.current = openModal({
+        const nextModalId = openModal({
             closeOnBackdrop: config.closeOnBackdrop ?? true,
             closeOnEsc: config.closeOnEsc ?? true,
             lockScroll: config.lockScroll ?? true,
@@ -122,6 +134,8 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
             onClose: handleUserClose,
             render: config.render,
         });
+        modalIdRef.current = nextModalId;
+        syncManagedModalId(nextModalId);
     }, [
         closeModal,
         getModalConfig,
@@ -131,6 +145,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
         paramKey,
         paramValue,
         setSearchParams,
+        syncManagedModalId,
     ]);
 
     useEffect(() => {
@@ -156,9 +171,10 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
         if (modalIdRef.current) {
             closeModal(modalIdRef.current);
             modalIdRef.current = null;
+            syncManagedModalId(null);
         }
 
-        modalIdRef.current = openModal({
+        const nextModalId = openModal({
             closeOnBackdrop: config.closeOnBackdrop ?? true,
             closeOnEsc: config.closeOnEsc ?? true,
             lockScroll: config.lockScroll ?? true,
@@ -166,6 +182,8 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
             onClose: handleUserClose,
             render: config.render,
         });
+        modalIdRef.current = nextModalId;
+        syncManagedModalId(nextModalId);
     }, [
         closeModal,
         getModalConfig,
@@ -173,6 +191,7 @@ export function useUrlModal({ paramKey, reopenNonce, getModalConfig }: UseUrlMod
         openModal,
         paramValue,
         reopenNonce,
+        syncManagedModalId,
     ]);
 
     // 提供给调用方的导航辅助函数（稳定引用，可安全用于 render 闭包）

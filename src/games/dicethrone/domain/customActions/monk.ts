@@ -12,6 +12,7 @@ import type {
     BonusDieRolledEvent,
     TokenLimitChangedEvent,
     RollLimitChangedEvent,
+    StatusAppliedEvent,
 } from '../types';
 import { registerCustomActionHandler, createBonusDiceWithReroll, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
@@ -282,6 +283,28 @@ function handleGrantExtraRoll({ targetId, sourceAbilityId, state, timestamp }: C
     } as RollLimitChangedEvent];
 }
 
+function handleFistTechnique3Matching4Knockdown({ ctx, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    const targetId = ctx.defenderId;
+    if (!targetId) return [];
+
+    const valueCounts = state.pendingAttack?.attackDiceValueCounts;
+    const hasFourOfAKind = valueCounts && Object.values(valueCounts).some((count) => count >= 4);
+    if (!hasFourOfAKind) return [];
+
+    const target = state.players[targetId];
+    const currentStacks = target?.statusEffects[STATUS_IDS.KNOCKDOWN] ?? 0;
+    const def = state.tokenDefinitions.find((entry) => entry.id === STATUS_IDS.KNOCKDOWN);
+    const maxStacks = def?.stackLimit || 99;
+    const newTotal = Math.min(currentStacks + 1, maxStacks);
+
+    return [{
+        type: 'STATUS_APPLIED',
+        payload: { targetId, statusId: STATUS_IDS.KNOCKDOWN, stacks: 1, newTotal, sourceAbilityId },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    } as StatusAppliedEvent];
+}
+
 // ============================================================================
 // 注册所有僧侣 Custom Action 处理器
 // ============================================================================
@@ -327,7 +350,9 @@ export function registerMonkCustomActions(): void {
     registerCustomActionHandler('thunder-strike-2-roll-damage', handleThunderStrike2RollDamage, {
         categories: ['dice', 'damage'],
     });
-
+    registerCustomActionHandler('monk-fist-technique-3-matching-4-knockdown', handleFistTechnique3Matching4Knockdown, {
+        categories: ['status'],
+    });
     // --- 资源相关 ---
     registerCustomActionHandler('grant-cp-2', handleGrantCp2, {
         categories: ['resource'],

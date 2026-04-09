@@ -13,6 +13,8 @@ import { AuthModule } from '../src/modules/auth/auth.module';
 import { AuthService } from '../src/modules/auth/auth.service';
 import { AdminAuditLog, type AdminAuditLogDocument } from '../src/modules/auth/schemas/admin-audit-log.schema';
 import { AdminModule } from '../src/modules/admin/admin.module';
+import { createAdminTestLatencyMiddleware } from '../src/modules/admin/admin-test-latency.middleware';
+import { AdminTestLatencyService } from '../src/modules/admin/admin-test-latency.service';
 import { User, type UserDocument } from '../src/modules/auth/schemas/user.schema';
 import { Friend, type FriendDocument } from '../src/modules/friend/schemas/friend.schema';
 import { Message, type MessageDocument } from '../src/modules/message/schemas/message.schema';
@@ -140,6 +142,7 @@ describe('Admin Module (e2e)', () => {
     let ugcAssetModel: Model<UgcAssetDocument>;
     let cacheManager: Cache;
     let authService: AuthService;
+    let adminTestLatencyService: AdminTestLatencyService;
 
     beforeAll(async () => {
         const externalMongoUri = process.env.MONGO_URI;
@@ -170,6 +173,8 @@ describe('Admin Module (e2e)', () => {
         ugcPackageModel = moduleRef.get<Model<UgcPackageDocument>>(getModelToken(UgcPackage.name));
         ugcAssetModel = moduleRef.get<Model<UgcAssetDocument>>(getModelToken(UgcAsset.name));
         cacheManager = moduleRef.get<Cache>(CACHE_MANAGER);
+        adminTestLatencyService = moduleRef.get<AdminTestLatencyService>(AdminTestLatencyService);
+        app.getHttpAdapter().getInstance().use('/admin', createAdminTestLatencyMiddleware(adminTestLatencyService));
         app.useGlobalPipes(
             new ValidationPipe({
                 whitelist: true,
@@ -200,6 +205,7 @@ describe('Admin Module (e2e)', () => {
                 await Promise.all(keys.map(key => cacheManager.del(key)));
             }
         }
+        adminTestLatencyService.reset();
     });
 
     afterAll(async () => {
@@ -314,6 +320,47 @@ describe('Admin Module (e2e)', () => {
             .get('/admin/stats')
             .set('Authorization', `Bearer ${userToken}`)
             .expect(403);
+    });
+
+    it('允许在 test 环境配置后台测试延迟，并实际作用于其他 admin 接口', async () => {
+        const { adminToken } = await seedUsers();
+
+        const updateRes = await request(app.getHttpServer())
+            .patch('/admin/test-latency')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ enabled: true, delayMs: 80 })
+            .expect(200);
+
+        expect(updateRes.body.available).toBe(true);
+        expect(updateRes.body.enabled).toBe(true);
+        expect(updateRes.body.delayMs).toBe(80);
+        expect(updateRes.body.scope).toBe('admin-api');
+
+        const startedAt = Date.now();
+        await request(app.getHttpServer())
+            .get('/admin/stats')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+        const elapsed = Date.now() - startedAt;
+
+        expect(elapsed).toBeGreaterThanOrEqual(60);
+
+        const stateRes = await request(app.getHttpServer())
+            .get('/admin/test-latency')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .expect(200);
+
+        expect(stateRes.body.enabled).toBe(true);
+        expect(stateRes.body.delayMs).toBe(80);
+
+        const disableRes = await request(app.getHttpServer())
+            .patch('/admin/test-latency')
+            .set('Authorization', `Bearer ${adminToken}`)
+            .send({ enabled: false, delayMs: 0 })
+            .expect(200);
+
+        expect(disableRes.body.enabled).toBe(false);
+        expect(disableRes.body.delayMs).toBe(0);
     });
 
     it('管理员统计/用户/对局查询', async () => {

@@ -1,10 +1,11 @@
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
-import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, getCurrentTrackedCardTopSnapshot, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import {
     addTempPower,
+    buildActionMinionTargetOptions,
     buildAbilityFeedback,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
@@ -17,7 +18,7 @@ import {
     moveTitan,
 } from '../domain/abilityHelpers';
 import { registerBaseAbility, registerExtended } from '../domain/baseAbilities';
-import { registerTrigger } from '../domain/ongoingEffects';
+import { isMinionProtected, registerTrigger } from '../domain/ongoingEffects';
 import type { TriggerContext } from '../domain/ongoingEffects';
 import { canStartDuel, isMinionInActiveDuel, startDuel } from '../domain/duel';
 import { validateActionPlaySemantics, validateDeckTopRegularMinionPlaySemantics } from '../domain/playLegality';
@@ -60,11 +61,55 @@ type StagecoachDestinationContinuation = {
 };
 type GoldChoice = { cardUid: string; defId: string };
 type GoldModeChoice = { mode: 'hand' | 'play' };
-type GoldOrderChoice = { topCardUid: string };
+type GoldOrderChoice = { topCardUid: string; cardUid?: string; defId?: string };
 type GoldPromptContext = {
     chosenCard: CardInstance;
     remainingCards: CardInstance[];
 };
+
+function getCurrentDeckTopSnapshotCards<T extends { uid: string; defId: string }>(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    trackedCards: T[],
+): T[] {
+    return getCurrentTrackedCardTopSnapshot(core.players[playerId]?.deck ?? [], trackedCards);
+}
+
+function buildGoldTopCardOptions(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    topCards: CardInstance[],
+) {
+    return getCurrentDeckTopSnapshotCards(core, playerId, topCards).map((card, index) => ({
+        id: `top-${index}`,
+        label: getCardDef(card.defId)?.name ?? card.defId,
+        value: { cardUid: card.uid, defId: card.defId },
+        _source: 'deck' as const,
+        displayMode: 'card' as const,
+    }));
+}
+
+function buildGoldOrderOptions(
+    core: SmashUpCore,
+    playerId: PlayerId,
+    context: GoldPromptContext,
+) {
+    const snapshot = getCurrentDeckTopSnapshotCards(core, playerId, [context.chosenCard, ...context.remainingCards]);
+    const currentChosen = snapshot.find((card) => card.uid === context.chosenCard.uid);
+    if (!currentChosen) {
+        return [];
+    }
+    const remainingUidSet = new Set(context.remainingCards.map((card) => card.uid));
+    return snapshot
+        .filter((card) => remainingUidSet.has(card.uid))
+        .map((card, index) => ({
+            id: `gold-order-${index}`,
+            label: getCardDef(card.defId)?.name ?? card.defId,
+            value: { topCardUid: card.uid, cardUid: card.uid, defId: card.defId },
+            _source: 'static' as const,
+            displayMode: 'card' as const,
+        }));
+}
 
 function isDynamiteSurpriseDefId(defId: string): boolean {
     return defId === 'cowboys_dynamite_surprise' || defId === 'cowboys_dynamite_surprise_pod';
@@ -142,7 +187,7 @@ function cowboysQuickDrawOnPlay(ctx: AbilityContext): AbilityResult {
         `cowboys_quick_draw_${ctx.now}`,
         ctx.playerId,
         '拔枪术：选择你的一个随从获得力量加成',
-        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        buildMinionTargetOptions(ownMinions, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
         { sourceId: 'cowboys_quick_draw', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -150,7 +195,7 @@ function cowboysQuickDrawOnPlay(ctx: AbilityContext): AbilityResult {
 
 function cowboysHighNoonOnPlay(ctx: AbilityContext): AbilityResult {
     if (!canStartDuel(ctx.state) || ctx.duel) return { events: [] };
-    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId);
+    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId, { respectActionProtection: true });
     if (options.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
@@ -158,7 +203,7 @@ function cowboysHighNoonOnPlay(ctx: AbilityContext): AbilityResult {
         `cowboys_high_noon_friendly_${ctx.now}`,
         ctx.playerId,
         '正午决斗：选择你的一个随从开始决斗',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
         { sourceId: 'cowboys_high_noon_friendly', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -166,7 +211,7 @@ function cowboysHighNoonOnPlay(ctx: AbilityContext): AbilityResult {
 
 function cowboysRunEmOffOnPlay(ctx: AbilityContext): AbilityResult {
     if (!canStartDuel(ctx.state) || ctx.duel) return { events: [] };
-    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId);
+    const options = collectFriendlyDuelStarters(ctx.state, ctx.playerId, { respectActionProtection: true });
     if (options.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
@@ -174,7 +219,7 @@ function cowboysRunEmOffOnPlay(ctx: AbilityContext): AbilityResult {
         `cowboys_run_em_off_friendly_${ctx.now}`,
         ctx.playerId,
         '赶走他们：选择你的一个随从开始决斗',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }) as any[],
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }) as any[],
         { sourceId: 'cowboys_run_em_off_friendly', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -196,10 +241,14 @@ function cowboysGoldInThemTharHillsOnPlay(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '那山里有金子：从牌库顶三张牌中选择一张抓到手里',
         options,
-        { sourceId: 'cowboys_gold_in_them_thar_hills', targetType: 'generic' },
+        { sourceId: 'cowboys_gold_in_them_thar_hills', targetType: 'generic', responseValidationMode: 'live' },
     );
     (interaction.data as any).continuationContext = {
-        topCardUids: topCards.map(card => card.uid),
+        topCards,
+    };
+    (interaction.data as any).optionsGenerator = (nextState: MatchState<SmashUpCore>, data: any) => {
+        const topSnapshot = (data?.continuationContext as { topCards?: CardInstance[] } | undefined)?.topCards ?? [];
+        return buildGoldTopCardOptions(nextState.core, ctx.playerId, topSnapshot);
     };
     return {
         events: [inspectDeck(ctx.playerId, ctx.playerId, topCards.length, 'cowboys_gold_in_them_thar_hills', ctx.now)],
@@ -265,11 +314,19 @@ function cowboysDynamiteSurpriseSpecial(ctx: AbilityContext): AbilityResult {
     if (targets.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
+    const targetOptions = buildActionMinionTargetOptions(targets, {
+        state: ctx.state,
+        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        effectType: 'destroy',
+    });
+    if (targetOptions.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
     const interaction = createSimpleChoice(
         `cowboys_dynamite_surprise_${ctx.now}`,
         ctx.playerId,
         '炸药惊喜：选择一个力量4或以下的随从消灭',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }) as any[],
+        targetOptions as any[],
         { sourceId: 'cowboys_dynamite_surprise', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -305,7 +362,7 @@ function cowboysDynamiteSurpriseSeenTrigger(ctx: TriggerContext): AbilityResult 
         `cowboys_dynamite_surprise_seen_${ctx.now}_${exposedCard.uid}`,
         ownerPlayerId,
         '炸药惊喜：你可以打出这张牌，消灭其中一个力量 4 或以下的随从',
-        [createSkipOption('跳过（不打出）'), ...buildMinionTargetOptions(targets, {
+        [createSkipOption('跳过（不打出）'), ...buildActionMinionTargetOptions(targets, {
             state: ctx.state,
             sourcePlayerId: ownerPlayerId,
             effectType: 'destroy',
@@ -437,7 +494,7 @@ const handleQuickDraw = (state: MatchState<SmashUpCore>, _playerId: string, valu
 const handleHighNoonFriendly = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, _data: any, _random: RandomFn, now: number) => {
     const selected = value as FriendlyChoice | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
-    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId);
+    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId, { respectActionProtection: true });
     if (options.length === 0) return { state, events: [] };
     const interaction = createSimpleChoice(
         `cowboys_high_noon_enemy_${now}`,
@@ -474,7 +531,7 @@ const handleHighNoonEnemy = (state: MatchState<SmashUpCore>, _playerId: string, 
 const handleRunEmOffFriendly = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, _data: any, _random: RandomFn, now: number) => {
     const selected = value as FriendlyChoice | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
-    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId);
+    const options = buildEnemyMinionOptions(state.core, selected.baseIndex, playerId, { respectActionProtection: true });
     if (options.length === 0) return { state, events: [] };
     const interaction = createSimpleChoice(
         `cowboys_run_em_off_enemy_${now}`,
@@ -509,41 +566,43 @@ const handleRunEmOffEnemy = (state: MatchState<SmashUpCore>, _playerId: string, 
 
 const handleGoldInThemTharHills = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
     const selected = value as { cardUid?: string; defId?: string } | undefined;
-    const topCardUids = (data?.continuationContext as any)?.topCardUids as string[] | undefined;
-    const player = state.core.players[playerId];
-    if (!selected?.cardUid || !topCardUids || !player) return { state, events: [] };
-    const topCards = player.deck.slice(0, topCardUids.length);
+    const topCards = ((data?.continuationContext as any)?.topCards ?? []) as CardInstance[];
+    if (!selected?.cardUid || topCards.length === 0) return { state, events: [] };
+    const currentTopCards = getCurrentDeckTopSnapshotCards(state.core, playerId as PlayerId, topCards);
     const chosen = topCards.find(card => card.uid === selected.cardUid);
-    if (!chosen) return { state, events: [] };
-    const remaining = topCards.filter(card => card.uid !== chosen.uid);
+    const currentChosen = currentTopCards.find(card => card.uid === selected.cardUid);
+    if (!chosen || !currentChosen) return { state, events: [] };
+    const remaining = currentTopCards.filter(card => card.uid !== currentChosen.uid);
     if (remaining.length > 1) {
         const interaction = createSimpleChoice(
             `cowboys_gold_in_them_thar_hills_order_${now}`,
             playerId,
             '那山里有金子：选择其余牌放回牌库顶的顺序',
-            remaining.map((card, index) => ({
-                id: `gold-order-${index}`,
-                label: getCardDef(card.defId)?.name ?? card.defId,
-                value: { topCardUid: card.uid },
-                _source: 'static' as const,
-                displayMode: 'card' as const,
-            })),
-            { sourceId: 'cowboys_gold_in_them_thar_hills_order', targetType: 'generic' },
+            buildGoldOrderOptions(state.core, playerId as PlayerId, { chosenCard: currentChosen, remainingCards: remaining }),
+            { sourceId: 'cowboys_gold_in_them_thar_hills_order', targetType: 'generic', responseValidationMode: 'live' },
         );
-        (interaction.data as any).continuationContext = { chosenCard: chosen, remainingCards: remaining } satisfies GoldPromptContext;
+        (interaction.data as any).continuationContext = { chosenCard: currentChosen, remainingCards: remaining } satisfies GoldPromptContext;
+        (interaction.data as any).optionsGenerator = (nextState: MatchState<SmashUpCore>, interactionData: any) => {
+            const ctx = (interactionData?.continuationContext ?? {}) as GoldPromptContext;
+            return buildGoldOrderOptions(nextState.core, playerId as PlayerId, ctx);
+        };
         return { state: queueInteraction(state, interaction), events: [] };
     }
-    return queueGoldModePrompt(state, playerId, chosen, remaining, now);
+    return queueGoldModePrompt(state, playerId as PlayerId, currentChosen, remaining, now);
 };
 
 const handleGoldInThemTharHillsOrder = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, _random: RandomFn, now: number) => {
     const selected = value as GoldOrderChoice | undefined;
     const ctx = data?.continuationContext as GoldPromptContext | undefined;
     if (!selected?.topCardUid || !ctx) return { state, events: [] };
-    const topCard = ctx.remainingCards.find(card => card.uid === selected.topCardUid);
+    const snapshot = getCurrentDeckTopSnapshotCards(state.core, playerId as PlayerId, [ctx.chosenCard, ...ctx.remainingCards]);
+    const currentChosen = snapshot.find(card => card.uid === ctx.chosenCard.uid);
+    if (!currentChosen) return { state, events: [] };
+    const currentRemaining = snapshot.filter(card => card.uid !== ctx.chosenCard.uid);
+    const topCard = currentRemaining.find(card => card.uid === selected.topCardUid);
     if (!topCard) return { state, events: [] };
-    const orderedRemaining = [topCard, ...ctx.remainingCards.filter(card => card.uid !== selected.topCardUid)];
-    return queueGoldModePrompt(state, playerId, ctx.chosenCard, orderedRemaining, now);
+    const orderedRemaining = [topCard, ...currentRemaining.filter(card => card.uid !== selected.topCardUid)];
+    return queueGoldModePrompt(state, playerId as PlayerId, currentChosen, orderedRemaining, now);
 };
 
 const handleGoldInThemTharHillsMode = (state: MatchState<SmashUpCore>, playerId: string, value: unknown, data: any, random: RandomFn, now: number) => {
@@ -801,8 +860,14 @@ function collectOwnMinions(state: SmashUpCore, playerId: PlayerId): Array<{ uid:
     return results;
 }
 
-function collectFriendlyDuelStarters(state: SmashUpCore, playerId: PlayerId): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
-    return collectOwnMinions(state, playerId).filter(({ baseIndex }) => buildEnemyMinionOptions(state, baseIndex, playerId).length > 0);
+function collectFriendlyDuelStarters(
+    state: SmashUpCore,
+    playerId: PlayerId,
+    options?: { respectActionProtection?: boolean },
+): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
+    return collectOwnMinions(state, playerId).filter(({ baseIndex }) => (
+        buildEnemyMinionOptions(state, baseIndex, playerId, options).length > 0
+    ));
 }
 
 function collectStagecoachSourceBases(state: SmashUpCore, playerId: PlayerId): Array<{ baseIndex: number; label: string }> {
@@ -928,12 +993,19 @@ function collectDynamiteSeenTargets(
     return results;
 }
 
-function buildEnemyMinionOptions(state: SmashUpCore, baseIndex: number, sourcePlayerId: PlayerId): any[] {
+function buildEnemyMinionOptions(
+    state: SmashUpCore,
+    baseIndex: number,
+    sourcePlayerId: PlayerId,
+    options?: { respectActionProtection?: boolean },
+): any[] {
     const base = state.bases[baseIndex];
     if (!base) return [];
+    const respectActionProtection = options?.respectActionProtection ?? false;
     return buildMinionTargetOptions(
         base.minions
             .filter(minion => minion.controller !== sourcePlayerId)
+            .filter(minion => !respectActionProtection || !isMinionProtected(state, minion, baseIndex, sourcePlayerId, 'action'))
             .map(minion => ({
                 uid: minion.uid,
                 defId: minion.defId,
@@ -1025,6 +1097,7 @@ function queueGoldPlayTargetPrompt(
     if (actionLikeNeedsPlayMinion(actionDef)) {
         const minionOptions = state.core.bases.flatMap((base, baseIndex) => (
             base.minions
+                .filter(minion => !isMinionProtected(state.core, minion, baseIndex, playerId, 'action'))
                 .filter(minion => validateActionPlaySemantics(state.core, playerId, {
                     defId: chosenCard.defId,
                     targetBaseIndex: baseIndex,
@@ -1044,7 +1117,7 @@ function queueGoldPlayTargetPrompt(
             `cowboys_gold_in_them_thar_hills_action_minion_${now}`,
             playerId,
             '那山里有金子：选择这张额外行动的目标随从',
-            buildMinionTargetOptions(minionOptions, { state: state.core, sourcePlayerId: playerId }) as any[],
+            buildMinionTargetOptions(minionOptions, { state: state.core, sourcePlayerId: playerId, sourceDefId: chosenCard.defId }) as any[],
             { sourceId: 'cowboys_gold_in_them_thar_hills_action_minion', targetType: 'minion' },
         );
         (interaction.data as any).continuationContext = { chosenCard, remainingCards } satisfies GoldPromptContext;
@@ -1189,8 +1262,8 @@ function playGoldCard(
         }
         return event;
     });
-    const currentInteractionId = state.sys.interaction?.current?.interactionId;
-    const nextInteractionId = simulatedState.sys.interaction?.current?.interactionId;
+    const currentInteractionId = state.sys.interaction?.current?.id;
+    const nextInteractionId = simulatedState.sys.interaction?.current?.id;
     const hasNewInteraction = (
         !!nextInteractionId && nextInteractionId !== currentInteractionId
     ) || ((simulatedState.sys.interaction?.queue?.length ?? 0) > (state.sys.interaction?.queue?.length ?? 0));

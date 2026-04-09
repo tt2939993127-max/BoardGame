@@ -19,8 +19,8 @@ import {
 import { createGameEngine } from '../../engine/adapter';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
 import type { ActionCardDef, FusionCardDef } from './domain/types';
-import { getCardDef, getFusionDef, getMinionDef } from './data/cards';
-import { isActionLikeRespondableInWindow, isCardActionLike, isCardMinionLike } from './domain/utils';
+import { getCardDef } from './data/cards';
+import { actionLikeNeedsResponseWindowBase, getMeFirstPlayableBaseIndicesForCard, isActionLikeRespondableInWindow, isCardActionLike, isCardMinionLike } from './domain/utils';
 import { smashUpFlowHooks } from './domain/index';
 import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
@@ -29,7 +29,7 @@ import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatSmashUpActionEntry } from './ac
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getSmashUpCardPreviewRef } from './ui/cardPreviewHelper';
 import { registerCriticalImageResolver } from '../../core';
-import { smashUpCriticalImageResolver } from './criticalImageResolver';
+import { smashUpRuntimeCriticalImageResolver } from './runtimeCriticalImageResolver';
 import { registerGameAiRuntime } from '../../engine/ai';
 import { smashUpAiRuntime } from './ai';
 import './ui/SmashUpCardRenderer'; // 注册卡牌渲染器
@@ -80,48 +80,32 @@ const systems: EngineSystem<SmashUpCore>[] = [
                 const def = getCardDef(c.defId) as ActionCardDef | FusionCardDef | undefined;
                 if (!def) return false;
                 if (!isActionLikeRespondableInWindow(def, windowType)) return false;
-                
-                // 特殊检查：便衣忍者需要手牌中有随从才能使用
-                if (c.defId === 'ninja_hidden_ninja') {
-                    return player.hand.some(isCardMinionLike);
+
+                if (windowType === 'meFirst'
+                    && actionLikeNeedsResponseWindowBase(def)
+                    && getMeFirstPlayableBaseIndicesForCard(core, c.defId).length === 0) {
+                    return false;
+                }
+
+                // 便衣忍者还需要手牌里存在可打出的随从。
+                if (c.defId === 'ninja_hidden_ninja' && !player.hand.some(isCardMinionLike)) {
+                    return false;
                 }
                 
                 // 其他响应牌默认可用
-                console.log('[hasRespondableContent] Found respondable action:', {
-                    playerId,
-                    windowType,
-                    cardDefId: c.defId,
-                });
                 return true;
             });
             
             // 检查 beforeScoringPlayable 随从（如影舞者）- 只在 meFirst 窗口可用
             const hasBeforeScoringMinion = windowType === 'meFirst' && player.hand.some(c => {
                 if (!isCardMinionLike(c)) return false;
-                const def = getMinionDef(c.defId);
-                const fusionDef = getFusionDef(c.defId);
-                if (def?.beforeScoringPlayable === true || fusionDef?.minionBeforeScoringPlayable === true) {
-                    console.log('[hasRespondableContent] Found beforeScoringPlayable minion:', {
-                        playerId,
-                        windowType,
-                        minionDefId: c.defId,
-                    });
+                if (getMeFirstPlayableBaseIndicesForCard(core, c.defId).length > 0) {
                     return true;
                 }
                 return false;
             });
             
-            const result = hasRespondableAction || hasBeforeScoringMinion;
-            console.log('[hasRespondableContent] Result:', {
-                playerId,
-                windowType,
-                hasRespondableAction,
-                hasBeforeScoringMinion,
-                result,
-                handSize: player.hand.length,
-            });
-            
-            return result;
+            return hasRespondableAction || hasBeforeScoringMinion;
         },
     }),
     createTutorialSystem(),
@@ -155,4 +139,4 @@ export { SmashUpDomain, smashUpFlowHooks };
 // 卡牌预览注册（放文件末尾，避免 Vite SSR 函数提升陷阱）
 // ============================================================================
 registerCardPreviewGetter('smashup', getSmashUpCardPreviewRef, { maxDim: 220 });
-registerCriticalImageResolver('smashup', smashUpCriticalImageResolver);
+registerCriticalImageResolver('smashup', smashUpRuntimeCriticalImageResolver);

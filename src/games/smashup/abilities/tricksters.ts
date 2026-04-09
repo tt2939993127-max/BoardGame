@@ -118,7 +118,7 @@ function tricksterGnome(ctx: AbilityContext): AbilityResult {
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: name + ' (力量 ' + power + ')' };
     });
     // "浣犲彲浠?鏁堟灉锛氭坊鍔犺烦杩囬€夐」
-    const minionOptions = buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
+    const minionOptions = buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' });
     minionOptions.push(createSkipOption());
     return resolveOrPrompt(ctx, minionOptions, {
         id: 'trickster_gnome',
@@ -401,7 +401,7 @@ function tricksterGnomePodSpecial(ctx: AbilityContext): AbilityResult {
         const power = getMinionPower(ctx.state, t, ctx.baseIndex);
         return { uid: t.uid, defId: t.defId, baseIndex: ctx.baseIndex, label: name + ' (力量 ' + power + ')' };
     });
-    const minionOptions = buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
+    const minionOptions = buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' });
     minionOptions.push(createSkipOption());
 
     return resolveOrPrompt(ctx, minionOptions, {
@@ -427,6 +427,7 @@ function registerTricksterPodAbilities(): void {
     registerAbility('trickster_enshrouding_mist_pod', 'talent', tricksterEnshroudingMistPodTalent);
     registerAbility('trickster_hideout_pod', 'talent', tricksterHideoutPodTalent);
     registerAbility('trickster_gnome_pod', 'onPlay', tricksterGnomePodOnPlay);
+    registerAbility('trickster_gnome_pod', 'special', tricksterGnomePodSpecial);
     registerAbility('trickster_gremlin_pod', 'onDestroy', () => ({ events: [] }));
     registerTricksterPodOngoingEffects();
     registerTrigger('trickster_gnome_pod', 'beforeScoring', tricksterGnomePodBeforeScoring);

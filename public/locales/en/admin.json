@@ -86,7 +86,7 @@
       "title": "Action Log"
     },
     "aiSummary": {
-      "title": "AI Summary"
+      "title": "AI Diagnostic Packet"
     },
     "stateSnapshot": {
       "title": "State Snapshot (JSON)",

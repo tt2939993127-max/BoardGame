@@ -579,15 +579,16 @@ function buildRunEmOffTieMovePrompts(
     now: number,
 ): MatchState<SmashUpCore> {
     const currentPlayerId = state.core.turnOrder[state.core.currentPlayerIndex];
-    const orderedPlayers = [duel.challengerPlayerId, duel.challengedPlayerId].sort((a, b) => {
-        if (a === currentPlayerId) return -1;
-        if (b === currentPlayerId) return 1;
+    const orderedLoserUids = [duel.challengerMinionUid, duel.challengedMinionUid].sort((a, b) => {
+        const aController = findMinionOnBases(state.core, a)?.minion.controller;
+        const bController = findMinionOnBases(state.core, b)?.minion.controller;
+        if (aController === currentPlayerId) return -1;
+        if (bController === currentPlayerId) return 1;
         return 0;
     });
 
     let nextState = state;
-    for (const mover of orderedPlayers) {
-        const loserUid = mover === duel.challengerPlayerId ? duel.challengedMinionUid : duel.challengerMinionUid;
+    for (const loserUid of orderedLoserUids) {
         const found = findMinionOnBases(nextState.core, loserUid);
         if (!found) continue;
         const destinationOptions = nextState.core.bases
@@ -612,8 +613,8 @@ function buildRunEmOffTieMovePrompts(
             continue;
         }
         const interaction = createSimpleChoice(
-            `smashup_duel_run_em_off_move_${duel.id}_${mover}_${now}`,
-            mover,
+            `smashup_duel_run_em_off_move_${duel.id}_${found.minion.controller}_${now}`,
+            found.minion.controller,
             'ui.duel_prompt_run_em_off_tie_title',
             buildBaseTargetOptions(destinationOptions, nextState.core),
             { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },
@@ -649,6 +650,8 @@ function resolveDuelResult(
     const loser = winner?.uid === challengerFound.minion.uid ? challengedFound.minion : winner?.uid === challengedFound.minion.uid ? challengerFound.minion : undefined;
     const events: SmashUpEvent[] = [];
     let nextState = withActiveDuel(state, undefined);
+    const destroySourceId = duel.destroyReason ?? duel.sourceId;
+    const destroySourceKind = getCardDef(destroySourceId)?.type === 'action' ? 'action' : 'nonAction';
 
     if (duel.outcome === 'destroy_loser') {
         if (isTie) {
@@ -657,16 +660,18 @@ function resolveDuelResult(
                 minionDefId: challengerFound.minion.defId,
                 fromBaseIndex: baseIndex,
                 destroyerId: duel.sourcePlayerId,
-                reason: duel.destroyReason ?? duel.sourceId,
+                reason: destroySourceId,
                 now,
+                sourceKind: destroySourceKind,
             }));
             events.push(...buildValidatedDestroyEvents(state, {
                 minionUid: challengedFound.minion.uid,
                 minionDefId: challengedFound.minion.defId,
                 fromBaseIndex: baseIndex,
                 destroyerId: duel.sourcePlayerId,
-                reason: duel.destroyReason ?? duel.sourceId,
+                reason: destroySourceId,
                 now,
+                sourceKind: destroySourceKind,
             }));
         } else if (loser) {
             events.push(...buildValidatedDestroyEvents(state, {
@@ -674,8 +679,9 @@ function resolveDuelResult(
                 minionDefId: loser.defId,
                 fromBaseIndex: baseIndex,
                 destroyerId: duel.sourcePlayerId,
-                reason: duel.destroyReason ?? duel.sourceId,
+                reason: destroySourceId,
                 now,
+                sourceKind: destroySourceKind,
             }));
         }
     } else if (duel.outcome === 'vp_to_winner') {
@@ -767,8 +773,8 @@ function resolveDuelResult(
                 }));
             } else if (destinationOptions.length > 1) {
                 const interaction = createSimpleChoice(
-                    `smashup_duel_run_em_off_move_${duel.id}_${winner.controller}_${now}`,
-                    winner.controller,
+                    `smashup_duel_run_em_off_move_${duel.id}_${loser.controller}_${now}`,
+                    loser.controller,
                     'ui.duel_prompt_run_em_off_title',
                     buildBaseTargetOptions(destinationOptions, state.core),
                     { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },
@@ -991,8 +997,15 @@ export function registerDuelInteractionHandlers(): void {
             0,
             now,
         );
+        const nextState: MatchState<SmashUpCore> = {
+            ...stageResult.state,
+            core: {
+                ...state.core,
+                activeDuel: stageResult.state.core.activeDuel,
+            },
+        };
         return {
-            state: stageResult.state,
+            state: nextState,
             events: [...events, ...stageResult.events],
         };
     });

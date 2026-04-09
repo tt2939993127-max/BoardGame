@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { GameTransportServer, type GameEngineConfig } from '../server';
 import type {
     CreateMatchData,
@@ -9,6 +9,7 @@ import type {
     StoredMatchState,
 } from '../storage';
 import type { TrainingDataRecorder, TrainingDecisionSample } from '../trainingData';
+import { GAME_MANIFEST_BY_ID } from '../../../games/manifest';
 
 type EventHandler = (...args: unknown[]) => void | Promise<void>;
 
@@ -165,6 +166,10 @@ class InMemoryStorage implements MatchStorage {
         };
     }
 
+    async fetchAuthMetadata(matchID: string): Promise<MatchMetadata | undefined> {
+        return this.metadata.get(matchID);
+    }
+
     async wipe(matchID: string): Promise<void> {
         this.states.delete(matchID);
         this.metadata.delete(matchID);
@@ -258,6 +263,25 @@ describe('GameTransportServer（离座与重连）', () => {
 
         expect(result).toBeTruthy();
         expect(result?.randomCursor).toBeGreaterThan(0);
+    });
+
+    it('setupMatch 应把 AI 座位写入 undo 状态', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+        });
+
+        const result = await server.setupMatch('match-ai-undo', 'test-game', ['0', '1'], 'seed-ai', {
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(result?.state.sys.undo.aiSeatIds).toEqual(['1']);
     });
 
     it('setupMatch 应透传 setupData 到 domain.setup', async () => {
@@ -477,6 +501,82 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(hasEvent(newSocket, 'error', (args) => args[1] === 'unauthorized')).toBe(false);
     });
 
+    it('sync should prefer auth metadata provider for active matches', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        await storage.createMatch('match-auth-provider', {
+            initialState: createStoredState(),
+            metadata: createMetadata('cred-auth-provider'),
+        });
+
+        const fetchSpy = vi.spyOn(storage, 'fetch');
+        const authMetadataSpy = vi.spyOn(storage, 'fetchAuthMetadata');
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const socket = new MockSocket('socket-auth-provider');
+        io.gameNamespace.connectSocket(socket);
+        await socket.clientEmit('sync', 'match-auth-provider', '0', 'cred-auth-provider');
+
+        fetchSpy.mockClear();
+        authMetadataSpy.mockClear();
+        socket.sent.length = 0;
+
+        await socket.clientEmit('sync', 'match-auth-provider', '0', 'cred-auth-provider');
+
+        expect(authMetadataSpy).toHaveBeenCalledTimes(1);
+        expect(fetchSpy).not.toHaveBeenCalled();
+        expect(hasEvent(socket, 'state:sync')).toBe(true);
+    });
+
+    it('sync should not wait for metadata persistence before emitting state:sync', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        await storage.createMatch('match-sync-fast', {
+            initialState: createStoredState(),
+            metadata: createMetadata('cred-fast'),
+        });
+
+        let resolvePersist: (() => void) | null = null;
+        const persistBlocked = new Promise<void>((resolve) => {
+            resolvePersist = resolve;
+        });
+        const setMetadataSpy = vi.spyOn(storage, 'setMetadata').mockImplementation(async (matchID, metadata) => {
+            await persistBlocked;
+            return InMemoryStorage.prototype.setMetadata.call(storage, matchID, metadata);
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const socket = new MockSocket('socket-sync-fast');
+        io.gameNamespace.connectSocket(socket);
+
+        const syncPromise = socket.clientEmit('sync', 'match-sync-fast', '0', 'cred-fast');
+        await nextTick();
+
+        expect(hasEvent(socket, 'state:sync')).toBe(true);
+        expect(setMetadataSpy).toHaveBeenCalledTimes(1);
+
+        resolvePersist?.();
+        await syncPromise;
+    });
+
     it('离座后断开旧连接，使用新凭证可继续同一 seat 进度', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
@@ -607,6 +707,7 @@ describe('GameTransportServer（离座与重连）', () => {
             gameId: 'test-game',
             matchId: 'match-train-1',
             playerId: '0',
+            seatControllerType: 'human',
             stateIdBefore: 0,
             stateIdAfter: 1,
             command: {
@@ -648,6 +749,123 @@ describe('GameTransportServer（离座与重连）', () => {
         const persisted = await storage.fetch('match-train-fail', { state: true });
         expect(persisted.state?._stateID).toBe(1);
         expect(hasEvent(socket, 'error')).toBe(false);
+    });
+
+    it('默认应跳过 AI seat 的训练样本，只记录真人 seat', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const recorder = new MockTrainingDataRecorder();
+
+        await storage.createMatch('match-train-human-only', {
+            initialState: createStoredState(),
+            metadata: {
+                ...createMetadata('cred-ai'),
+                players: {
+                    '0': { name: '玩家0', credentials: 'cred-ai', isConnected: false },
+                    '1': { name: 'AI 玩家1', credentials: 'cred-ai-seat-1', isConnected: false },
+                },
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai' },
+                    },
+                },
+            },
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            trainingDataRecorder: recorder,
+            authenticate: async (_matchID, playerID, credentials, metadata) => {
+                return metadata.players[playerID]?.credentials === credentials;
+            },
+        });
+        server.start();
+
+        const socket = new MockSocket('socket-train-human-only');
+        io.gameNamespace.connectSocket(socket);
+        await socket.clientEmit('sync', 'match-train-human-only', '0', 'cred-ai');
+        await socket.clientEmit('command', 'match-train-human-only', 'TEST_CMD', { foo: 'bar' }, 'cred-ai');
+
+        expect(recorder.samples).toHaveLength(1);
+        expect(recorder.samples[0]).toMatchObject({
+            playerId: '0',
+            seatControllerType: 'human',
+        });
+
+        await server.executeCommand('match-train-human-only', '1', 'AI_CMD', { auto: true });
+
+        expect(recorder.samples).toHaveLength(1);
+    });
+
+    it('manifest 声明 all-seats 时应继续采集 AI seat 样本', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const recorder = new MockTrainingDataRecorder();
+        const previousManifest = GAME_MANIFEST_BY_ID['test-game'];
+
+        GAME_MANIFEST_BY_ID['test-game'] = {
+            ...GAME_MANIFEST_BY_ID.tictactoe,
+            id: 'test-game',
+            ai: {
+                ...GAME_MANIFEST_BY_ID.tictactoe.ai!,
+                capture: true,
+                capturePolicy: 'all-seats',
+            },
+        };
+
+        try {
+            await storage.createMatch('match-train-all-seats', {
+                initialState: createStoredState(),
+                metadata: {
+                    ...createMetadata('cred-ai-all'),
+                    players: {
+                        '0': { name: '玩家0', credentials: 'cred-ai-all', isConnected: false },
+                        '1': { name: 'AI 玩家1', credentials: 'cred-ai-seat-1', isConnected: false },
+                    },
+                    setupData: {
+                        seatControllers: {
+                            '0': { type: 'human' },
+                            '1': { type: 'local-ai' },
+                        },
+                    },
+                },
+            });
+
+            const server = new GameTransportServer({
+                io: io as unknown as any,
+                storage,
+                games: [createEngineConfig()],
+                trainingDataRecorder: recorder,
+                authenticate: async (_matchID, playerID, credentials, metadata) => {
+                    return metadata.players[playerID]?.credentials === credentials;
+                },
+            });
+            server.start();
+
+            const socket = new MockSocket('socket-train-all-seats');
+            io.gameNamespace.connectSocket(socket);
+            await socket.clientEmit('sync', 'match-train-all-seats', '0', 'cred-ai-all');
+            await server.executeCommand('match-train-all-seats', '1', 'AI_CMD', { auto: true });
+
+            expect(recorder.samples).toHaveLength(1);
+            expect(recorder.samples[0]).toMatchObject({
+                playerId: '1',
+                seatControllerType: 'local-ai',
+                command: {
+                    type: 'AI_CMD',
+                    payload: { auto: true },
+                },
+            });
+        } finally {
+            if (previousManifest) {
+                GAME_MANIFEST_BY_ID['test-game'] = previousManifest;
+            } else {
+                delete GAME_MANIFEST_BY_ID['test-game'];
+            }
+        }
     });
 });
 

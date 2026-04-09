@@ -226,10 +226,16 @@ SMTP_PASS=xxx
 发布命令：
 
 ```bash
-npm run mobile:android:ota:publish -- --channel stable --dry-run
-npm run mobile:android:ota:publish -- --channel stable --skip-latest
-npm run mobile:android:ota:publish -- --channel stable
+node scripts/mobile/release-android.mjs ota --channel stable --dry-run
+node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
+node scripts/mobile/release-android.mjs ota --channel stable
 ```
+
+强制约束：
+
+- Android OTA 发布不得把 `public/assets/i18n/**` 这类大体积运行时资源打进 OTA zip；这些资源应继续走 R2 / 游戏包链路，而不是 H5 OTA。
+- `scripts/mobile/publish-android-ota.mjs` 只接受显式命名参数，并要求 `dist/` 已经经过 Android 专用裁剪；若 `dist/` 中仍存在 `dist/assets/i18n/**` 或非 `dist/locales/zh-CN/**` 资源，脚本会直接失败，禁止继续发布。
+- 若最终 OTA zip 体积异常过大（当前门禁为 `20MB`），发布脚本必须直接失败，禁止继续覆盖 `latest.json`。
 
 GitHub Actions 自动化：
 
@@ -244,6 +250,14 @@ GitHub Actions 自动化：
 - `--skip-latest` 会上传 bundle 与版本 manifest，但不会切换该 channel 的 `latest.json`
 - 正式覆盖 `latest.json` 后，指向该 channel 的 Android App 会在下一次启动后的后台检查中感知到新 bundle，并在切后台或重启后生效
 - OTA 只覆盖 Web bundle；涉及原生层改动时仍必须重新发 APK / AAB
+
+## Android 原生 APK 更新源
+
+- 路径前缀：`official/native-app-updates/android/<channel>/...`
+- `latest.json`：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/latest.json`
+- APK：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/packages/<version>.apk`
+- version manifest：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/manifests/<version>.json`
+- 当前 App 内置的是“下载 APK -> 调起系统安装器”的私有分发链路，不是静默安装
 
 ## Nginx 反向代理（自动管理）
 
@@ -273,6 +287,8 @@ GitHub Actions 自动化：
 > **生产环境更新必须使用部署脚本**：`bash scripts/deploy/deploy-image.sh update [tag]`
 >
 > 禁止在生产服务器上直接运行 `docker compose up -d`，因为默认使用 `docker-compose.yml` 而非 `docker-compose.prod.yml`，两者的端口映射和环境变量配置不同。
+>
+> **当前部署脚本已内建 post-deploy smoke + 自动回退**：更新后会自动等待关键容器 ready，并检查首页、`/health`、`/notifications`。若新版本 smoke 失败，脚本会自动回退到部署前实际运行的 `web` / `game-server` 镜像引用，并再次执行 smoke。即使自动回退成功，本次更新命令仍会以失败状态退出，用于明确提示“服务已恢复，但升级未成功”。
 
 ## 同域策略
 
@@ -321,8 +337,8 @@ GitHub Actions 自动化：
 Android OTA 产物也走同一个对象存储桶，但前缀独立：
 
 1. 先执行 `npm run mobile:android:sync`，确保 `dist/` 与 Android embedded 资源同步
-2. 预演发布：`npm run mobile:android:ota:publish -- --channel gray --dry-run`
-3. 灰度上传但不切流：`npm run mobile:android:ota:publish -- --channel gray --skip-latest`
+2. 预演发布：`node scripts/mobile/release-android.mjs ota --channel gray --dry-run`
+3. 灰度上传但不切流：`node scripts/mobile/release-android.mjs ota --channel gray --skip-latest`
 4. 准备正式生效时，再执行不带 `--skip-latest` 的正式发布命令
 
 建议把 `stable`、`gray` 等 channel 作为独立发布轨道管理，不要把未验证 bundle 直接覆盖到 `stable/latest.json`

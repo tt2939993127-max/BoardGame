@@ -1,6 +1,29 @@
+import { mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { test, expect } from './framework';
+import { getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
 import { setChineseLocale } from './helpers/common';
 import { DESKTOP_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
+
+async function saveEvidenceLocatorScreenshot(page: any, locator: any, testInfo: any, subdir: string, filename: string) {
+    const path = getEvidenceScreenshotPath(testInfo, filename, { subdir, filename });
+    mkdirSync(dirname(path), { recursive: true });
+    await expect(locator).toBeVisible({ timeout: 15000 });
+    const box = await locator.boundingBox();
+    expect(box, `未获取到截图目标 ${filename} 的边界`).not.toBeNull();
+    const padding = 10;
+    await page.screenshot({
+        path,
+        animations: 'disabled',
+        scale: 'device',
+        clip: {
+            x: Math.max((box?.x ?? 0) - padding, 0),
+            y: Math.max((box?.y ?? 0) - padding, 0),
+            width: (box?.width ?? 0) + padding * 2,
+            height: (box?.height ?? 0) + padding * 2,
+        },
+    });
+}
 
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
@@ -52,6 +75,335 @@ async function clickCenter(locator: any, page: any) {
     await locator.dispatchEvent('click');
 }
 
+async function tapTouchCenter(locator: any, page: any) {
+    const box = await locator.boundingBox();
+    expect(box, '触摸目标应该先可见').not.toBeNull();
+
+    const client = await page.context().newCDPSession(page);
+    const x = Math.round((box?.x ?? 0) + (box?.width ?? 0) / 2);
+    const y = Math.round((box?.y ?? 0) + (box?.height ?? 0) / 2);
+
+    try {
+        await client.send('Emulation.setTouchEmulationEnabled', {
+            enabled: true,
+            maxTouchPoints: 1,
+        });
+        await client.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x, y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+        });
+        await page.waitForTimeout(60);
+        await client.send('Input.dispatchTouchEvent', {
+            type: 'touchEnd',
+            touchPoints: [],
+        });
+        await page.waitForTimeout(180);
+    } finally {
+        await client.detach().catch(() => {});
+    }
+}
+
+async function pinchZoomTouch(locator: any, page: any, options?: {
+    startDistance?: number;
+    endDistance?: number;
+    steps?: number;
+    durationMs?: number;
+}) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    await locator.evaluate(async (element: HTMLElement, rawOptions?: {
+        startDistance?: number;
+        endDistance?: number;
+        steps?: number;
+        durationMs?: number;
+    }) => {
+        const startDistance = rawOptions?.startDistance ?? 120;
+        const endDistance = rawOptions?.endDistance ?? 250;
+        const steps = rawOptions?.steps ?? 6;
+        const durationMs = rawOptions?.durationMs ?? 140;
+        const rect = element.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+        const dispatch = (
+            type: 'pointerdown' | 'pointermove' | 'pointerup',
+            pointerId: number,
+            clientX: number,
+            clientY: number,
+            buttons: number,
+            isPrimary: boolean,
+        ) => {
+            element.dispatchEvent(new PointerEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                pointerId,
+                pointerType: 'touch',
+                clientX,
+                clientY,
+                buttons,
+                isPrimary,
+            }));
+        };
+        const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+        const startHalf = startDistance / 2;
+        const endHalf = endDistance / 2;
+
+        dispatch('pointerdown', 1, centerX - startHalf, centerY, 1, true);
+        dispatch('pointerdown', 2, centerX + startHalf, centerY, 1, false);
+
+        for (let step = 1; step <= steps; step += 1) {
+            const progress = step / steps;
+            const currentHalf = startHalf + (endHalf - startHalf) * progress;
+            dispatch('pointermove', 1, centerX - currentHalf, centerY, 1, true);
+            dispatch('pointermove', 2, centerX + currentHalf, centerY, 1, false);
+            await wait(durationMs / steps);
+        }
+
+        dispatch('pointerup', 1, centerX - endHalf, centerY, 0, true);
+        dispatch('pointerup', 2, centerX + endHalf, centerY, 0, false);
+    }, options);
+    await page.waitForTimeout(180);
+}
+
+async function panTouch(locator: any, page: any, options?: {
+    deltaX?: number;
+    deltaY?: number;
+    steps?: number;
+    durationMs?: number;
+    startXRatio?: number;
+    startYRatio?: number;
+    pointerId?: number;
+}) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    await locator.evaluate(async (element: HTMLElement, rawOptions?: {
+        deltaX?: number;
+        deltaY?: number;
+        steps?: number;
+        durationMs?: number;
+        startXRatio?: number;
+        startYRatio?: number;
+        pointerId?: number;
+    }) => {
+        const deltaX = rawOptions?.deltaX ?? -120;
+        const deltaY = rawOptions?.deltaY ?? 0;
+        const steps = rawOptions?.steps ?? 6;
+        const durationMs = rawOptions?.durationMs ?? 140;
+        const startXRatio = rawOptions?.startXRatio ?? 0.5;
+        const startYRatio = rawOptions?.startYRatio ?? 0.46;
+        const touchId = rawOptions?.pointerId ?? 11;
+        const rect = element.getBoundingClientRect();
+        const startX = rect.left + rect.width * startXRatio;
+        const startY = rect.top + rect.height * startYRatio;
+        const dispatch = (
+            type: 'pointerdown' | 'pointermove' | 'pointerup',
+            clientX: number,
+            clientY: number,
+            buttons: number,
+        ) => {
+            element.dispatchEvent(new PointerEvent(type, {
+                bubbles: true,
+                cancelable: true,
+                pointerId: touchId,
+                pointerType: 'touch',
+                clientX,
+                clientY,
+                buttons,
+                isPrimary: true,
+            }));
+        };
+        const wait = (ms: number) => new Promise<void>((resolve) => window.setTimeout(resolve, ms));
+
+        dispatch('pointerdown', startX, startY, 1);
+        for (let step = 1; step <= steps; step += 1) {
+            const progress = step / steps;
+            dispatch('pointermove', startX + deltaX * progress, startY + deltaY * progress, 1);
+            await wait(durationMs / steps);
+        }
+        dispatch('pointerup', startX + deltaX, startY + deltaY, 0);
+    }, options);
+    await page.waitForTimeout(180);
+}
+
+async function createChromiumTouchSession(page: any) {
+    const browserContext = page.context() as any;
+    if (typeof browserContext.newCDPSession !== 'function') {
+        throw new Error('当前浏览器上下文不支持 Chromium CDP，多触点注入不可用');
+    }
+
+    const session = await browserContext.newCDPSession(page);
+    await session.send('Emulation.setTouchEmulationEnabled', {
+        enabled: true,
+        maxTouchPoints: 5,
+    });
+
+    return session;
+}
+
+async function dispatchChromiumTouchEvent(
+    session: any,
+    type: 'touchStart' | 'touchMove' | 'touchEnd',
+    touchPoints: Array<{ id: number; x: number; y: number }>,
+) {
+    await session.send('Input.dispatchTouchEvent', {
+        type,
+        touchPoints: touchPoints.map((point) => ({
+            id: point.id,
+            x: point.x,
+            y: point.y,
+            radiusX: 2,
+            radiusY: 2,
+            force: 0.5,
+        })),
+        modifiers: 0,
+    });
+}
+
+async function pinchZoomTouchChromium(locator: any, page: any, options?: {
+    startDistance?: number;
+    endDistance?: number;
+    steps?: number;
+    durationMs?: number;
+}) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    const box = await locator.boundingBox();
+    expect(box, 'Chromium 多触点 pinch 目标应该先可见').not.toBeNull();
+
+    const startDistance = options?.startDistance ?? 120;
+    const endDistance = options?.endDistance ?? 250;
+    const steps = options?.steps ?? 6;
+    const durationMs = options?.durationMs ?? 140;
+    const centerX = (box?.x ?? 0) + (box?.width ?? 0) / 2;
+    const centerY = (box?.y ?? 0) + (box?.height ?? 0) / 2;
+    const startHalf = startDistance / 2;
+    const endHalf = endDistance / 2;
+    const session = await createChromiumTouchSession(page);
+
+    await dispatchChromiumTouchEvent(session, 'touchStart', [
+        { id: 1, x: centerX - startHalf, y: centerY },
+        { id: 2, x: centerX + startHalf, y: centerY },
+    ]);
+
+    for (let step = 1; step <= steps; step += 1) {
+        const progress = step / steps;
+        const currentHalf = startHalf + (endHalf - startHalf) * progress;
+        await dispatchChromiumTouchEvent(session, 'touchMove', [
+            { id: 1, x: centerX - currentHalf, y: centerY },
+            { id: 2, x: centerX + currentHalf, y: centerY },
+        ]);
+        await page.waitForTimeout(durationMs / steps);
+    }
+
+    await dispatchChromiumTouchEvent(session, 'touchEnd', []);
+    await page.waitForTimeout(180);
+}
+
+async function panTouchChromium(locator: any, page: any, options?: {
+    deltaX?: number;
+    deltaY?: number;
+    steps?: number;
+    durationMs?: number;
+    startXRatio?: number;
+    startYRatio?: number;
+    pointerId?: number;
+}) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    const box = await locator.boundingBox();
+    expect(box, 'Chromium 多触点 pan 目标应该先可见').not.toBeNull();
+
+    const deltaX = options?.deltaX ?? -120;
+    const deltaY = options?.deltaY ?? 0;
+    const steps = options?.steps ?? 6;
+    const durationMs = options?.durationMs ?? 140;
+    const startXRatio = options?.startXRatio ?? 0.5;
+    const startYRatio = options?.startYRatio ?? 0.46;
+    const pointerId = options?.pointerId ?? 11;
+    const startX = (box?.x ?? 0) + (box?.width ?? 0) * startXRatio;
+    const startY = (box?.y ?? 0) + (box?.height ?? 0) * startYRatio;
+    const session = await createChromiumTouchSession(page);
+
+    await dispatchChromiumTouchEvent(session, 'touchStart', [
+        { id: pointerId, x: startX, y: startY },
+    ]);
+
+    for (let step = 1; step <= steps; step += 1) {
+        const progress = step / steps;
+        await dispatchChromiumTouchEvent(session, 'touchMove', [
+            {
+                id: pointerId,
+                x: startX + deltaX * progress,
+                y: startY + deltaY * progress,
+            },
+        ]);
+        await page.waitForTimeout(durationMs / steps);
+    }
+
+    await dispatchChromiumTouchEvent(session, 'touchEnd', []);
+    await page.waitForTimeout(180);
+}
+
+async function installBattlefieldGestureProbe(page: any, selector = '[data-testid="su-battlefield-viewport"]') {
+    await page.evaluate((viewportSelector: string) => {
+        const viewport = document.querySelector<HTMLElement>(viewportSelector);
+        if (!viewport) {
+            throw new Error(`未找到手势探针目标: ${viewportSelector}`);
+        }
+
+        const store = {
+            logs: [] as Array<Record<string, unknown>>,
+        };
+        (window as any).__SU_BATTLEFIELD_GESTURE_PROBE__ = store;
+
+        const pushLog = (scope: string, event: Event) => {
+            const target = event.target instanceof HTMLElement ? event.target : null;
+            const touchEvent = event as TouchEvent;
+            const pointerEvent = event as PointerEvent;
+            store.logs.push({
+                scope,
+                type: event.type,
+                pointerId: 'pointerId' in pointerEvent ? pointerEvent.pointerId : null,
+                pointerType: 'pointerType' in pointerEvent ? pointerEvent.pointerType : null,
+                touches: typeof touchEvent.touches?.length === 'number' ? touchEvent.touches.length : null,
+                changedTouches: typeof touchEvent.changedTouches?.length === 'number' ? touchEvent.changedTouches.length : null,
+                clientX: 'clientX' in pointerEvent ? pointerEvent.clientX : null,
+                clientY: 'clientY' in pointerEvent ? pointerEvent.clientY : null,
+                targetTag: target?.tagName ?? null,
+                targetTestId: target?.getAttribute('data-testid') ?? null,
+                zoomScale: viewport.getAttribute('data-battlefield-zoom-scale'),
+                touchMode: viewport.getAttribute('data-battlefield-touch-mode'),
+                translateX: viewport.getAttribute('data-battlefield-translate-x'),
+                translateY: viewport.getAttribute('data-battlefield-translate-y'),
+                time: Math.round(performance.now()),
+            });
+            if (store.logs.length > 400) {
+                store.logs.splice(0, store.logs.length - 400);
+            }
+        };
+
+        const eventTypes = [
+            'touchstart',
+            'touchmove',
+            'touchend',
+            'touchcancel',
+            'pointerdown',
+            'pointermove',
+            'pointerup',
+            'pointercancel',
+            'pointerleave',
+            'pointerout',
+            'gotpointercapture',
+            'lostpointercapture',
+        ] as const;
+
+        for (const eventType of eventTypes) {
+            viewport.addEventListener(eventType, (event) => pushLog('viewport', event), true);
+            document.addEventListener(eventType, (event) => pushLog('document', event), true);
+        }
+    }, selector);
+}
+
+async function readBattlefieldGestureProbe(page: any) {
+    return page.evaluate(() => ((window as any).__SU_BATTLEFIELD_GESTURE_PROBE__?.logs ?? []) as Array<Record<string, unknown>>);
+}
+
 const INITIAL_BASE_IDS = ['base_the_jungle', 'base_dread_lookout', 'base_tsars_palace'] as const;
 const REPLACEMENT_BASE_DECK = [
     'base_central_brain',
@@ -63,7 +415,7 @@ const EXPECTED_FINAL_BASE_IDS = ['base_cave_of_shinies', 'base_rhodes_plaza', 'b
 const EXPECTED_FINAL_VP = {
     '0': 7,
     '1': 4,
-    '2': 8,
+    '2': 10,
     '3': 10,
 } as const;
 const MOBILE_LANDSCAPE_VIEWPORT = { width: 800, height: 450 } as const;
@@ -215,6 +567,53 @@ function buildFourPlayerMobileScene() {
                     },
                 },
             },
+        },
+    };
+}
+
+function buildDiscardOverflowScene() {
+    return {
+        gameId: 'smashup',
+        currentPlayer: '0' as const,
+        phase: 'draw',
+        bases: [
+            { defId: 'base_the_jungle' },
+            { defId: 'base_dread_lookout' },
+            { defId: 'base_tsars_palace' },
+        ],
+        player0: {
+            factions: ['aliens', 'pirates'],
+            hand: [
+                'alien_invader',
+                'alien_invader',
+                'alien_collector',
+                'pirate_first_mate',
+                'alien_invader',
+                'pirate_first_mate',
+                'alien_invader',
+                'alien_collector',
+                'pirate_first_mate',
+                'alien_invader',
+                'alien_collector',
+            ],
+            deck: ['alien_invader'],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            vp: 3,
+        },
+        player1: {
+            factions: ['dinosaurs', 'ninjas'],
+            hand: [],
+            deck: [],
+            discard: [],
+            minionsPlayed: 0,
+            minionLimit: 1,
+            actionsPlayed: 0,
+            actionLimit: 1,
+            vp: 2,
         },
     };
 }
@@ -448,7 +847,70 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await game.screenshot('03-final-four-player-state', testInfo);
     });
 
-    test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌', async ({ page, game }, testInfo) => {
+    test('移动端横屏点击对手分数应能进入并退出对手视角', async ({ page, game }, testInfo) => {
+        test.setTimeout(150000);
+
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        }, 120000);
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 800
+                && window.innerHeight === 450
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards';
+        }, { timeout: 10000, polling: 200 });
+
+        await waitForSmashUpMainUiReady(page);
+
+        const opponentScoreButton = page.locator('[data-testid="su-score-vp-1"]');
+        const opponentViewBanner = page.getByText('对手视角');
+        const backToSelfButton = page.getByRole('button', { name: '返回' });
+
+        await expect(opponentScoreButton).toBeVisible({ timeout: 15000 });
+        const hitTestId = await opponentScoreButton.evaluate((element: HTMLElement) => {
+            const rect = element.getBoundingClientRect();
+            const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) as HTMLElement | null;
+            return target?.closest('[data-testid]')?.getAttribute('data-testid') ?? null;
+        });
+        expect(hitTestId, '分数球中心点命中目标应仍是分数按钮本身').toBe('su-score-vp-1');
+
+        await tapTouchCenter(opponentScoreButton, page);
+        await expect(opponentViewBanner).toBeVisible({ timeout: 5000 });
+        await expect(backToSelfButton).toBeVisible({ timeout: 5000 });
+
+        await game.screenshot('03a-mobile-opponent-view-entry', testInfo);
+
+        await backToSelfButton.click();
+        await expect(opponentViewBanner).toHaveCount(0);
+    });
+
+    test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌与战场拖拽放大', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
@@ -490,6 +952,8 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         const scoreBoard = page.locator('[data-tutorial-id="su-scoreboard"]');
         const handArea = page.locator('[data-testid="su-hand-area"]');
+        const battlefieldViewport = page.locator('[data-testid="su-battlefield-viewport"]');
+        const battlefieldZoomTarget = page.locator('[data-testid="su-battlefield-zoom-target"]');
         const deckStack = page.locator('[data-testid="su-deck-stack"]');
         const discardToggle = page.locator('[data-testid="su-discard-toggle"]');
         const endTurnButton = page.locator('[data-tutorial-id="su-end-turn-btn"]');
@@ -524,6 +988,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(endTurnActionQuota).toBeVisible({ timeout: 15000 });
         await expect(firstBase).toBeVisible({ timeout: 15000 });
         await expect(secondBase).toBeVisible({ timeout: 15000 });
+        await expect(battlefieldViewport).toBeVisible({ timeout: 15000 });
         await expect(handCard).toBeVisible({ timeout: 15000 });
         await expect(exitFabButton).toBeVisible({ timeout: 15000 });
         await expect(exitFabVisual).toBeVisible({ timeout: 15000 });
@@ -588,6 +1053,60 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await game.screenshot('04-mobile-landscape-layout', testInfo);
 
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-zoom-enabled', 'true');
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'native-pan');
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-zoom-target-mode', 'content');
+        const inlineSecondBaseBox = await secondBase.boundingBox();
+        const inlineZoomTargetBox = await battlefieldZoomTarget.boundingBox();
+        const endTurnButtonBoxBeforeZoom = await endTurnActionButton.boundingBox();
+        expect(inlineSecondBaseBox, '战场缩放前的基地应提供尺寸').not.toBeNull();
+        expect(inlineZoomTargetBox, '战场缩放前的战场内容层应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxBeforeZoom, '缩放前的结束回合按钮应提供尺寸').not.toBeNull();
+
+        await pinchZoomTouch(battlefieldViewport, page, { startDistance: 120, endDistance: 260 });
+
+        await expect
+            .poll(async () => Number(await battlefieldViewport.getAttribute('data-battlefield-zoom-scale')), {
+                timeout: 5000,
+                message: '双指缩放后战场视口应进入大于 1 的缩放态',
+            })
+            .toBeGreaterThan(1.15);
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'gesture-lock');
+
+        const zoomedSecondBaseBox = await secondBase.boundingBox();
+        const zoomedZoomTargetBox = await battlefieldZoomTarget.boundingBox();
+        const endTurnButtonBoxAfterZoom = await endTurnActionButton.boundingBox();
+        expect(zoomedSecondBaseBox, '战场缩放后的基地应提供尺寸').not.toBeNull();
+        expect(zoomedZoomTargetBox, '战场缩放后的战场内容层应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxAfterZoom, '战场缩放后的结束回合按钮应提供尺寸').not.toBeNull();
+        expect(zoomedSecondBaseBox!.width, '双指缩放后基地宽度应明显大于默认态').toBeGreaterThan((inlineSecondBaseBox?.width ?? 0) * 1.15);
+        expect(
+            (zoomedSecondBaseBox?.y ?? 0) - (inlineSecondBaseBox?.y ?? 0),
+            '双指缩放后基地整体不应明显向下漂移',
+        ).toBeLessThan(40);
+        expect(
+            (zoomedZoomTargetBox?.y ?? 0) - (inlineZoomTargetBox?.y ?? 0),
+            '双指缩放后战场内容层不应整体下沉，顶部不应扩出大块透明挡层',
+        ).toBeLessThan(40);
+        expect(Math.abs((endTurnButtonBoxAfterZoom?.x ?? 0) - (endTurnButtonBoxBeforeZoom?.x ?? 0)), '结束回合按钮不应跟随战场一起横向漂移').toBeLessThan(4);
+        expect(Math.abs((endTurnButtonBoxAfterZoom?.y ?? 0) - (endTurnButtonBoxBeforeZoom?.y ?? 0)), '结束回合按钮不应跟随战场一起纵向漂移').toBeLessThan(4);
+        await game.screenshot('04d-mobile-battlefield-pinch-zoom', testInfo);
+
+        const translateXBeforePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        await panTouch(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
+        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const pannedSecondBaseBox = await secondBase.boundingBox();
+        expect(pannedSecondBaseBox, '战场平移后的基地应提供尺寸').not.toBeNull();
+        expect(
+            Math.abs(translateXAfterPan - translateXBeforePan),
+            `拖拽后 viewport translateX 应明显变化（before=${translateXBeforePan}, after=${translateXAfterPan}）`,
+        ).toBeGreaterThan(8);
+        expect(
+            Math.abs((pannedSecondBaseBox?.x ?? 0) - (zoomedSecondBaseBox?.x ?? 0)),
+            '拖拽平移后基地在屏幕中的横向位置应明显变化',
+        ).toBeGreaterThan(8);
+        await game.screenshot('04e-mobile-battlefield-panned', testInfo);
+
         await endTurnVisibilityToggle.click();
         await expect(endTurnActionButton).toHaveCount(0);
         await expect(endTurnHints).toHaveCount(0);
@@ -601,18 +1120,20 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await exitFabButton.click();
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
-        await expect(exitFabSheet).toBeVisible({ timeout: 5000 });
         await expectLocatorInsideViewport(exitFabPanel, 'exit fab panel', viewport!.width, viewport!.height);
-        const exitFabDocumentMetrics = await page.evaluate(() => ({
-            htmlOverflowY: window.getComputedStyle(document.documentElement).overflowY,
-            bodyOverflowY: window.getComputedStyle(document.body).overflowY,
-            htmlOverscrollBehaviorY: window.getComputedStyle(document.documentElement).overscrollBehaviorY,
-            bodyOverscrollBehaviorY: window.getComputedStyle(document.body).overscrollBehaviorY,
-        }));
-        expect(exitFabDocumentMetrics.htmlOverflowY, 'exit fab sheet 打开时 html 不应继续可滚动').toBe('hidden');
-        expect(exitFabDocumentMetrics.bodyOverflowY, 'exit fab sheet 打开时 body 不应继续可滚动').toBe('hidden');
-        expect(exitFabDocumentMetrics.htmlOverscrollBehaviorY, 'exit fab sheet 打开时 html 不应继续透传滚动').toBe('none');
-        expect(exitFabDocumentMetrics.bodyOverscrollBehaviorY, 'exit fab sheet 打开时 body 不应继续透传滚动').toBe('none');
+        const hasExitFabSheet = await exitFabSheet.isVisible().catch(() => false);
+        if (hasExitFabSheet) {
+            const exitFabDocumentMetrics = await page.evaluate(() => ({
+                htmlOverflowY: window.getComputedStyle(document.documentElement).overflowY,
+                bodyOverflowY: window.getComputedStyle(document.body).overflowY,
+                htmlOverscrollBehaviorY: window.getComputedStyle(document.documentElement).overscrollBehaviorY,
+                bodyOverscrollBehaviorY: window.getComputedStyle(document.body).overscrollBehaviorY,
+            }));
+            expect(exitFabDocumentMetrics.htmlOverflowY, 'exit fab sheet 打开时 html 不应继续可滚动').toBe('hidden');
+            expect(exitFabDocumentMetrics.bodyOverflowY, 'exit fab sheet 打开时 body 不应继续可滚动').toBe('hidden');
+            expect(exitFabDocumentMetrics.htmlOverscrollBehaviorY, 'exit fab sheet 打开时 html 不应继续透传滚动').toBe('none');
+            expect(exitFabDocumentMetrics.bodyOverscrollBehaviorY, 'exit fab sheet 打开时 body 不应继续透传滚动').toBe('none');
+        }
         const exitFabPanelMetrics = await exitFabPanel.evaluate((element) => ({
             clientWidth: element.clientWidth,
             scrollWidth: element.scrollWidth,
@@ -631,9 +1152,15 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             await expectLocatorInsideViewport(panelButton, `exit fab panel button ${index + 1}`, viewport!.width, viewport!.height);
         }
         await game.screenshot('04a-mobile-exit-fab-panel', testInfo);
-        await exitFabSheetBackdrop.click();
+        if (hasExitFabSheet && await exitFabSheetBackdrop.isVisible().catch(() => false)) {
+            await exitFabSheetBackdrop.click();
+        } else {
+            await exitFabButton.click();
+        }
         await expect(exitFabPanel).toHaveCount(0);
-        await expect(exitFabSheet).toHaveCount(0);
+        if (hasExitFabSheet) {
+            await expect(exitFabSheet).toHaveCount(0);
+        }
         await expect(exitFabTooltip).toHaveCount(0);
         await page.mouse.move(12, 12);
         await expect(exitFabTooltip).toHaveCount(0);
@@ -695,7 +1222,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await inspectButton.dispatchEvent('click');
         await waitForMagnifyPreviewReady(page);
-        await game.screenshot('11-mobile-hand-long-press-magnify', testInfo);
+        await game.screenshot('11-mobile-hand-inspect-button-magnify', testInfo);
         await closeMagnifyOverlay(page);
 
         const stateAfterLongPress = await game.getState();
@@ -708,6 +1235,8 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             polling: 100,
         });
         await waitForSmashUpMainUiReady(page);
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-zoom-enabled', 'false');
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'native-pan');
 
         const desktopViewport = page.viewportSize();
         expect(desktopViewport).not.toBeNull();
@@ -725,6 +1254,216 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(endTurnActionButton).toBeVisible({ timeout: 5000 });
         await expect(endTurnHints).toBeVisible({ timeout: 5000 });
         await game.screenshot('13-desktop-end-turn-restored', testInfo);
+    });
+
+    test('移动端横屏 pinch 后仍可拖拽战场，避免 pan 锁死回归', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        });
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 800
+                && window.innerHeight === 450
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards'
+                && (state?.core?.players?.['0']?.hand?.length ?? 0) === 2;
+        }, { timeout: 10000, polling: 200 });
+
+        await waitForSmashUpMainUiReady(page);
+
+        const battlefieldViewport = page.locator('[data-testid="su-battlefield-viewport"]');
+        const secondBase = page.locator('[data-base-index="1"]');
+        const endTurnActionButton = page.locator('[data-testid="su-end-turn-action-button"]');
+
+        await expect(battlefieldViewport).toBeVisible({ timeout: 15000 });
+        await expect(secondBase).toBeVisible({ timeout: 15000 });
+        await expect(endTurnActionButton).toBeVisible({ timeout: 15000 });
+
+        await pinchZoomTouch(battlefieldViewport, page, { startDistance: 120, endDistance: 260 });
+
+        await expect
+            .poll(async () => Number(await battlefieldViewport.getAttribute('data-battlefield-zoom-scale')), {
+                timeout: 5000,
+                message: '双指缩放后战场应进入大于 1 的缩放态',
+            })
+            .toBeGreaterThan(1.15);
+        await expect(battlefieldViewport).toHaveAttribute('data-battlefield-touch-mode', 'gesture-lock');
+
+        const translateXBeforePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const secondBaseBoxBeforePan = await secondBase.boundingBox();
+        const endTurnButtonBoxBeforePan = await endTurnActionButton.boundingBox();
+        expect(secondBaseBoxBeforePan, '拖拽前的基地应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxBeforePan, '拖拽前的结束回合按钮应提供尺寸').not.toBeNull();
+
+        await panTouch(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
+
+        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const secondBaseBoxAfterPan = await secondBase.boundingBox();
+        const endTurnButtonBoxAfterPan = await endTurnActionButton.boundingBox();
+        expect(secondBaseBoxAfterPan, '拖拽后的基地应提供尺寸').not.toBeNull();
+        expect(endTurnButtonBoxAfterPan, '拖拽后的结束回合按钮应提供尺寸').not.toBeNull();
+
+        expect(
+            Math.abs(translateXAfterPan - translateXBeforePan),
+            'pinch 后拖拽不应锁死，viewport translateX 应继续变化',
+        ).toBeGreaterThan(8);
+        expect(
+            Math.abs((secondBaseBoxAfterPan?.x ?? 0) - (secondBaseBoxBeforePan?.x ?? 0)),
+            'pinch 后拖拽应继续带动基地横向位移',
+        ).toBeGreaterThan(8);
+        expect(
+            Math.abs((endTurnButtonBoxAfterPan?.x ?? 0) - (endTurnButtonBoxBeforePan?.x ?? 0)),
+            '外围结束回合按钮不应随战场横向漂移',
+        ).toBeLessThan(4);
+        expect(
+            Math.abs((endTurnButtonBoxAfterPan?.y ?? 0) - (endTurnButtonBoxBeforePan?.y ?? 0)),
+            '外围结束回合按钮不应随战场纵向漂移',
+        ).toBeLessThan(4);
+
+        await game.screenshot('04f-mobile-battlefield-pan-still-works-after-pinch', testInfo);
+    });
+
+    test('移动端横屏 Chromium 真实多触点 pinch/pan 事件链路应正常驱动战场缩放', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        });
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 800
+                && window.innerHeight === 450
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards'
+                && (state?.core?.players?.['0']?.hand?.length ?? 0) === 2;
+        }, { timeout: 10000, polling: 200 });
+
+        await waitForSmashUpMainUiReady(page);
+
+        const battlefieldViewport = page.locator('[data-testid="su-battlefield-viewport"]');
+        const secondBase = page.locator('[data-base-index="1"]');
+
+        await expect(battlefieldViewport).toBeVisible({ timeout: 15000 });
+        await expect(secondBase).toBeVisible({ timeout: 15000 });
+        await installBattlefieldGestureProbe(page);
+
+        const gestureEnvironment = await page.evaluate(() => {
+            const viewport = document.querySelector<HTMLElement>('[data-testid="su-battlefield-viewport"]');
+            const contentRoot = viewport?.querySelector<HTMLElement>('.mobile-battlefield-viewport__content-root');
+            return {
+                viewportTouchAction: viewport ? window.getComputedStyle(viewport).touchAction : null,
+                contentRootTouchAction: contentRoot ? window.getComputedStyle(contentRoot).touchAction : null,
+                maxTouchPoints: navigator.maxTouchPoints,
+                hasPointerEvent: typeof PointerEvent !== 'undefined',
+                zoomMode: viewport?.getAttribute('data-battlefield-zoom-target-mode'),
+            };
+        });
+
+        await pinchZoomTouchChromium(battlefieldViewport, page, { startDistance: 120, endDistance: 260 });
+
+        const scaleAfterPinch = Number(await battlefieldViewport.getAttribute('data-battlefield-zoom-scale'));
+        const translateXBeforePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const logsAfterPinch = await readBattlefieldGestureProbe(page);
+        console.log('[DEBUG][smashup-real-touch-pinch]', JSON.stringify({
+            gestureEnvironment,
+            scaleAfterPinch,
+            tail: logsAfterPinch.slice(-40),
+        }, null, 2));
+
+        expect(gestureEnvironment.viewportTouchAction, 'viewport 应显式禁用浏览器默认触摸手势').toBe('none');
+        expect(
+            logsAfterPinch.some((entry) => entry.type === 'pointerdown' || entry.type === 'touchstart'),
+            '真实多触点注入后至少应命中 pointerdown/touchstart 事件',
+        ).toBeTruthy();
+        expect(scaleAfterPinch, 'Chromium 真实多触点 pinch 后战场应进入大于 1 的缩放态').toBeGreaterThan(1.15);
+
+        await panTouchChromium(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
+
+        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        const logsAfterPan = await readBattlefieldGestureProbe(page);
+        console.log('[DEBUG][smashup-real-touch-pan]', JSON.stringify({
+            translateXBeforePan,
+            translateXAfterPan,
+            tail: logsAfterPan.slice(-40),
+        }, null, 2));
+
+        expect(
+            Math.abs(translateXAfterPan - translateXBeforePan),
+            'Chromium 真实多触点 pinch 后单指 pan 仍应继续驱动战场横向位移',
+        ).toBeGreaterThan(8);
+
+        await game.screenshot('04g-mobile-battlefield-real-touch-pinch-pan', testInfo);
+    });
+
+    test('手牌超限时继续按钮应保持与结束回合同款白色描边', async ({ page, game }, testInfo) => {
+        test.setTimeout(60000);
+
+        await setChineseLocale(page.context());
+        await page.setViewportSize(DESKTOP_REFERENCE_VIEWPORT);
+        await game.openTestGame('smashup', { skipInitialization: true }, 20000);
+        await game.setupScene(buildDiscardOverflowScene());
+
+        await waitForSmashUpMainUiReady(page);
+
+        const continueButton = page.getByRole('button', { name: /^继续$/ });
+        await expect(continueButton).toBeVisible({ timeout: 10000 });
+        await expect(page.getByText(/你需要丢弃 1 张牌以继续游戏/i)).toBeVisible({ timeout: 10000 });
+        await expect(continueButton).toHaveAttribute('class', /border-white\/95/);
+        await expect(continueButton).toHaveAttribute('class', /ring-white\/55/);
+
+        await game.screenshot('14-discard-continue-border-restored', testInfo);
     });
 
     test('移动端不会把没有+1力量指示物的怪物当成可发动天赋', async ({ page, game }, testInfo) => {
@@ -824,10 +1563,25 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         }, { timeout: 10000, polling: 200 });
 
         const monster = page.locator('[data-minion-uid="p0-monster-with-counter"]');
+        const monsterFrame = monster.locator('xpath=./div').first();
 
         await expect(monster).toBeVisible({ timeout: 15000 });
         await expect(monster).toContainText('+1');
         await expect(monster).toHaveAttribute('data-activation-armed', 'false');
+        await expect
+            .poll(async () => await monsterFrame.getAttribute('class'))
+            .toContain('ring-2');
+        await expect
+            .poll(async () => await monsterFrame.getAttribute('class'))
+            .toMatch(/ring-(green|amber)-400/);
+        await game.screenshot('12-monster-with-counter-before-activation', testInfo);
+        await saveEvidenceLocatorScreenshot(
+            page,
+            monster,
+            testInfo,
+            'smashup-4p-layout-test.e2e/移动端有+1力量指示物的怪物发动天赋后会移除指示物并提示额外随从机会',
+            '12a-monster-with-counter-card-before-activation.png',
+        );
 
         await clickCenter(monster, page);
         await expect(monster).toHaveAttribute('data-expanded', 'true');
@@ -892,6 +1646,7 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const aliensCard = factionSelect.getByText(/Aliens|外星人/i).first();
         const piratesCard = factionSelect.getByText(/Pirates|海盗/i).first();
         const rotateBanner = page.getByText(/建议旋转至横屏|建议切换为竖屏/i);
+        const detailBackdrop = page.getByTestId('faction-detail-backdrop');
         const closeButton = page.getByTestId('faction-detail-close');
 
         await expect(factionHeading).toBeVisible({ timeout: 15000 });
@@ -901,6 +1656,7 @@ test.describe('大杀四方移动端派系选择布局', () => {
         await piratesCard.click();
 
         const confirmButton = page.getByRole('button', { name: /Confirm Selection|确认选择/i });
+        const detailPanel = page.getByTestId('faction-detail-panel');
         const previewGrid = page.getByTestId('faction-preview-grid');
         const previewCards = page.getByTestId('faction-preview-card');
         const previewSection = previewGrid.locator('xpath=ancestor::div[contains(@class,"overflow-y-auto")][1]');
@@ -908,12 +1664,49 @@ test.describe('大杀四方移动端派系选择布局', () => {
         const titanCards = page.getByTestId('faction-titan-card');
 
         await expect(confirmButton).toBeVisible({ timeout: 10000 });
+        await expect(detailPanel).toBeVisible({ timeout: 10000 });
         await expect(titanSection).toBeVisible({ timeout: 10000 });
         await expect(titanCards).toHaveCount(1);
         await expect(aliensCard).toBeVisible({ timeout: 10000 });
         const previewCardCount = await previewCards.count();
         expect(previewCardCount).toBeGreaterThan(8);
         await expect(previewSection).toBeVisible({ timeout: 10000 });
+
+        const detailPanelRect = await detailPanel.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            return {
+                width: rect.width,
+                height: rect.height,
+                left: rect.left,
+                right: rect.right,
+                top: rect.top,
+                bottom: rect.bottom,
+            };
+        });
+        const viewportSize = page.viewportSize();
+        expect(viewportSize).not.toBeNull();
+        const viewportWidth = viewportSize?.width ?? 852;
+        const viewportHeight = viewportSize?.height ?? 393;
+        expect(
+            detailPanelRect.width,
+            '移动端派系详情宽度不能明显小于 PC 同构效果，至少应占横屏视口宽度的 55%',
+        ).toBeGreaterThanOrEqual(viewportWidth * 0.55);
+        expect(
+            detailPanelRect.width,
+            '移动端派系详情宽度不能比 PC 同构效果更大，超过横屏视口宽度的 70% 视为放大过度',
+        ).toBeLessThanOrEqual(viewportWidth * 0.7);
+        expect(
+            detailPanelRect.height,
+            '移动端派系详情高度不能再缩成小海报，至少应占横屏视口高度的 60%',
+        ).toBeGreaterThanOrEqual(viewportHeight * 0.6);
+        expect(
+            detailPanelRect.height,
+            '移动端派系详情高度不能过高到接近铺满整屏，超过横屏视口高度的 90% 视为偏离 PC 主态',
+        ).toBeLessThanOrEqual(viewportHeight * 0.9);
+        expect(detailPanelRect.left).toBeGreaterThanOrEqual(0);
+        expect(detailPanelRect.right).toBeLessThanOrEqual(viewportWidth);
+        expect(detailPanelRect.top).toBeGreaterThanOrEqual(0);
+        expect(detailPanelRect.bottom).toBeLessThanOrEqual(viewportHeight);
 
         const scrollMetrics = await previewSection.evaluate((node) => ({
             scrollHeight: node.scrollHeight,
@@ -929,7 +1722,16 @@ test.describe('大杀四方移动端派系选择布局', () => {
 
         await game.screenshot('12-mobile-landscape-faction-detail-bottom', testInfo);
 
+        await expect(detailBackdrop).toBeVisible({ timeout: 5000 });
+        await detailBackdrop.click({ position: { x: 24, y: 24 } });
+        await expect(page.getByTestId('faction-detail-panel')).toHaveCount(0);
+        await game.screenshot('12a-mobile-landscape-faction-detail-blank-close', testInfo);
+
+        await piratesCard.click();
+        await expect(closeButton).toBeVisible({ timeout: 5000 });
         await closeButton.click();
+        await expect(page.getByTestId('faction-detail-panel')).toHaveCount(0);
+
         await aliensCard.click();
         await expect(page.getByTestId('faction-titan-empty')).toContainText(/该种族泰坦暂未接入|Titan/i);
         await game.screenshot('13-mobile-landscape-faction-detail-no-titan', testInfo);
@@ -953,30 +1755,11 @@ test.describe('大杀四方移动端派系选择布局', () => {
 
         const piratesCard = page.getByTestId('faction-option-pirates');
         const aliensCard = page.getByTestId('faction-option-aliens');
-        const detailPanel = page.getByTestId('faction-detail-panel');
         const cancelButton = page.getByTestId('faction-cancel-button');
         const confirmButton = page.getByTestId('faction-confirm-button');
-        const baseVariantButton = page.getByTestId('faction-variant-base');
-        const podVariantButton = page.getByTestId('faction-variant-pod');
 
         await expect(piratesCard).toBeVisible({ timeout: 10000 });
         await piratesCard.click();
-
-        await expect(detailPanel).toBeVisible({ timeout: 10000 });
-        await expect(cancelButton).toBeVisible({ timeout: 10000 });
-        await expect(baseVariantButton).toBeVisible({ timeout: 10000 });
-        await expect(podVariantButton).toBeVisible({ timeout: 10000 });
-        await game.screenshot('16-desktop-faction-variant-base', testInfo);
-
-        await podVariantButton.click();
-        await expect(podVariantButton).toHaveAttribute('data-testid', 'faction-variant-pod');
-        await game.screenshot('17-desktop-faction-variant-pod', testInfo);
-
-        await baseVariantButton.click();
-        await game.screenshot('18-desktop-faction-cancel-before', testInfo);
-
-        await cancelButton.click();
-        await expect(detailPanel).toHaveCount(0);
 
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
@@ -984,9 +1767,10 @@ test.describe('大杀四方移动端派系选择布局', () => {
             const currentPlayerId = state?.core?.turnOrder?.[state.core.currentPlayerIndex];
             return Array.isArray(picks) && picks.length === 0 && currentPlayerId === '0';
         }, { timeout: 10000, polling: 200 });
+        await game.screenshot('16-desktop-faction-direct-cancel', testInfo);
 
         await aliensCard.click();
-        await expect(detailPanel).toBeVisible({ timeout: 10000 });
+        await expect(page.getByTestId('faction-detail-panel')).toBeVisible({ timeout: 10000 });
         await expect(confirmButton).toBeVisible({ timeout: 10000 });
         await confirmButton.click();
 

@@ -1,0 +1,26 @@
+# Ralph Context Snapshot
+- task statement: 盘点并收口当前这批用户反馈，不能只修单一问题；需要并行识别当前工作区涉及的反馈项、已修状态、未收口项，并继续完成剩余修复、验证与证据。
+- desired outcome: 输出明确的反馈清单，区分已完成/待完成；对未收口项继续修复并补齐验证；最终给出带证据的批量收口结果。
+- known facts/evidence:
+  - 当前工作区存在大量并发改动，不能假设只有一个反馈问题。
+  - 已确认并修复的大杀四方在线 AI 8 秒强制结束/误跳过人类回合问题已有上下文快照与 E2E 证据。
+  - 根目录 task_plan.md/findings.md/progress.md 正在服务其他任务，不能混写。
+  - 项目根没有 agents/，但存在 .agent/，已读取其目录；并已读取 docs/shared/agent-tiers.md。
+- constraints:
+  - 全程中文。
+  - 不使用 git reset/revert/强制 checkout 等回滚历史操作。
+  - 涉及多 agent 必须显式使用 gpt-5.4 + high。
+  - 需要按 Ralph 持续推进，直到拿到验证与复核证据。
+- unknowns/open questions:
+  - 当前工作区到底覆盖了哪些反馈项，哪些仍缺验证或证据。
+  - 是否存在仍未完成的反馈修复只停留在代码脏改状态。
+  - 哪些反馈项能够安全并行，哪些必须由主代理串行整合。
+- likely codebase touchpoints:
+  - .omx/context/*.md
+  - evidence/*.md
+  - src/pages/MatchRoom.tsx
+  - src/pages/onlineAiForceSkip.ts
+  - src/games/smashup/**
+  - src/components/**
+  - scripts/infra/**
+  - package.json

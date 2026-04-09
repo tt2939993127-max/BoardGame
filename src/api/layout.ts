@@ -1,6 +1,7 @@
 import type { BoardLayoutConfig } from '../core/ui/board-layout.types';
 import type {
     AbilitySlotLayoutItem,
+    DiceThroneBoardShellTuningMap,
     DiceThronePlayerBoardLayoutVersion,
 } from '../games/dicethrone/ui/abilitySlotLayout';
 import { LAYOUT_API_URL } from '../config/server';
@@ -11,8 +12,9 @@ export type LayoutSaveResponse = {
     bytes: number;
 };
 
-export type DiceThroneAbilityLayoutPayload = {
-    layouts: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]>;
+export type DiceThroneBoardLayoutPayload = {
+    slotLayouts: Record<DiceThronePlayerBoardLayoutVersion, AbilitySlotLayoutItem[]>;
+    uiTuning: DiceThroneBoardShellTuningMap;
 };
 
 const resolveLayoutPath = (url: string) => {
@@ -71,7 +73,7 @@ export const saveSummonerWarsLayout = async (config: BoardLayoutConfig): Promise
 };
 
 export const saveDiceThroneAbilityLayout = async (
-    payload: DiceThroneAbilityLayoutPayload
+    payload: DiceThroneBoardLayoutPayload
 ): Promise<LayoutSaveResponse> => {
     const body = JSON.stringify(payload);
     if (!body) {

@@ -13,6 +13,7 @@ import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
 import { SmashUpDomain } from '../domain';
 import { smashUpSystemsForTest } from '../game';
 import { createInitialSystemState } from '../../../engine/pipeline';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 import type { SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS } from '../domain/types';
 
@@ -220,11 +221,12 @@ describe('盘旋机器人链式打出', () => {
         expect(finalCore.players['0'].deck[0]?.defId).toBe('robot_zapbot');
 
         // 验证第二个盘旋机器人触发后创建的交互，选项应该引用 zapbot
-        const interaction = result.finalState.sys.interaction?.current;
+        const refreshedState = refreshInteractionOptions(result.finalState);
+        const interaction = refreshedState.sys.interaction?.current;
         expect(interaction).toBeDefined();
         expect(interaction?.playerId).toBe('0');
 
-        // 检查交互选项（通过 optionsGenerator 生成）
+        // live 交互需要按最新状态刷新候选，第二个盘旋此时应看到 zapbot
         const options = (interaction?.data as any)?.options;
         expect(options).toBeDefined();
         expect(options.length).toBe(2);
@@ -309,24 +311,19 @@ describe('盘旋机器人链式打出', () => {
             setup: () => ({ core: modifiedCore, sys: step1.finalState.sys }),
         });
 
-        // 使用 try-catch 捕获预期的错误
-        let caughtError: Error | undefined;
-        try {
-            runner2.run({
-                name: '尝试打出不在牌库顶的卡',
-                commands: [
-                    { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } },
-                ] as any[],
-            });
-        } catch (error) {
-            caughtError = error as Error;
-        }
+        const staleRespond = runner2.run({
+            name: '尝试打出不在牌库顶的卡',
+            commands: [
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'play' } },
+            ] as any[],
+        });
 
-        // 验证确实抛出了错误
-        expect(caughtError).toBeDefined();
-        expect(caughtError?.message).toContain('不在牌库顶');
+        // live 校验下，过期的 play 选项会被拒绝为无效选择，而不是抛异常
+        expect(staleRespond.steps[0]?.success).toBe(false);
+        expect(staleRespond.steps[0]?.error).toBe('无效的选择');
 
         // 验证牌库顶仍然是 zapbot（没有被错误地打出）
-        expect(modifiedCore.players['0'].deck[0]?.uid).toBe('zapbot-1');
+        expect(staleRespond.finalState.core.players['0'].deck[0]?.uid).toBe('zapbot-1');
+        expect(staleRespond.finalState.core.bases[0]?.minions.find(m => m.uid === 'hoverbot-2')).toBeUndefined();
     });
 });

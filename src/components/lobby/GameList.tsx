@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Flame } from 'lucide-react';
 import type { GameConfig } from '../../config/games.config';
+import { resolveToolRoute } from '../../config/toolRoutes';
 import { resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 
 interface GameListProps {
@@ -14,11 +15,15 @@ export const GameList = ({ games, onGameClick, onGameIntent, mostPopularGameId }
     const { t, i18n } = useTranslation(['lobby', 'common']);
     return (
         <div className="grid w-full max-w-full grid-cols-2 gap-3 mx-auto sm:grid-cols-[repeat(auto-fill,180px)] sm:justify-center sm:gap-5">
-            {games.map((game, index) => (
+            {games.map((game, index) => {
+                const href = game.type === 'tool'
+                    ? (resolveToolRoute(game.id) ?? `/?game=${game.id}`)
+                    : `/?game=${game.id}`;
+                return (
                 <a
                     key={game.id}
                     data-game-id={game.id}
-                    href={`/?game=${game.id}`}
+                    href={href}
                     onClick={(e) => {
                         e.preventDefault();
                         onGameClick(game.id);
@@ -109,7 +114,8 @@ export const GameList = ({ games, onGameClick, onGameIntent, mostPopularGameId }
                         </div>
                     </div>
                 </a>
-            ))}
+                );
+            })}
         </div>
     );
 };

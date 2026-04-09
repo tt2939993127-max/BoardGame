@@ -2,8 +2,8 @@
  * 大杀四方 - 野生保护区 (wildlife_preserve) 保护测试
  *
  * 验证 'action' 类型保护在交互解决路径中生效：
- * - 对手打出行动卡 → 创建交互选择目标 → 交互解决 → afterEvents 产生 MINION_DESTROYED
- * - afterEvents 中的保护过滤应阻止消灭
+ * - 对手打出行动卡时，受保护目标不应进入可选列表
+ * - 若所有目标都被保护，则不应创建空交互，也不应产生 MINION_DESTROYED
  *
  * 这是 wildlife_preserve 的核心 bug 修复验证：
  * 修复前，保护过滤只在 execute() 后处理中执行，交互解决路径绕过了保护。
@@ -15,8 +15,9 @@ import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearOngoingEffectRegistry, isMinionProtected } from '../domain/ongoingEffects';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { startDuel } from '../domain/duel';
 import { runCommand } from './testRunner';
-import { makeMinion, makePlayer, makeState, makeMatchState, makeCard } from './helpers';
+import { findInteractionOption, makeMinion, makePlayer, makeState, makeMatchState, makeCard, resolveInteractionChain } from './helpers';
 import type { BaseInPlay, OngoingActionOnBase } from '../domain/types';
 import { SU_EVENTS, SU_COMMANDS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -119,12 +120,11 @@ describe('wildlife_preserve: 交互解决路径中阻止行动卡效果', () => 
      * 核心场景：对手打出行动卡（手里剑）消灭随从 → 交互解决 → afterEvents 应阻止消灭
      *
      * 流程：
-     * 1. P1 打出 ninja_seeing_stars（行动卡）→ execute 创建交互
-     * 2. SYS_INTERACTION_RESPOND → SimpleChoiceSystem 解决 → SYS_INTERACTION_RESOLVED
-     * 3. SmashUpEventSystem.afterEvents 调用 handler → 产生 MINION_DESTROYED
-     * 4. afterEvents 中的 processDestroyTriggers 应检测到 'action' 保护 → 过滤掉 MINION_DESTROYED
+ * 1. P1 打出 ninja_seeing_stars（行动卡）
+ * 2. 目标筛选阶段即过滤受 wildlife_preserve 保护的随从
+ * 3. 因为没有合法目标，不创建交互，也不会产生 MINION_DESTROYED
      */
-    it('对手行动卡通过交互消灭随从时，wildlife_preserve 阻止消灭', () => {
+    it('对手行动卡的目标若全部受 wildlife_preserve 保护，则不创建空交互也不消灭随从', () => {
         // 构造状态：基地上有 P0 的随从 + wildlife_preserve
         const base = makeBase('test_base', {
             minions: [makeMinion('target_m', 'test_minion_weak', '0', 2, { powerModifier: 0 })],
@@ -156,27 +156,17 @@ describe('wildlife_preserve: 交互解决路径中阻止行动卡效果', () => 
         });
         expect(playResult.success).toBe(true);
 
-        // 应创建交互（选择目标随从）
+        // 不应创建空交互
         const interaction = playResult.finalState.sys.interaction?.current;
-        expect(interaction).toBeDefined();
-        expect((interaction!.data as any).sourceId).toBe('ninja_seeing_stars');
+        expect(interaction).toBeUndefined();
 
-        // Step 2: P1 选择 P0 的随从作为目标
-        const respondResult = runCommand(playResult.finalState, {
-            type: 'SYS_INTERACTION_RESPOND' as any,
-            playerId: '1',
-            payload: { optionId: 'minion-0' },
-            timestamp: 1001,
-        });
-        expect(respondResult.success).toBe(true);
-
-        // Step 3: 验证随从未被消灭（wildlife_preserve 保护生效）
-        const finalBase = respondResult.finalState.core.bases[0];
+        // 验证随从未被消灭
+        const finalBase = playResult.finalState.core.bases[0];
         const targetMinion = finalBase.minions.find(m => m.uid === 'target_m');
         expect(targetMinion).toBeDefined(); // 随从仍在场上
 
-        // 验证没有 MINION_DESTROYED 事件（被过滤掉了）
-        const destroyEvents = respondResult.events.filter(
+        // 验证没有 MINION_DESTROYED 事件
+        const destroyEvents = playResult.events.filter(
             e => e.type === SU_EVENTS.MINION_DESTROYED
         );
         expect(destroyEvents).toHaveLength(0);
@@ -229,5 +219,48 @@ describe('wildlife_preserve: 交互解决路径中阻止行动卡效果', () => 
         const finalBase = respondResult.finalState.core.bases[0];
         const targetMinion = finalBase.minions.find(m => m.uid === 'target_m');
         expect(targetMinion).toBeUndefined(); // 随从已被消灭
+    });
+
+    it('wildlife_preserve 不应阻止枪手决斗消灭失败的敌方随从', () => {
+        const base = makeBase('test_base', {
+            minions: [
+                makeMinion('gun-1', 'cowboys_gunfighter', '0', 3, { powerModifier: 4 }),
+                makeMinion('enemy-1', 'alien_collector', '1', 2, { powerModifier: 1 }),
+            ],
+            ongoingActions: [makeOngoing('wp1', 'dino_wildlife_preserve', '1')],
+        });
+        const started = startDuel(makeMatchState(makeState({
+            bases: [base],
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS, SMASHUP_FACTION_IDS.WIZARDS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.DINOSAURS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+        })), {
+            sourceId: 'cowboys_gunfighter',
+            sourcePlayerId: '0',
+            challengerMinionUid: 'gun-1',
+            challengedMinionUid: 'enemy-1',
+            outcome: 'destroy_loser',
+            destroyReason: 'cowboys_gunfighter',
+        }, 1000);
+
+        const resolved = resolveInteractionChain(started, (prompt) => {
+            const skip = findInteractionOption(prompt, option => option?.value?.skip === true);
+            if (!skip) {
+                throw new Error(`未找到可跳过的决斗选项: ${prompt?.data?.sourceId ?? 'unknown'}`);
+            }
+            return { optionId: skip.id };
+        });
+
+        const destroyEvents = resolved.events.filter(
+            event => event.type === SU_EVENTS.MINION_DESTROYED && (event as any).payload?.minionUid === 'enemy-1',
+        );
+        expect(destroyEvents).toHaveLength(1);
+        expect(resolved.finalState.core.bases[0].minions.some(m => m.uid === 'enemy-1')).toBe(false);
+        expect(resolved.finalState.core.bases[0].minions.some(m => m.uid === 'gun-1')).toBe(true);
     });
 });

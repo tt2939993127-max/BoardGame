@@ -77,6 +77,9 @@
       "backToLobbyHint": "Leave room completely",
       "social": "Friends",
       "feedback": "Feedback",
+      "downloadApp": "Download App",
+      "checkUpdate": "Check Update",
+      "checkingUpdate": "Updating",
       "about": "About",
       "fullscreen": "Fullscreen",
       "exitFullscreen": "Exit Fullscreen",
@@ -161,9 +164,24 @@
       "enterFailed": "Failed to enter fullscreen. Check browser permissions.",
       "exitFailed": "Failed to exit fullscreen. Check browser status."
     },
+    "download": {
+      "missingLink": "App download is not configured yet. Configure the native update manifest or an APK direct link first.",
+      "resolveFailed": "Unable to resolve the latest App download URL. Please try again later."
+    },
     "toggle": {
       "collapse": "Collapse menu",
       "expand": "Expand menu - draggable"
+    },
+    "smashup": {
+      "title": "Smash Up",
+      "interaction": "Interaction mode",
+      "interactionHint": "Default mode: click to select, then click again to confirm play. Drag mode plays only on drop.",
+      "modeClick": "Click",
+      "modeDrag": "Drag",
+      "overlay": "Chinese overlay",
+      "overlayHint": "Show Chinese name and rules text on English card art.",
+      "enabled": "On",
+      "disabled": "Off"
     }
   },
   "audio": {
