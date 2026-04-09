@@ -108,6 +108,23 @@ describe('CreateRoomModal AI default state', () => {
         expect(screen.getByText('AI 占位')).toBeInTheDocument();
     });
 
+    it('房间密码支持右侧眼睛按钮切换显隐', () => {
+        render(createElement(CreateRoomModal, {
+            isOpen: true,
+            onClose: vi.fn(),
+            onConfirm: vi.fn(),
+            gameManifest,
+            initialPreferences: null,
+        }));
+
+        const passwordInput = screen.getByTestId('create-room-password-input');
+        const passwordToggle = screen.getByTestId('create-room-password-toggle');
+
+        expect(passwordInput).toHaveAttribute('type', 'password');
+        fireEvent.click(passwordToggle);
+        expect(passwordInput).toHaveAttribute('type', 'text');
+    });
+
     it('开启 AI 后默认使用普通难度提交本地 AI 座位', () => {
         const onConfirm = vi.fn();
 

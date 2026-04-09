@@ -1817,17 +1817,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
     return (
         <>
+            <PasswordEntryModal
+                open={!!passwordModalConfig}
+                onClose={() => setPasswordModalConfig(null)}
+                onConfirm={handlePasswordConfirm}
+                closeOnBackdrop
+            />
             <ModalBase
                 onClose={onClose}
                 closeOnBackdrop={closeOnBackdrop}
                 containerClassName="p-4 sm:p-8"
             >
-                <PasswordEntryModal
-                    open={!!passwordModalConfig}
-                    onClose={() => setPasswordModalConfig(null)}
-                    onConfirm={handlePasswordConfirm}
-                    closeOnBackdrop
-                />
                 <div
                     ref={modalRef}
                     data-testid="game-details-modal-root"

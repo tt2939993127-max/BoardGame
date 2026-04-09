@@ -8,6 +8,7 @@
  * - 鲜血领主
  */
 
+import type { MatchState } from '../../../engine/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { getBaseDef, getCardDef, getMinionLikePower, getTitanDef } from '../data/cards';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -43,6 +44,10 @@ import { continueActiveDuel } from '../domain/duel';
 import { registerInterceptor, registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase, registerTitanPowerModifier } from '../domain/ongoingModifiers';
+import {
+    getDeferredPostScoringEvents as readDeferredPostScoringEvents,
+    getDeferredReplacementBaseDefId,
+} from '../domain/scoringSession';
 import { validateActionPlaySemantics } from '../domain/playLegality';
 import {
     registerTitanSpecialValidator,
@@ -58,6 +63,7 @@ import type {
     MinionDestroyedEvent,
     MinionCardDef,
     PowerCounterAddedEvent,
+    SmashUpCore,
     SmashUpEvent,
     TitanState,
     TitanPowerCounterAddedEvent,
@@ -194,24 +200,11 @@ function getMajorUrsaEnemyMinionTargets(state: AbilityContext['state'], playerId
         });
 }
 
-function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
-    const continuation = interactionData?.continuationContext as { _deferredPostScoringEvents?: SmashUpEvent[] } | undefined;
-    return continuation?._deferredPostScoringEvents;
-}
-
-function appendDeferredPostScoringEventsIfLast(
-    state: AbilityContext['matchState'],
+function getDeferredPostScoringEvents(
+    state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
-    events: SmashUpEvent[],
-): SmashUpEvent[] {
-    const deferredEvents = getDeferredPostScoringEvents(interactionData);
-    const hasPendingInteraction =
-        !!state.sys.interaction?.current
-        || (state.sys.interaction?.queue?.length ?? 0) > 0;
-    if (deferredEvents && deferredEvents.length > 0 && !hasPendingInteraction) {
-        events.push(...deferredEvents);
-    }
-    return events;
+): SmashUpEvent[] | undefined {
+    return readDeferredPostScoringEvents(state, interactionData) as SmashUpEvent[] | undefined;
 }
 
 function schedulePowerModifierUntilNextTurnStart(
@@ -3324,8 +3317,7 @@ export function registerTitanInteractionHandlers(): void {
             baseIndex?: number;
         } | undefined;
         if (selected?.skip) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
         if (!selected?.cardUid || selected.baseIndex === undefined) {
             return { state, events: [] };
@@ -3343,12 +3335,7 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
-        const events = appendDeferredPostScoringEventsIfLast(
-            state,
-            data as Record<string, unknown> | undefined,
-            [returnEvent],
-        );
-        return { state, events };
+        return { state, events: [returnEvent] };
     });
 
     registerInteractionHandler('titan_sphinx_talent', (state, playerId, value, data, random, timestamp) => {
@@ -3552,7 +3539,7 @@ export function registerTitanInteractionHandlers(): void {
             continuationContext?: { titanUid?: string; titanDefId?: string };
         } | undefined)?.continuationContext;
         const titan = continuation?.titanUid ? getTitanByUid(state.core, continuation.titanUid) : undefined;
-        const replacementEvent = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined)?.find(
+        const replacementEvent = getDeferredPostScoringEvents(state, data as Record<string, unknown> | undefined)?.find(
             event => event.type === SU_EVENTS.BASE_REPLACED,
         );
         const replacementBaseIndex = replacementEvent?.payload?.baseIndex;
@@ -3924,10 +3911,7 @@ export function registerTitanInteractionHandlers(): void {
         let nextState = state;
 
         if (selected?.play && continuation?.titanUid && continuation.titanDefId && continuation.ownerId && continuation.controllerId && continuation.scoringBaseIndex !== undefined) {
-            const deferredEvents = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined) ?? [];
-            const replacementBaseDefId = (deferredEvents as Array<{ type: string; payload?: { newBaseDefId?: string } }>).find(
-                event => event.type === SU_EVENTS.BASE_REPLACED,
-            )?.payload?.newBaseDefId;
+            const replacementBaseDefId = getDeferredReplacementBaseDefId(state, data as Record<string, unknown> | undefined);
             if (replacementBaseDefId) {
                 nextState = {
                     ...state,
@@ -3951,7 +3935,6 @@ export function registerTitanInteractionHandlers(): void {
             }
         }
 
-        appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, events);
         return { state: nextState, events };
     });
 
@@ -3959,8 +3942,7 @@ export function registerTitanInteractionHandlers(): void {
         const selected = value as { skip?: boolean; minionUid?: string; defId?: string; baseIndex?: number } | undefined;
         const continuation = (data as { continuationContext?: { scoringBaseIndex?: number } } | undefined)?.continuationContext;
         if (selected?.skip || continuation?.scoringBaseIndex === undefined) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
         if (!selected?.minionUid || !selected.defId) {
             return { state, events: [] };
@@ -3968,8 +3950,7 @@ export function registerTitanInteractionHandlers(): void {
 
         const baseOptions = getOtherBaseOptions(state.core, continuation.scoringBaseIndex);
         if (baseOptions.length === 0) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
 
         const interaction = createSimpleChoice(
@@ -4000,10 +3981,9 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
-        const events = appendDeferredPostScoringEventsIfLast(
+        return {
             state,
-            data as Record<string, unknown> | undefined,
-            [
+            events: [
                 moveMinion(
                     continuation.minionUid,
                     continuation.minionDefId,
@@ -4014,9 +3994,7 @@ export function registerTitanInteractionHandlers(): void {
                     selected.baseDefId,
                 ),
             ],
-        );
-
-        return { state, events };
+        };
     });
 
     registerInteractionHandler('titan_pirates_the_kraken_talent', (state, _playerId, value, data, _random, timestamp) => {

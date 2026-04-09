@@ -17,6 +17,7 @@ import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { FACTION_DISPLAY_NAMES } from '../domain/ids';
 import { getOpponentLabel, resolveLiveBaseIndex } from '../domain/utils';
+import { flushDeferredPostScoringCompatibility } from '../domain/scoringSession';
 
 /** 注册海盗派系所有能力*/
 export function registerPirateAbilities(): void {
@@ -966,17 +967,7 @@ export function registerPirateInteractionHandlers(): void {
         
         // 【通用修复】检查是否有延迟事件需要补发
         // 引擎层 resolveInteraction 已自动传递延迟事件，这里只需要在最后一个交互时补发
-        const deferredEvents = (iData?.continuationContext as any)?._deferredPostScoringEvents as 
-            { type: string; payload: unknown; timestamp: number }[] | undefined;
-        const hasNextInteraction =
-            !!state.sys.interaction?.current
-            || (state.sys.interaction?.queue?.length ?? 0) > 0;
-        
         if (selected.skip) {
-            // 跳过时，如果这是最后一个交互，补发延迟事件
-            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-                return { state, events: deferredEvents as any[] };
-            }
             return { state, events: [] };
         }
         
@@ -986,9 +977,6 @@ export function registerPirateInteractionHandlers(): void {
         if (!ctx) return undefined;
         const resolvedDestBase = resolveLiveBaseIndex(state.core, destBase, selected.baseDefId);
         if (resolvedDestBase === undefined) {
-            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-                return { state, events: deferredEvents as any[] };
-            }
             return { state, events: [] };
         }
         const events: SmashUpEvent[] = [moveMinion(
@@ -999,12 +987,15 @@ export function registerPirateInteractionHandlers(): void {
             ctx.mateDefId === 'pirate_first_mate_pod' ? 'pirate_first_mate_pod' : 'pirate_first_mate',
             timestamp
         )];
-        
-        // 【通用修复】如果这是最后一个交互，补发延迟事件
-        if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-            events.push(...deferredEvents as SmashUpEvent[]);
+
+        const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
+        if (compatibility.flushed) {
+            return {
+                state: compatibility.state,
+                events: [...events, ...compatibility.events],
+            };
         }
-        
+
         return { state, events };
     });
 }

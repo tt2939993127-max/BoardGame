@@ -1,5 +1,4 @@
 import type {
-    AiActionDecision,
     AiDecisionContext,
     AiDifficultyProfile,
     AiLegalAction,
@@ -8,6 +7,7 @@ import type {
     LocalAiActionScorer,
     LocalAiPolicy,
 } from './types';
+import { resolveAiDifficultyProfile } from './difficulty';
 import { evaluateLocalAiActions } from './scoring';
 import { buildDeterministicAiNoise } from './noise';
 
@@ -91,11 +91,18 @@ export function createLookaheadLocalAiPolicy(
     return {
         id: options.id,
         decide(context) {
-            const baseEvaluations = evaluateLocalAiActions(context, options.scorers);
+            const difficulty = context.difficulty ?? resolveAiDifficultyProfile(undefined);
+            const normalizedContext = context.difficulty
+                ? context
+                : {
+                    ...context,
+                    difficulty,
+                };
+            const baseEvaluations = evaluateLocalAiActions(normalizedContext, options.scorers);
             if (baseEvaluations.length === 0) return null;
 
             const sorted = stableSortedEvaluations(baseEvaluations);
-            const shortlistSize = Math.max(1, Math.min(context.difficulty.shortlistSize, sorted.length));
+            const shortlistSize = Math.max(1, Math.min(difficulty.shortlistSize, sorted.length));
             const shortlist = new Set(sorted.slice(0, shortlistSize).map((item) => item.action.actionId));
             const startedAt = Date.now();
 
@@ -105,21 +112,21 @@ export function createLookaheadLocalAiPolicy(
                 let projectedMetadata: Record<string, unknown> | undefined;
                 const shouldSearch = Boolean(
                     options.projectAction
-                    && context.difficulty.searchDepth > 0
+                    && difficulty.searchDepth > 0
                     && shortlist.has(evaluation.action.actionId),
                 );
 
                 if (shouldSearch) {
                     const remainingBudgetMs = Math.max(
                         0,
-                        context.difficulty.simulationBudgetMs - (Date.now() - startedAt),
+                        difficulty.simulationBudgetMs - (Date.now() - startedAt),
                     );
                     if (remainingBudgetMs > 0) {
                         const projected = options.projectAction?.({
-                            context,
+                            context: normalizedContext,
                             action: evaluation.action,
                             baseEvaluation: evaluation,
-                            difficulty: context.difficulty,
+                            difficulty,
                             remainingBudgetMs,
                         });
                         if (projected && Number.isFinite(projected.score) && projected.score !== 0) {
@@ -135,15 +142,15 @@ export function createLookaheadLocalAiPolicy(
                 }
 
                 let noiseScore = 0;
-                if (context.difficulty.randomness > 0) {
+                if (difficulty.randomness > 0) {
                     noiseScore = Number(
-                        (buildDeterministicAiNoise(context, evaluation.action) * context.difficulty.randomness).toFixed(3),
+                        (buildDeterministicAiNoise(normalizedContext, evaluation.action) * difficulty.randomness).toFixed(3),
                     );
                     if (noiseScore !== 0) {
                         contributions.push({
                             scorerId: 'difficulty-noise',
                             score: noiseScore,
-                            reason: `难度扰动 ${context.difficulty.level}`,
+                            reason: `难度扰动 ${difficulty.level}`,
                         });
                     }
                 }
@@ -183,7 +190,7 @@ export function createLookaheadLocalAiPolicy(
                 reasoningSummary: buildReasoningSummary(best, options.maxReasonCount ?? 3),
                 providerMetadata: {
                     policyId: options.id,
-                    difficulty: context.difficulty,
+                    difficulty,
                     shortlistSize,
                     evaluations: finalEvaluations.map((evaluation) => evaluation.trace),
                 },

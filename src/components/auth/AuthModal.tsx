@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ModalBase } from '../common/overlays/ModalBase';
 import { LoadingArcaneAether } from '../system/LoadingVariants';
 import { AnimatePresence } from 'framer-motion';
+import { PasswordField } from '../common/PasswordField';
 
 const AUTH_REMEMBERED_FIELDS_STORAGE_KEY = 'auth_modal_remembered_fields_v1';
 
@@ -605,8 +606,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                     <label className={fieldLabelClassName}>
                                         {t('label.password')}
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordField
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         className={textInputClassName}
@@ -615,6 +615,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                         minLength={4}
                                         autoComplete="current-password"
                                         data-testid="auth-login-password-input"
+                                        toggleButtonTestId="auth-login-password-toggle"
                                     />
                                 </div>
                             )}
@@ -624,8 +625,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                     <label className={fieldLabelClassName}>
                                         {t('label.password')}
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordField
                                         value={password}
                                         onChange={(e) => setPassword(e.target.value)}
                                         className={textInputClassName}
@@ -634,6 +634,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                         minLength={4}
                                         autoComplete="new-password"
                                         data-testid="auth-register-password-input"
+                                        toggleButtonTestId="auth-register-password-toggle"
                                     />
                                 </div>
                             )}
@@ -643,8 +644,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                     <label className={fieldLabelClassName}>
                                         {t('label.newPassword')}
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordField
                                         value={resetNewPassword}
                                         onChange={(e) => setResetNewPassword(e.target.value)}
                                         className={textInputClassName}
@@ -653,6 +653,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                         minLength={4}
                                         autoComplete="new-password"
                                         data-testid="auth-reset-new-password-input"
+                                        toggleButtonTestId="auth-reset-new-password-toggle"
                                     />
                                 </div>
                             )}
@@ -665,8 +666,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                     <label className={fieldLabelClassName}>
                                         {t('label.confirmPassword')}
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordField
                                         value={confirmPassword}
                                         onChange={(e) => setConfirmPassword(e.target.value)}
                                         className={textInputClassName}
@@ -675,6 +675,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                         minLength={4}
                                         autoComplete="new-password"
                                         data-testid="auth-register-confirm-password-input"
+                                        toggleButtonTestId="auth-register-confirm-password-toggle"
                                     />
                                 </motion.div>
                             )}
@@ -687,8 +688,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                     <label className={fieldLabelClassName}>
                                         {t('label.confirmPassword')}
                                     </label>
-                                    <input
-                                        type="password"
+                                    <PasswordField
                                         value={resetConfirmPassword}
                                         onChange={(e) => setResetConfirmPassword(e.target.value)}
                                         className={textInputClassName}
@@ -697,6 +697,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                                         minLength={4}
                                         autoComplete="new-password"
                                         data-testid="auth-reset-confirm-password-input"
+                                        toggleButtonTestId="auth-reset-confirm-password-toggle"
                                     />
                                 </motion.div>
                             )}

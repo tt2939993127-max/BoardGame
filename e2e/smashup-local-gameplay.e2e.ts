@@ -1313,7 +1313,86 @@ test.describe('SmashUp 本地模式 E2E', () => {
         await expect(page.getByTestId('su-drag-arrow')).toHaveCount(0);
         await page.mouse.up();
 
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return {
+                    interactionId: state.sys.interaction?.current?.id ?? null,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'prompt-extra-minion-1'),
+                    minionsPlayed: state.core.players['0'].minionsPlayed,
+                };
+            });
+        }).toEqual({
+            interactionId: 'e2e-extra-minion-choice',
+            stillInHand: true,
+            minionsPlayed: 0,
+        });
+
         await game.screenshot('smashup-drag-prompt-click-mode', testInfo);
+
+        await page.evaluate(() => {
+            const harness = window.__BG_TEST_HARNESS__;
+            if (!harness?.state?.patch) {
+                throw new Error('TestHarness state.patch 不可用');
+            }
+            return harness.state.patch({
+                'sys.interaction.current': {
+                    id: 'e2e-base-choice',
+                    kind: 'simple-choice',
+                    playerId: '0',
+                    data: {
+                        title: '选择一个基地',
+                        sourceId: 'e2e_base_choice',
+                        targetType: 'base',
+                        options: [
+                            { id: 'base-0', label: '基地 0', value: { baseIndex: 0 } },
+                            { id: 'base-1', label: '基地 1', value: { baseIndex: 1 } },
+                            { id: 'skip-base', label: '跳过', value: { skip: true }, displayMode: 'button' },
+                        ],
+                    },
+                },
+            });
+        });
+
+        const boardPromptCard = page.locator('[data-card-uid="prompt-extra-minion-1"]');
+        const base = page.locator('[data-base-index="0"]');
+        await expect(boardPromptCard).toBeVisible({ timeout: 5000 });
+        await expect(base).toBeVisible({ timeout: 5000 });
+
+        const boardPromptCursor = await boardPromptCard.evaluate((node) => window.getComputedStyle(node as HTMLElement).cursor);
+        expect(boardPromptCursor).not.toContain('grab');
+
+        const cardBox = await boardPromptCard.boundingBox();
+        const baseBox = await base.boundingBox();
+        expect(cardBox).not.toBeNull();
+        expect(baseBox).not.toBeNull();
+        if (!cardBox || !baseBox) {
+            throw new Error('无法获取正常拖拽场景坐标');
+        }
+
+        await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
+        await page.mouse.down();
+        await page.mouse.move(baseBox.x + baseBox.width / 2, baseBox.y + baseBox.height / 2, { steps: 20 });
+        await page.waitForTimeout(250);
+        await expect(page.getByTestId('su-drag-arrow')).toHaveCount(0);
+        await page.mouse.up();
+
+        await expect.poll(async () => {
+            return await page.evaluate(() => {
+                const state = window.__BG_TEST_HARNESS__!.state.get();
+                return {
+                    interactionId: state.sys.interaction?.current?.id ?? null,
+                    stillInHand: state.core.players['0'].hand.some((entry: { uid: string }) => entry.uid === 'prompt-extra-minion-1'),
+                    baseMinionCount: state.core.bases[0].minions.length,
+                };
+            });
+        }).toEqual({
+            interactionId: 'e2e-base-choice',
+            stillInHand: true,
+            baseMinionCount: 0,
+        });
+
+        await game.screenshot('smashup-drag-board-prompt-lock-mode', testInfo);
 
         await page.evaluate(() => {
             const harness = window.__BG_TEST_HARNESS__;
@@ -1326,24 +1405,77 @@ test.describe('SmashUp 本地模式 E2E', () => {
         });
 
         const normalDragCard = page.locator('[data-card-uid="prompt-extra-minion-1"]');
-        const base = page.locator('[data-base-index="0"]');
         await expect(normalDragCard).toBeVisible({ timeout: 5000 });
-        await expect(base).toBeVisible({ timeout: 5000 });
 
-        const cardBox = await normalDragCard.boundingBox();
-        const baseBox = await base.boundingBox();
-        expect(cardBox).not.toBeNull();
-        expect(baseBox).not.toBeNull();
-        if (!cardBox || !baseBox) {
+        const normalCardBox = await normalDragCard.boundingBox();
+        expect(normalCardBox).not.toBeNull();
+        if (!normalCardBox || !baseBox) {
             throw new Error('无法获取正常拖拽场景坐标');
         }
 
-        await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
+        await page.mouse.move(normalCardBox.x + normalCardBox.width / 2, normalCardBox.y + normalCardBox.height / 2);
         await page.mouse.down();
         await page.mouse.move(baseBox.x + baseBox.width / 2, baseBox.y + baseBox.height / 2, { steps: 20 });
-        await expect(page.getByTestId('su-drag-arrow')).toBeVisible({ timeout: 5000 });
+        const dragArrow = page.getByTestId('su-drag-arrow');
+        await expect(dragArrow).toBeVisible({ timeout: 5000 });
+
+        const dragCurveMetrics = await dragArrow.evaluate((node) => {
+            const line = node.querySelector('path');
+            const path = line?.getAttribute('d') ?? '';
+            const match = path.match(
+                /M\s*([0-9.+-]+)\s+([0-9.+-]+)\s+C\s*([0-9.+-]+)\s+([0-9.+-]+)\s+([0-9.+-]+)\s+([0-9.+-]+)\s+([0-9.+-]+)\s+([0-9.+-]+)/i,
+            );
+            if (!match) return null;
+
+            const values = match.slice(1).map((value) => Number.parseFloat(value));
+            const [startX, startY, control1X, control1Y, control2X, control2Y, endX, endY] = values;
+            const deltaX = endX - startX;
+            const deltaY = endY - startY;
+            const lineLength = Math.hypot(deltaX, deltaY) || 1;
+            const signedOffset = (pointX: number, pointY: number) => (
+                ((pointX - startX) * deltaY - (pointY - startY) * deltaX) / lineLength
+            );
+            const progress = (pointX: number, pointY: number) => (
+                ((pointX - startX) * deltaX + (pointY - startY) * deltaY) / (lineLength * lineLength)
+            );
+
+            return {
+                path,
+                control1Offset: signedOffset(control1X, control1Y),
+                control2Offset: signedOffset(control2X, control2Y),
+                control1Progress: progress(control1X, control1Y),
+                control2Progress: progress(control2X, control2Y),
+            };
+        });
+
+        expect(dragCurveMetrics, '拖拽箭头路径应保持三次贝塞尔曲线').not.toBeNull();
+        if (!dragCurveMetrics) {
+            throw new Error('无法解析拖拽箭头路径');
+        }
+
+        expect(
+            Math.abs(dragCurveMetrics.control1Offset),
+            `拖拽箭头第一控制点抬升过小，路径=${dragCurveMetrics.path}`,
+        ).toBeGreaterThan(16);
+        expect(
+            Math.abs(dragCurveMetrics.control2Offset),
+            `拖拽箭头第二控制点不应塌成近似直线，路径=${dragCurveMetrics.path}`,
+        ).toBeGreaterThan(8);
+        expect(
+            Math.sign(dragCurveMetrics.control1Offset),
+            `拖拽箭头两段控制点必须位于同一侧，避免再次出现折返感，路径=${dragCurveMetrics.path}`,
+        ).toBe(Math.sign(dragCurveMetrics.control2Offset));
+        expect(
+            Math.abs(dragCurveMetrics.control1Offset),
+            `拖拽箭头尾段弧度不应反超前段，避免再次出现“前鼓后折”，路径=${dragCurveMetrics.path}`,
+        ).toBeGreaterThanOrEqual(Math.abs(dragCurveMetrics.control2Offset));
+        expect(dragCurveMetrics.control1Progress).toBeGreaterThan(0.1);
+        expect(dragCurveMetrics.control1Progress).toBeLessThan(0.45);
+        expect(dragCurveMetrics.control2Progress).toBeGreaterThan(0.55);
+        expect(dragCurveMetrics.control2Progress).toBeLessThan(0.95);
 
         await game.screenshot('smashup-drag-arrow-curve-optimized', testInfo);
+        await saveEvidenceLocatorScreenshot(dragArrow, 'smashup-drag-arrow-curve-optimized-arrow', testInfo);
 
         await page.mouse.up();
 

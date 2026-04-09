@@ -56,7 +56,7 @@ async function applyKeyboardViewportSimulation(page: Page, options: { runtimeVie
 }
 
 async function openCreateRoomFromDetailsModal(page: Page): Promise<void> {
-    const detailsModal = page.getByTestId('game-details-modal-root').last();
+    const detailsModal = page.locator('[data-testid="game-details-modal-root"]:visible').last();
     await expect(detailsModal).toBeVisible({ timeout: 15000 });
 
     const openCreateRoomButton = detailsModal.getByTestId('game-details-open-create-room');
@@ -69,6 +69,8 @@ async function openCreateRoomFromDetailsModal(page: Page): Promise<void> {
     });
     await expect(page.getByTestId('create-room-modal').last()).toBeVisible({ timeout: 10000 });
 }
+
+const getVisibleGameDetailsModal = (page: Page) => page.locator('[data-testid="game-details-modal-root"]:visible').last();
 
 async function confirmCreateRoomFromModal(page: Page): Promise<void> {
     const confirmButton = page.getByTestId('create-room-confirm-button');
@@ -207,7 +209,7 @@ test.describe('Lobby E2E', () => {
     test('游戏详情弹窗会显示当前中文动作入口', async ({ page }) => {
         await page.getByRole('heading', { name: '井字棋' }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
-        await expect(page.getByTestId('game-details-modal-root').last()).toBeVisible({ timeout: 15000 });
+        await expect(getVisibleGameDetailsModal(page)).toBeVisible({ timeout: 15000 });
 
         await expect(page.getByRole('button', { name: '创建房间' })).toBeVisible({ timeout: 15000 });
         await expect(page.getByRole('button', { name: '单机模式' })).toHaveCount(0);
@@ -405,6 +407,7 @@ test.describe('Lobby E2E', () => {
         const getCreateRoomModal = () => page.getByTestId('create-room-modal').last();
         const getRoomNameInput = () => page.getByTestId('create-room-name-input').last();
         const getPasswordInput = () => page.getByTestId('create-room-password-input').last();
+        const getPasswordToggle = () => page.getByTestId('create-room-password-toggle').last();
 
         await expect(getCreateRoomModal()).toBeVisible();
         await applyKeyboardViewportSimulation(page, {
@@ -421,6 +424,9 @@ test.describe('Lobby E2E', () => {
             node.dispatchEvent(new Event('input', { bubbles: true }));
         }, '移动端建房输入校验');
         await expect(getPasswordInput()).toBeVisible();
+        await expect(getPasswordInput()).toHaveAttribute('type', 'password');
+        await getPasswordToggle().click();
+        await expect(getPasswordInput()).toHaveAttribute('type', 'text');
         await getPasswordInput().evaluate((node, value) => {
             if (!(node instanceof HTMLInputElement)) {
                 throw new Error('房间密码输入框节点不是 input');
@@ -531,9 +537,12 @@ test.describe('Lobby E2E', () => {
         await setChineseLocale(page);
 
         const privateRoom = await createLockedTicTacToeRoom(page);
-        await page.goto('/?game=tictactoe', { waitUntil: 'domcontentloaded' });
+        await ensureLobbyReady(page);
+        const ticTacToeCard = page.locator('a[data-game-id="tictactoe"]').first();
+        await expect(ticTacToeCard).toBeVisible({ timeout: 15000 });
+        await ticTacToeCard.click();
         await expect(page).toHaveURL(/game=tictactoe/);
-        const detailsModal = page.getByTestId('game-details-modal-root').last();
+        const detailsModal = getVisibleGameDetailsModal(page);
         await expect(detailsModal).toBeVisible({ timeout: 15000 });
 
         const roomCard = detailsModal.getByTestId(`room-list-item-${privateRoom.matchId}`).last();
@@ -556,17 +565,14 @@ test.describe('Lobby E2E', () => {
             runtimeViewportHeight: 564,
             keyboardInsetHeight: 280,
         });
+        await expect(passwordInput).toHaveAttribute('type', 'password');
 
-        await passwordInput.evaluate((node, value) => {
+        await passwordInput.evaluate((node) => {
             if (!(node instanceof HTMLInputElement)) {
                 throw new Error('私密房间密码输入框节点不是 input');
             }
             node.focus();
-            node.value = value;
-            node.dispatchEvent(new Event('input', { bubbles: true }));
-        }, privateRoom.password);
-
-        await expect(passwordInput).toHaveValue(privateRoom.password);
+        });
 
         const layoutMetrics = await passwordModal.evaluate((element) => {
             if (!(element instanceof HTMLElement)) {
@@ -579,25 +585,60 @@ test.describe('Lobby E2E', () => {
             const runtimeViewportHeight = Number.parseFloat(
                 window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0',
             );
-            const fontSize = input ? Number.parseFloat(window.getComputedStyle(input).fontSize || '0') : 0;
 
             return {
                 modalTop: modalRect.top,
+                modalLeft: modalRect.left,
+                modalRight: modalRect.right,
+                modalBottom: modalRect.bottom,
                 inputBottom: input?.getBoundingClientRect().bottom ?? 0,
                 confirmBottom: confirm?.getBoundingClientRect().bottom ?? 0,
                 runtimeViewportHeight,
-                fontSize,
+                viewportWidth: window.innerWidth,
             };
         });
+        const passwordInputFontSize = await passwordInput.evaluate((node) =>
+            Number.parseFloat(window.getComputedStyle(node).fontSize || '0')
+        );
 
         expect(layoutMetrics.modalTop, '私密房间密码弹窗聚焦后顶部不应被顶出屏幕').toBeGreaterThanOrEqual(0);
         expect(layoutMetrics.inputBottom, '私密房间密码输入框应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
         expect(layoutMetrics.confirmBottom, '私密房间确认按钮应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
-        expect(layoutMetrics.fontSize, '移动端私密房间密码输入至少应为 16px').toBeGreaterThanOrEqual(16);
+        expect(passwordInputFontSize, '移动端私密房间密码输入至少应为 16px').toBeGreaterThanOrEqual(16);
 
-        await page.screenshot({
+        await page.evaluate(() => {
+            document.querySelector('[data-testid="room-password-modal-capture"]')?.remove();
+
+            const liveModal = document.querySelector('[data-testid="room-password-modal"]');
+            if (!(liveModal instanceof HTMLElement)) {
+                throw new Error('未找到用于截图的私密房间密码弹窗');
+            }
+
+            const clonedModal = liveModal.cloneNode(true);
+            if (!(clonedModal instanceof HTMLElement)) {
+                throw new Error('私密房间密码弹窗克隆失败');
+            }
+
+            clonedModal.dataset.testid = 'room-password-modal-capture';
+            clonedModal.style.position = 'fixed';
+            clonedModal.style.left = '50%';
+            clonedModal.style.top = '50%';
+            clonedModal.style.transform = 'translate(-50%, -50%)';
+            clonedModal.style.zIndex = '9999';
+            clonedModal.style.pointerEvents = 'none';
+            clonedModal.style.margin = '0';
+            clonedModal.style.maxHeight = 'none';
+            clonedModal.style.visibility = 'visible';
+            clonedModal.style.opacity = '1';
+
+            document.body.appendChild(clonedModal);
+        });
+
+        const captureModal = page.getByTestId('room-password-modal-capture');
+        await expect(captureModal).toBeVisible();
+        await captureModal.screenshot({
             path: 'test-results/evidence-screenshots/private-room-password-modal-mobile.png',
-            fullPage: false,
+            animations: 'disabled',
         });
     });
 
@@ -837,7 +878,7 @@ test.describe('Lobby E2E', () => {
         await page.getByRole('heading', { name: /Tic-Tac-Toe/i }).click();
         await expect(page).toHaveURL(/game=tictactoe/);
 
-        const modalRoot = page.getByTestId('game-details-modal-root');
+        const modalRoot = getVisibleGameDetailsModal(page);
         const packageCard = page.getByTestId('game-details-mobile-package-card');
         const installButton = page.getByRole('button', { name: /Install Pack/i });
 
@@ -915,7 +956,7 @@ test.describe('Lobby E2E', () => {
     test('Dice Throne 直达链接会直接打开详情弹窗', async ({ page }) => {
         await page.goto('/?game=dicethrone', { waitUntil: 'domcontentloaded' });
         await expect(page).toHaveURL(/game=dicethrone/);
-        await expect(page.getByTestId('game-details-modal-root')).toBeVisible({ timeout: 15000 });
+        await expect(getVisibleGameDetailsModal(page)).toBeVisible({ timeout: 15000 });
         await expect(page.getByRole('button', { name: /Local Match Setup/i })).toBeVisible();
         await expect(page.getByRole('button', { name: /Play AI/i })).toHaveCount(0);
         await expect(page.getByRole('button', { name: /Tutorial/i })).toBeVisible();

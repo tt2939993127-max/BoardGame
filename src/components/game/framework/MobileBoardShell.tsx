@@ -485,17 +485,6 @@ export const MobileBattlefieldViewport = ({
             const currentDistance = Math.max(getDistance(first, second), 1);
 
             if (!pinch.activated) {
-                if (Math.abs(currentDistance - pinch.startDistance) < PINCH_ACTIVATION_DISTANCE_PX) {
-                    logPinchDebug('pre-activate', {
-                        pointerId,
-                        currentDistance: toDebugNumber(currentDistance),
-                        startDistance: toDebugNumber(pinch.startDistance),
-                        deltaDistance: toDebugNumber(currentDistance - pinch.startDistance),
-                    });
-                    suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
-                    return true;
-                }
-
                 const center = getTargetLocalPoint(
                     surfaceRef.current,
                     activeTarget,
@@ -503,8 +492,33 @@ export const MobileBattlefieldViewport = ({
                     (first.clientX + second.clientX) / 2,
                     (first.clientY + second.clientY) / 2,
                 );
+                if (Math.abs(currentDistance - pinch.startDistance) < PINCH_ACTIVATION_DISTANCE_PX) {
+                    const settledPinch: PinchState = {
+                        ...pinch,
+                        targetLeft: center.left,
+                        targetTop: center.top,
+                        startCenterTargetLocal: { x: center.x, y: center.y },
+                        startCenterSurfaceLocal: { x: center.surfacePoint.x, y: center.surfacePoint.y },
+                    };
+                    pinchRef.current = settledPinch;
+                    logPinchDebug('pre-activate', {
+                        pointerId,
+                        currentDistance: toDebugNumber(currentDistance),
+                        startDistance: toDebugNumber(pinch.startDistance),
+                        deltaDistance: toDebugNumber(currentDistance - pinch.startDistance),
+                        settledTargetLeft: toDebugNumber(settledPinch.targetLeft),
+                        settledTargetTop: toDebugNumber(settledPinch.targetTop),
+                        settledCenterTargetLocalX: toDebugNumber(settledPinch.startCenterTargetLocal.x),
+                        settledCenterTargetLocalY: toDebugNumber(settledPinch.startCenterTargetLocal.y),
+                        settledCenterSurfaceLocalX: toDebugNumber(settledPinch.startCenterSurfaceLocal.x),
+                        settledCenterSurfaceLocalY: toDebugNumber(settledPinch.startCenterSurfaceLocal.y),
+                    });
+                    suppressClickUntilRef.current = Date.now() + CLICK_SUPPRESS_MS;
+                    return true;
+                }
+
                 const activatedPinch: PinchState = {
-                    ...pinch,
+                    ...(pinchRef.current ?? pinch),
                     startDistance: currentDistance,
                     startScale: transformRef.current.scale,
                     activated: true,
