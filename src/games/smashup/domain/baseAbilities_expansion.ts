@@ -35,10 +35,10 @@ import type { ProtectionCheckContext } from './ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { getPlayerLabel } from './utils';
 import {
-    buildPendingPostScoringActionEvents,
-    flushDeferredPostScoringCompatibility,
+    appendPendingPostScoringActions,
     getDeferredPostScoringEvents as readDeferredPostScoringEvents,
     getDeferredReplacementBaseDefId,
+    mergeDeferredPostScoringCompatibility,
 } from './scoringSession';
 
 function getContinuationContext<T>(interactionData: Record<string, unknown> | undefined): T | undefined {
@@ -877,31 +877,15 @@ export function registerExpansionBaseInteractionHandlers(): void {
                 targetBaseDefId: replacementBaseDefId,
                 power,
             };
-            const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
-            if (compatibility.flushed) {
-                return {
-                    state: compatibility.state,
-                    events: [
-                        ...compatibility.events,
-                        ...buildPendingPostScoringActionEvents(
-                            { core: state.core },
-                            [pendingAction],
-                            timestamp,
-                        ),
-                    ],
-                };
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryOrder: 'before',
+                extraPendingActions: [pendingAction],
+            });
+            if (compatibility) {
+                return compatibility;
             }
             return {
-                state: {
-                    ...state,
-                    core: {
-                        ...state.core,
-                        pendingPostScoringActions: [
-                            ...(state.core.pendingPostScoringActions ?? []),
-                            pendingAction,
-                        ],
-                    },
-                },
+                state: appendPendingPostScoringActions(state, [pendingAction]),
                 events: [],
             };
         }

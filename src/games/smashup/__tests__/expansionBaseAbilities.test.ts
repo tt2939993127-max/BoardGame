@@ -30,6 +30,7 @@ import { clearBaseAbilityRegistry, triggerBaseAbility, triggerExtendedBaseAbilit
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
+import { createScoringSession, setScoringSession } from '../domain/scoringSession';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -622,8 +623,29 @@ describe('stale destroy/deck-bottom regression: 扩展基地 Prompt', () => {
             },
         });
 
+        const scoredState = makeMatchState(staleCore);
         const resolved = handler!(
-            makeMatchState(staleCore),
+            setScoringSession(scoredState, {
+                ...createScoringSession(scoredState.core, [0]),
+                currentBaseRef: { slotIndex: 0, baseDefId: 'base_greenhouse' },
+                currentStep: 'awaiting-interactions',
+                deferredPostScoringEvents: [
+                    {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: 0, baseDefId: 'base_greenhouse' },
+                        timestamp: 1852,
+                    },
+                    {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: 0,
+                            oldBaseDefId: 'base_greenhouse',
+                            newBaseDefId: 'base_secret_garden',
+                        },
+                        timestamp: 1852,
+                    },
+                ],
+            }),
             '0',
             option.value,
             interaction.data,
@@ -631,7 +653,80 @@ describe('stale destroy/deck-bottom regression: 扩展基地 Prompt', () => {
             1853,
         );
         expect(resolved?.events ?? []).toHaveLength(0);
-        expect(resolved?.state.core.pendingPostScoringActions).toBeUndefined();
+        expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([]);
+    });
+
+    it('base_greenhouse: replacement follow-up 应写入 scoring session，不写 core', () => {
+        const result = triggerBaseAbilityWithMS('base_greenhouse', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_greenhouse')],
+                players: {
+                    '0': makePlayer('0', {
+                        deck: [makeCard('dk1', 'alien_collector', 'minion')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            }),
+            baseDefId: 'base_greenhouse',
+            rankings: [{ playerId: '0', power: 5, vp: 4 }],
+        }));
+        const interaction = getInteractionsFromResult(result)[0];
+        const option = interaction.data.options.find((entry: any) => entry.value?.cardUid === 'dk1');
+        const handler = getInteractionHandler('base_greenhouse');
+        expect(option).toBeDefined();
+        expect(handler).toBeDefined();
+
+        const scoredState = makeMatchState(makeState({
+            bases: [makeBase('base_greenhouse')],
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('dk1', 'alien_collector', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        }));
+
+        const resolved = handler!(
+            setScoringSession(scoredState, {
+                ...createScoringSession(scoredState.core, [0]),
+                currentBaseRef: { slotIndex: 0, baseDefId: 'base_greenhouse' },
+                currentStep: 'awaiting-interactions',
+                deferredPostScoringEvents: [
+                    {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: 0, baseDefId: 'base_greenhouse' },
+                        timestamp: 1852,
+                    },
+                    {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: 0,
+                            oldBaseDefId: 'base_greenhouse',
+                            newBaseDefId: 'base_secret_garden',
+                        },
+                        timestamp: 1852,
+                    },
+                ],
+            }),
+            '0',
+            option.value,
+            interaction.data,
+            dummyRandom,
+            1853,
+        );
+
+        expect(resolved?.events ?? []).toHaveLength(0);
+        expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([
+            {
+                kind: 'playMinionOnReplacementBase',
+                playerId: '0',
+                cardUid: 'dk1',
+                defId: 'alien_collector',
+                baseIndex: 0,
+                targetBaseDefId: 'base_secret_garden',
+                power: 2,
+            },
+        ]);
     });
 
     it('base_inventors_salon: 若所选行动已不在弃牌堆则不再取回', () => {

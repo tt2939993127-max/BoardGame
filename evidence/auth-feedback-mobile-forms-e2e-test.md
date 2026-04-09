@@ -25,7 +25,8 @@
 - `npm run test:e2e:ci:file -- account-settings.e2e.ts "移动端账户设置与邮箱绑定输入应保持可见可编辑"`（2026-04-09 复跑，通过）
 - `npm run test:e2e:ci:file -- social.e2e.ts "移动端社交聊天输入聚焦后仍应保持可见"`（2026-04-09 复跑，通过）
 - `PW_SERVER_RUNTIME=tsx node scripts/infra/run-e2e-single.mjs ci --file e2e/review.e2e.ts --case "移动端评价输入聚焦后仍应保持可见"`（2026-04-09 复跑，通过；详见 `evidence/review-mobile-input-e2e-test.md`）
-- `npm run test:e2e:ci:file -- lobby.e2e.ts "移动端创建房间输入聚焦后不应把弹窗顶飞出可视区"`（2026-04-09 复跑，失败：`game-details-open-create-room` 未出现）
+- `PW_SERVER_RUNTIME=tsx BG_HEAVY_MEMORY_MIN_FREE_GB=1 node scripts/infra/run-e2e-single.mjs ci --file e2e/lobby.e2e.ts --case "移动端创建房间输入聚焦后不应把弹窗顶飞出可视区"`（2026-04-09 复跑，通过）
+- `PW_SERVER_RUNTIME=tsx BG_HEAVY_MEMORY_MIN_FREE_GB=1 node scripts/infra/run-e2e-single.mjs ci --file e2e/lobby.e2e.ts --case "移动端私密房间密码输入聚焦后仍应保持可见"`（2026-04-09 复跑，通过；详见 `evidence/private-room-password-mobile-e2e-test.md`）
 
 ## 截图核验
 
@@ -116,12 +117,20 @@
 
 ### A. 创建房间 / 私密房间密码链路已补齐独立证据
 
-- 最新通过命令：`PW_SERVER_RUNTIME=tsx node scripts/infra/run-e2e-single.mjs ci --file e2e/lobby.e2e.ts --case "移动端私密房间密码输入聚焦后仍应保持可见"`
+- 最新通过命令：`PW_SERVER_RUNTIME=tsx BG_HEAVY_MEMORY_MIN_FREE_GB=1 node scripts/infra/run-e2e-single.mjs ci --file e2e/lobby.e2e.ts --case "移动端私密房间密码输入聚焦后仍应保持可见"`
 - 最新有效证据：`evidence/private-room-password-mobile-e2e-test.md`
 - 当前状态：
   - 2026-04-09 这轮已经补到真实密码弹窗截图 `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\private-room-password-modal-mobile.png`，不再是大厅页误截图。
   - 弹窗标题、密码输入框、眼睛按钮、取消/确认按钮都在同一张图内可见，因此这条链路现在可以作为已验收通过的有效证据。
   - 本文档保留这里只做总表汇总；私密房密码的逐图观察和最终结论，以独立证据文档为准。
+
+### B. 用户可见输入入口横向排查结论
+
+- 本轮额外用代码搜索复查了用户可见范围内的输入组件：`AuthModal`、`AccountSettingsModal`、`EmailBindModal`、`FeedbackModal`、`ReviewForm`、`CreateRoomModal`、`PasswordEntryModal`、`FriendList`、`ChatWindow`、`GameHUD`、`SetupOptionsFields`、`SummonerWars/MyDeckPanel`。
+- 排查口径明确排除了 `admin / devtools / debug-config / UGC builder` 这类非普通用户主流程页面，避免把后台和调试面板混进本轮收口。
+- 复查中补到的剩余缺口有两个：
+  - `SetupOptionsFields` 的 `select` 仍写着 `text-sm`；现已补成 `text-base sm:text-sm`，确保建房模态里的游戏自定义 setup 选项在移动端也遵守 16px 输入基线。
+  - `SummonerWars/MyDeckPanel` 的牌组命名输入框原来也是 `text-sm`；现已补成 `text-base sm:text-sm`，避免移动端牌组保存时再次出现“输入框里字太小 / 聚焦易被系统缩放干扰”的同类问题。
 
 ## 记住输入验收
 
@@ -136,8 +145,8 @@
 
 ## 结论
 
-- 已稳定拿到并肉眼核对的有效证据：登录/注册、账户设置、换绑邮箱、移动端反馈、游戏内横屏反馈、社交聊天。
-- 这轮额外把 `CreateRoomModal`、社交添加搜索输入、游戏内聊天输入补成了 **移动端 16px 优先 / PC 保持原样** 的条件化输入字号，不改 PC 基线。
+- 已稳定拿到并肉眼核对的有效证据：登录/注册、账户设置、换绑邮箱、移动端反馈、游戏内横屏反馈、评价弹窗、创建房间、私密房间密码、社交聊天。
+- 这轮额外把 `CreateRoomModal`、`SetupOptionsFields`、`SummonerWars/MyDeckPanel`、社交添加搜索输入、游戏内聊天输入补成了 **移动端 16px 优先 / PC 保持原样** 的条件化输入字号，不改 PC 基线。
 - PC 登录弹窗已回归核验，没有被移动端输入适配带坏。
 - 登录/注册流程的“记住输入”当前已覆盖切模式和关闭重开两类场景，但只保留非敏感字段。
 - 评价弹窗已在 2026-04-09 通过最新复跑并单独落地 `evidence/review-mobile-input-e2e-test.md`。

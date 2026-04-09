@@ -26,7 +26,10 @@ interface TestCore {
     value: number;
 }
 
-const createTestState = (phase: string): MatchState<TestCore> => ({
+const createTestState = (
+    phase: string,
+    sysOverrides?: Partial<MatchState<TestCore>['sys']>,
+): MatchState<TestCore> => ({
     sys: {
         schemaVersion: 1,
         undo: { snapshots: [], maxSnapshots: 50 },
@@ -39,6 +42,7 @@ const createTestState = (phase: string): MatchState<TestCore> => ({
         tutorial: { ...DEFAULT_TUTORIAL_STATE },
         turnNumber: 1,
         phase,
+        ...sysOverrides,
     },
     core: { value: 0 },
 });
@@ -237,6 +241,70 @@ describe('FlowSystem', () => {
         });
 
         expect(result?.events?.some((e) => e.type === 'SOME_DOMAIN_EVENT')).toBe(true);
+    });
+
+    it('存在被阻塞的 resolution frame 时，阻止阶段推进', () => {
+        const system = createFlowSystem<TestCore>({ hooks: buildHooks() });
+        const state = createTestState('phase1', {
+            resolution: {
+                activeFrameId: 'frame-1',
+                frames: [{
+                    id: 'frame-1',
+                    kind: 'smashup:score-bases',
+                    ownerGame: 'smashup',
+                    ordering: 'explicit',
+                    status: 'blocked',
+                    phase: 'phase1',
+                    phaseGate: 'block-advance-when-blocked',
+                    blockedBy: { type: 'interaction', id: 'interaction-1', reason: 'simple-choice' },
+                }],
+            },
+        });
+        const command: Command = { type: FLOW_COMMANDS.ADVANCE_PHASE, playerId: '0', payload: {} };
+
+        const result = system.beforeCommand?.({
+            state,
+            command,
+            events: [],
+            random: mockRandom,
+            playerIds: ['0', '1'],
+        });
+
+        expect(result?.halt).toBe(true);
+        expect(result?.error).toBe('resolution_blocked');
+    });
+
+    it('存在被阻塞的 resolution frame 时，不触发 autoContinue', () => {
+        const system = createFlowSystem<TestCore>({
+            hooks: buildHooks({
+                onAutoContinueCheck: () => ({ autoContinue: true, playerId: '0' }),
+            }),
+        });
+        const state = createTestState('phase1', {
+            resolution: {
+                activeFrameId: 'frame-1',
+                frames: [{
+                    id: 'frame-1',
+                    kind: 'smashup:score-bases',
+                    ownerGame: 'smashup',
+                    ordering: 'explicit',
+                    status: 'blocked',
+                    phase: 'phase1',
+                    phaseGate: 'block-advance-when-blocked',
+                    blockedBy: { type: 'post-reduce', reason: 'awaiting-post-reduce' },
+                }],
+            },
+        });
+
+        const result = system.afterEvents?.({
+            state,
+            command: { type: 'noop', playerId: '0', payload: {} },
+            events: [{ type: 'DOMAIN_EVENT', payload: {}, timestamp: 1 }],
+            random: mockRandom,
+            playerIds: ['0', '1'],
+        });
+
+        expect(result).toBeUndefined();
     });
 
     it('getCurrentPhase / setPhase 辅助函数', () => {

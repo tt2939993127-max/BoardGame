@@ -1314,8 +1314,6 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 standingStonesDoubleTalentMinionUid: undefined,
                 // 清空计分后延迟 special 记录
                 pendingAfterScoringSpecials: undefined,
-                // 清空计分后等待基地替换完成的动作
-                pendingPostScoringActions: undefined,
                 // 清空计分阶段锁定的 eligible 基地列表
                 scoringEligibleBaseIndices: undefined,
                 // 清空本回合已使用的持续行动 UID 追踪
@@ -2591,7 +2589,6 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return {
                 ...state,
                 afterScoringTriggeredBases: undefined,
-                pendingPostScoringActions: undefined,
             };
         }
 

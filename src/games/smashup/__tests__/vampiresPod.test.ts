@@ -9,6 +9,8 @@ import { runCommand, defaultTestRandom } from './testRunner';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { getEffectivePower } from '../domain/ongoingModifiers';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
+import { buildSmashUpAiLegalActions, smashUpAiRuntime } from '../ai';
+import { resolveAiDifficultyProfile } from '../../../engine/ai/difficulty';
 
 beforeAll(() => {
     clearRegistry();
@@ -399,6 +401,119 @@ describe('vampires_pod: The Count POD', () => {
             (i: any) => i?.data?.sourceId === 'vampire_the_count_pod_add_counter',
         );
         expect(countPrompt).toBeTruthy();
+    });
+
+    it('AI 在 The Count POD 的加指示物交互里应优先强化己方随从', async () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('count', 'vampire_the_count_pod', 'minion', '0'),
+                        makeCard('bg', 'vampire_big_gulp_pod', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            turnNumber: 1,
+            bases: [
+                { defId: 'base_a', minions: [], ongoingActions: [] },
+                {
+                    defId: 'base_b',
+                    minions: [
+                        makeMinion('ally', 'robot_microbot', '0', 2),
+                        makeMinion('victim', 'robot_microbot', '1', 1),
+                        makeMinion('enemy-survivor', 'pirate_first_mate', '1', 3),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const playCount = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'count', baseIndex: 0 } },
+            defaultTestRandom,
+        );
+        expect(playCount.success).toBe(true);
+
+        const playBigGulp = runCommand(
+            playCount.finalState,
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'bg' } },
+            defaultTestRandom,
+        );
+        expect(playBigGulp.success).toBe(true);
+
+        const chooseDestroy: any = getInteractionsFromMS(playBigGulp.finalState)[0];
+        const victimOpt = chooseDestroy.data.options.find((o: any) => o.value?.minionUid === 'victim');
+        expect(victimOpt).toBeTruthy();
+
+        const afterDestroy = runCommand(
+            playBigGulp.finalState,
+            { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: victimOpt.id } },
+            defaultTestRandom,
+        );
+        expect(afterDestroy.success).toBe(true);
+
+        const countPrompt = getInteractionsFromMS(afterDestroy.finalState).find(
+            (i: any) => i?.data?.sourceId === 'vampire_the_count_pod_add_counter',
+        );
+        expect(countPrompt).toBeTruthy();
+
+        const stateForAi = {
+            ...afterDestroy.finalState,
+            sys: {
+                ...afterDestroy.finalState.sys,
+                interaction: {
+                    ...(afterDestroy.finalState.sys.interaction ?? { queue: [] }),
+                    current: countPrompt,
+                    queue: [],
+                },
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const allyAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { minionUid?: string } })?.optionValue?.minionUid === 'ally',
+        );
+        const enemyAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { minionUid?: string } })?.optionValue?.minionUid === 'enemy-survivor',
+        );
+
+        expect(allyAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'self',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+            targetControllerId: '0',
+        });
+        expect(enemyAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'enemy',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+            targetControllerId: '1',
+        });
+
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'vampire-the-count-pod-ai-buff-target',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: stateForAi.sys.interaction?.current ?? null,
+            responseWindow: stateForAi.sys.responseWindow?.current ?? null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find(action => action.actionId === decision?.actionId);
+
+        expect(chosenAction?.kind).toBe('interaction-choice');
+        expect(chosenAction?.metadata?.optionId).toBe(allyAction?.metadata?.optionId);
     });
 
     it('talent 的 -1 应持续到自己下回合开始', () => {

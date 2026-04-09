@@ -35,7 +35,7 @@ async function ensureLobbyReady(page: Page): Promise<void> {
         await gotoLobbyWithRetry(page);
 
         try {
-            await expect(page.getByRole('heading', { name: '井字棋' })).toBeVisible({ timeout: 10000 });
+            await expect(page.locator('[data-game-id="tictactoe"]').first()).toBeVisible({ timeout: 10000 });
             return;
         } catch (error) {
             if (attempt === maxAttempts) {
@@ -956,10 +956,11 @@ test.describe('Lobby E2E', () => {
     test('Dice Throne 直达链接会直接打开详情弹窗', async ({ page }) => {
         await page.goto('/?game=dicethrone', { waitUntil: 'domcontentloaded' });
         await expect(page).toHaveURL(/game=dicethrone/);
-        await expect(getVisibleGameDetailsModal(page)).toBeVisible({ timeout: 15000 });
-        await expect(page.getByRole('button', { name: /Local Match Setup/i })).toBeVisible();
-        await expect(page.getByRole('button', { name: /Play AI/i })).toHaveCount(0);
-        await expect(page.getByRole('button', { name: /Tutorial/i })).toBeVisible();
+        const detailsModal = getVisibleGameDetailsModal(page);
+        await expect(detailsModal).toBeVisible({ timeout: 15000 });
+        await expect(detailsModal.getByTestId('game-details-open-create-room')).toBeVisible();
+        await expect(detailsModal.getByRole('button', { name: '教程模式' })).toBeVisible();
+        await expect(detailsModal.getByRole('button', { name: /对战AI|Play AI/i })).toHaveCount(0);
     });
 
     test('Dice Throne 更新日志 tab 会渲染接口返回的已发布内容', async ({ page, game }, testInfo) => {

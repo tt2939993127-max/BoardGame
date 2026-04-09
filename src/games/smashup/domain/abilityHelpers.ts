@@ -6,8 +6,8 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import { OPTIONAL_SKIP_AI_HINT } from '../../../engine/ai';
-import type { AiEffectIntent, AiHint, AiRelationToActor } from '../../../engine/ai';
+import { buildTargetAiHint, OPTIONAL_SKIP_AI_HINT } from '../../../engine/ai';
+import type { AiEffectIntent, AiHint } from '../../../engine/ai';
 import type {
     PromptOption as EnginePromptOption,
     SimpleChoiceConfig,
@@ -1350,13 +1350,6 @@ export function openAfterScoringWindow(
 
 type MinionTargetEffectType = ProtectionType | 'buff';
 
-function inferMinionRelationToActor(
-    controllerId: PlayerId,
-    sourcePlayerId: PlayerId,
-): AiRelationToActor {
-    return controllerId === sourcePlayerId ? 'self' : 'enemy';
-}
-
 function inferMinionEffectIntent(
     effectType: MinionTargetEffectType | undefined,
 ): AiEffectIntent | undefined {
@@ -1380,24 +1373,51 @@ function buildMinionTargetAiHint(args: {
     sourcePlayerId: PlayerId;
     effectType?: MinionTargetEffectType;
 }): AiHint {
-    const relationToActor = inferMinionRelationToActor(args.minion.controller, args.sourcePlayerId);
     const effectIntent = inferMinionEffectIntent(args.effectType);
-    const tags = [
-        'target:minion',
-        `relation:${relationToActor}`,
-        ...(effectIntent ? [`intent:${effectIntent}`] : []),
-    ];
-
-    return {
-        tags,
-        relationToActor,
-        ...(effectIntent ? { effectIntent } : {}),
-        targetKind: 'minion',
+    return buildTargetAiHint({
+        actorPlayerId: args.sourcePlayerId,
         targetPlayerId: args.minion.controller,
+        effectIntent,
+        targetKind: 'minion',
         targetOwnerId: args.minion.owner,
         targetControllerId: args.minion.controller,
-        derivedFrom: 'inferred',
-    };
+    });
+}
+
+export function buildPlayerTargetOptions<TExtraValue extends Record<string, unknown> = Record<string, never>>(
+    candidates: Array<{
+        id?: string;
+        label: string;
+        targetPlayerId: PlayerId;
+        value?: TExtraValue;
+        displayMode?: EnginePromptOption<{ targetPlayerId: PlayerId } & TExtraValue>['displayMode'];
+        priorityHint?: number;
+        forcedTargetPolicy?: AiHint['forcedTargetPolicy'];
+    }>,
+    context: {
+        sourcePlayerId: PlayerId;
+        effectIntent?: AiEffectIntent;
+        derivedFrom?: AiHint['derivedFrom'];
+    },
+): EnginePromptOption<{ targetPlayerId: PlayerId } & TExtraValue>[] {
+    return candidates.map((candidate, index) => ({
+        id: candidate.id ?? `player-${index}`,
+        label: candidate.label,
+        value: {
+            targetPlayerId: candidate.targetPlayerId,
+            ...((candidate.value ?? {}) as TExtraValue),
+        },
+        ...(candidate.displayMode ? { displayMode: candidate.displayMode } : {}),
+        _ai: buildTargetAiHint({
+            actorPlayerId: context.sourcePlayerId,
+            targetPlayerId: candidate.targetPlayerId,
+            effectIntent: context.effectIntent,
+            targetKind: 'player',
+            priorityHint: candidate.priorityHint,
+            forcedTargetPolicy: candidate.forcedTargetPolicy,
+            derivedFrom: context.derivedFrom ?? 'inferred',
+        }),
+    }));
 }
 
 /**

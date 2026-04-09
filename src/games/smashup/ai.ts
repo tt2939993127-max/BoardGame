@@ -5,7 +5,10 @@ import {
     createActionKindScorer,
     createInteractionHintScorer,
     createLookaheadLocalAiPolicy,
+    createProfileAwareActionScorer,
+    getAiActionStrategyTags,
     OPTIONAL_SKIP_AI_HINT,
+    withAiActionStrategyTags,
 } from '../../engine/ai';
 import type { AiDecisionContext, AiHint, AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
 import { getFreshSimpleChoiceOptions, type InteractionDescriptor as EngineInteractionDescriptor, type PromptMultiConfig } from '../../engine/systems/InteractionSystem';
@@ -151,16 +154,15 @@ const getActionPlayKind = (actionKind: string): SmashUpPlayKind | undefined => {
     return undefined;
 };
 
-const getActionStrategyTagsFromMetadata = (action: AiLegalAction): string[] => {
-    const metadataTags = action.metadata?.cardStrategyTags;
-    if (Array.isArray(metadataTags)) {
-        return metadataTags.filter((tag): tag is string => typeof tag === 'string');
-    }
-
+const getSmashUpActionStrategyTags = (action: AiLegalAction): string[] => {
     const defId = typeof action.metadata?.defId === 'string' ? action.metadata.defId : undefined;
     const playKind = getActionPlayKind(action.kind);
-    if (!defId || !playKind) return [];
-    return getCardStrategyTags(defId, playKind);
+    return getAiActionStrategyTags(action, {
+        fallback: () => {
+            if (!defId || !playKind) return [];
+            return getCardStrategyTags(defId, playKind);
+        },
+    });
 };
 
 const buildCardAiMetrics = (cardDef: SmashUpResolvedCardDef, count = 1): Partial<SmashUpCardAiMetrics> => {
@@ -581,7 +583,7 @@ const scoreActionStrategyFit = (
     action: AiLegalAction,
     legalActions?: AiLegalAction[],
 ): { score: number; reason: string; tags: string[]; profileSummary: string[] } | null => {
-    const cardTags = getActionStrategyTagsFromMetadata(action);
+    const cardTags = getSmashUpActionStrategyTags(action);
     if (cardTags.length === 0) return null;
 
     const profile = getPlayerStrategyProfile(state, playerId);
@@ -1036,7 +1038,7 @@ const buildPlayMinionAction = (
                 ...(options?.fromDiscard ? { fromDiscard: true } : {}),
             },
         }],
-        metadata: {
+        metadata: withAiActionStrategyTags({
             cardUid: card.uid,
             defId: card.defId,
             baseIndex,
@@ -1049,8 +1051,7 @@ const buildPlayMinionAction = (
             projectedMargin: projectedTotalPower - breakpoint,
             scoringEligible,
             fromDiscard: options?.fromDiscard === true,
-            cardStrategyTags,
-        },
+        }, cardStrategyTags, { mirrorLegacyCardStrategyTags: true }),
     };
 };
 
@@ -1075,13 +1076,12 @@ const buildPlayActionCandidates = (
             type: SU_COMMANDS.PLAY_ACTION,
             payload: { cardUid: card.uid },
         }],
-        metadata: {
+        metadata: withAiActionStrategyTags({
             cardUid: card.uid,
             defId: card.defId,
             responseTiming,
             needsBaseInWindow,
-            cardStrategyTags,
-        },
+        }, cardStrategyTags, { mirrorLegacyCardStrategyTags: true }),
     });
 
     for (let baseIndex = 0; baseIndex < state.core.bases.length; baseIndex += 1) {
@@ -1097,7 +1097,7 @@ const buildPlayActionCandidates = (
                     targetBaseIndex: baseIndex,
                 },
             }],
-            metadata: {
+            metadata: withAiActionStrategyTags({
                 cardUid: card.uid,
                 defId: card.defId,
                 targetBaseIndex: baseIndex,
@@ -1107,8 +1107,7 @@ const buildPlayActionCandidates = (
                 breakpoint,
                 gapBefore,
                 scoringEligible,
-                cardStrategyTags,
-            },
+            }, cardStrategyTags, { mirrorLegacyCardStrategyTags: true }),
         });
 
         for (const minion of state.core.bases[baseIndex].minions) {
@@ -1124,7 +1123,7 @@ const buildPlayActionCandidates = (
                         targetMinionUid: minion.uid,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     cardUid: card.uid,
                     defId: card.defId,
                     targetBaseIndex: baseIndex,
@@ -1136,8 +1135,7 @@ const buildPlayActionCandidates = (
                     breakpoint,
                     gapBefore,
                     scoringEligible,
-                    cardStrategyTags,
-                },
+                }, cardStrategyTags, { mirrorLegacyCardStrategyTags: true }),
             });
         }
     }
@@ -1611,32 +1609,45 @@ const interactionOrderScorer: LocalAiActionScorer = {
     },
 };
 
-const archetypeFitScorer: LocalAiActionScorer = {
-    id: 'archetype-fit',
-    score(context, action) {
-        if (![
-            'play-minion',
-            'play-action',
-            'response-play-minion',
-            'response-play-action',
-            'activate-special',
-            'use-talent',
-        ].includes(action.kind)) {
-            return null;
-        }
-
+const strategyProfileScorer = createProfileAwareActionScorer({
+    id: 'strategy-profile-fit',
+    allowedKinds: [
+        'play-minion',
+        'play-action',
+        'response-play-minion',
+        'response-play-action',
+        'activate-special',
+        'use-talent',
+    ],
+    getProfile(context) {
+        return getPlayerStrategyProfile(context.visibleState as SmashUpState, context.playerId);
+    },
+    getActionTags(_context, action) {
+        return getSmashUpActionStrategyTags(action);
+    },
+    evaluate({ context, action, profile, actionTags }) {
         const state = context.visibleState as SmashUpState;
-        const strategyFit = scoreActionStrategyFit(state, context.playerId, action, context.legalActions);
-        if (!strategyFit || strategyFit.score === 0) return null;
-
+        const urgentBasePressure = context.legalActions.some((candidate) => hasUrgentBasePressure(candidate));
+        const scored = scoreActionAgainstPlayerProfile({
+            profile,
+            actionKind: action.kind,
+            cardTags: actionTags,
+            phase: state.sys.phase as string | undefined,
+            hasUrgentBasePressure: urgentBasePressure,
+        });
+        if (!scored) return null;
         return {
-            score: Number(strategyFit.score.toFixed(3)),
-            reason: strategyFit.profileSummary.length > 0
-                ? `${strategyFit.reason}（当前牌组：${strategyFit.profileSummary.join(' / ')}）`
-                : strategyFit.reason,
+            score: scored.score,
+            reason: scored.reason,
+            matchedTags: actionTags,
         };
     },
-};
+    formatReason(fit) {
+        return fit.profileSummary.length > 0
+            ? `${fit.reason}（当前牌组：${fit.profileSummary.join(' / ')}）`
+            : fit.reason;
+    },
+});
 
 const urgentBaseTempoScorer: LocalAiActionScorer = {
     id: 'urgent-base-tempo',
@@ -1788,7 +1799,7 @@ const baselineLocalPolicy = createLookaheadLocalAiPolicy({
         actionKindScorer,
         interactionValueScorer,
         interactionOrderScorer,
-        archetypeFitScorer,
+        strategyProfileScorer,
         factionScorer,
         setupFactionRandomScorer,
         minionTempoScorer,

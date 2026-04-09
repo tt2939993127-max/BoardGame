@@ -47,10 +47,10 @@ import { isBaseAbilitySuppressed } from './ongoingEffects';
 import { registerBaseAbilityAsQueuedTrigger } from './baseAbilityQueue';
 import { resolveLiveBaseIndex } from './utils';
 import {
-    buildPendingPostScoringActionEvents,
-    flushDeferredPostScoringCompatibility,
+    appendPendingPostScoringActions,
     getDeferredPostScoringEvents as readDeferredPostScoringEvents,
     getDeferredReplacementBaseDefId,
+    mergeDeferredPostScoringCompatibility,
 } from './scoringSession';
 
 // ============================================================================
@@ -1682,10 +1682,15 @@ export function registerBaseInteractionHandlers(): void {
             }));
         }
         
-        // 【关键修复】检查是否是最后一个交互，如果是则补发延迟事件
-        // 当有多个 afterScoring 交互时（如海盗湾 + 忍者道场），延迟的 BASE_CLEARED 事件
-        // 存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
-        // InteractionSystem.resolveInteraction 会自动传递给下一个交互，最后一个交互解决时必须补发。
+        // 【关键修复】检查是否是最后一个交互，如果是则补发延迟事件。
+        // 当前权威来源已经收敛为 scoring session，本 handler 不再依赖 continuationContext 镜像。
+        const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+            primaryEvents: events,
+            primaryOrder: 'after',
+        });
+        if (compatibility) {
+            return compatibility;
+        }
         return { state, events };
     });
 
@@ -1728,8 +1733,6 @@ export function registerBaseInteractionHandlers(): void {
             { sourceId: 'base_pirate_cove_choose_base', targetType: 'base' },
         );
         const deferredEvents = getDeferredPostScoringEvents(state, iData);
-        
-        // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
         return {
             // 使用 urgent 标志，确保链式交互的第二步不被其他交互插队
             state: queueInteraction(state, {
@@ -1768,12 +1771,12 @@ export function registerBaseInteractionHandlers(): void {
                 },
                 timestamp,
             };
-            const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
-            if (compatibility.flushed) {
-                return {
-                    state: compatibility.state,
-                    events: [moveEvent, ...compatibility.events],
-                };
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryEvents: [moveEvent],
+                primaryOrder: 'after',
+            });
+            if (compatibility) {
+                return compatibility;
             }
             const events: SmashUpEvent[] = [
                 {
@@ -1829,31 +1832,15 @@ export function registerBaseInteractionHandlers(): void {
                 targetBaseDefId,
                 reason: '托尔图加：亚军移动随从到替换基地',
             };
-            const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
-            if (compatibility.flushed) {
-                return {
-                    state: compatibility.state,
-                    events: [
-                        ...compatibility.events,
-                        ...buildPendingPostScoringActionEvents(
-                            { core: state.core },
-                            [pendingAction],
-                            timestamp,
-                        ),
-                    ],
-                };
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryOrder: 'before',
+                extraPendingActions: [pendingAction],
+            });
+            if (compatibility) {
+                return compatibility;
             }
             return {
-                state: {
-                    ...state,
-                    core: {
-                        ...state.core,
-                        pendingPostScoringActions: [
-                            ...(state.core.pendingPostScoringActions ?? []),
-                            pendingAction,
-                        ],
-                    },
-                },
+                state: appendPendingPostScoringActions(state, [pendingAction]),
                 events: [],
             };
         }
@@ -2022,8 +2009,6 @@ export function registerBaseInteractionHandlers(): void {
                 { sourceId: 'base_temple_of_goju_tiebreak', targetType: 'minion' },
             );
             const deferredEvents = getDeferredPostScoringEvents(state, iData);
-            
-            // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
             return { 
                 // 使用 urgent 标志，确保链式交互的后续步骤不被其他交互插队
                 state: queueInteraction(state, { 
@@ -2039,6 +2024,14 @@ export function registerBaseInteractionHandlers(): void {
                 }, { urgent: true }), // 链式交互的后续步骤标记为 urgent
                 events 
             };
+        }
+
+        const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+            primaryEvents: events,
+            primaryOrder: 'after',
+        });
+        if (compatibility) {
+            return compatibility;
         }
 
         return { state, events };

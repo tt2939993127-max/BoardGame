@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { MatchState, Command, RandomFn } from '../../types';
+import { buildTargetAiHint, createInteractionHintScorer, scoreAiHint } from '../../ai';
+import type { AiDecisionContext, AiLegalAction } from '../../ai';
 import {
     createInteractionSystem,
     createCompareRollChoice,
@@ -404,5 +406,96 @@ describe('InteractionSystem', () => {
                 value: { customId: 'showdown-win', value: 2 },
             },
         });
+    });
+
+    it('buildTargetAiHint 会为 inspect 目标推导 relation / intent / target tags', () => {
+        const hint = buildTargetAiHint({
+            actorPlayerId: '0',
+            targetPlayerId: '1',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+        });
+
+        expect(hint.relationToActor).toBe('enemy');
+        expect(hint.effectIntent).toBe('inspect');
+        expect(hint.targetKind).toBe('player');
+        expect(hint.tags).toEqual(expect.arrayContaining([
+            'target:player',
+            'relation:enemy',
+            'intent:inspect',
+        ]));
+    });
+
+    it('inspect 语义评分会优先侦察敌方而不是己方', () => {
+        const enemyHint = buildTargetAiHint({
+            actorPlayerId: '0',
+            targetPlayerId: '1',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+        });
+        const selfHint = buildTargetAiHint({
+            actorPlayerId: '0',
+            targetPlayerId: '0',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+        });
+
+        expect(scoreAiHint(enemyHint)).toBeGreaterThan(scoreAiHint(selfHint));
+    });
+
+    it('createInteractionHintScorer 会在玩家目标交互中优先选择敌方 inspect 目标', () => {
+        const scorer = createInteractionHintScorer({ id: 'interaction-inspect' });
+        const legalActions: AiLegalAction[] = [
+            {
+                actionId: 'inspect-self',
+                kind: 'interaction-choice',
+                label: '查看自己',
+                commands: [],
+                aiHints: [buildTargetAiHint({
+                    actorPlayerId: '0',
+                    targetPlayerId: '0',
+                    effectIntent: 'inspect',
+                    targetKind: 'player',
+                })],
+            },
+            {
+                actionId: 'inspect-enemy',
+                kind: 'interaction-choice',
+                label: '查看对手',
+                commands: [],
+                aiHints: [buildTargetAiHint({
+                    actorPlayerId: '0',
+                    targetPlayerId: '1',
+                    effectIntent: 'inspect',
+                    targetKind: 'player',
+                })],
+            },
+        ];
+        const context: AiDecisionContext = {
+            gameId: 'test',
+            matchId: 'test-match',
+            playerId: '0',
+            visibleState: createTestState(),
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 100,
+            source: 'local',
+            difficulty: {
+                level: 'expert',
+                searchDepth: 1,
+                shortlistSize: 4,
+                simulationBudgetMs: 50,
+                randomness: 0,
+                beliefSampleCount: 1,
+                evaluatorProfile: 'expert',
+            },
+        };
+
+        const selfScore = scorer.score(context, legalActions[0]);
+        const enemyScore = scorer.score(context, legalActions[1]);
+
+        expect((enemyScore as { score: number }).score).toBeGreaterThan((selfScore as { score: number }).score);
     });
 });

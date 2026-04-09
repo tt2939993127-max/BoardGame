@@ -194,7 +194,7 @@ export const MyDeckPanel: React.FC<MyDeckPanelProps> = ({
                     value={deckName}
                     onChange={e => setDeckName(e.target.value)}
                     placeholder={t('deckBuilder.placeholderName')}
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/50"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-base sm:text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-amber-500/50"
                 />
                 <GameButton
                     variant="primary"

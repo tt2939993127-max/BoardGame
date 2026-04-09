@@ -15,6 +15,7 @@ import { DiceThroneDomain } from '../domain';
 import { createQueuedRandom, createHeroMatchup, testSystems } from './test-utils';
 import { TOKEN_IDS, PALADIN_DICE_FACE_IDS as FACES } from '../domain/ids';
 import { RESOURCE_IDS } from '../domain/resources';
+import { CP_MAX } from '../domain/types';
 
 const INITIAL_CP = 1;
 const INITIAL_HP = 50;
@@ -101,6 +102,44 @@ describe('圣骑士复仇技能 CP 获取测试', () => {
         expect(result.assertionErrors).toEqual([]);
     });
 
+    it('复仇 I - 接近上限时只应钳制到 CP_MAX，不应异常回满/溢出', () => {
+        const random = createQueuedRandom([3, 3, 3, 6, 1]); // 3盔+1祈祷
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random,
+            setup: createHeroMatchup('paladin', 'barbarian', (core) => {
+                core.players['0'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['0'].resources[RESOURCE_IDS.CP] = CP_MAX - 1;
+                core.players['1'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['1'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+            }),
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '复仇I边界钳制到CP_MAX',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'vengeance' }),
+                cmd('ADVANCE_PHASE', '0'),
+            ],
+            expect: {
+                players: {
+                    '0': {
+                        cp: CP_MAX,
+                        tokens: { [TOKEN_IDS.RETRIBUTION]: 1 },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toEqual([]);
+    });
+
     it('复仇 II - 多次点击技能按钮不应该重复获得 CP', () => {
         const random = createQueuedRandom([3, 3, 3, 6, 1]); // 3盔+1祈祷
         const runner = new GameTestRunner({
@@ -141,5 +180,49 @@ describe('圣骑士复仇技能 CP 获取测试', () => {
         });
 
         expect(result.assertionErrors).toEqual([]);
+        expect(result.actualErrors.map((entry) => entry.error)).toContain('attack_already_initiated');
+    });
+
+    it('复仇 II - 选择阶段开始后不停点击，也只能结算一次并在边界处钳制到 CP_MAX', () => {
+        const random = createQueuedRandom([3, 3, 3, 6, 1]); // 3盔+1祈祷
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random,
+            setup: createHeroMatchup('paladin', 'barbarian', (core) => {
+                core.players['0'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['0'].resources[RESOURCE_IDS.CP] = CP_MAX - 1;
+                core.players['1'].resources[RESOURCE_IDS.HP] = INITIAL_HP;
+                core.players['1'].resources[RESOURCE_IDS.CP] = INITIAL_CP;
+            }),
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '复仇II选择阶段连点仍只结算一次',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'vengeance' }),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'vengeance' }),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'vengeance' }),
+                cmd('RESOLVE_INTERACTION', '0', { selectedPlayerIds: ['0'] }),
+                cmd('RESOLVE_INTERACTION', '0', { selectedPlayerIds: ['0'] }),
+                cmd('ADVANCE_PHASE', '0'),
+            ],
+            expect: {
+                players: {
+                    '0': {
+                        cp: CP_MAX,
+                        tokens: { [TOKEN_IDS.RETRIBUTION]: 1 },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toEqual([]);
+        expect(result.actualErrors.map((entry) => entry.error)).toContain('attack_already_initiated');
     });
 });

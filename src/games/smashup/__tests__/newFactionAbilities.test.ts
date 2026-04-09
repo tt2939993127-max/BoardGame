@@ -1861,6 +1861,36 @@ describe('Samurai abilities', () => {
         expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
     });
 
+    it('samurai_samurai_chan_pod 在自己因基地结算进入弃牌堆后也会抽一张牌', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('draw-1', 'robot_microbot_alpha', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('chan-pod-1', 'samurai_samurai_chan_pod', '0', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const result = fireTriggers(state, 'onMinionDiscardedFromBase', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: makeMinion('chan-pod-1', 'samurai_samurai_chan_pod', '0', 2),
+            triggerMinionUid: 'chan-pod-1',
+            triggerMinionDefId: 'samurai_samurai_chan_pod',
+            random: defaultTestRandom,
+            now: 1001,
+        });
+
+        expect(result.events.some(event => event.type === SU_EVENTS.CARDS_DRAWN)).toBe(true);
+    });
+
     it('samurai_ronin 在自己是该基地唯一己方随从时只放置一个 +1 指示物', () => {
         const core = makeState({
             players: {
@@ -1906,6 +1936,36 @@ describe('Samurai abilities', () => {
             { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'ronin-pod-1', baseIndex: 0 } },
             defaultTestRandom,
         );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('samurai_ronin_pod');
+
+        const yesOption = prompt.data.options.find((entry: any) => entry.value?.apply === true);
+        const resolved = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: yesOption.id } } as any,
+            defaultTestRandom,
+        );
+
+        expect(resolved.finalState.core.bases[0].minions.find(m => m.uid === 'ronin-pod-1')?.powerCounters).toBe(2);
+    });
+
+    it('samurai_ronin_pod 在天守阁登场且自己是该基地唯一己方随从时仍放置两个 +1 指示物', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('ronin-pod-1', 'samurai_ronin_pod', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'base_shoguns_palace_pod', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'ronin-pod-1', baseIndex: 0 } },
+            defaultTestRandom,
+        );
+
         const prompt = getInteractionsFromMS(play.finalState)[0] as any;
         expect(prompt?.data?.sourceId).toBe('samurai_ronin_pod');
 
@@ -2683,6 +2743,50 @@ describe('Samurai abilities', () => {
         expect(counterEvent).toBeDefined();
         expect(counterEvent.payload.minionUid).toBe('shogun-1');
         expect(counterEvent.payload.amount).toBe(1);
+    });
+
+    it('samurai_bushi_pod 在以 5 力量因基地结算进入弃牌堆时会给你 1VP，且 samurai_shogun_pod 仍会获得指示物', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_shoguns_palace_pod',
+                    minions: [makeMinion('bushi-pod-1', 'samurai_bushi_pod', '0', 4, { powerCounters: 1 })],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_great_library',
+                    minions: [makeMinion('shogun-pod-1', 'samurai_shogun_pod', '0', 5)],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const result = fireTriggers(state, 'onMinionDiscardedFromBase', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: makeMinion('bushi-pod-1', 'samurai_bushi_pod', '0', 4, { powerCounters: 1 }),
+            triggerMinionUid: 'bushi-pod-1',
+            triggerMinionDefId: 'samurai_bushi_pod',
+            triggerMinionPower: 5,
+            random: defaultTestRandom,
+            now: 1002,
+        });
+
+        expect(result.events.some(event =>
+            event.type === SU_EVENTS.VP_AWARDED
+            && (event as any).payload.playerId === '0'
+            && (event as any).payload.amount === 1,
+        )).toBe(true);
+        expect(result.events.some(event =>
+            event.type === SU_EVENTS.POWER_COUNTER_ADDED
+            && (event as any).payload.minionUid === 'shogun-pod-1',
+        )).toBe(true);
     });
 
     it('samurai_final_haiku 在附着随从离场后给你的随从直到回合结束 +2 力量', () => {

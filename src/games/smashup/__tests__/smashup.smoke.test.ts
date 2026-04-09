@@ -11,7 +11,7 @@ import { postProcessSystemEvents } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { createFlowSystem, createBaseSystems, createInitialSystemState } from '../../../engine';
 import { resolveAiDifficultyProfile } from '../../../engine/ai/difficulty';
-import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import type { CardsDrawnEvent, SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { MADNESS_CARD_DEF_ID, SU_COMMANDS, SU_EVENTS, getCurrentPlayerId } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -19,7 +19,7 @@ import { getTitanDef } from '../data/cards';
 import { TITAN_CARD_DEFS } from '../data/titans';
 import { getPlayerEffectivePowerOnBase, getRegisteredModifierIds, getTitanPowerContribution } from '../domain/ongoingModifiers';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
-import { addPowerCounter } from '../domain/abilityHelpers';
+import { addPowerCounter, buildPlayerTargetOptions } from '../domain/abilityHelpers';
 import { fireTriggers, interceptEvent } from '../domain/ongoingEffects';
 import { filterProtectedDestroyEvents, filterProtectedMoveEvents, filterProtectedReturnEvents, processAffectTriggers, processMoveTriggers, processReturnToHandTriggers } from '../domain/reducer';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
@@ -1239,7 +1239,184 @@ describe('smashup', () => {
         );
 
         expect(summonAction).toBeDefined();
+        expect(summonAction?.metadata?.strategyTags).toContain('action-chain');
         expect(summonAction?.metadata?.cardStrategyTags).toContain('action-chain');
+    });
+
+    it('Smash Up baseline AI 在玩家目标交互里会把增益留给自己', async () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase('base_the_mothership')],
+        }));
+
+        const interaction = createSimpleChoice(
+            'smashup-ai-player-target-buff',
+            '0',
+            '选择获得增益的玩家',
+            buildPlayerTargetOptions(
+                [
+                    { id: 'self', label: '自己', targetPlayerId: '0', displayMode: 'button' as const },
+                    { id: 'enemy', label: '对手', targetPlayerId: '1', displayMode: 'button' as const },
+                ],
+                {
+                    sourcePlayerId: '0',
+                    effectIntent: 'buff',
+                },
+            ),
+            { sourceId: 'smashup_ai_player_target_buff', targetType: 'player' },
+        );
+        stateForAi.sys.interaction = {
+            ...stateForAi.sys.interaction,
+            current: interaction,
+            queue: [],
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-player-target-buff',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(chosenAction?.kind).toBe('interaction-choice');
+        expect((chosenAction?.metadata?.optionValue as { targetPlayerId?: string } | undefined)?.targetPlayerId).toBe('0');
+    });
+
+    it('Smash Up baseline AI 在玩家目标交互里会把减益或侦察指向对手', async () => {
+        const buildStateWithPlayerTargetInteraction = (effectIntent: 'debuff' | 'inspect') => {
+            const stateForAi = makeMatchState(makeState({
+                currentPlayerIndex: 0,
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1'),
+                },
+                bases: [makeBase('base_the_mothership')],
+            }));
+
+            const interaction = createSimpleChoice(
+                `smashup-ai-player-target-${effectIntent}`,
+                '0',
+                effectIntent === 'debuff' ? '选择承受减益的玩家' : '选择要侦察的玩家',
+                buildPlayerTargetOptions(
+                    [
+                        { id: 'self', label: '自己', targetPlayerId: '0', displayMode: 'button' as const },
+                        { id: 'enemy', label: '对手', targetPlayerId: '1', displayMode: 'button' as const },
+                    ],
+                    {
+                        sourcePlayerId: '0',
+                        effectIntent,
+                    },
+                ),
+                {
+                    sourceId: `smashup_ai_player_target_${effectIntent}`,
+                    targetType: 'player',
+                },
+            );
+            stateForAi.sys.interaction = {
+                ...stateForAi.sys.interaction,
+                current: interaction,
+                queue: [],
+            };
+            return stateForAi;
+        };
+
+        for (const effectIntent of ['debuff', 'inspect'] as const) {
+            const stateForAi = buildStateWithPlayerTargetInteraction(effectIntent);
+            const legalActions = buildSmashUpAiLegalActions({
+                playerId: '0',
+                state: stateForAi,
+            });
+            const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+                gameId: 'smashup',
+                matchId: `test-smashup-ai-player-target-${effectIntent}`,
+                playerId: '0',
+                visibleState: stateForAi,
+                interaction: null,
+                responseWindow: null,
+                legalActions,
+                rulesVersion: null,
+                decisionBudgetMs: 250,
+                difficulty: resolveAiDifficultyProfile('expert'),
+                source: 'local',
+            });
+            const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+            expect(chosenAction?.kind).toBe('interaction-choice');
+            expect((chosenAction?.metadata?.optionValue as { targetPlayerId?: string } | undefined)?.targetPlayerId).toBe('1');
+        }
+    });
+
+    it('Smash Up baseline AI 在 pirate_broadside 这类基地+玩家复合目标里会优先点敌方目标', async () => {
+        const core = makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('broadside-1', 'pirate_broadside', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_pirate_cove',
+                    minions: [
+                        makeMinion('ally-strong', 'pirate_first_mate', '0', 4, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('ally-weak', 'test_minion', '0', 1, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('enemy-weak-a', 'test_minion', '1', 2, { owner: '1', tempPowerModifier: 0 }),
+                        makeMinion('enemy-weak-b', 'test_minion', '1', 1, { owner: '1', tempPowerModifier: 0 }),
+                    ],
+                }),
+            ],
+        });
+        const state = makeMatchState(core, 'playCards', '0');
+        const command: SmashUpCommand = {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'broadside-1', targetBaseIndex: 0 },
+            timestamp: 88,
+        };
+
+        expect(SmashUpDomain.validate(state, command).valid).toBe(true);
+        SmashUpDomain.execute(state, command, FIXED_RANDOM);
+        expect(state.sys.interaction?.current?.data?.sourceId).toBe('pirate_broadside');
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-pirate-broadside-target',
+            playerId: '0',
+            visibleState: state,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(chosenAction?.kind).toBe('interaction-choice');
+        expect((chosenAction?.metadata?.optionValue as { targetPlayerId?: string } | undefined)?.targetPlayerId).toBe('1');
     });
 
     it('Smash Up baseline AI 在基础出牌阶段优先打随从', async () => {

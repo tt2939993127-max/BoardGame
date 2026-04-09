@@ -21,6 +21,7 @@ import {
     addTitanPowerCounter,
     buildAbilityFeedback,
     buildBaseTargetOptions,
+    buildPlayerTargetOptions,
     buildStandardDrawEvents,
     buildMinionTargetOptions,
     changeMinionController,
@@ -45,8 +46,10 @@ import { registerInterceptor, registerProtection, registerRestriction, registerT
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase, registerTitanPowerModifier } from '../domain/ongoingModifiers';
 import {
+    appendPendingPostScoringActions,
     getDeferredPostScoringEvents as readDeferredPostScoringEvents,
     getDeferredReplacementBaseDefId,
+    mergeDeferredPostScoringCompatibility,
 } from '../domain/scoringSession';
 import { validateActionPlaySemantics } from '../domain/playLegality';
 import {
@@ -1331,12 +1334,18 @@ function superSpiesMoonZeroThreeTalent(ctx: AbilityContext): AbilityResult {
         `titan_super_spies_moon_zero_three_choose_player_${ctx.now}`,
         ctx.playerId,
         '三号空间站：选择要查看的牌库',
-        playerOptions.map((option, index) => ({
-            id: `player-${index}`,
-            label: option.label,
-            value: { targetPlayerId: option.targetPlayerId },
-            displayMode: 'button' as const,
-        })),
+        buildPlayerTargetOptions(
+            playerOptions.map((option, index) => ({
+                id: `player-${index}`,
+                label: option.label,
+                targetPlayerId: option.targetPlayerId,
+                displayMode: 'button' as const,
+            })),
+            {
+                sourcePlayerId: ctx.playerId,
+                effectIntent: 'inspect',
+            },
+        ),
         { sourceId: 'titan_super_spies_moon_zero_three_choose_player', targetType: 'player' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
@@ -1508,15 +1517,22 @@ function buildCthulhuTitanTransferOptions(state: AbilityContext['state'], player
     const madnessCard = player.hand.find(card => card.defId === MADNESS_CARD_DEF_ID);
     if (!madnessCard) return [];
 
-    return state.turnOrder
-        .filter(pid => pid !== playerId)
-        .filter(pid => Boolean(state.players[pid]))
-        .map(pid => ({
-            id: `player-${pid}`,
-            label: getPlayerLabel(pid),
-            value: { targetPlayerId: pid, madnessUid: madnessCard.uid },
-            displayMode: 'button' as const,
-        }));
+    return buildPlayerTargetOptions<{ madnessUid: string }>(
+        state.turnOrder
+            .filter(pid => pid !== playerId)
+            .filter(pid => Boolean(state.players[pid]))
+            .map(pid => ({
+                id: `player-${pid}`,
+                label: getPlayerLabel(pid),
+                targetPlayerId: pid,
+                value: { madnessUid: madnessCard.uid },
+                displayMode: 'button' as const,
+            })),
+        {
+            sourcePlayerId: playerId,
+            effectIntent: 'debuff',
+        },
+    );
 }
 
 function queueCthulhuTitanTransferInteraction(
@@ -3548,26 +3564,26 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
+        const pendingAction = {
+            kind: 'playTitanOnReplacementBase' as const,
+            titanUid: titan.uid,
+            defId: continuation.titanDefId,
+            ownerId: titan.ownerId,
+            controllerId: titan.controllerId,
+            baseIndex: replacementBaseIndex,
+            targetBaseDefId: replacementBaseDefId,
+            reason: 'itty_critters_rainboroc_special',
+        };
+
+        const compatibility = mergeDeferredPostScoringCompatibility(state, data as Record<string, unknown> | undefined, timestamp, {
+            extraPendingActions: [pendingAction],
+        });
+        if (compatibility) {
+            return compatibility;
+        }
+
         return {
-            state: {
-                ...state,
-                core: {
-                    ...state.core,
-                    pendingPostScoringActions: [
-                        ...(state.core.pendingPostScoringActions ?? []),
-                        {
-                            kind: 'playTitanOnReplacementBase',
-                            titanUid: titan.uid,
-                            defId: continuation.titanDefId,
-                            ownerId: titan.ownerId,
-                            controllerId: titan.controllerId,
-                            baseIndex: replacementBaseIndex,
-                            targetBaseDefId: replacementBaseDefId,
-                            reason: 'itty_critters_rainboroc_special',
-                        },
-                    ],
-                },
-            },
+            state: appendPendingPostScoringActions(state, [pendingAction]),
             events: [],
         };
     });
@@ -3913,25 +3929,23 @@ export function registerTitanInteractionHandlers(): void {
         if (selected?.play && continuation?.titanUid && continuation.titanDefId && continuation.ownerId && continuation.controllerId && continuation.scoringBaseIndex !== undefined) {
             const replacementBaseDefId = getDeferredReplacementBaseDefId(state, data as Record<string, unknown> | undefined);
             if (replacementBaseDefId) {
-                nextState = {
-                    ...state,
-                    core: {
-                        ...state.core,
-                        pendingPostScoringActions: [
-                            ...(state.core.pendingPostScoringActions ?? []),
-                            {
-                                kind: 'playTitanOnReplacementBase',
-                                titanUid: continuation.titanUid,
-                                defId: continuation.titanDefId,
-                                ownerId: continuation.ownerId,
-                                controllerId: continuation.controllerId,
-                                baseIndex: continuation.scoringBaseIndex,
-                                targetBaseDefId: replacementBaseDefId,
-                                reason: 'pirates_the_kraken_after_scoring_play',
-                            },
-                        ],
-                    },
+                const pendingAction = {
+                    kind: 'playTitanOnReplacementBase' as const,
+                    titanUid: continuation.titanUid,
+                    defId: continuation.titanDefId,
+                    ownerId: continuation.ownerId,
+                    controllerId: continuation.controllerId,
+                    baseIndex: continuation.scoringBaseIndex,
+                    targetBaseDefId: replacementBaseDefId,
+                    reason: 'pirates_the_kraken_after_scoring_play',
                 };
+                const compatibility = mergeDeferredPostScoringCompatibility(state, data as Record<string, unknown> | undefined, _timestamp, {
+                    extraPendingActions: [pendingAction],
+                });
+                if (compatibility) {
+                    return compatibility;
+                }
+                nextState = appendPendingPostScoringActions(state, [pendingAction]);
             }
         }
 

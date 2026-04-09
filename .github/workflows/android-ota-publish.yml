@@ -1,23 +1,6 @@
 name: Android OTA Publish
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - 'src/**'
-      - 'public/**'
-      - 'index.html'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'vite.config.ts'
-      - 'postcss.config.js'
-      - 'postcss-tailwind-*.js'
-      - 'tsconfig*.json'
-      - 'scripts/game/**'
-      - 'scripts/audio/generate-slim-registry.mjs'
-      - 'scripts/mobile/**'
-      - '.github/workflows/android-ota-publish.yml'
   workflow_dispatch:
     inputs:
       channel:
@@ -73,7 +56,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('manual-{0}', inputs.channel) || format('push-{0}', github.ref_name) }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('manual-{0}', inputs.channel) || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -214,7 +197,7 @@ jobs:
           VITE_BACKEND_URL=${{ vars.VITE_BACKEND_URL || vars.ANDROID_VITE_BACKEND_URL || secrets.VITE_BACKEND_URL || secrets.ANDROID_VITE_BACKEND_URL }}
           VITE_ASSETS_BASE_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}
           CAPACITOR_APP_ID=${{ vars.CAPACITOR_APP_ID || 'top.easyboardgame.app' }}
-          CAPACITOR_APP_NAME=${{ vars.CAPACITOR_APP_NAME || 'EasyBoardGame' }}
+          CAPACITOR_APP_NAME=${{ vars.CAPACITOR_APP_NAME || '易桌游' }}
           ANDROID_WEBVIEW_MODE=embedded
           VITE_ANDROID_OTA_ENABLED=true
           VITE_ANDROID_OTA_MANIFEST_URL=${{ steps.bundle.outputs.manifest_url }}

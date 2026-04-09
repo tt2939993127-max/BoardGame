@@ -21,10 +21,12 @@ export interface AiLookaheadTraceEntry {
     actionId: string;
     kind: string;
     baseScore: number;
+    searchPriority: number;
     projectedScore: number;
     noiseScore: number;
     finalScore: number;
     searched: boolean;
+    shortlisted: boolean;
     contributions: LocalAiActionScoreContribution[];
     metadata?: Record<string, unknown>;
 }
@@ -40,6 +42,12 @@ export interface CreateLookaheadLocalAiPolicyOptions {
         difficulty: AiDifficultyProfile;
         remainingBudgetMs: number;
     }) => AiProjectedActionScore | null | undefined;
+    rankProjectionCandidate?: (args: {
+        context: AiDecisionContext;
+        action: AiLegalAction;
+        baseEvaluation: LocalAiActionEvaluation;
+        difficulty: AiDifficultyProfile;
+    }) => number | null | undefined;
 }
 
 interface FinalEvaluation {
@@ -103,17 +111,43 @@ export function createLookaheadLocalAiPolicy(
 
             const sorted = stableSortedEvaluations(baseEvaluations);
             const shortlistSize = Math.max(1, Math.min(difficulty.shortlistSize, sorted.length));
-            const shortlist = new Set(sorted.slice(0, shortlistSize).map((item) => item.action.actionId));
+            const projectionRanking = sorted
+                .map((evaluation) => {
+                    const searchPriority = Number((options.rankProjectionCandidate?.({
+                        context: normalizedContext,
+                        action: evaluation.action,
+                        baseEvaluation: evaluation,
+                        difficulty,
+                    }) ?? 0).toFixed(3));
+                    return {
+                        actionId: evaluation.action.actionId,
+                        index: evaluation.index,
+                        searchPriority,
+                        rankingScore: evaluation.totalScore + searchPriority,
+                    };
+                })
+                .sort((left, right) => {
+                    if (right.rankingScore !== left.rankingScore) {
+                        return right.rankingScore - left.rankingScore;
+                    }
+                    return left.index - right.index;
+                });
+            const searchPriorityByActionId = new Map(
+                projectionRanking.map((item) => [item.actionId, item.searchPriority] as const),
+            );
+            const shortlist = new Set(projectionRanking.slice(0, shortlistSize).map((item) => item.actionId));
             const startedAt = Date.now();
 
             const finalEvaluations: FinalEvaluation[] = sorted.map((evaluation) => {
                 const contributions = [...evaluation.contributions];
+                const searchPriority = searchPriorityByActionId.get(evaluation.action.actionId) ?? 0;
                 let projectedScore = 0;
                 let projectedMetadata: Record<string, unknown> | undefined;
+                const shortlisted = shortlist.has(evaluation.action.actionId);
                 const shouldSearch = Boolean(
                     options.projectAction
                     && difficulty.searchDepth > 0
-                    && shortlist.has(evaluation.action.actionId),
+                    && shortlisted,
                 );
 
                 if (shouldSearch) {
@@ -164,10 +198,12 @@ export function createLookaheadLocalAiPolicy(
                         actionId: evaluation.action.actionId,
                         kind: evaluation.action.kind,
                         baseScore: evaluation.totalScore,
+                        searchPriority,
                         projectedScore,
                         noiseScore,
                         finalScore,
                         searched: shouldSearch,
+                        shortlisted,
                         contributions,
                         ...(projectedMetadata ? { metadata: projectedMetadata } : {}),
                     },

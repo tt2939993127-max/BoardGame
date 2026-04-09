@@ -12,7 +12,6 @@ import { describe, it, expect } from 'vitest';
 import {
     INTERACTION_COMMANDS,
     INTERACTION_EVENTS,
-    createInteractionSystem,
     getCurrentTrackedCardTopSnapshot,
     getCurrentTrackedIdTopSnapshot,
     createSimpleChoice,
@@ -20,6 +19,7 @@ import {
     resolveInteraction,
     refreshInteractionOptions,
 } from '../InteractionSystem';
+import { getActiveResolutionFrame, upsertActiveResolutionFrame } from '../resolutionStack';
 import { createSimpleChoiceSystem } from '../SimpleChoiceSystem';
 import type { MatchState } from '../../types';
 
@@ -42,6 +42,53 @@ const dummyRandom = {
 };
 
 describe('InteractionSystem - 通用刷新', () => {
+    it('queueInteraction / resolveInteraction 应同步 active resolution frame 的 interaction blocker', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: { hand: [] },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        state = upsertActiveResolutionFrame(state, {
+            id: 'frame-1',
+            kind: 'test:resolution',
+            ordering: 'explicit',
+            status: 'running',
+            phase: 'phase1',
+            phaseGate: 'block-advance-when-blocked',
+        });
+
+        state = queueInteraction(state, createSimpleChoice(
+            'interaction-1',
+            'p1',
+            '测试交互',
+            [{ id: 'ok', label: '确定', value: { ok: true } }],
+            { sourceId: 'test' },
+        ));
+
+        expect(getActiveResolutionFrame(state)).toMatchObject({
+            id: 'frame-1',
+            status: 'blocked',
+            blockedBy: {
+                type: 'interaction',
+                id: 'interaction-1',
+            },
+        });
+
+        state = resolveInteraction(state);
+
+        expect(getActiveResolutionFrame(state)).toMatchObject({
+            id: 'frame-1',
+            status: 'running',
+            blockedBy: undefined,
+        });
+    });
+
     it('getCurrentTrackedCardTopSnapshot 只应保留当前仍连续位于顶部的揭示牌', () => {
         const snapshot = getCurrentTrackedCardTopSnapshot(
             [

@@ -413,8 +413,8 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         rerollCostAmount={props.pendingBonusDiceSettlement?.rerollCostAmount}
                         rerollCostTokenId={props.pendingBonusDiceSettlement?.rerollCostTokenId}
                         displayOnly={props.pendingBonusDiceSettlement?.displayOnly ?? props.bonusDie.displayOnly}
-                        summaryEffectKey={props.bonusDie.summaryEffectKey}
-                        summaryEffectParams={props.bonusDie.summaryEffectParams}
+                        summaryEffectKey={props.pendingBonusDiceSettlement?.summaryEffectKey ?? props.bonusDie.summaryEffectKey}
+                        summaryEffectParams={props.pendingBonusDiceSettlement?.summaryEffectParams ?? props.bonusDie.summaryEffectParams}
                         characterId={
                             props.pendingBonusDiceSettlement
                                 ? props.selectedCharacters[props.pendingBonusDiceSettlement.attackerId]

@@ -62,7 +62,7 @@ import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
     applyAiAutoRecoveryRejection,
-    resolveForceEndTurnFollowUpAfterConfirmation,
+    resolveForceAdvancePhaseAfterRecovery,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -139,6 +139,9 @@ const TutorialDispatchBridge = ({ children }: { children: ReactNode }) => {
     return <>{children}</>;
 };
 
+const MAX_FORCE_END_TURN_FOLLOW_UP_STEPS = 16;
+const RECOVERY_FAILURE_SYNC_GRACE_MS = 700;
+
 const OnlineAiSeatBridge = ({
     server,
     matchId,
@@ -172,6 +175,47 @@ const OnlineAiSeatBridge = ({
         autoSubmittedAt: number | null;
         lastReportedFailureReason: string | null;
     } | null>(null);
+    const latestSharedStateRef = useRef<MatchState<unknown> | null>(null);
+    const pendingRecoveryCheckTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+    useEffect(() => {
+        latestSharedStateRef.current = state && typeof state === 'object'
+            ? state as MatchState<unknown>
+            : null;
+    }, [state]);
+
+    useEffect(() => {
+        const pendingTimers = pendingRecoveryCheckTimersRef.current;
+        return () => {
+            for (const timer of pendingTimers) {
+                clearTimeout(timer);
+            }
+            pendingTimers.clear();
+        };
+    }, []);
+
+    const scheduleRecoveryFailureNotice = useCallback((args: {
+        targetClient: GameTransportClient;
+        markerBefore: string;
+        onStillStalled: () => void;
+    }) => {
+        const { targetClient, markerBefore, onStillStalled } = args;
+        targetClient.resync();
+        const timer = setTimeout(() => {
+            pendingRecoveryCheckTimersRef.current.delete(timer);
+            const sharedMarker = latestSharedStateRef.current
+                ? buildAiProgressMarker(latestSharedStateRef.current)
+                : markerBefore;
+            const seatMarker = targetClient.latestState && typeof targetClient.latestState === 'object'
+                ? buildAiProgressMarker(targetClient.latestState as MatchState<unknown>)
+                : markerBefore;
+            if (sharedMarker !== markerBefore || seatMarker !== markerBefore) {
+                return;
+            }
+            onStillStalled();
+        }, RECOVERY_FAILURE_SYNC_GRACE_MS);
+        pendingRecoveryCheckTimersRef.current.add(timer);
+    }, []);
 
     useEffect(() => {
         const nextClientKeys = new Set(
@@ -299,6 +343,9 @@ const OnlineAiSeatBridge = ({
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
+        const progressMarker = state && typeof state === 'object'
+            ? buildAiProgressMarker(state as MatchState<unknown>)
+            : 'no-shared-state';
         const seatStates = Object.fromEntries(
             Object.entries(clientsRef.current).map(([playerId, client]) => {
                 const latestState = client.latestState;
@@ -397,19 +444,17 @@ const OnlineAiSeatBridge = ({
                 if (!shouldNotify) {
                     return;
                 }
-                if (reason === 'unauthorized') {
-                    toast.warning(
-                        'AI 座位凭据已失效，无法自动跳过这次隐藏交互。建议通过反馈入口提交问题。',
-                        undefined,
-                        { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.${reason}` },
-                    );
-                    return;
-                }
-                toast.warning(
-                    '自动跳过这次 AI 隐藏交互未成功，系统会继续重试。建议通过反馈入口提交问题。',
-                    undefined,
-                    { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.${reason}` },
-                );
+                scheduleRecoveryFailureNotice({
+                    targetClient,
+                    markerBefore: progressMarker,
+                    onStillStalled: () => {
+                        toast.warning(
+                            `AI 自动跳过在 recover-interaction 阶段失败（${reason}），系统会继续观察并自动反馈。`,
+                            undefined,
+                            { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.recover-interaction.${reason}` },
+                        );
+                    },
+                });
             },
         });
 
@@ -418,7 +463,7 @@ const OnlineAiSeatBridge = ({
                 clearTimeout(timer);
             }
         };
-    }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, seatControllers, state, toast]);
+    }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, scheduleRecoveryFailureNotice, seatControllers, state, toast]);
 
     useEffect(() => {
         if (!state) {
@@ -494,6 +539,81 @@ const OnlineAiSeatBridge = ({
         }
 
         currentTracker.autoSubmittedAt = now;
+        const submitForceEndTurnAdvanceLoop = (args: {
+            targetClient: GameTransportClient;
+            playerId: string;
+            trackerKey: string;
+            markerBefore: string;
+            authoritativeState: MatchState<unknown> | null | undefined;
+            remainingSteps: number;
+        }) => {
+            const { targetClient, playerId, trackerKey, markerBefore, authoritativeState, remainingSteps } = args;
+            if (remainingSteps <= 0) {
+                toast.warning(
+                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合，并自动连跳剩余阶段直到安全收口。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+                return;
+            }
+
+            const followUpResolution = resolveForceAdvancePhaseAfterRecovery({
+                authoritativeState,
+                seatControllers,
+                playerId,
+            });
+            if (!followUpResolution) {
+                toast.warning(
+                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合，并自动连跳剩余阶段直到安全收口。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+                return;
+            }
+
+            submitOnlineAiResolution({
+                client: targetClient,
+                resolution: followUpResolution,
+                lastAiAttemptKeyRef,
+                scheduleRetry: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
+                onConfirmed: (nextAuthoritativeState) => {
+                    submitForceEndTurnAdvanceLoop({
+                        targetClient,
+                        playerId,
+                        trackerKey,
+                        markerBefore,
+                        authoritativeState: nextAuthoritativeState as MatchState<unknown> | null | undefined,
+                        remainingSteps: remainingSteps - 1,
+                    });
+                },
+                onRejected: (reason) => {
+                    const tracker = forceEndTurnTrackerRef.current;
+                    let shouldNotify = true;
+                    if (tracker?.key === trackerKey) {
+                        const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                        forceEndTurnTrackerRef.current = rejection.nextTracker;
+                        shouldNotify = rejection.shouldNotify;
+                    }
+                    if (!shouldNotify) {
+                        return;
+                    }
+                    scheduleRecoveryFailureNotice({
+                        targetClient,
+                        markerBefore,
+                        onStillStalled: () => {
+                            toast.warning(
+                                `AI 强制结束在 follow-up-advance 阶段失败（${reason}），系统会继续观察并自动反馈。`,
+                                undefined,
+                                { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.follow-up-advance.${reason}` },
+                            );
+                        },
+                    });
+                },
+            });
+        };
+
         submitOnlineAiResolution({
             client: targetClient,
             resolution: candidate.resolution,
@@ -502,59 +622,14 @@ const OnlineAiSeatBridge = ({
                 setAiRetryVersion((version) => version + 1);
             },
             onConfirmed: (authoritativeState) => {
-                const followUpResolution = resolveForceEndTurnFollowUpAfterConfirmation({
-                    candidate,
+                submitForceEndTurnAdvanceLoop({
+                    targetClient,
+                    playerId: candidate.playerId,
+                    trackerKey,
+                    markerBefore: progressMarker,
                     authoritativeState: authoritativeState as MatchState<unknown> | null | undefined,
-                    seatControllers,
+                    remainingSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS,
                 });
-                if (followUpResolution) {
-                    submitOnlineAiResolution({
-                        client: targetClient,
-                        resolution: followUpResolution,
-                        lastAiAttemptKeyRef,
-                        scheduleRetry: () => {
-                            setAiRetryVersion((version) => version + 1);
-                        },
-                        onConfirmed: () => {
-                            toast.warning(
-                                'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
-                                'AI 强制结束回合',
-                                { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
-                            );
-                        },
-                        onRejected: (reason) => {
-                            const tracker = forceEndTurnTrackerRef.current;
-                            let shouldNotify = true;
-                            if (tracker?.key === trackerKey) {
-                                const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
-                                forceEndTurnTrackerRef.current = rejection.nextTracker;
-                                shouldNotify = rejection.shouldNotify;
-                            }
-                            if (!shouldNotify) {
-                                return;
-                            }
-                            if (reason === 'unauthorized') {
-                                toast.warning(
-                                    'AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。',
-                                    undefined,
-                                    { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
-                                );
-                                return;
-                            }
-                            toast.warning(
-                                '强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。',
-                                undefined,
-                                { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
-                            );
-                        },
-                    });
-                    return;
-                }
-                toast.warning(
-                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
-                    'AI 强制结束回合',
-                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
-                );
             },
             onRejected: (reason) => {
                 const tracker = forceEndTurnTrackerRef.current;
@@ -567,19 +642,17 @@ const OnlineAiSeatBridge = ({
                 if (!shouldNotify) {
                     return;
                 }
-                if (reason === 'unauthorized') {
-                    toast.warning(
-                        'AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。',
-                        undefined,
-                        { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
-                    );
-                    return;
-                }
-                toast.warning(
-                    '强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。',
-                    undefined,
-                    { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${reason}` },
-                );
+                scheduleRecoveryFailureNotice({
+                    targetClient,
+                    markerBefore: progressMarker,
+                    onStillStalled: () => {
+                        toast.warning(
+                            `AI 强制结束在 recover-interaction 阶段失败（${reason}），系统会继续观察并自动反馈。`,
+                            undefined,
+                            { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.recover-interaction.${reason}` },
+                        );
+                    },
+                });
             },
         });
 
@@ -588,7 +661,7 @@ const OnlineAiSeatBridge = ({
                 clearTimeout(timer);
             }
         };
-    }, [aiRetryVersion, connectionVersion, seatControllers, state, toast]);
+    }, [aiRetryVersion, connectionVersion, scheduleRecoveryFailureNotice, seatControllers, state, toast]);
 
     return null;
 };

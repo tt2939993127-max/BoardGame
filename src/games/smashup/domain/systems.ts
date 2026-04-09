@@ -14,9 +14,9 @@ import { getInteractionHandler } from './abilityInteractionHandlers';
 import { SU_EVENT_TYPES } from './events';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import {
-    flushDeferredPostScoringCompatibility,
     getDeferredPostScoringEvents,
     getScoringSession,
+    mergeDeferredPostScoringCompatibility,
     mirrorDeferredPostScoringToFirstInteraction,
     updateScoringSession,
 } from './scoringSession';
@@ -117,12 +117,12 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     && !newState.sys.interaction?.current
                                     && (newState.sys.interaction?.queue?.length ?? 0) === 0
                                 ) {
-                                    const compatibility = flushDeferredPostScoringCompatibility(
+                                    const compatibility = mergeDeferredPostScoringCompatibility(
                                         newState,
                                         payload.interactionData,
                                         eventTimestamp,
                                     );
-                                    if (compatibility.flushed) {
+                                    if (compatibility) {
                                         newState = compatibility.state;
                                         emittedEvents = compatibility.events;
                                     }

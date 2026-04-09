@@ -8,6 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildActionMinionTargetOptions, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
+import { buildTargetAiHint } from '../../../engine/ai';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -17,7 +18,7 @@ import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { FACTION_DISPLAY_NAMES } from '../domain/ids';
 import { getOpponentLabel, resolveLiveBaseIndex } from '../domain/utils';
-import { flushDeferredPostScoringCompatibility } from '../domain/scoringSession';
+import { mergeDeferredPostScoringCompatibility } from '../domain/scoringSession';
 
 /** 注册海盗派系所有能力*/
 export function registerPirateAbilities(): void {
@@ -111,7 +112,14 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
         id: `target-${i}`,
         label: c.label,
         value: { baseIndex: c.baseIndex, baseDefId: ctx.state.bases[c.baseIndex].defId, targetPlayerId: c.targetPlayerId },
-        displayMode: 'card' as const
+        displayMode: 'card' as const,
+        _ai: buildTargetAiHint({
+            actorPlayerId: ctx.playerId,
+            targetPlayerId: c.targetPlayerId,
+            effectIntent: 'destroy',
+            targetKind: 'player',
+            priorityHint: c.count * 10,
+        }),
     }));
     const interaction = createSimpleChoice(
         `pirate_broadside_${ctx.now}`, ctx.playerId,
@@ -988,12 +996,12 @@ export function registerPirateInteractionHandlers(): void {
             timestamp
         )];
 
-        const compatibility = flushDeferredPostScoringCompatibility(state, iData, timestamp);
-        if (compatibility.flushed) {
-            return {
-                state: compatibility.state,
-                events: [...events, ...compatibility.events],
-            };
+        const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+            primaryEvents: events,
+            primaryOrder: 'after',
+        });
+        if (compatibility) {
+            return compatibility;
         }
 
         return { state, events };

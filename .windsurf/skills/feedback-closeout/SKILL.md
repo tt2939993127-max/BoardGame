@@ -11,6 +11,35 @@ description: 用于 BoardGame 项目中批量处理线上真实反馈、开放�
 
 优先使用本 skill 自带脚本，不要手工拼 URL、手工拷贝 JSON、手工维护重复组。
 
+## 本地状态板（强制）
+
+- 当前批次反馈默认使用 `temp/feedback-closeout/status-board.json` 作为本地状态板。
+- 该 JSON 是当前批次反馈进度的单一真实来源：一旦某条反馈确认进入 `in_progress`、`resolved`、`closed` 或 `blocked`，必须立刻更新状态板，禁止等整批结束再统一回填。
+- `resolved` 至少要附 1 条 `evidence` 和 1 条 `verification`；`closed` 至少要写清 `notes` 或补充证据。
+- 推荐顺序：
+  1. 先用 `sync-feedback-status-board.mjs` 从最新 `summary.json` 初始化/刷新状态板
+  2. 每拿到一个新结论，立刻用 `update-local-feedback-board.mjs` 更新该条本地状态
+  3. 再执行远端正式状态回写
+  4. 最后跑 `scripts/verify/verify-feedback-status.mjs` 做一次本地校验
+
+初始化/刷新状态板：
+
+```bash
+node .windsurf/skills/feedback-closeout/scripts/sync-feedback-status-board.mjs temp/feedback-closeout/<timestamp>/summary.json
+```
+
+更新单条本地状态：
+
+```bash
+node .windsurf/skills/feedback-closeout/scripts/update-local-feedback-board.mjs --id <feedbackId> --status resolved --owner codex --evidence evidence/<file>.md --verification "<验证命令>" --screenshot <绝对路径截图>
+```
+
+校验状态板：
+
+```bash
+node scripts/verify/verify-feedback-status.mjs temp/feedback-closeout/status-board.json
+```
+
 ## 默认目标
 
 - 默认目标必须是线上真实反馈。
@@ -64,6 +93,12 @@ node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-
 - 选出一组 `parallelCandidates`，用于后续并行分派
 - 可选把 `parallelCandidates` 立即改成 `in_progress`
 
+拉取完成后，立即把本批 `summary.json` 同步到本地状态板，不要跳过这一步：
+
+```bash
+node .windsurf/skills/feedback-closeout/scripts/sync-feedback-status-board.mjs temp/feedback-closeout/<timestamp>/summary.json
+```
+
 ### 2. 先分类，再决定真假 bug
 
 按 `summary.json` 中的代表项处理，不要把重复项当独立问题并行开工。
@@ -82,6 +117,8 @@ node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-
 1. 用户描述和现有实现是否真的冲突。
 2. 反馈是否只是重复、误用、环境噪音、历史已修复问题。
 3. 若是 bug，最小可复现链路和可疑模块是什么。
+
+只要结论已确认，就先更新本地状态板，再继续处理下一条反馈。
 
 ### 3. 只并行不冲突的代表项
 
@@ -117,6 +154,12 @@ node .windsurf/skills/feedback-closeout/scripts/triage-open-feedback.mjs --base-
 - 预计要持续处理较久，且已经明确接手
   - 可先改 `in_progress`
 
+本地状态板和远端正式状态必须一起维护：
+
+1. 先更新 `temp/feedback-closeout/status-board.json`
+2. 再回写远端正式状态
+3. 如果远端回写失败，必须立刻在本地状态板补 `notes` 说明阻塞原因，必要时改成 `blocked`
+
 使用：
 
 ```bash
@@ -134,6 +177,7 @@ node .windsurf/skills/feedback-closeout/scripts/finalize-feedback-group.mjs temp
 - 如果开放反馈接口实际上指向本地开发库或空库，禁止因为“脚本能通”就把本地结果当成线上已回写。
 - 如果线上 HTTP 接口不可用，但用户已经允许使用生产机直连数据库作为真实写入口，可以改走生产机脚本；此时必须在交付里明确写明“本轮不是通过 HTTP 接口，而是通过生产机真实数据源回写”。
 - 未经用户明确允许，不要擅自使用生产 SSH、生产数据库直连或其他越过业务接口的写路径。
+- 不得只改远端状态、不改本地状态板；也不得只改本地状态板就口头宣称“已收口”。
 
 ### 5. 交付口径
 
@@ -158,6 +202,10 @@ node .windsurf/skills/feedback-closeout/scripts/finalize-feedback-group.mjs temp
   - 用开放接口回写状态。
 - `finalize-feedback-group.mjs`
   - 按 `summary.json` 收口代表项，并默认关闭同组重复项。
+- `sync-feedback-status-board.mjs`
+  - 从 `summary.json` 初始化/刷新本地状态板，并保留已写入的本地证据/备注。
+- `update-local-feedback-board.mjs`
+  - 即时更新单条反馈的本地状态、证据、验证命令和截图路径。
 
 ### references/
 

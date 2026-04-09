@@ -5,8 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
-import { resolveNextLocalAiAction } from '../../../engine/ai';
-import { buildSummonerWarsAiLegalActions } from '../ai';
+import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildSummonerWarsAiLegalActions, summonerWarsAiRuntime } from '../ai';
 
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -24,6 +24,83 @@ const aiTestRandom = {
     range: (min: number) => min,
     shuffle: <T>(arr: T[]) => [...arr],
 };
+
+function createModerateThreatAttackCore(): SummonerWarsCore {
+    const core = createInitializedCore(['0', '1'], aiTestRandom);
+    core.phase = 'attack';
+    core.board[6][2].unit = undefined;
+    core.board[6][3].unit = undefined;
+    core.board[5][2].unit = undefined;
+
+    const defenderCard: UnitCard = {
+        id: 'test-guard',
+        cardType: 'unit',
+        name: '测试护卫',
+        unitClass: 'common',
+        faction: 'necromancer',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const threateningCard: UnitCard = {
+        id: 'test-threat',
+        cardType: 'unit',
+        name: '测试威胁兵',
+        unitClass: 'common',
+        faction: 'paladin',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const championCard: UnitCard = {
+        id: 'test-champion',
+        cardType: 'unit',
+        name: '测试冠军',
+        unitClass: 'champion',
+        faction: 'paladin',
+        strength: 3,
+        life: 4,
+        cost: 3,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+
+    placeTestUnit(core, { row: 6, col: 2 }, {
+        card: defenderCard,
+        owner: '0',
+    });
+    placeTestUnit(core, { row: 6, col: 3 }, {
+        card: threateningCard,
+        owner: '1',
+    });
+    placeTestUnit(core, { row: 5, col: 2 }, {
+        card: championCard,
+        owner: '1',
+        damage: 0,
+    });
+
+    return core;
+}
+
+function createBoardControlTiebreakAttackCore(): SummonerWarsCore {
+    const core = createModerateThreatAttackCore();
+    const ownSummoner = core.board[7][3].unit;
+    core.board[7][3].unit = undefined;
+    core.board[7][0].unit = ownSummoner
+        ? {
+            ...ownSummoner,
+            position: { row: 7, col: 0 },
+        }
+        : undefined;
+    return core;
+}
 
 // ============================================================================
 // 召唤师战争专用断言
@@ -820,6 +897,110 @@ describe('召唤师战争本地 AI', () => {
         const validPositions = getValidSummonPositions(core, '0');
         expect(summonPosition).toBeTruthy();
         expect(validPositions).toContainEqual(summonPosition);
+    });
+
+
+    it('攻击类 legal action 会附带 strategy tags，供通用 profile scorer 复用', () => {
+        const core = createModerateThreatAttackCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const threatAttack = actions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 6 && target?.col === 3;
+        });
+        const championAttack = actions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 5 && target?.col === 2;
+        });
+
+        expect(threatAttack?.metadata?.strategyTags).toContain('summoner-defense');
+        expect(threatAttack?.metadata?.strategyTags).toContain('board-control');
+        expect(championAttack?.metadata?.strategyTags).toContain('board-control');
+        expect(championAttack?.metadata?.strategyTags).not.toContain('summoner-defense');
+    });
+
+    it('通用 strategy profile scorer 会在中度承压时抬高回防标签动作的评分', async () => {
+        const core = createModerateThreatAttackCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-strategy-profile',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            totalScore: number;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const threatAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 6 && target?.col === 3;
+        });
+        const championAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 5 && target?.col === 2;
+        });
+        const threatEval = evaluations.find((item) => item.actionId === threatAttack?.actionId);
+        const championEval = evaluations.find((item) => item.actionId === championAttack?.actionId);
+
+        expect(threatAttack?.metadata?.strategyTags).toContain('summoner-defense');
+        expect(threatEval?.contributions.some((item) => item.scorerId === 'strategy-profile-fit' && item.score > 0)).toBe(true);
+        expect(threatEval?.totalScore ?? -Infinity).toBeGreaterThan(championEval?.totalScore ?? -Infinity);
+        expect(decision?.actionId).toBe(threatAttack?.actionId);
+    });
+
+    it('当两个攻击动作都只有 board-control 标签时，仍应由 attack-value 选择更高价值目标', async () => {
+        const core = createBoardControlTiebreakAttackCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-board-control-tiebreak',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            totalScore: number;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const commonAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 6 && target?.col === 3;
+        });
+        const championAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 5 && target?.col === 2;
+        });
+        const commonEval = evaluations.find((item) => item.actionId === commonAttack?.actionId);
+        const championEval = evaluations.find((item) => item.actionId === championAttack?.actionId);
+        const commonProfileScore = commonEval?.contributions.find((item) => item.scorerId === 'strategy-profile-fit')?.score ?? 0;
+        const championProfileScore = championEval?.contributions.find((item) => item.scorerId === 'strategy-profile-fit')?.score ?? 0;
+        const commonAttackScore = commonEval?.contributions.find((item) => item.scorerId === 'attack-value')?.score ?? -Infinity;
+        const championAttackScore = championEval?.contributions.find((item) => item.scorerId === 'attack-value')?.score ?? -Infinity;
+
+        expect(commonAttack?.metadata?.strategyTags).toEqual(['board-control']);
+        expect(championAttack?.metadata?.strategyTags).toEqual(['board-control']);
+        expect(championProfileScore).toBe(commonProfileScore);
+        expect(championAttackScore).toBeGreaterThan(commonAttackScore);
+        expect(championEval?.totalScore ?? -Infinity).toBeGreaterThan(commonEval?.totalScore ?? -Infinity);
+        expect(decision?.actionId).toBe(championAttack?.actionId);
     });
 
     it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {

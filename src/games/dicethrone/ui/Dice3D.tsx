@@ -2,6 +2,7 @@ import React from 'react';
 import { createScopedLogger } from '../../../lib/logger';
 import {
     DICE_BG_SIZE,
+    getDiceFaceFallbackSkin,
     getDiceSpritePosition,
     getDiceSpriteUrls,
 } from './assets';
@@ -336,21 +337,54 @@ export const Dice3D = ({
                     const { xPos, yPos } = getDiceSpritePosition(face.id);
                     const needsFlip = face.id === 1 || face.id === 6;
                     const faceTransform = needsFlip ? `${face.trans} rotateZ(180deg)` : face.trans;
+                    const fallbackSkin = getDiceFaceFallbackSkin(face.id, definitionId, characterId);
 
                     return (
                         <div
                             key={face.id}
-                            className={`absolute inset-0 flex items-center justify-center bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner`}
+                            className={`absolute inset-0 flex items-center justify-center bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner overflow-hidden`}
                             style={{
                                 transform: faceTransform,
                                 backgroundImage: isSpriteReady && resolvedSpriteUrl ? `url("${resolvedSpriteUrl}")` : undefined,
                                 backgroundSize: isSpriteReady ? DICE_BG_SIZE : undefined,
                                 backgroundPosition: isSpriteReady ? `${xPos}% ${yPos}%` : undefined,
+                                background: isSpriteReady ? undefined : fallbackSkin.faceBackground,
+                                borderColor: isSpriteReady ? undefined : fallbackSkin.faceBorder,
                                 boxShadow,
                                 imageRendering: 'auto',
                             }}
                             data-face-id={face.id}
-                        />
+                            data-face-symbol={isSpriteReady ? undefined : fallbackSkin.faceId ?? String(face.id)}
+                            data-face-fallback={isSpriteReady ? 'false' : 'true'}
+                        >
+                            {!isSpriteReady && (
+                                <>
+                                    <span
+                                        className="select-none font-black leading-none"
+                                        style={{
+                                            color: fallbackSkin.textColor,
+                                            textShadow: fallbackSkin.textShadow,
+                                            fontSize: isSpotlight ? '42%' : '36%',
+                                            letterSpacing: '0.02em',
+                                        }}
+                                    >
+                                        {fallbackSkin.glyph}
+                                    </span>
+                                    <span
+                                        className="absolute right-[10%] top-[10%] flex min-w-[24%] items-center justify-center rounded-full border px-[0.12em] py-[0.05em] text-center font-bold leading-none"
+                                        style={{
+                                            background: fallbackSkin.badgeBackground,
+                                            borderColor: fallbackSkin.badgeBorder,
+                                            color: fallbackSkin.captionColor,
+                                            fontSize: isSpotlight ? '18%' : '16%',
+                                            boxShadow: '0 2px 8px rgba(15,23,42,0.28)',
+                                        }}
+                                    >
+                                        {fallbackSkin.label}
+                                    </span>
+                                </>
+                            )}
+                        </div>
                     );
                 })}
             </div>

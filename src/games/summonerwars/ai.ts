@@ -3,9 +3,16 @@ import {
     buildDeterministicAiNoise,
     createAiLegalActionId,
     createActionKindScorer,
+    createProfileAwareActionScorer,
     createScoredLocalAiPolicy,
+    withAiActionStrategyTags,
 } from '../../engine/ai';
-import type { AiDecisionContext, AiLegalAction, GameAiRuntime, LocalAiActionScorer } from '../../engine/ai';
+import type {
+    AiLegalAction,
+    AiStrategyProfile,
+    GameAiRuntime,
+    LocalAiActionScorer,
+} from '../../engine/ai';
 import type { InteractionDescriptor as EngineInteractionDescriptor, PromptMultiConfig } from '../../engine/systems/InteractionSystem';
 import { SummonerWarsDomain } from './domain';
 import { abilityRegistry } from './domain/abilities';
@@ -29,12 +36,17 @@ import type {
     FactionId,
     GamePhase,
     SummonerWarsCore,
-    UnitCard,
 } from './domain/types';
 
 type SummonerWarsState = MatchState<SummonerWarsCore>;
 type SetupPhase = 'setup';
 type SummonerWarsTurnPhase = SetupPhase | GamePhase;
+type SummonerWarsStrategyTag =
+    | 'summoner-defense'
+    | 'summoner-pressure'
+    | 'board-control'
+    | 'economy'
+    | 'ability-tempo';
 
 type SummonerWarsInteractionOption = {
     id?: string;
@@ -129,6 +141,23 @@ const enumerateInteractionOptionCombinations = <T extends { id: string }>(
 
 const getEnemyPlayerId = (playerId: PlayerId): PlayerId => (playerId === '0' ? '1' : '0');
 
+const pushStrategyTag = (
+    tags: SummonerWarsStrategyTag[],
+    tag: SummonerWarsStrategyTag,
+): void => {
+    if (!tags.includes(tag)) {
+        tags.push(tag);
+    }
+};
+
+const addStrategyWeight = (
+    weights: Partial<Record<SummonerWarsStrategyTag, number>>,
+    tag: SummonerWarsStrategyTag,
+    value: number,
+): void => {
+    weights[tag] = Number(((weights[tag] ?? 0) + value).toFixed(3));
+};
+
 const getCurrentPhase = (state: SummonerWarsState): SummonerWarsTurnPhase => {
     if (!state.core.hostStarted) {
         return 'setup';
@@ -218,6 +247,137 @@ const estimateSummonerThreat = (
         nearbyEnemyPressure,
         threateningEnemyIds,
     };
+};
+
+const getSummonerWarsStrategyProfile = (
+    state: SummonerWarsState,
+    playerId: PlayerId,
+): AiStrategyProfile<SummonerWarsStrategyTag> => {
+    const phase = getCurrentPhase(state);
+    const threat = estimateSummonerThreat(state.core, playerId);
+    const weights: Partial<Record<SummonerWarsStrategyTag, number>> = {};
+    const summary: string[] = [];
+
+    if (threat.remainingLife > 0 && threat.directThreatDamage >= threat.remainingLife) {
+        addStrategyWeight(weights, 'summoner-defense', 2.4);
+        addStrategyWeight(weights, 'board-control', 1.1);
+        summary.push('先保召唤师');
+    } else if (threat.nearbyEnemyPressure >= 8) {
+        addStrategyWeight(weights, 'summoner-defense', 2);
+        addStrategyWeight(weights, 'board-control', 1);
+        addStrategyWeight(weights, 'summoner-pressure', 0.45);
+        summary.push('前线承压，优先回防');
+    } else {
+        addStrategyWeight(weights, 'summoner-pressure', 1.15);
+        addStrategyWeight(weights, 'board-control', 0.9);
+    }
+
+    switch (phase) {
+        case 'summon':
+            addStrategyWeight(weights, 'summoner-pressure', 0.35);
+            addStrategyWeight(weights, 'board-control', 0.15);
+            break;
+        case 'move':
+            addStrategyWeight(weights, 'summoner-pressure', 0.4);
+            addStrategyWeight(weights, 'board-control', 0.2);
+            break;
+        case 'attack':
+            addStrategyWeight(weights, 'summoner-pressure', 0.55);
+            addStrategyWeight(weights, 'board-control', 0.25);
+            break;
+        case 'build':
+            addStrategyWeight(weights, 'summoner-defense', 0.35);
+            addStrategyWeight(weights, 'board-control', 0.2);
+            break;
+        case 'magic':
+            addStrategyWeight(weights, 'economy', 1.4);
+            summary.push('资源回合优先经济');
+            break;
+        default:
+            addStrategyWeight(weights, 'ability-tempo', 0.35);
+            break;
+    }
+
+    if (summary.length === 0) {
+        summary.push('保持中线与召唤师压力平衡');
+    }
+
+    const tags = (Object.entries(weights) as Array<[SummonerWarsStrategyTag, number]>)
+        .filter(([, weight]) => weight >= 0.85)
+        .map(([tag]) => tag);
+
+    return {
+        tags,
+        tagWeights: weights,
+        summary,
+    };
+};
+
+const buildSummonStrategyTags = (args: {
+    distanceToEnemySummoner: number;
+    distanceToOwnSummoner: number;
+    centerScore: number;
+}): SummonerWarsStrategyTag[] => {
+    const tags: SummonerWarsStrategyTag[] = [];
+    if (args.distanceToOwnSummoner <= 1) {
+        pushStrategyTag(tags, 'summoner-defense');
+    }
+    if (args.distanceToEnemySummoner <= 4) {
+        pushStrategyTag(tags, 'summoner-pressure');
+    }
+    if (args.centerScore >= 2) {
+        pushStrategyTag(tags, 'board-control');
+    }
+    return tags;
+};
+
+const buildMoveStrategyTags = (args: {
+    attackTargetsAfterMove: number;
+    distanceToEnemySummonerBefore: number;
+    distanceToEnemySummonerAfter: number;
+    distanceToOwnSummonerBefore: number;
+    distanceToOwnSummonerAfter: number;
+    directThreatDamageBefore: number;
+    directThreatDamageAfter: number;
+    nearbyEnemyPressureBefore: number;
+    nearbyEnemyPressureAfter: number;
+    centerScore: number;
+}): SummonerWarsStrategyTag[] => {
+    const tags: SummonerWarsStrategyTag[] = [];
+    if (
+        args.attackTargetsAfterMove > 0
+        || args.distanceToEnemySummonerAfter < args.distanceToEnemySummonerBefore
+    ) {
+        pushStrategyTag(tags, 'summoner-pressure');
+    }
+    if (
+        args.directThreatDamageAfter < args.directThreatDamageBefore
+        || args.nearbyEnemyPressureAfter < args.nearbyEnemyPressureBefore
+        || args.distanceToOwnSummonerAfter < args.distanceToOwnSummonerBefore
+    ) {
+        pushStrategyTag(tags, 'summoner-defense');
+    }
+    if (args.centerScore >= 2) {
+        pushStrategyTag(tags, 'board-control');
+    }
+    return tags;
+};
+
+const buildAttackStrategyTags = (args: {
+    targetType: string;
+    targetIsThreateningSummoner: boolean;
+}): SummonerWarsStrategyTag[] => {
+    const tags: SummonerWarsStrategyTag[] = [];
+    if (args.targetType === 'summoner') {
+        pushStrategyTag(tags, 'summoner-pressure');
+    }
+    if (args.targetIsThreateningSummoner) {
+        pushStrategyTag(tags, 'summoner-defense');
+    }
+    if (args.targetType === 'champion' || args.targetType === 'common' || args.targetType === 'structure') {
+        pushStrategyTag(tags, 'board-control');
+    }
+    return tags;
 };
 
 const buildInteractionActions = (
@@ -412,6 +572,7 @@ const buildActivatedAbilityActions = (
             if (abilityDef.trigger !== 'activated') continue;
             if (abilityDef.requiresTargetSelection) continue;
             if (!canActivateAbility(state.core, unit, abilityId, playerId)) continue;
+            const strategyTags: SummonerWarsStrategyTag[] = ['ability-tempo'];
 
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('activate-ability', unit.instanceId, abilityId),
@@ -424,11 +585,11 @@ const buildActivatedAbilityActions = (
                         sourceUnitId: unit.instanceId,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     abilityId,
                     sourceUnitId: unit.instanceId,
                     sourcePosition: unit.position,
-                },
+                }, strategyTags),
             });
         }
     }
@@ -450,6 +611,14 @@ const buildSummonActions = (
     for (const card of player.hand) {
         if (card.cardType !== 'unit') continue;
         for (const position of summonPositions) {
+            const distanceToEnemySummoner = enemySummoner ? manhattanDistance(position, enemySummoner.position) : 99;
+            const distanceToOwnSummoner = ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99;
+            const centerScore = getCenterScore(position);
+            const strategyTags = buildSummonStrategyTags({
+                distanceToEnemySummoner,
+                distanceToOwnSummoner,
+                centerScore,
+            });
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('summon-unit', card.id, position.row, position.col),
                 kind: 'summon-unit',
@@ -461,20 +630,20 @@ const buildSummonActions = (
                         position,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     cardId: card.id,
                     cardName: card.name,
                     cost: card.cost,
                     strength: card.strength,
                     life: card.life,
                     position,
-                    centerScore: getCenterScore(position),
-                    distanceToEnemySummoner: enemySummoner ? manhattanDistance(position, enemySummoner.position) : 99,
-                    distanceToOwnSummoner: ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99,
+                    centerScore,
+                    distanceToEnemySummoner,
+                    distanceToOwnSummoner,
                     remainingLife: threat.remainingLife,
                     directThreatDamage: threat.directThreatDamage,
                     nearbyEnemyPressure: threat.nearbyEnemyPressure,
-                },
+                }, strategyTags),
             });
         }
     }
@@ -497,6 +666,25 @@ const buildMoveActions = (
             const movedCore = cloneCoreWithMovedUnit(state.core, unit.position, to);
             const attackTargetsAfterMove = movedCore ? getValidAttackTargetsEnhanced(movedCore, to).length : 0;
             const threatAfter = movedCore ? estimateSummonerThreat(movedCore, playerId) : threatBefore;
+            const distanceToEnemySummonerBefore = enemySummoner ? manhattanDistance(unit.position, enemySummoner.position) : 99;
+            const distanceToEnemySummonerAfter = enemySummoner ? manhattanDistance(to, enemySummoner.position) : 99;
+            const distanceToOwnSummonerBefore = ownSummoner ? manhattanDistance(unit.position, ownSummoner.position) : 99;
+            const distanceToOwnSummonerAfter = ownSummoner
+                ? (unit.card.unitClass === 'summoner' ? 0 : manhattanDistance(to, ownSummoner.position))
+                : 99;
+            const centerScore = getCenterScore(to);
+            const strategyTags = buildMoveStrategyTags({
+                attackTargetsAfterMove,
+                distanceToEnemySummonerBefore,
+                distanceToEnemySummonerAfter,
+                distanceToOwnSummonerBefore,
+                distanceToOwnSummonerAfter,
+                directThreatDamageBefore: threatBefore.directThreatDamage,
+                directThreatDamageAfter: threatAfter.directThreatDamage,
+                nearbyEnemyPressureBefore: threatBefore.nearbyEnemyPressure,
+                nearbyEnemyPressureAfter: threatAfter.nearbyEnemyPressure,
+                centerScore,
+            });
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('move-unit', unit.instanceId, to.row, to.col),
                 kind: 'move-unit',
@@ -508,27 +696,25 @@ const buildMoveActions = (
                         to,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     sourceUnitId: unit.instanceId,
                     from: unit.position,
                     to,
                     attackTargetsAfterMove,
-                    distanceToEnemySummonerBefore: enemySummoner ? manhattanDistance(unit.position, enemySummoner.position) : 99,
-                    distanceToEnemySummonerAfter: enemySummoner ? manhattanDistance(to, enemySummoner.position) : 99,
-                    centerScore: getCenterScore(to),
+                    distanceToEnemySummonerBefore,
+                    distanceToEnemySummonerAfter,
+                    centerScore,
                     attackType: unit.card.attackType,
                     sourceUnitClass: unit.card.unitClass,
                     sourceIsSummoner: unit.card.unitClass === 'summoner',
-                    distanceToOwnSummonerBefore: ownSummoner ? manhattanDistance(unit.position, ownSummoner.position) : 99,
-                    distanceToOwnSummonerAfter: ownSummoner
-                        ? (unit.card.unitClass === 'summoner' ? 0 : manhattanDistance(to, ownSummoner.position))
-                        : 99,
+                    distanceToOwnSummonerBefore,
+                    distanceToOwnSummonerAfter,
                     remainingLifeBefore: threatBefore.remainingLife,
                     directThreatDamageBefore: threatBefore.directThreatDamage,
                     nearbyEnemyPressureBefore: threatBefore.nearbyEnemyPressure,
                     directThreatDamageAfter: threatAfter.directThreatDamage,
                     nearbyEnemyPressureAfter: threatAfter.nearbyEnemyPressure,
-                },
+                }, strategyTags),
             });
         }
     }
@@ -549,6 +735,15 @@ const buildStructureActions = (
     for (const card of player.hand) {
         if (card.cardType !== 'structure') continue;
         for (const position of buildPositions) {
+            const distanceToOwnSummoner = ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99;
+            const centerScore = getCenterScore(position);
+            const strategyTags: SummonerWarsStrategyTag[] = [];
+            if (distanceToOwnSummoner <= 1) {
+                strategyTags.push('summoner-defense');
+            }
+            if (centerScore >= 2) {
+                strategyTags.push('board-control');
+            }
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('build-structure', card.id, position.row, position.col),
                 kind: 'build-structure',
@@ -560,17 +755,17 @@ const buildStructureActions = (
                         position,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     cardId: card.id,
                     cost: card.cost,
                     life: card.life,
                     position,
-                    centerScore: getCenterScore(position),
-                    distanceToOwnSummoner: ownSummoner ? manhattanDistance(position, ownSummoner.position) : 99,
+                    centerScore,
+                    distanceToOwnSummoner,
                     remainingLife: threat.remainingLife,
                     directThreatDamage: threat.directThreatDamage,
                     nearbyEnemyPressure: threat.nearbyEnemyPressure,
-                },
+                }, strategyTags),
             });
         }
     }
@@ -591,11 +786,21 @@ const buildAttackActions = (
         for (const target of targets) {
             const targetUnit = getUnitAt(state.core, target);
             const targetStructure = getStructureAt(state.core, target);
+            const targetType = targetUnit
+                ? targetUnit.card.unitClass
+                : targetStructure
+                    ? 'structure'
+                    : 'unknown';
             const targetLifeRemaining = targetUnit
                 ? targetUnit.card.life - targetUnit.damage
                 : targetStructure
                     ? targetStructure.card.life - targetStructure.damage
                     : 0;
+            const targetIsThreateningSummoner = targetUnit ? threateningEnemyIds.has(targetUnit.instanceId) : false;
+            const strategyTags = buildAttackStrategyTags({
+                targetType,
+                targetIsThreateningSummoner,
+            });
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('declare-attack', unit.instanceId, target.row, target.col),
                 kind: 'declare-attack',
@@ -607,25 +812,21 @@ const buildAttackActions = (
                         target,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     sourceUnitId: unit.instanceId,
                     attacker: unit.position,
                     target,
                     attackerStrength: unit.card.strength,
                     attackType: unit.card.attackType,
-                    targetType: targetUnit
-                        ? targetUnit.card.unitClass
-                        : targetStructure
-                            ? 'structure'
-                            : 'unknown',
+                    targetType,
                     targetLifeRemaining,
                     lethalLikely: unit.card.strength >= targetLifeRemaining,
                     targetOwner: targetUnit?.owner ?? targetStructure?.owner,
-                    targetIsThreateningSummoner: targetUnit ? threateningEnemyIds.has(targetUnit.instanceId) : false,
+                    targetIsThreateningSummoner,
                     remainingLife: threat.remainingLife,
                     directThreatDamage: threat.directThreatDamage,
                     nearbyEnemyPressure: threat.nearbyEnemyPressure,
-                },
+                }, strategyTags),
             });
         }
     }
@@ -649,11 +850,11 @@ const buildMagicActions = (
                 type: SW_COMMANDS.DISCARD_FOR_MAGIC,
                 payload: { cardIds: [card.id] },
             }],
-            metadata: {
+            metadata: withAiActionStrategyTags({
                 cardId: card.id,
                 cardType: card.cardType,
                 keepValue: getCardKeepValue(card),
-            },
+            }, ['economy']),
         });
     }
 
@@ -870,6 +1071,21 @@ const attackScorer: LocalAiActionScorer = {
     },
 };
 
+const strategyProfileScorer = createProfileAwareActionScorer<SummonerWarsStrategyTag>({
+    id: 'strategy-profile-fit',
+    allowedKinds: [
+        'summon-unit',
+        'move-unit',
+        'build-structure',
+        'declare-attack',
+        'discard-for-magic',
+        'activate-ability',
+    ],
+    getProfile(context) {
+        return getSummonerWarsStrategyProfile(context.visibleState as SummonerWarsState, context.playerId);
+    },
+});
+
 const summonerSafetyScorer: LocalAiActionScorer = {
     id: 'summoner-safety',
     score(_context, action) {
@@ -1021,6 +1237,7 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
         summonScorer,
         moveScorer,
         attackScorer,
+        strategyProfileScorer,
         summonerSafetyScorer,
         buildScorer,
         discardScorer,

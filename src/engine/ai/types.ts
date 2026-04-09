@@ -98,13 +98,23 @@ export interface AiCommandSpec {
     payload: unknown;
 }
 
+export interface AiActionStrategyMetadata {
+    strategyTags?: string[];
+    /**
+     * @deprecated 旧的 Smash Up 专用字段，读取仍兼容；新代码应优先写入 strategyTags。
+     */
+    cardStrategyTags?: string[];
+}
+
+export type AiActionMetadata = Record<string, unknown> & AiActionStrategyMetadata;
+
 export interface AiLegalAction {
     actionId: string;
     kind: string;
     label: string;
     commands: AiCommandSpec[];
     aiHints?: AiHint[];
-    metadata?: Record<string, unknown>;
+    metadata?: AiActionMetadata;
 }
 
 export interface AiDecisionContext {
