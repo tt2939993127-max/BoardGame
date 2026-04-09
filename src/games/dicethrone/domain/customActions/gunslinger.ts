@@ -315,7 +315,8 @@ function handleEatMyLead({ attackerId, sourceAbilityId, state, timestamp, random
         };
     });
 
-    const bonusDamage = dice.filter(die => die.face === GUNSLINGER_DICE_FACE_IDS.BULLET).length;
+    const bulletCount = dice.filter(die => die.face === GUNSLINGER_DICE_FACE_IDS.BULLET).length;
+    const bonusDamage = bulletCount;
     const events: DiceThroneEvent[] = [];
 
     for (const die of dice) {
@@ -340,6 +341,15 @@ function handleEatMyLead({ attackerId, sourceAbilityId, state, timestamp, random
         state.pendingAttack?.defenderId ?? attackerId,
         dice,
         timestamp + 10,
+        {
+            summaryEffectKey: bonusDamage > 4
+                ? 'bonusDie.effect.gunslingerEatMyLead.resultKnockdown'
+                : 'bonusDie.effect.gunslingerEatMyLead.result',
+            summaryEffectParams: {
+                bulletCount,
+                bonusDamage,
+            },
+        },
     ));
 
     if (bonusDamage > 0) {

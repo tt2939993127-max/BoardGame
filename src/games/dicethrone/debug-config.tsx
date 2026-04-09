@@ -8,6 +8,8 @@ import { useTranslation } from 'react-i18next';
 import { resolveCardDisplayName } from '../../components/game/framework/debug/cardNameResolver';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+const REVERSED_COMMON_ATLAS_HEROES = new Set(['gunslinger', 'samurai']);
+
 const getCardSourceAtlasIndex = (card: any) => (
     typeof card?.sourceAtlasIndex === 'number'
         ? card.sourceAtlasIndex
@@ -15,6 +17,16 @@ const getCardSourceAtlasIndex = (card: any) => (
             ? card.previewRef.index
             : null
 );
+
+const getDeckSectionLabel = (characterId: string | null | undefined, atlasIndex: number | null) => {
+    if (atlasIndex == null) return '未知';
+
+    if (REVERSED_COMMON_ATLAS_HEROES.has(characterId ?? '')) {
+        return atlasIndex <= 17 ? '通用' : '专属';
+    }
+
+    return atlasIndex >= 15 ? '通用' : '专属';
+};
 
 interface DiceThroneDebugConfigProps {
     G: unknown;
@@ -45,6 +57,14 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
     // 获取当前玩家牌库和手牌
     const playerDeck: any[] = useMemo(() => G?.core?.players?.[dealPlayer]?.deck ?? [], [G, dealPlayer]);
     const playerHand: any[] = useMemo(() => G?.core?.players?.[dealPlayer]?.hand ?? [], [G, dealPlayer]);
+    const playerCharacterId: string | null = useMemo(
+        () => G?.core?.players?.[dealPlayer]?.characterId ?? null,
+        [G, dealPlayer],
+    );
+    const usesReversedCommonAtlas = useMemo(
+        () => REVERSED_COMMON_ATLAS_HEROES.has(playerCharacterId ?? ''),
+        [playerCharacterId],
+    );
 
     // 检查牌库中是否存在指定图集索引的卡牌
     const matchingDeckCards = useMemo(() => {
@@ -75,6 +95,46 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                 return a.deckIndexInDeck - b.deckIndexInDeck;
             });
     }, [playerDeck]);
+
+    const groupedDeckCards = useMemo(() => {
+        const groups: Array<{ key: 'common' | 'hero'; title: string; description: string; entries: typeof sortedDeckCards }> = [];
+        const commonEntries = sortedDeckCards.filter(({ card }) => getDeckSectionLabel(playerCharacterId, getCardSourceAtlasIndex(card)) === '通用');
+        const heroEntries = sortedDeckCards.filter(({ card }) => getDeckSectionLabel(playerCharacterId, getCardSourceAtlasIndex(card)) === '专属');
+
+        if (usesReversedCommonAtlas) {
+            groups.push(
+                {
+                    key: 'common',
+                    title: '通用牌区 0-17',
+                    description: '枪手 / 武士通用牌区是反向索引：0 → Transfer Status，17 → Play Six。',
+                    entries: commonEntries,
+                },
+                {
+                    key: 'hero',
+                    title: '专属牌区 18-31',
+                    description: '18 以后才是当前角色专属牌。',
+                    entries: heroEntries,
+                },
+            );
+            return groups;
+        }
+
+        groups.push(
+            {
+                key: 'hero',
+                title: '专属牌区',
+                description: '老角色通常是前半段索引为专属牌。',
+                entries: heroEntries,
+            },
+            {
+                key: 'common',
+                title: '通用牌区 15-32',
+                description: '老角色通用牌区按正向排列：15 → Play Six，32 → Transfer Status。',
+                entries: commonEntries,
+            },
+        );
+        return groups;
+    }, [playerCharacterId, sortedDeckCards, usesReversedCommonAtlas]);
 
     const handleDealByDeckIndex = (deckIndexInDeck: number, atlasIdx?: number | null) => {
         if (atlasIdx != null) {
@@ -314,6 +374,26 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                                 placeholder="图集索引"
                             />
                         </div>
+                        <div className={`rounded border px-2 py-1.5 text-[9px] leading-4 ${
+                            usesReversedCommonAtlas
+                                ? 'border-emerald-200 bg-emerald-100/70 text-emerald-800'
+                                : 'border-green-200 bg-white/70 text-green-700'
+                        }`}>
+                            {usesReversedCommonAtlas ? (
+                                <>
+                                    当前角色 <span className="font-bold">{playerCharacterId}</span> 使用<strong>反向通用牌区</strong>：
+                                    <span className="font-bold"> 0-17 = 通用牌</span>，
+                                    <span className="font-bold"> 18-31 = 专属牌</span>。
+                                    若怕记错，优先点下方“牌库索引速查”里的候选行精确发牌。
+                                </>
+                            ) : (
+                                <>
+                                    当前角色 <span className="font-bold">{playerCharacterId ?? '未选角色'}</span> 使用老角色默认顺序：
+                                    <span className="font-bold"> 前半段多为专属牌</span>，
+                                    <span className="font-bold"> 15-32 = 通用牌</span>。
+                                </>
+                            )}
+                        </div>
                         <div className="text-[9px] text-green-600 mb-1">
                             牌库剩余: {playerDeck.length} 张
                             {matchingDeckCards.length === 1 ? (
@@ -369,32 +449,50 @@ export const DiceThroneDebugConfig: React.FC<DiceThroneDebugConfigProps> = ({ G,
                     {sortedDeckCards.length === 0 ? (
                         <div className="text-[10px] text-amber-400 text-center py-2">牌库为空</div>
                     ) : (
-                        <div className="space-y-1">
-                            {sortedDeckCards.map(({ card, deckIndexInDeck }, idx) => {
-                                const atlasIdx = card.previewRef?.type === 'atlas' ? card.previewRef.index : null;
-                                return (
-                                    <div
-                                        key={`${card.id}-${idx}`}
-                                        className="flex items-center gap-2 text-[10px] px-1 py-0.5 rounded cursor-pointer text-amber-700 hover:bg-amber-100"
-                                        onClick={() => {
-                                            if (atlasIdx != null) {
-                                                handleDealByDeckIndex(deckIndexInDeck, atlasIdx);
-                                            }
-                                        }}
-                                    >
-                                        <span className="w-5 text-amber-500 font-mono">{atlasIdx ?? '-'}</span>
-                                        <span className="w-10 text-[8px] text-slate-400">#{deckIndexInDeck}</span>
-                                        <span className={`px-1 rounded text-[8px] ${
-                                            card.type === 'upgrade' ? 'bg-amber-200 text-amber-800' : 'bg-purple-200 text-purple-800'
-                                        }`}>
-                                            {card.type === 'upgrade' ? '升级' : '行动'}
-                                        </span>
-                                        <span className="flex-1 truncate">{resolveCardDisplayName(card, t)}</span>
-                                        <span className="text-purple-500 text-[9px]">💎{card.cpCost}</span>
-                                        <span className="text-green-500 text-[8px]">✓ 可发</span>
+                        <div className="space-y-2">
+                            {groupedDeckCards.map((group) => (
+                                <div key={group.key} className="space-y-1">
+                                    <div className="rounded bg-amber-100 px-2 py-1">
+                                        <div className="text-[9px] font-black uppercase tracking-wide text-amber-700">
+                                            {group.title}
+                                        </div>
+                                        <div className="text-[8px] leading-4 text-amber-600">
+                                            {group.description}
+                                        </div>
                                     </div>
-                                );
-                            })}
+                                    {group.entries.length === 0 ? (
+                                        <div className="px-2 py-1 text-[9px] text-amber-300">当前牌库没有这一分区的牌</div>
+                                    ) : group.entries.map(({ card, deckIndexInDeck }, idx) => {
+                                        const atlasIdx = getCardSourceAtlasIndex(card);
+                                        const sectionLabel = getDeckSectionLabel(playerCharacterId, atlasIdx);
+                                        return (
+                                            <div
+                                                key={`${group.key}-${card.id}-${idx}`}
+                                                className="flex items-center gap-2 text-[10px] px-1 py-0.5 rounded cursor-pointer text-amber-700 hover:bg-amber-100"
+                                                onClick={() => {
+                                                    if (atlasIdx != null) {
+                                                        handleDealByDeckIndex(deckIndexInDeck, atlasIdx);
+                                                    }
+                                                }}
+                                            >
+                                                <span className="w-5 text-amber-500 font-mono">{atlasIdx ?? '-'}</span>
+                                                <span className="w-10 text-[8px] text-slate-400">#{deckIndexInDeck}</span>
+                                                <span className="rounded bg-emerald-100 px-1 text-[8px] text-emerald-800">
+                                                    {sectionLabel}
+                                                </span>
+                                                <span className={`px-1 rounded text-[8px] ${
+                                                    card.type === 'upgrade' ? 'bg-amber-200 text-amber-800' : 'bg-purple-200 text-purple-800'
+                                                }`}>
+                                                    {card.type === 'upgrade' ? '升级' : '行动'}
+                                                </span>
+                                                <span className="flex-1 truncate">{resolveCardDisplayName(card, t)}</span>
+                                                <span className="text-purple-500 text-[9px]">💎{card.cpCost}</span>
+                                                <span className="text-green-500 text-[8px]">✓ 可发</span>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>

@@ -261,19 +261,22 @@ async function installAiBatchRejectPatch(
     options: {
         targetPlayerId?: string;
         rejectLimit?: number;
+        minCommandCount?: number;
     } = {},
 ) {
     const {
         targetPlayerId = '1',
         rejectLimit = 1,
+        minCommandCount = 2,
     } = options;
 
-    await page.evaluate(async ({ aiPlayerId, rejectCountLimit }) => {
+    await page.evaluate(async ({ aiPlayerId, rejectCountLimit, minimumCommandCount }) => {
         const globalWindow = window as Window & {
             __DT_AI_BATCH_RETRY_PATCH__?: {
                 installed: boolean;
                 aiPlayerId: string;
                 rejectLimit: number;
+                minCommandCount: number;
                 interceptedCount: number;
                 rejectedCount: number;
                 delegatedCount: number;
@@ -305,6 +308,7 @@ async function installAiBatchRejectPatch(
             installed: true,
             aiPlayerId,
             rejectLimit: rejectCountLimit,
+            minCommandCount: minimumCommandCount,
             interceptedCount: 0,
             rejectedCount: 0,
             delegatedCount: 0,
@@ -328,7 +332,7 @@ async function installAiBatchRejectPatch(
                 tracker
                 && config?.playerID === tracker.aiPlayerId
                 && tracker.rejectedCount < tracker.rejectLimit
-                && commandCount >= 2
+                && commandCount >= tracker.minCommandCount
             ) {
                 tracker.interceptedCount += 1;
                 tracker.rejectedCount += 1;
@@ -342,7 +346,7 @@ async function installAiBatchRejectPatch(
             if (
                 tracker
                 && config?.playerID === tracker.aiPlayerId
-                && commandCount >= 2
+                && commandCount >= tracker.minCommandCount
             ) {
                 tracker.interceptedCount += 1;
                 tracker.delegatedCount += 1;
@@ -355,6 +359,7 @@ async function installAiBatchRejectPatch(
     }, {
         aiPlayerId: targetPlayerId,
         rejectCountLimit: rejectLimit,
+        minimumCommandCount: minCommandCount,
     });
 }
 
@@ -362,6 +367,7 @@ async function readAiBatchRejectPatchStatus(page: Page): Promise<{
     installed: boolean;
     aiPlayerId: string;
     rejectLimit: number;
+    minCommandCount: number;
     interceptedCount: number;
     rejectedCount: number;
     delegatedCount: number;
@@ -375,6 +381,7 @@ async function readAiBatchRejectPatchStatus(page: Page): Promise<{
                 installed: boolean;
                 aiPlayerId: string;
                 rejectLimit: number;
+                minCommandCount: number;
                 interceptedCount: number;
                 rejectedCount: number;
                 delegatedCount: number;
@@ -528,6 +535,105 @@ const buildOnlineAiHiddenModifyDiceState = (state: any) => {
     };
 
     return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-hidden-modify', next);
+};
+
+const buildOnlineAiStalledMain2State = (state: any) => {
+    const next = structuredClone(state);
+    const fallbackTurnOrder = Array.isArray(next.sys?.turnOrder)
+        ? [...next.sys.turnOrder]
+        : ['0', '1'];
+    const hostHp = Math.max(20, next.core?.players?.['0']?.resources?.[RESOURCE_IDS.HP] ?? 0);
+    const aiHp = Math.max(20, next.core?.players?.['1']?.resources?.[RESOURCE_IDS.HP] ?? 0);
+
+    next.core = {
+        ...next.core,
+        activePlayerId: '1',
+        currentPlayerIndex: 1,
+        turnOrder: fallbackTurnOrder,
+        turnNumber: 4,
+        phase: 'main2',
+        pendingAttack: null,
+        pendingDamage: null,
+        pendingBonusDiceSettlement: undefined,
+        activatingAbilityId: undefined,
+        selectedAbilityId: undefined,
+        rollConfirmed: true,
+        rollCount: 1,
+        rollLimit: 2,
+        players: {
+            ...next.core.players,
+            '0': {
+                ...next.core.players['0'],
+                resources: {
+                    ...next.core.players['0']?.resources,
+                    [RESOURCE_IDS.HP]: hostHp,
+                },
+            },
+            '1': {
+                ...next.core.players['1'],
+                hand: [],
+                resources: {
+                    ...next.core.players['1']?.resources,
+                    [RESOURCE_IDS.HP]: aiHp,
+                    [RESOURCE_IDS.CP]: next.core.players['1']?.resources?.[RESOURCE_IDS.CP] ?? 0,
+                },
+            },
+        },
+    };
+
+    next.sys = {
+        ...next.sys,
+        turnNumber: 4,
+        phase: 'main2',
+        turnOrder: fallbackTurnOrder,
+        currentPlayerIndex: 1,
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            ...next.sys?.responseWindow,
+            current: undefined,
+        },
+        gameover: undefined,
+        eventStream: {
+            ...(next.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-main2-stall', next);
+};
+
+const advanceHostTurnToMain1 = async (
+    matchId: string,
+    page: Page,
+    expectedPlayerId = '0',
+) => {
+    for (let step = 0; step < 3; step += 1) {
+        const state = await getMatchState(matchId, page);
+        const phase = state.sys?.phase ?? null;
+        const activePlayerId = state.core?.activePlayerId ?? null;
+        if (activePlayerId !== expectedPlayerId) {
+            throw new Error(`期望已回到玩家 ${expectedPlayerId} 的回合，但当前为 ${String(activePlayerId)} / ${String(phase)}`);
+        }
+        if (phase === 'main1') {
+            return;
+        }
+        if (!['upkeep', 'income'].includes(phase ?? '')) {
+            throw new Error(`期望在人类回合的 upkeep/income/main1 之间推进，但当前 phase=${String(phase)}`);
+        }
+
+        const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]');
+        await expect(advanceButton).toBeVisible({ timeout: 10000 });
+        await expect(advanceButton).toBeEnabled({ timeout: 10000 });
+        await advanceButton.click();
+        await page.waitForTimeout(300);
+    }
+
+    throw new Error('已回到真人回合，但在 3 次内仍未能推进到 main1，说明链路仍可能卡住');
 };
 
 const buildTargetingRollState = (state: any, targetingValue: number) => {
@@ -1884,6 +1990,118 @@ test.describe('DiceThrone Simple Start', () => {
             });
 
             await saveEvidenceScreenshot(hostPage, testInfo, '18-online-ai-hidden-multistep-after-third-attempt');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI 在 DiceThrone main2 阶段持续卡死时，服务端 watchdog 应自动多步收口到我方回合且不再弹失败提示', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 一起完成 watchdog 测试前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+            await installAiBatchRejectPatch(hostPage, {
+                targetPlayerId: '1',
+                rejectLimit: 99,
+                minCommandCount: 1,
+            });
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiStalledMain2State);
+            await waitForPhase(hostPage, 'main2', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            await expect.poll(async () => {
+                const status = await readAiBatchRejectPatchStatus(hostPage);
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    rejectedCount: status?.rejectedCount ?? 0,
+                    phase: state.sys?.phase ?? null,
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    hostHandCount: state.core?.players?.['0']?.hand?.length ?? null,
+                    aiHandCount: state.core?.players?.['1']?.hand?.length ?? null,
+                };
+            }, {
+                timeout: 15000,
+                message: '等待 AI main2 卡死场景至少出现一次本地 batch 拒绝',
+            }).toEqual({
+                rejectedCount: 1,
+                phase: 'main2',
+                activePlayerId: '1',
+                hostHandCount: expect.any(Number),
+                aiHandCount: 0,
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '19-online-ai-main2-stalled-before-watchdog');
+
+            await expect.poll(async () => {
+                const status = await readAiBatchRejectPatchStatus(hostPage);
+                const state = await getMatchState(matchId, hostPage);
+                const failureToastVisible = await hostPage.evaluate(() => {
+                    return Array.from(document.querySelectorAll('*')).some((node) => {
+                        const text = node.textContent?.trim() ?? '';
+                        return text.includes('强制结束 AI 回合未成功')
+                            || text.includes('AI 强制结束在 recover-interaction 阶段失败')
+                            || text.includes('AI 强制结束在 follow-up-advance 阶段失败');
+                    });
+                });
+                return {
+                    rejectedCount: status?.rejectedCount ?? 0,
+                    phase: state.sys?.phase ?? null,
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    hasGameOver: Boolean(state.sys?.gameover),
+                    failureToastVisible,
+                };
+            }, {
+                timeout: 25000,
+                message: '等待服务端 watchdog 多步推进 main2 → discard → 人类回合起始阶段',
+            }).toMatchObject({
+                rejectedCount: expect.any(Number),
+                activePlayerId: '0',
+                hasGameOver: false,
+                failureToastVisible: false,
+            });
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const phase = state.sys?.phase ?? null;
+                return ['upkeep', 'income', 'main1'].includes(String(phase));
+            }, {
+                timeout: 5000,
+                message: 'watchdog 收口后应进入真人回合的 upkeep/income/main1',
+            }).toBe(true);
+
+            await advanceHostTurnToMain1(matchId, hostPage, '0');
+
+            await expect(hostPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 10000 });
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-main2-stalled-after-watchdog');
         } finally {
             await setup.hostContext.close();
         }

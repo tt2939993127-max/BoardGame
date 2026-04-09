@@ -359,7 +359,7 @@ function finalizeCurrentScoringBase(
     events.push(
         ...buildPendingPostScoringActionEvents(
             { core: state.core },
-            state.core.pendingPostScoringActions,
+            session.pendingPostScoringActions,
             now,
         ),
     );

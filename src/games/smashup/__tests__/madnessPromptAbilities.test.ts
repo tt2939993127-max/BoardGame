@@ -27,6 +27,8 @@ import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { applyEvents as _applyEventsHelper } from './helpers';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { runCommand } from './testRunner';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
 beforeAll(() => {
     clearRegistry();
@@ -418,6 +420,85 @@ describe('克苏鲁之仆 - cthulhu_madness_unleashed（疯狂释放）', () => 
         expect(finalState.players['0'].hand.map(c => c.uid)).toEqual(['d1']);
         expect(finalState.players['0'].discard.map(c => c.uid).sort()).toEqual(['a1', 'm1']);
         expect(finalState.players['0'].actionLimit - finalState.players['0'].actionsPlayed).toBe(1);
+    });
+
+    it('弃掉多张疯狂卡后，额外战术额度会被后续打出的疯狂卡逐次消耗', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('mu', 'cthulhu_madness_unleashed', 'action', '0'),
+                        makeCard('selected-1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('selected-2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('selected-3', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('leftover', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
+                    deck: [
+                        makeCard('drawn-1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('drawn-2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        makeCard('drawn-3', MADNESS_CARD_DEF_ID, 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const playMadnessUnleashed = runCommand(makeMatchState(state), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'mu' },
+        } as any, defaultRandom);
+        expect(playMadnessUnleashed.success).toBe(true);
+
+        const unleashedPrompt = (playMadnessUnleashed.finalState.sys as any)?.interaction?.current;
+        expect(unleashedPrompt?.data?.sourceId).toBe('cthulhu_madness_unleashed');
+
+        const selectedOptionIds = unleashedPrompt.data.options
+            .filter((option: any) => ['selected-1', 'selected-2', 'selected-3'].includes(option.value?.cardUid))
+            .map((option: any) => option.id);
+        expect(selectedOptionIds).toHaveLength(3);
+
+        const resolveMadnessUnleashed = runCommand(playMadnessUnleashed.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionIds: selectedOptionIds },
+        } as any, defaultRandom);
+        expect(resolveMadnessUnleashed.success).toBe(true);
+        expect(resolveMadnessUnleashed.finalState.core.players['0'].actionsPlayed).toBe(1);
+        expect(resolveMadnessUnleashed.finalState.core.players['0'].actionLimit).toBe(4);
+
+        let currentState = resolveMadnessUnleashed.finalState;
+        for (const uid of ['leftover', 'drawn-1', 'drawn-2']) {
+            const playMadness = runCommand(currentState, {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: uid },
+            } as any, defaultRandom);
+            expect(playMadness.success).toBe(true);
+
+            const madnessPrompt = (playMadness.finalState.sys as any)?.interaction?.current;
+            const consumeOptionId = madnessPrompt?.data?.options.find((option: any) => option.value?.action === 'return')?.id;
+            expect(consumeOptionId).toBeTruthy();
+
+            const consumeMadness = runCommand(playMadness.finalState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: '0',
+                payload: { optionId: consumeOptionId },
+            } as any, defaultRandom);
+            expect(consumeMadness.success).toBe(true);
+            currentState = consumeMadness.finalState;
+        }
+
+        expect(currentState.core.players['0'].actionsPlayed).toBe(4);
+        expect(currentState.core.players['0'].actionLimit).toBe(4);
+
+        const blockedExtraPlay = runCommand(currentState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'drawn-3' },
+        } as any, defaultRandom);
+        expect(blockedExtraPlay.success).toBe(false);
+        expect(blockedExtraPlay.error).toContain('本回合行动额度已用完');
     });
 });
 

@@ -7,6 +7,7 @@ export * from './context';
 export * from './localRunner';
 export * from './scoring';
 export * from './lookahead';
+export * from './strategy';
 export * from './semantics';
 export * from './seatControllers';
 export * from './localMatchPreferences';

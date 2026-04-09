@@ -1104,7 +1104,7 @@ const MinionCard: React.FC<{
     // 随从选择模式下的高亮
     const isSelectableMinion = !!isMinionSelectMode;
     const showUsedMinionState = hasTalent && minion.talentUsed && !canActivate;
-    const minionContainerClassName = `relative aspect-[0.714] transition-transform duration-200 group hover:!z-[999] ${
+    const minionContainerClassName = `relative aspect-[0.714] group hover:!z-[999] ${
         isDimmed
             ? 'cursor-not-allowed'
             : 'cursor-pointer'

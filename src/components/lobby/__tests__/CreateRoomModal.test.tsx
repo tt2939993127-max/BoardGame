@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { CreateRoomModal } from '../CreateRoomModal';
+import { PasswordEntryModal } from '../../common/overlays/PasswordEntryModal';
 import type { GameManifestEntry } from '../../../games/manifest.types';
 import type { LocalMatchPreferences } from '../../../engine/ai';
 
@@ -117,9 +118,14 @@ describe('CreateRoomModal AI default state', () => {
             initialPreferences: null,
         }));
 
+        const roomNameInput = screen.getByTestId('create-room-name-input');
         const passwordInput = screen.getByTestId('create-room-password-input');
         const passwordToggle = screen.getByTestId('create-room-password-toggle');
 
+        expect(roomNameInput).toHaveAttribute('name', 'roomName');
+        expect(roomNameInput).toHaveAttribute('autocomplete', 'off');
+        expect(passwordInput).toHaveAttribute('name', 'roomPassword');
+        expect(passwordInput).toHaveAttribute('autocomplete', 'new-password');
         expect(passwordInput).toHaveAttribute('type', 'password');
         fireEvent.click(passwordToggle);
         expect(passwordInput).toHaveAttribute('type', 'text');
@@ -176,5 +182,18 @@ describe('CreateRoomModal AI default state', () => {
                 '1': { type: 'local-ai', difficulty: 'hard' },
             }),
         }));
+    });
+
+    it('加入私密房间密码弹窗使用独立字段语义，避免浏览器误填登录密码', () => {
+        render(createElement(PasswordEntryModal, {
+            open: true,
+            onClose: vi.fn(),
+            onConfirm: vi.fn(),
+        }));
+
+        const passwordInput = screen.getByTestId('room-password-input');
+
+        expect(passwordInput).toHaveAttribute('name', 'roomPassword');
+        expect(passwordInput).toHaveAttribute('autocomplete', 'new-password');
     });
 });

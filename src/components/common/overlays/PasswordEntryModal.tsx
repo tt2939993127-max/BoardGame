@@ -64,12 +64,14 @@ export const PasswordEntryModal = ({
                             <PasswordField
                                 data-testid="room-password-input"
                                 autoFocus
+                                name="roomPassword"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 onKeyDown={(e) => {
                                     if (e.key === 'Enter') handleConfirm();
                                 }}
                                 placeholder={t('password.placeholder', 'Enter password...')}
+                                autoComplete="new-password"
                                 className="w-full px-4 py-2 mb-2 rounded-[4px] text-base sm:text-sm border border-parchment-card-border/30 bg-parchment-base-bg/30 text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
                                 toggleButtonTestId="room-password-toggle"
                                 toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"

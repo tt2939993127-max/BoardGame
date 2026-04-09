@@ -33,9 +33,9 @@ async function openTicTacToeDetailsModal(page: Page): Promise<void> {
 
     await page.goto('/', { waitUntil: 'commit', timeout: 15000 });
     await closeServiceUnavailableIfNeeded();
-    await expect(page.locator('a[href="/?game=tictactoe"]').first()).toBeVisible({ timeout: 15000 });
-    await page.goto('/?game=tictactoe', { waitUntil: 'domcontentloaded', timeout: 15000 });
-    await closeServiceUnavailableIfNeeded();
+    const gameEntry = page.locator('[data-game-id="tictactoe"]').first();
+    await expect(gameEntry).toBeVisible({ timeout: 15000 });
+    await gameEntry.click();
     await expect(page).toHaveURL(/game=tictactoe/);
 
     const detailsModal = page.locator('[data-testid="game-details-modal-root"]:visible').last();

@@ -19,6 +19,7 @@ import type { AiHint } from '../ai/types';
 import { resolveCommandTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+import { syncActiveResolutionWithInteraction } from './resolutionStack';
 
 function isSamePlayerId(a: unknown, b: unknown): boolean {
     if (a === undefined || a === null || b === undefined || b === null) return false;
@@ -587,20 +588,20 @@ export function queueInteraction<TCore>(
             }
         }
 
-        return {
+        return syncActiveResolutionWithInteraction({
             ...state,
             sys: {
                 ...state.sys,
                 interaction: { ...state.sys.interaction, current: interaction },
             },
-        };
+        });
     }
 
     // 否则加入队列（选项生成延迟到 resolveInteraction 时）
     // urgent 交互插入队列头部，确保链式交互不被打断
     const newQueue = options?.urgent ? [interaction, ...queue] : [...queue, interaction];
     
-    return {
+    return syncActiveResolutionWithInteraction({
         ...state,
         sys: {
             ...state.sys,
@@ -609,7 +610,7 @@ export function queueInteraction<TCore>(
                 queue: newQueue,
             },
         },
-    };
+    });
 }
 
 /**
@@ -623,7 +624,7 @@ export function queueInteraction<TCore>(
 export function resolveInteraction<TCore>(
     state: MatchState<TCore>,
 ): MatchState<TCore> {
-    const { current, queue } = state.sys.interaction;
+    const { queue } = state.sys.interaction;
     let next = queue[0];
     const newQueue = queue.slice(1);
 
@@ -654,13 +655,13 @@ export function resolveInteraction<TCore>(
         }
     }
 
-    return {
+    return syncActiveResolutionWithInteraction({
         ...state,
         sys: {
             ...state.sys,
             interaction: { current: next, queue: newQueue },
         },
-    };
+    });
 }
 
 /**

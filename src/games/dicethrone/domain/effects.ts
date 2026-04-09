@@ -208,6 +208,10 @@ export function createDisplayOnlySettlement(
     targetId: PlayerId,
     dice: BonusDieInfo[],
     timestamp: number,
+    options?: {
+        summaryEffectKey?: string;
+        summaryEffectParams?: Record<string, string | number>;
+    },
 ): BonusDiceRerollRequestedEvent {
     return {
         type: 'BONUS_DICE_REROLL_REQUESTED',
@@ -224,6 +228,8 @@ export function createDisplayOnlySettlement(
                 maxRerollCount: 0,
                 readyToSettle: false,
                 displayOnly: true,
+                summaryEffectKey: options?.summaryEffectKey,
+                summaryEffectParams: options?.summaryEffectParams,
             },
         },
         sourceCommandType: 'ABILITY_EFFECT',

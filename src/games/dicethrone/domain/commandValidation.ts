@@ -1063,7 +1063,7 @@ const validateTransferStatus = (
     if (!sourcePlayerId || !statusId) {
         return fail('invalid_transfer_status_interaction');
     }
-    if (!interaction.targetPlayerIds?.includes(sourcePlayerId)) {
+    if (isRealtimeTransferFlow && !interaction.targetPlayerIds?.includes(sourcePlayerId)) {
         return fail('invalid_target_player');
     }
     if (!hasStatusOrToken(state, sourcePlayerId, statusId)) {

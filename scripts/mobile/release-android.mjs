@@ -1,13 +1,17 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
+import {
+    bumpSemver,
+    packageJsonPath,
+    readJsonFile,
+    updateProjectVersion,
+} from './version-utils.mjs';
 
 const rootDir = process.cwd();
 const rawArgs = process.argv.slice(2);
 const command = rawArgs[0] || '';
 const args = rawArgs.slice(1);
-const packageJsonPath = path.join(rootDir, 'package.json');
-const packageLockPath = path.join(rootDir, 'package-lock.json');
 const releaseAndroidAppId = 'top.easyboardgame.app';
 const releaseAndroidAppName = '易桌游';
 const debugAndroidAppIdSegments = new Set(['debug', 'dev', 'test', 'qa']);
@@ -116,51 +120,6 @@ const runNodeScript = async (relativePath, scriptArgs = []) => {
 
 const logStep = (message) => {
     console.log(`\n[android-release] ${message}`);
-};
-
-const readJsonFile = (filePath) => JSON.parse(readFileSync(filePath, 'utf8'));
-
-const writeJsonFile = (filePath, value) => {
-    writeFileSync(filePath, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
-};
-
-const parseSemver = (value) => {
-    const match = String(value || '').trim().match(/^(\d+)\.(\d+)\.(\d+)$/);
-    if (!match) {
-        throw new Error(`当前版本不是可 bump 的 x.y.z 形式: ${String(value || '')}`);
-    }
-    return match.slice(1).map((segment) => Number.parseInt(segment, 10));
-};
-
-const bumpSemver = (value, bumpType) => {
-    const [major, minor, patch] = parseSemver(value);
-    switch (bumpType) {
-        case 'major':
-            return `${major + 1}.0.0`;
-        case 'minor':
-            return `${major}.${minor + 1}.0`;
-        case 'patch':
-            return `${major}.${minor}.${patch + 1}`;
-        default:
-            throw new Error(`不支持的 bump 类型: ${bumpType}`);
-    }
-};
-
-const updateProjectVersion = (nextVersion) => {
-    const packageJson = readJsonFile(packageJsonPath);
-    packageJson.version = nextVersion;
-    writeJsonFile(packageJsonPath, packageJson);
-
-    if (!existsSync(packageLockPath)) {
-        return;
-    }
-
-    const packageLock = readJsonFile(packageLockPath);
-    packageLock.version = nextVersion;
-    if (packageLock.packages && typeof packageLock.packages === 'object' && packageLock.packages['']) {
-        packageLock.packages[''].version = nextVersion;
-    }
-    writeJsonFile(packageLockPath, packageLock);
 };
 
 const ensureNoNativeVersionOverride = () => {
@@ -327,6 +286,7 @@ const runNativeRelease = async () => {
 const shouldRunPackagesInFull = () => hasFlag('with-packages', args) || Boolean(readArgValue('game', '', args));
 
 const runFullRelease = async () => {
+    const nativeInfo = prepareNativeVersion();
     await runDoctor();
     await runSync();
     logStep('发布 Android OTA');
@@ -334,7 +294,6 @@ const runFullRelease = async () => {
     if (shouldRunPackagesInFull()) {
         await runPackagesRelease(args);
     }
-    const nativeInfo = prepareNativeVersion();
     if (!hasFlag('skip-build', args)) {
         await runBuildRelease();
     } else {

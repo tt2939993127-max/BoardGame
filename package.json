@@ -1,7 +1,7 @@
 {
   "name": "boardgame-platform",
   "private": true,
-  "version": "0.5.1",
+  "version": "0.5.31",
   "type": "module",
   "engines": {
     "node": "24.1.0"
@@ -115,6 +115,7 @@
     "mobile:android:build:debug": "node scripts/mobile/android.mjs build-debug",
     "mobile:android:build:release": "node scripts/mobile/android.mjs build-release",
     "mobile:android:build:bundle": "node scripts/mobile/android.mjs build-bundle",
+    "mobile:android:version:bump": "node scripts/mobile/bump-project-version.mjs",
     "typecheck": "tsc --noEmit",
     "assets:download": "node scripts/assets/download-from-r2.js",
     "assets:upload": "node scripts/assets/upload-to-r2.js",

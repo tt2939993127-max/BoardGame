@@ -245,6 +245,45 @@ export interface ResponseWindowState {
     };
 }
 
+/**
+ * 连续结算阻塞来源
+ */
+export interface ResolutionBlocker {
+    type: 'interaction' | 'response-window' | 'post-reduce' | 'external';
+    id?: string;
+    reason?: string;
+}
+
+/**
+ * 连续结算帧
+ *
+ * 用于表达一条跨事件批 / 交互 / 响应窗口的长事务。
+ * 当前先作为通用引擎骨架存在，允许游戏渐进式迁移接入。
+ */
+export interface ResolutionFrame {
+    id: string;
+    kind: string;
+    ownerGame?: string;
+    ownerSystem?: string;
+    ordering: 'stack' | 'queue' | 'explicit';
+    status: 'running' | 'blocked' | 'completed';
+    step?: string;
+    phase?: string;
+    phaseGate?: 'none' | 'block-advance-when-blocked';
+    blockedBy?: ResolutionBlocker;
+    deferredEvents?: Array<{ type: string; payload: unknown; timestamp: number }>;
+    deferredActions?: unknown[];
+    metadata?: Record<string, unknown>;
+}
+
+/**
+ * 连续结算栈状态
+ */
+export interface ResolutionState {
+    frames: ResolutionFrame[];
+    activeFrameId?: string;
+}
+
 // ============================================================================
 // 教程系统
 // ============================================================================
@@ -392,6 +431,8 @@ export interface SystemState {
     rematch: RematchState;
     /** 响应窗口状态 */
     responseWindow: ResponseWindowState;
+    /** 连续结算栈（通用长事务骨架，游戏可渐进接入） */
+    resolution?: ResolutionState;
     /** 教程系统状态 */
     tutorial: TutorialState;
     /** 当前回合数 */
@@ -402,7 +443,7 @@ export interface SystemState {
     flowHalted?: boolean;
     /** 游戏结束结果（由管线在每次命令执行后自动检测并写入） */
     gameover?: GameOverResult;
-    /** SmashUp: scoreBases 结算会话（当前基地、剩余基地、延迟清场与重算快照的唯一权威） */
+    /** SmashUp: scoreBases 结算会话（当前为通用 resolution frame 的游戏专属镜像） */
     smashupScoring?: {
         lockedBaseRefs: Array<{ slotIndex: number; baseDefId: string }>;
         completedBaseRefs: Array<{ slotIndex: number; baseDefId: string }>;

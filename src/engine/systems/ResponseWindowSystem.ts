@@ -14,6 +14,7 @@ import { resolveCommandTimestamp, resolveEventTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
 import { INTERACTION_EVENTS } from './InteractionSystem';
+import { syncActiveResolutionWithResponseWindow } from './resolutionStack';
 
 // ============================================================================
 // 响应窗口系统配置
@@ -167,7 +168,7 @@ export function openResponseWindow<TCore>(
 ): MatchState<TCore> {
     if (!window) return state;
 
-    return {
+    return syncActiveResolutionWithResponseWindow({
         ...state,
         sys: {
             ...state.sys,
@@ -175,7 +176,7 @@ export function openResponseWindow<TCore>(
                 current: window,
             },
         },
-    };
+    });
 }
 
 /**
@@ -184,7 +185,7 @@ export function openResponseWindow<TCore>(
 export function closeResponseWindow<TCore>(
     state: MatchState<TCore>
 ): MatchState<TCore> {
-    return {
+    return syncActiveResolutionWithResponseWindow({
         ...state,
         sys: {
             ...state.sys,
@@ -192,7 +193,7 @@ export function closeResponseWindow<TCore>(
                 current: undefined,
             },
         },
-    };
+    });
 }
 
 /**
@@ -855,8 +856,10 @@ export function createResponseWindowSystem<TCore>(
                 }
             }
             
+            newState = syncActiveResolutionWithResponseWindow(newState);
+
             if (newState !== state || additionalEvents.length > 0) {
-                return { 
+                return {
                     state: newState,
                     events: additionalEvents.length > 0 ? additionalEvents : undefined,
                 };

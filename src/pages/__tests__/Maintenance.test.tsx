@@ -3,6 +3,7 @@ import { act, cleanup, render, renderHook, screen, waitFor } from '@testing-libr
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Home } from '../Home';
 import { MaintenancePage } from '../Maintenance';
+import packageJson from '../../../package.json';
 import {
     detectBrowserCompatibility,
     readBrowserCompatibilityBypass,
@@ -86,6 +87,7 @@ const storedMatch = {
 
 const originalCss = globalThis.CSS;
 const originalUserAgent = navigator.userAgent;
+const currentAppVersionLabel = packageJson.version.replace(/^v/i, '').split('-')[0] || packageJson.version.replace(/^v/i, '');
 
 vi.mock('../../lib/logger', () => ({
     logger: {
@@ -1418,7 +1420,7 @@ describe('Home native runtime footer', () => {
         render(<Home />);
 
         await waitFor(() => {
-            expect(screen.getByText('0.5.1')).toBeInTheDocument();
+            expect(screen.getByText(currentAppVersionLabel)).toBeInTheDocument();
         });
 
         expect(screen.queryByText(/^Bundle /)).toBeNull();
@@ -1433,10 +1435,10 @@ describe('Home native runtime footer', () => {
         render(<Home />);
 
         await waitFor(() => {
-            expect(screen.getByText('Bundle 0.5.1')).toBeInTheDocument();
+            expect(screen.getByText(`Bundle ${currentAppVersionLabel}`)).toBeInTheDocument();
         });
 
-        expect(screen.getByText('App 0.5.1')).toBeInTheDocument();
+        expect(screen.getByText(`App ${currentAppVersionLabel}`)).toBeInTheDocument();
     });
 
     it('原生 Android 且快照确认后显示 Bundle/App/OTA 信息', async () => {

@@ -15,7 +15,7 @@ import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../type
 import { runCommand } from './testRunner';
 import { SU_COMMANDS } from '../domain/types';
 import { initAllAbilities } from '../abilities';
-import { buildMinionTargetOptions } from '../domain/abilityHelpers';
+import { buildMinionTargetOptions, buildPlayerTargetOptions } from '../domain/abilityHelpers';
 
 /** 构造最小 SmashUpCore 用于测试 */
 function makeMinimalCore(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
@@ -1185,6 +1185,87 @@ describe('scoreBases 阶段自动推进', () => {
         expect(resolution?.action.kind).toBe('interaction-choice');
         expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
             .toBe(ownAction?.metadata?.optionId);
+    });
+
+    it('inspect 型玩家目标交互应透传 AI hints，且 AI 优先查看敌方信息', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore(),
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'inspect-player-choice',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'alien_probe_choose_target',
+                            options: buildPlayerTargetOptions(
+                                [
+                                    {
+                                        id: 'inspect-self',
+                                        label: '查看自己',
+                                        targetPlayerId: '0',
+                                    },
+                                    {
+                                        id: 'inspect-enemy',
+                                        label: '查看对手',
+                                        targetPlayerId: '1',
+                                    },
+                                ],
+                                {
+                                    sourcePlayerId: '0',
+                                    effectIntent: 'inspect',
+                                },
+                            ),
+                            targetType: 'player',
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions).toHaveLength(2);
+        const selfAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { targetPlayerId?: string } })?.optionValue?.targetPlayerId === '0',
+        );
+        const enemyAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { targetPlayerId?: string } })?.optionValue?.targetPlayerId === '1',
+        );
+
+        expect(selfAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'self',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+            targetPlayerId: '0',
+        });
+        expect(enemyAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'enemy',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+            targetPlayerId: '1',
+        });
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: state as any,
+            matchId: 'smashup-inspect-player-target-ai',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
+            .toBe(enemyAction?.metadata?.optionId);
     });
 
     it('两个基地都接近爆点时，AI 应优先把随从投到自己能拿第一的基地', async () => {

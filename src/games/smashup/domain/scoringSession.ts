@@ -33,6 +33,7 @@ export interface SmashUpScoringSession {
     currentBaseRef?: SmashUpScoringBaseRef;
     currentStep: SmashUpScoringStep;
     deferredPostScoringEvents?: SerializedPostScoringEvent[];
+    pendingPostScoringActions?: PendingPostScoringAction[];
     afterScoringInitialPowers?: {
         baseRef: SmashUpScoringBaseRef;
         powers: Record<PlayerId, number>;
@@ -258,26 +259,46 @@ export function flushDeferredPostScoringCompatibility(
         timestamp: event.timestamp,
     })) as SmashUpEvent[];
 
-    flushedEvents.push(
-        ...buildPendingPostScoringActionEvents(
-            { core: state.core },
-            state.core.pendingPostScoringActions,
-            timestamp,
-        ),
+    return { state, events: flushedEvents, flushed: true };
+}
+
+export function mergeDeferredPostScoringCompatibility(
+    state: MatchState<SmashUpCore>,
+    interactionData: Record<string, unknown> | undefined,
+    timestamp: number,
+    options?: {
+        primaryEvents?: SmashUpEvent[];
+        primaryOrder?: 'before' | 'after';
+        extraPendingActions?: PendingPostScoringAction[];
+    },
+): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } | undefined {
+    if (getScoringSession(state)) {
+        const updatedState = appendPendingPostScoringActions(state, options?.extraPendingActions);
+        const primaryEvents = options?.primaryEvents ?? [];
+        return {
+            state: updatedState,
+            events: primaryEvents,
+        };
+    }
+
+    const compatibility = flushDeferredPostScoringCompatibility(state, interactionData, timestamp);
+    if (!compatibility.flushed) {
+        return undefined;
+    }
+
+    const primaryEvents = options?.primaryEvents ?? [];
+    const primaryOrder = options?.primaryOrder ?? 'after';
+    const extraPendingActionEvents = buildPendingPostScoringActionEvents(
+        { core: state.core },
+        options?.extraPendingActions,
+        timestamp,
     );
 
     return {
-        state: state.core.pendingPostScoringActions?.length
-            ? {
-                ...state,
-                core: {
-                    ...state.core,
-                    pendingPostScoringActions: undefined,
-                },
-            }
-            : state,
-        events: flushedEvents,
-        flushed: true,
+        state: compatibility.state,
+        events: primaryOrder === 'before'
+            ? [...compatibility.events, ...extraPendingActionEvents, ...primaryEvents]
+            : [...primaryEvents, ...compatibility.events, ...extraPendingActionEvents],
     };
 }
 
@@ -309,7 +330,31 @@ export function markScoringBaseCompleted(
                 : [...session.completedBaseRefs, baseRef],
             currentBaseRef: undefined,
             deferredPostScoringEvents: undefined,
+            pendingPostScoringActions: undefined,
             afterScoringInitialPowers: undefined,
+        };
+    });
+}
+
+export function appendPendingPostScoringActions(
+    state: MatchState<SmashUpCore>,
+    actions: PendingPostScoringAction[] | undefined,
+): MatchState<SmashUpCore> {
+    if (!actions?.length) {
+        return state;
+    }
+
+    return updateScoringSession(state, (session) => {
+        if (!session) {
+            return session;
+        }
+
+        return {
+            ...session,
+            pendingPostScoringActions: [
+                ...(session.pendingPostScoringActions ?? []),
+                ...actions,
+            ],
         };
     });
 }

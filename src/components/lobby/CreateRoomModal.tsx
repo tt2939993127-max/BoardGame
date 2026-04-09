@@ -298,10 +298,12 @@ export const CreateRoomModal = ({
                                     </div>
                                     <input
                                         type="text"
+                                        name="roomName"
                                         value={roomName}
                                         onChange={(event) => setRoomName(event.target.value)}
                                         placeholder={t('createRoom.roomNamePlaceholder')}
                                         maxLength={20}
+                                        autoComplete="off"
                                         className="w-full px-4 py-2.5 rounded-[4px] text-base sm:text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
                                         data-testid="create-room-name-input"
                                     />
@@ -317,10 +319,12 @@ export const CreateRoomModal = ({
                                         </span>
                                     </div>
                                     <PasswordField
+                                        name="roomPassword"
                                         value={password}
                                         onChange={(event) => setPassword(event.target.value)}
                                         placeholder={t('createRoom.passwordPlaceholder')}
                                         maxLength={10}
+                                        autoComplete="new-password"
                                         className="w-full px-4 py-2.5 rounded-[4px] text-base sm:text-sm border border-parchment-card-border/30 bg-parchment-card-bg text-parchment-base-text placeholder:text-parchment-light-text/50 focus:outline-none focus:border-parchment-base-text transition-colors"
                                         data-testid="create-room-password-input"
                                         toggleButtonTestId="create-room-password-toggle"

@@ -2,7 +2,9 @@ import type {
     AiEffectIntent,
     AiHint,
     AiLegalAction,
+    AiHintDerivation,
     AiRelationToActor,
+    AiTargetKind,
     LocalAiActionScorer,
 } from './types';
 
@@ -25,6 +27,20 @@ export interface CreateInteractionHintScorerOptions extends ScoreAiHintOptions {
     confirmBonus?: number;
 }
 
+export interface BuildTargetAiHintOptions {
+    actorPlayerId?: string;
+    targetPlayerId?: string;
+    effectIntent?: AiEffectIntent;
+    targetKind?: AiTargetKind;
+    targetOwnerId?: string;
+    targetControllerId?: string;
+    estimatedSwing?: number;
+    priorityHint?: number;
+    forcedTargetPolicy?: AiHint['forcedTargetPolicy'];
+    tags?: string[];
+    derivedFrom?: AiHintDerivation;
+}
+
 const DEFAULT_ACTION_KINDS = ['interaction-choice'];
 
 export const OPTIONAL_SKIP_AI_HINT: AiHint = {
@@ -32,6 +48,14 @@ export const OPTIONAL_SKIP_AI_HINT: AiHint = {
     effectIntent: 'optional-skip',
     derivedFrom: 'explicit',
 };
+
+export function inferAiRelationToActor(
+    targetPlayerId: string | undefined,
+    actorPlayerId: string | undefined,
+): AiRelationToActor | undefined {
+    if (!targetPlayerId || !actorPlayerId) return undefined;
+    return targetPlayerId === actorPlayerId ? 'self' : 'enemy';
+}
 
 export function getAiRelationSign(relation: AiRelationToActor | undefined): number {
     switch (relation) {
@@ -95,6 +119,11 @@ export function scoreAiHint(hint: AiHint, options: ScoreAiHintOptions = {}): num
         if (hint.relationToActor === 'self' || hint.relationToActor === 'ally') score += moveFriendlyBonus;
     }
 
+    if (hint.effectIntent === 'inspect') {
+        if (hint.relationToActor === 'enemy') score += 18;
+        if (hint.relationToActor === 'self' || hint.relationToActor === 'ally') score += 6;
+    }
+
     if (hint.forcedTargetPolicy === 'prefer') score += preferScore;
     if (hint.forcedTargetPolicy === 'avoid') score -= avoidScore;
     if (hint.forcedTargetPolicy === 'must-select') score += mustSelectScore;
@@ -103,6 +132,30 @@ export function scoreAiHint(hint: AiHint, options: ScoreAiHintOptions = {}): num
     score += hint.priorityHint ?? 0;
     score += hint.estimatedSwing ?? 0;
     return score;
+}
+
+export function buildTargetAiHint(options: BuildTargetAiHintOptions): AiHint {
+    const relationToActor = inferAiRelationToActor(options.targetPlayerId, options.actorPlayerId);
+    const tags = [
+        ...(options.tags ?? []),
+        ...(options.targetKind ? [`target:${options.targetKind}`] : []),
+        ...(relationToActor ? [`relation:${relationToActor}`] : []),
+        ...(options.effectIntent ? [`intent:${options.effectIntent}`] : []),
+    ];
+
+    return {
+        ...(tags.length > 0 ? { tags } : {}),
+        ...(relationToActor ? { relationToActor } : {}),
+        ...(options.effectIntent ? { effectIntent: options.effectIntent } : {}),
+        ...(options.targetKind ? { targetKind: options.targetKind } : {}),
+        ...(options.targetPlayerId ? { targetPlayerId: options.targetPlayerId } : {}),
+        ...(options.targetOwnerId ? { targetOwnerId: options.targetOwnerId } : {}),
+        ...(options.targetControllerId ? { targetControllerId: options.targetControllerId } : {}),
+        ...(options.estimatedSwing !== undefined ? { estimatedSwing: options.estimatedSwing } : {}),
+        ...(options.priorityHint !== undefined ? { priorityHint: options.priorityHint } : {}),
+        ...(options.forcedTargetPolicy ? { forcedTargetPolicy: options.forcedTargetPolicy } : {}),
+        derivedFrom: options.derivedFrom ?? 'inferred',
+    };
 }
 
 export function scoreAiHints(hints: AiHint[], options: ScoreAiHintOptions = {}): number {
@@ -127,6 +180,12 @@ export function summarizeAiHints(hints: AiHint[]): string {
     }
     if (hints.some((hint) => hint.effectIntent === 'debuff' && (hint.relationToActor === 'self' || hint.relationToActor === 'ally'))) {
         return '减益目标命中己方语义，应降权';
+    }
+    if (hints.some((hint) => hint.effectIntent === 'inspect' && hint.relationToActor === 'enemy')) {
+        return '侦察目标命中敌方语义';
+    }
+    if (hints.some((hint) => hint.effectIntent === 'inspect' && (hint.relationToActor === 'self' || hint.relationToActor === 'ally'))) {
+        return '侦察目标命中己方语义';
     }
     if (hints.some((hint) => hint.effectIntent === OPTIONAL_SKIP_AI_HINT.effectIntent)) {
         return '可跳过选项默认降权';

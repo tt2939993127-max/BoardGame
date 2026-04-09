@@ -510,6 +510,8 @@
       "gunslingerHighNoonDash": "Spur: inflict Knockdown",
       "gunslingerHighNoonBullseye": "Bullseye: inflict Bounty",
       "gunslingerEatMyLeadDie": "Eat My Lead! Roll: {{value}}",
+      "gunslingerEatMyLead.result": "{{bulletCount}} Bullet: +{{bonusDamage}} damage this attack",
+      "gunslingerEatMyLead.resultKnockdown": "{{bulletCount}} Bullet: +{{bonusDamage}} damage this attack and inflict Knockdown",
       "barbarianSuppress": "Suppress Roll: {{value}}",
       "energeticStrength": "Strength! Heal 2 and inflict Concussion",
       "energeticOther": "Draw 1 card",
@@ -590,7 +592,8 @@
       "samuraiBackStrikeDie": "Back Strike Roll: {{value}}",
       "samuraiRighteousnessKatana": "Katana: +2 damage",
       "samuraiRighteousnessHelm": "Helm: inflict 2 Shame",
-      "samuraiRighteousnessRisingSun": "Rising Sun: gain 1 Back Strike"
+      "samuraiRighteousnessRisingSun": "Rising Sun: gain 1 Back Strike",
+      "samuraiMasamune.result": "{{katanaCount}} Katana: +{{katanaCount}} damage; {{shameCount}} Helm: inflict {{shameCount}} Shame; {{retributionCount}} Rising Sun: gain {{retributionCount}} Back Strike"
     },
     "selectToReroll": "Click a die to spend {{cost}} {{token}} to reroll",
     "noTokenToReroll": "No {{token}} tokens available to reroll",

@@ -147,6 +147,42 @@ describe('基地记分与力量计算', () => {
             expect(finalState.players['0'].vp).toBe(scoredEvent.payload.rankings[0].vp + 1);
         });
 
+        it('scoreOneBase 会让 Samurai-Chan POD 在基地计分弃牌后抓 1 张牌', () => {
+            const state: SmashUpCore = {
+                players: {
+                    '0': makePlayer('0', {
+                        factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                        deck: [
+                            { uid: 'draw-1', defId: 'robot_microbot_alpha', type: 'minion', owner: '0' },
+                        ],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                turnOrder: PLAYER_IDS,
+                currentPlayerIndex: 0,
+                bases: [{
+                    defId: 'base_shoguns_palace_pod',
+                    minions: [
+                        { uid: 'chan-pod-1', defId: 'samurai_samurai_chan_pod', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'ally-21', defId: 'ally_big', controller: '0', owner: '0', basePower: 21, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    ],
+                    ongoingActions: [],
+                }],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 10,
+            };
+
+            const result = scoreOneBase(state, 0, [], '0', 1000);
+            const drawEvent = result.events.find((event) =>
+                event.type === SU_EVENTS.CARDS_DRAWN
+                && (event as any).payload?.playerId === '0'
+                && (event as any).payload?.count === 1
+            ) as any;
+
+            expect(drawEvent).toBeDefined();
+        });
+
         it('reduce BASE_SCORED 正确分配 VP', () => {
             const { reduce } = SmashUpDomain;
             const state: SmashUpCore = {

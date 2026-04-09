@@ -1865,7 +1865,7 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
     await expect(bonusDieOverlay).toContainText(/samuraiRighteousnessKatana|武士刀：\+2 伤害|Katana:\s*\+2 damage|\+2\s*(伤害|damage)/i, { timeout: 5000 });
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
-    await expect(activeBadge).toContainText('+2', { timeout: 5000 });
+    await expect(activeBadge).toContainText(/攻击修正\s*\+2|Attack Modifier\s*\+2/i, { timeout: 5000 });
     expect(stateAfterPlay.attackModifierBonusDamage).toBe(2);
     expect(stateAfterPlay.totalBonusDamage).toBe(2);
     expect(stateAfterPlay.shame).toBe(0);
@@ -1903,7 +1903,8 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
         return settlement?.displayOnly === true && settlement?.dice?.length === 5;
     }, { timeout: 10000, polling: 200 });
 
-    await expect(bonusDieOverlay).toContainText(/Dice Results/i, { timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/Dice Results|投掷结果/i, { timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/2.*(武士刀|Katana).*1.*(耻辱|Shame).*2.*(反击|Back Strike)/i, { timeout: 5000 });
 
     const stateAfterPlay = await page.evaluate(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
@@ -1955,7 +1956,7 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
 
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
-    await expect(activeBadge).toContainText('+2', { timeout: 5000 });
+    await expect(activeBadge).toContainText(/攻击修正\s*\+2|Attack Modifier\s*\+2/i, { timeout: 5000 });
 
     await page.waitForTimeout(900);
     await game.screenshot('10-samurai-zanshin-vs-paladin', testInfo);
@@ -1976,7 +1977,7 @@ test('samurai honor token should accumulate to +3 after two real clicks', async 
     await disableFabMenu(page);
 
     const attackerTitle = page.getByText(/响应（攻击方）|attacker/i).first();
-    const honorLabel = page.getByText(/^Honor$/).first();
+    const honorLabel = page.getByText(/^荣誉$|^Honor$/).first();
     const useButton = page.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
 
     await expect(attackerTitle).toBeVisible({ timeout: 5000 });
@@ -2037,7 +2038,7 @@ test('samurai retribution token should retaliate through real click flow', async
     await disableFabMenu(page);
 
     const defenderTitle = page.getByText(/响应（防御方）|defender/i).first();
-    const retributionLabel = page.getByText(/^Back Strike$|^Retribution$/).first();
+    const retributionLabel = page.getByText(/^反击$|^Back Strike$|^Retribution$/).first();
     const useButton = page.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
 
     await expect(defenderTitle).toBeVisible({ timeout: 5000 });
