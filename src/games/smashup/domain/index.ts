@@ -44,7 +44,7 @@ import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef, getCardDef } from '../data/cards';
 import { drawCards } from './utils';
 import {
-    countMadnessCards,
+    countMadnessCardsForPlayer,
     madnessVpPenalty,
     fireMinionPlayedTriggers,
     getTitanByUid,
@@ -1884,8 +1884,8 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     }
     // 骞冲眬锛氱柉鐙傚崱杈冨皯鑰呰儨锛堝厠鑻忛瞾鎵╁睍瑙勫垯锛?
     if (state.madnessDeck !== undefined) {
-        const madnessA = countMadnessCards(state.players[sorted[0]]);
-        const madnessB = countMadnessCards(state.players[sorted[1]]);
+        const madnessA = countMadnessCardsForPlayer(state, sorted[0]);
+        const madnessB = countMadnessCardsForPlayer(state, sorted[1]);
         if (madnessA !== madnessB) {
             return { winner: madnessA < madnessB ? sorted[0] : sorted[1], scores };
         }
@@ -1902,7 +1902,7 @@ export function getScores(state: SmashUpCore): Record<PlayerId, number> {
         let vp = player.vp;
         // P19: 鐤媯鍗?VP 鎯╃綒锛堟瘡 2 寮犳墸 1 VP锛?
         if (state.madnessDeck !== undefined) {
-            vp -= madnessVpPenalty(countMadnessCards(player));
+            vp -= madnessVpPenalty(countMadnessCardsForPlayer(state, pid));
         }
         scores[pid] = vp;
     }

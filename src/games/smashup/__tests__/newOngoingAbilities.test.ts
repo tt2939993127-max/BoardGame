@@ -12,7 +12,7 @@
  
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, TempPowerAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, LimitModifiedEvent, TurnStartedEvent } from '../domain/types';
+import type { SmashUpCore, PlayerState, MinionOnBase, BaseInPlay, TempPowerAddedEvent, MinionMovedEvent, MinionDestroyedEvent, MadnessDrawnEvent, MadnessReturnedEvent, CardsDrawnEvent, CardsDiscardedEvent, MinionReturnedEvent, BaseReplacedEvent, CardToDeckBottomEvent, CardInstance, TurnStartedEvent } from '../domain/types';
 import { countMadnessCards, madnessVpPenalty } from '../domain/abilityHelpers';
 import { triggerBaseAbility, triggerExtendedBaseAbility } from '../domain/baseAbilities';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
@@ -2660,32 +2660,30 @@ describe('special_madness onPlay', () => {
         expect(drawEvt.payload.cardUids).toEqual(['d1', 'd2']);
     });
 
-    it('选择返回→返回疯狂牌并获得 1 个额外行动额度', () => {
+    it('选择返回→仅返回疯狂牌堆，不授予额外行动额度', () => {
         const state = makeState({
             players: {
-                '0': makePlayer('0'),
+                '0': makePlayer('0', {
+                    discard: [{ uid: 'mad-1', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' }],
+                }),
                 '1': makePlayer('1'),
             },
+            madnessDeck: [MADNESS_CARD_DEF_ID],
         });
         const handler = getInteractionHandler('special_madness');
         expect(handler).toBeDefined();
         const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
         const result = handler!(ms, '0', { action: 'return' }, { continuationContext: { cardUid: 'mad-1' } }, dummyRandom, 0);
-        expect(result.events.length).toBe(2);
+        expect(result.events.length).toBe(1);
         expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_RETURNED);
         const retEvt = result.events[0] as MadnessReturnedEvent;
         expect(retEvt.payload.playerId).toBe('0');
         expect(retEvt.payload.cardUid).toBe('mad-1');
-        expect(result.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
-        expect((result.events[1] as LimitModifiedEvent).payload).toMatchObject({
-            playerId: '0',
-            limitType: 'action',
-            delta: 1,
-            reason: 'special_madness',
-        });
 
         const next = result.events.reduce((core, event) => reduce(core, event as any), state);
-        expect(next.players['0'].actionLimit).toBe(state.players['0'].actionLimit + 1);
+        expect(next.players['0'].actionLimit).toBe(state.players['0'].actionLimit);
+        expect(next.players['0'].discard).toHaveLength(0);
+        expect(next.madnessDeck).toHaveLength(2);
     });
 });
 
