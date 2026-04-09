@@ -1682,6 +1682,29 @@ function getGreatWolfSpiritTalentTargets(state: AbilityContext['state'], playerI
     );
 }
 
+function getGreatWolfSpiritMoveOptions(
+    state: AbilityContext['state'],
+    playerId: string,
+    currentBaseIndex: number,
+) {
+    return state.bases
+        .map((base, baseIndex) => {
+            if (baseIndex === currentBaseIndex) return null;
+            const myPower = getPlayerEffectivePowerOnBase(state, base, baseIndex, playerId);
+            if (myPower <= 0) return null;
+            const hasStrictlyMostPower = Object.keys(state.players).every(pid => {
+                if (pid === playerId) return true;
+                return getPlayerEffectivePowerOnBase(state, base, baseIndex, pid) < myPower;
+            });
+            if (!hasStrictlyMostPower) return null;
+            return {
+                baseIndex,
+                label: getBaseDef(base.defId)?.name ?? `Base ${baseIndex + 1}`,
+            };
+        })
+        .filter((value): value is { baseIndex: number; label: string } => value !== null);
+}
+
 function werewolvesGreatWolfSpiritSpecial(ctx: AbilityContext): AbilityResult {
     const eligibleBases = getGreatWolfSpiritEligibleBases(ctx.state, ctx.playerId);
     if (eligibleBases.length < 2) return { events: [] };
@@ -1704,6 +1727,41 @@ function werewolvesGreatWolfSpiritTalent(ctx: AbilityContext): AbilityResult {
         buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'buff' }),
         { sourceId: 'titan_werewolves_great_wolf_spirit_talent', targetType: 'minion' },
     );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
+function werewolvesGreatWolfSpiritOnTurnStart(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
+    if (!ctx.matchState) return [];
+
+    const titan = (ctx.state.titans ?? []).find(candidate =>
+        candidate.defId === 'werewolves_great_wolf_spirit'
+        && candidate.controllerId === ctx.playerId
+        && candidate.location.zone === 'base',
+    );
+    if (!titan || titan.location.zone !== 'base') return [];
+
+    const baseOptions = getGreatWolfSpiritMoveOptions(ctx.state, ctx.playerId, titan.location.baseIndex);
+    if (baseOptions.length === 0) return [];
+
+    const interaction = createSimpleChoice(
+        `titan_werewolves_great_wolf_spirit_move_${ctx.now}`,
+        ctx.playerId,
+        '巨狼之灵：你可以将此泰坦移动到一个你战力高于任何其他玩家的基地',
+        [
+            ...buildBaseTargetOptions(baseOptions, ctx.state),
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ],
+        { sourceId: 'titan_werewolves_great_wolf_spirit_move', targetType: 'base', autoResolveIfSingle: false },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        titanUid: titan.uid,
+        titanDefId: titan.defId,
+        fromBaseIndex: titan.location.baseIndex,
+    };
 
     return {
         events: [],
@@ -2575,6 +2633,7 @@ export function registerTitanAbilities(): void {
             : '此基地不满足巨狼之灵的进场条件';
     });
     registerAbility('werewolves_great_wolf_spirit', 'talent', werewolvesGreatWolfSpiritTalent);
+    registerTrigger('werewolves_great_wolf_spirit', 'onTurnStart', werewolvesGreatWolfSpiritOnTurnStart, { global: true, optional: true });
     registerTitanTalentValidator('werewolves_great_wolf_spirit', ({ state, titan, playerId }) => {
         if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getGreatWolfSpiritTalentTargets(state, playerId).length > 0
@@ -4188,6 +4247,39 @@ export function registerTitanInteractionHandlers(): void {
                     1,
                     'werewolves_great_wolf_spirit_talent',
                     timestamp,
+                ),
+            ],
+        };
+    });
+
+    registerInteractionHandler('titan_werewolves_great_wolf_spirit_move', (state, _playerId, value, data, _random, timestamp) => {
+        const selected = value as { skip?: boolean; baseIndex?: number; baseDefId?: string } | undefined;
+        const continuation = (data as {
+            continuationContext?: { titanUid?: string; titanDefId?: string; fromBaseIndex?: number };
+        } | undefined)?.continuationContext;
+        if (selected?.skip) {
+            return { state, events: [] };
+        }
+        if (
+            selected?.baseIndex === undefined
+            || !continuation?.titanUid
+            || !continuation.titanDefId
+            || continuation.fromBaseIndex === undefined
+        ) {
+            return { state, events: [] };
+        }
+
+        return {
+            state,
+            events: [
+                moveTitan(
+                    continuation.titanUid,
+                    continuation.titanDefId,
+                    continuation.fromBaseIndex,
+                    selected.baseIndex,
+                    'werewolves_great_wolf_spirit_move',
+                    timestamp,
+                    selected.baseDefId,
                 ),
             ],
         };
