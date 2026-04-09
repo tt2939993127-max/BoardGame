@@ -74,7 +74,14 @@ test.describe('Auth (account login) E2E', () => {
 
         const accountInput = dialog.getByTestId('auth-login-account-input');
         const passwordInput = dialog.getByTestId('auth-login-password-input');
+        const passwordToggle = dialog.getByTestId('auth-login-password-toggle');
         const submitButton = dialog.getByTestId('auth-submit-button');
+
+        await expect(passwordInput).toHaveAttribute('type', 'password');
+        await passwordToggle.click();
+        await expect(passwordInput).toHaveAttribute('type', 'text');
+        await passwordToggle.click();
+        await expect(passwordInput).toHaveAttribute('type', 'password');
 
         await accountInput.evaluate((node, value) => {
             const input = node as HTMLInputElement;

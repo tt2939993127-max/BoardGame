@@ -232,7 +232,7 @@ export const FriendList = ({ onSelectFriend, activeFriendId }: FriendListProps) 
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}
                                 placeholder={t('social:search.placeholder')}
-                                className="w-full bg-white border border-parchment-card-border/40 rounded pl-8 pr-3 py-2 text-sm focus:outline-none focus:border-parchment-base-text transition-colors placeholder-parchment-light-text/50"
+                                className="w-full bg-white border border-parchment-card-border/40 rounded pl-8 pr-3 py-2 text-base sm:text-sm focus:outline-none focus:border-parchment-base-text transition-colors placeholder-parchment-light-text/50"
                             />
                             <Search size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-parchment-light-text" />
                         </form>

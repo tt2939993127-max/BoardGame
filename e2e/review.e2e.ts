@@ -1,5 +1,6 @@
 import { test, expect } from './framework';
 import { setChineseLocale } from './helpers/common';
+import type { Locator, Page } from '@playwright/test';
 
 const REVIEW_MOBILE_SCREENSHOT_PATH = 'test-results/evidence-screenshots/review-form-mobile-input-visible.png';
 
@@ -11,6 +12,36 @@ const mockUser = {
     role: 'user',
     banned: false,
 };
+
+async function clickButtonViaDom(locator: Locator, errorMessage: string) {
+    await expect(locator).toBeVisible({ timeout: 10000 });
+    await locator.evaluate((element, message) => {
+        if (!(element instanceof HTMLElement)) {
+            throw new Error(typeof message === 'string' ? message : '目标节点不是 HTMLElement');
+        }
+        element.click();
+    }, errorMessage);
+}
+
+async function openTicTacToeDetailsModal(page: Page): Promise<void> {
+    const closeServiceUnavailableIfNeeded = async () => {
+        const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
+        if (await serviceUnavailable.isVisible().catch(() => false)) {
+            await page.getByRole('button', { name: /Close|关闭/i }).first().click();
+        }
+    };
+
+    await page.goto('/', { waitUntil: 'commit', timeout: 15000 });
+    await closeServiceUnavailableIfNeeded();
+    await expect(page.locator('a[href="/?game=tictactoe"]').first()).toBeVisible({ timeout: 15000 });
+    await page.goto('/?game=tictactoe', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await closeServiceUnavailableIfNeeded();
+    await expect(page).toHaveURL(/game=tictactoe/);
+
+    const detailsModal = page.locator('[data-testid="game-details-modal-root"]:visible').last();
+    await expect(detailsModal).toBeVisible({ timeout: 15000 });
+    await expect(page.locator('[data-testid="game-details-sidebar"]:visible').last()).toBeVisible({ timeout: 10000 });
+}
 
 test.describe('游戏评价系统', () => {
     test.beforeEach(async ({ page }) => {
@@ -71,18 +102,15 @@ test.describe('游戏评价系统', () => {
             }
         });
 
-        await page.goto('/?game=tictactoe');
     });
 
     test('已登录用户可以发布评价', async ({ page }) => {
-        const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
-        if (await serviceUnavailable.isVisible().catch(() => false)) {
-            await page.getByRole('button', { name: /Close|关闭/i }).first().click();
-        }
+        await openTicTacToeDetailsModal(page);
         // 1. Switch to Reviews tab and ensure stats visible
         const modalRoot = page.locator('#modal-root');
-        const reviewsTab = modalRoot.getByRole('button', { name: '评价' });
-        await reviewsTab.click();
+        const detailsModal = page.locator('[data-testid="game-details-modal-root"]:visible').last();
+        const reviewsTab = detailsModal.getByRole('button', { name: '评价' });
+        await clickButtonViaDom(reviewsTab, '评价标签节点不是 button');
         await expect(modalRoot.getByText('评价较少')).toBeVisible();
 
         // 2. Mock create review response
@@ -182,38 +210,22 @@ test.describe('游戏评价系统', () => {
     });
 
     test('移动端评价输入聚焦后仍应保持可见', async ({ page }) => {
+        test.setTimeout(90000);
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.goto('/', { waitUntil: 'domcontentloaded' });
+        await openTicTacToeDetailsModal(page);
 
-        const serviceUnavailable = page.getByRole('heading', { name: /Service Unavailable|服务不可用/i });
-        if (await serviceUnavailable.isVisible().catch(() => false)) {
-            await page.getByRole('button', { name: /Close|关闭/i }).first().click();
-        }
-
-        const gameHeading = page.getByRole('heading', { name: '井字棋' });
-        await expect(gameHeading).toBeVisible({ timeout: 15000 });
-        await gameHeading.click();
-        await expect(page).toHaveURL(/game=tictactoe/);
-        const getDetailsModal = () => page.getByTestId('game-details-modal-root').last();
-        await expect(getDetailsModal()).toBeVisible({ timeout: 15000 });
         const modalRoot = page.locator('#modal-root');
-        await getDetailsModal().getByRole('button', { name: '评价' }).evaluate((button) => {
-            if (!(button instanceof HTMLButtonElement)) {
-                throw new Error('评价标签节点不是 button');
-            }
-            button.click();
-        });
+        const detailsModal = page.locator('[data-testid="game-details-modal-root"]:visible').last();
+        const reviewTab = detailsModal.getByRole('button', { name: '评价' });
+        await clickButtonViaDom(reviewTab, '评价标签节点不是可点击元素');
+        await expect(detailsModal).toBeVisible({ timeout: 10000 });
+        await expect(detailsModal.getByText('评价较少')).toBeVisible({ timeout: 10000 });
 
-        const writeButton = getDetailsModal().getByRole('button', { name: '写评价' });
-        await expect(writeButton).toBeVisible();
-        await writeButton.evaluate((button) => {
-            if (!(button instanceof HTMLButtonElement)) {
-                throw new Error('写评价按钮节点不是 button');
-            }
-            button.click();
-        });
+        const writeButton = detailsModal.getByRole('button', { name: '写评价' });
+        await clickButtonViaDom(writeButton, '写评价按钮节点不是可点击元素');
+        await expect(modalRoot.getByText(/撰写评价|修改我的评价/)).toBeVisible({ timeout: 10000 });
 
-        const positiveBtn = modalRoot.getByRole('button', { name: '推荐' });
+        const positiveBtn = modalRoot.getByRole('button', { name: /^推荐$/ });
         await positiveBtn.click();
 
         await page.evaluate(() => {

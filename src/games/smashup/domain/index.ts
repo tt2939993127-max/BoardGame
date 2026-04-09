@@ -59,6 +59,20 @@ import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import type { SpecialAfterScoringConsumedEvent } from './types';
+import {
+    buildPendingPostScoringActionEvents,
+    clearScoringSession,
+    createScoringBaseRef,
+    createScoringSession,
+    getRemainingScoringBaseRefs,
+    getScoringSession,
+    markScoringBaseCompleted,
+    resolveScoringBaseRefSlotIndex,
+    serializePostScoringEvents,
+    setScoringSession,
+    updateScoringSession,
+    type SmashUpScoringBaseRef,
+} from './scoringSession';
 
 // ============================================================================
 // 鍩哄湴璁板垎杈呭姪鍑芥暟锛堜緵 FlowHooks 鍜?Prompt 缁х画鍑芥暟鍏辩敤锛?
@@ -188,6 +202,184 @@ function buildBaseRankings(
     return rankings;
 }
 
+function getLockedScoringBaseIndices(core: SmashUpCore): number[] {
+    return core.scoringEligibleBaseIndices ?? getScoringEligibleBaseIndices(core);
+}
+
+function ensureScoreBasesSession(state: MatchState<SmashUpCore>): MatchState<SmashUpCore> {
+    if (getScoringSession(state)) {
+        return state;
+    }
+    const lockedIndices = getLockedScoringBaseIndices(state.core);
+    if (lockedIndices.length === 0) {
+        return state;
+    }
+    return setScoringSession(state, createScoringSession(state.core, lockedIndices));
+}
+
+function buildMultiBaseScoringInteraction(
+    state: MatchState<SmashUpCore>,
+    playerId: PlayerId,
+    now: number,
+    baseRefs: SmashUpScoringBaseRef[],
+) {
+    const candidates = baseRefs
+        .map((ref) => {
+            const baseIndex = resolveScoringBaseRefSlotIndex(state, ref);
+            if (baseIndex === undefined) return null;
+            const base = state.core.bases[baseIndex];
+            if (!base) return null;
+            const baseDef = getBaseDef(base.defId);
+            const totalPower = getTotalEffectivePowerOnBase(state.core, base, baseIndex);
+            return {
+                baseIndex,
+                label: `${baseDef?.name ?? `基地 ${baseIndex + 1}`} (力量 ${totalPower}/${baseDef?.breakpoint ?? '?'})`,
+            };
+        })
+        .filter(Boolean) as Array<{ baseIndex: number; label: string }>;
+
+    if (candidates.length === 0) {
+        return undefined;
+    }
+
+    return createSimpleChoice(
+        `multi_base_scoring_${now}`,
+        playerId,
+        candidates.length === 1 ? '计分最后一个基地' : '选择先计分的基地',
+        buildBaseTargetOptions(candidates, state.core) as any[],
+        { sourceId: 'multi_base_scoring', targetType: 'base' },
+    );
+}
+
+function buildRescoredBaseEvent(
+    state: MatchState<SmashUpCore>,
+    baseIndex: number,
+    now: number,
+): BaseScoredEvent | undefined {
+    const currentBase = state.core.bases[baseIndex];
+    if (!currentBase) {
+        return undefined;
+    }
+    const playerPowers = collectQualifiedPlayerPowers(state.core, currentBase, baseIndex);
+    const baseDef = getBaseDef(currentBase.defId);
+    if (!baseDef) {
+        return undefined;
+    }
+    const rankings = buildBaseRankings(baseDef, playerPowers);
+    const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
+
+    for (const minion of currentBase.minions) {
+        const breakdown = getEffectivePowerBreakdown(state.core, minion, baseIndex);
+        if (!minionBreakdowns[minion.controller]) {
+            minionBreakdowns[minion.controller] = [];
+        }
+        minionBreakdowns[minion.controller].push({
+            defId: minion.defId,
+            basePower: breakdown.basePower,
+            finalPower: breakdown.finalPower,
+            modifiers: [
+                ...(breakdown.permanentModifier !== 0
+                    ? [{ sourceDefId: minion.defId, sourceName: 'actionLog.powerModifier.permanent', value: breakdown.permanentModifier }]
+                    : []),
+                ...(breakdown.tempModifier !== 0
+                    ? [{ sourceDefId: minion.defId, sourceName: 'actionLog.powerModifier.temp', value: breakdown.tempModifier }]
+                    : []),
+                ...breakdown.ongoingDetails.map(detail => ({
+                    sourceDefId: detail.sourceDefId,
+                    sourceName: detail.sourceName,
+                    value: detail.value,
+                })),
+            ],
+        });
+    }
+
+    return {
+        type: SU_EVENTS.BASE_SCORED,
+        payload: {
+            baseIndex,
+            baseDefId: currentBase.defId,
+            rankings,
+            minionBreakdowns,
+        },
+        timestamp: now,
+    };
+}
+
+function finalizeCurrentScoringBase(
+    state: MatchState<SmashUpCore>,
+    now: number,
+): { updatedState: MatchState<SmashUpCore>; events: SmashUpEvent[] } {
+    const session = getScoringSession(state);
+    const currentBaseRef = session?.currentBaseRef;
+    if (!session || !currentBaseRef) {
+        return { updatedState: state, events: [] };
+    }
+
+    const events: SmashUpEvent[] = [];
+    const baseIndex = resolveScoringBaseRefSlotIndex(state, currentBaseRef);
+    const initialPowers = session.afterScoringInitialPowers;
+    if (baseIndex !== undefined && initialPowers && initialPowers.baseRef.baseDefId === currentBaseRef.baseDefId) {
+        const currentBase = state.core.bases[baseIndex];
+        const currentPowers = currentBase
+            ? collectQualifiedPlayerPowers(state.core, currentBase, baseIndex)
+            : new Map<PlayerId, number>();
+        const comparedPlayerIds = new Set<PlayerId>([
+            ...(Object.keys(initialPowers.powers) as PlayerId[]),
+            ...currentPowers.keys(),
+        ]);
+        let powerChanged = false;
+        for (const playerId of comparedPlayerIds) {
+            const hadInitialEntry = Object.prototype.hasOwnProperty.call(initialPowers.powers, playerId);
+            const hasCurrentEntry = currentPowers.has(playerId);
+            if (hadInitialEntry !== hasCurrentEntry) {
+                powerChanged = true;
+                break;
+            }
+            if ((initialPowers.powers[playerId] ?? 0) !== (currentPowers.get(playerId) ?? 0)) {
+                powerChanged = true;
+                break;
+            }
+        }
+        if (powerChanged) {
+            const rescoredEvent = buildRescoredBaseEvent(state, baseIndex, now);
+            if (rescoredEvent) {
+                events.push(rescoredEvent);
+            }
+        }
+    }
+
+    if (session.deferredPostScoringEvents?.length) {
+        events.push(...session.deferredPostScoringEvents.map((event) => ({
+            type: event.type,
+            payload: event.payload,
+            timestamp: event.timestamp,
+        })) as SmashUpEvent[]);
+    }
+
+    events.push(
+        ...buildPendingPostScoringActionEvents(
+            { core: state.core },
+            state.core.pendingPostScoringActions,
+            now,
+        ),
+    );
+
+    const completedState = updateScoringSession(
+        markScoringBaseCompleted(state, currentBaseRef),
+        (currentSession) => currentSession
+            ? {
+                ...currentSession,
+                currentStep: 'awaiting-post-reduce',
+            }
+            : currentSession,
+    );
+
+    return {
+        updatedState: completedState,
+        events,
+    };
+}
+
 /**
  * 瀵规寚瀹氬熀鍦版墽琛岃鍒嗛€昏緫锛岃繑鍥炴墍鏈夌浉鍏充簨浠?
  * 
@@ -213,6 +405,18 @@ export function scoreOneBase(
     let ms = matchState;
     const base = core.bases[baseIndex];
     const baseDef = getBaseDef(base.defId)!;
+    const currentBaseRef = createScoringBaseRef(core, baseIndex);
+
+    if (ms && currentBaseRef) {
+        ms = updateScoringSession(ms, (session) => session
+            ? {
+                ...session,
+                currentBaseRef,
+                currentStep: 'resolving-base',
+            }
+            : session,
+        );
+    }
     
     // 銆愪慨澶嶃€憂ewBaseDeck 蹇呴』鍦ㄥ嚱鏁伴《閮ㄥ０鏄庯紝閬垮厤 TDZ 閿欒
     // 闂锛氫箣鍓嶅湪涓や釜涓嶅悓鐨勪綔鐢ㄥ煙涓０鏄庝簡 newBaseDeck锛坙ine 454 鍜?line 476锛?
@@ -480,44 +684,7 @@ export function scoreOneBase(
         ? getPlayersWithPlayableAfterScoringResponses({ ...ms, core: afterScoringCore }, now)
         : [];
 
-    // 濡傛灉鏈夌帺瀹舵湁 afterScoring 鍗＄墝锛屾墦寮€ afterScoring 鍝嶅簲绐楀彛
-    if (playersWithAfterScoringCards.length > 0) {
-        // 銆愰噸鏂拌鍒嗚鍒欍€戣褰曞垵濮嬪姏閲忥紙鐢ㄤ簬鍝嶅簲绐楀彛鍏抽棴鍚庡姣旓級
-        // 瑙勫垯锛歛fterScoring 鍗＄墝鍙互褰卞搷璇ュ熀鍦扮殑鍔涢噺锛屽鏋滃姏閲忓彉鍖栧垯闇€瑕侀噸鏂拌鍒?
-        const currentBase = afterScoringCore.bases[baseIndex];
-        const initialPowers = collectQualifiedPlayerPowers(afterScoringCore, currentBase, baseIndex);
-        
-        // 灏嗗垵濮嬪姏閲忓瓨鍌ㄥ埌 matchState.sys锛堢敤浜庡搷搴旂獥鍙ｅ叧闂悗瀵规瘮锛?
-        // 娉ㄦ剰锛氫笉鑳藉瓨鍒板搷搴旂獥鍙ｇ殑 continuationContext 涓紝鍥犱负鍝嶅簲绐楀彛涓嶆槸浜や簰
-        if (ms) {
-            ms = {
-                ...ms,
-                sys: {
-                    ...ms.sys,
-                    afterScoringInitialPowers: {
-                        baseIndex,
-                        powers: Object.fromEntries(initialPowers.entries()),
-                    } as any,
-                },
-            };
-        }
-        
-        // 鎵撳紑 afterScoring 鍝嶅簲绐楀彛锛堝湪 BASE_CLEARED 涔嬪墠锛?
-        const afterScoringWindowEvt = openAfterScoringWindow('scoreBases', pid, afterScoringCore.turnOrder, now);
-        events.push(afterScoringWindowEvt);
-        
-        // 寤惰繜鍙戝嚭 postScoringEvents锛堢瓑鍝嶅簲绐楀彛鍏抽棴鍚庡啀鍙戯級
-        // 灏?postScoringEvents 瀛樺埌鍝嶅簲绐楀彛鐨?continuationContext 涓?
-        // 娉ㄦ剰锛氬搷搴旂獥鍙ｅ叧闂悗锛岄渶瑕佹鏌ュ熀鍦板姏閲忔槸鍚﹀彉鍖栵紝濡傛灉鍙樺寲鍒欓噸鏂拌鍒?
-        // 杩欎釜閫昏緫闇€瑕佸湪 onPhaseExit 涓鐞?
-        
-        // 銆愪慨澶嶃€戜笉闇€瑕佸湪杩欓噷淇敼 newBaseDeck锛屽洜涓鸿繕娌℃湁鍙戝嚭 BASE_REPLACED 浜嬩欢
-        // BASE_REPLACED 浜嬩欢浼氬湪鍝嶅簲绐楀彛鍏抽棴鍚庛€乸ostScoringEvents 涓彂鍑?
-        
-        return { events, newBaseDeck, matchState: ms };
-    }
-
-    // 鏋勫缓娓呴櫎+鏇挎崲浜嬩欢
+    // 构建清场 + 换基地 + onBaseRevealed 触发队列（延迟到当前基地彻底结算后再补发）
     const postScoringEvents: SmashUpEvent[] = [];
     const clearEvt: BaseClearedEvent = {
         type: SU_EVENTS.BASE_CLEARED,
@@ -526,10 +693,7 @@ export function scoreOneBase(
     };
     postScoringEvents.push(clearEvt);
 
-    // 鏇挎崲鍩哄湴
     if (newBaseDeck.length === 0) {
-        // 鍩哄湴鐗屽簱瑙佸簳锛氬皢鍩哄湴寮冪墝鍫嗘礂鍥炵墝搴擄紙骞舵妸鏈璁″垎鐨勬棫鍩哄湴涔熻鍏ュ純鐗屽爢鍚庝竴璧锋礂鍥烇級
-        // 娉ㄦ剰锛氭澶勫皻鏈?reduce BASE_CLEARED锛屾墍浠?core.baseDiscard 閲屼笉鍖呭惈 base.defId锛岄渶瑕佹墜鍔ㄥ姞鍏ャ€?
         const pool = [...(core.baseDiscard ?? []), base.defId];
         const rebuiltDeck = (random?.shuffle ? random.shuffle(pool) : [...pool]);
         const shuffleEvt: BaseDeckShuffledEvent = {
@@ -559,8 +723,6 @@ export function scoreOneBase(
         postScoringEvents.push(replaceEvt);
         newBaseDeck = newBaseDeck.slice(1);
 
-        // 瑙﹀彂鏂板熀鍦扮殑 onBaseRevealed 鎵╁睍鏃舵満锛堝缁电緤绁炵ぞ锛氭瘡浣嶇帺瀹跺彲绉诲姩涓€涓殢浠庡埌姝わ級
-        // 鏀逛负鍏ラ槦锛屽厑璁镐笌鍏朵粬鍚屾椂瑙﹀彂鍙嶅簲缁熶竴鎺掑簭锛坥ptional 鎸夐『鏃堕拡锛?
         const queuedReveal = collectExtendedBaseAbilityTriggers({
             core,
             timing: 'onBaseRevealed',
@@ -570,274 +732,94 @@ export function scoreOneBase(
         });
         if (queuedReveal) {
             postScoringEvents.push(queuedReveal as unknown as SmashUpEvent);
-            const coreForQueue = reduce(core, queuedReveal as unknown as SmashUpEvent);
-            const msForQueue = ms ? { ...ms, core: coreForQueue } : ({ core: coreForQueue, sys: { interaction: { current: undefined, queue: [] } } } as any);
-            const rq = maybeResolveReactionQueue(msForQueue, rng, now);
-            if (rq) {
-                postScoringEvents.push(...rq.events);
-                ms = rq.state;
-            } else {
-                ms = msForQueue;
-            }
         }
     }
 
-    // 鍏抽敭锛氫粎褰?afterScoring 鏂板浜嗕氦浜掓椂锛堝鍒氭煍娴佸搴欏钩灞€閫夋嫨銆佸繊鑰呴亾鍦烘秷鐏殢浠庣瓑锛夛紝
-    // 鎵嶅欢杩熷彂鍑?BASE_CLEARED/BASE_REPLACED锛岀‘淇?targetType: 'minion' 鐨勫満涓婄偣閫変氦浜掕兘鐪嬪埌闅忎粠銆?
-    // 涓嶅奖鍝?beforeScoring/onBaseRevealed 绛夊叾浠栨潵婧愮殑浜や簰銆?
-    
+    if (playersWithAfterScoringCards.length > 0) {
+        const currentBase = afterScoringCore.bases[baseIndex];
+        const initialPowers = collectQualifiedPlayerPowers(afterScoringCore, currentBase, baseIndex);
+        const serializedDeferredEvents = serializePostScoringEvents(postScoringEvents);
+
+        if (ms && currentBaseRef) {
+            ms = updateScoringSession(ms, (session) => session
+                ? {
+                    ...session,
+                    currentBaseRef,
+                    currentStep: 'awaiting-response-window',
+                    deferredPostScoringEvents: serializedDeferredEvents,
+                    afterScoringInitialPowers: {
+                        baseRef: currentBaseRef,
+                        powers: Object.fromEntries(initialPowers.entries()),
+                    },
+                }
+                : session,
+            );
+            const firstInteraction = ms.sys.interaction?.current ?? ms.sys.interaction?.queue?.[0];
+            if (firstInteraction?.data) {
+                const data = firstInteraction.data as Record<string, unknown>;
+                const continuationContext = (data.continuationContext ?? {}) as Record<string, unknown>;
+                continuationContext._deferredPostScoringEvents = serializedDeferredEvents;
+                data.continuationContext = continuationContext;
+            }
+        }
+
+        const afterScoringWindowEvt = openAfterScoringWindow('scoreBases', pid, afterScoringCore.turnOrder, now);
+        events.push(afterScoringWindowEvt);
+        return { events, newBaseDeck, matchState: ms };
+    }
+
     if (afterScoringCreatedInteraction) {
-        // 鎶?postScoringEvents 搴忓垪鍖栧瓨鍒颁氦浜掔殑 continuationContext 涓?
-        // 銆愪慨澶嶃€戝鏋滄湁澶氫釜 afterScoring 浜や簰锛堝姣嶈埌 + 渚﹀療鍏碉級锛屽繀椤诲瓨鍒扮涓€涓氦浜掍腑
-        // 杩欐牱绗竴涓氦浜掕В鍐虫椂浼氫紶閫掔粰涓嬩竴涓紝鏈€鍚庝竴涓В鍐虫椂鎵嶄細琛ュ彂 BASE_CLEARED
-        const firstInteraction = ms!.sys.interaction!.current ?? ms!.sys.interaction!.queue[0];
-        if (firstInteraction?.data) {
-            const data = firstInteraction.data as Record<string, unknown>;
-            const ctx = (data.continuationContext ?? {}) as Record<string, unknown>;
-            ctx._deferredPostScoringEvents = postScoringEvents.map(e => ({
-                type: e.type,
-                payload: (e as GameEvent).payload,
-                timestamp: (e as GameEvent).timestamp,
-            }));
-            data.continuationContext = ctx;
+        const serializedDeferredEvents = serializePostScoringEvents(postScoringEvents);
+        if (ms && currentBaseRef) {
+            ms = updateScoringSession(ms, (session) => session
+                ? {
+                    ...session,
+                    currentBaseRef,
+                    currentStep: 'awaiting-interactions',
+                    deferredPostScoringEvents: serializedDeferredEvents,
+                }
+                : session,
+            );
+            const firstInteraction = ms.sys.interaction?.current ?? ms.sys.interaction?.queue?.[0];
+            if (firstInteraction?.data) {
+                const data = firstInteraction.data as Record<string, unknown>;
+                const continuationContext = (data.continuationContext ?? {}) as Record<string, unknown>;
+                continuationContext._deferredPostScoringEvents = serializedDeferredEvents;
+                data.continuationContext = continuationContext;
+            }
         }
         return { events, newBaseDeck, matchState: ms };
     }
 
-    // 鏃?afterScoring 浜や簰锛氭甯稿彂鍑烘竻闄?鏇挎崲浜嬩欢
     events.push(...postScoringEvents);
     return { events, newBaseDeck, matchState: ms };
 }
 
 /** 娉ㄥ唽澶氬熀鍦拌鍒嗙殑浜や簰瑙ｅ喅澶勭悊鍑芥暟 */
 export function registerMultiBaseScoringInteractionHandler(): void {
-    registerInteractionHandler('multi_base_scoring', (state, playerId, value, _iData, random, timestamp) => {
-        const { baseIndex } = value as { baseIndex: number };
-        const events: SmashUpEvent[] = [];
-        let currentState = state;
-        let currentBaseDeck = state.core.baseDeck;
-
-        // 鈿狅笍 娉ㄦ剰锛氫笉闇€瑕佹竻闄?current锛屽洜涓?SimpleChoiceSystem 宸茬粡鍦?beforeCommand 涓皟鐢ㄤ簡 resolveInteraction
-        // resolveInteraction 浼氬脊鍑轰笅涓€涓氦浜掞紝鎵€浠?current 宸茬粡鏄笅涓€涓氦浜掍簡锛堝鏋滄湁鐨勮瘽锛?
-
-        // 銆愪慨澶嶃€戞彁鍙栧欢杩熺殑 BASE_CLEARED/BASE_REPLACED 浜嬩欢锛堜絾涓嶇珛鍗宠ˉ鍙戯級
-        const deferredEvents = (_iData?.continuationContext as any)?._deferredPostScoringEvents as 
-            { type: string; payload: unknown; timestamp: number }[] | undefined;
-        
-        // 1. 璁″垎鐜╁閫夋嫨鐨勫熀鍦?
-        // 鈿狅笍 銆愬叧閿慨澶嶃€慴eforeScoring 浜や簰瑙ｅ喅鍚庯紝闇€瑕侀噸鏂拌皟鐢?scoreOneBase 缁х画鎵ц璁″垎閫昏緫
-        // 闂锛歴coreOneBase 鍦?beforeScoring 鍒涘缓浜や簰鍚庝細绔嬪嵆杩斿洖锛屼氦浜掕В鍐冲悗涓嶄細鑷姩缁х画
-        // 瑙ｅ喅鏂规锛氭鏌ユ槸鍚﹀彧瑙﹀彂浜?beforeScoring 浣嗘病鏈夊畬鎴愯鍒嗭紙娌℃湁 BASE_SCORED 浜嬩欢锛夛紝
-        // 濡傛灉鏄紝鍒欓噸鏂拌皟鐢?scoreOneBase 缁х画鎵ц
-        let result = scoreOneBase(currentState.core, baseIndex, currentBaseDeck, playerId, timestamp, random, currentState);
-        events.push(...result.events);
-        currentBaseDeck = result.newBaseDeck;
-        if (result.matchState) currentState = result.matchState;
-        
-        // 妫€鏌ユ槸鍚﹀彧瑙﹀彂浜?beforeScoring 浣嗘病鏈夊畬鎴愯鍒?
-        const hasBaseScored = result.events.some((evt: SmashUpEvent) => evt.type === SU_EVENTS.BASE_SCORED);
-        const hasBeforeScoringTriggered = result.events.some((evt: SmashUpEvent) => 
-            evt.type === SU_EVENT_TYPES.BEFORE_SCORING_TRIGGERED
-        );
-        
-        
-        // 濡傛灉鍙Е鍙戜簡 beforeScoring 浣嗘病鏈?BASE_SCORED锛岃鏄?beforeScoring 鍒涘缓浜嗕氦浜掑苟鎻愬墠杩斿洖
-        // 浜や簰宸茬粡琚В鍐充簡锛堝洜涓烘垜浠湪 handler 涓級锛屾墍浠ラ渶瑕侀噸鏂拌皟鐢?scoreOneBase 缁х画鎵ц
-        if (hasBeforeScoringTriggered && !hasBaseScored && !currentState.sys.interaction?.current) {
-            
-            // 鉁?鍏抽敭淇锛氬皢绗竴娆¤皟鐢ㄧ殑浜嬩欢 reduce 鍒?currentState.core
-            // 闂锛歴coreOneBase 鍐呴儴浼氬皢 BEFORE_SCORING_TRIGGERED 浜嬩欢 reduce 鍒版湰鍦?core 鍓湰锛?
-            // 浣?handler 浼犲叆鐨?currentState.core 娌℃湁琚洿鏂帮紝瀵艰嚧绗簩娆¤皟鐢ㄦ椂 alreadyTriggeredBeforeScoring 浠嶄负 false
-            // 瑙ｅ喅鏂规锛氬湪閲嶆柊璋冪敤鍓嶏紝鍏堝皢绗竴娆＄殑浜嬩欢 reduce 鍒?currentState.core
-            let updatedCore = currentState.core;
-            for (const evt of events) {
-                updatedCore = reduce(updatedCore, evt as SmashUpEvent);
-            }
-            currentState = {
-                ...currentState,
-                core: updatedCore,
-            };
-            
-            // 鈿狅笍 娉ㄦ剰锛氫笉闇€瑕佹竻闄?current锛屽洜涓?SimpleChoiceSystem 宸茬粡鍦?beforeCommand 涓皟鐢ㄤ簡 resolveInteraction
-            // resolveInteraction 浼氬脊鍑轰笅涓€涓氦浜掞紝鎵€浠?current 宸茬粡鏄笅涓€涓氦浜掍簡锛堝鏋滄湁鐨勮瘽锛?
-            
-            // 閲嶆柊璋冪敤 scoreOneBase锛坆eforeScoring 宸茬粡瑙﹀彂杩囷紝涓嶄細閲嶅瑙﹀彂锛?
-            result = scoreOneBase(currentState.core, baseIndex, currentBaseDeck, playerId, timestamp, random, currentState);
-            events.push(...result.events);
-            currentBaseDeck = result.newBaseDeck;
-            if (result.matchState) currentState = result.matchState;
+    registerInteractionHandler('multi_base_scoring', (state, _playerId, value) => {
+        const { baseIndex } = value as { baseIndex?: number };
+        if (baseIndex === undefined) {
+            return { state, events: [] };
         }
 
-        if (!currentState.sys.scoredBaseIndices) {
-            currentState = {
-                ...currentState,
-                sys: { ...currentState.sys, scoredBaseIndices: [] },
-            };
+        const baseRef = createScoringBaseRef(state.core, baseIndex);
+        if (!baseRef) {
+            return { state, events: [] };
         }
 
-        // 2. 灏嗗凡浜х敓鐨勪簨浠?reduce 鍒版湰鍦?core 鍓湰锛岃幏鍙栨渶鏂扮姸鎬?
-        let updatedCore = currentState.core;
-        for (const evt of events) {
-            updatedCore = reduce(updatedCore, evt as SmashUpEvent);
-        }
-
-        const currentBaseCompleted = events.some((evt: SmashUpEvent) =>
-                evt.type === SU_EVENTS.BASE_SCORED
-                && (evt.payload as { baseIndex?: number } | undefined)?.baseIndex === baseIndex
-            );
-
-        if (currentBaseCompleted && !currentState.sys.scoredBaseIndices.includes(baseIndex)) {
-            currentState = {
-                ...currentState,
-                sys: {
-                    ...currentState.sys,
-                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices, baseIndex],
-                },
-            };
-        }
-
-        // 3. 妫€鏌ュ墿浣?eligible 鍩哄湴锛堟帓闄ゅ綋鍓嶆鍦ㄥ鐞嗙殑鍩哄湴锛屽彧鎶婄湡姝ｅ畬鎴愮殑鍩哄湴瑙嗕负宸茶鍒嗭級
-        const allEligibleIndices = getScoringEligibleBaseIndices(updatedCore);
-        const remainingIndices = allEligibleIndices.filter(
-            i => i !== baseIndex && !currentState.sys.scoredBaseIndices?.includes(i)
-        );
-
-        // 濡傛灉 beforeScoring/afterScoring 鍒涘缓浜嗕氦浜?鈫?鍏堝鐞嗕氦浜掞紝鍓╀綑鍩哄湴鍚庣画鍐嶈鍒?
-        if (currentState.sys.interaction?.current) {
-            // 銆愪慨澶嶃€戝鏋滆繕鏈夊墿浣欏熀鍦伴渶瑕佽鍒嗭紝鍒涘缓鏂扮殑 multi_base_scoring 浜や簰骞跺姞鍏ラ槦鍒?
-            // 杩欐牱 afterScoring 浜や簰瑙ｅ喅鍚庯紝闃熷垪涓殑 multi_base_scoring 浼氳嚜鍔ㄥ脊鍑猴紝缁х画璁″垎娴佺▼
-            if (remainingIndices.length >= 1) {
-                const candidates = remainingIndices.map(i => {
-                    const base = updatedCore.bases[i];
-                    if (!base) return null;
-                    const baseDef = getBaseDef(base.defId);
-                    const totalPower = getTotalEffectivePowerOnBase(updatedCore, base, i);
-                    return {
-                        baseIndex: i,
-                        label: `${baseDef?.name ?? `鍩哄湴 ${i + 1}`} (鍔涢噺 ${totalPower}/${baseDef?.breakpoint ?? '?'})`,
-                    };
-                }).filter(Boolean) as { baseIndex: number; label: string }[];
-
-                if (candidates.length >= 1) {
-                    const interaction = createSimpleChoice(
-                        `multi_base_scoring_${timestamp}_remaining`, playerId,
-                        remainingIndices.length === 1 ? '计分最后一个基地' : '选择先计分的基地',
-                        buildBaseTargetOptions(candidates, updatedCore) as any[],
-                        { sourceId: 'multi_base_scoring', targetType: 'base' },
-                    );
-                    
-                    // 銆愬叧閿慨澶嶃€戜紶閫掑欢杩熶簨浠跺埌涓嬩竴涓氦浜?
-                    // 濡傛灉褰撳墠浜や簰鏈夊欢杩熶簨浠讹紝闇€瑕佷紶閫掔粰鏂板垱寤虹殑 multi_base_scoring 浜や簰
-                    // 杩欐牱寤惰繜浜嬩欢浼氬湪鎵€鏈夊熀鍦拌鍒嗗畬鎴愬悗缁熶竴琛ュ彂
-                    if (deferredEvents && deferredEvents.length > 0) {
-                        const iData = interaction.data as Record<string, unknown>;
-                        const ctx = (iData.continuationContext ?? {}) as Record<string, unknown>;
-                        ctx._deferredPostScoringEvents = deferredEvents;
-                        iData.continuationContext = ctx;
-                    }
-                    
-                    currentState = queueInteraction(currentState, interaction);
-
-                    for (const idx of remainingIndices) {
-                        if (!currentState.sys.scoredBaseIndices!.includes(idx)) {
-                            currentState = {
-                                ...currentState,
-                                sys: {
-                                    ...currentState.sys,
-                                    scoredBaseIndices: [...currentState.sys.scoredBaseIndices!, idx],
-                                },
-                            };
-                        }
-                    }
+        const nextState = ensureScoreBasesSession(state);
+        return {
+            state: updateScoringSession(nextState, (session) => session
+                ? {
+                    ...session,
+                    currentBaseRef: baseRef,
+                    currentStep: 'resolving-base',
                 }
-            }
-
-            return { state: currentState, events };
-        }
-
-        // 4. 娌℃湁 afterScoring 浜や簰锛岀户缁鐞嗗墿浣欏熀鍦?
-        if (remainingIndices.length >= 2) {
-            // 2+ 鍓╀綑 鈫?鍒涘缓鏂扮殑澶氬熀鍦伴€夋嫨浜や簰
-            const candidates = remainingIndices.map(i => {
-                const base = updatedCore.bases[i];
-                if (!base) return null;
-                const baseDef = getBaseDef(base.defId);
-                const totalPower = getTotalEffectivePowerOnBase(updatedCore, base, i);
-                return {
-                    baseIndex: i,
-                    label: `${baseDef?.name ?? `鍩哄湴 ${i + 1}`} (鍔涢噺 ${totalPower}/${baseDef?.breakpoint ?? '?'})`,
-                };
-            }).filter(Boolean) as { baseIndex: number; label: string }[];
-
-            if (candidates.length >= 2) {
-                const interaction = createSimpleChoice(
-                    `multi_base_scoring_${timestamp}`, playerId,
-                    '选择先记分的基地', buildBaseTargetOptions(candidates, updatedCore) as any[],
-                    { sourceId: 'multi_base_scoring', targetType: 'base' },
-                );
-                currentState = queueInteraction(currentState, interaction);
-
-                return { state: currentState, events };
-            }
-        }
-
-        // 1 涓垨 0 涓墿浣?鈫?閫愪釜鐩存帴璁″垎
-        for (const idx of remainingIndices) {
-            const base = updatedCore.bases[idx];
-            if (!base) continue;
-            const r = scoreOneBase(updatedCore, idx, currentBaseDeck, playerId, timestamp, random, currentState);
-            events.push(...r.events);
-            currentBaseDeck = r.newBaseDeck;
-            if (r.matchState) currentState = r.matchState;
-            // 鍩哄湴鑳藉姏鍒涘缓浜嗕氦浜?鈫?halt锛屽墿浣欏熀鍦板悗缁鐞?
-            if (currentState.sys.interaction?.current) {
-                // 銆愬叧閿慨澶嶃€戝皢寤惰繜浜嬩欢浼犻€掔粰鏂板垱寤虹殑浜や簰
-                // 濡傛灉 scoreOneBase 鍒涘缓浜嗕氦浜掞紙濡?beforeScoring/afterScoring锛夛紝
-                // 闇€瑕佸皢寤惰繜浜嬩欢浼犻€掔粰鏂颁氦浜掞紝纭繚浜や簰瑙ｅ喅鍚庤兘琛ュ彂寤惰繜浜嬩欢
-                if (deferredEvents && deferredEvents.length > 0) {
-                    const newInteraction = currentState.sys.interaction.current;
-                    if (newInteraction?.data) {
-                        const iData = newInteraction.data as Record<string, unknown>;
-                        const ctx = (iData.continuationContext ?? {}) as Record<string, unknown>;
-                        // 鍚堝苟寤惰繜浜嬩欢锛堝彲鑳藉凡缁忔湁涓€浜涘欢杩熶簨浠朵簡锛?
-                        const existingDeferred = (ctx._deferredPostScoringEvents ?? []) as { type: string; payload: unknown; timestamp: number }[];
-                        ctx._deferredPostScoringEvents = [...existingDeferred, ...deferredEvents];
-                        iData.continuationContext = ctx;
-                    }
-                }
-
-                return { state: currentState, events };
-            }
-            // 鏇存柊鏈湴 core 鍓湰
-            for (const evt of r.events) {
-                updatedCore = reduce(updatedCore, evt as SmashUpEvent);
-            }
-
-            if (!currentState.sys.scoredBaseIndices) {
-                currentState = {
-                    ...currentState,
-                    sys: { ...currentState.sys, scoredBaseIndices: [] },
-                };
-            }
-            if (!currentState.sys.scoredBaseIndices.includes(idx)) {
-                currentState = {
-                    ...currentState,
-                    sys: {
-                        ...currentState.sys,
-                        scoredBaseIndices: [...currentState.sys.scoredBaseIndices, idx],
-                    },
-                };
-            }
-        }
-
-        // 銆愬叧閿慨澶嶃€戞墍鏈夊熀鍦拌鍒嗗畬鎴愬悗锛岃ˉ鍙戝欢杩熶簨浠?
-        // 鍙湁褰?remainingIndices 涓虹┖鏃讹紙鎵€鏈夊熀鍦伴兘璁″垎瀹屼簡锛夛紝鎵嶈ˉ鍙戝欢杩熶簨浠?
-        // 杩欐牱鍙互閬垮厤鍦ㄤ腑闂存楠ら噸澶嶈ˉ鍙?
-        if (deferredEvents && deferredEvents.length > 0) {
-            events.push(...deferredEvents as SmashUpEvent[]);
-        }
-
-        return { state: currentState, events };
+                : session,
+            ),
+            events: [],
+        };
     });
 }
 
@@ -891,13 +873,13 @@ function processImmediateStartTurnMinionTriggers(
         }
 
         if (event.type === SU_EVENTS.MINION_RETURNED) {
-            const returnedEvent = event as MinionReturnedEvent;
+            const returnedEvent = event as SmashUpEvent & { payload: { minionUid: string } };
             processedPlayedUids.delete(returnedEvent.payload.minionUid);
             continue;
         }
 
         if (event.type === SU_EVENTS.BURIED_CARD_RETURNED_TO_HAND) {
-            const returnedEvent = event as { payload: { cardUid: string } };
+            const returnedEvent = event as SmashUpEvent & { payload: { cardUid: string } };
             processedPlayedUids.delete(returnedEvent.payload.cardUid);
             continue;
         }
@@ -1010,12 +992,11 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
             minionLimit: 1,
             actionsPlayed: 0,
             actionLimit: 1,
-            factions: ['', ''],  // 鍗犱綅锛屽緟 ALL_FACTIONS_SELECTED 浜嬩欢濉厖
+            factions: ['', ''],
         };
         playerSelections[pid] = [];
     }
 
-    // 缈诲紑 鐜╁鏁?1 寮犲熀鍦帮紙璁剧疆鏈熼棿缈诲埌 replaceOnSetup 鐨勫熀鍦版椂鏇挎崲骞堕噸娲楋級
     let shuffledBaseIds = random.shuffle(getAllBaseDefIds());
     const baseCount = playerIds.length + 1;
     const activeBases: BaseInPlay[] = [];
@@ -1024,7 +1005,6 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
         const defId = shuffledBaseIds.shift()!;
         const def = getBaseDef(defId);
         if (def?.replaceOnSetup) {
-            // 鏀惧洖鐗屽簱骞堕噸娲?
             shuffledBaseIds.push(defId);
             shuffledBaseIds = random.shuffle(shuffledBaseIds);
             continue;
@@ -1033,14 +1013,14 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
     }
     const baseDeck = shuffledBaseIds;
 
-    // 閲嶈禌鍏堟墜杞崲锛氬弻浜虹敤 firstPlayerId 杞崲锛屽浜虹敤 turnOrder 闅忔満
     let initialTurnOrder = [...playerIds];
-    if (Array.isArray(setupData?.turnOrder) && setupData.turnOrder.length === playerIds.length
-        && setupData.turnOrder.every((id: unknown) => typeof id === 'string' && playerIds.includes(id as PlayerId))) {
-        // 澶氫汉锛氫娇鐢ㄦ湇鍔＄闅忔満鎵撲贡鐨勯『搴?
+    if (
+        Array.isArray(setupData?.turnOrder)
+        && setupData.turnOrder.length === playerIds.length
+        && setupData.turnOrder.every((id: unknown) => typeof id === 'string' && playerIds.includes(id as PlayerId))
+    ) {
         initialTurnOrder = setupData.turnOrder as PlayerId[];
     } else if (typeof setupData?.firstPlayerId === 'string' && playerIds.includes(setupData.firstPlayerId)) {
-        // 鍙屼汉锛氬厛鎵嬬帺瀹舵帓绗竴
         const first = setupData.firstPlayerId;
         initialTurnOrder = [first, ...playerIds.filter(id => id !== first)];
     }
@@ -1067,10 +1047,6 @@ function setup(playerIds: PlayerId[], random: RandomFn, setupData?: Record<strin
         powerCountersPlacedOnMinionsThisTurn: 0,
     };
 }
-
-// ============================================================================
-// FlowSystem 閽╁瓙
-// ============================================================================
 
 export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
     initialPhase: 'factionSelect',
@@ -1129,382 +1105,127 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         }
 
         if (from === 'scoreBases') {
-            // Me First! 鍝嶅簲瀹屾垚鍚庯紝鎵ц瀹為檯鍩哄湴璁板垎
-            const events: GameEvent[] = [];
+            const events: SmashUpEvent[] = [];
+            let currentState = ensureScoreBasesSession(state);
 
-            // 銆愰噸鏂拌鍒嗚鍒欍€戞鏌ユ槸鍚﹀垰鍏抽棴浜?afterScoring 鍝嶅簲绐楀彛
-            // 濡傛灉鍔涢噺鍙樺寲锛岄渶瑕侀噸鏂拌鍒嗚鍩哄湴锛堝嵆浣挎病鏈夎揪鍒颁复鐣屽€硷級
-            if (state.sys.afterScoringInitialPowers) {
-                const { baseIndex: scoredBaseIndex, powers: initialPowers } = state.sys.afterScoringInitialPowers as any;
-                
-                
-                // 璁＄畻褰撳墠鍔涢噺
-                const currentBase = core.bases[scoredBaseIndex];
-                const currentPowers = currentBase
-                    ? collectQualifiedPlayerPowers(core, currentBase, scoredBaseIndex)
-                    : new Map<PlayerId, number>();
-                
-                // 妫€鏌ユ槸鍚︽湁鍔涢噺鍙樺寲
-                let powerChanged = false;
-                const comparedPlayerIds = new Set<PlayerId>([
-                    ...(Object.keys(initialPowers) as PlayerId[]),
-                    ...currentPowers.keys(),
-                ]);
-                for (const playerId of comparedPlayerIds) {
-                    const hadInitialEntry = Object.prototype.hasOwnProperty.call(initialPowers, playerId);
-                    const hasCurrentEntry = currentPowers.has(playerId);
-                    if (hadInitialEntry !== hasCurrentEntry) {
-                        powerChanged = true;
-                        break;
-                    }
-                    const initialPower = (initialPowers as Record<string, number>)[playerId] ?? 0;
-                    const currentPower = currentPowers.get(playerId) ?? 0;
-                    if (currentPower !== initialPower) {
-                        powerChanged = true;
-                        break;
-                    }
+            if (currentState.sys.flowHalted) {
+                if (currentState.sys.interaction.current) {
+                    return { events: [], halt: true, updatedState: currentState } as PhaseExitResult;
                 }
-                
-                // 濡傛灉鍔涢噺鍙樺寲锛岄噸鏂拌鍒嗚鍩哄湴
-                if (powerChanged && currentBase) {
-                    const playerPowers = collectQualifiedPlayerPowers(core, currentBase, scoredBaseIndex);
-                    const baseDef = getBaseDef(currentBase.defId)!;
-                    const rankings = buildBaseRankings(baseDef, playerPowers);
-                    
-                    // 鏀堕泦姣忎綅鐜╁鐨勯殢浠庡姏閲?breakdown锛堢敤浜?ActionLog 灞曠ず锛?
-                    const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
-                    for (const m of currentBase.minions) {
-                        const bd = getEffectivePowerBreakdown(core, m, scoredBaseIndex);
-                        if (!minionBreakdowns[m.controller]) minionBreakdowns[m.controller] = [];
-                        minionBreakdowns[m.controller].push({
-                            defId: m.defId,
-                            basePower: bd.basePower,
-                            finalPower: bd.finalPower,
-                            modifiers: [
-                                ...(bd.permanentModifier !== 0 ? [{ sourceDefId: m.defId, sourceName: 'actionLog.powerModifier.permanent', value: bd.permanentModifier }] : []),
-                                ...(bd.tempModifier !== 0 ? [{ sourceDefId: m.defId, sourceName: 'actionLog.powerModifier.temp', value: bd.tempModifier }] : []),
-                                ...bd.ongoingDetails.map(d => ({ sourceDefId: d.sourceDefId, sourceName: d.sourceName, value: d.value })),
-                            ],
-                        });
-                    }
-                    
-                    // 鍙戝嚭鏂扮殑 BASE_SCORED 浜嬩欢锛堥噸鏂拌鍒嗙粨鏋滐級
-                    const scoreEvt: BaseScoredEvent = {
-                        type: SU_EVENTS.BASE_SCORED,
-                        payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId, rankings, minionBreakdowns },
-                        timestamp: now,
-                    };
-                    events.push(scoreEvt);
-                    
-                }
-                
-                // 鈿狅笍 鍏抽敭淇锛氭棤璁哄姏閲忔槸鍚﹀彉鍖栵紝閮介渶瑕佸彂鍑?BASE_CLEARED 鍜?BASE_REPLACED 浜嬩欢
-                // 鍘熷洜锛歛fterScoring 鍝嶅簲绐楀彛鎵撳紑鏃讹紝杩欎簺浜嬩欢琚欢杩熷彂鍑?
-                // 鍝嶅簲绐楀彛鍏抽棴鍚庯紝蹇呴』琛ュ彂杩欎簺浜嬩欢锛屽惁鍒欏熀鍦颁笉浼氳娓呴櫎鍜屾浛鎹?
-                if (currentBase) {
-                    // 鍙戝嚭 BASE_CLEARED 浜嬩欢
-                    const clearEvt: BaseClearedEvent = {
-                        type: SU_EVENTS.BASE_CLEARED,
-                        payload: { baseIndex: scoredBaseIndex, baseDefId: currentBase.defId },
-                        timestamp: now,
-                    };
-                    events.push(clearEvt);
-                    
-                    // 鏇挎崲鍩哄湴
-                    const coreNow = state.core;
-                    let deckForReplacement = coreNow.baseDeck;
-                    if (deckForReplacement.length === 0) {
-                        const pool = [...(coreNow.baseDiscard ?? []), currentBase.defId];
-                        deckForReplacement = (random?.shuffle ? random.shuffle(pool) : [...pool]);
-                        const shuffleEvt: BaseDeckShuffledEvent = {
-                            type: SU_EVENTS.BASE_DECK_SHUFFLED,
-                            payload: {
-                                newBaseDeckDefIds: deckForReplacement,
-                                reason: 'base_deck_empty_reshuffle_discard',
-                                clearBaseDiscard: true,
-                            },
-                            timestamp: now,
-                        };
-                        events.push(shuffleEvt);
-                    }
-
-                    if (deckForReplacement.length > 0) {
-                        const newBaseDefId = deckForReplacement[0];
-                        const replaceEvt: BaseReplacedEvent = {
-                            type: SU_EVENTS.BASE_REPLACED,
-                            payload: {
-                                baseIndex: scoredBaseIndex,
-                                oldBaseDefId: currentBase.defId,
-                                newBaseDefId,
-                            },
-                            timestamp: now,
-                        };
-                        events.push(replaceEvt);
-                        
-                        // 瑙﹀彂鏂板熀鍦扮殑 onBaseRevealed 鎵╁睍鏃舵満锛堝缁电緤绁炵ぞ锛氭瘡浣嶇帺瀹跺彲绉诲姩涓€涓殢浠庡埌姝わ級
-                        const revealCtx = {
-                            state: coreNow,
-                            matchState: state,
-                            baseIndex: scoredBaseIndex,
-                            baseDefId: newBaseDefId,
-                            playerId: pid,
-                            now,
-                        };
-                        const revealResult = triggerExtendedBaseAbility(newBaseDefId, 'onBaseRevealed', revealCtx);
-                        events.push(...revealResult.events);
-                        if (revealResult.matchState) state = revealResult.matchState;
-                    }
-                    
-                }
-                
-                // 鏍囪璇ュ熀鍦板凡璁板垎锛岄槻姝㈠悗缁甯歌鍒嗗惊鐜噸澶嶈鍒?
-                if (!state.sys.scoredBaseIndices) {
-                    state = {
-                        ...state,
-                        sys: { ...state.sys, scoredBaseIndices: [scoredBaseIndex] },
-                    };
-                } else if (!state.sys.scoredBaseIndices.includes(scoredBaseIndex)) {
-                    state = {
-                        ...state,
-                        sys: {
-                            ...state.sys,
-                            scoredBaseIndices: [...state.sys.scoredBaseIndices, scoredBaseIndex],
-                        },
-                    };
-                }
-                
-                // 娓呯悊鐘舵€侊紙涓嶅彲鍙樻洿鏂帮級
-                state = {
-                    ...state,
+                currentState = {
+                    ...currentState,
                     sys: {
-                        ...state.sys,
-                        afterScoringInitialPowers: undefined,
+                        ...currentState.sys,
+                        flowHalted: false,
                     },
                 };
             }
 
-            // 浣跨敤缁熶竴鏌ヨ鍑芥暟锛堜紭鍏堥攣瀹氬垪琛紝鍥為€€瀹炴椂璁＄畻锛?
-            // Wiki Phase 3 Step 4锛氫竴鏃﹀熀鍦板湪杩涘叆璁″垎闃舵鏃惰揪鍒?breakpoint锛屽繀瀹氳鍒?
-            const lockedIndices = getScoringEligibleBaseIndices(core);
-            // 鏋勫缓 eligible 鍩哄湴淇℃伅锛堢敤浜庡鍩哄湴閫夋嫨 UI锛?
-            const eligibleBases: { baseIndex: number; defId: string; totalPower: number }[] = [];
-            for (const i of lockedIndices) {
-                const base = core.bases[i];
-                if (!base) continue;
-                const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-                eligibleBases.push({ baseIndex: i, defId: base.defId, totalPower });
-            }
-
-            // 鏃犲熀鍦拌揪鏍?鈫?姝ｅ父鎺ㄨ繘
-            if (eligibleBases.length === 0) {
+            const currentSession = getScoringSession(currentState);
+            if (!currentSession) {
                 return events;
             }
 
-            // 銆愬叧閿畧鍗€慺lowHalted=true 琛ㄧず涓婁竴杞?onPhaseExit 杩斿洖浜?halt锛?
-            // 姝ゆ椂 FlowSystem(priority=25) 鍦?SmashUpEventSystem(priority=50) 涔嬪墠鎵ц锛?
-            // core 灏氭湭琚氦浜掑鐞嗗櫒鐨勮鍒嗕簨浠舵洿鏂帮紝eligible 鍒楄〃鏄繃鏃剁殑銆?
-            // 蹇呴』 halt 绛夊緟 SmashUpEventSystem 澶勭悊瀹屼氦浜掕В鍐充簨浠躲€乧ore 鏇存柊鍚庯紝
-            // 涓嬩竴杞?afterEvents 鍐嶉噸鏂拌繘鍏?onPhaseExit 浣跨敤鏈€鏂?core銆?
-            // 
-            // 淇锛氬彧鏈夋爣蹇楀瓨鍦ㄤ笖浜や簰浠嶅湪杩涜鏃舵墠 halt锛屼氦浜掑畬鎴愬悗鑷姩娓呴櫎鏍囧織
-            if (state.sys.flowHalted) {
-                if (state.sys.interaction.current) {
-                    return { events: [], halt: true } as PhaseExitResult;
+            if (currentState.sys.responseWindow?.current || currentState.sys.interaction?.current) {
+                return { events: [], halt: true, updatedState: currentState } as PhaseExitResult;
+            }
+
+            if (currentSession.currentStep === 'awaiting-post-reduce') {
+                return { events: [], halt: true, updatedState: currentState } as PhaseExitResult;
+            }
+
+            if (currentSession.currentBaseRef && (
+                currentSession.currentStep === 'awaiting-interactions'
+                || currentSession.currentStep === 'awaiting-response-window'
+            )) {
+                const finalized = finalizeCurrentScoringBase(currentState, now);
+                return { events: finalized.events, updatedState: finalized.updatedState } as PhaseExitResult;
+            }
+
+            if (!currentSession.currentBaseRef) {
+                const remainingBaseRefs = getRemainingScoringBaseRefs(currentState);
+
+                if (remainingBaseRefs.length === 0) {
+                    const cleanedState = clearScoringSession(currentState);
+                    events.push({
+                        type: SU_EVENT_TYPES.BEFORE_SCORING_CLEARED,
+                        payload: {},
+                        timestamp: now,
+                    } as SmashUpEvent);
+                    events.push({
+                        type: SU_EVENT_TYPES.AFTER_SCORING_CLEARED,
+                        payload: {},
+                        timestamp: now,
+                    } as SmashUpEvent);
+                    return { events, updatedState: cleanedState } as PhaseExitResult;
                 }
-                // 浜や簰宸茶В鍐筹紝娓呴櫎 flowHalted 鏍囧織锛堜笉鍙彉鏇存柊锛?
-                state = {
-                    ...state,
-                    sys: { ...state.sys, flowHalted: false },
-                };
-            }
 
-            // 銆愬叧閿慨澶嶃€戜娇鐢?sys 鐘舵€佽窡韪凡璁板垎鐨勫熀鍦帮紝闃叉 halt 鍚庨噸澶嶈鍒?
-            // 鍒濆鍖栨垨鑾峰彇宸茶鍒嗗熀鍦板垪琛紙涓嶅彲鍙樻洿鏂帮級
-            if (!state.sys.scoredBaseIndices) {
-                state = {
-                    ...state,
-                    sys: { ...state.sys, scoredBaseIndices: [] },
-                };
-            }
-            // 杩囨护鎺夊凡璁板垎鐨勫熀鍦?
-            const remainingIndices = lockedIndices.filter(i => !state.sys.scoredBaseIndices!.includes(i));
-
-            // 鎵€鏈夊熀鍦伴兘宸茶鍒?鈫?娓呯悊鐘舵€佸苟姝ｅ父鎺ㄨ繘锛堜笉鍙彉鏇存柊锛?
-            if (remainingIndices.length === 0) {
-                // 鍒涘缓鏂?state 娓呯悊 scoredBaseIndices
-                const cleanedState: MatchState<SmashUpCore> = {
-                    ...state,
-                    sys: { ...state.sys, scoredBaseIndices: [] },
-                };
-                // 杩斿洖娓呯悊鍚庣殑 state锛堥€氳繃 updatedState 浼犳挱锛?
-                return { events, updatedState: cleanedState } as PhaseExitResult;
-            }
-
-            // 1 涓熀鍦拌揪鏍?鈫?妫€鏌ュ綋鍓嶄氦浜掓垨闃熷垪涓槸鍚﹀凡鏈?multi_base_scoring 浜や簰
-            const currentIsMultiBaseScoring = 
-                (state.sys.interaction.current?.data as any)?.sourceId === 'multi_base_scoring';
-            const hasMultiBaseScoringInQueue = state.sys.interaction.queue.some(
-                (i: any) => (i.data as any)?.sourceId === 'multi_base_scoring'
-            );
-            // Property 14: 2+ 鍩哄湴杈炬爣 鈫?閫氳繃 InteractionSystem(simple-choice) 璁╁綋鍓嶇帺瀹堕€夋嫨璁″垎椤哄簭
-            if (remainingIndices.length >= 2 && !currentIsMultiBaseScoring && !hasMultiBaseScoringInQueue) {
-                const candidates = remainingIndices.map(i => {
-                    const base = core.bases[i];
-                    const totalPower = getTotalEffectivePowerOnBase(core, base, i);
-                    const baseDef = getBaseDef(base.defId);
-                    return {
-                        baseIndex: i,
-                        label: `${baseDef?.name ?? `鍩哄湴 ${i + 1}`} (鍔涢噺 ${totalPower}/${baseDef?.breakpoint ?? '?'})`,
-                    };
-                });
-
-                const interaction = createSimpleChoice(
-                    `multi_base_scoring_${now}`, pid,
-                    '选择先记分的基地', buildBaseTargetOptions(candidates, core) as any[],
-                    { sourceId: 'multi_base_scoring', targetType: 'base' },
-                );
-                const updatedState = queueInteraction(state, interaction);
-
-                // halt=true锛氫笉鍒囨崲闃舵锛岀瓑寰呬氦浜掕В鍐冲悗鍐嶇户缁?
-                return { events: [], halt: true, updatedState } as PhaseExitResult;
-            }
-
-            // 1 涓熀鍦拌揪鏍?鈫?妫€鏌ュ綋鍓嶄氦浜掓垨闃熷垪涓槸鍚﹀凡鏈?multi_base_scoring 浜や簰
-            // 濡傛灉鏈夛紝璇存槑涔嬪墠宸茬粡鍒涘缓浜嗕氦浜掞紝涓嶅簲璇ラ噸澶嶈鍒?
-            // 浣跨敤 remainingIndices锛堝凡杩囨护宸茶鍒嗗熀鍦帮級锛屾寜椤哄簭閫愪釜璁″垎
-            if (currentIsMultiBaseScoring || hasMultiBaseScoringInQueue) {
-                // 褰撳墠浜や簰鎴栭槦鍒椾腑宸叉湁 multi_base_scoring 浜や簰锛屼笉閲嶅璁″垎
-                // halt=true锛氱瓑寰呬氦浜掕В鍐?
-                return { events: [], halt: true } as PhaseExitResult;
-            }
-            
-            let currentBaseDeck = core.baseDeck;
-            let currentMatchState: MatchState<SmashUpCore> = state;
-            let currentCore = core;  // 鉁?淇锛氱淮鎶や竴涓湰鍦?core 鍓湰锛屾瘡娆¤鍒嗗悗鏇存柊
-
-            const maxIterations = remainingIndices.length;
-            for (let iter = 0; iter < maxIterations; iter++) {
-                if (iter >= remainingIndices.length) break;
-                const foundIndex = remainingIndices[iter];
-
-                const result = scoreOneBase(currentCore, foundIndex, currentBaseDeck, pid, now, random, currentMatchState);
-                
-                // 鈿狅笍 銆愬叧閿慨澶嶃€戠珛鍗虫鏌ユ槸鍚︽墦寮€浜嗗搷搴旂獥鍙ｏ紝濡傛灉鎵撳紑浜嗗氨绔嬪嵆 halt
-                // 闂锛氫箣鍓嶇殑浠ｇ爜鍏?push 鎵€鏈変簨浠讹紝鍐嶆鏌ュ搷搴旂獥鍙ｏ紝瀵艰嚧澶氫釜鍩哄湴鍚屾椂璁″垎鏃讹紝
-                // 绗竴涓熀鍦版墦寮€鍝嶅簲绐楀彛鍚庯紝寰幆缁х画璁″垎绗簩涓熀鍦帮紝绗簩涓熀鍦扮殑 BASE_CLEARED 琚彂閫?
-                // 淇锛氬湪 push 浜嬩欢涔嬪墠鍏堟鏌ュ搷搴旂獥鍙ｏ紝濡傛灉鎵撳紑浜嗗氨绔嬪嵆 halt锛屼笉 push 浜嬩欢锛屼笉缁х画寰幆
-                const hasResponseWindowOpened = result.events.some(
-                    (evt: SmashUpEvent) => evt.type === 'RESPONSE_WINDOW_OPENED'
-                );
-                if (hasResponseWindowOpened) {
-                    // 鈿狅笍 鍏抽敭锛氬繀椤讳繚鐣?scoreOneBase 鍦ㄦ墦寮€鍝嶅簲绐楀彛鍓嶅凡缁忕敓鎴愮殑浜嬩欢锛?
-                    // 鍖呮嫭 BASE_SCORED / BEFORE_SCORING_TRIGGERED / AFTER_SCORING_TRIGGERED銆?
-                    // 鍝嶅簲绐楀彛鍏抽棴鍚庡彧琛ュ彂 BASE_CLEARED / BASE_REPLACED锛屽苟鍦ㄥ姏閲忓彉鍖栨椂杩藉姞鏂扮殑 BASE_SCORED锛?
-                    // 涓嶈兘鎶婇娆¤鍒嗙粨鏋滄暣浣撲涪鎺夛紝鍚﹀垯 reducer銆丄ctionLog銆佺壒鏁堝拰瑙﹀彂鏍囪閮戒細寤跺悗鎴栭噸澶嶃€?
-                    
-                    // 銆愬叧閿慨澶嶃€戞爣璁拌鍩哄湴宸茶鍒嗭紝閬垮厤鍝嶅簲绐楀彛鍏抽棴鍚庨噸澶嶈鍒?
-                    if (!currentMatchState.sys.scoredBaseIndices) {
-                        currentMatchState = {
-                            ...currentMatchState,
-                            sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
-                        };
+                if (remainingBaseRefs.length > 1) {
+                    const currentIsMultiBaseScoring =
+                        (currentState.sys.interaction.current?.data as { sourceId?: string } | undefined)?.sourceId === 'multi_base_scoring';
+                    const hasMultiBaseScoringInQueue = currentState.sys.interaction.queue.some(
+                        (interaction: { data?: { sourceId?: string } }) => interaction.data?.sourceId === 'multi_base_scoring',
+                    );
+                    if (!currentIsMultiBaseScoring && !hasMultiBaseScoringInQueue) {
+                        const interaction = buildMultiBaseScoringInteraction(currentState, pid, now, remainingBaseRefs);
+                        if (interaction) {
+                            return {
+                                events: [],
+                                halt: true,
+                                updatedState: queueInteraction(currentState, interaction),
+                            } as PhaseExitResult;
+                        }
                     }
-                    currentMatchState = {
-                        ...currentMatchState,
-                        sys: {
-                            ...currentMatchState.sys,
-                            scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || []), foundIndex],
-                        },
-                    };
-                    
-                    const baseState = result.matchState ?? currentMatchState;
-                    const haltedState: MatchState<SmashUpCore> = {
-                        ...baseState,
-                        sys: {
-                            ...baseState.sys,
-                            scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || [])],
-                        },
-                    };
-
-                    return {
-                        events: [...events, ...result.events],
-                        halt: true,
-                        updatedState: haltedState,
-                    } as PhaseExitResult;
-                }
-                
-                // 娌℃湁鎵撳紑鍝嶅簲绐楀彛锛屾甯?push 浜嬩欢
-                events.push(...result.events);
-                currentBaseDeck = result.newBaseDeck;
-                // 涓嶅彲鍙樹紶鎾?matchState锛坅fterScoring 鍩哄湴鑳藉姏鍙兘鍒涘缓 Interaction锛?
-                if (result.matchState) {
-                    currentMatchState = result.matchState;
+                    return { events: [], halt: true, updatedState: currentState } as PhaseExitResult;
                 }
 
-                // 鉁?淇锛氬皢鏈璁″垎鐨勪簨浠?reduce 鍒?currentCore锛岀‘淇濅笅娆¤鍒嗕娇鐢ㄦ渶鏂扮姸鎬?
-                for (const evt of result.events) {
-                    currentCore = reduce(currentCore, evt as SmashUpEvent);
-                }
-
-                // beforeScoring 鍒涘缓浜嗕氦浜掞紙濡傛捣鐩楃帇绉诲姩纭锛夆啋 halt 绛変氦浜掕В鍐冲悗閲嶆柊璁″垎
-                if (currentMatchState.sys.interaction?.current) {
-                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
-                }
-
-                const openedAfterScoringWindow = result.events.some((evt) =>
-                    evt.type === RESPONSE_WINDOW_EVENTS.OPENED
-                    && (evt.payload as { windowType?: string } | undefined)?.windowType === 'afterScoring',
+                currentState = updateScoringSession(currentState, (session) => session
+                    ? {
+                        ...session,
+                        currentBaseRef: remainingBaseRefs[0],
+                        currentStep: 'resolving-base',
+                    }
+                    : session,
                 );
-                if (openedAfterScoringWindow) {
-                    return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
-                }
-
-                // 鏍囪璇ュ熀鍦板凡璁板垎锛堜笉鍙彉鏇存柊锛?
-                // 鈿狅笍 鍙湁鍦?scoreOneBase 鎴愬姛瀹屾垚锛堟病鏈夋墦寮€鍝嶅簲绐楀彛锛夊悗锛屾墠鏍囪涓?宸茶鍒?
-                if (!currentMatchState.sys.scoredBaseIndices) {
-                    currentMatchState = {
-                        ...currentMatchState,
-                        sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
-                    };
-                }
-                // 銆愬叧閿€戜笉鍙彉鏇存柊锛氬垱寤烘柊鏁扮粍鑰屼笉鏄洿鎺?push
-                currentMatchState = {
-                    ...currentMatchState,
-                    sys: {
-                        ...currentMatchState.sys,
-                        scoredBaseIndices: [...(currentMatchState.sys.scoredBaseIndices || []), foundIndex],
-                    },
-                };
             }
 
-            // 濡傛灉鍩哄湴鑳藉姏鍒涘缓浜?Interaction锛堝鎵樺皵鍥惧姞 afterScoring锛夛紝
-            // 闇€瑕?halt 绛夊緟鐜╁鍝嶅簲锛屼笉鑳界洿鎺ユ帹杩涘埌涓嬩竴闃舵
-            if (currentMatchState.sys.interaction?.current) {
-                return { events, halt: true, updatedState: currentMatchState } as PhaseExitResult;
+            const activeBaseRef = getScoringSession(currentState)?.currentBaseRef;
+            const activeBaseIndex = resolveScoringBaseRefSlotIndex(currentState, activeBaseRef);
+            if (!activeBaseRef || activeBaseIndex === undefined) {
+                if (activeBaseRef) {
+                    const missingBaseState = updateScoringSession(
+                        markScoringBaseCompleted(currentState, activeBaseRef),
+                        (session) => session ? { ...session, currentStep: 'awaiting-post-reduce' } : session,
+                    );
+                    return { events: [], updatedState: missingBaseState } as PhaseExitResult;
+                }
+                return events;
             }
 
-            // 鎵€鏈夊熀鍦拌鍒嗗畬鎴愶紝娓呯悊鐘舵€侊紙涓嶅彲鍙樻洿鏂帮級
-            currentMatchState = {
-                ...currentMatchState,
-                sys: { ...currentMatchState.sys, scoredBaseIndices: [] },
-            };
+            const result = scoreOneBase(
+                currentState.core,
+                activeBaseIndex,
+                currentState.core.baseDeck,
+                pid,
+                now,
+                random,
+                currentState,
+            );
+            const nextState = result.matchState ?? currentState;
+            const openedAfterScoringWindow = result.events.some((event) =>
+                event.type === RESPONSE_WINDOW_EVENTS.OPENED
+                && (event.payload as { windowType?: string } | undefined)?.windowType === 'afterScoring',
+            );
 
-            // 娓呯┖ beforeScoring 鍜?afterScoring 瑙﹀彂鏍囪锛堣鍒嗛樁娈电粨鏉燂級
-            events.push({
-                type: SU_EVENT_TYPES.BEFORE_SCORING_CLEARED,
-                payload: {},
-                timestamp: now,
-            } as unknown as SmashUpEvent);
-            events.push({
-                type: SU_EVENT_TYPES.AFTER_SCORING_CLEARED,
-                payload: {},
-                timestamp: now,
-            } as unknown as SmashUpEvent);
+            if (nextState.sys.interaction?.current || nextState.sys.responseWindow?.current || openedAfterScoringWindow) {
+                return { events: result.events, halt: true, updatedState: nextState } as PhaseExitResult;
+            }
 
-            // 杩斿洖鏇存柊鍚庣殑 matchState锛堝寘鍚竻鐞嗗悗鐨?scoredBaseIndices锛?
-            return { events, updatedState: currentMatchState } as PhaseExitResult;
-
-            return events;
+            const completedState = updateScoringSession(
+                markScoringBaseCompleted(nextState, activeBaseRef),
+                (session) => session ? { ...session, currentStep: 'awaiting-post-reduce' } : session,
+            );
+            return { events: result.events, updatedState: completedState } as PhaseExitResult;
         }
 
         return [];
@@ -1654,7 +1375,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         }
 
         if (to === 'scoreBases') {
-            // 娓呯悊涓婁竴杞殑瑙﹀彂鏍囪锛堥槻姝㈠紓甯搁€€鍑哄鑷存爣璁版畫鐣欙級
             events.push({
                 type: SU_EVENT_TYPES.BEFORE_SCORING_CLEARED,
                 payload: {},
@@ -1666,25 +1386,23 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 timestamp: now,
             } as GameEvent);
 
-            // 妫€鏌ユ槸鍚︽湁鍩哄湴杈惧埌涓寸晫鐐癸紝娌℃湁鍒欒烦杩?Me First! 鍝嶅簲绐楀彛
             const eligibleIndices = getScoringEligibleBaseIndices(core);
+            currentMatchState = eligibleIndices.length > 0
+                ? setScoringSession(currentMatchState, createScoringSession(core, eligibleIndices))
+                : clearScoringSession(currentMatchState);
+            hasSysUpdate = true;
 
             if (eligibleIndices.length > 0) {
-                // 閿佸畾 eligible 鍩哄湴鍒楄〃鍒?core 鐘舵€?
-                // 瑙勫垯锛氫竴鏃﹀熀鍦板湪杩涘叆璁″垎闃舵鏃惰揪鍒?breakpoint锛屽嵆浣?Me First! 鍝嶅簲绐楀彛涓?
-                // 鍔涢噺琚檷浣庡埌 breakpoint 浠ヤ笅锛岃鍩哄湴浠嶇劧蹇呭畾璁″垎锛圵iki Phase 3 Step 4锛?
                 events.push({
                     type: SU_EVENTS.SCORING_ELIGIBLE_BASES_LOCKED,
                     payload: { baseIndices: eligibleIndices },
                     timestamp: now,
                 } as GameEvent);
-                // 鎵撳紑 Me First! 鍝嶅簲绐楀彛锛岀瓑寰呮墍鏈夌帺瀹跺搷搴?
-                // 瀹為檯璁板垎鍦?onPhaseExit('scoreBases') 涓墽琛?
                 const meFirstEvt = openMeFirstWindow('scoreBases', pid, core.turnOrder, now);
                 events.push(meFirstEvt);
             }
-            // 鏃犲熀鍦拌揪鏍囨椂涓嶆墦寮€绐楀彛锛宱nAutoContinueCheck 浼氳嚜鍔ㄦ帹杩涘埌 draw
-            return events;
+
+            return { events, updatedState: currentMatchState } as PhaseEnterResult;
         }
 
         if (to === 'draw') {
@@ -1774,41 +1492,20 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         // 
         // 杩欐牱鍙互閬垮厤鏃犻檺寰幆锛屽悓鏃跺湪鍝嶅簲绐楀彛鍏抽棴鍚庤嚜鍔ㄦ帹杩涜Е鍙戣鍒嗐€?
         if (phase === 'scoreBases') {
-            // 鍏抽敭瀹堝崼锛氬彧瑕佸搷搴旂獥鍙ｄ粛鐒舵墦寮€锛屽氨蹇呴』缁х画鍋滃湪 scoreBases 绛夊緟鐜╁鍝嶅簲銆?
-            // 涓嶈兘鍏堢湅 eligibleIndices锛屽洜涓?afterScoring 绐楀彛鎵撳紑鍚庡熀鍦板彲鑳藉凡缁忚娓呴櫎/鏇挎崲锛?
-            // 姝ゆ椂 eligibleIndices 浼氬彉鎴愮┖鏁扮粍锛涘鏋滃厛鎸夆€滄棤 eligible 鍩哄湴鈥濊嚜鍔ㄦ帹杩涳紝
-            // 灏变細閿欒鍦板甫鐫€浠嶇劧鎵撳紑鐨?afterScoring 绐楀彛涓€璺帹杩涘埌鍚庣画闃舵銆?
             if (state.sys.responseWindow?.current) {
                 return undefined;
             }
 
-            // 鏈€鍚庝竴涓?afterScoring 浜や簰鍒氳ˉ鍙戞竻鍦?鎹㈠熀鍦颁簨浠舵椂锛?
-            // 杩欎簺浜嬩欢瑕佺瓑鏈疆 afterEvents 缁撴潫鍚庢墠浼氳 reduce 鍒?core銆?
-            // 杩欓噷蹇呴』鍏堝仠涓€杞紝閬垮厤 FlowSystem 鐢ㄦ棫 core 閲嶆柊杩涘叆 scoreBases锛屽鑷撮噸澶嶈鍒嗐€?
             if ((state.sys as any)._waitForPostScoringReduce) {
                 return undefined;
             }
-            
-            // 鎯呭喌1锛歠lowHalted=true 涓斾氦浜掑凡瑙ｅ喅涓斿搷搴旂獥鍙ｅ凡鍏抽棴 鈫?鑷姩鎺ㄨ繘
-            if (state.sys.flowHalted && !state.sys.interaction.current && !state.sys.responseWindow?.current) {
-                // 銆愬叧閿慨澶嶃€戝鏋滄鍦ㄦ墽琛?multi_base_scoring handler锛屼笉瑕佽嚜鍔ㄦ帹杩?
-                // 闂锛歨andler 鎵ц鏈熼棿锛宱nAutoContinueCheck 浼氭娴嬪埌浜や簰宸茶В鍐筹紝
-                // 鐒跺悗瑙﹀彂 ADVANCE_PHASE锛屽鑷撮噸鏂拌繘鍏?onPhaseExit锛屽張鍒涘缓鏂扮殑浜や簰
-                // 瑙ｅ喅鏂规锛氭鏌ユ爣蹇楋紝濡傛灉 handler 姝ｅ湪鎵ц锛屼笉瑕佹帹杩?
-                
-                // 銆愪慨澶嶃€戝鏋滃瓨鍦?afterScoringInitialPowers锛岃鏄庨渶瑕侀噸鏂拌鍒?
-                // 杩斿洖 autoContinue: true锛岃Е鍙?ADVANCE_PHASE锛岃繖浼氬啀娆¤皟鐢?onPhaseExit
-                // onPhaseExit 寮€澶寸殑閲嶆柊璁″垎閫昏緫浼氭墽琛岋紝鐒跺悗鎺ㄨ繘鍒?draw 闃舵
-                if ((state.sys as any).afterScoringInitialPowers) {
-                    return { autoContinue: true, playerId: pid };
-                }
 
-                return { autoContinue: true, playerId: pid };
+            const scoringSession = getScoringSession(state);
+            if (scoringSession?.currentStep === 'awaiting-post-reduce') {
+                return undefined;
             }
-            
-            // 鎯呭喌2锛氭病鏈?eligible 鍩哄湴 鈫?鑷姩鎺ㄨ繘
-            const eligibleIndices = getScoringEligibleBaseIndices(core);
-            if (eligibleIndices.length === 0) {
+
+            if (state.sys.flowHalted && !state.sys.interaction.current && !state.sys.responseWindow?.current) {
                 return { autoContinue: true, playerId: pid };
             }
 
@@ -1816,10 +1513,22 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 return undefined;
             }
 
+            if (scoringSession) {
+                const hasRemainingWork = !!scoringSession.currentBaseRef || getRemainingScoringBaseRefs(state).length > 0;
+                if (hasRemainingWork) {
+                    return { autoContinue: true, playerId: pid };
+                }
+                return { autoContinue: true, playerId: pid };
+            }
+
+            const eligibleIndices = getLockedScoringBaseIndices(core);
+            if (eligibleIndices.length === 0) {
+                return { autoContinue: true, playerId: pid };
+            }
+
             return { autoContinue: true, playerId: pid };
         }
 
-        // draw 闃舵锛氭墜鐗屼笉瓒呴檺鍒欒嚜鍔ㄦ帹杩涘埌 endTurn
         if (phase === 'draw') {
             const player = core.players[pid];
             if (player && player.hand.length <= HAND_LIMIT) {

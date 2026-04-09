@@ -1318,6 +1318,10 @@ export function getCardDef(defId: string): CardDef | undefined {
     return _cardRegistry.get(defId);
 }
 
+export function getCardDefsByFaction(factionId: string): CardDef[] {
+    return Array.from(_cardRegistry.values()).filter((def) => def.faction === factionId);
+}
+
 /** 查找随从卡定义 */
 export function getMinionDef(defId: string): MinionCardDef | undefined {
     const def = _cardRegistry.get(defId);
