@@ -1,64 +1,50 @@
 ## Context
 
-当前仓库已经有：
+当前 AI Repo Workbench 已明确选择 Flowise 作为上游宿主基线，但最初的落地方式是把 fork 直接 vendor 到 `forks/flowise/`，导致 BoardGame worktree 同时承担了：
 
-- `WorkflowOrchestrator -> LocalRuntime -> Repo Domain` 的代码边界
-- `LangGraphWorkflowOrchestrator` 作为当前 interrupt/resume 适配层
-- 仓库内 `forks/flowise/` 基线
-- 一个可消费本地 journal 的只读 Flowise shell
+- 工作台业务代码
+- 上游 Flowise fork 源码
+- 启动脚本与路径基线说明
 
-但还没有：
+这会放大两个问题：
 
-- “Flowise 是主交互壳，还是只是一块预览区”的单一真相
-- 把模板、仓库、工作树、决策、产物收敛到同一套 Flowise 页面骨架的布局裁决
+1. BoardGame 仓库职责被上游 fork 污染，删除/移动时 diff 面极大。
+2. 后续如果要单独维护、推送、升级 Flowise fork，很难和 BoardGame 业务改动解耦。
 
-## Goals / Non-Goals
+## Goals
 
-- Goals:
-  - 把 `FlowiseAI/Flowise` `flowise@3.1.1` `34cf285` 真实落到仓库独立目录。
-  - 明确这批源码只作为节点画布 / workflow shell 起点，不接管领域真相。
-  - 让 `AIRepoWorkbench` 以 Flowise shell 为页面主骨架，而不是继续外包一层“三栏产品壳 + 中间嵌一个画布”。
-  - 删除“双图并存”的主路径，让 Flowise 成为唯一图交互面，自绘节点图降级为状态摘要轨。
-- Non-Goals:
-  - 本 change 不要求今天就跑起完整 Flowise dev server。
-  - 本 change 不要求今天就让 Flowise 接管 `DecisionRequest`、`ArtifactBundle` 或 git worktree 生命周期。
-  - 本 change 不要求今天就完成移动端适配。
+- 把 Flowise fork 从 BoardGame worktree 迁到独立仓 `D:/gongzuo/webgame/flowise-fork/`
+- 保持 AI Repo Workbench 的本地开发入口可用
+- 让 BoardGame 仅保留外链基线与业务侧接线，不再内嵌上游源码
+- 为后续单独维护 Flowise fork 的提交、推送和升级留出清晰边界
+
+## Non-Goals
+
+- 本次不要求重新实现工作台业务逻辑
+- 本次不要求重跑完整 Flowise UI/服务端联调
+- 本次不处理其他仍在演进中的 ai-repo-workbench 功能改动
 
 ## Decisions
 
-- Decision: 上游源码落点使用 `forks/flowise/`
-  - Reason: 根目录当前没有既定 `vendor/` 或 `forks/` 目录；本 change 直接建立 `forks/` 语义，比把整坨上游代码塞进 `src/`、`temp/` 或隐藏子目录更清晰。
+- 决定 1：Flowise fork 固定落点改为 `D:/gongzuo/webgame/flowise-fork/`
+  - 原因：独立仓才能直接走自己的提交、推送、升级节奏，不再绑在 BoardGame worktree 上
 
-- Decision: 采用 vendor 式源码落盘，而不是嵌套 git repo / submodule
-  - Reason: 当前项目没有 submodule 规范；直接保留上游 `.git` 会把主仓库变成嵌套仓库，后续 diff、审计和打包都更混乱。
+- 决定 2：BoardGame 通过外部脚本路径启动 Flowise 本地环境
+  - 原因：保留现有本地工作流，同时避免在 BoardGame 内重复存放启动脚本副本
 
-- Decision: 这批源码先视为“静态 fork 基线”
-  - Reason: 当前目标是先给工作台 shell 一个真实上游起点，而不是立刻并行维护完整 Flowise 构建系统。接入代码先围绕目录基线和边界说明推进，再逐步做最小 UI/adapter 嵌入。
-
-- Decision: Flowise shell 直接成为页面主交互骨架
-  - Reason: 继续维护“主画布 + 下方 Flowise 预览”会让用户面对两套 graph interaction 语义。既然 `agentflow` 已经提供 ReactFlow、Controls、MiniMap、Background 和 header/palette 扩展点，就应把图交互统一到它身上，而不是继续修补自绘节点图。
-
-- Decision: 通过 `renderHeader` / `renderNodePalette` 把项目能力填入 Flowise 外壳
-  - Reason: 这能复用 Flowise 的页面骨架和交互分区，同时保留 `RepoSession`、模板启动、工作树管理这些本项目特有能力，不必再在外层硬包一套平级三栏。
-
-- Decision: 保留状态轨，但不再保留第二张图
-  - Reason: 运行摘要、当前节点切换和状态浏览仍有价值，但它不该再是绝对定位连线图。将其降级为非画布状态轨后，可以保留检查入口，同时避免与主 Flowise 争夺“哪套图才是真的”。
-
-- Decision: 右侧业务面板保留为覆盖层
-  - Reason: `DecisionRequest`、节点详情和 `ArtifactBundle` 仍然是本项目自己的业务 UI。将它们作为覆盖在 Flowise 主区边缘的业务层，可以保持领域真相边界，而不是强行塞进 Flowise 节点内部。
+- 决定 3：BoardGame 继续以 `flowiseForkBaseline.ts` 作为业务侧单一真实来源
+  - 原因：工作台其他代码不需要感知迁仓细节，只需要知道固定外链路径与上游基线元信息
 
 ## Risks / Trade-offs
 
-- 上游源码体积较大，会显著增加当前 worktree 改动量。
-- `agentflow` vendored 类型与宿主仓库 React 类型存在桥接成本，短期内可能需要显式类型转换。
-- 右侧覆盖层与底部状态轨当前按桌面布局优化，后续若推进移动端，需要重新校验遮挡、层级和可用高度。
-- Node 版本兼容仍是显式风险；本 change 只锁定源码，不假装兼容问题已经被解决。
+- `../flowise-fork` 是本地固定路径约定，后续若目录迁移，需要同步更新基线与脚本
+- 本次只做迁仓与引用切换，不等于已经重新完成一轮完整运行时回归
+- 独立仓与 BoardGame 仓的提交节奏分离后，需要明确“先改哪边、再回填哪边”的操作纪律
 
 ## Migration Plan
 
-1. 创建 `forks/flowise/` 目录并 vendor 上游 `flowise@3.1.1` 源码。
-2. 在仓库内补充 fork 说明文件，写清上游 tag/commit、目录边界和下一步集成方向。
-3. 运行 OpenSpec 校验，确认“真实 fork 落地”这条 change 已可审计。
-4. 在 `AIRepoWorkbench` 中接入只读 `FlowiseWorkbenchShell`，验证页面可消费本地 `FlowData` 映射。
-5. 将 `AIRepoWorkbench` 页面主体收敛到 Flowise header/palette/canvas，移除“第二张图”的主路径地位。
-6. 复跑目标 E2E 并把肉眼观察更新到证据文档，作为下一轮对话的续接依据。
+1. 将 `forks/flowise/` 整体迁出到独立仓 `D:/gongzuo/webgame/flowise-fork/`
+2. 将独立仓推到 GitHub 主分支，确保不再依赖临时迁移分支
+3. 回填 BoardGame 的启动脚本入口与基线路径
+4. 清理 BoardGame worktree 中已迁出的内嵌 fork 目录
+5. 用静态校验确认 BoardGame 不再硬引用 `forks/flowise`
