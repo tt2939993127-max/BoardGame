@@ -159,9 +159,27 @@ const dryRun = hasFlag('dry-run');
 const skipLatest = hasFlag('skip-latest');
 const distDir = path.join(rootDir, 'dist');
 const androidBuildMetaPath = path.join(distDir, 'android-build-meta.json');
-const builtAt = new Date().toISOString().replace(/[:.]/g, '-');
+const buildInstant = new Date();
+const builtAt = buildInstant.toISOString().replace(/[:.]/g, '-');
 const bundleVersion = explicitBundleVersion || `${packageJson.version}-ota-${builtAt}`;
 const manifestPrefix = `official/app-updates/android/${channel}`;
+const humanDateTimeFormatter = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+});
+const formatHumanTime = (value) => {
+    if (!value) return '(unknown)';
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return `${humanDateTimeFormatter.format(date)}（北京时间）`;
+};
+const bundleVersionHumanTime = formatHumanTime(buildInstant);
 const bundleKey = `${manifestPrefix}/bundles/${bundleVersion}.zip`;
 const versionManifestKey = `${manifestPrefix}/manifests/${bundleVersion}.json`;
 const latestManifestKey = `${manifestPrefix}/latest.json`;
@@ -291,6 +309,7 @@ const normalizedTargetNativeVersion = explicitTargetNativeVersion
 // stable 默认要求旧壳先升到当前原生版本，避免继续吃到新 OTA。
 // 如确需放行旧壳，必须显式传 --allow-legacy-shells，或手动指定 target/min/max。
 const resolvedTargetNativeVersion = normalizedTargetNativeVersion;
+const publishedAt = new Date();
 const manifest = {
     version: bundleVersion,
     url: bundleUrl,
@@ -308,10 +327,11 @@ const manifest = {
     ...(forceUpdate ? { forceUpdate: true } : {}),
     ...(forceUpdateTitle ? { forceUpdateTitle } : {}),
     ...(forceUpdateMessage ? { forceUpdateMessage } : {}),
-    publishedAt: new Date().toISOString(),
+    publishedAt: publishedAt.toISOString(),
     size: zipBuffer.length,
     notes,
 };
+const publishedAtHumanTime = formatHumanTime(publishedAt);
 
 const uploadObject = async (key, body, contentType, cacheControl) => {
     await s3Client.send(new PutObjectCommand({
@@ -335,6 +355,7 @@ const distStats = statSync(path.join(distDir, 'index.html'));
 console.log(dryRun ? 'OTA bundle 预演完成（未上传）' : 'OTA bundle 已发布');
 console.log(`channel=${channel}`);
 console.log(`bundleVersion=${bundleVersion}`);
+console.log(`bundleVersionHumanTime=${bundleVersionHumanTime}`);
 console.log(`nativeVersion=${nativeVersion}`);
 console.log(`mode=${dryRun ? 'dry-run' : 'publish'}`);
 console.log(`forceUpdate=${forceUpdate ? 'true' : 'false'}`);
@@ -353,4 +374,5 @@ console.log(`bundleKey=${bundleKey}`);
 console.log(`latestManifestKey=${latestManifestKey}`);
 console.log(`bundleUrl=${bundleUrl}`);
 console.log(`checksum=${checksum}`);
+console.log(`publishedAtHumanTime=${publishedAtHumanTime}`);
 console.log(`manifest=${JSON.stringify(manifest)}`);
