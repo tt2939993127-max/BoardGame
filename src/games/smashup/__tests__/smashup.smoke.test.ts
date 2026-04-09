@@ -4319,12 +4319,14 @@ describe('smashup', () => {
             bases: [
                 makeBase({
                     minions: [
-                        makeMinion('wolf-used-1', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
-                        makeMinion('wolf-used-2', 'werewolf_howler', '0', 3, { talentUsed: true }),
+                        makeMinion('wolf-outside', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
                     ],
                 }),
                 makeBase({
-                    minions: [makeMinion('wolf-other', 'werewolf_howler', '0', 3)],
+                    minions: [
+                        makeMinion('wolf-gws-a', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
+                        makeMinion('wolf-gws-b', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
+                    ],
                 }),
             ],
             titans: [{
@@ -4340,30 +4342,44 @@ describe('smashup', () => {
         });
 
         const state = makeMatchState(core);
-        const firstExtraUse: SmashUpCommand = {
+        const sameBaseSecondUse: SmashUpCommand = {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
-            payload: { minionUid: 'wolf-used-1', baseIndex: 0 },
+            payload: { minionUid: 'wolf-gws-a', baseIndex: 1 },
             timestamp: 67,
         };
+        const outsideBaseSecondUse: SmashUpCommand = {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'wolf-outside', baseIndex: 0 },
+            timestamp: 68,
+        };
 
-        expect(SmashUpDomain.validate(state, firstExtraUse).valid).toBe(true);
-        const events = SmashUpDomain.execute(state, firstExtraUse, FIXED_RANDOM);
+        expect(SmashUpDomain.validate(state, sameBaseSecondUse).valid).toBe(true);
+        expect(SmashUpDomain.validate(state, outsideBaseSecondUse).valid).toBe(false);
+        const events = SmashUpDomain.execute(state, sameBaseSecondUse, FIXED_RANDOM);
         expect(events.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
         expect(events.map(event => event.type)).toContain(SU_EVENTS.TEMP_POWER_ADDED);
 
         const resolved = events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
-        expect(resolved.players['0'].extraTalentUsesConsumed).toBe(1);
+        expect(resolved.greatWolfSpiritDoubleTalentCardUids).toContain('wolf-gws-a');
 
-        const secondExtraAttempt = makeMatchState(resolved);
-        const blockedCommand: SmashUpCommand = {
+        const afterFirstSecondUse = makeMatchState(resolved);
+        const otherCardSecondUse: SmashUpCommand = {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
-            payload: { minionUid: 'wolf-used-2', baseIndex: 0 },
-            timestamp: 68,
+            payload: { minionUid: 'wolf-gws-b', baseIndex: 1 },
+            timestamp: 69,
+        };
+        const thirdUseAttempt: SmashUpCommand = {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'wolf-gws-a', baseIndex: 1 },
+            timestamp: 70,
         };
 
-        expect(SmashUpDomain.validate(secondExtraAttempt, blockedCommand).valid).toBe(false);
+        expect(SmashUpDomain.validate(afterFirstSecondUse, otherCardSecondUse).valid).toBe(true);
+        expect(SmashUpDomain.validate(afterFirstSecondUse, thirdUseAttempt).valid).toBe(false);
     });
 
     it('巨狼之灵天赋会创建己方随从目标选择，并让目标直到回合结束获得 +1 战力', () => {
@@ -5136,5 +5152,76 @@ describe('smashup', () => {
         expect(finalPecos?.location).toMatchObject({ zone: 'base', baseIndex: 0 });
         expect(finalPecos?.metadata?.deferClashUntilDuelEnds).toBe(false);
         expect(finalArcane?.location.zone).toBe('setaside');
+    });
+    /*
+
+    it('宸ㄧ嫾涔嬬伒浼氬湪浣犵殑鍥炲悎寮€濮嬫椂鍒涘缓绉诲姩浜や簰锛屽苟鍙兘绉诲姩鍒颁綘涓ユ牸棰嗗厛鐨勫熀鍦?, () => {
+    */
+    it('Great Wolf Spirit creates a start-of-turn move interaction and only offers bases where you are strictly ahead', () => {
+        const core = makeState({
+            bases: [
+                makeBase({
+                    minions: [
+                        makeMinion('wolf-home', 'werewolf_teenage_wolf', '0', 3),
+                        makeMinion('enemy-home', 'ghosts_spectre', '1', 1),
+                    ],
+                }),
+                makeBase({
+                    minions: [
+                        makeMinion('wolf-destination', 'werewolf_howler', '0', 4),
+                        makeMinion('enemy-destination', 'ghosts_spectre', '1', 2),
+                    ],
+                }),
+                makeBase({
+                    minions: [
+                        makeMinion('wolf-tied', 'werewolf_howler', '0', 2),
+                        makeMinion('enemy-tied', 'ghosts_spectre', '1', 2),
+                    ],
+                }),
+            ],
+            titans: [{
+                uid: 't-gws',
+                defId: 'werewolves_great_wolf_spirit',
+                faction: SMASHUP_FACTION_IDS.WEREWOLVES,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            } satisfies TitanState],
+        });
+
+        const triggerResult = fireTriggers(core, 'onTurnStart', {
+            state: core,
+            matchState: makeMatchState(core, 'startTurn', '0'),
+            playerId: '0',
+            random: FIXED_RANDOM,
+            now: 71,
+        });
+
+        const currentInteraction = triggerResult.matchState?.sys.interaction?.current;
+        expect(currentInteraction?.data?.sourceId).toBe('titan_werewolves_great_wolf_spirit_move');
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.skip === true)).toBe(true);
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.baseIndex === 1)).toBe(true);
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.baseIndex === 2)).toBe(false);
+
+        const handler = getInteractionHandler('titan_werewolves_great_wolf_spirit_move');
+        expect(handler).toBeDefined();
+
+        const resolved = handler!(
+            triggerResult.matchState!,
+            '0',
+            { baseIndex: 1, baseDefId: core.bases[1].defId },
+            currentInteraction?.data as any,
+            FIXED_RANDOM,
+            72,
+        );
+        expect(resolved.events.map(event => event.type)).toEqual([SU_EVENTS.TITAN_MOVED]);
+
+        const moved = resolved.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        expect(moved.titans?.find(candidate => candidate.uid === 't-gws')?.location).toMatchObject({
+            zone: 'base',
+            baseIndex: 1,
+        });
     });
 });
