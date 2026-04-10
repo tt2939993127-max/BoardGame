@@ -33,18 +33,9 @@ export interface SmashUpScoringSession {
     currentBaseRef?: SmashUpScoringBaseRef;
     currentStep: SmashUpScoringStep;
     deferredPostScoringEvents?: SerializedPostScoringEvent[];
-    pendingPostScoringActions?: PendingPostScoringAction[];
-    afterScoringInitialPowers?: {
-        baseRef: SmashUpScoringBaseRef;
-        powers: Record<PlayerId, number>;
-    };
 }
 
 type SmashUpScoringStateCarrier = MatchState<SmashUpCore>['sys'] & {
-    afterScoringInitialPowers?: {
-        baseIndex: number;
-        powers: Record<PlayerId, number>;
-    };
     scoredBaseIndices?: number[];
     smashupScoring?: SmashUpScoringSession;
 };
@@ -66,12 +57,6 @@ function syncLegacyScoreBaseFields(
         ...sys,
         smashupScoring: session,
         scoredBaseIndices,
-        afterScoringInitialPowers: session?.afterScoringInitialPowers
-            ? {
-                baseIndex: session.afterScoringInitialPowers.baseRef.slotIndex,
-                powers: session.afterScoringInitialPowers.powers,
-            }
-            : undefined,
     };
 }
 
@@ -242,7 +227,7 @@ export function getDeferredReplacementBaseDefId(
 export function flushDeferredPostScoringCompatibility(
     state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
-    _timestamp: number,
+    timestamp: number,
 ): { state: MatchState<SmashUpCore>; events: SmashUpEvent[]; flushed: boolean } {
     if (getScoringSession(state)) {
         return { state, events: [], flushed: false };
@@ -259,46 +244,26 @@ export function flushDeferredPostScoringCompatibility(
         timestamp: event.timestamp,
     })) as SmashUpEvent[];
 
-    return { state, events: flushedEvents, flushed: true };
-}
-
-export function mergeDeferredPostScoringCompatibility(
-    state: MatchState<SmashUpCore>,
-    interactionData: Record<string, unknown> | undefined,
-    timestamp: number,
-    options?: {
-        primaryEvents?: SmashUpEvent[];
-        primaryOrder?: 'before' | 'after';
-        extraPendingActions?: PendingPostScoringAction[];
-    },
-): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } | undefined {
-    if (getScoringSession(state)) {
-        const updatedState = appendPendingPostScoringActions(state, options?.extraPendingActions);
-        const primaryEvents = options?.primaryEvents ?? [];
-        return {
-            state: updatedState,
-            events: primaryEvents,
-        };
-    }
-
-    const compatibility = flushDeferredPostScoringCompatibility(state, interactionData, timestamp);
-    if (!compatibility.flushed) {
-        return undefined;
-    }
-
-    const primaryEvents = options?.primaryEvents ?? [];
-    const primaryOrder = options?.primaryOrder ?? 'after';
-    const extraPendingActionEvents = buildPendingPostScoringActionEvents(
-        { core: state.core },
-        options?.extraPendingActions,
-        timestamp,
+    flushedEvents.push(
+        ...buildPendingPostScoringActionEvents(
+            { core: state.core },
+            state.core.pendingPostScoringActions,
+            timestamp,
+        ),
     );
 
     return {
-        state: compatibility.state,
-        events: primaryOrder === 'before'
-            ? [...compatibility.events, ...extraPendingActionEvents, ...primaryEvents]
-            : [...primaryEvents, ...compatibility.events, ...extraPendingActionEvents],
+        state: state.core.pendingPostScoringActions?.length
+            ? {
+                ...state,
+                core: {
+                    ...state.core,
+                    pendingPostScoringActions: undefined,
+                },
+            }
+            : state,
+        events: flushedEvents,
+        flushed: true,
     };
 }
 
@@ -311,8 +276,9 @@ export function resolveScoringBaseRefSlotIndex(
     if (slotBase?.defId === baseRef.baseDefId) {
         return baseRef.slotIndex;
     }
-    const matchedIndex = state.core.bases.findIndex((candidate) => candidate?.defId === baseRef.baseDefId);
-    return matchedIndex >= 0 ? matchedIndex : undefined;
+    return state.core.bases.findIndex((candidate) => candidate?.defId === baseRef.baseDefId) >= 0
+        ? state.core.bases.findIndex((candidate) => candidate?.defId === baseRef.baseDefId)
+        : undefined;
 }
 
 export function markScoringBaseCompleted(
@@ -329,31 +295,6 @@ export function markScoringBaseCompleted(
                 : [...session.completedBaseRefs, baseRef],
             currentBaseRef: undefined,
             deferredPostScoringEvents: undefined,
-            pendingPostScoringActions: undefined,
-            afterScoringInitialPowers: undefined,
-        };
-    });
-}
-
-export function appendPendingPostScoringActions(
-    state: MatchState<SmashUpCore>,
-    actions: PendingPostScoringAction[] | undefined,
-): MatchState<SmashUpCore> {
-    if (!actions?.length) {
-        return state;
-    }
-
-    return updateScoringSession(state, (session) => {
-        if (!session) {
-            return session;
-        }
-
-        return {
-            ...session,
-            pendingPostScoringActions: [
-                ...(session.pendingPostScoringActions ?? []),
-                ...actions,
-            ],
         };
     });
 }

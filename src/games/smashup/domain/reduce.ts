@@ -1953,6 +1953,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const oldBase = baseIndex < state.bases.length ? state.bases[baseIndex] : undefined;
             let reusedTalent = false;
             let consumedStandingStones = false;
+            let standingStonesHostMinionUid: string | undefined;
 
             if (ongoingCardUid) {
                 const baseOngoing = oldBase?.ongoingActions.find(o => o.uid === ongoingCardUid);
@@ -1964,6 +1965,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         const attached = minion.attachedActions.find(action => action.uid === ongoingCardUid);
                         if (attached?.talentUsed) {
                             reusedTalent = true;
+                            consumedStandingStones =
+                                oldBase?.defId === 'base_standing_stones'
+                                && minion.controller === playerId
+                                && !state.standingStonesDoubleTalentMinionUid;
+                            standingStonesHostMinionUid = minion.uid;
                             break;
                         }
                     }
@@ -2006,32 +2012,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             });
             // 巨石阵双才能追踪：如果随从在使用前 talentUsed 已为 true，说明这是第二次使用
             let newStandingStonesUid = state.standingStonesDoubleTalentMinionUid;
-            if (minionUid && !ongoingCardUid && consumedStandingStones) {
-                newStandingStonesUid = minionUid;
-            }
-            const talentCardUid = ongoingCardUid ?? titanUid ?? minionUid;
-            const greatWolfSpiritBaseIndex = (state.titans ?? []).find(titan =>
-                titan.defId === 'werewolves_great_wolf_spirit'
-                && titan.location.zone === 'base'
-                && titan.controllerId === playerId
-                && !(state.titanOngoingSuppressedUntilTurnEnd ?? []).includes(titan.uid),
-            )?.location.baseIndex;
-            const consumedGreatWolfSpirit =
-                reusedTalent
-                && !consumedStandingStones
-                && talentCardUid !== undefined
-                && greatWolfSpiritBaseIndex !== undefined
-                && baseIndex === greatWolfSpiritBaseIndex;
-            let newGreatWolfSpiritDoubleTalentCardUids = state.greatWolfSpiritDoubleTalentCardUids;
-            if (
-                consumedGreatWolfSpirit
-                && talentCardUid
-                && !(newGreatWolfSpiritDoubleTalentCardUids ?? []).includes(talentCardUid)
-            ) {
-                newGreatWolfSpiritDoubleTalentCardUids = [
-                    ...(newGreatWolfSpiritDoubleTalentCardUids ?? []),
-                    talentCardUid,
-                ];
+            if (consumedStandingStones) {
+                newStandingStonesUid = standingStonesHostMinionUid ?? minionUid;
             }
             const newTitans = titanUid
                 ? (state.titans ?? []).map(titan =>
@@ -2039,7 +2021,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 )
                 : state.titans;
             const currentPlayer = state.players[playerId];
-            const nextPlayer = reusedTalent && !consumedStandingStones && !consumedGreatWolfSpirit && currentPlayer
+            const nextPlayer = reusedTalent && !consumedStandingStones && currentPlayer
                 ? {
                     ...currentPlayer,
                     extraTalentUsesConsumed: (currentPlayer.extraTalentUsesConsumed ?? 0) + 1,
@@ -2050,7 +2032,6 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 bases: newBases,
                 titans: newTitans,
                 standingStonesDoubleTalentMinionUid: newStandingStonesUid,
-                greatWolfSpiritDoubleTalentCardUids: newGreatWolfSpiritDoubleTalentCardUids,
                 players: nextPlayer
                     ? { ...state.players, [playerId]: nextPlayer }
                     : state.players,
@@ -2386,7 +2367,6 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const newDiscard = player.discard.filter(c => c.uid !== cardUid);
             return {
                 ...state,
-                madnessDeck: [...state.madnessDeck, returningCard.defId],
                 players: {
                     ...state.players,
                     [playerId]: { ...player, hand: newHand, discard: newDiscard },

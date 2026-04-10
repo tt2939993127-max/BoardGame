@@ -63,56 +63,6 @@ function buildReactionQueueOptionLabel(trigger: TriggerInstance): string {
   return `${sourceLabel} · ${getReactionTimingLabelKey(trigger.timing)}`;
 }
 
-function buildReactionQueueAiHint(
-  core: SmashUpCore,
-  decider: PlayerId,
-  trigger: TriggerInstance,
-): AiHint {
-  const ownerIsActor = trigger.ownerPlayerId === decider;
-  const scoringTiming = trigger.timing === 'beforeScoring'
-    || trigger.timing === 'whenScoring'
-    || trigger.timing === 'afterScoring';
-  const tags = [
-    'reaction-queue',
-    `timing:${trigger.timing}`,
-    ownerIsActor ? 'owner:self' : 'owner:enemy',
-    ...(trigger.mandatory ? ['mandatory'] : []),
-    ...(scoringTiming ? ['scoring'] : []),
-  ];
-
-  let priorityHint = ownerIsActor ? 18 : -14;
-  if (scoringTiming) priorityHint += 8;
-
-  let estimatedSwing: number | undefined;
-  if (trigger.rankings && trigger.rankings.length > 0) {
-    const ownVp = trigger.rankings.find(r => r.playerId === decider)?.vp ?? 0;
-    const bestOpponentVp = trigger.rankings
-      .filter(r => r.playerId !== decider)
-      .reduce((best, r) => Math.max(best, r.vp), 0);
-    estimatedSwing = ownVp - bestOpponentVp;
-    priorityHint += estimatedSwing * 6;
-    if (estimatedSwing > 0) tags.push('vp-advantage');
-    if (estimatedSwing < 0) tags.push('vp-disadvantage');
-  }
-
-  const targetKind = trigger.actionTargetType === 'minion'
-    ? 'minion'
-    : trigger.actionTargetType === 'base'
-      ? 'base'
-      : typeof trigger.baseIndex === 'number'
-        ? 'base'
-        : undefined;
-
-  return buildTargetAiHint({
-    actorPlayerId: decider,
-    ...(targetKind ? { targetKind } : {}),
-    ...(estimatedSwing !== undefined ? { estimatedSwing } : {}),
-    priorityHint,
-    tags,
-    derivedFrom: 'explicit',
-  });
-}
-
 export function maybeResolveReactionQueue(
   state: MatchState<SmashUpCore>,
   random: RandomFn,

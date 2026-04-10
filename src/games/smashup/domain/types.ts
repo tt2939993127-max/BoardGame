@@ -1383,10 +1383,6 @@ export interface MinionControlChangedEvent extends GameEvent<typeof SU_EVENTS.MI
         fromControllerId: PlayerId;
         toControllerId: PlayerId;
         sourcePlayerId: PlayerId;
-        sourceCardUid?: string;
-        sourceDefId?: string;
-        sourceControllerId?: PlayerId;
-        sourceBaseIndex?: number;
         reason: string;
     };
 }
@@ -1740,6 +1736,26 @@ export interface CardSuppressedEvent extends GameEvent<typeof SU_EVENTS.CARD_SUP
         sourceDefId?: string;
         sourceControllerId?: PlayerId;
         sourceBaseIndex?: number;
+    };
+}
+
+/** 主动基地能力已使用事件 */
+export interface BaseAbilityUsedEvent extends GameEvent<typeof SU_EVENTS.BASE_ABILITY_USED> {
+    payload: {
+        playerId: PlayerId;
+        baseIndex: number;
+        baseDefId: string;
+    };
+}
+
+/** 卡牌能力压制事件（直到压制者的下个回合开始） */
+export interface CardSuppressedEvent extends GameEvent<typeof SU_EVENTS.CARD_SUPPRESSED> {
+    payload: {
+        cardUid: string;
+        baseIndex: number;
+        suppressorPlayerId: PlayerId;
+        cardType: 'minion' | 'ongoing' | 'attached' | 'titan';
+        reason: string;
     };
 }
 
