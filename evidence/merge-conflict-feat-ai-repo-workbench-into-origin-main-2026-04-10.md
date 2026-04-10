@@ -60,3 +60,16 @@
 - 当前状态：冲突已解决，待创建 merge commit。
 - 目标提交：合并 `feat/ai-repo-workbench` 到 `origin/main` 基线的 merge commit。
 - 后续：merge commit 后执行 `npm run merge:audit:strict -- HEAD`，再决定是否推送到远端 `main`。
+
+## 8. merge 后追加门禁修正
+- 在首次推送 `main` 时，changed-quality-gate 额外暴露 2 条旧测试口径：
+  - `src/games/smashup/__tests__/factionAbilities.test.ts`
+    - `dino_survival_of_the_fittest` 用例未传当前必填的 `targetBaseIndex`
+  - `src/games/smashup/__tests__/madnessPromptAbilities.test.ts`
+    - `miskatonic_book_of_iter_the_unseen` 仍按旧口径断言疯狂牌库长度未增加
+- 处理：
+  - 前者补传 `targetBaseIndex: 0`
+  - 后者把断言更新为 `MADNESS_DECK_SIZE + 1`
+- 定向复验：
+  - `npx vitest run src/games/smashup/__tests__/factionAbilities.test.ts -t "dino_survival_of_the_fittest: 每个基地消灭一个最低力量随从"` ✅
+  - `npx vitest run src/games/smashup/__tests__/madnessPromptAbilities.test.ts -t "选择从手牌返回1张疯狂卡后正确更新状态"` ✅
