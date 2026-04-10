@@ -11,8 +11,6 @@ import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
 import {
     applyAiAutoRecoveryRejection,
-    resolveForceAdvancePhaseAfterRecovery,
-    resolveForceEndTurnFollowUpAfterConfirmation,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -1180,7 +1178,7 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
 });
 
 describe('resolveForceEndTurnForStalledAi', () => {
-    it('隐藏交互卡住 8 秒后，应先单独收口交互，等待确认后再决定是否推进阶段', () => {
+    it('隐藏交互卡住 8 秒后，应先收口交互再 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1223,13 +1221,13 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('hidden-interaction');
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'skip' } },
+            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
-    it('不可跳过的交互卡住时，应先单独 CANCEL，等待确认后再决定是否推进阶段', () => {
+    it('不可跳过的交互卡住时，应改为 CANCEL 后再 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1261,13 +1259,13 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('visible-interaction');
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'SYS_INTERACTION_CANCEL', payload: {} },
+            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
-    it('响应窗口卡住时，应先单独 RESPONSE_PASS，等待确认后再决定是否推进阶段', () => {
+    it('响应窗口卡住时，应 RESPONSE_PASS 后再 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1293,13 +1291,13 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('response-window');
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'RESPONSE_PASS', payload: {} },
+            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
-    it('无交互阻塞但轮到 AI 且共享态 8 秒未变化时，应允许强制 ADVANCE_PHASE 收口主动回合卡死', () => {
+    it('无交互阻塞但轮到 AI 时，应直接 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1327,220 +1325,6 @@ describe('resolveForceEndTurnForStalledAi', () => {
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'ADVANCE_PHASE', payload: {} },
         ]);
-    });
-
-    it('当前轮到 human 时，不应把玩家回合误判成 AI active-turn 卡死并强制推进', () => {
-        expect(resolveForceEndTurnForStalledAi({
-            sharedState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                    },
-                    responseWindow: {
-                        current: undefined,
-                    },
-                    turnNumber: 3,
-                    phase: 'playCards',
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '0': { type: 'human' },
-                '1': { type: 'local-ai' },
-            },
-            seatStates: {},
-        })).toBeNull();
-    });
-
-    it('响应窗口当前 responder 是 human 时，不应自动 RESPONSE_PASS 或误转成 AI active-turn', () => {
-        expect(resolveForceEndTurnForStalledAi({
-            sharedState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                    },
-                    responseWindow: {
-                        current: {
-                            responderQueue: ['0', '1'],
-                            currentResponderIndex: 0,
-                        },
-                    },
-                    turnNumber: 3,
-                    phase: 'playCards',
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '0': { type: 'human' },
-                '1': { type: 'local-ai' },
-            },
-            seatStates: {},
-        })).toBeNull();
-    });
-});
-
-describe('resolveForceAdvancePhaseAfterRecovery', () => {
-    it('恢复成功后仍是该 AI 的回合且无新阻塞时，应返回单独 ADVANCE_PHASE', () => {
-        const resolution = resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    turnNumber: 3,
-                    phase: 'playCards',
-                    eventStream: { nextId: 11 },
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                        isBlocked: false,
-                    },
-                    responseWindow: {
-                        current: undefined,
-                    },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        });
-
-        expect(resolution?.action.commands).toEqual([{ type: 'ADVANCE_PHASE', payload: {} }]);
-        expect(resolution?.attemptKey).toContain('force-end-turn:1:follow-up:1:3:playCards:11');
-    });
-
-    it('恢复后若已经切到人类/出现新交互/仍有响应窗口，则不应继续 ADVANCE_PHASE', () => {
-        expect(resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: { current: undefined, queue: [], isBlocked: false },
-                    responseWindow: { current: undefined },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        })).toBeNull();
-
-        expect(resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    interaction: {
-                        current: { id: 'next-choice', playerId: '1' },
-                        queue: [],
-                        isBlocked: false,
-                    },
-                    responseWindow: { current: undefined },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        })).toBeNull();
-
-        expect(resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    interaction: { current: undefined, queue: [], isBlocked: false },
-                    responseWindow: { current: { responderQueue: ['1'], currentResponderIndex: 0 } },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        })).toBeNull();
-    });
-});
-
-describe('resolveForceEndTurnFollowUpAfterConfirmation', () => {
-    it('恢复后若已切到人类回合，则桥接层不应再生成 follow-up ADVANCE_PHASE', () => {
-        const candidate = resolveForceEndTurnForStalledAi({
-            sharedState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                        isBlocked: true,
-                    },
-                    responseWindow: {
-                        current: {
-                            responderQueue: ['1'],
-                            currentResponderIndex: 0,
-                        },
-                    },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            seatStates: {
-                '1': {
-                    core: {
-                        activePlayerId: '1',
-                    },
-                    sys: {
-                        interaction: {
-                            current: undefined,
-                            queue: [],
-                            isBlocked: false,
-                        },
-                        responseWindow: {
-                            current: {
-                                responderQueue: ['1'],
-                                currentResponderIndex: 0,
-                            },
-                        },
-                    },
-                } as MatchState<unknown>,
-            },
-            now: 10_000,
-            thresholdMs: 8_000,
-        });
-
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
-        expect(resolveForceEndTurnFollowUpAfterConfirmation({
-            candidate: candidate!,
-            authoritativeState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                        isBlocked: false,
-                    },
-                    responseWindow: {
-                        current: undefined,
-                    },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-        })).toBeNull();
     });
 });
 
