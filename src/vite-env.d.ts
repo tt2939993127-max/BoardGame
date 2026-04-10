@@ -5,11 +5,6 @@ interface ImportMetaEnv {
     readonly VITE_AUTH_API_URL?: string;
     readonly VITE_GAME_SERVER_URL?: string;
     readonly VITE_ASSETS_BASE_URL?: string;
-    readonly VITE_AUDIO_ASSETS_BASE_URL?: string;
-    readonly VITE_ANDROID_APP_DOWNLOAD_URL?: string;
-    readonly VITE_ANDROID_NATIVE_UPDATE_ENABLED?: string;
-    readonly VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL?: string;
-    readonly VITE_ANDROID_NATIVE_UPDATE_CHANNEL?: string;
     readonly VITE_ANDROID_OTA_ENABLED?: string;
     readonly VITE_ANDROID_OTA_ALLOW_DEBUG_APP?: string;
     readonly VITE_ANDROID_OTA_MANIFEST_URL?: string;
@@ -28,3 +23,13 @@ declare const __LOCALE_HASHES__: Record<string, string>;
 declare const __ASSET_HASHES__: Record<string, string>;
 /** 构建时注入的 public 根目录静态文件 content hash 映射（fonts/logos/game-data） */
 declare const __PUBLIC_FILE_HASHES__: Record<string, string>;
+
+declare module '*.yaml?raw' {
+    const content: string;
+    export default content;
+}
+
+declare module '*.yml?raw' {
+    const content: string;
+    export default content;
+}

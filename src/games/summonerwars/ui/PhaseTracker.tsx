@@ -4,7 +4,7 @@
  * 使用 SVG 图标而非 emoji
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { GamePhase } from '../domain/types';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
@@ -53,17 +53,14 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   const { t, i18n } = useTranslation('game-summonerwars');
   const isCoarsePointer = useCoarsePointer();
   const [hoveredPhaseId, setHoveredPhaseId] = useState<string | null>(null);
-  const [selectedPhaseState, setSelectedPhaseState] = useState<{
-    sessionKey: string;
-    phaseId: Exclude<GamePhase, 'factionSelect'>;
-  } | null>(null);
+  const [selectedPhaseId, setSelectedPhaseId] = useState<Exclude<GamePhase, 'factionSelect'> | null>(null);
   const phaseCursor: Exclude<GamePhase, 'factionSelect'> = currentPhase === 'factionSelect'
     ? PHASE_ORDER[0]
     : currentPhase;
-  const selectionSessionKey = `${phaseCursor}:${isCoarsePointer ? 'coarse' : 'fine'}`;
-  const selectedPhaseId = selectedPhaseState?.sessionKey === selectionSessionKey
-    ? selectedPhaseState.phaseId
-    : null;
+
+  useEffect(() => {
+    setSelectedPhaseId(null);
+  }, [currentPhase, isCoarsePointer]);
 
   const phasesBase: Omit<PhaseConfig, 'count' | 'maxCount'>[] = PHASE_ORDER.map((phaseId) => ({
     id: phaseId,
@@ -120,15 +117,13 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
                 role={isCoarsePointer ? 'button' : undefined}
                 tabIndex={isCoarsePointer ? 0 : undefined}
                 onClick={() => {
-                  if (isCoarsePointer) {
-                    setSelectedPhaseState({ sessionKey: selectionSessionKey, phaseId: phase.id });
-                  }
+                  if (isCoarsePointer) setSelectedPhaseId(phase.id);
                 }}
                 onKeyDown={(event) => {
                   if (!isCoarsePointer) return;
                   if (event.key !== 'Enter' && event.key !== ' ') return;
                   event.preventDefault();
-                  setSelectedPhaseState({ sessionKey: selectionSessionKey, phaseId: phase.id });
+                  setSelectedPhaseId(phase.id);
                 }}
                 className={`
                   flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all

@@ -9,14 +9,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, MessageSquareWarning } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
-import { CharacterSelectionBadge } from '../../../components/game/framework/CharacterSelectionBadge';
 import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
 import { getPlayerBoardAspectRatio } from './abilitySlotLayout';
 import {
     DICETHRONE_CHARACTER_CATALOG,
-    type CharacterDefinition,
     type SelectableCharacterId,
     type CharacterId,
     type PendingSeatSwapRequest,
@@ -24,7 +22,6 @@ import {
 } from '../domain/types';
 import type { PlayerId } from '../../../engine/types';
 import clsx from 'clsx';
-import { buildRuntimeInlineUnitValue } from '../../mobileSupport';
 
 export interface DiceThroneHeroSelectionProps {
     isOpen: boolean;
@@ -86,11 +83,10 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     onStart,
     locale,
 }) => {
-    const { t } = useTranslation(['game-dicethrone', 'common']);
+    const { t } = useTranslation('game-dicethrone');
     const isHost = currentPlayerId === hostPlayerId;
     const playerIds = Object.keys(playerNames);
     const isFourPlayerMode = playerIds.length === 4;
-    const inlineUnit = buildRuntimeInlineUnitValue;
 
     const everyoneReady = playerIds.every(pid => {
         const char = selectedCharacters[pid as PlayerId];
@@ -205,41 +201,27 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 key={`seat-player-${pid}-${seatIndex}`}
                 data-testid={`dt-seat-swap-seat-${pid}`}
                 className={clsx(
-                    'border text-left transition-all',
+                    'min-w-[8.6vw] rounded-[0.9vw] border px-[0.8vw] py-[0.68vw] text-left transition-all',
                     isRequesterSeat || isTargetSeat
-                        ? 'border-amber-300/70 bg-amber-500/12'
+                        ? 'border-amber-300/70 bg-amber-500/12 shadow-[0_0_1vw_rgba(245,158,11,0.22)]'
                         : isMe
                             ? 'border-white/28 bg-white/10'
                             : 'border-white/12 bg-black/25'
                 )}
-                style={{
-                    minWidth: inlineUnit(8.6),
-                    borderRadius: inlineUnit(0.9),
-                    paddingLeft: inlineUnit(0.8),
-                    paddingRight: inlineUnit(0.8),
-                    paddingTop: inlineUnit(0.68),
-                    paddingBottom: inlineUnit(0.68),
-                    ...(isRequesterSeat || isTargetSeat
-                        ? { boxShadow: `0 0 ${inlineUnit(1)} rgba(245,158,11,0.22)` }
-                        : {}),
-                }}
             >
-                <div className="flex items-center" style={{ gap: inlineUnit(0.55) }}>
+                <div className="flex items-center gap-[0.55vw]">
                     <button
                         type="button"
                         onClick={() => handleSeatSwapAvatarClick(pid)}
                         disabled={avatarDisabled}
                         data-testid={`dt-seat-swap-avatar-${pid}`}
                         className={clsx(
-                            'relative flex items-center justify-center rounded-full font-black transition-all',
+                            'relative flex h-[1.7vw] w-[1.7vw] items-center justify-center rounded-full font-black text-[0.62vw] transition-all',
                             avatarDisabled
                                 ? 'cursor-default opacity-95'
                                 : 'cursor-pointer hover:scale-105 hover:ring-2 hover:ring-amber-300/55'
                         )}
                         style={{
-                            width: inlineUnit(1.7),
-                            height: inlineUnit(1.7),
-                            fontSize: inlineUnit(0.62),
                             backgroundColor: colors.bg,
                             color: colors.text,
                             boxShadow: `0 0 12px ${colors.glow}`,
@@ -247,36 +229,21 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                     >
                         {getPlayerLabel(pid)}
                         {isAiSeat && (
-                            <span
-                                className="absolute rounded-full border border-sky-200/45 bg-sky-500 font-black uppercase tracking-[0.08em] text-white"
-                                style={{
-                                    right: `-${inlineUnit(0.16)}`,
-                                    bottom: `-${inlineUnit(0.12)}`,
-                                    paddingLeft: inlineUnit(0.16),
-                                    paddingRight: inlineUnit(0.16),
-                                    paddingTop: inlineUnit(0.02),
-                                    paddingBottom: inlineUnit(0.02),
-                                    fontSize: inlineUnit(0.34),
-                                    boxShadow: `0 0 ${inlineUnit(0.35)} rgba(14,165,233,0.45)`,
-                                }}
-                            >
+                            <span className="absolute -right-[0.16vw] -bottom-[0.12vw] rounded-full border border-sky-200/45 bg-sky-500 px-[0.16vw] py-[0.02vw] text-[0.34vw] font-black uppercase tracking-[0.08em] text-white shadow-[0_0_0.35vw_rgba(14,165,233,0.45)]">
                                 {t('selection.seating.aiBadge')}
                             </span>
                         )}
                     </button>
                     <div className="min-w-0">
-                        <div className="font-black text-white/90" style={{ fontSize: inlineUnit(0.56) }}>
+                        <div className="text-[0.56vw] font-black text-white/90">
                             {t('selection.seating.seatNumber', { seat: seatIndex + 1 })}
                         </div>
-                        <div className="truncate text-white/60" style={{ fontSize: inlineUnit(0.52) }}>
+                        <div className="truncate text-[0.52vw] text-white/60">
                             {getPlayerDisplayName(pid)}
                         </div>
                     </div>
                 </div>
-                <div
-                    className={clsx('truncate font-bold', hasSelected ? 'text-amber-300' : 'text-white/35')}
-                    style={{ marginTop: inlineUnit(0.35), fontSize: inlineUnit(0.5) }}
-                >
+                <div className={clsx('mt-[0.35vw] truncate text-[0.5vw] font-bold', hasSelected ? 'text-amber-300' : 'text-white/35')}>
                     {hasSelected ? t(`characters.${selectedCharacters[pid]}`) : t('selection.notSelected')}
                 </div>
             </div>
@@ -293,33 +260,15 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 <span
                     key={`ready-dot-${pid}`}
                     className={clsx(
-                        'rounded-full',
+                        'w-[0.55vw] h-[0.55vw] rounded-full',
                         isReady
-                            ? 'bg-emerald-400'
+                            ? 'bg-emerald-400 shadow-[0_0_0.6vw_rgba(16,185,129,0.6)]'
                             : 'bg-white/30'
                     )}
-                    style={isReady
-                        ? {
-                            width: inlineUnit(0.55),
-                            height: inlineUnit(0.55),
-                            boxShadow: `0 0 ${inlineUnit(0.6)} rgba(16,185,129,0.6)`,
-                        }
-                        : {
-                            width: inlineUnit(0.55),
-                            height: inlineUnit(0.55),
-                        }}
                 />
             );
         });
-    }, [hostPlayerId, inlineUnit, playerIds, readyPlayers, selectedCharacters]);
-
-    const getOverlayBadge = (character: CharacterDefinition) => {
-        return character.badges?.find((badge) => badge.variant === 'disabled-overlay');
-    };
-
-    const getPillBadges = (character: CharacterDefinition) => {
-        return character.badges?.filter((badge) => badge.variant !== 'disabled-overlay') ?? [];
-    };
+    }, [playerIds, selectedCharacters, readyPlayers, hostPlayerId]);
 
     if (!isOpen) return null;
 
@@ -347,34 +296,15 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
             <div className="absolute inset-0 bg-indigo-950/3 pointer-events-none" style={{ zIndex: 1 }} />
 
             {/* 左侧：英雄选择列表 (18vw) */}
-            <div
-                className="h-full border-r border-white/5 flex flex-col z-10 bg-black/15 backdrop-blur-2xl relative flex-shrink-0"
-                style={{ width: inlineUnit(18) }}
-            >
-                <div
-                    className="border-b border-white/10"
-                    style={{
-                        paddingLeft: inlineUnit(1),
-                        paddingRight: inlineUnit(1),
-                        paddingTop: inlineUnit(1.2),
-                        paddingBottom: inlineUnit(0.6),
-                    }}
-                >
-                    <h2 className="font-bold text-white/90 uppercase tracking-wider" style={{ fontSize: inlineUnit(1) }}>
+            <div className="w-[18vw] h-full border-r border-white/5 flex flex-col z-10 bg-black/15 backdrop-blur-2xl relative flex-shrink-0">
+                <div className="px-[1vw] pt-[1.2vw] pb-[0.6vw] border-b border-white/10">
+                    <h2 className="text-[1vw] font-bold text-white/90 uppercase tracking-wider">
                         {t('selection.title')}
                     </h2>
                 </div>
-                <div
-                    className="flex-1 overflow-y-auto custom-scrollbar grid grid-cols-2 content-start"
-                    style={{
-                        padding: inlineUnit(1),
-                        gap: inlineUnit(0.8),
-                    }}
-                >
+                <div className="flex-1 overflow-y-auto custom-scrollbar p-[1vw] grid grid-cols-2 gap-[0.8vw] content-start pt-[1vw]">
                     {availableCharacters.map((char, index) => {
                         const isSelectedByMe = selectedCharacters[currentPlayerId] === char.id;
-                        const overlayBadge = getOverlayBadge(char);
-                        const pillBadges = getPillBadges(char);
 
                         return (
                             <motion.div
@@ -384,12 +314,11 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: index * 0.03 }}
                                 className={clsx(
-                                    "relative aspect-[3/4] border-2 transition-all duration-300 overflow-hidden cursor-pointer group",
+                                    "relative aspect-[3/4] rounded-[0.4vw] border-2 transition-all duration-300 overflow-hidden cursor-pointer group",
                                     isSelectedByMe
                                         ? "border-amber-400 shadow-[0_0_1.5vw_rgba(251,191,36,0.4)] z-20 scale-[1.02]"
                                         : "border-white/10 hover:border-white/30 hover:scale-[1.02]"
                                 )}
-                                style={{ borderRadius: inlineUnit(0.4) }}
                                 onClick={() => handleSelectCharacter(char.id as SelectableCharacterId)}
                             >
                                 <div className={clsx(
@@ -400,73 +329,18 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
 
-                                {pillBadges.length ? (
-                                    <div
-                                        className="absolute left-0 z-20 flex flex-col items-start pointer-events-none"
-                                        style={{
-                                            top: inlineUnit(0.34),
-                                            left: inlineUnit(0.34),
-                                            gap: inlineUnit(0.28),
-                                            maxWidth: `calc(100% - ${inlineUnit(1.9)})`,
-                                        }}
-                                    >
-                                        {pillBadges.map((badge) => (
-                                            <CharacterSelectionBadge
-                                                key={badge.id}
-                                                badge={badge}
-                                                label={t(badge.labelKey)}
-                                                inlineUnit={inlineUnit}
-                                                testId={`character-badge-${char.id}-${badge.id}`}
-                                            />
-                                        ))}
-                                    </div>
-                                ) : null}
-
-                                {overlayBadge ? (
-                                    <div className="absolute inset-0 z-20 pointer-events-none">
-                                        <div className="absolute inset-0 overflow-hidden">
-                                            <CharacterSelectionBadge
-                                                badge={overlayBadge}
-                                                label={t(overlayBadge.labelKey)}
-                                                inlineUnit={inlineUnit}
-                                                mode="overlay"
-                                                testId={`character-badge-${char.id}-${overlayBadge.id}`}
-                                            />
-                                        </div>
-                                    </div>
-                                ) : null}
-
-                                <div
-                                    className="absolute"
-                                    style={{
-                                        bottom: inlineUnit(0.5),
-                                        left: inlineUnit(0.5),
-                                        right: inlineUnit(0.5),
-                                    }}
-                                >
-                                    <div className="font-black truncate uppercase tracking-tight text-white/90" style={{ fontSize: inlineUnit(0.7) }}>
+                                <div className="absolute bottom-[0.5vw] left-[0.5vw] right-[0.5vw]">
+                                    <div className="text-[0.7vw] font-black truncate uppercase tracking-tight text-white/90">
                                         {t(char.nameKey)}
                                     </div>
                                 </div>
 
-                                <div
-                                    className="absolute flex"
-                                    style={{
-                                        top: inlineUnit(0.3),
-                                        right: inlineUnit(0.3),
-                                        marginLeft: `-${inlineUnit(0.3)}`,
-                                    }}
-                                >
+                                <div className="absolute top-[0.3vw] right-[0.3vw] flex -space-x-[0.3vw]">
                                     {playerIds.filter(pid => selectedCharacters[pid as PlayerId] === char.id).map(pid => (
                                         <div
                                             key={pid}
-                                            className="rounded-full border border-white/80 flex items-center justify-center font-black shadow-lg"
-                                            style={{
-                                                width: inlineUnit(1.2),
-                                                height: inlineUnit(1.2),
-                                                fontSize: inlineUnit(0.5),
-                                                backgroundColor: PLAYER_COLORS[pid]?.bg,
-                                            }}
+                                            className="w-[1.2vw] h-[1.2vw] rounded-full border border-white/80 flex items-center justify-center text-[0.5vw] font-black shadow-lg"
+                                            style={{ backgroundColor: PLAYER_COLORS[pid]?.bg }}
                                         >
                                             {PLAYER_LABELS[pid]}
                                         </div>
@@ -480,10 +354,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
             {/* 右侧：角色预览区 */}
             <div className="flex-1 h-full relative flex flex-col z-10 overflow-hidden bg-gradient-to-br from-slate-900/5 to-black/12">
-                <div
-                    className="flex-1 flex items-center justify-center overflow-hidden"
-                    style={{ padding: inlineUnit(1) }}
-                >
+                <div className="flex-1 flex items-center justify-center p-[1vw] overflow-hidden">
                     <AnimatePresence mode="wait">
                         <motion.div
                             key={previewCharId}
@@ -492,17 +363,11 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                             exit={{ opacity: 0, scale: 1.02, y: -20 }}
                             className="relative w-full h-full flex items-center justify-center"
                         >
-                            <div
-                                className="flex items-center justify-center h-full"
-                                style={{ gap: inlineUnit(1) }}
-                            >
+                            <div className="flex items-center justify-center gap-[1vw] h-full">
                                 {/* 物理面板预览 - OptimizedImage 自动处理本地化路径 */}
                                 <div
-                                    className="relative h-[85%] w-auto shadow-2xl overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
-                                    style={{
-                                        aspectRatio: String(playerBoardAspectRatio),
-                                        borderRadius: inlineUnit(0.6),
-                                    }}
+                                    className="relative h-[85%] w-auto shadow-2xl rounded-[0.6vw] overflow-hidden cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
+                                    style={{ aspectRatio: String(playerBoardAspectRatio) }}
                                     onClick={() => setMagnifyPreview({
                                         src: ASSETS.PLAYER_BOARD(previewCharId as CharacterId),
                                         kind: 'player-board',
@@ -518,8 +383,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 </div>
 
                                 <div
-                                    className="relative h-[85%] w-auto overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
-                                    style={{ borderRadius: inlineUnit(0.6) }}
+                                    className="relative h-[85%] w-auto rounded-[0.6vw] overflow-hidden shadow-2xl cursor-zoom-in hover:ring-2 hover:ring-amber-400/50 transition-all"
                                     onClick={() => setMagnifyPreview({
                                         src: ASSETS.TIP_BOARD(previewCharId as CharacterId),
                                         kind: 'tip-board',
@@ -539,27 +403,17 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                 </div>
 
                 {isFourPlayerMode && (
-                    <div
-                        className="absolute border border-white/12 bg-black/45 backdrop-blur-xl"
-                        style={{
-                            right: inlineUnit(2),
-                            bottom: inlineUnit(10.2),
-                            width: inlineUnit(22),
-                            borderRadius: inlineUnit(1),
-                            padding: inlineUnit(0.95),
-                            boxShadow: `0 ${inlineUnit(1.2)} ${inlineUnit(3)} rgba(0,0,0,0.35)`,
-                        }}
-                    >
+                    <div className="absolute right-[2vw] bottom-[9vw] w-[22vw] rounded-[1vw] border border-white/12 bg-black/45 p-[0.95vw] backdrop-blur-xl shadow-[0_1.2vw_3vw_rgba(0,0,0,0.35)]">
                         <div>
-                            <div className="font-black uppercase tracking-[0.18em] text-white/88" style={{ fontSize: inlineUnit(0.72) }}>
+                            <div className="text-[0.72vw] font-black uppercase tracking-[0.18em] text-white/88">
                                 {t('selection.seating.title')}
                             </div>
-                            <div className="leading-relaxed text-white/56" style={{ marginTop: inlineUnit(0.2), fontSize: inlineUnit(0.5) }}>
+                            <div className="mt-[0.2vw] text-[0.5vw] leading-relaxed text-white/56">
                                 {seatHintText}
                             </div>
                         </div>
 
-                        <div className="mt-[0.85vw] flex flex-wrap" style={{ marginTop: inlineUnit(0.85), gap: inlineUnit(0.45) }}>
+                        <div className="mt-[0.85vw] flex flex-wrap gap-[0.45vw]">
                             {effectiveSeatingOrder.map((pid, seatIndex) => renderSeatPlayerCard(pid, seatIndex))}
                         </div>
 
@@ -567,19 +421,17 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                             <div className="mt-[0.85vw] rounded-[0.9vw] border border-white/14 bg-black/35 p-[0.8vw] shadow-[0_0.8vw_2vw_rgba(0,0,0,0.22)]">
                                 {isTarget ? (
                                     <div className="flex flex-col gap-[0.65vw]">
-                                        <div className="rounded-[0.72vw] border border-sky-400/28 bg-sky-500/10 p-[0.7vw]">
-                                            <div className="flex items-center gap-[0.45vw]">
-                                                <MessageSquareWarning className="h-[0.95vw] w-[0.95vw] text-sky-300" />
-                                                <span className="text-[0.62vw] font-black text-sky-200">
-                                                    {t('selection.seating.swapIncoming', {
-                                                        player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
-                                                    })}
-                                                </span>
-                                            </div>
-                                            <p className="mt-[0.3vw] text-[0.48vw] leading-relaxed text-white/68">
-                                                {t('selection.seating.swapReviewHint')}
-                                            </p>
+                                        <div className="flex items-center gap-[0.45vw] border-b border-white/10 pb-[0.45vw]">
+                                            <MessageSquareWarning className="h-[0.95vw] w-[0.95vw] text-amber-400" />
+                                            <span className="text-[0.62vw] font-black text-amber-400">
+                                                {t('selection.seating.swapIncoming', {
+                                                    player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
+                                                })}
+                                            </span>
                                         </div>
+                                        <p className="text-[0.5vw] leading-relaxed text-white/78">
+                                            {t('selection.seating.swapHint')}
+                                        </p>
                                         <div className="flex gap-[0.45vw]">
                                             <button
                                                 type="button"
@@ -588,7 +440,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                     onRespondSeatSwap(true);
                                                 }}
                                                 data-testid="dt-seat-swap-approve"
-                                                className="flex-1 rounded-[0.65vw] border border-emerald-500/50 bg-emerald-500/20 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-emerald-300 transition hover:bg-emerald-500/38 hover:text-white"
+                                                className="flex-1 rounded-[0.65vw] border border-emerald-500/50 bg-emerald-500/20 px-[0.8vw] py-[0.55vw] text-[0.58vw] font-black text-emerald-300 transition hover:bg-emerald-500/38 hover:text-white"
                                             >
                                                 {t('selection.seating.swapApprove')}
                                             </button>
@@ -599,7 +451,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                     onRespondSeatSwap(false);
                                                 }}
                                                 data-testid="dt-seat-swap-reject"
-                                                className="flex-1 rounded-[0.65vw] border border-rose-500/50 bg-rose-500/20 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-rose-300 transition hover:bg-rose-500/38 hover:text-white"
+                                                className="flex-1 rounded-[0.65vw] border border-rose-500/50 bg-rose-500/20 px-[0.8vw] py-[0.55vw] text-[0.58vw] font-black text-rose-300 transition hover:bg-rose-500/38 hover:text-white"
                                             >
                                                 {t('selection.seating.swapReject')}
                                             </button>
@@ -607,18 +459,13 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                     </div>
                                 ) : isRequester ? (
                                     <div className="flex flex-col gap-[0.65vw]">
-                                        <div className="rounded-[0.72vw] border border-amber-400/30 bg-amber-500/10 p-[0.7vw]">
-                                            <div className="flex items-center gap-[0.45vw]">
-                                                <div className="h-[0.6vw] w-[0.6vw] rounded-full bg-amber-400 animate-pulse" />
-                                                <span className="text-[0.62vw] font-black text-amber-300">
-                                                    {t('selection.seating.swapWaiting', {
-                                                        player: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
-                                                    })}
-                                                </span>
-                                            </div>
-                                            <p className="mt-[0.3vw] text-[0.48vw] leading-relaxed text-white/68">
-                                                {t('selection.seating.swapWaitingHint')}
-                                            </p>
+                                        <div className="flex items-center gap-[0.45vw] border-b border-white/10 pb-[0.45vw]">
+                                            <div className="h-[0.6vw] w-[0.6vw] rounded-full bg-amber-400 animate-pulse" />
+                                            <span className="text-[0.62vw] font-black text-amber-400">
+                                                {t('selection.seating.swapWaiting', {
+                                                    player: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
+                                                })}
+                                            </span>
                                         </div>
                                         <button
                                             type="button"
@@ -627,27 +474,17 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                 onCancelSeatSwap();
                                             }}
                                             data-testid="dt-seat-swap-cancel"
-                                            className="w-full rounded-[0.65vw] border border-white/12 bg-white/5 px-[0.8vw] py-[0.62vw] text-[0.58vw] font-black text-white/82 transition hover:border-white/22 hover:bg-white/10 hover:text-white"
+                                            className="w-full rounded-[0.65vw] border border-amber-500/45 bg-amber-500/16 px-[0.8vw] py-[0.55vw] text-[0.58vw] font-black text-amber-300 transition hover:bg-amber-500/32 hover:text-white"
                                         >
                                             {t('selection.seating.swapCancel')}
                                         </button>
                                     </div>
                                 ) : (
-                                    <div className="rounded-[0.72vw] border border-white/10 bg-white/5 p-[0.7vw] text-[0.5vw] leading-relaxed text-white/72">
-                                        <div className="text-[0.58vw] font-black uppercase tracking-[0.14em] text-white/52">
-                                            {t('selection.seating.swapResolving')}
-                                        </div>
-                                        <div className="mt-[0.28vw]">
-                                            {t('selection.seating.swapIncoming', {
-                                                player: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
-                                            })}
-                                        </div>
-                                        <div className="mt-[0.22vw] text-white/60">
-                                            {t('selection.seating.swapPendingOther', {
+                                    <div className="text-[0.54vw] font-semibold text-white/78">
+                                        {t('selection.seating.swapPendingOther', {
                                             requester: getPlayerDisplayName(currentSeatSwapRequest!.requesterId),
                                             target: getPlayerDisplayName(currentSeatSwapRequest!.targetPlayerId),
                                         })}
-                                    </div>
                                     </div>
                                 )}
                             </div>
@@ -676,19 +513,10 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                 {/* 底部玩家面板 (8vw) */}
                 <div
-                    className="bg-gradient-to-t from-black/25 via-black/10 to-transparent backdrop-blur-xl flex items-center justify-center flex-shrink-0"
-                    style={{
-                        zIndex: UI_Z_INDEX.hud,
-                        height: inlineUnit(8),
-                        gap: inlineUnit(3),
-                        paddingLeft: inlineUnit(4),
-                        paddingRight: inlineUnit(4),
-                    }}
+                    className="h-[8vw] bg-gradient-to-t from-black/25 via-black/10 to-transparent backdrop-blur-xl flex items-center justify-center gap-[3vw] px-[4vw] flex-shrink-0"
+                    style={{ zIndex: UI_Z_INDEX.hud }}
                 >
-                    <div
-                        className="flex items-center justify-center"
-                        style={{ gap: inlineUnit(1.5) }}
-                    >
+                    <div className="flex items-center justify-center gap-[1.5vw]">
                         {playerIds.map(pid => {
                             const charId = selectedCharacters[pid as PlayerId];
                             const isMe = pid === currentPlayerId;
@@ -699,26 +527,16 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 <motion.div
                                     key={pid}
                                     className={clsx(
-                                        "flex items-center rounded-full transition-all duration-300",
+                                        "flex items-center gap-[0.8vw] px-[1.5vw] py-[0.6vw] rounded-full transition-all duration-300",
                                         isMe ? "bg-white/15 ring-2 ring-amber-400/50" : "bg-white/8"
                                     )}
-                                    style={{
-                                        gap: inlineUnit(0.8),
-                                        paddingLeft: inlineUnit(1.5),
-                                        paddingRight: inlineUnit(1.5),
-                                        paddingTop: inlineUnit(0.6),
-                                        paddingBottom: inlineUnit(0.6),
-                                    }}
                                     initial={{ opacity: 0, y: 20 }}
                                     animate={{ opacity: 1, y: 0 }}
                                     transition={{ delay: Number(pid) * 0.08 }}
                                 >
                                     <div
-                                        className="rounded-full flex items-center justify-center font-black"
+                                        className="w-[2.5vw] h-[2.5vw] rounded-full flex items-center justify-center text-[1vw] font-black"
                                         style={{
-                                            width: inlineUnit(2.5),
-                                            height: inlineUnit(2.5),
-                                            fontSize: inlineUnit(1),
                                             backgroundColor: colors.bg,
                                             color: colors.text,
                                             boxShadow: `0 0 15px ${colors.glow}`
@@ -729,22 +547,19 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
 
                                     <div className="flex flex-col">
                                         <div className={clsx(
-                                            "font-black uppercase tracking-wide leading-tight",
+                                            "text-[0.9vw] font-black uppercase tracking-wide leading-tight",
                                             hasSelected ? "text-amber-400" : "text-white/50"
-                                        )} style={{ fontSize: inlineUnit(0.9) }}>
+                                        )}>
                                             {hasSelected ? t(`characters.${charId}`) : t('selection.notSelected')}
                                         </div>
-                                        <div className="text-white/50 truncate" style={{ fontSize: inlineUnit(0.6), maxWidth: inlineUnit(8) }}>
+                                        <div className="text-[0.6vw] text-white/50 truncate max-w-[8vw]">
                                             {playerNames[pid as PlayerId]}
-                                            {isMe && <span style={{ marginLeft: inlineUnit(0.2) }} className="text-amber-400/80 font-bold">({t('selection.you')})</span>}
+                                            {isMe && <span className="ml-[0.2vw] text-amber-400/80 font-bold">({t('selection.you')})</span>}
                                         </div>
                                     </div>
 
                                     {readyPlayers[pid as PlayerId] && (
-                                        <div
-                                            className="rounded-full bg-emerald-500 flex items-center justify-center text-white"
-                                            style={{ width: inlineUnit(1.2), height: inlineUnit(1.2) }}
-                                        >
+                                        <div className="w-[1.2vw] h-[1.2vw] rounded-full bg-emerald-500 flex items-center justify-center text-white">
                                             <Check size={14} className="text-white" strokeWidth={3} />
                                         </div>
                                     )}
@@ -759,15 +574,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 onClick={handleReady}
-                                className="rounded-full font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer"
-                                style={{
-                                    paddingLeft: inlineUnit(3),
-                                    paddingRight: inlineUnit(3),
-                                    paddingTop: inlineUnit(1),
-                                    paddingBottom: inlineUnit(1),
-                                    fontSize: inlineUnit(1.2),
-                                    boxShadow: '0 0 30px rgba(16,185,129,0.5)',
-                                }}
+                                className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-emerald-500 text-white border-emerald-400 hover:bg-emerald-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(16,185,129,0.5)]"
                             >
                                 {t('selection.ready')}
                             </motion.button>
@@ -778,14 +585,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 initial={{ scale: 0.9, opacity: 0 }}
                                 animate={{ scale: 1, opacity: 1 }}
                                 onClick={handleUnready}
-                                className="rounded-full font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer"
-                                style={{
-                                    paddingLeft: inlineUnit(3),
-                                    paddingRight: inlineUnit(3),
-                                    paddingTop: inlineUnit(1),
-                                    paddingBottom: inlineUnit(1),
-                                    fontSize: inlineUnit(1.2),
-                                }}
+                                className="px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer"
                             >
                                 {t('selection.cancelReady')}
                             </motion.button>
@@ -798,20 +598,13 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                 disabled={startDisabled}
                                 onClick={handleStart}
                                 className={clsx(
-                                    "rounded-full font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
+                                    "px-[3vw] py-[1vw] rounded-full text-[1.2vw] font-black uppercase tracking-[0.2em] transition-all duration-300 border-2",
                                     !startDisabled
                                         ? "bg-amber-500 text-black border-amber-400 hover:bg-amber-400 hover:scale-105 active:scale-95 cursor-pointer shadow-[0_0_30px_rgba(245,158,11,0.5)]"
                                         : "bg-white/5 text-white/30 border-white/10 cursor-not-allowed"
                                 )}
-                                style={{
-                                    paddingLeft: inlineUnit(3),
-                                    paddingRight: inlineUnit(3),
-                                    paddingTop: inlineUnit(1),
-                                    paddingBottom: inlineUnit(1),
-                                    fontSize: inlineUnit(1.2),
-                                }}
                             >
-                                <span className="inline-flex items-center" style={{ gap: inlineUnit(0.8) }}>
+                                <span className="inline-flex items-center gap-[0.8vw]">
                                     <span>
                                         {isSeatSwapPending
                                             ? t('selection.seating.swapResolving')
@@ -819,7 +612,7 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                                 ? t('selection.pressStart')
                                                 : t('selection.waitingAll')}
                                     </span>
-                                    <span className="flex items-center" style={{ gap: inlineUnit(0.35) }}>{readyProgressDots}</span>
+                                    <span className="flex items-center gap-[0.35vw]">{readyProgressDots}</span>
                                 </span>
                             </motion.button>
                         )}

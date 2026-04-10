@@ -1,9 +1,7 @@
-import { isNativeAndroidRuntime } from './mobile/androidRuntime';
-
 /**
  * 统一管理 socket.io 的握手策略。
  * 生产环境默认优先 websocket，避免慢链路上重连风暴。
- * 开发/测试环境仍优先 websocket，仅在失败时允许回退到 polling。
+ * 开发/测试环境优先 polling，再升级 websocket，减少本地代理链路先报一轮 websocket 失败的噪声。
  */
 export const SOCKET_CONNECT_TIMEOUT_MS = 30_000;
 export const SOCKET_COMPATIBILITY_MODE_STORAGE_KEY = 'boardgame.socketCompatibilityMode';
@@ -12,19 +10,19 @@ export type SocketIoTransport = 'websocket' | 'polling';
 
 const SOCKET_IO_TRANSPORTS_DEFAULT: SocketIoTransport[] = ['websocket'];
 const SOCKET_IO_TRANSPORTS_COMPATIBILITY: SocketIoTransport[] = ['websocket', 'polling'];
-const SOCKET_IO_TRANSPORTS_DEV_FALLBACK: SocketIoTransport[] = ['websocket', 'polling'];
+const SOCKET_IO_TRANSPORTS_DEV_FALLBACK: SocketIoTransport[] = ['polling', 'websocket'];
 
 const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 const isDev = metaEnv.DEV === true;
 const mode = typeof metaEnv.MODE === 'string' ? metaEnv.MODE : '';
+const isAndroidShellBuild = mode === 'android';
 const allowPollingOverride = metaEnv.VITE_SOCKET_ALLOW_POLLING === 'true';
-const allowPollingByEnvironment = isDev || mode === 'test' || isNativeAndroidRuntime() || allowPollingOverride;
+const allowPollingByEnvironment = isDev || mode === 'test' || isAndroidShellBuild || allowPollingOverride;
 
 const canUseStorage = () => typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
 
 /**
- * 开发/测试、Android 壳和显式 env 覆盖允许 polling 作为 websocket 失败后的回退，
- * 便于调试或规避 WebView / 代理链路不稳定。
+ * 开发/测试、Android 壳和显式 env 覆盖始终允许 polling，便于调试或规避 WebView / 代理链路不稳定。
  * 纯 Web 生产环境保留本地兼容模式开关，用于 websocket-only 被网络拦截时的降级。
  */
 export const canToggleSocketCompatibilityMode = () => !allowPollingByEnvironment;

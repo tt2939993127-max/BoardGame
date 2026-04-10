@@ -143,9 +143,7 @@ export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, ch
 
     useEffect(() => {
         if (!effectiveThemeId) {
-            queueMicrotask(() => {
-                setCssText(null);
-            });
+            setCssText(null);
             return;
         }
 
@@ -156,9 +154,7 @@ export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, ch
 
             const theme = getCursorTheme(effectiveThemeId);
             if (!theme) {
-                queueMicrotask(() => {
-                    setCssText(null);
-                });
+                setCssText(null);
                 return;
             }
 

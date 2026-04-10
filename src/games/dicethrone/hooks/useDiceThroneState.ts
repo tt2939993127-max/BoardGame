@@ -202,16 +202,14 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
     /** slider 模式配置（存在时渲染滑动条） */
     slider?: SliderConfig;
 } {
-    const prompt = access.prompt;
-
     return useMemo(() => {
-        if (prompt) {
-            const promptData = prompt as typeof prompt & { slider?: SliderConfig };
+        if (access.prompt) {
+            const promptData = access.prompt as typeof access.prompt & { slider?: SliderConfig };
             return {
                 hasChoice: true,
-                playerId: prompt.playerId,
-                title: prompt.title,
-                options: prompt.options.map(opt => {
+                playerId: access.prompt.playerId,
+                title: access.prompt.title,
+                options: access.prompt.options.map(opt => {
                     const rawValue = opt.value as { statusId?: string; tokenId?: string; customId?: string; value?: number; disabled?: boolean } | undefined;
                     return {
                         id: opt.id,
@@ -223,7 +221,7 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
                         disabled: opt.disabled ?? rawValue?.disabled,
                     };
                 }),
-                sourceAbilityId: prompt.sourceId,
+                sourceAbilityId: access.prompt.sourceId,
                 slider: promptData.slider,
             };
         }
@@ -235,7 +233,7 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
             options: [],
             sourceAbilityId: undefined,
         };
-    }, [prompt]);
+    }, [access.prompt]);
 }
 
 /**

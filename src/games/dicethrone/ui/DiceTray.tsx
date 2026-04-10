@@ -143,8 +143,7 @@ export const DiceTray = ({
         ? (selectResult?.selectedDiceIds.length ?? 0)
         : (modifyResult?.modCount ?? 0);
     const canSelectMore = currentSelectCount < maxSelectCount;
-    const isLockableRollPhase = _currentPhase === 'offensiveRoll';
-    const canToggleDieLock = canInteract && isLockableRollPhase && rollCount > 0;
+    const canToggleDieLock = canInteract && rollCount > 0;
 
     const handleDieClick = (dieId: number) => {
         if (isRolling && !isInteractionMode) return;
@@ -441,14 +440,14 @@ export const DiceActions = ({
 
     const leftDisabled = isInteractionMode
         ? false
-        : (!isRollPhase || !canInteract || rollConfirmed || rollCount >= rollLimit);
+        : (!canInteract || rollConfirmed || rollCount >= rollLimit);
     const leftVariant = isInteractionMode
         ? 'secondary' as const
         : (isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit ? 'primary' as const : 'secondary' as const);
 
     const rightDisabled = isInteractionMode
         ? !(multistepInteraction?.canConfirm ?? false)
-        : (!isRollPhase || rollConfirmed || rollCount === 0 || !canInteract || isRolling);
+        : (rollConfirmed || rollCount === 0 || !canInteract || isRolling);
     const rightVariant = isInteractionMode
         ? 'primary' as const
         : (rollConfirmed ? 'glass' as const : 'secondary' as const);

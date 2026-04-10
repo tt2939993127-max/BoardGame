@@ -112,12 +112,9 @@ export interface WaitingRoomNotificationOptions {
 export function useWaitingRoomNotification({ enabled }: WaitingRoomNotificationOptions) {
     const { t } = useTranslation('lobby');
     const enabledRef = useRef(enabled);
+    enabledRef.current = enabled;
     // 防止重复通知：对手加入只通知一次，后续断开/重连不再触发
     const notifiedRef = useRef(false);
-
-    useEffect(() => {
-        enabledRef.current = enabled;
-    }, [enabled]);
 
     // 页面重新可见时停止标题闪烁
     useEffect(() => {

@@ -35,7 +35,6 @@ function createState(opts: {
     dice?: Die[];
     defenderHP?: number;
     attackerHP?: number;
-    pendingAttackValueCounts?: Record<number, number>;
 }): DiceThroneCore {
     const attacker: HeroState = {
         id: '0', characterId: 'barbarian',
@@ -59,17 +58,7 @@ function createState(opts: {
         dice: opts.dice ?? [1, 2, 3, 4, 5].map(v => createBarbarianDie(v)),
         rollCount: 1, rollLimit: 3, rollDiceCount: 5, rollConfirmed: false,
         activePlayerId: '0', startingPlayerId: '0', turnNumber: 1,
-        pendingAttack: opts.pendingAttackValueCounts
-            ? {
-                attackerId: '0',
-                defenderId: '1',
-                isDefendable: true,
-                damage: 7,
-                bonusDamage: 0,
-                attackDiceValueCounts: opts.pendingAttackValueCounts,
-            } as any
-            : null,
-        tokenDefinitions: [],
+        pendingAttack: null, tokenDefinitions: [],
     };
 }
 
@@ -103,28 +92,6 @@ function eventsOfType(events: DiceThroneEvent[], type: string) {
 // ============================================================================
 
 describe('野蛮人 Custom Action 运行时行为断言', () => {
-    describe('barbarian-slap-matching-4-unblockable (重击升级追加不可防御)', () => {
-        it('4个相同数字时将攻击标记为不可防御', () => {
-            const state = createState({ pendingAttackValueCounts: { 1: 4, 4: 1 } });
-            const handler = getCustomActionHandler('barbarian-slap-matching-4-unblockable')!;
-            const events = handler(buildCtx(state, 'barbarian-slap-matching-4-unblockable', {
-                targetSelf: true,
-            }));
-
-            const undefendable = eventsOfType(events, 'ATTACK_MADE_UNDEFENDABLE');
-            expect(undefendable).toHaveLength(1);
-            expect((undefendable[0] as any).payload.attackerId).toBe('0');
-        });
-
-        it('仅4剑但不足4个相同数字时不触发', () => {
-            const state = createState({ pendingAttackValueCounts: { 1: 2, 2: 2, 4: 1 } });
-            const handler = getCustomActionHandler('barbarian-slap-matching-4-unblockable')!;
-            const events = handler(buildCtx(state, 'barbarian-slap-matching-4-unblockable', {
-                targetSelf: true,
-            }));
-            expect(events).toHaveLength(0);
-        });
-    });
 
     // ========================================================================
     // barbarian-suppress-roll: 投3骰，造成点数总和伤害，>14施加脑震荡

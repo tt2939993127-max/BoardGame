@@ -6,7 +6,7 @@
 import type { DiceThroneCore, DiceThroneEvent } from './types';
 import { resourceSystem } from './resourceSystem';
 import { RESOURCE_IDS } from './resources';
-import { getFaceCounts, getActiveDice, getDiceValueCounts, getTeamId, isTeamMode } from './rules';
+import { getFaceCounts, getActiveDice, getTeamId, isTeamMode } from './rules';
 
 type EventHandler<E extends DiceThroneEvent> = (
     state: DiceThroneCore,
@@ -314,7 +314,6 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
 ) => {
     const { attackerId, defenderId, sourceAbilityId, isDefendable, isUltimate } = event.payload;
     const attackFaceCounts = getFaceCounts(getActiveDice(state));
-    const attackValueCounts = getDiceValueCounts(getActiveDice(state));
     const attacker = state.players[attackerId];
     const queuedAttackModifierBonusDamage = attacker?.pendingBonusDamage ?? 0;
     const players = attacker?.pendingBonusDamage !== undefined
@@ -339,7 +338,6 @@ export const handleAttackInitiated: EventHandler<Extract<DiceThroneEvent, { type
             damageResolved: false,
             resolvedDamage: 0,
             attackDiceFaceCounts: attackFaceCounts,
-            attackDiceValueCounts: attackValueCounts,
             bonusDamage: queuedAttackModifierBonusDamage,
             attackModifierBonusDamage: queuedAttackModifierBonusDamage,
         },

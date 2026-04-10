@@ -96,26 +96,6 @@ export const getFaceCounts = (dice: Die[]): Record<DieFace, number> => {
 };
 
 /**
- * 统计骰子原始点数的出现次数
- *
- * 用于“4个相同数字 / 3个相同数字”这类按点数而非符号判定的技能。
- */
-export const getDiceValueCounts = (dice: Die[]): Record<number, number> => {
-    return dice.reduce((acc, die) => {
-        acc[die.value] = (acc[die.value] ?? 0) + 1;
-        return acc;
-    }, {} as Record<number, number>);
-};
-
-/**
- * 获取当前活跃骰池中相同点数的最大重复数
- */
-export const getActiveDiceMaxDuplicateValueCount = (state: DiceThroneCore): number => {
-    const valueCounts = getDiceValueCounts(getActiveDice(state));
-    return Math.max(0, ...Object.values(valueCounts));
-};
-
-/**
  * 获取活跃骰子（根据 rollDiceCount）
  */
 export const getActiveDice = (state: DiceThroneCore): Die[] => {

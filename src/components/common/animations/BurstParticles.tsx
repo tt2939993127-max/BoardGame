@@ -17,7 +17,7 @@
  * ```
  */
 
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useCallback } from 'react';
 import {
   type ParticlePreset,
   type Particle,
@@ -217,10 +217,7 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
   const particlesRef = useRef<Particle[]>([]);
   // 用 ref 持有回调，避免 onComplete 引用变化导致 useEffect 重跑（粒子重生）
   const onCompleteRef = useRef(onComplete);
-
-  useEffect(() => {
-    onCompleteRef.current = onComplete;
-  }, [onComplete]);
+  onCompleteRef.current = onComplete;
 
   const mergedPreset = useMemo<ParticlePreset>(() => {
     const base = BURST_PRESETS[preset] ?? BURST_PRESETS.explosion;
@@ -229,6 +226,7 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
 
   // 用 JSON 序列化做值比较，避免数组字面量引用变化导致 useEffect 重跑
   const colorKey = JSON.stringify(color);
+  const rgbColors = useMemo(() => color.map(parseColorToRgb), [colorKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!active || typeof window === 'undefined') return;
@@ -253,7 +251,6 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
     // 粒子在 canvas 中心生成（对应容器中心）
-    const rgbColors = (JSON.parse(colorKey) as string[]).map(parseColorToRgb);
     particlesRef.current = spawnParticles(mergedPreset, rgbColors, cw / 2, ch / 2);
 
     let lastTime = 0;
@@ -281,7 +278,7 @@ export const BurstParticles: React.FC<BurstParticlesProps> = ({
       cancelAnimationFrame(rafRef.current);
       particlesRef.current = [];
     };
-  }, [active, colorKey, mergedPreset, overflow]);
+  }, [active, mergedPreset, rgbColors, overflow]);
 
   if (!active || typeof window === 'undefined') return null;
 

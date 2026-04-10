@@ -7,11 +7,8 @@ import { formatPackageBytes } from './packageManagerFormat';
 interface GamePackageInstallConfirmModalProps {
     gameName: string;
     state: GamePackageCardState;
-    manifestSource?: 'fallback' | 'remote';
     modulePackId?: string;
     assetPackId?: string;
-    modulePackUrl?: string;
-    assetPackUrl?: string;
     modulePackBytes?: number;
     assetPackBytes?: number;
     onConfirm: () => void | Promise<void>;
@@ -26,11 +23,8 @@ interface GamePackageInstallConfirmModalProps {
 export const GamePackageInstallConfirmModal = ({
     gameName,
     state,
-    manifestSource,
     modulePackId,
     assetPackId,
-    modulePackUrl,
-    assetPackUrl,
     modulePackBytes,
     assetPackBytes,
     onConfirm,
@@ -43,16 +37,13 @@ export const GamePackageInstallConfirmModal = ({
 }: GamePackageInstallConfirmModalProps) => {
     const { t } = useTranslation('lobby');
     const sizeUnknownLabel = t('packageManager.sizeUnknown');
-    const unpublishedLabel = t('packageManager.packageUnpublished');
     const packageItems = [
         {
-            kind: 'module' as const,
             label: t('packageManager.modulePack'),
             id: modulePackId,
             bytes: modulePackBytes,
         },
         {
-            kind: 'asset' as const,
             label: t('packageManager.assetPack'),
             id: assetPackId,
             bytes: assetPackBytes,
@@ -78,18 +69,6 @@ export const GamePackageInstallConfirmModal = ({
     const isFailed = state.status === 'failed';
     const isInstalled = state.status === 'installed';
     const isPreview = state.status === 'not-installed';
-    const isSyncingPreview = isPreview
-        && state.previewResolved !== true
-        && totalBytes === undefined;
-    const isUnpublishedPreview = isPreview
-        && state.previewResolved === true
-        && manifestSource === 'fallback'
-        && !assetPackUrl;
-    const previewSizeFallbackLabel = isUnpublishedPreview
-        ? unpublishedLabel
-        : isSyncingPreview
-            ? t('packageManager.packageSyncing')
-            : sizeUnknownLabel;
     const modalTitle = isPreview
         ? t('packageManager.confirmTitle', { game: gameName })
         : isFailed
@@ -144,7 +123,7 @@ export const GamePackageInstallConfirmModal = ({
                                 {t('packageManager.totalSize')}
                             </p>
                             <p className="mt-1 text-base font-bold text-parchment-base-text">
-                                {formatPackageBytes(totalBytes, previewSizeFallbackLabel)}
+                                {formatPackageBytes(totalBytes, sizeUnknownLabel)}
                             </p>
                         </div>
                         <div className="rounded-full border border-parchment-card-border/30 bg-parchment-card-bg px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-parchment-light-text">
@@ -163,16 +142,7 @@ export const GamePackageInstallConfirmModal = ({
                                         </p>
                                     </div>
                                     <span className="shrink-0 text-[11px] font-medium text-parchment-light-text">
-                                        {formatPackageBytes(
-                                            item.bytes,
-                                            isUnpublishedPreview
-                                                && ((item.kind === 'asset' && !assetPackUrl)
-                                                    || (item.kind === 'module' && !modulePackUrl))
-                                                ? unpublishedLabel
-                                                : isSyncingPreview
-                                                    ? t('packageManager.packageSyncing')
-                                                : sizeUnknownLabel,
-                                        )}
+                                        {formatPackageBytes(item.bytes, sizeUnknownLabel)}
                                     </span>
                                 </div>
                             ))}

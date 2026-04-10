@@ -72,10 +72,6 @@ import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
-const MAP_INTERNAL_TARGETS = new Set([
-  'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
-]);
-
 /** 默认网格配置 */
 const DEFAULT_GRID_CONFIG: GridConfig = {
   rows: BOARD_ROWS,
@@ -175,10 +171,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 教程自动平移：当高亮目标在地图内部时，传给 MapContainer 让其自动居中并放大
   // 地图内部的 tutorial-id：sw-my-summoner, sw-enemy-summoner, sw-my-gate, sw-start-archer（在 BoardGrid 内）
-  const highlightedTutorialTarget = tutorialStep?.highlightTarget ?? null;
-  const mapPanTarget = isTutorialActive && highlightedTutorialTarget && MAP_INTERNAL_TARGETS.has(highlightedTutorialTarget)
-    ? highlightedTutorialTarget
-    : null;
+  const MAP_INTERNAL_TARGETS = useMemo(() => new Set([
+    'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
+  ]), []);
+  const mapPanTarget = useMemo(() => {
+    if (!isTutorialActive || !tutorialStep?.highlightTarget) return null;
+    return MAP_INTERNAL_TARGETS.has(tutorialStep.highlightTarget) ? tutorialStep.highlightTarget : null;
+  }, [isTutorialActive, tutorialStep?.highlightTarget, MAP_INTERNAL_TARGETS]);
   // 聚焦到单个单位/建筑时放大到 1.8x，让卡牌清晰可见
   const MAP_PAN_SCALE = 1.8;
 
@@ -395,7 +394,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       // 近战攻击：启动卡牌本体碰撞动画
       setAttackAnimState({ attacker: pending.attacker, target: pending.target, hits: pending.hits });
     }
-  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus, core]);
+  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus]);
 
   // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效）
   const handleAttackHit = useCallback(() => {
@@ -417,7 +416,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       const damageSoundKey = resolveDamageSoundKey(dmg.damage);
       fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, soundKey: damageSoundKey });
     }
-  }, [core, fxBus, pendingAttackRef, releaseDamageSnapshot]);
+  }, [pendingAttackRef, fxBus, releaseDamageSnapshot]);
 
   // 近战攻击回弹完成回调（卡牌回到原位后触发，flush 摧毁效果）
   const handleAttackReturn = useCallback(() => {
@@ -1038,7 +1037,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                   {/* 底部：手牌区 */}
-                  <div className="absolute inset-x-0 bottom-0 z-30 flex justify-center pointer-events-none" data-tutorial-id="sw-hand-area">
+                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
                     <HandArea
                       cards={myHand}
                       phase={currentPhase}
@@ -1055,8 +1054,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
-                      className="pointer-events-auto"
-                    />
+                  />
                   </div>
                 </div>
                 </div>

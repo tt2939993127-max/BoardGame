@@ -177,17 +177,9 @@ export const DiceResultOverlay: React.FC<DiceResultOverlayProps> = ({
   }, [onClose, resultSignature]);
 
   useEffect(() => {
-    let cancelled = false;
     if (!hasResults) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          setDismissedSignature(null);
-        }
-      });
+      setDismissedSignature(null);
     }
-    return () => {
-      cancelled = true;
-    };
   }, [hasResults]);
 
   useEffect(() => {

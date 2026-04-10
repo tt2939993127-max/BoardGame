@@ -47,18 +47,9 @@ export const ModalStackRoot = () => {
     const [isLocked, setIsLocked] = useState(false);
 
     useEffect(() => {
-        if (stack.length === 0) return;
-
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (!cancelled) {
-                setIsLocked(true);
-            }
-        });
-
-        return () => {
-            cancelled = true;
-        };
+        if (stack.length > 0) {
+            setIsLocked(true);
+        }
     }, [stack.length]);
 
     // 真正的文档操作副作用

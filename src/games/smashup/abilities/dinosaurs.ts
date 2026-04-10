@@ -23,7 +23,7 @@ import type { SmashUpEvent, SmashUpCore, MinionOnBase, OngoingDetachedEvent, Min
 import { SU_EVENTS } from '../domain/types';
 import { getCardDef, getBaseDef } from '../data/cards';
 import type { MinionCardDef } from '../domain/types';
-import { isMinionProtected, registerProtection, registerInterceptor } from '../domain/ongoingEffects';
+import { registerProtection, registerInterceptor } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext } from '../domain/ongoingEffects';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -84,7 +84,7 @@ function dinoLaserTriceratops(ctx: AbilityContext): AbilityResult {
     // 强制效果：消灭一个力量≤2的随从，单候选自动执行
     return resolveOrPrompt(ctx, buildMinionTargetOptions(options, {
         state: ctx.state,
-        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        sourcePlayerId: ctx.playerId,
         effectType: 'destroy',
     }), {
         id: 'dino_laser_triceratops',
@@ -125,7 +125,7 @@ function dinoLaserTriceratopsPod(ctx: AbilityContext): AbilityResult {
     // "你可以（may）"效果：加入跳过选项
     const minionOptions = buildMinionTargetOptions(options, {
         state: ctx.state,
-        sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId,
+        sourcePlayerId: ctx.playerId,
         effectType: 'destroy',
     });
     // 联合类型：skipOption 的 value 是 { skip: true }，minionOption 的 value 是 { minionUid, baseIndex, defId }
@@ -176,7 +176,7 @@ function dinoAugmentation(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `dino_augmentation_${ctx.now}`, ctx.playerId,
         '选择一个随从获得+4力量（直到回合结束）',
-        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
+        buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }),
         { sourceId: 'dino_augmentation', targetType: 'minion' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -224,7 +224,7 @@ function dinoNaturalSelection(ctx: AbilityContext): AbilityResult {
     });
     const interaction = createSimpleChoice(
         `dino_natural_selection_${ctx.now}`, ctx.playerId,
-        '选择你的一个随从作为参照', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId }),
+        '选择你的一个随从作为参照', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }),
         { sourceId: 'dino_natural_selection_choose_mine', targetType: 'minion', autoCancelOption: true }
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -274,7 +274,7 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
             return { uid: m.uid, defId: m.defId, baseIndex: first.baseIndex, label: `${name} (力量 ${first.minPower}) @ ${baseName}` };
         });
         const interaction = createSimpleChoice(
-            `dino_sotf_tiebreak_${ctx.now}`, ctx.playerId, '选择要消灭的最低力量随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }), { sourceId: 'dino_survival_tiebreak', targetType: 'minion' }
+            `dino_sotf_tiebreak_${ctx.now}`, ctx.playerId, '选择要消灭的最低力量随从', buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }), { sourceId: 'dino_survival_tiebreak', targetType: 'minion' }
         );
         const remainingData = remaining.map(tb => ({
             baseIndex: tb.baseIndex,
@@ -284,7 +284,7 @@ function dinoSurvivalOfTheFittest(ctx: AbilityContext): AbilityResult {
         return {
             events, matchState: queueInteraction(ctx.matchState, {
                 ...interaction,
-                data: { ...interaction.data, continuationContext: { remainingBases: remainingData, sourceKind: 'action' } },
+                data: { ...interaction.data, continuationContext: { remainingBases: remainingData } },
             })
         };
     }
@@ -330,11 +330,7 @@ function queueDinoRampageMinionChoice(
         playerId,
         '选择用于降低爆破点的随从',
         buildMinionTargetOptions(candidates, { state, sourcePlayerId: playerId }),
-        {
-            sourceId: 'dino_rampage_choose_minion',
-            targetType: 'minion',
-            autoResolveIfSingle: false,
-        },
+        { sourceId: 'dino_rampage_choose_minion', targetType: 'minion' },
     );
     return queueInteraction(matchState, interaction);
 }
@@ -351,15 +347,6 @@ function dinoRampage(ctx: AbilityContext): AbilityResult {
             ? `${baseName} (降低 ${minionCandidates[0].power} 爆破点)`
             : `${baseName} (选择一个己方随从的力量)`;
         baseCandidates.push({ baseIndex: i, label });
-    }
-
-    if (baseCandidates.length === 1) {
-        const minionCandidates = collectDinoRampageMinions(ctx.state, ctx.playerId, baseCandidates[0].baseIndex);
-        if (minionCandidates.length === 0) return { events: [] };
-        return {
-            events: [],
-            matchState: queueDinoRampageMinionChoice(ctx.matchState, ctx.state, ctx.playerId, minionCandidates, ctx.now),
-        };
     }
 
     return resolveOrPrompt(ctx, buildBaseTargetOptions(baseCandidates, ctx.state), {
@@ -429,7 +416,6 @@ export function registerDinosaurInteractionHandlers(): void {
         for (const m of base.minions) {
             if (m.uid === myMinion.uid) continue;
             const power = getMinionPower(state.core, m, baseIndex);
-            if (isMinionProtected(state.core, m, baseIndex, playerId, 'action')) continue;
             if (power < myPower) {
                 const def = getCardDef(m.defId) as MinionCardDef | undefined;
                 const name = def?.name ?? m.defId;
@@ -438,9 +424,9 @@ export function registerDinosaurInteractionHandlers(): void {
         }
         if (targets.length === 0) return undefined;
         const next = createSimpleChoice(
-            `dino_natural_selection_target_${timestamp}`, playerId, '选择要消灭的随从', buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, sourceKind: 'action', effectType: 'destroy' }), { sourceId: 'dino_natural_selection_choose_target', targetType: 'minion' }
+            `dino_natural_selection_target_${timestamp}`, playerId, '选择要消灭的随从', buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }), { sourceId: 'dino_natural_selection_choose_target', targetType: 'minion' }
         );
-        return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { baseIndex, sourceKind: 'action' } } }), events: [] };
+        return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { baseIndex } } }), events: [] };
     });
 
     // 物竞天择第二步：选择目标后消灭
@@ -463,7 +449,7 @@ export function registerDinosaurInteractionHandlers(): void {
         const events: SmashUpEvent[] = [destroyMinion(target.uid, target.defId, baseIndex, target.owner, playerId, 'dino_survival_of_the_fittest', timestamp)];
 
         // 检查是否有剩余基地需要平局选择
-        const ctx = iData?.continuationContext as { remainingBases?: { baseIndex: number; candidateUids: { uid: string; defId: string; owner: string }[]; minPower: number }[]; sourceKind?: 'action' } | undefined;
+        const ctx = iData?.continuationContext as { remainingBases?: { baseIndex: number; candidateUids: { uid: string; defId: string; owner: string }[]; minPower: number }[] } | undefined;
         const remaining = ctx?.remainingBases ?? [];
         if (remaining.length > 0) {
             const next = remaining[0];
@@ -476,9 +462,9 @@ export function registerDinosaurInteractionHandlers(): void {
                 return { uid: c.uid, defId: c.defId, baseIndex: next.baseIndex, label: `${name} (力量 ${next.minPower}) @ ${baseName}` };
             });
             const interaction = createSimpleChoice(
-                `dino_sotf_tiebreak_${timestamp}`, playerId, '选择要消灭的最低力量随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: playerId, sourceKind: ctx?.sourceKind ?? 'action', effectType: 'destroy' }), { sourceId: 'dino_survival_tiebreak', targetType: 'minion' }
+                `dino_sotf_tiebreak_${timestamp}`, playerId, '选择要消灭的最低力量随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }), { sourceId: 'dino_survival_tiebreak', targetType: 'minion' }
             );
-            return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { remainingBases: rest, sourceKind: ctx?.sourceKind ?? 'action' } } }), events };
+            return { state: queueInteraction(state, { ...interaction, data: { ...interaction.data, continuationContext: { remainingBases: rest } } }), events };
         }
 
         return { state, events };
@@ -489,6 +475,9 @@ export function registerDinosaurInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         const minionCandidates = collectDinoRampageMinions(state.core, playerId, baseIndex);
         if (minionCandidates.length === 0) return { state, events: [] };
+        if (minionCandidates.length === 1) {
+            return { state, events: [modifyBreakpoint(baseIndex, -minionCandidates[0].power, 'dino_rampage', timestamp)] };
+        }
         return {
             state: queueDinoRampageMinionChoice(state, state.core, playerId, minionCandidates, timestamp),
             events: [],

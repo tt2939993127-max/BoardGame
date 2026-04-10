@@ -156,10 +156,7 @@ const FlameTrailCanvas: React.FC<{
     const rafRef = React.useRef(0);
     const lastTimeRef = React.useRef(0);
     const emittingRef = React.useRef(emitting);
-
-    React.useEffect(() => {
-        emittingRef.current = emitting;
-    }, [emitting]);
+    emittingRef.current = emitting;
 
     // 预解析颜色
     const rgbColors = React.useMemo(() => flameColors.map(hexToRgb), [flameColors]);
@@ -491,14 +488,14 @@ const FlyingEffectItem: React.FC<{
         if (pendingRef.current === 0) {
             setTimeout(() => onComplete(effect.id), 300);
         }
-    }, [effect, onComplete]);
+    }, [effect.id, effect.type, effect.onImpact, onComplete]);
 
     const handlePhaseComplete = React.useCallback(() => {
         pendingRef.current--;
         if (pendingRef.current <= 0) {
             onComplete(effect.id);
         }
-    }, [effect, onComplete]);
+    }, [effect.id, onComplete]);
 
     // 零距离时 framer-motion 不触发 onAnimationComplete，手动立即触发
     React.useEffect(() => {
@@ -520,7 +517,7 @@ const FlyingEffectItem: React.FC<{
             onComplete(effect.id);
         }, maxMs);
         return () => window.clearTimeout(timer);
-    }, [effect, flightDuration, onComplete]);
+    }, [effect.id, effect.onImpact, flightDuration, onComplete]);
 
     return (
         <>

@@ -11,13 +11,11 @@ const DEFAULT_CAPTURE_SAVE_URL = '/__capture/save';
 const DEFAULT_CAPTURE_STATUS_URL = '/__capture/status';
 type Html2CanvasFn = typeof import('html2canvas').default;
 type SmashUpMobileEvidenceInjector = typeof import('../../games/smashup/mobileEvidence').injectSmashUpFourPlayerMobileEvidenceScene;
-type SmashUpFactionSelectionEvidenceInjector = typeof import('../../games/smashup/mobileEvidence').injectSmashUpFactionSelectionMobileEvidenceScene;
 type SummonerWarsMobileEvidenceInjector = typeof import('../../games/summonerwars/mobileEvidence').injectSummonerWarsMobileEvidenceScene;
 type SummonerWarsMobileEvidenceStateFactory = typeof import('../../games/summonerwars/mobileEvidence').withSummonerWarsMobileEvidenceActionLog;
 
 let html2CanvasLoader: Promise<Html2CanvasFn> | null = null;
 let smashUpMobileEvidenceInjectorLoader: Promise<SmashUpMobileEvidenceInjector> | null = null;
-let smashUpFactionSelectionEvidenceInjectorLoader: Promise<SmashUpFactionSelectionEvidenceInjector> | null = null;
 let summonerWarsMobileEvidenceInjectorLoader: Promise<SummonerWarsMobileEvidenceInjector> | null = null;
 let summonerWarsMobileEvidenceStateFactoryLoader: Promise<SummonerWarsMobileEvidenceStateFactory> | null = null;
 
@@ -281,19 +279,6 @@ async function loadSmashUpMobileEvidenceInjector() {
     }
 
     return smashUpMobileEvidenceInjectorLoader;
-}
-
-async function loadSmashUpFactionSelectionEvidenceInjector() {
-    if (!smashUpFactionSelectionEvidenceInjectorLoader) {
-        smashUpFactionSelectionEvidenceInjectorLoader = import('../../games/smashup/mobileEvidence')
-            .then((module) => module.injectSmashUpFactionSelectionMobileEvidenceScene)
-            .catch((error) => {
-                smashUpFactionSelectionEvidenceInjectorLoader = null;
-                throw error;
-            });
-    }
-
-    return smashUpFactionSelectionEvidenceInjectorLoader;
 }
 
 async function loadSummonerWarsMobileEvidenceInjector() {
@@ -573,46 +558,8 @@ async function runSmashUpTabletBoardScenario() {
     await prepareSmashUpFourPlayerBoard({ expandMinion: false });
 }
 
-async function runSmashUpFactionSelectionMobileScenario() {
-    await waitForCondition(
-        'Smash Up TestHarness 就绪',
-        () => {
-            const harness = window.__BG_TEST_HARNESS__;
-            return Boolean(harness?.state?.isRegistered?.());
-        },
-        15000,
-    );
-
-    const harness = window.__BG_TEST_HARNESS__;
-    if (!harness) {
-        throw new Error('TestHarness 未挂载');
-    }
-
-    const injectSmashUpFactionSelectionMobileEvidenceScene = await loadSmashUpFactionSelectionEvidenceInjector();
-    injectSmashUpFactionSelectionMobileEvidenceScene(harness);
-
-    await waitForCondition(
-        'Smash Up 选择派系标题可见',
-        () => Boolean(getVisibleElement('[data-tutorial-id="su-faction-select"] h1')),
-        15000,
-    );
-
-    await waitForCondition(
-        'Smash Up 派系卡可见',
-        () => getVisibleElements('[data-testid^="faction-option-"]').length >= 6,
-        15000,
-    );
-
-    await waitForCondition(
-        'Smash Up 玩家卡片栏可见',
-        () => Boolean(getVisibleElement('[data-testid="faction-selection-player-rail"]')),
-        5000,
-    );
-}
-
 const scenarioHandlers: Record<string, () => Promise<void>> = {
     'smashup-tutorial-mobile-landscape': runSmashUpTutorialScenario,
-    'smashup-faction-selection-mobile-landscape': runSmashUpFactionSelectionMobileScenario,
     'summonerwars-tutorial-phone-landscape': runSummonerWarsPhoneBoardScenario,
     'summonerwars-mobile-10-phone-landscape-board': runSummonerWarsPhoneBoardScenario,
     'summonerwars-mobile-11-hand-magnify-open': runSummonerWarsHandMagnifyScenario,

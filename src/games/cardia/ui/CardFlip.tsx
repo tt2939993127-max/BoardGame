@@ -41,9 +41,7 @@ export const CardFlip: React.FC<CardFlipProps> = ({
     useEffect(() => {
         // 首次渲染后标记为非初始状态
         if (isInitialRender) {
-            queueMicrotask(() => {
-                setIsInitialRender(false);
-            });
+            setIsInitialRender(false);
         }
     }, [isInitialRender]);
 

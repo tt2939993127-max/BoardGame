@@ -1368,7 +1368,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                     nextPlayerId,
                     '你可以揭开一张你控制的埋葬牌，并立刻作为额外牌打出',
                     options as any[],
-                    { sourceId: 'bury_uncover_start_turn', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
+                    { sourceId: 'bury_uncover_start_turn', targetType: 'generic' },
                 );
                 currentMatchState = queueInteraction(currentMatchState, interaction);
                 hasSysUpdate = true;

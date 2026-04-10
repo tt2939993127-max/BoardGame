@@ -15,7 +15,6 @@ import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { createScopedLogger } from '../../../lib/logger';
-import { resolveBonusDieText } from './bonusDieTranslation';
 
 const bonusDieOverlayLogger = createScopedLogger('DT_BONUS_DIE_OVERLAY');
 
@@ -125,6 +124,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 : '1.2vw';
         // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
         const isInteractive = !displayOnly && canReroll === true;
+
         bonusDieOverlayLogger.info('render-reroll', {
             total,
             bonusDiceCount: bonusDice.length,
@@ -233,11 +233,9 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                             className="text-white text-[1.4vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
                             style={{ textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)' }}
                         >
-                            {resolveBonusDieText(summaryEffectKey, {
-                                t,
-                                i18n,
-                                params: summaryEffectParams,
-                            }) ?? summaryEffectKey}
+                            {i18n.exists(summaryEffectKey)
+                                ? t(summaryEffectKey, summaryEffectParams)
+                                : summaryEffectKey}
                         </motion.div>
                     )}
 

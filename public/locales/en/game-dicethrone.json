@@ -756,26 +756,6 @@
       }
     }
   },
-  "compareRoll": {
-    "confirming": "Confirming the face-off...",
-    "rolled": "Rolled {{value}}",
-    "gunslinger": {
-      "showdown": {
-        "title": "Showdown",
-        "attackerLabel": "Gunslinger",
-        "defenderLabel": "Opponent",
-        "win": "You win the face-off. This attack gains +{{bonus}} damage.",
-        "lose": "You lose the face-off. The attack stays at its base damage."
-      },
-      "duel": {
-        "title": "Duel",
-        "defenderLabel": "Gunslinger",
-        "attackerLabel": "Attacker",
-        "win": "You win the duel. Choose the resolution.",
-        "lose": "You lose the duel and deal 1 undefendable damage to the attacker."
-      }
-    }
-  },
   "choices": {
     "title": "Ability Resolution Choice",
     "option": "Option {{index}}",
@@ -873,10 +853,9 @@
     },
     "fist-technique-3": {
       "name": "Fist Technique III",
-      "description": "3/4/5 Fists: deal 7/8/9 damage. If you roll 4 matching numbers, inflict Knockdown.",
+      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown.",
       "effects": {
-        "damage4": "Deal 4 damage",
-        "inflictKnockdownOnFourOfAKind": "If you roll 4 matching numbers, inflict Knockdown."
+        "damage4": "Deal 4 damage"
       }
     },
     "fist-technique-4": {
@@ -994,12 +973,6 @@
         "taijiByResult": "Gain Taiji tokens equal to Taiji faces rolled",
         "damageByFist": "Deal damage equal to Fist faces rolled"
       }
-    },
-    "meditation-2": {
-      "name": "Meditation II",
-      "description": "During Defensive Roll Phase, roll 5 dice. Gain Taiji tokens based on results. Deal 1 damage for each [Fist].",
-      "taijiByResult": "Gain Taiji tokens based on results",
-      "damageByFist": "Deal 1 damage for each [Fist]"
     },
     "transcendence": {
       "name": "Transcendence!",
@@ -1299,7 +1272,7 @@
     },
     "longbow-3": {
       "name": "Longbow III",
-      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching numbers are rolled, inflict Entangle",
+      "description": "3/4/5 Bow: deal 5/7/9 damage; if 3+ matching symbols are rolled, inflict Entangle",
       "effects": {
         "damage3": "Deal 3 damage",
         "damage5": "Deal 5 damage",
@@ -1319,7 +1292,7 @@
     },
     "longbow-2": {
       "name": "Longbow II",
-      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching numbers are rolled, inflict Entangle",
+      "description": "3/4/5 Bow: deal 4/6/8 damage; if 4+ matching symbols are rolled, inflict Entangle",
       "effects": {
         "damage4": "Deal 4 damage",
         "damage6": "Deal 6 damage",
@@ -1714,14 +1687,6 @@
         "selfDamage4": "Take 4 self-damage (only if damage was dealt)"
       }
     },
-    "rage": {
-      "name": "Rage",
-      "description": "Ultimate Ability: 5 Strength faces, inflict Daze and deal 15 damage.",
-      "effects": {
-        "inflictDaze": "Inflict Daze",
-        "damage15": "Deal 15 damage"
-      }
-    },
     "thick-skin": {
       "name": "Thick Skin",
       "description": "Defense: heal 2 × Heart faces.",
@@ -1780,22 +1745,20 @@
     },
     "slap-2": {
       "name": "Slap II",
-      "description": "3/4/5 Swords: deal 5/7/9 damage. If you roll 4 matching numbers, this attack deals undefendable damage.",
+      "description": "3/4/5 Swords: deal 5/7/9 damage. 4/5 Swords deal undefendable damage.",
       "effects": {
         "damage5": "Deal 5 damage",
-        "damage7": "Deal 7 damage",
-        "damage9": "Deal 9 damage",
-        "makeUnblockableOnFourOfAKind": "If you roll 4 matching numbers, this attack deals undefendable damage."
+        "damage7Unblockable": "Deal 7 undefendable damage",
+        "damage9Unblockable": "Deal 9 undefendable damage"
       }
     },
     "slap-3": {
       "name": "Slap III",
-      "description": "3/4/5 Swords: deal 6/8/10 damage. If you roll 4 matching numbers, this attack deals undefendable damage.",
+      "description": "3/4/5 Swords: deal 6/8/10 damage. 4/5 Swords deal undefendable damage.",
       "effects": {
         "damage6": "Deal 6 damage",
-        "damage8": "Deal 8 damage",
-        "damage10": "Deal 10 damage",
-        "makeUnblockableOnFourOfAKind": "If you roll 4 matching numbers, this attack deals undefendable damage."
+        "damage8Unblockable": "Deal 8 undefendable damage",
+        "damage10Unblockable": "Deal 10 undefendable damage"
       }
     },
     "all-out-strike-2": {
@@ -2189,7 +2152,7 @@
     },
     "card-thrust-punch-3": {
       "name": "Thrust Punch III",
-      "description": "3/4/5 Fists: deal 7/8/9 damage. If you roll 4 matching numbers, inflict Knockdown."
+      "description": "3/4/5 Fists: deal 7/8/9 damage. 4+ Fists inflict Knockdown."
     },
     "card-contemplation-2": {
       "name": "Contemplation II",
@@ -2692,9 +2655,7 @@
       "title": "2v2 Seating",
       "swapHint": "Click a target portrait to swap seats. AI swaps instantly; human targets receive a request.",
       "swapWaiting": "Seat swap request sent to {{player}}. Waiting for a response.",
-      "swapWaitingHint": "Seats will not change until the other player responds, and you can still cancel here.",
       "swapIncoming": "{{player}} wants to swap seats with you.",
-      "swapReviewHint": "Approving swaps your two seats immediately. Rejecting keeps the current seating.",
       "swapPendingOther": "{{requester}} is waiting for {{target}} to respond to a seat swap request.",
       "swapApprove": "Approve",
       "swapReject": "Reject",

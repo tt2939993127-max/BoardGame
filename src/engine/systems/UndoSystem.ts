@@ -74,53 +74,6 @@ function clearPendingRequest<TCore>(state: MatchState<TCore>): MatchState<TCore>
     };
 }
 
-function normalizeAiSeatIds(aiSeatIds: readonly PlayerId[] | undefined): PlayerId[] {
-    if (!aiSeatIds || aiSeatIds.length === 0) {
-        return [];
-    }
-
-    return Array.from(new Set(aiSeatIds.filter((playerId): playerId is PlayerId => typeof playerId === 'string' && playerId.length > 0)));
-}
-
-export function setUndoAiSeatIds<TCore>(
-    state: MatchState<TCore>,
-    aiSeatIds: readonly PlayerId[] | undefined,
-): MatchState<TCore> {
-    const normalized = normalizeAiSeatIds(aiSeatIds);
-    const currentUndo = state.sys?.undo ?? {
-        snapshots: [],
-        maxSnapshots: 50,
-    };
-    const currentAiSeatIds = normalizeAiSeatIds(currentUndo.aiSeatIds);
-
-    if (
-        normalized.length === currentAiSeatIds.length
-        && normalized.every((playerId, index) => playerId === currentAiSeatIds[index])
-    ) {
-        return state;
-    }
-
-    return {
-        ...state,
-        sys: {
-            ...state.sys,
-            undo: {
-                ...currentUndo,
-                aiSeatIds: normalized,
-            },
-        },
-    };
-}
-
-function getEligibleHumanApproverIds(
-    playerIds: readonly PlayerId[],
-    requesterId: PlayerId,
-    undo: UndoState,
-): PlayerId[] {
-    const aiSeatIdSet = new Set(normalizeAiSeatIds(undo.aiSeatIds));
-    return playerIds.filter((playerId) => playerId !== requesterId && !aiSeatIdSet.has(playerId));
-}
-
 // ============================================================================
 // 撤销命令类型
 // ============================================================================
@@ -193,7 +146,7 @@ export function createUndoSystem<TCore>(
 
             // 处理撤销相关命令
             if (command.type === UNDO_COMMANDS.REQUEST_UNDO) {
-                return handleRequestUndo(state, command.playerId, playerIds, requireApproval, requiredApprovals);
+                return handleRequestUndo(state, command.playerId, requireApproval, requiredApprovals);
             }
             if (command.type === UNDO_COMMANDS.APPROVE_UNDO) {
                 return handleApproveUndo(state, command.playerId);
@@ -400,7 +353,6 @@ function appendSnapshot<TCore>(
 function handleRequestUndo<TCore>(
     state: MatchState<TCore>,
     requesterId: PlayerId,
-    playerIds: readonly PlayerId[],
     requireApproval: boolean,
     requiredApprovals: number
 ): HookResult<TCore> {
@@ -442,7 +394,6 @@ function handleRequestUndo<TCore>(
                         maxSnapshots: undo.maxSnapshots,
                         snapshots: newSnapshots,
                         snapshotCursors: newCursors,
-                        aiSeatIds: normalizeAiSeatIds(undo.aiSeatIds),
                         pendingRequest: undefined,
                         restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
                     },
@@ -451,46 +402,10 @@ function handleRequestUndo<TCore>(
         };
     }
 
-    const eligibleHumanApproverIds = getEligibleHumanApproverIds(playerIds, requesterId, undo);
-    const effectiveRequiredApprovals = Math.min(requiredApprovals, eligibleHumanApproverIds.length);
-
-    if (effectiveRequiredApprovals === 0) {
-        const previousState = undo.snapshots[undo.snapshots.length - 1] as MatchState<TCore>;
-        const newSnapshots = undo.snapshots.slice(0, -1);
-        const cursors = undo.snapshotCursors ?? [];
-        const restoredCursor = cursors[cursors.length - 1] ?? -1;
-        const newCursors = cursors.slice(0, -1);
-
-        logUndoServer('request-approved-by-human-bypass', {
-            requesterId,
-            historyLen: undo.snapshots.length,
-            aiSeatIds: undo.aiSeatIds ?? [],
-            restoredRandomCursor: restoredCursor,
-        });
-
-        return {
-            halt: true,
-            state: {
-                ...previousState,
-                sys: {
-                    ...previousState.sys,
-                    undo: {
-                        maxSnapshots: undo.maxSnapshots,
-                        snapshots: newSnapshots,
-                        snapshotCursors: newCursors,
-                        aiSeatIds: normalizeAiSeatIds(undo.aiSeatIds),
-                        pendingRequest: undefined,
-                        restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
-                    },
-                },
-            },
-        };
-    }
-
+    // 创建撤销请求
     logUndoServer('request-created', {
         requesterId,
-        requiredApprovals: effectiveRequiredApprovals,
-        eligibleHumanApproverIds,
+        requiredApprovals,
         historyLen: undo.snapshots.length,
     });
     return {
@@ -504,7 +419,7 @@ function handleRequestUndo<TCore>(
                     pendingRequest: {
                         requesterId,
                         approvals: [],
-                        requiredApprovals: effectiveRequiredApprovals,
+                        requiredApprovals,
                     },
                 },
             },
@@ -521,16 +436,6 @@ function handleApproveUndo<TCore>(
     if (!undo?.pendingRequest) {
         logUndoServer('approve-rejected', { reason: 'no-pending', approverId });
         return { halt: true, error: '没有待处理的撤销请求' };
-    }
-
-    if (undo.pendingRequest.requesterId === approverId) {
-        logUndoServer('approve-rejected', { reason: 'requester-cannot-approve', approverId });
-        return { halt: true, error: '请求者不能批准自己的撤销请求' };
-    }
-
-    if (normalizeAiSeatIds(undo.aiSeatIds).includes(approverId)) {
-        logUndoServer('approve-rejected', { reason: 'ai-does-not-vote', approverId });
-        return { halt: true, error: 'AI 玩家不参与撤销投票' };
     }
 
     if (undo.pendingRequest.approvals.includes(approverId)) {
@@ -570,7 +475,6 @@ function handleApproveUndo<TCore>(
                         maxSnapshots: undo.maxSnapshots,
                         snapshots: newSnapshots,
                         snapshotCursors: newCursors,
-                        aiSeatIds: normalizeAiSeatIds(undo.aiSeatIds),
                         pendingRequest: undefined,
                         restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
                     },

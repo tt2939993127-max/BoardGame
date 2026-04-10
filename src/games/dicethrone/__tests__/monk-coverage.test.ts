@@ -15,7 +15,6 @@ import {
     createQueuedRandom,
     createNoResponseSetup,
     createNoResponseSetupWithEmptyHand,
-    createSetupWithHand,
     assertState,
     cmd,
 } from './test-utils';
@@ -596,100 +595,6 @@ describe('Monk 技能完整覆盖测试', () => {
                 },
             });
             
-            expect(result.assertionErrors).toEqual([]);
-        });
-
-        it('冲拳 III：5拳但不是4个相同数字时不施加击倒', () => {
-            const random = createQueuedRandom([1, 1, 1, 2, 2, 4, 4, 4, 4, 4]);
-            const runner = new GameTestRunner({
-                domain: DiceThroneDomain,
-                systems: testSystems,
-                playerIds: ['0', '1'],
-                random,
-                setup: createSetupWithHand(['card-thrust-punch-2', 'card-thrust-punch-3'], {
-                    cp: 4,
-                    mutate: (core) => {
-                        core.players['1'].hand = [];
-                    },
-                }),
-                assertFn: assertState,
-                silent: true,
-            });
-
-            const result = runner.run({
-                name: '冲拳III 5拳但非4同数不击倒',
-                commands: [
-                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-2', targetAbilityId: 'fist-technique' }),
-                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-3', targetAbilityId: 'fist-technique' }),
-                    cmd('ADVANCE_PHASE', '0'),
-                    cmd('ROLL_DICE', '0'),
-                    cmd('CONFIRM_ROLL', '0'),
-                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-3-5' }),
-                    cmd('ADVANCE_PHASE', '0'),
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'),
-                    cmd('SKIP_TOKEN_RESPONSE', '1'),
-                ],
-                expect: {
-                    turnPhase: 'main2',
-                    players: {
-                        '1': {
-                            hp: 41,
-                            statusEffects: { [STATUS_IDS.KNOCKDOWN]: 0 },
-                        },
-                    },
-                },
-            });
-
-            expect(result.assertionErrors).toEqual([]);
-        });
-
-        it('冲拳 III：4个相同数字时施加击倒', () => {
-            const random = createQueuedRandom([1, 1, 1, 1, 2, 4, 4, 4, 4, 4]);
-            const runner = new GameTestRunner({
-                domain: DiceThroneDomain,
-                systems: testSystems,
-                playerIds: ['0', '1'],
-                random,
-                setup: createSetupWithHand(['card-thrust-punch-2', 'card-thrust-punch-3'], {
-                    cp: 4,
-                    mutate: (core) => {
-                        core.players['1'].hand = [];
-                    },
-                }),
-                assertFn: assertState,
-                silent: true,
-            });
-
-            const result = runner.run({
-                name: '冲拳III 4同数施加击倒',
-                commands: [
-                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-2', targetAbilityId: 'fist-technique' }),
-                    cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-thrust-punch-3', targetAbilityId: 'fist-technique' }),
-                    cmd('ADVANCE_PHASE', '0'),
-                    cmd('ROLL_DICE', '0'),
-                    cmd('CONFIRM_ROLL', '0'),
-                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-3-5' }),
-                    cmd('ADVANCE_PHASE', '0'),
-                    cmd('ROLL_DICE', '1'),
-                    cmd('CONFIRM_ROLL', '1'),
-                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
-                    cmd('ADVANCE_PHASE', '1'),
-                    cmd('SKIP_TOKEN_RESPONSE', '1'),
-                ],
-                expect: {
-                    turnPhase: 'main2',
-                    players: {
-                        '1': {
-                            hp: 41,
-                            statusEffects: { [STATUS_IDS.KNOCKDOWN]: 1 },
-                        },
-                    },
-                },
-            });
-
             expect(result.assertionErrors).toEqual([]);
         });
 

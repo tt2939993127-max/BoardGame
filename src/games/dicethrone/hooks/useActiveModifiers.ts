@@ -122,6 +122,8 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
     const lastSeenIdRef = useRef<number>(-1);
     const isFirstMountRef = useRef(true);
 
+    console.log('[useActiveModifiers] Hook 被调用，isFirstMount:', isFirstMountRef.current, 'totalEntries:', eventStreamEntries.length);
+
     useEffect(() => {
         const curLen = eventStreamEntries.length;
         console.log('[useActiveModifiers] useEffect 触发，isFirstMount:', isFirstMountRef.current, 'totalEntries:', curLen);
@@ -150,9 +152,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
             
             if (restoredModifiers.length > 0) {
                 console.log('[useActiveModifiers] 首次挂载，设置 modifiers:', restoredModifiers);
-                queueMicrotask(() => {
-                    setModifiers(restoredModifiers);
-                });
+                setModifiers(restoredModifiers);
             } else {
                 console.log('[useActiveModifiers] 首次挂载，没有找到攻击修正卡');
             }
@@ -178,9 +178,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
                 totalEntries: curLen,
                 restoredModifiers,
             });
-            queueMicrotask(() => {
-                setModifiers(restoredModifiers);
-            });
+            setModifiers(restoredModifiers);
             return;
         }
         
@@ -251,9 +249,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
             }
             
             console.log('[useActiveModifiers] ATTACK_RESOLVED 后的新修正卡:', newModifiers, '（应该清空旧的）');
-            queueMicrotask(() => {
-                setModifiers(newModifiers);
-            });
+            setModifiers(newModifiers);
         } else {
             // 没有 ATTACK_RESOLVED 事件：正常添加修正卡
             const newModifiers: ActiveModifier[] = [];
@@ -283,9 +279,7 @@ export function useActiveModifiers(config: UseActiveModifiersConfig) {
 
             if (newModifiers.length > 0) {
                 console.log('[useActiveModifiers] 添加新修正卡:', newModifiers);
-                queueMicrotask(() => {
-                    setModifiers(prev => [...prev, ...newModifiers]);
-                });
+                setModifiers(prev => [...prev, ...newModifiers]);
             }
         }
     }, [eventStreamEntries]); // 移除 modifiers 依赖，避免无限循环

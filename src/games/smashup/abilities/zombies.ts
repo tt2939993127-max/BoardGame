@@ -137,7 +137,7 @@ function zombieGraveDigger(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `zombie_grave_digger_${ctx.now}`, ctx.playerId,
         '选择要从弃牌堆取回的随从（可跳过）', [...options, skipOption] as any[],
-        { sourceId: 'zombie_grave_digger', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
+        { sourceId: 'zombie_grave_digger', targetType: 'generic' },
     );
     // 手动提供 optionsGenerator：从弃牌堆过滤随从
     (interaction.data as any).optionsGenerator = (state: any) => {
@@ -196,7 +196,7 @@ function zombieGraveRobbing(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `zombie_grave_robbing_${ctx.now}`, ctx.playerId,
         '选择要从弃牌堆取回的卡牌', options,
-        { sourceId: 'zombie_grave_robbing', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
+        { sourceId: 'zombie_grave_robbing', targetType: 'generic' },
     );
     // 手动提供 optionsGenerator：从弃牌堆获取所有卡牌
     (interaction.data as any).optionsGenerator = (state: any) => {
@@ -231,7 +231,7 @@ function zombieNotEnoughBullets(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `zombie_not_enough_bullets_${ctx.now}`, ctx.playerId,
         '选择要取回的随从名（取回所有同名随从）', options,
-        { sourceId: 'zombie_not_enough_bullets', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
+        { sourceId: 'zombie_not_enough_bullets', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -250,7 +250,7 @@ function zombieLendAHand(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `zombie_lend_a_hand_${ctx.now}`, ctx.playerId,
         '借把手：选择要洗回牌库的卡牌（任意数量，可不选）', options,
-        { sourceId: 'zombie_lend_a_hand', targetType: 'generic', multi: { min: 0, max: player.discard.length }, autoRefresh: 'discard', responseValidationMode: 'live' },
+        { sourceId: 'zombie_lend_a_hand', targetType: 'generic', multi: { min: 0, max: player.discard.length } },
     );
     // 手动提供 optionsGenerator：从弃牌堆获取所有卡牌
     (interaction.data as any).optionsGenerator = (state: any) => {

@@ -76,15 +76,7 @@ export function useInteractionState(pendingInteraction?: InteractionDescriptor) 
 
     // 当 pendingInteraction 变化时自动重置状态
     useEffect(() => {
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (!cancelled) {
-                setLocalState(INITIAL_STATE);
-            }
-        });
-        return () => {
-            cancelled = true;
-        };
+        setLocalState(INITIAL_STATE);
     }, [pendingInteraction?.id]);
 
     /**

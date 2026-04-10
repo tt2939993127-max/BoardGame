@@ -23,7 +23,6 @@ export type {
 // 角色选择类型
 export type {
     CharacterDef,
-    CharacterBadgeDef,
     CharacterSelectionState,
     CharacterAssets,
     CharacterSelectionCallbacks,

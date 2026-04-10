@@ -87,30 +87,22 @@ export function useFxBus(registry: FxRegistry, options?: FxBusOptions): FxBus {
   const [effects, setEffects] = useState<FxEvent[]>([]);
   // 同步 ref 用于 fireImpact 查找事件上下文（避免闭包过期）
   const effectsRef = useRef<FxEvent[]>([]);
-
-  // registry ref（供 removeEffect 闭包内安全访问）
-  const registryRef = useRef(registry);
-  // 反馈回调 ref（避免闭包过期）
-  const playSoundRef = useRef(options?.playSound);
-  const triggerShakeRef = useRef(options?.triggerShake);
-
-  useEffect(() => {
-    effectsRef.current = effects;
-  }, [effects]);
-
-  useEffect(() => {
-    registryRef.current = registry;
-  }, [registry]);
-
-  useEffect(() => {
-    playSoundRef.current = options?.playSound;
-    triggerShakeRef.current = options?.triggerShake;
-  }, [options?.playSound, options?.triggerShake]);
+  effectsRef.current = effects;
 
   // 挂载时自动预编译所有自注册的 shader
   useEffect(() => {
     flushRegisteredShaders();
   }, [registry]);
+
+  // registry ref（供 removeEffect 闭包内安全访问）
+  const registryRef = useRef(registry);
+  registryRef.current = registry;
+
+  // 反馈回调 ref（避免闭包过期）
+  const playSoundRef = useRef(options?.playSound);
+  playSoundRef.current = options?.playSound;
+  const triggerShakeRef = useRef(options?.triggerShake);
+  triggerShakeRef.current = options?.triggerShake;
 
   // 防抖时间戳记录：cue → lastPushTime
   const debounceMapRef = useRef(new Map<FxCue, number>());

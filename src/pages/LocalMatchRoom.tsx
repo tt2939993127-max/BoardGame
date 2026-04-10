@@ -1,4 +1,4 @@
-import { useMemo, useEffect, useCallback, useState } from 'react';
+import { useMemo, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { getGameImplementation } from '../games/registry';
@@ -57,10 +57,10 @@ export const LocalMatchRoom = () => {
 
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
 
+
     const seedFromUrl = searchParams.get('seed');
     const [fallbackSeed] = useState(() => seedFromUrl || createLocalMatchSeed());
     const gameSeed = seedFromUrl || fallbackSeed;
-    const [hasCompletedInitialLocalPreload, setHasCompletedInitialLocalPreload] = useState(false);
 
     useEffect(() => {
         if (seedFromUrl) return;
@@ -94,23 +94,10 @@ export const LocalMatchRoom = () => {
         () => buildLocalMatchSetupData(setupSelections),
         [setupSelections],
     );
-    const humanSeatIds = useMemo(
-        () => Object.entries(seatControllers)
-            .filter(([, controller]) => controller.type === 'human')
-            .map(([playerId]) => playerId)
-            .sort((left, right) => Number(left) - Number(right)),
-        [seatControllers],
-    );
     const hasAiSeat = useMemo(
         () => Object.values(seatControllers).some((controller) => controller.type !== 'human'),
         [seatControllers],
     );
-    const shouldFollowCurrentTurnPlayer = !hasAiSeat || humanSeatIds.length === 0;
-    const fixedLocalPlayerId = shouldFollowCurrentTurnPlayer ? undefined : humanSeatIds[0];
-
-    useEffect(() => {
-        setHasCompletedInitialLocalPreload(false);
-    }, [gameId, gameSeed, localPlayerCount]);
 
     // 从游戏实现中获取引擎配置
     const engineConfig = useMemo(() => {
@@ -118,8 +105,7 @@ export const LocalMatchRoom = () => {
         return getGameImplementation(gameId)?.engineConfig ?? null;
     }, [gameId, isGameImplementationReady]);
 
-    // 包装 Board 组件，注入 CriticalImageGate。
-    // 不要把 WrappedBoard 绑定到 t 引用，否则 namespace 变化会让 Board 重挂载。
+    // 包装 Board 组件，注入 CriticalImageGate
     const WrappedBoard = useMemo<ComponentType<GameBoardProps> | null>(() => {
         if (!gameId || !isGameImplementationReady) return null;
         const impl = getGameImplementation(gameId);
@@ -131,17 +117,13 @@ export const LocalMatchRoom = () => {
                 gameState={props?.G}
                 locale={i18n.language}
                 playerID={props?.playerID}
-                blockRendering={!hasCompletedInitialLocalPreload}
-                loadingDescription={i18n.t('matchRoom.loadingResources', { ns: 'lobby' })}
-                onReady={() => {
-                    setHasCompletedInitialLocalPreload(true);
-                }}
+                loadingDescription={t('matchRoom.loadingResources')}
             >
                 <Board {...props} />
             </CriticalImageGate>
         );
         return WrappedLocalBoard;
-    }, [gameId, hasCompletedInitialLocalPreload, i18n, isGameImplementationReady]);
+    }, [gameId, i18n.language, t, isGameImplementationReady]);
 
     // 命令被拒绝时的统一反馈（拒绝音效 + toast 提示）
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
@@ -198,7 +180,7 @@ export const LocalMatchRoom = () => {
                         } as React.CSSProperties}
                     >
                         <GameModeProvider mode="local">
-                            <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId} playerID={fixedLocalPlayerId}>
+                            <GameCursorProvider themeId={gameConfig?.cursorTheme} gameId={gameId}>
                                 {engineConfig && WrappedBoard ? (
                                     <LocalGameProvider
                                         key={`local:${gameId ?? 'unknown'}:${gameSeed}:${localPlayerCount}`}
@@ -208,8 +190,7 @@ export const LocalMatchRoom = () => {
                                         setupData={localSetupData}
                                         onCommandRejected={handleCommandRejected}
                                         seatControllers={seatControllers}
-                                        playerId={fixedLocalPlayerId}
-                                        followCurrentTurnPlayer={shouldFollowCurrentTurnPlayer}
+                                        followCurrentTurnPlayer
                                         persistSession
                                     >
                                         <BoardBridge

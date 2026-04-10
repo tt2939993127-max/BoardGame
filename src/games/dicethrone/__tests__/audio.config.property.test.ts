@@ -43,29 +43,6 @@ import {
     SHADOW_THIEF_ABILITIES,
     STEAL_2,
 } from '../heroes/shadow_thief/abilities';
-import {
-    BOUNTY_HUNTER_2,
-    DEADEYE_2,
-    DUEL_2,
-    FAN_THE_HAMMER_2,
-    GUNSLINGER_ABILITIES,
-    REVOLVER_2,
-    SHOWDOWN_2,
-    SHOWDOWN_3,
-    TAKE_COVER_2,
-} from '../heroes/gunslinger/abilities';
-import {
-    BUDO_2,
-    KATANA_SLICE_2,
-    KATANA_SLICE_3,
-    MASAMUNE_2,
-    SAMURAI_ABILITIES,
-    SAMURAI_SLOT_06_2,
-    SOLEMNITY_2,
-    STAND_TALL_2,
-    WAKIZASHI_2,
-    WAKIZASHI_3,
-} from '../heroes/samurai/abilities';
 import { ALL_TOKEN_DEFINITIONS } from '../domain/characters';
 import type { AudioEvent } from '../../../lib/audio/types';
 import { getOptimizedAudioUrl } from '../../../core/AssetLoader';
@@ -157,8 +134,6 @@ describe.skipIf(!registryExists)('DiceThrone 音效配置属性测试', () => {
                 ...MOON_ELF_ABILITIES,
                 ...PALADIN_ABILITIES,
                 ...SHADOW_THIEF_ABILITIES,
-                ...GUNSLINGER_ABILITIES,
-                ...SAMURAI_ABILITIES,
             ];
 
             const offensiveAbilities = resolverAbilities.filter(ability => ability.type === 'offensive');
@@ -175,8 +150,6 @@ describe.skipIf(!registryExists)('DiceThrone 音效配置属性测试', () => {
                 ...MOON_ELF_ABILITIES,
                 ...PALADIN_ABILITIES,
                 ...SHADOW_THIEF_ABILITIES,
-                ...GUNSLINGER_ABILITIES,
-                ...SAMURAI_ABILITIES,
                 LONGBOW_2,
                 LONGBOW_3,
                 COVERT_FIRE_2,
@@ -204,23 +177,6 @@ describe.skipIf(!registryExists)('DiceThrone 音效配置属性测试', () => {
                 CORNUCOPIA_2,
                 SHADOW_DEFENSE_2,
                 FEARLESS_RIPOSTE_2,
-                REVOLVER_2,
-                BOUNTY_HUNTER_2,
-                TAKE_COVER_2,
-                SHOWDOWN_2,
-                SHOWDOWN_3,
-                DEADEYE_2,
-                FAN_THE_HAMMER_2,
-                DUEL_2,
-                KATANA_SLICE_2,
-                KATANA_SLICE_3,
-                WAKIZASHI_2,
-                WAKIZASHI_3,
-                SOLEMNITY_2,
-                BUDO_2,
-                SAMURAI_SLOT_06_2,
-                MASAMUNE_2,
-                STAND_TALL_2,
             ];
 
             const customSfxKeys = allAbilityDefs
@@ -259,27 +215,6 @@ describe.skipIf(!registryExists)('DiceThrone 音效配置属性测试', () => {
         allUsedKeys.add(VICTORY_KEY);
         allUsedKeys.add(DEFEAT_KEY);
         for (const ability of MONK_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of BARBARIAN_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of PYROMANCER_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of MOON_ELF_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of PALADIN_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of SHADOW_THIEF_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of GUNSLINGER_ABILITIES) {
-            if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
-        }
-        for (const ability of SAMURAI_ABILITIES) {
             if (ability.sfxKey) allUsedKeys.add(ability.sfxKey);
         }
         for (const token of ALL_TOKEN_DEFINITIONS) {

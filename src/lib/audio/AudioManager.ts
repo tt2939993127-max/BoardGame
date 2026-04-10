@@ -5,14 +5,7 @@
 import { Howl, Howler } from 'howler';
 import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
-import {
-    audioAssetsPath,
-    getCommonAudioAssetBaseOverride,
-    getOptimizedAudioUrl,
-    waitForCriticalImages,
-    isCriticalImagesReady,
-    resolveAssetsBaseUrlFromEnv,
-} from '../../core/AssetLoader';
+import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages, isCriticalImagesReady, resolveAssetsBaseUrlFromEnv } from '../../core/AssetLoader';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -28,7 +21,7 @@ const normalizeBasePath = (basePath: string) => {
     if (isPassthroughSource(basePath)) {
         return ensureTrailingSlash(basePath);
     }
-    return ensureTrailingSlash(audioAssetsPath(basePath));
+    return ensureTrailingSlash(assetsPath(basePath));
 };
 
 const buildAudioSrc = (basePath: string, src: string) => {
@@ -72,18 +65,9 @@ const dedupeAudioSrcList = (list: string[]) => {
 };
 
 const toOfficialRemoteAssetUrl = (src: string) => {
+    if (!src.startsWith('/assets/')) return null;
     const { path, suffix } = splitUrlSuffix(src);
-    const commonAudioAssetBaseOverride = getCommonAudioAssetBaseOverride();
-    let relativePath = '';
-
-    if (path.startsWith('/assets/')) {
-        relativePath = path.replace(/^\/+assets\/+/, '');
-    } else if (commonAudioAssetBaseOverride && path.startsWith(`${commonAudioAssetBaseOverride}/`)) {
-        relativePath = path.slice(commonAudioAssetBaseOverride.length + 1);
-    } else {
-        return null;
-    }
-
+    const relativePath = path.replace(/^\/+assets\/+/, '');
     if (!relativePath) return null;
     return `${OFFICIAL_REMOTE_ASSETS_BASE_URL}/${relativePath}${suffix}`;
 };

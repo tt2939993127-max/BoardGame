@@ -13,7 +13,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
 import { findHeroCard } from '../heroes';
 import { RightSidebar } from '../ui/RightSidebar';
-import { DiceActions, DiceTray } from '../ui/DiceTray';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
 
 vi.mock('react-i18next', () => ({
@@ -294,44 +293,6 @@ describe('攻击修正指示器撤回测试', () => {
         );
 
         expect(html).toContain('interaction.hint_select_ally:current=0,max=1');
-    });
-
-    it('非掷骰阶段不应放开普通投掷/确认按钮', () => {
-        const html = renderToStaticMarkup(
-            React.createElement(DiceActions, {
-                rollCount: 1,
-                rollLimit: 2,
-                rollConfirmed: false,
-                onRoll: vi.fn(),
-                onConfirm: vi.fn(),
-                currentPhase: 'main1',
-                canInteract: true,
-                isRolling: false,
-                setIsRolling: vi.fn(),
-                setRerollingDiceIds: vi.fn(),
-            })
-        );
-
-        expect(html).toContain('data-tutorial-id="dice-roll-button"');
-        expect(html).toContain('data-tutorial-id="dice-confirm-button"');
-        expect(html).toContain('disabled=""');
-    });
-
-    it('非合法锁骰阶段不应把普通骰子渲染为可点击', () => {
-        const html = renderToStaticMarkup(
-            React.createElement(DiceTray, {
-                dice: [{ id: 0, value: 4, isKept: false, definitionId: 'monk-dice-1' } as any],
-                rollCount: 1,
-                onToggleLock: vi.fn(),
-                currentPhase: 'main1',
-                canInteract: true,
-                isRolling: false,
-                locale: 'zh-CN',
-            })
-        );
-
-        expect(html).toContain('data-testid="die-button-0"');
-        expect(html).toContain('data-clickable="false"');
     });
 });
 

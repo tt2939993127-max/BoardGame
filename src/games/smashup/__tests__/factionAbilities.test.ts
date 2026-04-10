@@ -18,9 +18,8 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
-import { clearOngoingEffectRegistry, fireTriggers } from '../domain/ongoingEffects';
 import { scoreOneBase } from '../domain';
+import { fireTriggers } from '../domain/ongoingEffects';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { makeMatchState } from './helpers';
@@ -28,8 +27,6 @@ import { makeMatchState } from './helpers';
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
-    clearOngoingEffectRegistry();
-    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -173,30 +170,10 @@ describe('trickster interaction regressions', () => {
 // 辅助函数
 // ============================================================================
 
-function makeMinion(
-    uid: string,
-    defId: string,
-    controller: string,
-    power: number,
-    ownerOrOverrides?: string | Partial<MinionOnBase>,
-    overrides?: Partial<MinionOnBase>,
-): MinionOnBase {
-    const base: MinionOnBase = {
-        uid,
-        defId,
-        controller,
-        owner: typeof ownerOrOverrides === 'string' ? ownerOrOverrides : controller,
-        basePower: power,
-        powerCounters: 0,
-        powerModifier: 0,
-        tempPowerModifier: 0,
-        talentUsed: false,
-        attachedActions: [],
-    };
+function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
-        ...base,
-        ...(typeof ownerOrOverrides === 'object' ? ownerOrOverrides : null),
-        ...overrides,
+        uid, defId, controller, owner: owner ?? controller,
+        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
     };
 }
 
@@ -428,30 +405,6 @@ describe('恐龙派系能力', () => {
         expect(current?.data?.options).toHaveLength(2);
     });
 
-    it('dino_rampage: 单基地单个己方随从时也应显式创建随从选择', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'dino_rampage', 'action', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [
-                {
-                    defId: 'b1',
-                    minions: [makeMinion('m0', 'test', '0', 3)],
-                    ongoingActions: [],
-                },
-            ],
-        });
-
-        const { matchState } = execPlayAction(state, '0', 'a1');
-        const current = (matchState.sys as any).interaction?.current;
-        expect(current).toBeDefined();
-        expect(current?.data?.sourceId).toBe('dino_rampage_choose_minion');
-        expect(current?.data?.options).toHaveLength(1);
-    });
-
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
         const state = makeState({
             players: {
@@ -561,54 +514,6 @@ describe('恐龙派系能力', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('dino_natural_selection_choose_mine');
-    });
-
-    it('dino_natural_selection: 第二段目标不会列出挂有烟雾弹的对手随从', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('a1', 'dino_natural_selection', 'action', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [
-                {
-                    defId: 'b1', minions: [
-                        makeMinion('ally-1', 'test', '0', 5),
-                        makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 3, {
-                            attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
-                        } as any),
-                        makeMinion('enemy-plain', 'test', '1', 4),
-                    ], ongoingActions: [],
-                },
-            ],
-        });
-
-        const playResult = runCommand(makeMatchState(state), {
-            type: SU_COMMANDS.PLAY_ACTION,
-            playerId: '0',
-            payload: { cardUid: 'a1' },
-        } as any, defaultRandom);
-
-        const firstPrompt = playResult.finalState.sys.interaction?.current as any;
-        expect(firstPrompt?.data?.sourceId).toBe('dino_natural_selection_choose_mine');
-        const allyOption = firstPrompt.data.options.find((option: any) => option?.value?.minionUid === 'ally-1');
-        expect(allyOption).toBeDefined();
-
-        const targetResult = runCommand(playResult.finalState, {
-            type: 'SYS_INTERACTION_RESPOND',
-            playerId: '0',
-            payload: { optionId: allyOption.id },
-        } as any, defaultRandom);
-
-        const secondPrompt = targetResult.finalState.sys.interaction?.current as any;
-        expect(secondPrompt?.data?.sourceId).toBe('dino_natural_selection_choose_target');
-        const targetUids = ((secondPrompt?.data?.options ?? []) as any[])
-            .map(option => option?.value?.minionUid)
-            .filter(Boolean);
-
-        expect(targetUids).toContain('enemy-plain');
-        expect(targetUids).not.toContain('enemy-smoke');
     });
 
     it('dino_natural_selection: 无合法目标时无事件', () => {

@@ -40,12 +40,6 @@ const removeStatus = (description: string, opts?: { timing?: EffectTiming; condi
     condition: opts?.condition,
 });
 
-const makeAttackUndefendableOnMatchingNumbers = (description: string): AbilityEffect => ({
-    description,
-    action: { type: 'custom', target: 'self', customActionId: 'barbarian-slap-matching-4-unblockable' },
-    timing: 'preDefense',
-});
-
 // ============================================
 // Level 1 技能 (已验证)
 // ============================================
@@ -167,19 +161,15 @@ export const SLAP_2: AbilityDef = {
         {
             id: 'slap-2-4',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 4 } },
-            effects: [
-                makeAttackUndefendableOnMatchingNumbers(abilityEffectText('slap-2', 'makeUnblockableOnFourOfAKind')),
-                damage(7, abilityEffectText('slap-2', 'damage7')),
-            ],
+            effects: [damage(7, abilityEffectText('slap-2', 'damage7Unblockable'))],
+            tags: ['unblockable'], // 变体支持 tags
             priority: 2
         },
         {
             id: 'slap-2-5',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 5 } },
-            effects: [
-                makeAttackUndefendableOnMatchingNumbers(abilityEffectText('slap-2', 'makeUnblockableOnFourOfAKind')),
-                damage(9, abilityEffectText('slap-2', 'damage9')),
-            ],
+            effects: [damage(9, abilityEffectText('slap-2', 'damage9Unblockable'))],
+            tags: ['unblockable'],
             priority: 3
         },
     ],
@@ -322,19 +312,15 @@ export const SLAP_3: AbilityDef = {
         {
             id: 'slap-3-4',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 4 } },
-            effects: [
-                makeAttackUndefendableOnMatchingNumbers(abilityEffectText('slap-3', 'makeUnblockableOnFourOfAKind')),
-                damage(8, abilityEffectText('slap-3', 'damage8')),
-            ],
+            effects: [damage(8, abilityEffectText('slap-3', 'damage8Unblockable'))],
+            tags: ['unblockable'],
             priority: 2
         },
         {
             id: 'slap-3-5',
             trigger: { type: 'diceSet', faces: { [BARBARIAN_DICE_FACE_IDS.SWORD]: 5 } },
-            effects: [
-                makeAttackUndefendableOnMatchingNumbers(abilityEffectText('slap-3', 'makeUnblockableOnFourOfAKind')),
-                damage(10, abilityEffectText('slap-3', 'damage10')),
-            ],
+            effects: [damage(10, abilityEffectText('slap-3', 'damage10Unblockable'))],
+            tags: ['unblockable'],
             priority: 3
         },
     ],

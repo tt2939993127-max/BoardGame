@@ -30,26 +30,17 @@ export function useDiscoveryHint(hintKey: string): [boolean, () => void, boolean
 
     // 登录用户：从服务端同步已读状态
     useEffect(() => {
-        let cancelled = false;
-
         if (!token || !user) {
-            queueMicrotask(() => {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            });
+            setLoading(false);
             return;
         }
         // 本地已标记过则跳过网络请求
         if (lsGet(hintKey)) {
-            queueMicrotask(() => {
-                if (!cancelled) {
-                    setLoading(false);
-                }
-            });
+            setLoading(false);
             return;
         }
 
+        let cancelled = false;
         getSeenHints(token).then(keys => {
             if (cancelled) return;
             if (keys.includes(hintKey)) {

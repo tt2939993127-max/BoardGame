@@ -19,7 +19,6 @@ ENV/
 # 构建输出
 dist
 dist-ssr
-*.tgz
 *.local
 
 # 编辑器目录和文件

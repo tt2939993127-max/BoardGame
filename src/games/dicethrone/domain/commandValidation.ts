@@ -233,13 +233,18 @@ const validateConfirmRoll = (
 /**
  * 验证选择技能命令
  */
+const normalizeSelectedAbilityId = (abilityId: string): string => {
+    if (abilityId === 'shadow-guard') return 'shadow-defense';
+    return abilityId;
+};
+
 const validateSelectAbility = (
     state: DiceThroneCore,
     cmd: SelectAbilityCommand,
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    const { abilityId } = cmd.payload;
+    const abilityId = normalizeSelectedAbilityId(cmd.payload.abilityId);
     
     if (phase === 'defensiveRoll') {
         if (!state.pendingAttack) {

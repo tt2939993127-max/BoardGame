@@ -40,7 +40,6 @@ function createState(opts: {
     purify?: number;
     cp?: number;
     rollLimit?: number;
-    pendingAttackValueCounts?: Record<number, number>;
 }): DiceThroneCore {
     const player: HeroState = {
         id: '0', characterId: 'monk',
@@ -71,17 +70,7 @@ function createState(opts: {
         dice: opts.dice ?? [1, 2, 3, 4, 5].map(v => createMonkDie(v)),
         rollCount: 1, rollLimit: opts.rollLimit ?? 3, rollDiceCount: 5, rollConfirmed: false,
         activePlayerId: '0', startingPlayerId: '0', turnNumber: 1,
-        pendingAttack: opts.pendingAttackValueCounts
-            ? {
-                attackerId: '0',
-                defenderId: '1',
-                isDefendable: true,
-                damage: 9,
-                bonusDamage: 0,
-                attackDiceValueCounts: opts.pendingAttackValueCounts,
-            } as any
-            : null,
-        tokenDefinitions: [],
+        pendingAttack: null, tokenDefinitions: [],
     };
 }
 
@@ -114,25 +103,6 @@ function eventsOfType(events: DiceThroneEvent[], type: string) {
 // ============================================================================
 
 describe('僧侣 Custom Action 运行时行为断言', () => {
-    describe('monk-fist-technique-3-matching-4-knockdown (冲拳III追加击倒)', () => {
-        it('4个相同数字时施加击倒', () => {
-            const state = createState({ pendingAttackValueCounts: { 1: 4, 2: 1 } });
-            const handler = getCustomActionHandler('monk-fist-technique-3-matching-4-knockdown')!;
-            const events = handler(buildCtx(state, 'monk-fist-technique-3-matching-4-knockdown'));
-
-            const status = eventsOfType(events, 'STATUS_APPLIED');
-            expect(status).toHaveLength(1);
-            expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.KNOCKDOWN);
-            expect((status[0] as any).payload.targetId).toBe('1');
-        });
-
-        it('5拳但不足4个相同数字时不施加击倒', () => {
-            const state = createState({ pendingAttackValueCounts: { 1: 3, 2: 2 } });
-            const handler = getCustomActionHandler('monk-fist-technique-3-matching-4-knockdown')!;
-            const events = handler(buildCtx(state, 'monk-fist-technique-3-matching-4-knockdown'));
-            expect(events).toHaveLength(0);
-        });
-    });
 
     // ========================================================================
     // meditation-taiji: 根据太极骰面数获得太极Token

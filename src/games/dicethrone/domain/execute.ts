@@ -75,6 +75,11 @@ const resolveStatusNewTotal = (
     return Math.min(currentStacks + amount, maxStacks);
 };
 
+const normalizeSelectedAbilityId = (abilityId: string): string => {
+    if (abilityId === 'shadow-guard') return 'shadow-defense';
+    return abilityId;
+};
+
 const buildSwappedSeatingOrder = (
     seatingOrder: PlayerId[],
     requesterId: PlayerId,
@@ -432,8 +437,9 @@ export function execute(
         }
 
         case 'SELECT_ABILITY': {
-            const { abilityId } = command.payload as { abilityId: string };
-            
+            const { abilityId: rawAbilityId } = command.payload as { abilityId: string };
+            const abilityId = normalizeSelectedAbilityId(rawAbilityId);
+
             if (phase === 'defensiveRoll') {
                 // 防御技能选择
                 const event: AbilityActivatedEvent = {
@@ -872,11 +878,7 @@ export function execute(
                 && resolvedPlayerIds.length === 1
                 && interaction.sourceCardId
             ) {
-                const playerCharacterId = state.players[interaction.playerId]?.characterId;
-                const card = findHeroCard(
-                    interaction.sourceCardId,
-                    playerCharacterId && playerCharacterId !== 'unselected' ? playerCharacterId : undefined,
-                );
+                const card = findHeroCard(interaction.sourceCardId);
                 const selectedTargetId = resolvedPlayerIds[0];
                 if (card && hasOpponentTargetEffect(card)) {
                     const stateAfterCardResolution = applyEvents(state, events, reduce);

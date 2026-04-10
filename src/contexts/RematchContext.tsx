@@ -46,8 +46,6 @@ export function RematchProvider({
     const hasRematchStartedRef = useRef(false);
     const resetTimeoutRef = useRef<number | null>(null);
     const { user, token } = useAuth();
-    const userId = user?.id;
-    const username = user?.username;
 
     const matchInfoRef = useRef<{ matchId?: string; playerId?: string }>({ matchId, playerId });
     useEffect(() => {
@@ -101,17 +99,17 @@ export function RematchProvider({
                 if (currentPlayerId === '0') {
                     try {
                         console.log('[RematchContext] P0 发起 playAgain', { gameName, currentMatchId });
-                        const guestId = userId ? undefined : getOrCreateGuestId();
+                        const guestId = user?.id ? undefined : getOrCreateGuestId();
                         const { nextMatchID } = await matchApi.playAgain(gameName, currentMatchId, {
                             playerID: currentPlayerId,
                             credentials,
                             guestId,
                         });
-                        const fallbackPlayerName = playerName || username || `玩家${currentPlayerId}`;
-                        const claimResult = userId && token
+                        const fallbackPlayerName = playerName || user?.username || `玩家${currentPlayerId}`;
+                        const claimResult = user?.id && token
                             ? await claimSeat(gameName, nextMatchID, currentPlayerId, {
                                 token,
-                                playerName: username ?? fallbackPlayerName,
+                                playerName: user.username,
                             })
                             : await claimSeat(gameName, nextMatchID, currentPlayerId, {
                                 guestId,
@@ -166,7 +164,7 @@ export function RematchProvider({
             hasRematchStartedRef.current = false;
             clearResetTimeout();
         };
-    }, [clearResetTimeout, isMultiplayer, matchId, playerId, token, userId, username]);
+    }, [isMultiplayer, matchId, playerId]);
 
     // 投票
     const vote = useCallback(() => {

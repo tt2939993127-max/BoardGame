@@ -18,7 +18,6 @@ import { UI_Z_INDEX } from '../../../core';
 import { ActiveModifierBadge } from './ActiveModifierBadge';
 import type { ActiveModifier } from '../hooks/useActiveModifiers';
 import { PassiveAbilityPanel, type PassiveAbilityPanelProps } from './PassiveAbilityPanel';
-import { buildRuntimeInlineUnitValue } from '../../mobileSupport';
 
 export const RightSidebar = ({
     dice,
@@ -87,7 +86,6 @@ export const RightSidebar = ({
     rootPlayerId: PlayerId;
     teamIdByPlayerId?: Record<PlayerId, string>;
 }) => {
-    const inlineUnit = buildRuntimeInlineUnitValue;
     const isDiceMultistep = interaction?.kind === 'multistep-choice' &&
         ((interaction.data as any)?.meta?.dtType === 'modifyDie' ||
          (interaction.data as any)?.meta?.dtType === 'selectDie');
@@ -129,7 +127,15 @@ export const RightSidebar = ({
     const multistepInteraction = useMultistepInteraction(diceInteraction, dispatch);
 
     const { t } = useTranslation('game-dicethrone');
-    const advanceButtonSizeClassName = '!min-h-0';
+    const actionRailWidthClassName = 'w-[10.2vw]';
+    const sidebarFrameClassName = 'absolute right-[1.5vw] top-0 bottom-[1.5vw] w-[15vw] flex flex-col items-center pointer-events-auto';
+    const advanceButtonSizeClassName = '!text-[0.75vw] !px-[0.5vw] !py-0 !min-h-0 h-[2.5vw] !rounded-[0.5vw]';
+    const stackGapClassName = 'gap-[0.75vw]';
+    const modifierBadgeRowClassName = 'pointer-events-none absolute left-1/2 bottom-full mb-[0.55vw] flex -translate-x-1/2 items-center justify-center gap-[0.35vw] whitespace-nowrap';
+    const hintOffsetClassName = 'mr-[0.6vw]';
+    const hintBubbleClassName = 'flex max-w-[8.8vw] min-w-0 items-center gap-[0.4vw] overflow-hidden rounded-[0.5vw] border border-amber-500/50 bg-amber-950/95 px-[0.6vw] py-[0.4vw] shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap';
+    const hintIconClassName = 'w-[1vw] h-[1vw] text-amber-400 shrink-0';
+    const hintTextClassName = 'min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-[0.75vw] text-amber-200 font-medium leading-snug';
 
     const interactionHint = useMemo(() => {
         if (!isDiceMultistep || !interaction) return null;
@@ -185,25 +191,16 @@ export const RightSidebar = ({
 
     return (
         <div
-            className="absolute top-0 flex flex-col items-center pointer-events-auto"
-            style={{
-                zIndex: UI_Z_INDEX.hud,
-                right: inlineUnit(1.5),
-                bottom: inlineUnit(1.5),
-                width: inlineUnit(15),
-            }}
+            className={sidebarFrameClassName}
+            style={{ zIndex: UI_Z_INDEX.hud }}
         >
             <div className="flex-grow" />
-            <div className="relative w-full flex flex-col items-center" style={{ gap: inlineUnit(0.75) }}>
+            <div className={`relative w-full flex flex-col items-center ${stackGapClassName}`}>
                 <div className="relative">
                     {(activeModifiers && activeModifiers.length > 0) || (attackModifierBonusDamage && attackModifierBonusDamage > 0) ? (
                         <div
-                            className="pointer-events-none absolute left-1/2 bottom-full flex -translate-x-1/2 items-center justify-center whitespace-nowrap"
-                            style={{
-                                zIndex: UI_Z_INDEX.hint,
-                                marginBottom: inlineUnit(0.55),
-                                gap: inlineUnit(0.35),
-                            }}
+                            className={modifierBadgeRowClassName}
+                            style={{ zIndex: UI_Z_INDEX.hint }}
                         >
                             {activeModifiers && activeModifiers.length > 0 && (
                                 <ActiveModifierBadge
@@ -214,30 +211,10 @@ export const RightSidebar = ({
                         </div>
                     ) : null}
                     {isDiceMultistep && interactionHint && (
-                        <div
-                            className="absolute right-full top-1/2 -translate-y-1/2 z-10 pointer-events-none"
-                            style={{ marginRight: inlineUnit(0.6) }}
-                        >
-                            <div
-                                className="flex min-w-0 items-center overflow-hidden border border-amber-500/50 bg-amber-950/95 shadow-lg shadow-amber-900/40 backdrop-blur-sm whitespace-nowrap"
-                                style={{
-                                    maxWidth: inlineUnit(8.8),
-                                    gap: inlineUnit(0.4),
-                                    borderRadius: inlineUnit(0.5),
-                                    paddingLeft: inlineUnit(0.6),
-                                    paddingRight: inlineUnit(0.6),
-                                    paddingTop: inlineUnit(0.4),
-                                    paddingBottom: inlineUnit(0.4),
-                                }}
-                            >
-                                <MousePointerClick
-                                    className="text-amber-400 shrink-0"
-                                    style={{ width: inlineUnit(1), height: inlineUnit(1) }}
-                                />
-                                <span
-                                    className="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap text-amber-200 font-medium leading-snug"
-                                    style={{ fontSize: inlineUnit(0.75) }}
-                                >
+                        <div className={`absolute right-full top-1/2 -translate-y-1/2 ${hintOffsetClassName} z-10 pointer-events-none`}>
+                            <div className={hintBubbleClassName}>
+                                <MousePointerClick className={hintIconClassName} />
+                                <span className={hintTextClassName}>
                                     {interactionHint}
                                 </span>
                             </div>
@@ -280,18 +257,8 @@ export const RightSidebar = ({
                         disabled={!isAdvanceButtonEnabled}
                         variant={isAdvanceButtonEnabled ? "primary" : "secondary"}
                         clickSoundKey={null}
-                        className={advanceButtonSizeClassName}
+                        className={`${actionRailWidthClassName} ${advanceButtonSizeClassName}`}
                         size="sm"
-                        style={{
-                            width: inlineUnit(10.2),
-                            height: inlineUnit(2.5),
-                            borderRadius: inlineUnit(0.5),
-                            paddingLeft: inlineUnit(0.5),
-                            paddingRight: inlineUnit(0.5),
-                            paddingTop: 0,
-                            paddingBottom: 0,
-                            fontSize: inlineUnit(0.75),
-                        }}
                         data-tutorial-id="advance-phase-button"
                     >
                         {advanceLabel}
@@ -300,7 +267,7 @@ export const RightSidebar = ({
                 {passiveAbilityProps && passiveAbilityProps.passives.length > 0 && (
                     <PassiveAbilityPanel {...passiveAbilityProps} />
                 )}
-                <div className="flex justify-center" style={{ width: inlineUnit(10.2) }}>
+                <div className={`${actionRailWidthClassName} flex justify-center`}>
                     <DiscardPile
                         ref={discardPileRef}
                         cards={discardCards}

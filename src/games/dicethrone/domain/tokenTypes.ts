@@ -316,8 +316,6 @@ export interface TokenDef {
     name: string;
     /** 图标（已废弃，精灵图优先） */
     icon?: string;
-    /** 单图图标路径（可选；未制作 atlas 时的显示回退） */
-    iconPath?: string;
     /** 颜色主题（Tailwind gradient class） */
     colorTheme: string;
     /** 描述文本（供 UI 展示） */

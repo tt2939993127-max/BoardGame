@@ -5,7 +5,6 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../core';
-import type { CharacterBadgeDef } from '../../../core/ui';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
@@ -78,7 +77,6 @@ export type TeamId = 'A' | 'B';
 export interface CharacterDefinition {
     id: SelectableCharacterId;
     nameKey: string;
-    badges?: CharacterBadgeDef[];
 }
 
 export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
@@ -88,26 +86,8 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
-    {
-        id: 'gunslinger',
-        nameKey: 'characters.gunslinger',
-        badges: [{
-            id: 'under_construction',
-            labelKey: 'common:status_tags.under_construction',
-            tone: 'warning',
-            variant: 'disabled-overlay',
-        }],
-    },
-    {
-        id: 'samurai',
-        nameKey: 'characters.samurai',
-        badges: [{
-            id: 'under_construction',
-            labelKey: 'common:status_tags.under_construction',
-            tone: 'warning',
-            variant: 'disabled-overlay',
-        }],
-    },
+    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
+    { id: 'samurai', nameKey: 'characters.samurai' },
 ];
 
 /**
@@ -222,8 +202,6 @@ export interface PendingAttack {
     resolvedDamage?: number;
     /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
     attackDiceFaceCounts?: Record<string, number>;
-    /** 攻击方原始点数计数快照（用于“4个相同数字 / 3个相同数字”判定） */
-    attackDiceValueCounts?: Record<number, number>;
     /** 攻击掷骰阶段结束时的 Token 选择是否已完成（暴击/精准） */
     offensiveRollEndTokenResolved?: boolean;
     /** 奖励骰是否已通过 BONUS_DICE_SETTLED 结算（避免 autoContinue 重入时重复执行 resolveAttack） */
@@ -536,12 +514,11 @@ export interface DiceThroneCore {
      */
     taijiGainedThisTurn?: Record<PlayerId, number>;
     /**
-     * 本回合进攻掷骰尝试次数
-     * key: playerId, value: 当前回合进入 offensiveRoll 后执行过多少次 ROLL_DICE
-     * 仅在真正的进攻掷骰（pendingAttack 仍为空）时累加，TURN_CHANGED 时清除
-     * 供 Bushido 等“按本回合攻击掷骰次数结算”的规则复用
+     * 当前回合常规 offensiveRoll 阶段的实际掷骰次数快照。
+     * 仅记录从 main1 进入的那次 offensiveRoll，用于武士道（Bushido）在回合末判定。
+     * 额外攻击产生的 offensiveRoll 不覆盖该值。
      */
-    offensiveRollCountThisTurn?: Record<PlayerId, number>;
+    offensiveRollAttemptsThisTurn?: number;
 }
 
 // ============================================================================

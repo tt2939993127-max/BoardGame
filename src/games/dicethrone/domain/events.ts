@@ -94,7 +94,6 @@ export const DT_EVENTS = defineEvents({
   
   CHOICE_REQUESTED: { audio: 'immediate', sound: CHOICE_REQUEST_KEY },
   CHOICE_RESOLVED: { audio: 'immediate', sound: CHOICE_RESOLVE_KEY },
-  COMPARE_ROLL_REQUESTED: { audio: 'immediate', sound: CHOICE_REQUEST_KEY },
   
   RESPONSE_WINDOW_OPENED: { audio: 'immediate', sound: RESPONSE_WINDOW_OPEN_KEY },
   RESPONSE_WINDOW_CLOSED: { audio: 'immediate', sound: RESPONSE_WINDOW_CLOSE_KEY },
@@ -133,6 +132,7 @@ export const DT_EVENTS = defineEvents({
 
   // ========== 静默事件 ==========
   HERO_INITIALIZED: 'silent',    // 英雄初始化（内部状态）
+  OFFENSIVE_ROLL_ATTEMPTS_RECORDED: 'silent', // 回合内常规 offensiveRoll 掷骰次数快照（内部状态）
   RESPONSE_WINDOW_RESPONDER_CHANGED: 'silent', // 响应者变更（内部状态）
 });
 
@@ -195,6 +195,14 @@ export interface HeroInitializedEvent extends GameEvent<'HERO_INITIALIZED'> {
     payload: {
         playerId: PlayerId;
         characterId: SelectableCharacterId;
+    };
+}
+
+/** 常规 offensiveRoll 掷骰次数记录事件（用于回合末被动能力判定） */
+export interface OffensiveRollAttemptsRecordedEvent extends GameEvent<'OFFENSIVE_ROLL_ATTEMPTS_RECORDED'> {
+    payload: {
+        playerId: PlayerId;
+        attempts: number;
     };
 }
 
@@ -616,38 +624,6 @@ export interface ChoiceResolvedEvent extends GameEvent<'CHOICE_RESOLVED'> {
     };
 }
 
-export interface CompareRollRequestedEvent extends GameEvent<'COMPARE_ROLL_REQUESTED'> {
-    payload: {
-        playerId: PlayerId;
-        sourceAbilityId: string;
-        titleKey: string;
-        contestants: Array<{
-            playerId?: PlayerId;
-            labelKey?: string;
-            labelParams?: Record<string, string | number>;
-            roll: number;
-            face?: DieFace;
-            characterId?: string;
-            effectKey?: string;
-            effectParams?: Record<string, string | number>;
-        }>;
-        resultKey?: string;
-        resultParams?: Record<string, string | number>;
-        resultTone?: 'neutral' | 'success' | 'warning' | 'danger';
-        options?: Array<{
-            value: number;
-            customId?: string;
-            labelKey?: string;
-            disabled?: boolean;
-        }>;
-        confirmValue?: {
-            value: number;
-            customId?: string;
-        };
-        autoConfirmDelayMs?: number;
-    };
-}
-
 /** 回合切换事件 */
 export interface TurnChangedEvent extends GameEvent<'TURN_CHANGED'> {
     payload: {
@@ -874,6 +850,7 @@ export type DiceThroneEvent =
     | RollConfirmedEvent
     | CharacterSelectedEvent
     | HeroInitializedEvent
+    | OffensiveRollAttemptsRecordedEvent
     | HostStartedEvent
     | SeatingMovedEvent
     | SeatSwapRequestedEvent
@@ -908,7 +885,6 @@ export type DiceThroneEvent =
     | AttackMadeUndefendableEvent
     | ChoiceRequestedEvent
     | ChoiceResolvedEvent
-    | CompareRollRequestedEvent
     | TurnChangedEvent
     | AbilityReplacedEvent
     | ResponseWindowOpenedEvent

@@ -48,7 +48,6 @@ export const BreakdownTooltip: React.FC<BreakdownTooltipProps> = ({
 }) => {
     const [isHovered, setIsHovered] = useState(false);
     const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
-    const [tooltipHeight, setTooltipHeight] = useState(80);
     const anchorRef = useRef<HTMLSpanElement>(null);
     const tooltipRef = useRef<HTMLDivElement>(null);
 
@@ -73,20 +72,14 @@ export const BreakdownTooltip: React.FC<BreakdownTooltipProps> = ({
         };
     }, [isHovered, updateAnchorRect]);
 
-    useEffect(() => {
-        if (!isHovered || !tooltipRef.current) return;
-        const measuredHeight = tooltipRef.current.getBoundingClientRect().height;
-        if (Number.isFinite(measuredHeight) && measuredHeight > 0) {
-            setTooltipHeight(measuredHeight);
-        }
-    }, [isHovered, lines]);
-
     // 计算 tooltip 位置（优先上方，空间不足则下方）
     const tooltipPosition = useMemo(() => {
         if (!anchorRect || typeof window === 'undefined') return null;
         const gap = 6;
         const padding = 8;
         const tooltipWidth = 180;
+        const measured = tooltipRef.current?.getBoundingClientRect();
+        const tooltipHeight = measured ? measured.height : 80;
 
         // 水平居中对齐锚点
         let left = anchorRect.left + anchorRect.width / 2 - tooltipWidth / 2;
@@ -99,7 +92,7 @@ export const BreakdownTooltip: React.FC<BreakdownTooltipProps> = ({
             : anchorRect.bottom + gap;
 
         return { left, top, above: canPlaceAbove, tooltipWidth };
-    }, [anchorRect, tooltipHeight]);
+    }, [anchorRect]);
 
     // 没有明细行时不显示 tooltip 效果
     if (!lines || lines.length === 0) {

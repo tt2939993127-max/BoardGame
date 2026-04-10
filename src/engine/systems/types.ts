@@ -142,7 +142,6 @@ export const SYSTEM_IDS = {
     UNDO: 'undo',
     INTERACTION: 'interaction',
     SIMPLE_CHOICE: 'simple-choice',
-    COMPARE_ROLL_CHOICE: 'compare-roll-choice',
     LOG: 'log',
     EVENT_STREAM: 'eventStream',
     ACTION_LOG: 'actionLog',

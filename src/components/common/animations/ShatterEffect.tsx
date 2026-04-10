@@ -195,15 +195,12 @@ export const ShatterEffect: React.FC<ShatterEffectProps> = ({
   const animStartedRef = useRef(false);
   const onCompleteRef = useRef(onComplete);
   const onStartRef = useRef(onStart);
+  onCompleteRef.current = onComplete;
+  onStartRef.current = onStart;
   // imageSource 是对象 prop，每次父组件渲染都会新建引用
   // 必须用 ref 持有，从 useCallback 依赖中移除，否则动画会无限重启
   const imageSourceRef = useRef(imageSource);
-
-  useEffect(() => {
-    onCompleteRef.current = onComplete;
-    onStartRef.current = onStart;
-    imageSourceRef.current = imageSource;
-  }, [onComplete, onStart, imageSource]);
+  imageSourceRef.current = imageSource;
 
   const isStrong = intensity === 'strong';
   const cols = colsProp ?? (isStrong ? 4 : 3);

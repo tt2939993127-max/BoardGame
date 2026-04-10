@@ -16,7 +16,6 @@ export interface PlayerMetadata {
     name?: string;
     credentials?: string;
     isConnected?: boolean;
-    ownerKey?: string;
 }
 
 /**

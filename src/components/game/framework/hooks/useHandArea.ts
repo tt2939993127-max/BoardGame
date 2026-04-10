@@ -85,9 +85,7 @@ export function useHandArea<TCard>({
         const prevIds = prevCardIdsRef.current;
 
         if (!dealAnimation) {
-            queueMicrotask(() => {
-                setVisibleCardIds(new Set(currentIds));
-            });
+            setVisibleCardIds(new Set(currentIds));
             prevCardIdsRef.current = currentIds;
             return;
         }
@@ -108,9 +106,7 @@ export function useHandArea<TCard>({
         }
 
         // 移除不存在的卡牌
-        queueMicrotask(() => {
-            setVisibleCardIds(new Set(currentIds));
-        });
+        setVisibleCardIds(new Set(currentIds));
         prevCardIdsRef.current = currentIds;
     }, [cards, getCardId, dealAnimation, dealInterval]);
 

@@ -216,7 +216,6 @@ export async function startSingleWorkerRuntime(options = {}) {
 
   const apiServerEnv = {
     ...env,
-    NODE_ENV: 'test',
     API_SERVER_PORT: String(ports.apiServer),
   };
 

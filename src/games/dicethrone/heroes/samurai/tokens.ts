@@ -16,7 +16,6 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         sfxKey: SAMURAI_TOKEN_SFX_HONOR,
         stackLimit: 0,
         category: 'buff',
-        iconPath: 'dicethrone/images/samurai/icons/荣誉',
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
@@ -41,7 +40,6 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         sfxKey: SAMURAI_TOKEN_SFX_SHAME,
         stackLimit: 0,
         category: 'debuff',
-        iconPath: 'dicethrone/images/samurai/icons/耻辱',
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
@@ -61,7 +59,6 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         sfxKey: SAMURAI_TOKEN_SFX_RETRIBUTION,
         stackLimit: 0,
         category: 'buff',
-        iconPath: 'dicethrone/images/samurai/icons/反击',
         activeUse: {
             timing: ['beforeDamageReceived'],
             consumeAmount: 1,

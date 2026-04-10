@@ -770,31 +770,27 @@ export const BoardGrid: React.FC<BoardGridProps> = (props) => {
   const { toViewCoord, fromViewCoord } = useViewCoords(shouldFlipView);
 
   // 追踪新出现的单位用于播放召唤动画
-  const [prevUnitIds, setPrevUnitIds] = React.useState<Set<string> | null>(null);
-  const currentUnitIds = React.useMemo(() => {
-    const next = new Set<string>();
-    core.board.forEach(row => row.forEach(cell => {
-      if (cell.unit) next.add(cell.unit.instanceId);
-      if (cell.structure) next.add(cell.structure.cardId);
-    }));
-    return next;
-  }, [core.board]);
-
+  const prevUnitIdsRef = React.useRef<Set<string>>(new Set());
   const newUnitIds = React.useMemo(() => {
-    if (!prevUnitIds) {
+    const current = new Set<string>();
+    core.board.forEach(row => row.forEach(cell => {
+      if (cell.unit) current.add(cell.unit.instanceId);
+      if (cell.structure) current.add(cell.structure.cardId);
+    }));
+
+    if (prevUnitIdsRef.current.size === 0) {
+      prevUnitIdsRef.current = current;
       return new Set<string>();
     }
 
     const added = new Set<string>();
-    currentUnitIds.forEach(id => {
-      if (!prevUnitIds.has(id)) added.add(id);
+    current.forEach(id => {
+      if (!prevUnitIdsRef.current.has(id)) added.add(id);
     });
-    return added;
-  }, [currentUnitIds, prevUnitIds]);
 
-  useEffect(() => {
-    setPrevUnitIds(currentUnitIds);
-  }, [currentUnitIds]);
+    prevUnitIdsRef.current = current;
+    return added;
+  }, [core.board]);
 
   return (
     <>

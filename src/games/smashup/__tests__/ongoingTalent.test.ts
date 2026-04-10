@@ -5,7 +5,6 @@
  * - 米斯卡塔尼克大学：miskatonic_lost_knowledge（通往超凡的门 ongoing talent）
  * - 蒸汽朋克：steampunk_zeppelin（齐柏林飞艇 ongoing talent，含交互选择）
  * - 印斯茅斯：innsmouth_sacred_circle（宗教圆环 ongoing talent）
- * - 狼人：巨石阵上的附着 talent 二次发动
  * - 验证/reduce/回合重置 全链路
  */
 
@@ -76,61 +75,6 @@ describe('ongoing 行动卡天赋 - 验证层', () => {
                 minions: [],
                 ongoingActions: [makeOngoing('oa1', 'miskatonic_lost_knowledge', '0', true)],
             }],
-        });
-        const ms = makeMatchState(core);
-        const result = validate(ms, {
-            type: SU_COMMANDS.USE_TALENT,
-            playerId: '0',
-            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
-        } as any);
-        expect(result.valid).toBe(false);
-        expect(result.error).toContain('已使用');
-    });
-
-    it('巨石阵允许狼人附着天赋第2次发动', () => {
-        const core = makeState({
-            standingStonesDoubleTalentMinionUid: undefined,
-            bases: [{
-                defId: 'base_standing_stones',
-                minions: [
-                    makeMinion('wolf-host', 'werewolf_teenage_wolf', '0', 5, {
-                        attachedActions: [{ uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true }],
-                    }),
-                    makeMinion('enemy', 'ghosts_spectre', '1', 2),
-                ],
-                ongoingActions: [],
-            }],
-            players: {
-                '0': makePlayer('0'),
-                '1': makePlayer('1'),
-            },
-        });
-        const ms = makeMatchState(core);
-        const result = validate(ms, {
-            type: SU_COMMANDS.USE_TALENT,
-            playerId: '0',
-            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
-        } as any);
-        expect(result.valid).toBe(true);
-    });
-
-    it('巨石阵双才能名额已占用时拒绝狼人附着天赋第2次发动', () => {
-        const core = makeState({
-            standingStonesDoubleTalentMinionUid: 'used-minion',
-            bases: [{
-                defId: 'base_standing_stones',
-                minions: [
-                    makeMinion('wolf-host', 'werewolf_teenage_wolf', '0', 5, {
-                        attachedActions: [{ uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true }],
-                    }),
-                    makeMinion('enemy', 'ghosts_spectre', '1', 2),
-                ],
-                ongoingActions: [],
-            }],
-            players: {
-                '0': makePlayer('0'),
-                '1': makePlayer('1'),
-            },
         });
         const ms = makeMatchState(core);
         const result = validate(ms, {
@@ -317,50 +261,6 @@ describe('miskatonic_lost_knowledge（通往超凡的门 ongoing talent）', () 
 
         expect(newCore.bases[0].ongoingActions[0].talentUsed).toBe(false); // 玩家 0 的卡重置
         expect(newCore.bases[0].ongoingActions[1].talentUsed).toBe(true);  // 玩家 1 的卡不重置
-    });
-});
-
-describe('werewolf_leader_of_the_pack（狼群领袖）@ 巨石阵', () => {
-    it('第2次发动应占用巨石阵名额，而不是额外天赋次数', () => {
-        const core = makeState({
-            standingStonesDoubleTalentMinionUid: undefined,
-            players: {
-                '0': makePlayer('0'),
-                '1': makePlayer('1'),
-            },
-            bases: [{
-                defId: 'base_standing_stones',
-                minions: [
-                    makeMinion('wolf-host', 'werewolf_teenage_wolf', '0', 5, {
-                        attachedActions: [{ uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true }],
-                    }),
-                    makeMinion('enemy', 'ghosts_spectre', '1', 2),
-                ],
-                ongoingActions: [],
-            }],
-        });
-
-        const validation = validate(makeMatchState(core), {
-            type: SU_COMMANDS.USE_TALENT,
-            playerId: '0',
-            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
-        } as any);
-        expect(validation.valid).toBe(true);
-
-        const events = execute(makeMatchState(core), {
-            type: SU_COMMANDS.USE_TALENT,
-            playerId: '0',
-            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
-        } as any, defaultRandom);
-
-        expect(events.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
-        const limitEvent = events.find(event => event.type === SU_EVENTS.LIMIT_MODIFIED) as any;
-        expect(limitEvent?.payload.limitType).toBe('action');
-
-        const resolved = applyEvents(core, events);
-        expect(resolved.standingStonesDoubleTalentMinionUid).toBe('wolf-host');
-        expect(resolved.players['0'].extraTalentUsesConsumed).toBeUndefined();
-        expect(resolved.bases[0].minions[0].attachedActions[0].talentUsed).toBe(true);
     });
 });
 

@@ -100,21 +100,10 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
             currentPlayerIndex: 0,
         }));
 
+        // 只有一个基地且只有一个己方随从时，允许自动执行
         runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a1', targetBaseIndex: 0 });
 
-        let state = runner.getState();
-        let interaction = state.sys.interaction.current;
-        expect(interaction).toBeDefined();
-        expect(interaction?.kind).toBe('simple-choice');
-        expect((interaction?.data as any)?.sourceId).toBe('dino_rampage_choose_minion');
-
-        const data = interaction!.data as any;
-        const option = data.options.find((opt: any) => opt.value.minionUid === 'm1');
-        expect(option).toBeDefined();
-
-        runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: option.id });
-
-        state = runner.getState();
+        const state = runner.getState();
         expect(state.core.tempBreakpointModifiers?.[0]).toBe(-3);
         
         // 验证查询路径正确（getEffectiveBreakpoint 读取 tempBreakpointModifiers）
@@ -187,20 +176,12 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
             currentPlayerIndex: 0,
         }));
 
+        // 打出狂暴
+        // 注意：只有一个基地时，resolveOrPrompt 会自动执行，不创建交互
         runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a1', targetBaseIndex: 0 });
 
         let state = runner.getState();
-        let interaction = state.sys.interaction.current;
-        expect(interaction).toBeDefined();
-        expect((interaction?.data as any)?.sourceId).toBe('dino_rampage_choose_minion');
-
-        const data = interaction!.data as any;
-        const option = data.options.find((opt: any) => opt.value.minionUid === 'm1');
-        expect(option).toBeDefined();
-
-        runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: option.id });
-
-        state = runner.getState();
+        // 验证临时修正已写入
         expect(state.core.tempBreakpointModifiers?.[0]).toBe(-3);
 
         // 结束回合
@@ -256,17 +237,8 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
         const option1 = data1.options.find((opt: any) => opt.value.baseIndex === 0);
         expect(option1).toBeDefined();
         
-        // 选择基地0后，仍需显式选择该基地的随从
+        // 使用正确的 optionId 解决交互
         runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: option1.id });
-
-        state = runner.getState();
-        interaction = state.sys.interaction.current;
-        expect(interaction).toBeDefined();
-        expect((interaction?.data as any)?.sourceId).toBe('dino_rampage_choose_minion');
-
-        const minionChoice1 = (interaction!.data as any).options.find((opt: any) => opt.value.minionUid === 'm1');
-        expect(minionChoice1).toBeDefined();
-        runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: minionChoice1.id });
 
         // 打出第二张狂暴，选择基地1
         runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a2', targetBaseIndex: 0 });
@@ -282,17 +254,8 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
         const option2 = data2.options.find((opt: any) => opt.value.baseIndex === 1);
         expect(option2).toBeDefined();
         
-        // 选择基地1后，仍需显式选择该基地的随从
+        // 使用正确的 optionId 解决交互
         runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: option2.id });
-
-        state = runner.getState();
-        interaction = state.sys.interaction.current;
-        expect(interaction).toBeDefined();
-        expect((interaction?.data as any)?.sourceId).toBe('dino_rampage_choose_minion');
-
-        const minionChoice2 = (interaction!.data as any).options.find((opt: any) => opt.value.minionUid === 'm2');
-        expect(minionChoice2).toBeDefined();
-        runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: minionChoice2.id });
 
         state = runner.getState();
         // 验证两个基地的修正独立存储
@@ -324,20 +287,12 @@ describe('Audit D11+D12+D14: dino_rampage（狂暴）', () => {
             currentPlayerIndex: 0,
         }));
 
+        // 打出狂暴（此时随从力量为3）
+        // 注意：只有一个基地时，resolveOrPrompt 会自动执行，不创建交互
         runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a1', targetBaseIndex: 0 });
 
         let state = runner.getState();
-        let interaction = state.sys.interaction.current;
-        expect(interaction).toBeDefined();
-        expect((interaction?.data as any)?.sourceId).toBe('dino_rampage_choose_minion');
-
-        const data = interaction!.data as any;
-        const option = data.options.find((opt: any) => opt.value.minionUid === 'm1');
-        expect(option).toBeDefined();
-
-        runner.dispatch('SYS_INTERACTION_RESPOND', { playerId: '0', optionId: option.id });
-
-        state = runner.getState();
+        // 验证修正值为-3（基于打出时的力量）
         expect(state.core.tempBreakpointModifiers?.[0]).toBe(-3);
 
         // 打出嚎叫（+1力量给所有己方随从）

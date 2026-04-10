@@ -52,23 +52,20 @@ export interface FeedbackItem {
 
 const EMBEDDED_IMG_RE = /!\[([^\]]*)\]\((data:image\/[^)]+)\)/g;
 
-function createEmbeddedImageRegExp(): RegExp {
-    return new RegExp(EMBEDDED_IMG_RE.source, EMBEDDED_IMG_RE.flags);
-}
-
 export function extractEmbeddedImages(content: string) {
-    return Array.from(content.matchAll(createEmbeddedImageRegExp()), (match) => ({
+    return Array.from(content.matchAll(EMBEDDED_IMG_RE), (match) => ({
         alt: match[1] || '',
         src: match[2],
     }));
 }
 
 export function hasEmbeddedImage(content: string): boolean {
-    return createEmbeddedImageRegExp().test(content);
+    EMBEDDED_IMG_RE.lastIndex = 0;
+    return EMBEDDED_IMG_RE.test(content);
 }
 
 export function extractText(content: string, t: TFunction<'admin'>): string {
-    return content.replace(createEmbeddedImageRegExp(), '').trim() || t('feedback.content.onlyImage');
+    return content.replace(EMBEDDED_IMG_RE, '').trim() || t('feedback.content.onlyImage');
 }
 
 export function parseOperationLogs(actionLog?: string): unknown[] {

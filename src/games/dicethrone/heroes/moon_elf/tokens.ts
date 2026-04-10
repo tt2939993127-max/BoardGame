@@ -5,9 +5,9 @@
  * - Blinded (致盲)
  * - Entangle (缠绕)
  * - Targeted (锁定)
- * - 月精灵专属闪避定义：Evasive (闪避)
- *
- * 注意：Evasive 的真实运行时路径是本地 activeUse，不再依赖 sharedTokens
+ * - 共享 token：Evasive (闪避) - 从 sharedTokens 导入
+ * 
+ * 注意：月精灵的 Evasive 有 activeUse 配置，与共享版本不同，所以保留自己的定义
  */
 import type { TokenDef, TokenState } from '../../domain/tokenTypes';
 import { TOKEN_IDS, STATUS_IDS, DICETHRONE_STATUS_ATLAS_IDS } from '../../domain/ids';
@@ -23,8 +23,8 @@ export const MOON_ELF_TOKENS: TokenDef[] = [
     /**
      * 闪避 (Evasive) - Stack limit 3
      * 
-     * 注意：Evasive 的真实运行时路径是本地 activeUse（投掷判定），
-     * 不再依赖 sharedTokens 中的共享定义
+     * 注意：月精灵的 Evasive 有 activeUse 配置（投掷判定），
+     * 与共享版本（passiveTrigger）不同，所以保留自己的定义
      */
     {
         id: TOKEN_IDS.EVASIVE,

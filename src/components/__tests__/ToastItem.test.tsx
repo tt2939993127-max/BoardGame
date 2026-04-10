@@ -98,7 +98,7 @@ describe('SocketCompatibilityToastListener', () => {
         lastStatusHandler = null;
     });
 
-    it('auto-enables compatibility mode on websocket timeout errors', () => {
+    it('shows an opt-in prompt before enabling compatibility mode', () => {
         render(
             <ToastProvider>
                 <SocketCompatibilityToastListener />
@@ -109,34 +109,19 @@ describe('SocketCompatibilityToastListener', () => {
         act(() => {
             lastStatusHandler?.({ connected: false, lastError: 'websocket transport timeout' });
         });
+
+        expect(setSocketCompatibilityModeEnabledMock).not.toHaveBeenCalled();
+        expect(lobbyReconnectMock).not.toHaveBeenCalled();
+        expect(socialReconnectMock).not.toHaveBeenCalled();
+        expect(screen.getByText('socketCompatibility.title')).toBeInTheDocument();
+        expect(screen.getByText('socketCompatibility.description')).toBeInTheDocument();
+
+        fireEvent.click(screen.getByRole('button', { name: 'socketCompatibility.enable' }));
 
         expect(setSocketCompatibilityModeEnabledMock).toHaveBeenCalledWith(true);
         expect(lobbyReconnectMock).toHaveBeenCalledTimes(1);
         expect(socialReconnectMock).toHaveBeenCalledTimes(1);
-        expect(screen.getByText('socketCompatibility.title')).toBeInTheDocument();
-        expect(screen.getByText('socketCompatibility.description')).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: 'socketCompatibility.disable' })).toBeInTheDocument();
-    });
-
-    it('allows turning compatibility mode off from the auto-enabled toast', () => {
-        render(
-            <ToastProvider>
-                <SocketCompatibilityToastListener />
-                <ToastViewport />
-            </ToastProvider>
-        );
-
-        act(() => {
-            lastStatusHandler?.({ connected: false, lastError: 'websocket transport timeout' });
-        });
-
-        fireEvent.click(screen.getByRole('button', { name: 'socketCompatibility.disable' }));
-
-        expect(setSocketCompatibilityModeEnabledMock).toHaveBeenNthCalledWith(1, true);
-        expect(setSocketCompatibilityModeEnabledMock).toHaveBeenNthCalledWith(2, false);
-        expect(lobbyReconnectMock).toHaveBeenCalledTimes(2);
-        expect(socialReconnectMock).toHaveBeenCalledTimes(2);
-        expect(screen.getByText('socketCompatibility.disabledTitle')).toBeInTheDocument();
+        expect(screen.getByText('socketCompatibility.enabledTitle')).toBeInTheDocument();
     });
 
     it('ignores unrelated connection errors', () => {

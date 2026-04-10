@@ -1216,7 +1216,7 @@ function sphinxOnTurnStart(ctx: TriggerContext) {
             })),
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
-        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false, autoRefresh: 'buried', responseValidationMode: 'live' },
+        { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -1258,7 +1258,7 @@ function sphinxAfterScoring(ctx: {
                 })),
                 { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ],
-            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
+            { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic' },
         );
         nextMatchState = queueInteraction(nextMatchState, interaction);
     }
@@ -1466,7 +1466,7 @@ function penguinsEmperorPenguinTalent(ctx: AbilityContext): AbilityResult {
             value: { cardUid: option.cardUid, defId: option.defId, zone: option.zone },
             displayMode: 'card' as const,
         })),
-        { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic', autoRefresh: 'hand_or_discard', responseValidationMode: 'live' },
+        { sourceId: 'titan_penguins_emperor_penguin_talent', targetType: 'generic' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
@@ -1733,7 +1733,7 @@ function werewolvesGreatWolfSpiritTalent(ctx: AbilityContext): AbilityResult {
         `titan_werewolves_great_wolf_spirit_talent_${ctx.now}`,
         ctx.playerId,
         '巨狼之灵：选择一个你的随从获得 +1 战力直到回合结束',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'buff' }),
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'buff' }),
         { sourceId: 'titan_werewolves_great_wolf_spirit_talent', targetType: 'minion' },
     );
 
@@ -1855,7 +1855,7 @@ function trickstersBigFunnyGiantTalent(ctx: AbilityContext): AbilityResult {
         `titan_tricksters_big_funny_giant_choose_minion_${ctx.now}`,
         ctx.playerId,
         '滑稽巨人：选择本基地一个战力 2 或更低的随从',
-        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }),
+        buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
         { sourceId: 'titan_tricksters_big_funny_giant_choose_minion', targetType: 'minion' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
@@ -2241,7 +2241,7 @@ function bearCavalryMajorUrsaOnTitanMoved(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '澶х唺搴э細閫夋嫨瑕佺Щ鍔ㄧ殑瀵规墜闅忎粠锛堝彲璺宠繃锛?',
         [
-            ...buildMinionTargetOptions(minionTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'move' }),
+            ...buildMinionTargetOptions(minionTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'move' }),
             { id: 'skip', label: '璺宠繃', value: 'skip' as const, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_bear_cavalry_major_ursa_choose_minion', targetType: 'minion' },
@@ -2280,7 +2280,7 @@ function vampireAncientLordTalent(ctx: AbilityContext): AbilityResult {
         `titan_vampires_ancient_lord_talent_${ctx.now}`,
         ctx.playerId,
         '鲜血领主：选择本基地一个已有 +1 力量标记的己方随从',
-        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'affect' }),
+        buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }),
         { sourceId: 'titan_vampires_ancient_lord_talent', targetType: 'minion' },
     );
 
@@ -3839,7 +3839,7 @@ export function registerTitanInteractionHandlers(): void {
             playerId,
             '奶油泡芙美人：选择要从弃牌堆额外打出的标准战术',
             actionOptions,
-            { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
+            { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic' },
         );
         (interaction.data as { optionsGenerator?: unknown; continuationContext?: unknown }).optionsGenerator = (nextState: AbilityContext['matchState']) =>
             buildCreampuffActionOptions(nextState, playerId);

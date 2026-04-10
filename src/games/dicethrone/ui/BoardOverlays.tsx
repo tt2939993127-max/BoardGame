@@ -13,7 +13,6 @@ import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverl
 import { ConfirmSkipModal } from './ConfirmSkipModal';
 import { ConfirmRemoveKnockdownModal } from './ConfirmRemoveKnockdownModal';
 import { ChoiceModal } from './ChoiceModal';
-import { CompareRollOverlay } from './CompareRollOverlay';
 import { BonusDieOverlay } from './BonusDieOverlay';
 import { CardSpotlightOverlay } from './CardSpotlightOverlay';
 import { TokenResponseModal } from './TokenResponseModal';
@@ -29,7 +28,6 @@ import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
 import type { TokenDef } from '../domain/tokenTypes';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import type { CompareRollChoiceData } from '../../../engine/systems/InteractionSystem';
 import {
     getAbilitySlotLayoutForCharacter,
     getPlayerBoardAspectRatio,
@@ -79,7 +77,6 @@ export interface BoardOverlaysProps {
     onCancelInteraction: () => void;
 
     // 选择弹窗
-    compareRoll?: (CompareRollChoiceData & { id: string; playerId: string }) | undefined;
     choice: {
         hasChoice: boolean;
         title?: string;
@@ -90,7 +87,6 @@ export interface BoardOverlaysProps {
     };
     canResolveChoice: boolean;
     onResolveChoice: (optionId: string) => void;
-    onConfirmCompareRoll: () => void;
 
     // 卡牌特写
     cardSpotlightQueue: CardSpotlightItem[];
@@ -114,6 +110,7 @@ export interface BoardOverlaysProps {
         characterId?: string;
     };
     onBonusDieClose: () => void;
+
     // 奖励骰重掷交互
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
     canRerollBonusDie: boolean;
@@ -231,16 +228,6 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     return (
         <>
             <AnimatePresence>
-                {props.compareRoll && (
-                    <CompareRollOverlay
-                        compareRoll={props.compareRoll}
-                        isVisible={true}
-                        locale={props.locale}
-                        onResolveOption={props.onResolveChoice}
-                        onConfirm={props.onConfirmCompareRoll}
-                    />
-                )}
-
                 {/* 放大预览 */}
                 {props.isMagnifyOpen && (
                     <MagnifyOverlay

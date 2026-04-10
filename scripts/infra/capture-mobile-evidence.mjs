@@ -14,13 +14,6 @@ const scenarioMap = {
         height: 375,
         forceCoarsePointer: true,
     },
-    'smashup-faction-selection-mobile-landscape': {
-        route: '/play/smashup?numPlayers=2&skipInitialization=true',
-        output: 'test-results/evidence-screenshots/smashup-faction-selection-spacing/mobile-landscape-800x450.png',
-        width: 800,
-        height: 450,
-        forceCoarsePointer: true,
-    },
     'summonerwars-tutorial-phone-landscape': {
         route: '/play/summonerwars/tutorial',
         output: 'test-results/evidence-screenshots/summonerwars.e2e/移动横屏：触屏放大入口与阶段说明在手机和平板都可达/10-phone-landscape-board.png',

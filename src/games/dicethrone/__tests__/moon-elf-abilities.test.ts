@@ -572,11 +572,11 @@ describe('Moon Elf 状态效果逻辑', () => {
 describe('Moon Elf 自定义动作', () => {
     /**
      * 长弓 II 连击判定 (longbow-bonus-check-4)：
-     * 升级到 LONGBOW_2 后，若投出 ≥4 个相同数字 → 施加缠绕
+     * 升级到 LONGBOW_2 后，若投出 ≥4 个相同符号 → 施加缠绕
      *
-     * 测试：投出 [1,1,1,1,5] = 4弓+1足，且有 4 个相同数字 → 触发 longbow-4-2 (6伤害) + 缠绕
+     * 测试：投出 [1,1,1,1,5] = 4弓+1足 → 触发 longbow-4-2 (6伤害) + 缠绕
      */
-    it('长弓 II：4个相同数字 → 施加缠绕', () => {
+    it('长弓 II：4个相同符号 → 施加缠绕', () => {
         // 骰子值：[1,1,1,1,5] 攻击骰(4弓+1足), [1,1,1,1,1] 防御骰
         const random = createQueuedRandom([1, 1, 1, 1, 5, 1, 1, 1, 1, 1]);
         const runner = new GameTestRunner({
@@ -597,7 +597,7 @@ describe('Moon Elf 自定义动作', () => {
         });
 
         const result = runner.run({
-            name: '长弓II 4个相同数字触发缠绕',
+            name: '长弓II 4个相同符号触发缠绕',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
@@ -622,10 +622,10 @@ describe('Moon Elf 自定义动作', () => {
         expect(result.assertionErrors).toEqual([]);
     });
 
-    it('长弓 II：4弓但不足4个相同数字 → 不施加缠绕', () => {
-        // 骰子值：[1,1,2,2,4] 攻击骰(4弓+1足), [1,1,1,1,1] 防御骰
-        // longbow-bonus-check-4 要求 ≥4 个相同数字；这里只有两个 1 和两个 2
-        const random = createQueuedRandom([1, 1, 2, 2, 4, 1, 1, 1, 1, 1]);
+    it('长弓 II：3个相同骰面 → 不施加缠绕', () => {
+        // 骰子值：[1,1,1,4,6] 攻击骰(3弓+1足+1月), [1,1,1,1,1] 防御骰
+        // longbow-bonus-check-4 需要 ≥4 个相同骰面，3弓不满足
+        const random = createQueuedRandom([1, 1, 1, 4, 6, 1, 1, 1, 1, 1]);
         const runner = new GameTestRunner({
             domain: DiceThroneDomain,
             systems: testSystems,
@@ -643,12 +643,12 @@ describe('Moon Elf 自定义动作', () => {
         });
 
         const result = runner.run({
-            name: '长弓II 4弓但非4同数不触发缠绕',
+            name: '长弓II 3个相同不触发缠绕',
             commands: [
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '0'),
                 cmd('CONFIRM_ROLL', '0'),
-                cmd('SELECT_ABILITY', '0', { abilityId: 'longbow-4-2' }),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'longbow-3-2' }),
                 cmd('ADVANCE_PHASE', '0'),
                 cmd('ROLL_DICE', '1'),
                 cmd('CONFIRM_ROLL', '1'),
@@ -659,7 +659,7 @@ describe('Moon Elf 自定义动作', () => {
                 turnPhase: 'main2',
                 players: {
                     '1': {
-                        hp: INITIAL_HEALTH - 6, // longbow-4-2 = 6伤害
+                        hp: INITIAL_HEALTH - 4, // longbow-3-2 = 4伤害
                         statusEffects: { [STATUS_IDS.ENTANGLE]: 0 }, // 无缠绕
                     },
                 },
@@ -670,9 +670,9 @@ describe('Moon Elf 自定义动作', () => {
 
     /**
      * 长弓 III 连击判定 (longbow-bonus-check-3)：
-     * 升级到 LONGBOW_3 后，≥3 个相同数字 → 施加缠绕
+     * 升级到 LONGBOW_3 后，≥3 个相同 → 施加缠绕
      */
-    it('长弓 III：3个相同数字 → 施加缠绕', () => {
+    it('长弓 III：3个相同骰面 → 施加缠绕', () => {
         // 骰子值：[1,1,1,4,5] 攻击骰(3弓+2足), [1,1,1,1,1] 防御骰
         const random = createQueuedRandom([1, 1, 1, 4, 5, 1, 1, 1, 1, 1]);
         const runner = new GameTestRunner({
@@ -710,51 +710,6 @@ describe('Moon Elf 自定义动作', () => {
                     '1': {
                         hp: INITIAL_HEALTH - 5, // longbow-3-3 = 5伤害
                         statusEffects: { [STATUS_IDS.ENTANGLE]: 1 },
-                    },
-                },
-            },
-        });
-        expect(result.assertionErrors).toEqual([]);
-    });
-
-    it('长弓 III：3弓但不足3个相同数字 → 不施加缠绕', () => {
-        // 骰子值：[1,2,3,4,5] 攻击骰(3弓+2足), [1,1,1,1,1] 防御骰
-        const random = createQueuedRandom([1, 2, 3, 4, 5, 1, 1, 1, 1, 1]);
-        const runner = new GameTestRunner({
-            domain: DiceThroneDomain,
-            systems: testSystems,
-            playerIds: ['0', '1'],
-            random,
-            setup: createMoonElfSetup({
-                mutate: (core) => {
-                    const idx = core.players['0'].abilities.findIndex((a: any) => a.id === 'longbow');
-                    if (idx >= 0) core.players['0'].abilities[idx] = LONGBOW_3 as any;
-                    core.players['0'].abilityLevels['longbow'] = 3;
-                },
-            }),
-            assertFn: assertState,
-            silent: true,
-        });
-
-        const result = runner.run({
-            name: '长弓III 3弓但非3同数不触发缠绕',
-            commands: [
-                cmd('ADVANCE_PHASE', '0'),
-                cmd('ROLL_DICE', '0'),
-                cmd('CONFIRM_ROLL', '0'),
-                cmd('SELECT_ABILITY', '0', { abilityId: 'longbow-3-3' }),
-                cmd('ADVANCE_PHASE', '0'),
-                cmd('ROLL_DICE', '1'),
-                cmd('CONFIRM_ROLL', '1'),
-                cmd('SELECT_ABILITY', '1', { abilityId: 'shadow-step' }),
-                cmd('ADVANCE_PHASE', '1'),
-            ],
-            expect: {
-                turnPhase: 'main2',
-                players: {
-                    '1': {
-                        hp: INITIAL_HEALTH - 5,
-                        statusEffects: { [STATUS_IDS.ENTANGLE]: 0 },
                     },
                 },
             },

@@ -56,7 +56,6 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
         sfxKey: 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a',
         stackLimit: 2,
         category: 'consumable',
-        iconPath: 'dicethrone/images/gunslinger/icons/弹药装填',
         activeUse: {
             timing: ['onOffensiveRollEnd'],
             consumeAmount: 1,
@@ -81,7 +80,6 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
         sfxKey: 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a',
         stackLimit: 1,
         category: 'debuff',
-        iconPath: 'dicethrone/images/gunslinger/icons/赏金',
         passiveTrigger: {
             timing: 'onDamageReceived',
             removable: false,

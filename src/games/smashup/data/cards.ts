@@ -51,7 +51,6 @@ import { SAMURAI_CARDS } from './factions/samurai';
 import { SAMURAI_POD_CARDS } from './factions/samurai_pod';
 import { VIKINGS_CARDS } from './factions/vikings';
 import { VIKINGS_POD_CARDS } from './factions/vikings_pod';
-import i18n from '../../../lib/i18n';
 
 // ============================================================================
 // 注册表
@@ -1356,7 +1355,6 @@ export function getBaseDef(defId: string): BaseCardDef | undefined {
 
 function resolveLocaleValue(t: (key: string) => string, keys: string[]): string | undefined {
     for (const key of keys) {
-        void i18n.exists(key, { ns: 'game-smashup' });
         const resolved = t(key);
         if (resolved && resolved !== key) return resolved;
     }
@@ -1378,7 +1376,6 @@ export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key:
     if (!def) return '';
     // 1) 优先尝试完整 ID（POD 版应优先命中 cards.xxx_pod.name）
     const primaryKey = `cards.${def.id}.name`;
-    void i18n.exists(primaryKey, { ns: 'game-smashup' });
     const resolvedPrimary = t(primaryKey);
     if (resolvedPrimary && resolvedPrimary !== primaryKey) return resolvedPrimary;
 
@@ -1386,7 +1383,6 @@ export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key:
     const fallbackLocaleKeyId = getPodFallbackKeyId(def.id);
     if (fallbackLocaleKeyId) {
         const fallbackKey = `cards.${fallbackLocaleKeyId}.name`;
-        void i18n.exists(fallbackKey, { ns: 'game-smashup' });
         const resolvedFallback = t(fallbackKey);
         if (resolvedFallback && resolvedFallback !== fallbackKey) return resolvedFallback;
     }
@@ -1394,7 +1390,6 @@ export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key:
     // 3) 若 def.name 已是 i18n key，则继续尝试；否则用 cards.<baseId>.name
     const baseId = def.id.replace(/_pod$/, '');
     const key = def.name.startsWith('cards.') ? def.name : `cards.${baseId}.name`;
-    void i18n.exists(key, { ns: 'game-smashup' });
     const resolved = t(key);
     return (resolved && resolved !== key) ? resolved : def.name;
 }
@@ -1422,14 +1417,12 @@ export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key:
 
     // 1. 优先尝试完整 ID (如果是 POD 版，这将匹配 cards.xxx_pod.xxxText)
     const podKey = `cards.${def.id}.${field}`;
-    void i18n.exists(podKey, { ns: 'game-smashup' });
     const resolvedPod = t(podKey);
     if (resolvedPod && resolvedPod !== podKey) return resolvedPod;
 
     // 2. 如果未命中，且 ID 含有 _pod，尝试去掉后缀的基础版本
     const keyId = def.id.replace(/_pod$/, '');
     const key = `cards.${keyId}.${field}`;
-    void i18n.exists(key, { ns: 'game-smashup' });
     const resolved = t(key);
 
     // 如果找到了翻译，返回翻译

@@ -49,7 +49,6 @@ interface GameHUDProps {
     myPlayerId?: string | null;
     opponentName?: string | null;
     opponentConnected?: boolean;
-    presenceReady?: boolean;
     players?: Array<{
         id: number;
         name?: string;
@@ -103,7 +102,6 @@ export const GameHUD = ({
     myPlayerId,
     opponentName,
     opponentConnected,
-    presenceReady = true,
     players,
     onLeave,
     onDestroy,
@@ -402,7 +400,6 @@ export const GameHUD = ({
         id: 'action-log',
         icon: <ListOrdered size={20} />,
         label: t('hud.actions.actionLog'),
-        mobilePopoverVerticalAnchor: 'column',
         content: (
             <div className="flex flex-col gap-2 pr-0.5 sm:pr-1">
                 {actionLogRows.length === 0 ? (
@@ -472,13 +469,7 @@ export const GameHUD = ({
                                         return (
                                             <div key={p.id} className="flex items-center gap-1.5">
                                                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${
-                                                    isEmpty
-                                                        ? 'bg-white/20'
-                                                        : p.isConnected === undefined
-                                                            ? 'bg-white/30'
-                                                            : p.isConnected
-                                                                ? 'bg-green-500'
-                                                                : 'bg-red-500 animate-pulse'
+                                                    isEmpty ? 'bg-white/20' : p.isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'
                                                 }`} />
                                                 <span className={`truncate ${isSelf ? 'text-white/80' : 'text-white/60'}`}>
                                                     {isEmpty
@@ -587,13 +578,7 @@ export const GameHUD = ({
                                     {players.map(p => (
                                         <div key={p.id} className="flex items-center justify-between bg-black/40 px-3 py-2 rounded border border-white/5">
                                             <div className="flex items-center gap-2">
-                                                <div className={`w-2 h-2 rounded-full ${
-                                                    p.isConnected === undefined
-                                                        ? 'bg-white/30'
-                                                        : p.isConnected
-                                                            ? 'bg-green-500'
-                                                            : 'bg-red-500 animate-pulse'
-                                                }`} />
+                                                <div className={`w-2 h-2 rounded-full ${p.isConnected ? 'bg-green-500' : 'bg-red-500 animate-pulse'}`} />
                                                 <span className="text-sm font-medium">{p.name || t('hud.status.player', { id: p.id })}</span>
                                             </div>
                                             {String(p.id) === String(myPlayerId) && (
@@ -640,28 +625,17 @@ export const GameHUD = ({
                             type="button"
                             onClick={toggleOverlay}
                             className="w-full rounded-md border border-white/10 bg-white/5 px-3 py-2 text-left transition-colors hover:bg-white/10"
-                            aria-pressed={overlayEnabled}
                         >
-                            <div className="flex min-w-0 items-center justify-between gap-3">
-                                <div className="min-w-0">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
                                     <div className="text-xs font-bold text-white">{t('hud.smashup.overlay')}</div>
                                     <div className="mt-1 text-[11px] text-white/55">{t('hud.smashup.overlayHint')}</div>
                                 </div>
-                                <div
-                                    className={`flex h-6 w-11 shrink-0 items-center rounded-full border px-0.5 transition-colors ${overlayEnabled
-                                        ? 'justify-end border-emerald-300/40 bg-emerald-400/20'
-                                        : 'justify-start border-white/10 bg-white/10'}`}
-                                    aria-hidden="true"
-                                >
-                                    <div
-                                        className={`flex h-5 w-5 items-center justify-center rounded-full transition-colors ${overlayEnabled
-                                            ? 'bg-emerald-200 text-emerald-950'
-                                            : 'bg-white/25 text-transparent'}`}
-                                    >
-                                        <Check size={12} strokeWidth={3} />
-                                    </div>
+                                <div className={`rounded-full px-2 py-1 text-[10px] font-bold ${overlayEnabled
+                                    ? 'bg-emerald-400/20 text-emerald-200'
+                                    : 'bg-white/10 text-white/60'}`}>
+                                    {overlayEnabled ? t('hud.smashup.enabled') : t('hud.smashup.disabled')}
                                 </div>
-                                <span className="sr-only">{overlayEnabled ? t('hud.smashup.enabled') : t('hud.smashup.disabled')}</span>
                             </div>
                         </button>
                     </div>
@@ -679,6 +653,7 @@ export const GameHUD = ({
         id: 'exit',
         icon: <LogOut size={20} />,
         label: t('hud.actions.exit'),
+        mobilePanelVariant: 'sheet',
         content: (
             <div className="space-y-3">
                 {/* 本地模式：只显示返回大厅 */}
@@ -916,7 +891,7 @@ export const GameHUD = ({
     return (
         <>
             {/* 对手状态提示（仅联机模式，加载完成后） */}
-            {isOnline && presenceReady && !isSpectator && opponentConnected !== undefined && (
+            {isOnline && !isSpectator && opponentConnected !== undefined && (
                 <OpponentOfflineBanner
                     connected={opponentConnected}
                     name={opponentName}

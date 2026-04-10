@@ -989,16 +989,15 @@ describe('Property 18: Me First 窗口协议', () => {
         expect(validBase.valid).toBe(true);
     });
 
-    test('无需基地目标的特殊行动卡在存在有效隐式目标时不能携带 targetBaseIndex', () => {
+    test('无需基地目标的特殊行动卡不能携带 targetBaseIndex', () => {
         const specialCard = makeCard('s-1', 'pirate_full_sail', 'action');
-        const movableMinion = makeMinion('m-1', 'pirate_buccaneer', '0', 4);
         const state: SmashUpCore = {
             players: {
                 '0': makePlayer('0', [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS], { hand: [specialCard] }),
                 '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
             },
             turnOrder: ['0', '1'], currentPlayerIndex: 0,
-            bases: [makeBase('base_central_brain', { minions: [movableMinion] }), makeBase('base_jungle_oasis')],
+            bases: [makeBase('base_central_brain')],
             baseDeck: [], turnNumber: 1, nextUid: 100,
         };
         const matchState: MatchState<SmashUpCore> = {

@@ -6,7 +6,6 @@ import { registerInteractionHandler, type InteractionHandler } from '../domain/a
 import { registerActiveBaseAbility, registerBaseAbility } from '../domain/baseAbilities';
 import {
     addTempPower,
-    buildActionMinionTargetOptions,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
     buildStandardDrawEvents,
@@ -85,6 +84,7 @@ export function registerAncientEgyptiansInteractionHandlers(): void {
     registerInteractionHandler('ancient_egyptians_plague_of_locusts', handlePlagueOfLocusts);
     registerInteractionHandler('ancient_egyptians_tomb_trap', handleTombTrap);
     registerInteractionHandler('ancient_egyptians_ancient_curse_confirm', handleAncientCurseConfirm);
+    registerInteractionHandler('ancient_egyptians_mummy_strength_mode', handleMummyStrengthMode);
     registerInteractionHandler('ancient_egyptians_mummy_strength_target', handleMummyStrengthTarget);
     registerInteractionHandler('ancient_egyptians_seal_the_tomb_mode', handleSealTheTombMode);
     registerInteractionHandler('ancient_egyptians_seal_the_tomb_bury', handleSealTheTombBury);
@@ -104,7 +104,7 @@ function ancientEgyptiansPyramidEngineerOnPlay(ctx: AbilityContext): AbilityResu
         ctx.playerId,
         '金字塔工程师：你可以翻开这里你的一张埋葬牌',
         [createSkipOption(), ...options] as any[],
-        { sourceId: 'ancient_egyptians_pyramid_engineer_uncover', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
+        { sourceId: 'ancient_egyptians_pyramid_engineer_uncover', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -189,7 +189,7 @@ function ancientEgyptiansTombTrapOnUncover(ctx: AbilityContext): AbilityResult {
             label: `${getCardDef(minion.defId)?.name ?? minion.defId}`,
         }));
     const options = [
-        ...buildActionMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' }),
+        ...buildMinionTargetOptions(candidates, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' }),
         createSkipOption(),
     ];
     const interaction = createSimpleChoice(
@@ -328,7 +328,7 @@ function ancientEgyptiansPharaohBeforeScoring(ctx: any): AbilityResult {
         ctx.sourceControllerId,
         '法老：你可以在计分前翻开这里你的一张埋葬牌',
         [createSkipOption(), ...options] as any[],
-        { sourceId: 'ancient_egyptians_pharaoh_before_scoring', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
+        { sourceId: 'ancient_egyptians_pharaoh_before_scoring', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -388,7 +388,7 @@ function queueLostKnowledgeUncover(
         playerId,
         '失落知识：选择一张你的埋葬牌翻开',
         buildBuriedCardChoiceOptions(state, playerId, choices),
-        { sourceId: 'ancient_egyptians_lost_knowledge_uncover', targetType: 'generic', autoRefresh: 'buried', responseValidationMode: 'live' },
+        { sourceId: 'ancient_egyptians_lost_knowledge_uncover', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(matchState, interaction) };
 }
@@ -402,7 +402,7 @@ function queueMummyStrengthTarget(
     const interaction = createSimpleChoice(
         `ancient_egyptians_mummy_strength_target_${now}`,
         playerId,
-        '木乃伊之力：选择你的一个随从。若其所在基地有埋葬牌，则其获得 +4 力量；否则获得 +2 力量，直到回合结束',
+        '木乃伊之力：选择一个你的随从',
         buildMinionTargetOptions(targets, { state: matchState.core, sourcePlayerId: playerId }) as any[],
         { sourceId: 'ancient_egyptians_mummy_strength_target', targetType: 'minion' },
     );
@@ -559,7 +559,9 @@ const handleAncientCurseConfirm: InteractionHandler = (state, _playerId, value, 
     };
 };
 
-const handleMummyStrengthTarget: InteractionHandler = (state, _playerId, value, data, _random, now) => {
+const handleMummyStrengthMode: InteractionHandler = (state) => ({ state, events: [] });
+
+const handleMummyStrengthTarget: InteractionHandler = (state, _playerId, value, _data, _random, now) => {
     const selected = value as { minionUid?: string; baseIndex?: number } | undefined;
     if (!selected?.minionUid || selected.baseIndex === undefined) return { state, events: [] };
     const base = state.core.bases[selected.baseIndex];
@@ -595,13 +597,7 @@ const handleSealTheTombMode: InteractionHandler = (state, playerId, value, data,
         playerId,
         '封印墓穴：翻开同一基地至多两张你的埋葬牌',
         buildBuriedCardChoiceOptions(state.core, playerId, choices),
-        {
-            sourceId: 'ancient_egyptians_seal_the_tomb_uncover',
-            targetType: 'generic',
-            multi: { min: 0, max: Math.min(2, choices.length) },
-            autoRefresh: 'buried',
-            responseValidationMode: 'live',
-        },
+        { sourceId: 'ancient_egyptians_seal_the_tomb_uncover', targetType: 'generic', multi: { min: 0, max: Math.min(2, choices.length) } },
     );
     return { state: queueInteraction(state, interaction), events: [] };
 };
@@ -796,4 +792,14 @@ function getOwnMinions(state: SmashUpCore, playerId: PlayerId): Array<{ uid: str
         });
     });
     return minions;
+}
+
+function getOwnMinionsWithBuriedBase(
+    state: SmashUpCore,
+    playerId: PlayerId,
+): Array<{ uid: string; defId: string; baseIndex: number; label: string }> {
+    return getOwnMinions(state, playerId).filter(({ baseIndex }) => {
+        const base = state.bases[baseIndex];
+        return (base.buriedCards?.length ?? 0) > 0;
+    });
 }

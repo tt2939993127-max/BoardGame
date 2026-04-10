@@ -57,22 +57,7 @@ const handleDiceRolled: EventHandler<Extract<DiceThroneEvent, { type: 'DICE_ROLL
         }
         return die;
     });
-
-    const isOffensiveRollAttempt = state.pendingAttack === null;
-    const offensiveRollCountThisTurn = isOffensiveRollAttempt
-        ? {
-            ...(state.offensiveRollCountThisTurn || {}),
-            [state.activePlayerId]: (state.offensiveRollCountThisTurn?.[state.activePlayerId] ?? 0) + 1,
-        }
-        : state.offensiveRollCountThisTurn;
-
-    return {
-        ...state,
-        dice: newDice,
-        rollCount: state.rollCount + 1,
-        rollConfirmed: false,
-        offensiveRollCountThisTurn,
-    };
+    return { ...state, dice: newDice, rollCount: state.rollCount + 1, rollConfirmed: false };
 };
 
 /**
@@ -145,6 +130,17 @@ const handleRollConfirmed: EventHandler<Extract<DiceThroneEvent, { type: 'ROLL_C
 const handleHostStarted: EventHandler<Extract<DiceThroneEvent, { type: 'HOST_STARTED' }>> = (
     state
 ) => ({ ...state, hostStarted: true });
+
+/**
+ * 记录当前回合常规 offensiveRoll 的实际掷骰次数
+ */
+const handleOffensiveRollAttemptsRecorded: EventHandler<Extract<DiceThroneEvent, { type: 'OFFENSIVE_ROLL_ATTEMPTS_RECORDED' }>> = (
+    state,
+    event
+) => ({
+    ...state,
+    offensiveRollAttemptsThisTurn: event.payload.attempts,
+});
 
 /**
  * 处理 2v2 站位移动事件
@@ -576,7 +572,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
         turnNumber,
         lastResolvedAttackDamage: undefined,
         taijiGainedThisTurn: undefined, // 清除太极本回合获得量追踪
-        offensiveRollCountThisTurn: undefined,
+        offensiveRollAttemptsThisTurn: undefined,
     };
 };
 
@@ -940,6 +936,8 @@ export const reduce = (
             return handleHeroInitialized(state, event);
         case 'HOST_STARTED':
             return handleHostStarted(state, event);
+        case 'OFFENSIVE_ROLL_ATTEMPTS_RECORDED':
+            return handleOffensiveRollAttemptsRecorded(state, event);
         case 'SEATING_MOVED':
             return handleSeatingMoved(state, event);
         case 'SEAT_SWAP_REQUESTED':

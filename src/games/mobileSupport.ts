@@ -30,33 +30,6 @@ export interface RuntimeViewportSize {
     height: number;
 }
 
-export interface MobileLayoutEngineCapabilities {
-    chromiumMajorVersion: number | null;
-    layoutMode: 'legacy' | 'modern';
-    supportsCalcDivision: boolean;
-    supportsDynamicViewportUnits: boolean;
-    requiresJsScaleFallback: boolean;
-    requiresLegacyViewportFallback: boolean;
-}
-
-export interface RuntimeLayoutScaleMetrics {
-    designWidth: number;
-    scale: number;
-    inverseScale: number;
-    logicalHeight: number;
-    inlineUnit: number;
-    blockUnit: number;
-}
-
-const formatRuntimeUnitMultiplier = (value: number) => {
-    if (!Number.isFinite(value)) {
-        return '0';
-    }
-
-    const normalized = Number.parseFloat(value.toFixed(4));
-    return Number.isInteger(normalized) ? String(normalized) : String(normalized);
-};
-
 const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
     'data-game-page',
     'data-game-id',
@@ -84,70 +57,6 @@ export const extractGameIdFromPlayPath = (pathname: string) => {
     if (segments[0] !== 'play') return undefined;
     return segments[1];
 };
-
-const DEFAULT_LAYOUT_SUPPORTS = (property: string, value: string) => {
-    if (typeof CSS === 'undefined' || typeof CSS.supports !== 'function') {
-        return true;
-    }
-    return CSS.supports(property, value);
-};
-
-export const parseChromiumMajorVersion = (userAgent?: string | null) => {
-    if (!userAgent) return null;
-    const match = userAgent.match(/(?:Chrome|Chromium|CriOS)\/(\d+)/i);
-    if (!match) return null;
-    const major = Number.parseInt(match[1], 10);
-    return Number.isFinite(major) ? major : null;
-};
-
-export const detectMobileLayoutEngineCapabilities = ({
-    userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '',
-    cssSupports = DEFAULT_LAYOUT_SUPPORTS,
-}: {
-    userAgent?: string | null;
-    cssSupports?: (property: string, value: string) => boolean;
-} = {}): MobileLayoutEngineCapabilities => {
-    const chromiumMajorVersion = parseChromiumMajorVersion(userAgent);
-    const supportsCalcDivision = cssSupports('transform', 'scale(calc(100px / 50px))');
-    const supportsDynamicViewportUnits = cssSupports('height', '100dvh');
-    const isLegacyChromium = chromiumMajorVersion !== null && chromiumMajorVersion < 100;
-    const requiresJsScaleFallback = isLegacyChromium || !supportsCalcDivision;
-    const requiresLegacyViewportFallback = isLegacyChromium || !supportsDynamicViewportUnits;
-
-    return {
-        chromiumMajorVersion,
-        layoutMode: requiresJsScaleFallback || requiresLegacyViewportFallback ? 'legacy' : 'modern',
-        supportsCalcDivision,
-        supportsDynamicViewportUnits,
-        requiresJsScaleFallback,
-        requiresLegacyViewportFallback,
-    };
-};
-
-export const resolveRuntimeLayoutScaleMetrics = (
-    viewport: RuntimeViewportSize,
-    designWidth: number,
-): RuntimeLayoutScaleMetrics => {
-    const safeDesignWidth = Math.max(1, designWidth);
-    const scale = Math.max(0.01, viewport.width / safeDesignWidth);
-    const inverseScale = 1 / scale;
-    const logicalHeight = viewport.height * inverseScale;
-
-    return {
-        designWidth: safeDesignWidth,
-        scale,
-        inverseScale,
-        logicalHeight,
-        inlineUnit: safeDesignWidth / 100,
-        blockUnit: logicalHeight / 100,
-    };
-};
-
-export const buildRuntimeInlineUnitValue = (multiplier: number, fallback = '1vw') =>
-    `calc(var(--mobile-layout-inline-unit, ${fallback}) * ${formatRuntimeUnitMultiplier(multiplier)})`;
-
-export const buildRuntimeBlockUnitValue = (multiplier: number, fallback = '1vh') =>
-    `calc(var(--mobile-layout-block-unit, ${fallback}) * ${formatRuntimeUnitMultiplier(multiplier)})`;
 
 export const resolveGameMobileSupport = (
     entry?: Pick<

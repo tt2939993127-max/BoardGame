@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { useToast } from '../../contexts/ToastContext';
 import { lobbySocket } from '../../services/lobbySocket';
 import { socialSocket } from '../../services/socialSocket';
@@ -27,7 +27,6 @@ const isLikelyCompatibilityError = (message?: string): boolean => {
 
 export const SocketCompatibilityToastListener = () => {
     const { info, warning } = useToast();
-    const hasAutoEnabledRef = useRef(false);
 
     useEffect(() => {
         if (!canToggleSocketCompatibilityMode()) {
@@ -39,16 +38,15 @@ export const SocketCompatibilityToastListener = () => {
             socialSocket.reconnectWithCurrentSettings();
         };
 
-        const handleAutoEnableCompatibilityMode = () => {
-            hasAutoEnabledRef.current = true;
+        const handleEnableCompatibilityMode = () => {
             setSocketCompatibilityModeEnabled(true);
             reconnectSockets();
             warning(
-                { kind: 'i18n', ns: 'common', key: 'socketCompatibility.description' },
-                { kind: 'i18n', ns: 'common', key: 'socketCompatibility.title' },
+                { kind: 'i18n', ns: 'common', key: 'socketCompatibility.enabledDescription' },
+                { kind: 'i18n', ns: 'common', key: 'socketCompatibility.enabledTitle' },
                 {
-                    dedupeKey: 'socketCompatibility.autoEnabled',
-                    ttlMs: 15_000,
+                    dedupeKey: 'socketCompatibility.enabled',
+                    ttlMs: 12_000,
                     actions: [{
                         label: { kind: 'i18n', ns: 'common', key: 'socketCompatibility.disable' },
                         variant: 'secondary',
@@ -70,13 +68,24 @@ export const SocketCompatibilityToastListener = () => {
             if (
                 status.connected
                 || isSocketCompatibilityModeEnabled()
-                || hasAutoEnabledRef.current
                 || !isLikelyCompatibilityError(status.lastError)
             ) {
                 return;
             }
 
-            handleAutoEnableCompatibilityMode();
+            warning(
+                { kind: 'i18n', ns: 'common', key: 'socketCompatibility.description' },
+                { kind: 'i18n', ns: 'common', key: 'socketCompatibility.title' },
+                {
+                    dedupeKey: 'socketCompatibility.prompt',
+                    ttlMs: 15_000,
+                    actions: [{
+                        label: { kind: 'i18n', ns: 'common', key: 'socketCompatibility.enable' },
+                        variant: 'primary',
+                        onClick: handleEnableCompatibilityMode,
+                    }],
+                }
+            );
         });
 
         return unsubscribe;

@@ -295,7 +295,7 @@ export function registerExpansionBaseAbilities(): void {
         const interaction = createSimpleChoice(
             `base_inventors_salon_${ctx.now}`, winnerId,
             '发明家沙龙：从弃牌堆选择一张行动卡放入手牌', options,
-            { sourceId: 'base_inventors_salon', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
+            { sourceId: 'base_inventors_salon', targetType: 'generic' },
         );
         return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
     });

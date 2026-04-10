@@ -7,8 +7,10 @@ import { getPlayerBoardUiTuning } from '../ui/abilitySlotLayout';
 const {
     CHARACTER_ASSET_TYPES,
     COMMON_CRITICAL_PATHS,
+    HAND_ATLAS_CHARACTER_IDS,
     IMPLEMENTED_CHARACTERS,
     getAllCharAssets,
+    getHandAtlasAssets,
 } = _testExports;
 
 function makeState(
@@ -54,7 +56,7 @@ describe('diceThroneCriticalImageResolver', () => {
         expect(unrelatedIndex).toBeGreaterThan(opponentIndex);
     });
 
-    it('setup/playing 阶段不再预加载 hand atlas', () => {
+    it('setup/playing 阶段仅为枪手和武士加入 hand atlas', () => {
         const setupResult = diceThroneCriticalImageResolver(
             makeState(false, { '0': 'samurai', '1': 'gunslinger' }),
             undefined,
@@ -66,10 +68,16 @@ describe('diceThroneCriticalImageResolver', () => {
             '0',
         );
 
-        expect(setupResult.warm).not.toContain('dicethrone/images/samurai/hand-cards-atlas');
-        expect(setupResult.warm).not.toContain('dicethrone/images/gunslinger/hand-cards-atlas');
-        expect(playingResult.critical).not.toContain('dicethrone/images/samurai/hand-cards-atlas');
-        expect(playingResult.warm).not.toContain('dicethrone/images/gunslinger/hand-cards-atlas');
+        for (const charId of HAND_ATLAS_CHARACTER_IDS) {
+            const [path] = getHandAtlasAssets(charId);
+            expect(setupResult.warm).toContain(path);
+        }
+
+        expect(playingResult.critical).toContain('dicethrone/images/samurai/hand-cards-atlas');
+        expect(playingResult.warm).toContain('dicethrone/images/gunslinger/hand-cards-atlas');
+
+        expect(setupResult.warm).not.toContain('dicethrone/images/monk/hand-cards-atlas');
+        expect(playingResult.critical).not.toContain('dicethrone/images/monk/hand-cards-atlas');
     });
 
     it('playing 阶段有 playerID 时：自己进 critical，对手进 warm', () => {

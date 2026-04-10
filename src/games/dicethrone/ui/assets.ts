@@ -21,6 +21,7 @@ export const ASSETS = {
     PLAYER_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/player-board`, charId),
     TIP_BOARD: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/tip`, charId),
     CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/ability-cards`, charId),
+    HAND_CARDS_ATLAS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/hand-cards-atlas`, charId),
     DICE_SPRITE: (charId: string = 'monk') => `${getCharacterAssetBase(charId)}/dice`,
     EFFECT_ICONS: (charId: string = 'monk') => withExtension(`${getCharacterAssetBase(charId)}/status-icons-atlas`, charId),
     CARD_BG: 'dicethrone/images/Common/card-background',

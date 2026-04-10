@@ -1,9 +1,7 @@
-import { startTransition, useCallback, useEffect, useState } from 'react';
+import { startTransition, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
 import type { GameManifestEntry } from '../../games/manifest';
-import { onAppVisible } from '../../lib/mobile/appVisibility';
-import { isTextEntryElement, scrollTextEntryIntoView } from '../../lib/textEntry';
 import {
     extractGameIdFromPlayPath,
     getGameMobileBannerKind,
@@ -154,6 +152,12 @@ const getBannerMessage = (bannerKind: GameMobileBannerKind) => {
     }
 };
 
+const isHomeV2DraftRoute = (pathname: string, search: string) => {
+    if (pathname !== '/') return false;
+    const searchParams = new URLSearchParams(search);
+    return searchParams.get('homeV2Draft') === '1' || import.meta.env.VITE_HOME_V2_DRAFT === '1';
+};
+
 export function MobileOrientationGuard({ children }: { children: React.ReactNode }) {
     const location = useLocation();
     const viewport = useRuntimeViewport({ syncCssVars: true });
@@ -162,36 +166,23 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     const [dynamicGameConfig, setDynamicGameConfig] = useState<GameMobileEntry | undefined>(undefined);
 
     const gameId = extractGameIdFromPlayPath(location.pathname);
+    const isHomeV2Route = isHomeV2DraftRoute(location.pathname, location.search);
     const builtInGameConfig = gameId ? GAME_MANIFEST_BY_ID[gameId] : undefined;
     const gameConfig = builtInGameConfig ?? dynamicGameConfig;
     const preferredOrientation = gameId
         ? resolveGameMobileSupport(gameConfig).preferredOrientation
         : undefined;
-    const targetOrientation: 'landscape' | 'portrait' = gameId
+    const targetOrientation: 'landscape' | 'portrait' | null = gameId
         ? (preferredOrientation === 'landscape' ? 'landscape' : 'portrait')
-        : 'portrait';
+        : isHomeV2Route
+            ? 'landscape'
+            : null;
     const bannerKind = getGameMobileBannerKind(gameConfig, viewport.width, viewport.height);
     const bannerKey = bannerKind ? `${location.pathname}:${bannerKind}` : null;
     const shouldSuppressBannerInAppShell = nativeAppShell && Boolean(gameId);
     const activeBannerKind = !shouldSuppressBannerInAppShell && bannerKey && dismissedBannerKey !== bannerKey
         ? bannerKind
         : null;
-    const isMobileViewport = viewport.width > 0 && viewport.width <= 1023;
-
-    const scheduleScrollActiveTextEntryIntoView = useCallback((behavior: ScrollBehavior = 'smooth') => {
-        const activeElement = document.activeElement;
-        if (!isTextEntryElement(activeElement)) {
-            return undefined;
-        }
-
-        const frameId = window.requestAnimationFrame(() => {
-            scrollTextEntryIntoView(activeElement, behavior);
-        });
-
-        return () => {
-            window.cancelAnimationFrame(frameId);
-        };
-    }, []);
 
     useEffect(() => {
         if (!gameId || builtInGameConfig) {
@@ -253,58 +244,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     }, [bannerKey]);
 
     useEffect(() => {
-        if (viewport.keyboardInsetBottom <= 0) {
-            return undefined;
-        }
-
-        return scheduleScrollActiveTextEntryIntoView('smooth');
-    }, [scheduleScrollActiveTextEntryIntoView, viewport.keyboardInsetBottom]);
-
-    useEffect(() => {
-        if (!isMobileViewport) {
-            return undefined;
-        }
-
-        const frameIds = new Set<number>();
-        const timeoutIds = new Set<number>();
-
-        const cleanupScheduled = () => {
-            frameIds.forEach((frameId) => window.cancelAnimationFrame(frameId));
-            timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
-            frameIds.clear();
-            timeoutIds.clear();
-        };
-
-        const handleFocusIn = (event: FocusEvent) => {
-            const target = event.target as Element | null;
-            if (!isTextEntryElement(target)) {
-                return;
-            }
-
-            const behavior: ScrollBehavior = viewport.keyboardInsetBottom > 0 ? 'smooth' : 'auto';
-            const frameId = window.requestAnimationFrame(() => {
-                frameIds.delete(frameId);
-                scrollTextEntryIntoView(target, behavior);
-            });
-            frameIds.add(frameId);
-
-            const timeoutId = window.setTimeout(() => {
-                timeoutIds.delete(timeoutId);
-                scrollTextEntryIntoView(target, 'smooth');
-            }, 180);
-            timeoutIds.add(timeoutId);
-        };
-
-        window.addEventListener('focusin', handleFocusIn);
-
-        return () => {
-            window.removeEventListener('focusin', handleFocusIn);
-            cleanupScheduled();
-        };
-    }, [isMobileViewport, viewport.keyboardInsetBottom]);
-
-    useEffect(() => {
-        if (!nativeAppShell) return;
+        if (!nativeAppShell || !targetOrientation) return;
 
         let disposed = false;
         const timeoutIds: number[] = [];
@@ -322,6 +262,11 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             timeoutIds.push(id);
         }
 
+        const handleVisibilityChange = () => {
+            if (document.hidden) return;
+            lockNow();
+        };
+
         const handleFocus = () => {
             lockNow();
         };
@@ -330,7 +275,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             lockNow();
         };
 
-        const cleanupAppVisible = onAppVisible(lockNow);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
         window.addEventListener('focus', handleFocus);
         window.addEventListener('orientationchange', handleOrientationChange);
 
@@ -339,7 +284,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             for (const timeoutId of timeoutIds) {
                 window.clearTimeout(timeoutId);
             }
-            cleanupAppVisible();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
             window.removeEventListener('focus', handleFocus);
             window.removeEventListener('orientationchange', handleOrientationChange);
         };

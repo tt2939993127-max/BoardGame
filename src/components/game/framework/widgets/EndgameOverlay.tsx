@@ -164,16 +164,8 @@ export function EndgameOverlay({
     // 仅在 isGameOver 从 false → true 时触发显示，并冻结 result
     useEffect(() => {
         if (isGameOver && !prevGameOverRef.current) {
-            let cancelled = false;
-            queueMicrotask(() => {
-                if (cancelled) return;
-                setShouldShow(true);
-                setFrozenResult(result);
-            });
-            prevGameOverRef.current = isGameOver;
-            return () => {
-                cancelled = true;
-            };
+            setShouldShow(true);
+            setFrozenResult(result);
         }
         prevGameOverRef.current = isGameOver;
     }, [isGameOver, result]);
@@ -181,15 +173,8 @@ export function EndgameOverlay({
     // 如果游戏重置（isGameOver 变回 false），关闭遮罩
     useEffect(() => {
         if (!isGameOver) {
-            let cancelled = false;
-            queueMicrotask(() => {
-                if (cancelled) return;
-                setShouldShow(false);
-                setFrozenResult(undefined);
-            });
-            return () => {
-                cancelled = true;
-            };
+            setShouldShow(false);
+            setFrozenResult(undefined);
         }
     }, [isGameOver]);
 

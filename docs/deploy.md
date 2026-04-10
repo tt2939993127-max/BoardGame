@@ -204,7 +204,8 @@ SMTP_PASS=xxx
 - 远程模式下，Android App 会与线上 Web 同步更新；如果线上前端需要回滚，App 也会一起回滚，不再依赖重新发 APK
 - Android `remote` 打包应视为“纯壳模式”：不会执行 `vite build`，也不会把 `dist` 前端资源复制进 APK；打包只更新原生壳、Capacitor 配置和壳内静态资产（例如方向映射、图标、启动图）
 - Android `remote` 的 `build-debug / build-release / build-bundle` 不再自动执行 `capacitor sync/update`；如果你新增了 Capacitor 插件、修改了 Android 原生模板或首次初始化工程，先手动执行一次 `npm run mobile:android:sync`
-- 当前 Android 壳默认行为：游戏页按 `preferredOrientation` 自动切换横竖屏，并隐藏顶部状态栏；非游戏页恢复竖屏和系统状态栏
+- 当前 Android 壳默认行为：游戏页按 `preferredOrientation` 自动切换横竖屏，并隐藏顶部状态栏；未声明固定方向的非游戏页恢复系统默认方向和系统状态栏
+- 若首页 V2、活动页、教程页等**非游戏页**也要求固定方向，必须让原生 `MainActivity` 显式识别该路由或读取构建元数据；**不能只靠 H5 层 `MobileOrientationGuard` 试图锁屏**
 - Android 壳进入后台、按 Home、锁屏或熄屏时，会主动通知 H5 停止当前 BGM；恢复前台后默认不自动续播
 
 > **主线口径**：`remote WebView` 只作为兼容 / 调试 / 短期灰度路径保留。Android 的长期主线应是 `embedded` 打包；若未来需要热更新 H5 本体，应演进为 `embedded + OTA/Live Update`，而不是继续把 `remote` 当默认产品方案。
@@ -253,14 +254,6 @@ GitHub Actions 自动化：
 - `--skip-latest` 会上传 bundle 与版本 manifest，但不会切换该 channel 的 `latest.json`
 - 正式覆盖 `latest.json` 后，指向该 channel 的 Android App 会在下一次启动后的后台检查中感知到新 bundle，并在切后台或重启后生效
 - OTA 只覆盖 Web bundle；涉及原生层改动时仍必须重新发 APK / AAB
-
-## Android 原生 APK 更新源
-
-- 路径前缀：`official/native-app-updates/android/<channel>/...`
-- `latest.json`：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/latest.json`
-- APK：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/packages/<version>.apk`
-- version manifest：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/manifests/<version>.json`
-- 当前 App 内置的是“下载 APK -> 调起系统安装器”的私有分发链路，不是静默安装
 
 ## Nginx 反向代理（自动管理）
 

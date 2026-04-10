@@ -12,14 +12,8 @@ import { useTouchInspectGesture } from '../../../hooks/ui/useTouchInspectGesture
 // Layout Constants
 // ============================================================================
 export type HandAreaDropTarget = {
-    kind: 'board';
-} | {
-    kind: 'base';
     baseIndex: number;
-} | {
-    kind: 'minion';
-    baseIndex: number;
-    minionUid: string;
+    minionUid?: string;
 };
 
 export type HandAreaDragPreview = {
@@ -37,7 +31,7 @@ const MOBILE_CARD_WIDTH_VW = 10.5;
 const DESKTOP_SELECTED_Y_LIFT_VW = 5;
 const MOBILE_SELECTED_Y_LIFT_VW = 3.8;
 const DRAG_START_DISTANCE_PX = 12;
-const DRAG_DROP_SHADOW = '0 0 30px rgba(251, 191, 36, 0.38)';
+const DRAG_DROP_SHADOW = '0 0 30px rgba(34, 211, 238, 0.45)';
 type Props = {
     hand: CardInstance[];
     selectedCardUid: string | null;
@@ -127,17 +121,14 @@ const HandCard: React.FC<HandCardProps> = ({
         startY: 0,
         hasMoved: false,
     });
+
     const handleDragFinish = useCallback((event?: React.PointerEvent) => {
         const dragState = dragStateRef.current;
         if (interactionMode !== 'drag' || dragState.pointerId == null) return;
         const didDrag = dragState.hasMoved;
 
         if (event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(dragState.pointerId)) {
-            try {
-                event.currentTarget.releasePointerCapture(dragState.pointerId);
-            } catch {
-                // 合成 pointer 事件测试场景下可能没有真实 capture，忽略即可。
-            }
+            event.currentTarget.releasePointerCapture(dragState.pointerId);
         }
 
         const dropTarget = didDrag && event ? onResolveDropTarget?.(card, event.clientX, event.clientY) ?? null : null;
@@ -162,11 +153,7 @@ const HandCard: React.FC<HandCardProps> = ({
         if (interactionMode !== 'drag' || dragState.pointerId == null) return;
         suppressClickRef.current = dragState.hasMoved;
         if (event?.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(dragState.pointerId)) {
-            try {
-                event.currentTarget.releasePointerCapture(dragState.pointerId);
-            } catch {
-                // 合成 pointer 事件测试场景下可能没有真实 capture，忽略即可。
-            }
+            event.currentTarget.releasePointerCapture(dragState.pointerId);
         }
         dragStateRef.current = {
             pointerId: null,
@@ -181,9 +168,8 @@ const HandCard: React.FC<HandCardProps> = ({
 
     const handlePointerDownInternal = useCallback((event: React.PointerEvent) => {
         onPointerDown?.(event, card);
+        if (interactionMode !== 'drag' || isOpponentView || disableInteraction || isDisabled) return;
         suppressClickRef.current = false;
-        if (isOpponentView || interactionMode !== 'drag') return;
-        if (disableInteraction || isDisabled) return;
         dragStateRef.current = {
             pointerId: event.pointerId,
             startX: event.clientX,
@@ -195,12 +181,8 @@ const HandCard: React.FC<HandCardProps> = ({
             x: rect.left + rect.width / 2,
             y: rect.top + rect.height * 0.34,
         };
-        try {
-            event.currentTarget.setPointerCapture(event.pointerId);
-        } catch {
-            // 合成 pointer 事件测试场景下可能没有真实 capture，忽略即可。
-        }
-    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onPointerDown]);
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }, [card, disableInteraction, interactionMode, isDisabled, isOpponentView, onDragStateChange, onPointerDown]);
 
     const handlePointerMoveInternal = useCallback((event: React.PointerEvent) => {
         onPointerMove?.(event, card);
@@ -229,15 +211,13 @@ const HandCard: React.FC<HandCardProps> = ({
 
     const handlePointerUpInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
-        if (interactionMode !== 'drag') return;
         handleDragFinish(event);
-    }, [card, handleDragFinish, interactionMode, onPointerEnd]);
+    }, [card, handleDragFinish, onPointerEnd]);
 
     const handlePointerCancelInternal = useCallback((event: React.PointerEvent) => {
         onPointerEnd?.(card);
-        if (interactionMode !== 'drag') return;
         handleDragCancel(event);
-    }, [card, handleDragCancel, interactionMode, onPointerEnd]);
+    }, [card, handleDragCancel, onPointerEnd]);
 
     const def = lookupCardDef(card.defId);
     const resolvedName = resolveCardName(def, t) || t('ui.card_placeholder');
@@ -321,10 +301,37 @@ const HandCard: React.FC<HandCardProps> = ({
             <div className={`
                 w-full h-full relative rounded-md shadow-md transition-all duration-200
                 ${isDisabled ? 'opacity-40 grayscale cursor-not-allowed' : ''}
-                ${isSelected ? 'ring-4 ring-purple-400 shadow-[0_0_20px_rgba(168,85,247,0.5)]' : 'shadow-black/30'}
-                ${isDiscardSelected ? 'ring-4 ring-purple-500 shadow-[0_0_14px_rgba(168,85,247,0.4)]' : ''}
-                ${!isSelected && !isDiscardSelected && !isDisabled && !isOpponentView ? (isDiscardMode ? 'ring-2 ring-purple-500/35' : 'hover:ring-2 hover:ring-purple-200/85 hover:shadow-xl') : ''}
+                ${isSelected ? 'ring-4 ring-cyan-400 shadow-[0_0_20px_rgba(34,211,238,0.5)]' : 'shadow-black/30'}
+                ${isDiscardSelected ? 'ring-4 ring-red-500 shadow-[0_0_12px_rgba(239,68,68,0.4)]' : ''}
+                ${!isSelected && !isDiscardSelected && !isDisabled && !isOpponentView ? (isDiscardMode ? 'ring-2 ring-red-500/30' : 'hover:ring-2 hover:ring-white hover:shadow-xl') : ''}
             `}>
+
+                {/* Detail View Button (Magnifying Glass) - Appears on hover, inside card top-right */}
+                {!isOpponentView && (
+                    <button
+                        data-testid={`su-hand-card-inspect-${card.uid}`}
+                        className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl border-2 border-white/30 z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
+                        style={{
+                            top: compactLayout ? '0.45vw' : '0.3vw',
+                            right: compactLayout ? '0.45vw' : '0.3vw',
+                            width: `${inspectButtonSizeVw}vw`,
+                            height: `${inspectButtonSizeVw}vw`,
+                        }}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onViewDetail?.();
+                        }}
+                    >
+                        <svg
+                            className="fill-current"
+                            style={{ width: `${inspectIconSizeVw}vw`, height: `${inspectIconSizeVw}vw` }}
+                            viewBox="0 0 20 20"
+                        >
+                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                        </svg>
+                    </button>
+                )}
+
                 {/* Card Asset Preview */}
                 <div className="w-full h-full rounded-md overflow-hidden bg-[#f3f0e8] border border-slate-400/50 shadow-inner relative">
                     <CardPreview
@@ -340,33 +347,6 @@ const HandCard: React.FC<HandCardProps> = ({
                 </div>
 
             </div>
-            {!isOpponentView && (
-                <button
-                    data-testid={`su-hand-card-inspect-${card.uid}`}
-                    className={`absolute flex items-center justify-center bg-black/70 hover:bg-amber-500/90 text-white rounded-full shadow-xl z-50 cursor-zoom-in transition-[opacity,background-color] duration-200 ${(showTouchInspectButton || isHovered) ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}
-                    style={{
-                        top: compactLayout ? '0.45vw' : '0.3vw',
-                        right: compactLayout ? '0.45vw' : '0.3vw',
-                        width: `${inspectButtonSizeVw}vw`,
-                        height: `${inspectButtonSizeVw}vw`,
-                    }}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        onViewDetail?.();
-                    }}
-                    onPointerDown={(e) => {
-                        e.stopPropagation();
-                    }}
-                >
-                    <svg
-                        className="fill-current"
-                        style={{ width: `${inspectIconSizeVw}vw`, height: `${inspectIconSizeVw}vw` }}
-                        viewBox="0 0 20 20"
-                    >
-                        <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-                    </svg>
-                </button>
-            )}
         </motion.div>
     );
 };
@@ -399,11 +379,7 @@ export const HandArea: React.FC<Props> = ({
             onCardView?.(card);
         },
     });
-    useEffect(() => {
-        queueMicrotask(() => {
-            setIsLoaded(true);
-        });
-    }, []);
+    useEffect(() => { setIsLoaded(true); }, []);
     if (!isLoaded) return null;
 
     return (

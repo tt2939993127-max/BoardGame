@@ -579,16 +579,15 @@ function buildRunEmOffTieMovePrompts(
     now: number,
 ): MatchState<SmashUpCore> {
     const currentPlayerId = state.core.turnOrder[state.core.currentPlayerIndex];
-    const orderedLoserUids = [duel.challengerMinionUid, duel.challengedMinionUid].sort((a, b) => {
-        const aController = findMinionOnBases(state.core, a)?.minion.controller;
-        const bController = findMinionOnBases(state.core, b)?.minion.controller;
-        if (aController === currentPlayerId) return -1;
-        if (bController === currentPlayerId) return 1;
+    const orderedPlayers = [duel.challengerPlayerId, duel.challengedPlayerId].sort((a, b) => {
+        if (a === currentPlayerId) return -1;
+        if (b === currentPlayerId) return 1;
         return 0;
     });
 
     let nextState = state;
-    for (const loserUid of orderedLoserUids) {
+    for (const mover of orderedPlayers) {
+        const loserUid = mover === duel.challengerPlayerId ? duel.challengedMinionUid : duel.challengerMinionUid;
         const found = findMinionOnBases(nextState.core, loserUid);
         if (!found) continue;
         const destinationOptions = nextState.core.bases
@@ -613,8 +612,8 @@ function buildRunEmOffTieMovePrompts(
             continue;
         }
         const interaction = createSimpleChoice(
-            `smashup_duel_run_em_off_move_${duel.id}_${found.minion.controller}_${now}`,
-            found.minion.controller,
+            `smashup_duel_run_em_off_move_${duel.id}_${mover}_${now}`,
+            mover,
             'ui.duel_prompt_run_em_off_tie_title',
             buildBaseTargetOptions(destinationOptions, nextState.core),
             { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },
@@ -773,8 +772,8 @@ function resolveDuelResult(
                 }));
             } else if (destinationOptions.length > 1) {
                 const interaction = createSimpleChoice(
-                    `smashup_duel_run_em_off_move_${duel.id}_${loser.controller}_${now}`,
-                    loser.controller,
+                    `smashup_duel_run_em_off_move_${duel.id}_${winner.controller}_${now}`,
+                    winner.controller,
                     'ui.duel_prompt_run_em_off_title',
                     buildBaseTargetOptions(destinationOptions, state.core),
                     { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },

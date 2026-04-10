@@ -269,10 +269,7 @@ const RiftCanvas: React.FC<{
     const sparksRef = useRef<Spark[]>([]);
     const rgb = React.useMemo(() => parseColor(color), [color]);
     const onCompleteRef = useRef(onComplete);
-
-    useEffect(() => {
-        onCompleteRef.current = onComplete;
-    }, [onComplete]);
+    onCompleteRef.current = onComplete;
 
     const OVERFLOW = 1.6;
 
@@ -427,15 +424,8 @@ export const RiftSlash: React.FC<RiftSlashProps> = ({
             newLines.push({ angle: angle + angleOffset, delay: staggerDelay, offsetX });
         }
 
-        let cancelled = false;
-        queueMicrotask(() => {
-            if (cancelled) return;
-            setLines(newLines);
-            setActiveKey(counterRef.current);
-        });
-        return () => {
-            cancelled = true;
-        };
+        setLines(newLines);
+        setActiveKey(counterRef.current);
     }, [isActive, angle, count, duration]);
 
     const handleComplete = useCallback(() => {

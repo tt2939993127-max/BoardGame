@@ -80,20 +80,6 @@ const LONG_PRESS_DURATION_MS = 420;
 const LONG_PRESS_MOVE_CANCEL_PX = 14;
 const LONG_PRESS_CLICK_BLOCK_MS = 450;
 
-function getHandCardSpacingRatio(totalCards: number): number {
-  if (totalCards <= 3) return 0.012;
-  if (totalCards === 4) return -0.015;
-  if (totalCards === 5) return -0.035;
-  if (totalCards === 6) return -0.05;
-  return -0.06;
-}
-
-function getHandCardStackZIndex(index: number, totalCards: number): number {
-  const centerIndex = (totalCards - 1) / 2;
-  const distanceFromCenter = Math.abs(index - centerIndex);
-  return Math.round((totalCards - distanceFromCenter) * 10);
-}
-
 const HandCard: React.FC<{
   card: Card;
   index: number;
@@ -140,8 +126,7 @@ const HandCard: React.FC<{
     height: magnifyIconSize,
   };
 
-  const cardSpacingRatio = getHandCardSpacingRatio(totalCards);
-  const baseZIndex = getHandCardStackZIndex(index, totalCards);
+  const cardSpacingRatio = totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05;
 
   const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -168,7 +153,7 @@ const HandCard: React.FC<{
       style={{
         width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${CARD_WIDTH_RATIO})`,
         marginLeft: index === 0 ? 0 : `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${cardSpacingRatio})`,
-        zIndex: isSelected ? 100 : isHovered ? 50 : baseZIndex,
+        zIndex: isSelected ? 100 : isHovered ? 50 : index,
       }}
       initial={false}
       animate={{

@@ -248,18 +248,12 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
     useEffect(() => {
         if (!isOpen) return;
         if (isCursorRegistryLoaded()) {
-            queueMicrotask(() => {
-                setIsRegistryReady(true);
-            });
+            setIsRegistryReady(true);
             return;
         }
 
         let cancelled = false;
-        queueMicrotask(() => {
-            if (!cancelled) {
-                setIsRegistryReady(false);
-            }
-        });
+        setIsRegistryReady(false);
 
         void ensureCursorRegistryLoaded().then(() => {
             if (!cancelled) {

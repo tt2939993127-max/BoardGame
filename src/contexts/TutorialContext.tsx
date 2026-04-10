@@ -116,10 +116,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     const fallbackTimerRef = useRef<number | undefined>(undefined);
     const toast = useToast();
     const toastRef = useRef(toast);
-
-    useEffect(() => {
-        toastRef.current = toast;
-    }, [toast]);
+    toastRef.current = toast;
 
     const bindDispatch = useCallback((dispatch: DispatchFn) => {
         // 清除兜底 timer（正常路径：bindDispatch 被调用）
@@ -332,11 +329,8 @@ export const useTutorialBridge = (tutorial: TutorialState, dispatch: (type: stri
     // 用 ref 保持最新的 context 和 dispatch，供挂载时的 effect 使用
     const contextRef = useRef(context);
     const dispatchRef = useRef(dispatch);
-
-    useEffect(() => {
-        contextRef.current = context;
-        dispatchRef.current = dispatch;
-    }, [context, dispatch]);
+    contextRef.current = context;
+    dispatchRef.current = dispatch;
 
     useEffect(() => {
         if (!context) return;

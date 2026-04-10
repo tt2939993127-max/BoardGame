@@ -20,3 +20,5 @@ export * from './ShatterEffect';
 export * from './canvasParticleEngine';
 export * from './useDamageFlash';
 export * from './useImpactFeedback';
+export * from './frameSequence';
+export * from './FrameSequencePlayer';

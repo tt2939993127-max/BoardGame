@@ -8,7 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     addTempPower, destroyMinion,
-    grantExtraAction, buildActionMinionTargetOptions, buildMinionTargetOptions,
+    grantExtraAction, buildMinionTargetOptions,
     resolveOrPrompt, findMinionOnBases, findMinionByAttachedCard, buildAbilityFeedback,
     modifyBreakpoint,
     buildValidatedDestroyEvents,
@@ -132,7 +132,7 @@ function createChewToyTargetInteraction(ctx: AbilityContext, minionUid: string, 
         }
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
-    const options = buildActionMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' });
+    const options = buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
     if (options.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.all_protected', ctx.now)] };
 
     return resolveOrPrompt(ctx, options, {
@@ -187,7 +187,7 @@ function buildLetTheDogOutTargetInteraction(
     state: SmashUpCore, playerId: string, now: number, matchState: any,
     budget: number, sourceUid: string,
 ): AbilityResult {
-    const targets = buildActionMinionTargetOptions(
+    const targets = buildMinionTargetOptions(
         collectLetTheDogOutTargets(state, budget, sourceUid),
         { state, sourcePlayerId: playerId, effectType: 'destroy' },
     ).map(o => ({
@@ -250,7 +250,7 @@ const handleChewToyChooseMinion: IH = (state, playerId, value, _data, _random, n
         }
     }
     if (targets.length === 0) return { state, events: [] };
-    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
+    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
     if (options.length === 0) return { state, events: [] };
 
     const interaction = createSimpleChoice(
@@ -284,7 +284,7 @@ const handleLetTheDogOutChooseMinion: IH = (state, playerId, value, _data, _rand
     const myPower = getEffectivePower(state.core, minion, v.baseIndex);
     const targets = collectLetTheDogOutTargets(state.core, myPower, v.minionUid);
     if (targets.length === 0) return { state, events: [] };
-    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
+    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
         .map(o => ({
             ...o,
             value: { ...o.value, budget: myPower, sourceUid: v.minionUid },
@@ -323,7 +323,7 @@ const handleLetTheDogOutChooseTarget: IH = (state, playerId, value, _data, _rand
     const remaining = collectLetTheDogOutTargets(state.core, newBudget, v.sourceUid)
         .filter(t => t.uid !== v.minionUid);
     if (remaining.length === 0) return { state, events };
-    const options = buildActionMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
+    const options = buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
         .map(o => ({
             ...o,
             value: { ...o.value, budget: newBudget, sourceUid: v.sourceUid },

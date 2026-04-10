@@ -74,16 +74,12 @@ export const ImpactContainer: React.FC<ImpactContainerProps> = ({
 
   // 用 ref 持有 onComplete，避免父组件传内联函数导致 useEffect 重跑
   const onCompleteRef = React.useRef(onComplete);
-
-  useEffect(() => {
-    onCompleteRef.current = onComplete;
-  }, [onComplete]);
+  onCompleteRef.current = onComplete;
 
   useEffect(() => {
     if (!isActive) return;
 
     const timers: number[] = [];
-    let cancelled = false;
     const preset = hitStopConfig ?? getHitStopPresetByDamage(damage);
     const hitStopDur = preset.duration ?? 80;
     const doShake = !!effects.shake;
@@ -94,12 +90,8 @@ export const ImpactContainer: React.FC<ImpactContainerProps> = ({
     const hitStopDelay = doShake ? 80 : 0;
 
     if (doShake) {
-      queueMicrotask(() => {
-        if (!cancelled) {
-          setIsShaking(true);
-          setIsPaused(false);
-        }
-      });
+      setIsShaking(true);
+      setIsPaused(false);
     }
 
     if (doHitStop) {
@@ -128,10 +120,7 @@ export const ImpactContainer: React.FC<ImpactContainerProps> = ({
       onCompleteRef.current?.();
     }, totalDuration));
 
-    return () => {
-      cancelled = true;
-      timers.forEach(t => window.clearTimeout(t));
-    };
+    return () => timers.forEach(t => window.clearTimeout(t));
   }, [isActive]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const finalHitStopConfig = hitStopConfig ?? getHitStopPresetByDamage(damage);

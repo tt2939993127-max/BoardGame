@@ -4,7 +4,6 @@ import { logger } from '../lib/logger';
 import { logMobileRuntime, logMobileRuntimeCritical } from '../lib/mobile/mobileRuntimeDebug';
 
 interface GameNamespaceState {
-    requestKey: string | null;
     isReady: boolean;
     error: string | null;
 }
@@ -49,15 +48,11 @@ export function useGameNamespaceReady(
     const [retryTick, setRetryTick] = useState(0);
     const languageKey = i18n.resolvedLanguage ?? i18n.language;
     const required = options.required ?? true;
-    const namespace = gameId ? `game-${gameId}` : null;
-    const requestKey = gameId && required ? `${gameId}:${languageKey}:${retryTick}` : null;
-    const hasLoadedNamespace = Boolean(namespace && gameId && required && i18n.hasLoadedNamespace(namespace));
     const [state, setState] = useState<GameNamespaceState>(() => {
         if (!gameId || !required) {
-            return { requestKey: null, isReady: true, error: null };
+            return { isReady: true, error: null };
         }
         return {
-            requestKey: null,
             isReady: i18n.hasLoadedNamespace(`game-${gameId}`),
             error: null,
         };
@@ -68,25 +63,31 @@ export function useGameNamespaceReady(
     }, []);
 
     useEffect(() => {
-        if (!namespace || !gameId || !required) {
+        if (!gameId || !required) {
+            queueMicrotask(() => {
+                setState({ isReady: true, error: null });
+            });
             return;
         }
 
-        if (hasLoadedNamespace) {
+        const namespace = `game-${gameId}`;
+        if (i18n.hasLoadedNamespace(namespace)) {
             logMobileRuntime('GameNamespace', 'load-cache-hit', {
                 gameId,
                 namespace,
                 language: languageKey,
                 resolvedLanguage: i18n.resolvedLanguage,
             });
+            queueMicrotask(() => {
+                setState({ isReady: true, error: null });
+            });
             return;
         }
-
-        if (!requestKey) return;
 
         let isActive = true;
         const startedAt = Date.now();
         const timeoutMessage = createGameNamespaceTimeoutMessage(gameId, namespace);
+        setState({ isReady: false, error: null });
         logMobileRuntime('GameNamespace', 'load-start', {
             gameId,
             namespace,
@@ -104,7 +105,7 @@ export function useGameNamespaceReady(
                     resolvedLanguage: i18n.resolvedLanguage,
                     durationMs: Date.now() - startedAt,
                 });
-                setState({ requestKey, isReady: true, error: null });
+                setState({ isReady: true, error: null });
             })
             .catch((error: unknown) => {
                 const message = error instanceof Error ? error.message : String(error);
@@ -131,30 +132,17 @@ export function useGameNamespaceReady(
                     logMobileRuntimeCritical('GameNamespace', 'load-timeout', payload);
                 }
                 if (!isActive) return;
-                setState({ requestKey, isReady: false, error: message });
+                setState({ isReady: false, error: message });
             });
 
         return () => {
             isActive = false;
         };
-    }, [gameId, hasLoadedNamespace, i18n, languageKey, namespace, requestKey, required]);
-
-    const resolvedState = (() => {
-        if (!requestKey || !gameId || !required) {
-            return { isReady: true, error: null };
-        }
-        if (hasLoadedNamespace) {
-            return { isReady: true, error: null };
-        }
-        if (state.requestKey !== requestKey) {
-            return { isReady: false, error: null };
-        }
-        return { isReady: state.isReady, error: state.error };
-    })();
+    }, [gameId, i18n, languageKey, required, retryTick]);
 
     return {
-        isGameNamespaceReady: resolvedState.isReady,
-        gameNamespaceError: resolvedState.error,
+        isGameNamespaceReady: state.isReady,
+        gameNamespaceError: state.error,
         retryGameNamespaceLoad: retry,
     };
 }

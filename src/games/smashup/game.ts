@@ -29,7 +29,7 @@ import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatSmashUpActionEntry } from './ac
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getSmashUpCardPreviewRef } from './ui/cardPreviewHelper';
 import { registerCriticalImageResolver } from '../../core';
-import { smashUpRuntimeCriticalImageResolver } from './runtimeCriticalImageResolver';
+import { smashUpCriticalImageResolver } from './criticalImageResolver';
 import { registerGameAiRuntime } from '../../engine/ai';
 import { smashUpAiRuntime } from './ai';
 import './ui/SmashUpCardRenderer'; // 注册卡牌渲染器
@@ -139,4 +139,4 @@ export { SmashUpDomain, smashUpFlowHooks };
 // 卡牌预览注册（放文件末尾，避免 Vite SSR 函数提升陷阱）
 // ============================================================================
 registerCardPreviewGetter('smashup', getSmashUpCardPreviewRef, { maxDim: 220 });
-registerCriticalImageResolver('smashup', smashUpRuntimeCriticalImageResolver);
+registerCriticalImageResolver('smashup', smashUpCriticalImageResolver);

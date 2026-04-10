@@ -23,10 +23,9 @@ export default function SearchInput({
     const debounceTimerRef = useRef<any>(null);
 
     useEffect(() => {
-        if (propValue === undefined) return;
-        queueMicrotask(() => {
+        if (propValue !== undefined) {
             setLocalValue(propValue);
-        });
+        }
     }, [propValue]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {

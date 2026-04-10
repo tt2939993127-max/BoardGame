@@ -54,6 +54,7 @@
     "playAi": "Play AI",
     "tutorial": "Tutorial",
     "createRoom": "Create Room",
+    "backToDirectory": "Back to Directory",
     "confirm": "Confirm",
     "cancel": "Cancel"
   },
@@ -63,16 +64,12 @@
   "button": {
     "processing": "Processing..."
   },
-  "tutorial": {
-    "steps": {
-      "setup": "Preparing room"
-    }
-  },
   "activeMatch": {
     "notice": "You are currently in a match",
     "return": "Return to match (#{{id}})"
   },
   "rooms": {
+    "title": "Game Rooms",
     "loading": "Loading rooms...",
     "empty": "No active rooms",
     "matchTitle": "Match #{{id}}",
@@ -135,8 +132,6 @@
     "assetPack": "Asset Pack",
     "packIdUnknown": "Pack ID pending",
     "sizeUnknown": "Pending manifest",
-    "packageSyncing": "Syncing",
-    "packageUnpublished": "Package not published",
     "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
     "failedTitle": "Download Failed",
     "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
@@ -187,38 +182,6 @@
       "progressPercent": "{{percent}}%",
       "progressPending": "Preparing",
       "retryAction": "Check again"
-    }
-  },
-  "nativeUpdate": {
-    "gate": {
-      "eyebrow": "Install New App",
-      "checkingTitle": "Preparing installer",
-      "checkingDescription": "Checking and preparing the new app package. Please wait.",
-      "downloadingTitle": "Downloading installer",
-      "downloadingDescription": "Downloading the new app package. The system installer will open automatically when ready.",
-      "verifyingTitle": "Verifying package",
-      "verifyingDescription": "The app package has been downloaded. Verifying integrity now.",
-      "permissionTitle": "Install permission required",
-      "permissionDescription": "Allow this app to install unknown apps first, then return and continue installation.",
-      "installingTitle": "Opening system installer",
-      "installingDescription": "The system installer is ready. Follow the system prompt to complete the update.",
-      "errorTitle": "App update failed",
-      "errorDescription": "Downloading the app package or starting the installer failed. Please retry.",
-      "targetVersion": "Target app version",
-      "progressLabel": "Download progress",
-      "progressPercent": "{{percent}}%",
-      "progressPending": "Preparing",
-      "openSettingsAction": "Open settings",
-      "continueInstallAction": "Continue install",
-      "retryAction": "Retry download"
-    },
-    "toast": {
-      "disabled": "Native app update is not enabled in the current Android shell build.",
-      "upToDate": "This app is already up to date.",
-      "available": "A newer app version {{version}} is available and ready to install.",
-      "installerOpened": "The system installer has opened. Follow the prompt to finish the update.",
-      "openSettingsFailed": "Failed to open the install permission page. Please try again.",
-      "missingPreparedUpdate": "No downloaded update package is ready to continue. Please download it again."
     }
   },
   "gameDetails": {

@@ -49,8 +49,8 @@ export const SummonerWarsDebugConfig: React.FC<SummonerWarsDebugConfigProps> = (
     const [dealPlayer, setDealPlayer] = useState<string>('0');
     const [atlasIndex, setAtlasIndex] = useState<string>('0');
 
-    const playerDeck = useMemo(() => core?.players?.[dealPlayer as '0' | '1']?.deck ?? [], [core, dealPlayer]);
-    const playerHand = useMemo(() => core?.players?.[dealPlayer as '0' | '1']?.hand ?? [], [core, dealPlayer]);
+    const playerDeck = core?.players?.[dealPlayer as '0' | '1']?.deck ?? [];
+    const playerHand = core?.players?.[dealPlayer as '0' | '1']?.hand ?? [];
 
     const cardInDeck = useMemo(() => {
         const targetIndex = Number(atlasIndex);

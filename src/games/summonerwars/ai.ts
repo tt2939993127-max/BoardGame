@@ -117,31 +117,6 @@ const buildSimpleChoicePayload = (
     return { optionIds };
 };
 
-const enumerateInteractionOptionCombinations = <T extends { id: string }>(
-    options: T[],
-    minCount: number,
-    maxCount: number,
-): T[][] => {
-    const results: T[][] = [];
-    const path: T[] = [];
-
-    const dfs = (start: number) => {
-        if (path.length >= minCount && path.length <= maxCount) {
-            results.push([...path]);
-        }
-        if (path.length === maxCount) return;
-
-        for (let index = start; index < options.length; index += 1) {
-            path.push(options[index]);
-            dfs(index + 1);
-            path.pop();
-        }
-    };
-
-    dfs(0);
-    return results;
-};
-
 const getEnemyPlayerId = (playerId: PlayerId): PlayerId => (playerId === '0' ? '1' : '0');
 
 const pushStrategyTag = (
@@ -552,54 +527,7 @@ const buildInteractionActions = (
         const availableOptions = (data.options ?? []).filter((option): option is Required<Pick<SummonerWarsInteractionOption, 'id'>> & SummonerWarsInteractionOption => {
             return typeof option.id === 'string' && option.disabled !== true;
         });
-        const minCount = data.multi?.min ?? 1;
-        const maxCount = data.multi?.max ?? minCount;
-
-        if (data.multi) {
-            const actions: AiLegalAction[] = [];
-            if (minCount === 0) {
-                actions.push({
-                    actionId: createAiLegalActionId('interaction', current.id, 'empty-selection'),
-                    kind: 'interaction-choice',
-                    label: '不选择任何项',
-                    commands: [{
-                        type: 'SYS_INTERACTION_RESPOND',
-                        payload: { optionIds: [] },
-                    }],
-                    metadata: {
-                        interactionId: current.id,
-                        optionIds: [],
-                        optionValue: [],
-                    },
-                });
-            }
-
-            const combinations = enumerateInteractionOptionCombinations(
-                availableOptions,
-                Math.max(1, minCount),
-                maxCount,
-            );
-
-            actions.push(...combinations.map((combination, index) => ({
-                actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
-                kind: 'interaction-choice',
-                label: combination.map((option) => option.label ?? option.id).join(' + ') || `交互选择 ${index + 1}`,
-                commands: [{
-                    type: 'SYS_INTERACTION_RESPOND',
-                    payload: buildSimpleChoicePayload(
-                        combination.map((option) => option.id),
-                        data.multi,
-                    ),
-                }],
-                metadata: {
-                    interactionId: current.id,
-                    optionIds: combination.map((option) => option.id),
-                    optionValue: combination.map((option) => option.value),
-                },
-            })));
-
-            return actions;
-        }
+        const minCount = Math.max(1, data.multi?.min ?? 1);
 
         return availableOptions.map((option, index) => ({
             actionId: createAiLegalActionId('interaction', current.id, option.id),
@@ -608,7 +536,7 @@ const buildInteractionActions = (
             commands: [{
                 type: 'SYS_INTERACTION_RESPOND',
                 payload: buildSimpleChoicePayload(
-                    [option.id],
+                    minCount > 1 ? availableOptions.slice(0, minCount).map((item) => item.id) : [option.id],
                     data.multi,
                     option.value,
                 ),

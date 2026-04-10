@@ -7,7 +7,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AUTH_API_URL } from '../config/server';
-import { onAppVisible } from '../lib/mobile/appVisibility';
 
 // 提前刷新时间（提前1天刷新）
 const REFRESH_BEFORE_MS = 24 * 60 * 60 * 1000;
@@ -177,8 +176,10 @@ export function useTokenRefresh() {
 
         scheduleRefresh();
 
-        // 监听 App 恢复到前台，检查 token 是否需要刷新
-        const handleAppVisible = () => {
+        // 监听 visibilitychange，页面恢复可见时检查 token 是否需要刷新
+        const handleVisibilityChange = () => {
+            if (document.hidden) return;
+            
             // 读最新 token，避免闭包捕获旧值
             const currentToken = getCurrentToken();
             if (!currentToken) return;
@@ -215,11 +216,11 @@ export function useTokenRefresh() {
             }
         };
 
-        const cleanupAppVisible = onAppVisible(handleAppVisible);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
 
         return () => {
             clearTimer();
-            cleanupAppVisible();
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, [token, logout, clearTimer, handleRefreshSuccess]);
 }

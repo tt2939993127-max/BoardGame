@@ -23,63 +23,6 @@ import type { GameEngineConfig } from '../../../engine/transport/server';
 import { createTestRoutes, getConfiguredTestApiToken, isTestRoutesEnabledEnv } from '../test';
 import { ensureSharedTestApiToken, resolveSharedTestApiToken } from '../../testApiToken';
 
-const FETCH_BLOCKED_PORTS = new Set([
-    1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
-    87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117, 119, 123, 135, 137,
-    139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532,
-    540, 548, 554, 556, 563, 587, 601, 636, 989, 990, 993, 995, 1719, 1720, 1723,
-    2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679,
-    6697, 10080,
-]);
-
-const closeHttpServer = async (server: ReturnType<typeof createServer>) => {
-    await new Promise<void>((resolve, reject) => {
-        server.close((error) => {
-            if (error) {
-                reject(error);
-                return;
-            }
-            resolve();
-        });
-    });
-};
-
-const listenHttpServer = async (server: ReturnType<typeof createServer>) => {
-    const port = await new Promise<number>((resolve, reject) => {
-        const handleError = (error: Error) => {
-            server.off('listening', handleListening);
-            reject(error);
-        };
-        const handleListening = () => {
-            server.off('error', handleError);
-            const addr = server.address();
-            if (!addr || typeof addr === 'string') {
-                reject(new Error(`Unexpected server address: ${String(addr)}`));
-                return;
-            }
-            resolve(addr.port);
-        };
-
-        server.once('error', handleError);
-        server.once('listening', handleListening);
-        server.listen(0, '127.0.0.1');
-    });
-
-    return port;
-};
-
-const listenHttpServerOnFetchSafePort = async (server: ReturnType<typeof createServer>) => {
-    for (let attempt = 1; attempt <= 20; attempt += 1) {
-        const port = await listenHttpServer(server);
-        if (!FETCH_BLOCKED_PORTS.has(port)) {
-            return `http://127.0.0.1:${port}`;
-        }
-        await closeHttpServer(server);
-    }
-
-    throw new Error('Failed to bind test server to a fetch-safe port');
-};
-
 // Mock storage
 const createMockStorage = (): MatchStorage => {
     const states = new Map<string, StoredMatchState>();
@@ -190,7 +133,7 @@ const createRoomLifecycleRoutes = ({
             return;
         }
 
-        const body = ctx.request.body as { numPlayers?: unknown; setupData?: unknown; playerName?: string } | undefined;
+        const body = ctx.request.body as { numPlayers?: unknown; setupData?: unknown } | undefined;
         const numPlayers = Number(body?.numPlayers ?? 2);
         const minPlayers = gameEngine.minPlayers ?? 2;
         const maxPlayers = gameEngine.maxPlayers ?? 2;
@@ -226,19 +169,6 @@ const createRoomLifecycleRoutes = ({
             status: 'waiting',
         };
 
-        const ownerName = typeof body?.playerName === 'string' && body.playerName.trim()
-            ? body.playerName.trim()
-            : undefined;
-        let ownerCredentials: string | undefined;
-        if (ownerName) {
-            ownerCredentials = `cred-${matchID}-0`;
-            metadata.players['0'] = {
-                ...metadata.players['0'],
-                name: ownerName,
-                credentials: ownerCredentials,
-            };
-        }
-
         await storage.createMatch(matchID, {
             initialState: {
                 G: setupResult.state,
@@ -249,24 +179,15 @@ const createRoomLifecycleRoutes = ({
             metadata,
         });
 
-        ctx.body = {
-            matchID,
-            ownerPlayerID: ownerCredentials ? '0' : undefined,
-            ownerCredentials,
-        };
+        ctx.body = { matchID };
     });
 
     router.post('/games/:name/:matchID/join', async (ctx) => {
         const matchID = String(ctx.params.matchID || '').trim();
         const body = ctx.request.body as { playerID?: string; playerName?: string } | undefined;
-        const requestedPlayerID = typeof body?.playerID === 'string' && body.playerID.trim()
-            ? body.playerID.trim()
-            : undefined;
-        const playerName = typeof body?.playerName === 'string' && body.playerName.trim()
-            ? body.playerName.trim()
-            : undefined;
-        if (!playerName) {
-            ctx.throw(403, 'playerName is required');
+        const playerID = body?.playerID;
+        if (!playerID) {
+            ctx.throw(403, 'playerID is required');
             return;
         }
 
@@ -276,29 +197,16 @@ const createRoomLifecycleRoutes = ({
             return;
         }
 
-        const playerID = requestedPlayerID
-            ?? Object.entries(result.metadata.players)
-                .sort(([a], [b]) => Number(a) - Number(b))
-                .find(([, player]) => !player.name && !player.credentials)?.[0];
-        if (!playerID) {
-            ctx.throw(409, 'Room is full');
-            return;
-        }
-
         const playerMeta = result.metadata.players[playerID];
         if (!playerMeta) {
             ctx.throw(404, `Player ${playerID} not found`);
-            return;
-        }
-        if (playerMeta.name || playerMeta.credentials) {
-            ctx.throw(409, `Seat ${playerID} is occupied`);
             return;
         }
 
         const credentials = `cred-${matchID}-${playerID}`;
         result.metadata.players[playerID] = {
             ...playerMeta,
-            name: playerName,
+            name: body?.playerName,
             credentials,
         };
         result.metadata.updatedAt = Date.now();
@@ -311,7 +219,7 @@ const createRoomLifecycleRoutes = ({
         await storage.setMetadata(matchID, result.metadata);
         gameTransport.updateMatchMetadata(matchID, result.metadata);
 
-        ctx.body = { playerID, playerCredentials: credentials };
+        ctx.body = { playerCredentials: credentials };
     });
 
     router.post('/games/:name/:matchID/leave', async (ctx) => {
@@ -545,7 +453,14 @@ describe('Test Routes Integration', () => {
         app.use(testRouter.allowedMethods());
 
         // 启动服务器
-        baseURL = await listenHttpServerOnFetchSafePort(httpServer);
+        await new Promise<void>((resolve) => {
+            httpServer.listen(0, () => {
+                const addr = httpServer.address();
+                const port = typeof addr === 'object' && addr ? addr.port : 0;
+                baseURL = `http://localhost:${port}`;
+                resolve();
+            });
+        });
     });
 
     afterAll(async () => {
@@ -1006,70 +921,6 @@ describe('Test Routes Integration', () => {
     });
 
     describe('room lifecycle integration', () => {
-        it('create 时返回房主 0 号位凭据，避免再走二次 claim-seat', async () => {
-            const response = await fetch(`${baseURL}/games/lifecycle-game/create`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ numPlayers: 2, playerName: 'Host Alice' }),
-            });
-
-            expect(response.status).toBe(200);
-            const data = await response.json() as {
-                matchID: string;
-                ownerPlayerID?: string;
-                ownerCredentials?: string;
-            };
-
-            expect(data.matchID).toContain('lifecycle-match-');
-            expect(data.ownerPlayerID).toBe('0');
-            expect(data.ownerCredentials).toBe(`cred-${data.matchID}-0`);
-
-            const matchResponse = await fetch(`${baseURL}/games/lifecycle-game/${data.matchID}`);
-            expect(matchResponse.status).toBe(200);
-            const match = await matchResponse.json() as {
-                status: string;
-                players: Array<{ id: number; name?: string }>;
-            };
-
-            expect(match.status).toBe('waiting');
-            expect(match.players.find((player) => player.id === 0)?.name).toBe('Host Alice');
-        });
-
-        it('join 在未指定 playerID 时由服务端自动分配空席，并拒绝覆盖已占席位', async () => {
-            const createResponse = await fetch(`${baseURL}/games/lifecycle-game/create`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ numPlayers: 2, playerName: 'Host Alice' }),
-            });
-            const { matchID } = await createResponse.json() as { matchID: string };
-
-            const joinResponse = await fetch(`${baseURL}/games/lifecycle-game/${matchID}/join`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ playerName: 'Bob' }),
-            });
-
-            expect(joinResponse.status).toBe(200);
-            const joinData = await joinResponse.json() as { playerID?: string; playerCredentials: string };
-            expect(joinData.playerID).toBe('1');
-            expect(joinData.playerCredentials).toBe(`cred-${matchID}-1`);
-
-            const overwriteResponse = await fetch(`${baseURL}/games/lifecycle-game/${matchID}/join`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ playerID: '0', playerName: 'Mallory' }),
-            });
-            expect(overwriteResponse.status).toBe(409);
-        });
-
         it('covers create -> join -> sync -> command -> leave through REST and /game socket', async () => {
             const sockets: ClientSocket[] = [];
             const closeSockets = async () => {

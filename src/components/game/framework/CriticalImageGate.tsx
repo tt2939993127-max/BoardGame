@@ -10,7 +10,6 @@ import {
     signalCriticalImagesReady,
 } from '../../../core';
 import { resolveCriticalImages } from '../../../core/CriticalImageResolverRegistry';
-import { isAppCurrentlyActive, onAppVisibilityChange } from '../../../lib/mobile/appVisibility';
 import { warmPreloadScheduler } from './warmPreloadScheduler';
 
 const criticalImageGateWindow = typeof window !== 'undefined'
@@ -63,16 +62,18 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     children,
 }) => {
     useEffect(() => {
-        const applyVisibilityState = (isActive: boolean) => {
-            if (!isActive) {
+        if (typeof document === 'undefined') return;
+        const onVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
                 warmPreloadScheduler.pause();
             } else {
                 warmPreloadScheduler.resume();
             }
         };
 
-        applyVisibilityState(isAppCurrentlyActive());
-        return onAppVisibilityChange(applyVisibilityState);
+        document.addEventListener('visibilitychange', onVisibilityChange);
+        onVisibilityChange();
+        return () => document.removeEventListener('visibilitychange', onVisibilityChange);
     }, []);
 
     // E2E 测试可通过 window.__E2E_SKIP_IMAGE_GATE__ 跳过图片预加载门禁
@@ -81,55 +82,61 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
     const effectiveEnabled = enabled && !skipGate;
 
     const { t } = useTranslation('lobby');
+    const [ready, setReady] = useState(!effectiveEnabled);
     const [loadingProgress, setLoadingProgress] = useState<{ loaded: number; total: number } | undefined>(undefined);
-    const [lastReadyRunKey, setLastReadyRunKey] = useState<string | null>(null);
 
     const gameStateRef = useRef(gameState);
     const inFlightRef = useRef(false);
+    const lastReadyKeyRef = useRef<string | null>(null);
     const lastWarmRunKeyRef = useRef<string | null>(null);
-    const notifiedReadyRunKeyRef = useRef<string | null>(null);
     const pendingRunKeyRef = useRef<string | null>(null);
     const [retryTick, setRetryTick] = useState(0);
 
     const stateKey = gameState ? 'ready' : 'empty';
 
-    const resolvedImages = useMemo(() => {
-        if (!effectiveEnabled || !gameId || !gameState) return null;
-        return resolveCriticalImages(gameId, gameState, locale, playerID);
+    const phaseKey = useMemo(() => {
+        if (!effectiveEnabled || !gameId || !gameState) return '';
+        const resolved = resolveCriticalImages(gameId, gameState, locale, playerID);
+        return resolved.phaseKey ?? '';
     }, [effectiveEnabled, gameId, gameState, locale, playerID]);
-    const phaseKey = resolvedImages?.phaseKey ?? '';
-    const hasCriticalImages = (resolvedImages?.critical?.length ?? 0) > 0;
 
     const runKey = `${gameId ?? ''}:${locale ?? ''}:${phaseKey}:${stateKey}`;
     const latestRunKeyRef = useRef(runKey);
+    latestRunKeyRef.current = runKey;
 
-    const cacheHitReady = effectiveEnabled
+    const needsPreload = effectiveEnabled
         && !!gameId
         && stateKey === 'ready'
-        && lastReadyRunKey !== runKey
-        && Boolean(gameId && gameState && readyRunKeys.has(runKey));
-    const cacheResolvedReady = effectiveEnabled
+        && lastReadyKeyRef.current !== runKey;
+
+    if (needsPreload && gameId && gameState && readyRunKeys.has(runKey)) {
+        lastReadyKeyRef.current = runKey;
+        const resolved = resolveCriticalImages(gameId, gameState, locale, playerID);
+        if ((resolved.critical?.length ?? 0) > 0) {
+            signalCriticalImagesReady();
+        }
+    } else if (
+        needsPreload
+        && gameId
+        && gameState
+        && areAllCriticalImagesCached(gameId, gameState, locale, playerID)
+    ) {
+        lastReadyKeyRef.current = runKey;
+        readyRunKeys.add(runKey);
+        const resolved = resolveCriticalImages(gameId, gameState, locale, playerID);
+        if ((resolved.critical?.length ?? 0) > 0) {
+            signalCriticalImagesReady();
+        }
+    }
+
+    const effectiveNeedsPreload = effectiveEnabled
         && !!gameId
         && stateKey === 'ready'
-        && hasCriticalImages
-        && Boolean(gameId && gameState)
-        && lastReadyRunKey !== runKey
-        && areAllCriticalImagesCached(gameId, gameState, locale, playerID);
-    const isRunReady = !effectiveEnabled
-        || !gameId
-        || stateKey !== 'ready'
-        || !hasCriticalImages
-        || lastReadyRunKey === runKey
-        || cacheHitReady
-        || cacheResolvedReady;
+        && lastReadyKeyRef.current !== runKey;
 
     useEffect(() => {
         gameStateRef.current = gameState;
     }, [gameState]);
-
-    useEffect(() => {
-        latestRunKeyRef.current = runKey;
-    }, [runKey]);
 
     useEffect(() => {
         // 教程启动常通过 useLayoutEffect 同步推进 state。
@@ -140,7 +147,9 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         }
 
         if (!effectiveEnabled || !gameId) {
+            setReady(true);
             inFlightRef.current = false;
+            lastReadyKeyRef.current = null;
             lastWarmRunKeyRef.current = null;
             pendingRunKeyRef.current = null;
             signalCriticalImagesReady();
@@ -152,7 +161,7 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         }
 
         if (inFlightRef.current) {
-            if (pendingRunKeyRef.current !== runKey) {
+            if (lastReadyKeyRef.current !== runKey) {
                 pendingRunKeyRef.current = runKey;
             }
             return;
@@ -163,31 +172,37 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
             return;
         }
 
-        if (isRunReady) {
-            if (hasCriticalImages && lastWarmRunKeyRef.current !== runKey) {
+        if (lastReadyKeyRef.current === runKey) {
+            if (lastWarmRunKeyRef.current !== runKey) {
+                const resolved = resolveCriticalImages(gameId, currentState, locale, playerID);
                 cancelWarmPreload();
-                preloadWarmImages(resolvedImages?.warm, locale, gameId);
-                lastWarmRunKeyRef.current = runKey;
-                signalCriticalImagesReady();
-            }
-            if (!hasCriticalImages) {
+                preloadWarmImages(resolved.warm, locale, gameId);
                 lastWarmRunKeyRef.current = runKey;
             }
-            readyRunKeys.add(runKey);
-            if (notifiedReadyRunKeyRef.current !== runKey) {
-                notifiedReadyRunKeyRef.current = runKey;
-                onReady?.();
-            }
+            if (!ready) setReady(true);
+            onReady?.();
             return;
         }
 
         pendingRunKeyRef.current = null;
         inFlightRef.current = true;
-        queueMicrotask(() => {
-            if (runKey === latestRunKeyRef.current) {
-                setLoadingProgress(undefined);
-            }
-        });
+        setReady(false);
+        setLoadingProgress(undefined);
+
+        const resolved = resolveCriticalImages(gameId, currentState, locale, playerID);
+        const hasCriticalImages = (resolved.critical?.length ?? 0) > 0;
+
+        // 空 critical 阶段（如教程 setup）应快速放行：
+        // 不阻塞 Board，也不放行音频，等待后续真正有关键图的阶段再 signal。
+        if (!hasCriticalImages) {
+            lastReadyKeyRef.current = runKey;
+            lastWarmRunKeyRef.current = runKey;
+            inFlightRef.current = false;
+            setLoadingProgress(undefined);
+            setReady(true);
+            onReady?.();
+            return;
+        }
 
         const preloadPromise = preloadCriticalImages(
             gameId,
@@ -205,13 +220,10 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                 if (runKey !== latestRunKeyRef.current) {
                     return;
                 }
-                setLastReadyRunKey(runKey);
+                lastReadyKeyRef.current = runKey;
                 readyRunKeys.add(runKey);
-                setLoadingProgress(undefined);
-                if (notifiedReadyRunKeyRef.current !== runKey) {
-                    notifiedReadyRunKeyRef.current = runKey;
-                    onReady?.();
-                }
+                setReady(true);
+                onReady?.();
                 warmPreloadScheduler.enqueue(warmPaths, locale, gameId);
                 lastWarmRunKeyRef.current = runKey;
                 if (hasCriticalImages) {
@@ -223,13 +235,10 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                     return;
                 }
                 console.error('[CriticalImageGate] 预加载失败', err);
-                setLastReadyRunKey(runKey);
+                lastReadyKeyRef.current = runKey;
                 readyRunKeys.add(runKey);
-                setLoadingProgress(undefined);
-                if (notifiedReadyRunKeyRef.current !== runKey) {
-                    notifiedReadyRunKeyRef.current = runKey;
-                    onReady?.();
-                }
+                setReady(true);
+                onReady?.();
                 signalCriticalImagesReady(epoch);
             })
             .finally(() => {
@@ -242,9 +251,11 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
                     setRetryTick((tick) => tick + 1);
                 }
             });
-    }, [effectiveEnabled, gameId, hasCriticalImages, isRunReady, lastReadyRunKey, locale, onReady, playerID, resolvedImages?.warm, retryTick, runKey, stateKey]);
+    }, [effectiveEnabled, gameId, locale, playerID, ready, retryTick, runKey, stateKey]);
 
-    const shouldBlock = blockRendering && !isRunReady;
+    const shouldBlock = blockRendering && (
+        effectiveNeedsPreload || (!ready && lastReadyKeyRef.current !== runKey)
+    );
     if (shouldBlock) {
         const progressText = loadingProgress
             ? t('matchRoom.loadingProgress.loadingAssets', { loaded: loadingProgress.loaded, total: loadingProgress.total })
