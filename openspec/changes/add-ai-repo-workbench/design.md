@@ -293,6 +293,88 @@ Completion Gate 之前的执行层至少需要接收以下裁决字段：
 2. **Local Model Layer**：负责意图归一化、歧义解释、裁决摘要、候选执行器选择
 3. **Execution Layer**：负责真正调用 ACP / exec / workflow / ClawFlow / delivery nodes
 
+### False-active / Watcher Recovery Policy
+
+`false-active` 不是“进程还活着但我感觉不对”的模糊状态，而是一个**基于证据的健康判定结果**。首版策略应尽量简单、可解释、可恢复：
+
+#### 1. 健康信号来源
+
+每个 `WorkflowRun` 至少维护三类健康信号：
+
+- `checkpointHeartbeatAt`：最近一次 checkpoint 写入时间
+- `artifactHeartbeatAt`：最近一次新产物落盘/索引时间
+- `executorHeartbeatAt`：执行器最近一次明确存活心跳或状态回报时间
+
+允许模板按节点类型声明期望信号，例如：
+
+- 审计 / 脚本节点：优先依赖 `checkpointHeartbeatAt`
+- E2E / 长测节点：同时依赖 `artifactHeartbeatAt` 与 `executorHeartbeatAt`
+- 等待用户决策节点：只要状态为 `waiting-decision`，就不参与 false-active 判定
+
+#### 2. 判定分层
+
+首版不要直接二元化为“活着 / 死了”，而是走三段：
+
+1. `active`：在阈值窗口内持续收到至少一种有效健康信号
+2. `idle`：当前无新进展，但仍未越过 false-active 阈值；适合展示“暂无新产物，继续观察”
+3. `false-active`：超过阈值窗口，且没有 checkpoint、没有新产物、也没有执行器心跳
+
+也就是说，`idle` 是观察态，`false-active` 才是需要恢复动作的异常态。
+
+#### 3. 阈值策略
+
+首版采用“模板默认值 + 节点可覆盖”的轻量策略，而不是复杂自学习：
+
+- 默认 `idleAfterMs`：5 分钟
+- 默认 `falseActiveAfterMs`：15 分钟
+- 长 E2E / build / external automation 节点可上调到 20~30 分钟
+- 高频短任务节点可下调到 2~5 分钟
+
+阈值必须写进 `checkpoint_policy`，避免 watcher 和执行器各自猜一套。
+
+#### 4. 恢复动作
+
+一旦进入 `false-active`，系统必须生成明确恢复建议，而不是只改一个状态灯：
+
+- `resume-from-last-checkpoint`
+- `rerun-current-node`
+- `mark-blocked`
+- `request-human-review`
+
+是否自动恢复，取决于节点声明的 `retryPolicy` 与副作用等级：
+
+- **可重入、无外部副作用**的节点，可以自动尝试一次恢复
+- **涉及部署、发信、PR、merge、外部写操作**的节点，不得自动重试，只能升级为 blocker / human review
+
+#### 5. 与监察者模式的边界
+
+false-active 监测能力本身可以作为底层运行时能力存在；但只有在老板显式开启“检查/监察模式”时，系统才应主动加强：
+
+- 更频繁的 watcher 巡检
+- 更积极的里程碑通知
+- Completion Gate 后的持续恢复跟踪
+
+未开启监察者模式时，系统可以记录 false-active 候选并在工作台展示，但不应默认升级为强打扰式监督流程。
+
+#### 6. 最小数据契约
+
+为避免前后端、执行器、watcher 各讲各话，`checkpoint_policy` 至少应包含：
+
+- `idleAfterMs`
+- `falseActiveAfterMs`
+- `expectedSignals[]`
+- `autoResumeAllowed`
+- `maxAutoResumeAttempts`
+- `recoveryActions[]`
+
+而每次健康判定结果至少应落出：
+
+- `healthState`
+- `healthReason`
+- `lastHealthyAt`
+- `missingSignals[]`
+- `recommendedRecoveryAction`
+
 ### Continue Record
 
 每次 `continue` 都必须留下结构化记录，至少包含：

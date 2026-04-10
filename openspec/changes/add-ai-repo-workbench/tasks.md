@@ -29,4 +29,4 @@
 - [ ] 5.2 将首批模板拆成可实施的后续实现 change 或开发任务。
 - [ ] 5.3 评估是否需要新增 repo-provider / artifact-storage 等相邻 capability，而不是把实现细节全部塞进本 spec。
 - [x] 5.4 清理旧 Kiro auto-continue 入口与误导性文档引用，避免与新监察者模式混淆。
-- [ ] 5.5 细化 `false-active` 监测阈值、checkpoint policy 与 watcher 恢复策略的实现方案。
+- [x] 5.5 细化 `false-active` 监测阈值、checkpoint policy 与 watcher 恢复策略的实现方案。

@@ -153,6 +153,21 @@
 - **THEN** 系统 MUST 将该运行标记为 `false-active` 候选而不是继续显示为正常运行
 - **AND** 恢复界面 MUST 提供恢复、重试或升级为 blocker 的后续动作
 
+#### Scenario: idle 与 false-active 分层
+- **WHEN** 运行暂时没有新进展，但仍未超过 false-active 阈值
+- **THEN** 系统 MUST 将该运行标记为 `idle`
+- **AND** 不得过早标记为 `false-active`
+
+#### Scenario: checkpoint policy 显式声明阈值
+- **WHEN** 系统为节点或模板生成 `checkpoint_policy`
+- **THEN** 其中 MUST 包含 `idleAfterMs` 与 `falseActiveAfterMs`
+- **AND** watcher 与执行器 MUST 使用同一套阈值解释健康状态
+
+#### Scenario: 高副作用节点禁止自动恢复
+- **WHEN** `false-active` 节点涉及部署、PR、merge、外部发信或其他外部写操作
+- **THEN** 系统 MUST 禁止自动重试该节点
+- **AND** 必须升级为 blocker、人工复核或显式恢复动作
+
 ### Requirement: 监察者模式 MUST 显式启用
 
 系统 MUST 仅在用户明确发出“开检查”“检查模式”“开监察”“监察模式”或等价显式口令时启用监察者模式。
@@ -166,6 +181,11 @@
 - **WHEN** 用户明确发出“开检查”“检查模式”“开监察”“监察模式”或等价口令
 - **THEN** 系统 MUST 为当前任务或当前会话启用监察者模式
 - **AND** 后续执行才允许进入监察者模式特有的 Completion Gate 与 watcher 语义
+
+#### Scenario: 未开启监察者模式时弱化监督行为
+- **WHEN** 系统检测到 `idle` 或 `false-active` 候选，但用户未显式开启监察者模式
+- **THEN** 系统 MAY 记录和展示健康异常
+- **AND** 不得默认升级为强打扰式持续监督或更高频通知流程
 
 ### Requirement: 监察者模式 MUST 作为 post-run Completion Gate 工作
 
@@ -245,6 +265,11 @@
 - **WHEN** `DecisionRecord` 已完成并允许进入执行层
 - **THEN** 系统 MUST 向执行器传递至少 `normalized_intent`、`action_mode`、`preferred_executor`、`requires_preflight`、`checkpoint_policy` 与 `report_policy`
 - **AND** 执行器 MUST 以这些字段为边界推进，而不是重新自由解释原始消息
+
+#### Scenario: hand-off 包含恢复边界
+- **WHEN** 执行层接收到 `checkpoint_policy`
+- **THEN** 其中 MUST 包含 `expectedSignals[]`、`autoResumeAllowed`、`maxAutoResumeAttempts` 与 `recoveryActions[]`
+- **AND** 执行器与 watcher MUST 依据这些字段决定是否可自动恢复
 
 #### Scenario: 需要 preflight 的任务不能直接执行
 - **WHEN** hand-off 中 `requires_preflight=true`
