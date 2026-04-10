@@ -87,7 +87,7 @@ test.describe('账户设置', () => {
 
     test('移动端账户设置与邮箱绑定输入应保持可见可编辑', async ({ page }) => {
         await page.setViewportSize({ width: 390, height: 844 });
-        await page.goto('/');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
 
         await page.route('**/auth/send-email-code', async route => {
             await route.fulfill({ status: 200, json: { message: 'ok' } });
@@ -102,13 +102,22 @@ test.describe('账户设置', () => {
         const currentPasswordInput = page.getByTestId('account-settings-current-password-input');
         const newPasswordInput = page.getByTestId('account-settings-new-password-input');
         const confirmPasswordInput = page.getByTestId('account-settings-confirm-password-input');
+        const currentPasswordToggle = page.getByTestId('account-settings-current-password-toggle');
+
+        await expect(currentPasswordInput).toHaveAttribute('type', 'password');
+        await currentPasswordToggle.click();
+        await expect(currentPasswordInput).toHaveAttribute('type', 'text');
 
         await currentPasswordInput.fill('oldpass');
         await newPasswordInput.fill('newpass1234');
         await confirmPasswordInput.fill('newpass1234');
 
         const passwordMetrics = await modal.evaluate((element) => {
-            const inputs = Array.from(element.querySelectorAll('input[type="password"]'));
+            const inputs = [
+                element.querySelector('[data-testid="account-settings-current-password-input"]'),
+                element.querySelector('[data-testid="account-settings-new-password-input"]'),
+                element.querySelector('[data-testid="account-settings-confirm-password-input"]'),
+            ].filter((node): node is HTMLInputElement => node instanceof HTMLInputElement);
             return {
                 viewportWidth: window.innerWidth,
                 viewportHeight: window.innerHeight,

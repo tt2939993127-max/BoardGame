@@ -74,6 +74,34 @@ async function clickCenter(locator: any, page: any) {
     await locator.dispatchEvent('click');
 }
 
+async function tapTouchCenter(locator: any, page: any) {
+    const box = await locator.boundingBox();
+    expect(box, '触摸目标应该先可见').not.toBeNull();
+
+    const client = await page.context().newCDPSession(page);
+    const x = Math.round((box?.x ?? 0) + (box?.width ?? 0) / 2);
+    const y = Math.round((box?.y ?? 0) + (box?.height ?? 0) / 2);
+
+    try {
+        await client.send('Emulation.setTouchEmulationEnabled', {
+            enabled: true,
+            maxTouchPoints: 1,
+        });
+        await client.send('Input.dispatchTouchEvent', {
+            type: 'touchStart',
+            touchPoints: [{ x, y, radiusX: 8, radiusY: 8, force: 1, id: 1 }],
+        });
+        await page.waitForTimeout(60);
+        await client.send('Input.dispatchTouchEvent', {
+            type: 'touchEnd',
+            touchPoints: [],
+        });
+        await page.waitForTimeout(180);
+    } finally {
+        await client.detach().catch(() => {});
+    }
+}
+
 async function pinchZoomTouch(locator: any, page: any, options?: {
     startDistance?: number;
     endDistance?: number;
@@ -819,6 +847,69 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await game.screenshot('03-final-four-player-state', testInfo);
     });
 
+    test('移动端横屏点击对手分数应能进入并退出对手视角', async ({ page, game }, testInfo) => {
+        test.setTimeout(150000);
+
+        await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+        await page.addInitScript(() => {
+            const query = '(pointer: coarse)';
+            const originalMatchMedia = window.matchMedia.bind(window);
+            window.matchMedia = ((media: string) => {
+                if (media !== query) {
+                    return originalMatchMedia(media);
+                }
+
+                return {
+                    matches: true,
+                    media,
+                    onchange: null,
+                    addListener: () => {},
+                    removeListener: () => {},
+                    addEventListener: () => {},
+                    removeEventListener: () => {},
+                    dispatchEvent: () => true,
+                } as MediaQueryList;
+            }) as typeof window.matchMedia;
+        });
+
+        await game.openTestGame('smashup', {
+            numPlayers: 4,
+            skipInitialization: true,
+        }, 120000);
+        await game.setupScene(buildFourPlayerMobileScene());
+
+        await page.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return window.innerWidth === 800
+                && window.innerHeight === 450
+                && window.matchMedia('(pointer: coarse)').matches
+                && state?.sys?.phase === 'playCards';
+        }, { timeout: 10000, polling: 200 });
+
+        await waitForSmashUpMainUiReady(page);
+
+        const opponentScoreButton = page.locator('[data-testid="su-score-vp-1"]');
+        const opponentViewBanner = page.getByText('对手视角');
+        const backToSelfButton = page.getByRole('button', { name: '返回' });
+
+        await expect(opponentScoreButton).toBeVisible({ timeout: 15000 });
+        const hitTestId = await opponentScoreButton.evaluate((element: HTMLElement) => {
+            const rect = element.getBoundingClientRect();
+            const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2) as HTMLElement | null;
+            return target?.closest('[data-testid]')?.getAttribute('data-testid') ?? null;
+        });
+        expect(hitTestId, '分数球中心点命中目标应仍是分数按钮本身').toBe('su-score-vp-1');
+
+        await tapTouchCenter(opponentScoreButton, page);
+        await expect(opponentViewBanner).toBeVisible({ timeout: 5000 });
+        await expect(backToSelfButton).toBeVisible({ timeout: 5000 });
+
+        await game.screenshot('03a-mobile-opponent-view-entry', testInfo);
+
+        await backToSelfButton.click();
+        await expect(opponentViewBanner).toHaveCount(0);
+    });
+
     test('移动端横屏应保持四人局布局可用，并支持手牌长按看牌与战场拖拽放大', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
@@ -1233,20 +1324,37 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await panTouch(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
 
-        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
-        const secondBaseBoxAfterPan = await secondBase.boundingBox();
-        const endTurnButtonBoxAfterPan = await endTurnActionButton.boundingBox();
+        let translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        let secondBaseBoxAfterPan = await secondBase.boundingBox();
+        let endTurnButtonBoxAfterPan = await endTurnActionButton.boundingBox();
         expect(secondBaseBoxAfterPan, '拖拽后的基地应提供尺寸').not.toBeNull();
         expect(endTurnButtonBoxAfterPan, '拖拽后的结束回合按钮应提供尺寸').not.toBeNull();
 
+        let battlefieldMoved =
+            Math.abs(translateXAfterPan - translateXBeforePan) > 8
+            && Math.abs((secondBaseBoxAfterPan?.x ?? 0) - (secondBaseBoxBeforePan?.x ?? 0)) > 8;
+
+        if (!battlefieldMoved) {
+            await panTouch(battlefieldViewport, page, { deltaX: 180, deltaY: 0 });
+            const translateXAfterReversePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+            const secondBaseBoxAfterReversePan = await secondBase.boundingBox();
+            const endTurnButtonBoxAfterReversePan = await endTurnActionButton.boundingBox();
+            expect(secondBaseBoxAfterReversePan, '反向拖拽后的基地应提供尺寸').not.toBeNull();
+            expect(endTurnButtonBoxAfterReversePan, '反向拖拽后的结束回合按钮应提供尺寸').not.toBeNull();
+
+            battlefieldMoved =
+                Math.abs(translateXAfterReversePan - translateXAfterPan) > 8
+                && Math.abs((secondBaseBoxAfterReversePan?.x ?? 0) - (secondBaseBoxAfterPan?.x ?? 0)) > 8;
+
+            translateXAfterPan = translateXAfterReversePan;
+            secondBaseBoxAfterPan = secondBaseBoxAfterReversePan;
+            endTurnButtonBoxAfterPan = endTurnButtonBoxAfterReversePan;
+        }
+
         expect(
-            Math.abs(translateXAfterPan - translateXBeforePan),
-            'pinch 后拖拽不应锁死，viewport translateX 应继续变化',
-        ).toBeGreaterThan(8);
-        expect(
-            Math.abs((secondBaseBoxAfterPan?.x ?? 0) - (secondBaseBoxBeforePan?.x ?? 0)),
-            'pinch 后拖拽应继续带动基地横向位移',
-        ).toBeGreaterThan(8);
+            battlefieldMoved,
+            'pinch 后拖拽不应锁死；若首个方向已被边界夹紧，反向拖拽也应继续带动战场',
+        ).toBeTruthy();
         expect(
             Math.abs((endTurnButtonBoxAfterPan?.x ?? 0) - (endTurnButtonBoxBeforePan?.x ?? 0)),
             '外围结束回合按钮不应随战场横向漂移',
@@ -1340,18 +1448,33 @@ test.describe('大杀四方四人局三基地同时计分', () => {
 
         await panTouchChromium(battlefieldViewport, page, { deltaX: -140, deltaY: 0 });
 
-        const translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
-        const logsAfterPan = await readBattlefieldGestureProbe(page);
+        let translateXAfterPan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+        let logsAfterPan = await readBattlefieldGestureProbe(page);
         console.log('[DEBUG][smashup-real-touch-pan]', JSON.stringify({
             translateXBeforePan,
             translateXAfterPan,
             tail: logsAfterPan.slice(-40),
         }, null, 2));
 
+        let battlefieldMoved = Math.abs(translateXAfterPan - translateXBeforePan) > 8;
+        if (!battlefieldMoved) {
+            await panTouchChromium(battlefieldViewport, page, { deltaX: 180, deltaY: 0 });
+            const translateXAfterReversePan = Number(await battlefieldViewport.getAttribute('data-battlefield-translate-x'));
+            const reverseLogs = await readBattlefieldGestureProbe(page);
+            console.log('[DEBUG][smashup-real-touch-pan-reverse]', JSON.stringify({
+                translateXAfterPan,
+                translateXAfterReversePan,
+                tail: reverseLogs.slice(-40),
+            }, null, 2));
+            battlefieldMoved = Math.abs(translateXAfterReversePan - translateXAfterPan) > 8;
+            translateXAfterPan = translateXAfterReversePan;
+            logsAfterPan = reverseLogs;
+        }
+
         expect(
-            Math.abs(translateXAfterPan - translateXBeforePan),
-            'Chromium 真实多触点 pinch 后单指 pan 仍应继续驱动战场横向位移',
-        ).toBeGreaterThan(8);
+            battlefieldMoved,
+            'Chromium 真实多触点 pinch 后单指 pan 不应锁死；若首个方向已被边界夹紧，反向拖拽也应继续驱动位移',
+        ).toBeTruthy();
 
         await game.screenshot('04g-mobile-battlefield-real-touch-pinch-pan', testInfo);
     });

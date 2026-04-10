@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { CardPreview, getCardAtlasCandidateUrls, registerCardAtlasSource, registerCardPreviewRenderer } from '../CardPreview';
@@ -191,6 +191,77 @@ describe('CardPreview i18n atlas path', () => {
 
         expect(getCardAtlasSource(atlasId, 'zh-CN')).toBeUndefined();
         expect(getLazyRegistration(atlasId)).toBeDefined();
+    });
+
+    it('atlas 首轮候选失败后应自动重试并恢复显示', async () => {
+        vi.useFakeTimers();
+        const atlasId = 'test:card-preview:atlas-auto-retry';
+        const atlasImage = 'smashup/cards/cards-auto-retry';
+        registerCardAtlasSource(atlasId, {
+            image: atlasImage,
+            config: TEST_UNIFORM_ATLAS,
+        });
+
+        const candidateUrls = getCardAtlasCandidateUrls(atlasImage, 'zh-CN');
+        const primaryUrl = candidateUrls[0];
+        const attemptCount = new Map<string, number>();
+
+        class MockImage {
+            onload: (() => void) | null = null;
+            onerror: (() => void) | null = null;
+            naturalWidth = 100;
+            naturalHeight = 200;
+            currentSrc = '';
+            private _src = '';
+
+            get src() {
+                return this._src;
+            }
+
+            set src(value: string) {
+                this._src = value;
+                this.currentSrc = value;
+                const nextAttempt = (attemptCount.get(value) ?? 0) + 1;
+                attemptCount.set(value, nextAttempt);
+                const shouldSucceed = value === primaryUrl && nextAttempt >= 2;
+                setTimeout(() => {
+                    if (shouldSucceed) {
+                        this.onload?.();
+                        return;
+                    }
+                    this.onerror?.();
+                }, 0);
+            }
+        }
+
+        vi.stubGlobal('Image', MockImage as unknown as typeof Image);
+
+        try {
+            const { container } = render(
+                <CardPreview previewRef={{ type: 'atlas', atlasId, index: 0 }} locale="zh-CN" />
+            );
+            const atlasNode = container.firstElementChild as HTMLElement | null;
+            expect(atlasNode).not.toBeNull();
+            expect(atlasNode?.className).toContain('atlas-shimmer');
+
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(100);
+            });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(4000);
+            });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(100);
+                await Promise.resolve();
+            });
+
+            expect(attemptCount.get(primaryUrl)).toBeGreaterThanOrEqual(2);
+            expect(atlasNode?.className).not.toContain('atlas-shimmer');
+            expect(atlasNode?.style.backgroundImage).toContain(primaryUrl);
+        } finally {
+            vi.useRealTimers();
+            vi.unstubAllGlobals();
+        }
     });
 
 });

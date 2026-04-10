@@ -46,9 +46,9 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
             closeOnBackdrop: true,
             render: ({ close }) => (
                 <ModalBase onClose={close}>
-                    <div className="bg-parchment-card-bg w-full max-w-lg rounded-sm shadow-parchment-card border border-parchment-card-border/30 overflow-hidden pointer-events-auto flex flex-col">
+                    <div className="bg-parchment-card-bg w-full max-w-lg max-h-[var(--runtime-modal-max-height)] rounded-sm shadow-parchment-card border border-parchment-card-border/30 overflow-hidden pointer-events-auto flex flex-col">
                         {/* 弹窗头部 */}
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-parchment-card-border/10">
+                        <div className="shrink-0 flex items-center justify-between px-4 py-4 sm:px-6 border-b border-parchment-card-border/10">
                             <span className="text-lg font-bold text-parchment-base-text uppercase tracking-widest">
                                 {myReview ? t('form.editTitle', '修改我的评价') : t('form.newTitle', '撰写评价')}
                             </span>
@@ -58,7 +58,7 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
                         </div>
 
                         {/* 弹窗内容 */}
-                        <div className="p-6">
+                        <div className="flex-1 min-h-0 overflow-hidden p-4 sm:p-6">
                             <ReviewForm
                                 onSubmit={async (data) => {
                                     try {
@@ -66,8 +66,9 @@ export const GameReviews = ({ gameId }: { gameId: string }) => {
                                         success(t('form.success', '评价已发布'));
                                         refreshData();
                                         close();
-                                    } catch (err: any) {
-                                        error(err.message);
+                                    } catch (err) {
+                                        const message = err instanceof Error ? err.message : t('common:unknownError', '发生未知错误');
+                                        error(message);
                                     }
                                 }}
                                 initialData={myReview ? { isPositive: myReview.isPositive, content: myReview.content } : undefined}

@@ -108,9 +108,12 @@ describe('圣骑士技能定义', () => {
                 type: 'diceSet',
                 faces: { [FACES.PRAY]: 4 },
             });
-            // 效果：8 伤害 + 暴击 + 20 CP
+            // 效果：8 伤害 + 暴击 + 2 CP
             expect(ability!.effects).toHaveLength(3);
             expect(ability!.effects![0].action.value).toBe(8);
+            expect(ability!.effects![2].action.type).toBe('custom');
+            expect(ability!.effects![2].action.customActionId).toBe('gain-cp');
+            expect(ability!.effects![2].action.params.amount).toBe(2);
         });
 
         it('神圣防御 - 防御技能，3 骰', () => {

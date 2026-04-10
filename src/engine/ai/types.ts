@@ -1,5 +1,37 @@
 import type { MatchState, PlayerId } from '../types';
 
+export type AiRelationToActor = 'self' | 'ally' | 'enemy' | 'neutral';
+
+export type AiEffectIntent =
+    | 'buff'
+    | 'debuff'
+    | 'destroy'
+    | 'move'
+    | 'inspect'
+    | 'resource'
+    | 'optional-skip'
+    | 'affect';
+
+export type AiTargetKind = 'player' | 'minion' | 'base' | 'card';
+
+export type AiHintDerivation = 'explicit' | 'inferred';
+
+export type AiForcedTargetPolicy = 'prefer' | 'avoid' | 'must-select' | 'must-avoid';
+
+export interface AiHint {
+    tags?: string[];
+    relationToActor?: AiRelationToActor;
+    effectIntent?: AiEffectIntent;
+    targetKind?: AiTargetKind;
+    targetPlayerId?: PlayerId;
+    targetOwnerId?: PlayerId;
+    targetControllerId?: PlayerId;
+    estimatedSwing?: number;
+    priorityHint?: number;
+    forcedTargetPolicy?: AiForcedTargetPolicy;
+    derivedFrom?: AiHintDerivation;
+}
+
 export interface AiSupportProfile {
     capture: boolean;
     localAi: boolean;
@@ -42,6 +74,7 @@ export interface AiInteractionOptionSnapshot {
     value?: unknown;
     disabled?: boolean;
     displayMode?: string;
+    _ai?: AiHint;
 }
 
 export interface AiInteractionSnapshot {
@@ -65,12 +98,23 @@ export interface AiCommandSpec {
     payload: unknown;
 }
 
+export interface AiActionStrategyMetadata {
+    strategyTags?: string[];
+    /**
+     * @deprecated 旧的 Smash Up 专用字段，读取仍兼容；新代码应优先写入 strategyTags。
+     */
+    cardStrategyTags?: string[];
+}
+
+export type AiActionMetadata = Record<string, unknown> & AiActionStrategyMetadata;
+
 export interface AiLegalAction {
     actionId: string;
     kind: string;
     label: string;
     commands: AiCommandSpec[];
-    metadata?: Record<string, unknown>;
+    aiHints?: AiHint[];
+    metadata?: AiActionMetadata;
 }
 
 export interface AiDecisionContext {

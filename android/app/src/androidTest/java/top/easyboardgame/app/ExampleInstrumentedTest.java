@@ -1,4 +1,4 @@
-package top.easyboardgame.app.debug;
+package top.easyboardgame.app;
 
 import static org.junit.Assert.*;
 
@@ -21,6 +21,6 @@ public class ExampleInstrumentedTest {
         // Context of the app under test.
         Context appContext = InstrumentationRegistry.getInstrumentation().getTargetContext();
 
-        assertEquals("top.easyboardgame.app.debug", appContext.getPackageName());
+        assertEquals("top.easyboardgame.app", appContext.getPackageName());
     }
 }

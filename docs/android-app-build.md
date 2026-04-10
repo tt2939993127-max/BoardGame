@@ -423,44 +423,35 @@ Manifest 字段说明：
 - 只有原生版本不兼容且 manifest 显式声明 `forceUpdate: true` 时，才会进入 OTA 阻塞页；此时运行时会继续触发原生 APK 更新检查，要求用户安装新壳
 - 若本次改动涉及原生层，仍必须重新打包安装验证，不能把 OTA 当成原生更新替代品
 
-## 正式发版强制策略
+## 正式发版策略
 
-以后正式 Android 发版统一按“双保险强更”执行，禁止再依赖单条链路碰运气：
+以后正式 Android OTA 发版统一按当前项目规则执行：
 
-1. 兼容当前壳的 H5 修复：
+1. OTA 默认面向所有已安装版本，不再通过 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion` 做分流。
+2. 如需客户端下载完成后立即切换 bundle，可显式传 `--force-update`。
+3. 如果改动涉及原生能力、权限、插件或壳层代码，仍然要另外发原生 APK / AAB；不要把 OTA 当成原生更新替代品。
+4. 正式 OTA 的 bundle 版本必须继续沿用既有命名口径：`package.json.version-ota-UTC时间戳`。切换发布入口（本地脚本 / GitHub Actions / 手工补发）时，不得擅自改成 `gha-*`、run number 或其他临时展示格式。
+
+推荐命令：
 
 ```bash
-node scripts/mobile/release-android.mjs ota --channel stable --force-update --target-native-version 0.5.1 --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
+node scripts/mobile/release-android.mjs ota --channel stable --force-update
 ```
 
-2. 不兼容当前壳或需要修原生能力时，同时发布原生强更 manifest：
+## 正式发版前检查
 
-```bash
-npm run mobile:android:native-update:publish -- --channel stable --force-update-title "需要安装新版 App" --force-update-message "当前版本需要升级 App 后继续使用。"
-```
+正式切 `stable` 之前，至少人工确认以下两条：
 
-执行原则：
-
-- OTA manifest 负责“兼容壳优先即时更新”
-- OTA manifest 的 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion` 负责显式声明“哪些旧壳还能吃这次 OTA”
-- 一旦 OTA manifest 判定当前壳不兼容，运行时会切到 `native-update-required`，并继续触发原生 APK 更新检查
-- 原生 update manifest 必须与 OTA 的兼容门禁一起设计，不能只发其中一条
-
-## 正式发版前双门禁
-
-正式发包 / 正式切 `stable` 之前，必须至少人工验证以下两条：
-
-1. 旧壳兼容路径：
+1. 兼容当前正式壳的 OTA 路径：
 - 安装上一个正式 APK
 - 启动 App
 - 必须自动进入即时 OTA 或成功切到最新 bundle
 
-2. 旧壳不兼容路径：
-- 把 OTA manifest 收窄到不兼容当前旧壳
-- 启动 App
-- 必须进入“需要更新 App”的阻塞链路，并能拉起原生 APK 更新流程
+2. 原生改动路径（如本次涉及原生层）：
+- 同步发布原生 APK / AAB 更新
+- 在目标安装链路上验证能成功升级并进入最新壳
 
-只要这两条没有都验证过，就不能再宣称“这次发版以后不需要第二次发包”。
+只要这两条里与本次发布相关的验证没有完成，就不能把正式发布说成完全收口。
 
 ## GitHub Actions 配置
 

@@ -138,17 +138,32 @@ function getRemainingExtraTalentUses(core: SmashUpCore, playerId: string): numbe
     const player = core.players[playerId];
     if (!player) return 0;
 
-    let allowance = 0;
-    const hasGreatWolfSpirit = (core.titans ?? []).some(titan =>
-        titan.defId === 'werewolves_great_wolf_spirit'
-        && titan.location.zone === 'base'
-        && titan.controllerId === playerId,
-    );
-    if (hasGreatWolfSpirit) {
-        allowance += 1;
-    }
-
+    const allowance = 0;
     return Math.max(0, allowance - (player.extraTalentUsesConsumed ?? 0));
+}
+
+function getGreatWolfSpiritBaseIndex(core: SmashUpCore, playerId: string): number | undefined {
+    const titan = (core.titans ?? []).find(candidate =>
+        candidate.defId === 'werewolves_great_wolf_spirit'
+        && candidate.location.zone === 'base'
+        && candidate.controllerId === playerId
+        && !(core.titanOngoingSuppressedUntilTurnEnd ?? []).includes(candidate.uid),
+    );
+    return titan?.location.zone === 'base' ? titan.location.baseIndex : undefined;
+}
+
+function canUseGreatWolfSpiritSecondTalent(
+    core: SmashUpCore,
+    playerId: string,
+    baseIndex: number,
+    cardUid: string,
+): boolean {
+    if (!isCurrentTurnPlayer(core, playerId)) return false;
+    const greatWolfSpiritBaseIndex = getGreatWolfSpiritBaseIndex(core, playerId);
+    if (greatWolfSpiritBaseIndex === undefined || greatWolfSpiritBaseIndex !== baseIndex) {
+        return false;
+    }
+    return !(core.greatWolfSpiritDoubleTalentCardUids ?? []).includes(cardUid);
 }
 
 function findAttachedTalentHostMinion(
@@ -756,7 +771,13 @@ export function validate(
                         targetBase.defId === 'base_standing_stones'
                         && hostMinion?.controller === command.playerId
                         && !core.standingStonesDoubleTalentMinionUid;
-                    if (!canUseStandingStonesDoubleTalent && getRemainingExtraTalentUses(core, command.playerId) <= 0) {
+                    const canUseGreatWolfSpiritDoubleTalent =
+                        canUseGreatWolfSpiritSecondTalent(core, command.playerId, baseIndex, ongoingCardUid);
+                    if (
+                        !canUseStandingStonesDoubleTalent
+                        && !canUseGreatWolfSpiritDoubleTalent
+                        && getRemainingExtraTalentUses(core, command.playerId) <= 0
+                    ) {
                         return { valid: false, error: '本回合天赋已使用' };
                     }
                 }
@@ -780,7 +801,12 @@ export function validate(
                     return { valid: false, error: '只能使用自己控制的泰坦的天赋' };
                 }
                 if (titan.talentUsed) {
-                    if (getRemainingExtraTalentUses(core, command.playerId) <= 0) {
+                    const canUseGreatWolfSpiritDoubleTalent =
+                        canUseGreatWolfSpiritSecondTalent(core, command.playerId, baseIndex, titanUid);
+                    if (
+                        !canUseGreatWolfSpiritDoubleTalent
+                        && getRemainingExtraTalentUses(core, command.playerId) <= 0
+                    ) {
                         return { valid: false, error: '本回合天赋已使用' };
                     }
                 }
@@ -812,8 +838,14 @@ export function validate(
                 // 巨石阵例外：允许一个随从每回合使用才能两次
                 const isStandingStones = targetBase.defId === 'base_standing_stones';
                 const doubleTalentAvailable = !core.standingStonesDoubleTalentMinionUid;
+                const greatWolfSpiritDoubleTalentAvailable =
+                    canUseGreatWolfSpiritSecondTalent(core, command.playerId, baseIndex, minionUid);
                 const extraTalentAvailable = getRemainingExtraTalentUses(core, command.playerId) > 0;
-                if (!(isStandingStones && doubleTalentAvailable) && !extraTalentAvailable) {
+                if (
+                    !(isStandingStones && doubleTalentAvailable)
+                    && !greatWolfSpiritDoubleTalentAvailable
+                    && !extraTalentAvailable
+                ) {
                     return { valid: false, error: '本回合天赋已使用' };
                 }
             }

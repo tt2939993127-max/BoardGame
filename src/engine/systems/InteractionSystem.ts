@@ -15,9 +15,11 @@ import type {
     PlayerId,
     GameEvent,
 } from '../types';
+import type { AiHint } from '../ai/types';
 import { resolveCommandTimestamp } from '../utils';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+import { syncActiveResolutionWithInteraction } from './resolutionStack';
 
 function isSamePlayerId(a: unknown, b: unknown): boolean {
     if (a === undefined || a === null || b === undefined || b === null) return false;
@@ -51,6 +53,11 @@ export interface PromptOption<T = unknown> {
      * - 'button' | undefined: 普通按钮
      */
     displayMode?: 'card' | 'button';
+    /**
+     * 仅供 AI 使用的语义 hints。
+     * 必须与业务 value 隔离，不能被规则处理器当成真实输入消费。
+     */
+    _ai?: AiHint;
 }
 
 /**
@@ -581,20 +588,20 @@ export function queueInteraction<TCore>(
             }
         }
 
-        return {
+        return syncActiveResolutionWithInteraction({
             ...state,
             sys: {
                 ...state.sys,
                 interaction: { ...state.sys.interaction, current: interaction },
             },
-        };
+        });
     }
 
     // 否则加入队列（选项生成延迟到 resolveInteraction 时）
     // urgent 交互插入队列头部，确保链式交互不被打断
     const newQueue = options?.urgent ? [interaction, ...queue] : [...queue, interaction];
     
-    return {
+    return syncActiveResolutionWithInteraction({
         ...state,
         sys: {
             ...state.sys,
@@ -603,7 +610,7 @@ export function queueInteraction<TCore>(
                 queue: newQueue,
             },
         },
-    };
+    });
 }
 
 /**
@@ -617,28 +624,9 @@ export function queueInteraction<TCore>(
 export function resolveInteraction<TCore>(
     state: MatchState<TCore>,
 ): MatchState<TCore> {
-    const { current, queue } = state.sys.interaction;
+    const { queue } = state.sys.interaction;
     let next = queue[0];
     const newQueue = queue.slice(1);
-
-    // 【通用修复】传递延迟事件给下一个交互
-    // 当有多个 afterScoring 交互时（如多个大副、母舰+侦察兵），
-    // 延迟的 BASE_CLEARED 事件存储在第一个交互的 continuationContext._deferredPostScoringEvents 中。
-    // 第一个交互解决后，必须传递给下一个交互，最后一个交互解决时由交互处理器补发。
-    if (current && next) {
-        const currentData = current.data as Record<string, unknown>;
-        const currentCtx = (currentData.continuationContext ?? {}) as Record<string, unknown>;
-        const deferredEvents = currentCtx._deferredPostScoringEvents;
-        
-        if (deferredEvents && Array.isArray(deferredEvents) && deferredEvents.length > 0) {
-            const nextData = next.data as Record<string, unknown>;
-            const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
-            nextCtx._deferredPostScoringEvents = deferredEvents;
-            nextData.continuationContext = nextCtx;
-            
-            next = { ...next, data: nextData };
-        }
-    }
 
     // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {
@@ -667,13 +655,13 @@ export function resolveInteraction<TCore>(
         }
     }
 
-    return {
+    return syncActiveResolutionWithInteraction({
         ...state,
         sys: {
             ...state.sys,
             interaction: { current: next, queue: newQueue },
         },
-    };
+    });
 }
 
 /**
@@ -858,6 +846,12 @@ function mergeRenderableOptionMetadata<T>(
         const previousSource = (previous as { _source?: unknown })._source;
         if ((nextOption as { _source?: unknown })._source === undefined && previousSource !== undefined) {
             nextOption = { ...(nextOption as Record<string, unknown>), _source: previousSource } as PromptOption<T>;
+            optionChanged = true;
+        }
+
+        const previousAiHints = previous._ai;
+        if (nextOption._ai === undefined && previousAiHints !== undefined) {
+            nextOption = { ...nextOption, _ai: previousAiHints };
             optionChanged = true;
         }
 

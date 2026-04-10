@@ -59,6 +59,7 @@ import {
 } from '../ai';
 import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
 import { onAppVisible } from '../../lib/mobile/appVisibility';
+import { buildAiProgressMarker } from './onlineAiRecovery';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -66,6 +67,7 @@ import { setUndoAiSeatIds } from '../systems/UndoSystem';
 
 // re-export 供外部使用（测试等场景）
 export { filterPlayedEvents };
+export { buildAiProgressMarker };
 
 // ============================================================================
 // Context 类型
@@ -89,38 +91,6 @@ interface GameClientContextValue {
 }
 
 const GameClientContext = createContext<GameClientContextValue | null>(null);
-
-export function buildAiProgressMarker(state: MatchState<unknown>): string {
-    const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : '';
-    const phase = typeof state.sys?.phase === 'string' ? state.sys.phase : '';
-    const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
-        ? state.sys.eventStream.nextId
-        : '';
-    const interactionId = typeof state.sys?.interaction?.current?.id === 'string'
-        ? state.sys.interaction.current.id
-        : '';
-    const responderIndex = typeof state.sys?.responseWindow?.current?.currentResponderIndex === 'number'
-        ? state.sys.responseWindow.current.currentResponderIndex
-        : '';
-    const currentPlayerId = (() => {
-        const core = state.core as Record<string, unknown>;
-        if (typeof core.activePlayerId === 'string') return core.activePlayerId;
-        if (typeof core.currentPlayer === 'string') return core.currentPlayer;
-        if (Array.isArray(core.turnOrder) && typeof core.currentPlayerIndex === 'number') {
-            return (core.turnOrder as string[])[core.currentPlayerIndex as number] ?? '';
-        }
-        return '';
-    })();
-
-    return [
-        turnNumber,
-        phase,
-        eventStreamNextId,
-        interactionId,
-        responderIndex,
-        currentPlayerId,
-    ].join('|');
-}
 
 export function shouldRetryLocalAiAttemptAfterDispatch(args: {
     cancelled: boolean;

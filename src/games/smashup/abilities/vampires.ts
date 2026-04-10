@@ -141,19 +141,28 @@ function registerVampirePodOngoingEffects(): void {
         );
         if (counts.length === 0) return [];
 
-        const options = base.minions.map((m, i) => {
-            const def = getCardDef(m.defId);
-            return {
-                id: `m-${i}`,
-                label: def?.name ?? m.defId,
-                value: { minionUid: m.uid, defId: m.defId, baseIndex },
-                _source: 'field' as const,
-                displayMode: 'card' as const,
-            };
-        });
-        if (options.length === 0) return [];
         let matchState = ctx.matchState;
         for (const count of counts) {
+            const options = buildMinionTargetOptions(
+                base.minions.map((m) => {
+                    const def = getCardDef(m.defId);
+                    return {
+                        uid: m.uid,
+                        defId: m.defId,
+                        baseIndex,
+                        label: def?.name ?? m.defId,
+                    };
+                }),
+                {
+                    state,
+                    sourcePlayerId: count.controller,
+                    effectType: 'buff',
+                },
+            ).map((option) => ({
+                ...option,
+                displayMode: 'card' as const,
+            }));
+            if (options.length === 0) continue;
             const interaction = createSimpleChoice(
                 `vampire_the_count_pod_add_${count.uid}_${now}`,
                 count.controller,

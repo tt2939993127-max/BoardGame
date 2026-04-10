@@ -86,6 +86,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     const { t, i18n } = useTranslation('game-dicethrone');
     // 只要有 bonusDice 就进入多骰模式，不依赖 onReroll 或 displayOnly
     const isRerollMode = Boolean(bonusDice && bonusDice.length > 0);
+    const isSingleDieRerollSpotlight = Boolean(bonusDice && bonusDice.length === 1);
     const costAmount = rerollCostAmount ?? 1;
     const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
 
@@ -110,12 +111,18 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
-        const multiDieSize = bonusDice.length >= 5
-            ? '5.2vw'
-            : bonusDice.length >= 4
-                ? '5.8vw'
-                : '6.4vw';
-        const multiDieGap = bonusDice.length >= 5 ? '0.8vw' : '1.2vw';
+        const multiDieSize = isSingleDieRerollSpotlight
+            ? '8vw'
+            : bonusDice.length >= 5
+                ? '5.2vw'
+                : bonusDice.length >= 4
+                    ? '5.8vw'
+                    : '6.4vw';
+        const multiDieGap = isSingleDieRerollSpotlight
+            ? '0'
+            : bonusDice.length >= 5
+                ? '0.8vw'
+                : '1.2vw';
         // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
         const isInteractive = !displayOnly && canReroll === true;
         bonusDieOverlayLogger.info('render-reroll', {
@@ -125,6 +132,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             canReroll: !!canReroll,
             showTotal,
             characterId,
+            isSingleDieRerollSpotlight,
         });
 
         return (
@@ -156,7 +164,11 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                     </motion.div>
 
                     {/* 骰子列表 */}
-                    <div className="flex items-start justify-center" style={{ gap: multiDieGap }}>
+                    <div
+                        className={`flex justify-center ${isSingleDieRerollSpotlight ? 'items-center' : 'items-start'}`}
+                        style={{ gap: multiDieGap }}
+                        data-testid={isSingleDieRerollSpotlight ? 'bonus-die-single-reroll-spotlight' : 'bonus-die-multi-reroll-spotlight'}
+                    >
                         {bonusDice.map((die) => (
                             <motion.div
                                 key={die.index}
@@ -179,8 +191,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                                     size={multiDieSize}
                                     rollingDurationMs={600 + die.index * 100}
                                     characterId={characterId}
-                                    compact={true}
-                                    hideEffectText={bonusDice.length > 1}
+                                    compact={!isSingleDieRerollSpotlight}
+                                    hideEffectText={!isSingleDieRerollSpotlight && bonusDice.length > 1}
                                 />
                                 {canReroll && (
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">

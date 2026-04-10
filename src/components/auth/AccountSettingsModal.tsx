@@ -6,6 +6,7 @@ import { ModalBase } from '../common/overlays/ModalBase';
 import { AvatarUpdateModal } from './AvatarUpdateModal';
 import { EmailBindModal } from './EmailBindModal';
 import { User, Image, Mail, Lock, Pencil, Check, X } from 'lucide-react';
+import { PasswordField } from '../common/PasswordField';
 
 interface AccountSettingsModalProps {
     isOpen: boolean;
@@ -329,8 +330,7 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                         </div>
                     ) : (
                         <div className="w-full mt-3 space-y-3">
-                            <input
-                                type="password"
+                            <PasswordField
                                 value={currentPassword}
                                 onChange={(e) => setCurrentPassword(e.target.value)}
                                 className="auth-form-input w-full px-2 py-1.5 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
@@ -338,18 +338,20 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                                 autoFocus
                                 autoComplete="current-password"
                                 data-testid="account-settings-current-password-input"
+                                toggleButtonTestId="account-settings-current-password-toggle"
+                                toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                             />
-                            <input
-                                type="password"
+                            <PasswordField
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
                                 className="auth-form-input w-full px-2 py-1.5 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
                                 placeholder={t('account.password.new')}
                                 autoComplete="new-password"
                                 data-testid="account-settings-new-password-input"
+                                toggleButtonTestId="account-settings-new-password-toggle"
+                                toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                             />
-                            <input
-                                type="password"
+                            <PasswordField
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
                                 className="auth-form-input w-full px-2 py-1.5 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
@@ -357,6 +359,8 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                                 onKeyDown={(e) => { if (e.key === 'Enter') void handleSavePassword(); }}
                                 autoComplete="new-password"
                                 data-testid="account-settings-confirm-password-input"
+                                toggleButtonTestId="account-settings-confirm-password-toggle"
+                                toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                             />
                             {passwordError && (
                                 <div className="text-xs text-red-500">{passwordError}</div>

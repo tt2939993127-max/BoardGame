@@ -156,6 +156,30 @@ describe('BonusDieOverlay', () => {
         expect(screen.queryByText('弓🏹：伤害+2')).not.toBeInTheDocument();
     });
 
+    it('单骰重掷模式应使用特写布局并保留效果文案', async () => {
+        vi.useFakeTimers();
+
+        render(
+            <BonusDieOverlay
+                isVisible
+                onClose={vi.fn()}
+                bonusDice={[
+                    { index: 0, value: 1, face: 'fist', effectKey: 'bonusDie.effect.watchOut.bow', effectParams: { value: 1 } },
+                ]}
+                canReroll
+                onReroll={vi.fn()}
+            />
+        );
+
+        await act(async () => {
+            vi.advanceTimersByTime(1200);
+        });
+
+        expect(screen.getByTestId('bonus-die-single-reroll-spotlight')).toBeInTheDocument();
+        expect(screen.getByText('弓🏹：伤害+2')).toBeInTheDocument();
+        expect(screen.queryByTestId('bonus-die-multi-reroll-spotlight')).not.toBeInTheDocument();
+    });
+
     it('奖励骰展示态特写应保留首次点击保护，保护窗后才允许关闭', () => {
         vi.useFakeTimers();
         const onClose = vi.fn();

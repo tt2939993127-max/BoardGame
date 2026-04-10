@@ -102,12 +102,18 @@ export const AndroidForceUpdateGate = ({
                         {description}
                     </p>
 
-                    {(state.version || state.requiredNativeVersion) && (
+                    {(state.version || state.currentNativeVersion || state.requiredNativeVersion) && (
                         <div className="mt-5 rounded-2xl border border-amber-200/12 bg-black/20 px-4 py-3 text-left text-xs text-amber-100/70">
                             {state.version && (
                                 <div className="flex items-center justify-between gap-3">
                                     <span>{t('ota.forceUpdate.bundleVersion')}</span>
                                     <span className="font-medium text-amber-50">{state.version}</span>
+                                </div>
+                            )}
+                            {state.currentNativeVersion && (
+                                <div className="mt-2 flex items-center justify-between gap-3">
+                                    <span>{t('ota.forceUpdate.currentAppVersion')}</span>
+                                    <span className="font-medium text-amber-50">{state.currentNativeVersion}</span>
                                 </div>
                             )}
                             {state.requiredNativeVersion && (

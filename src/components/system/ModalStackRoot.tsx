@@ -16,7 +16,10 @@ export const ModalStackRoot = () => {
         return () => {
             closeAll({ skipOnClose: true });
         };
-    }, [closeAll, location.key]);
+        // 仅在真正离开当前 pathname 时清空弹窗。
+        // Home 页的 ?game=xxx 是同一路径下的 URL 驱动详情弹窗，
+        // 若跟随 location.key（含 search 变化）一起清空，会把刚根据 search 打开的弹窗立刻关掉。
+    }, [closeAll, location.pathname]);
 
     // 栈顶条目决定交互与退出键行为
     const topEntry = stack[stack.length - 1];

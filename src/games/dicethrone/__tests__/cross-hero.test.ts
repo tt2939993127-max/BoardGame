@@ -591,6 +591,11 @@ describe('cross hero battles', () => {
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
             expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectKey).toBe('bonusDie.effect.gunslingerEatMyLead.resultKnockdown');
+            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectParams).toEqual({
+                bulletCount: 5,
+                bonusDamage: 5,
+            });
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(5);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(5);
@@ -2115,6 +2120,12 @@ describe('cross hero battles', () => {
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
             expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(5);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectKey).toBe('bonusDie.effect.samuraiMasamune.result');
+            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectParams).toEqual({
+                katanaCount: 2,
+                shameCount: 1,
+                retributionCount: 2,
+            });
             expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('katana-slice-3');
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(2);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
@@ -2178,6 +2189,12 @@ describe('cross hero battles', () => {
             expect(result.assertionErrors).toEqual([]);
             expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
             expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(6);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectKey).toBe('bonusDie.effect.samuraiMasamune.result');
+            expect(result.finalState.core.pendingBonusDiceSettlement?.summaryEffectParams).toMatchObject({
+                katanaCount: expect.any(Number),
+                shameCount: expect.any(Number),
+                retributionCount: expect.any(Number),
+            });
             expect(result.finalState.core.pendingAttack).toBeNull();
             expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
             expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] ?? 0).toBe(0);

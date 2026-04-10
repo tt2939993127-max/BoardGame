@@ -6,6 +6,8 @@
  */
 
 import type { PlayerId, RandomFn, MatchState } from '../../../engine/types';
+import { buildTargetAiHint, OPTIONAL_SKIP_AI_HINT } from '../../../engine/ai';
+import type { AiEffectIntent, AiHint } from '../../../engine/ai';
 import type {
     PromptOption as EnginePromptOption,
     SimpleChoiceConfig,
@@ -91,7 +93,8 @@ export function createSkipOption(label: string = '跳过'): EnginePromptOption<{
         id: 'skip',
         label,
         value: { skip: true },
-        displayMode: 'button'
+        displayMode: 'button',
+        _ai: OPTIONAL_SKIP_AI_HINT,
     };
 }
 
@@ -120,11 +123,12 @@ export function destroyMinion(
     ownerId: PlayerId,
     destroyerId: PlayerId | undefined,
     reason: string,
-    now: number
+    now: number,
+    sourceKind?: 'action' | 'nonAction',
 ): MinionDestroyedEvent {
     return {
         type: SU_EVENTS.MINION_DESTROYED,
-        payload: { minionUid, minionDefId, fromBaseIndex, ownerId, destroyerId, reason },
+        payload: { minionUid, minionDefId, fromBaseIndex, ownerId, destroyerId, reason, sourceKind } as MinionDestroyedEvent['payload'],
         timestamp: now,
     };
 }
@@ -370,6 +374,7 @@ export function buildValidatedDestroyEvents(
         destroyerId?: PlayerId;
         reason: string;
         now: number;
+        sourceKind?: 'action' | 'nonAction';
     },
 ): MinionDestroyedEvent[] {
     const minion = findMinionOnBase(state, params.fromBaseIndex, params.minionUid);
@@ -384,6 +389,7 @@ export function buildValidatedDestroyEvents(
             params.destroyerId,
             params.reason,
             params.now,
+            params.sourceKind,
         ),
     ];
 }
@@ -1359,6 +1365,78 @@ export function openAfterScoringWindow(
 // 交互辅助函数（目标选择）
 // ============================================================================
 
+type MinionTargetEffectType = ProtectionType | 'buff';
+
+function inferMinionEffectIntent(
+    effectType: MinionTargetEffectType | undefined,
+): AiEffectIntent | undefined {
+    switch (effectType) {
+        case 'buff':
+            return 'buff';
+        case 'destroy':
+            return 'destroy';
+        case 'move':
+            return 'move';
+        case 'action':
+        case 'affect':
+            return 'affect';
+        default:
+            return undefined;
+    }
+}
+
+function buildMinionTargetAiHint(args: {
+    minion: MinionOnBase;
+    sourcePlayerId: PlayerId;
+    effectType?: MinionTargetEffectType;
+}): AiHint {
+    const effectIntent = inferMinionEffectIntent(args.effectType);
+    return buildTargetAiHint({
+        actorPlayerId: args.sourcePlayerId,
+        targetPlayerId: args.minion.controller,
+        effectIntent,
+        targetKind: 'minion',
+        targetOwnerId: args.minion.owner,
+        targetControllerId: args.minion.controller,
+    });
+}
+
+export function buildPlayerTargetOptions<TExtraValue extends Record<string, unknown> = Record<string, never>>(
+    candidates: Array<{
+        id?: string;
+        label: string;
+        targetPlayerId: PlayerId;
+        value?: TExtraValue;
+        displayMode?: EnginePromptOption<{ targetPlayerId: PlayerId } & TExtraValue>['displayMode'];
+        priorityHint?: number;
+        forcedTargetPolicy?: AiHint['forcedTargetPolicy'];
+    }>,
+    context: {
+        sourcePlayerId: PlayerId;
+        effectIntent?: AiEffectIntent;
+        derivedFrom?: AiHint['derivedFrom'];
+    },
+): EnginePromptOption<{ targetPlayerId: PlayerId } & TExtraValue>[] {
+    return candidates.map((candidate, index) => ({
+        id: candidate.id ?? `player-${index}`,
+        label: candidate.label,
+        value: {
+            targetPlayerId: candidate.targetPlayerId,
+            ...((candidate.value ?? {}) as TExtraValue),
+        },
+        ...(candidate.displayMode ? { displayMode: candidate.displayMode } : {}),
+        _ai: buildTargetAiHint({
+            actorPlayerId: context.sourcePlayerId,
+            targetPlayerId: candidate.targetPlayerId,
+            effectIntent: context.effectIntent,
+            targetKind: 'player',
+            priorityHint: candidate.priorityHint,
+            forcedTargetPolicy: candidate.forcedTargetPolicy,
+            derivedFrom: context.derivedFrom ?? 'inferred',
+        }),
+    }));
+}
+
 /**
  * 构建随从目标选择的交互选项（自动保护过滤）
  * 
@@ -1381,7 +1459,7 @@ export function buildMinionTargetOptions(
         /** 显式来源类型；仅在无法提供 sourceDefId 时使用 */
         sourceKind?: 'action' | 'nonAction';
         /** 效果类型覆盖（可选，不传则自动检查 destroy + affect） */
-        effectType?: ProtectionType;
+        effectType?: MinionTargetEffectType;
         /** 是否额外尊重“行动卡保护”（如烟雾弹） */
         respectActionProtection?: boolean;
     }
@@ -1418,12 +1496,29 @@ export function buildMinionTargetOptions(
         return true;
     });
 
-    return filteredCandidates.map((c, i) => ({
-        id: `minion-${i}`,
-        label: c.label,
-        value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
-        _source: 'field' as const,
-    }));
+    return filteredCandidates.map((c, i) => {
+        const minion = state.bases[c.baseIndex]?.minions.find(m => m.uid === c.uid);
+        if (!minion) {
+            return {
+                id: `minion-${i}`,
+                label: c.label,
+                value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
+                _source: 'field' as const,
+            };
+        }
+
+        return {
+            id: `minion-${i}`,
+            label: c.label,
+            value: { minionUid: c.uid, baseIndex: c.baseIndex, defId: c.defId },
+            _source: 'field' as const,
+            _ai: buildMinionTargetAiHint({
+                minion,
+                sourcePlayerId,
+                effectType,
+            }),
+        };
+    });
 }
 
 /**
@@ -1437,7 +1532,7 @@ export function buildActionMinionTargetOptions(
     context: {
         state: SmashUpCore;
         sourcePlayerId: PlayerId;
-        effectType?: ProtectionType;
+        effectType?: MinionTargetEffectType;
     },
 ): EnginePromptOption<{ minionUid: string; baseIndex: number; defId: string }>[] {
     return buildMinionTargetOptions(candidates, {

@@ -1,0 +1,21 @@
+# Ralph Context Snapshot
+
+- task statement: 给大杀四方增加机制说明教程入口与子教程支持，并以牛仔决斗作为首个子教程；完成 E2E、看图和证据文档。
+- desired outcome: 派系详情标题右侧仅在有教程时显示入口；子教程路由与教程系统工作正常；牛仔决斗教程可完整跑通并有截图证据。
+- known facts/evidence:
+  - 教程系统已支持 tutorialId 子路由与子教程目录。
+  - Smash Up 已接入 cowboys-duel 子教程与派系入口按钮。
+  - 当前最新失败点是 E2E 在 pecosBillWindow 步骤点击 skip 时 locator 过宽，出现 strict mode violation。
+  - 单测、ESLint、TS 之前已通过；仍需 fresh E2E + 看图 + evidence。
+- constraints:
+  - 全程中文。
+  - 不动无关脏改，不用 git 回滚/restore/stash。
+  - 若声称 E2E 通过，必须给截图绝对路径并写 evidence/smashup-faction-subtutorials-e2e-test.md。
+- unknowns/open questions:
+  - Pecos Bill 跳过按钮在当前 DOM 中的最稳定位器是什么。
+  - 本轮通过后是否还会暴露新的链路/视觉问题。
+- likely codebase touchpoints:
+  - e2e/smashup-tutorial.e2e.ts
+  - src/games/smashup/tutorial.ts
+  - src/pages/MatchRoom.tsx
+  - evidence/

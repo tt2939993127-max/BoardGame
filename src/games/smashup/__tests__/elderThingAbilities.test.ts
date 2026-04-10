@@ -30,6 +30,7 @@ import { clearInteractionHandlers, getInteractionHandler } from '../domain/abili
 import { applyEvents, makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
 beforeAll(() => {
     clearRegistry();
@@ -519,6 +520,70 @@ describe('远古之物派系能力', () => {
 
             expect(reshuffleEvents.length).toBe(0);
             expect(limitEvents.length).toBe(1);
+        });
+
+        it('授予的额外战术额度会被后续打出的疯狂卡正常消耗', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [
+                            makeCard('begin', 'elder_thing_begin_the_summoning', 'action', '0'),
+                            makeCard('mad-1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                            makeCard('mad-2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        ],
+                        discard: [makeCard('disc-minion', 'test_minion', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            const playBegin = runCommand(makeMatchState(state), {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'begin' },
+            } as any, defaultRandom);
+            expect(playBegin.success).toBe(true);
+
+            const beginPrompt = (playBegin.finalState.sys as any)?.interaction?.current;
+            expect(beginPrompt?.data?.sourceId).toBe('elder_thing_begin_the_summoning');
+
+            const resolveBegin = runCommand(playBegin.finalState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: '0',
+                payload: { optionId: beginPrompt.data.options[0].id },
+            } as any, defaultRandom);
+            expect(resolveBegin.success).toBe(true);
+            expect(resolveBegin.finalState.core.players['0'].actionsPlayed).toBe(1);
+            expect(resolveBegin.finalState.core.players['0'].actionLimit).toBe(2);
+
+            const playMadness = runCommand(resolveBegin.finalState, {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'mad-1' },
+            } as any, defaultRandom);
+            expect(playMadness.success).toBe(true);
+
+            const madnessPrompt = (playMadness.finalState.sys as any)?.interaction?.current;
+            expect(madnessPrompt?.data?.sourceId).toBe('special_madness');
+
+            const consumeMadness = runCommand(playMadness.finalState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: '0',
+                payload: {
+                    optionId: madnessPrompt.data.options.find((option: any) => option.value?.action === 'return')?.id,
+                },
+            } as any, defaultRandom);
+            expect(consumeMadness.success).toBe(true);
+            expect(consumeMadness.finalState.core.players['0'].actionsPlayed).toBe(2);
+            expect(consumeMadness.finalState.core.players['0'].actionLimit).toBe(2);
+
+            const playSecondMadness = runCommand(consumeMadness.finalState, {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'mad-2' },
+            } as any, defaultRandom);
+            expect(playSecondMadness.success).toBe(false);
+            expect(playSecondMadness.error).toContain('本回合行动额度已用完');
         });
     });
 

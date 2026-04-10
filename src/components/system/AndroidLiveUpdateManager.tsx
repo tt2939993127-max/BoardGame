@@ -11,14 +11,15 @@ import {
 import { requestAndroidNativeUpdateCheck } from '../../lib/mobile/androidNativeUpdates';
 
 let hasAutoStartedAndroidLiveUpdateCheck = false;
+const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
+    phase: 'hidden',
+    blocking: false,
+};
 
 export const AndroidLiveUpdateManager = () => {
     const toast = useToast();
     const isNativeAndroid = isNativeAndroidRuntime();
-    const [forceUpdateState, setForceUpdateState] = useState<AndroidForceUpdateState>({
-        phase: 'hidden',
-        blocking: false,
-    });
+    const [forceUpdateState, setForceUpdateState] = useState<AndroidForceUpdateState>(HIDDEN_FORCE_UPDATE_STATE);
 
     useEffect(() => {
         if (!isNativeAndroid) {
@@ -40,10 +41,21 @@ export const AndroidLiveUpdateManager = () => {
             }
 
             if (result.status === 'up-to-date' && options?.interactive) {
+                setForceUpdateState(HIDDEN_FORCE_UPDATE_STATE);
                 toast.success('当前已经是最新版本。', '应用更新', {
                     dedupeKey: 'android-ota-up-to-date',
                     ttlMs: 3000,
                 });
+                return;
+            }
+
+            if (
+                result.status === 'up-to-date'
+                || result.status === 'disabled'
+                || result.status === 'manifest-missing'
+                || result.status === 'not-native'
+            ) {
+                setForceUpdateState(HIDDEN_FORCE_UPDATE_STATE);
                 return;
             }
 

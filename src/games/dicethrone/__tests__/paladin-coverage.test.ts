@@ -20,7 +20,8 @@ import { describe, it, expect } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { DiceThroneDomain } from '../domain';
 import { TOKEN_IDS } from '../domain/ids';
-import { INITIAL_CP } from '../domain/types';
+import { RESOURCE_IDS } from '../domain/resources';
+import { CP_MAX, INITIAL_CP } from '../domain/types';
 import {
     testSystems,
     createQueuedRandom,
@@ -30,7 +31,7 @@ import {
 import type { DiceThroneCore } from '../domain/types';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
-import { BLESSING_OF_MIGHT_2, HOLY_STRIKE_2 } from '../heroes/paladin/abilities';
+import { BLESSING_OF_MIGHT_2, HOLY_STRIKE_2, RIGHTEOUS_PRAYER_2 } from '../heroes/paladin/abilities';
 
 // ============================================================================
 // 自定义 Setup：双方圣骑士，移除响应卡避免干扰
@@ -233,6 +234,126 @@ describe('圣骑士 GTR 技能覆盖', () => {
                 },
             });
             expect(result.assertionErrors).toEqual([]);
+        });
+    });
+
+    // ========================================================================
+    // righteous-prayer — 正义祈祷（修复：基础版应为 +2CP，不应直接满 CP）
+    // ========================================================================
+    describe('正义祈祷 (righteous-prayer)', () => {
+        it('基础版 4 祈祷应造成 8 伤害 + 1 暴击 + 2 CP，而不是直接满 CP', () => {
+            const random = createQueuedRandom([6, 6, 6, 6, 1]);
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup: createPaladinSetup(), assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '正义祈祷 基础版=8伤害+暴击+2CP',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-prayer' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': {
+                            cp: INITIAL_CP + 2,
+                            tokens: { [TOKEN_IDS.CRIT]: 1 },
+                        },
+                        '1': { hp: 42 },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('基础版在接近上限时应钳制到 CP_MAX，不应因技能直接回满之外的异常值', () => {
+            const random = createQueuedRandom([6, 6, 6, 6, 1]);
+            const setup = (playerIds: PlayerId[], rng: RandomFn): MatchState<DiceThroneCore> => {
+                const base = createPaladinSetup()(playerIds, rng);
+                base.core.players['0'].resources[RESOURCE_IDS.CP] = CP_MAX - 1;
+                return base;
+            };
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup, assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '正义祈祷 基础版 CP 边界钳制',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-prayer' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': {
+                            cp: CP_MAX,
+                            tokens: { [TOKEN_IDS.CRIT]: 1 },
+                        },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+        });
+
+        it('升级版 4 祈祷应保持 +2 CP，不应被连点或升级流程放大', () => {
+            const random = createQueuedRandom([6, 6, 6, 6, 1]);
+            const setup = (playerIds: PlayerId[], rng: RandomFn): MatchState<DiceThroneCore> => {
+                const base = createPaladinSetup()(playerIds, rng);
+                const attacker = base.core.players['0'];
+                const idx = attacker.abilities.findIndex(a => a.id === 'righteous-prayer');
+                if (idx >= 0) attacker.abilities[idx] = RIGHTEOUS_PRAYER_2 as any;
+                attacker.abilityLevels['righteous-prayer'] = 2;
+                return base;
+            };
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain, systems: testSystems,
+                playerIds: ['0', '1'], random,
+                setup, assertFn: assertState, silent: true,
+            });
+            const result = runner.run({
+                name: '正义祈祷 升级版=8不可防御伤害+暴击+2CP',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-prayer-2-main' }),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'righteous-prayer-2-main' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    players: {
+                        '0': {
+                            cp: INITIAL_CP + 2,
+                            tokens: { [TOKEN_IDS.CRIT]: 1 },
+                        },
+                        '1': { hp: 42 },
+                    },
+                },
+            });
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.actualErrors.map((entry) => entry.error)).toContain('attack_already_initiated');
         });
     });
 

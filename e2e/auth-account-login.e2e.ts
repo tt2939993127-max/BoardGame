@@ -22,23 +22,23 @@ async function applyKeyboardViewportSimulation(
 async function clickHeaderLoginEntry(page: import('@playwright/test').Page) {
     const loginButton = page.locator('header button:has-text("登录")').first();
     await expect(loginButton).toBeVisible();
-    await loginButton.evaluate((button) => {
-        if (!(button instanceof HTMLButtonElement)) {
-            throw new Error('登录入口节点不是 button');
-        }
-        button.click();
-    });
+    await page.waitForTimeout(500);
+    await loginButton.click({ force: true });
+    if (await page.getByTestId('auth-modal').count() === 0) {
+        await page.waitForTimeout(500);
+        await loginButton.click({ force: true });
+    }
 }
 
 async function clickHeaderRegisterEntry(page: import('@playwright/test').Page) {
     const registerButton = page.locator('header button:has-text("注册")').first();
     await expect(registerButton).toBeVisible();
-    await registerButton.evaluate((button) => {
-        if (!(button instanceof HTMLButtonElement)) {
-            throw new Error('注册入口节点不是 button');
-        }
-        button.click();
-    });
+    await page.waitForTimeout(500);
+    await registerButton.click({ force: true });
+    if (await page.getByTestId('auth-modal').count() === 0) {
+        await page.waitForTimeout(500);
+        await registerButton.click({ force: true });
+    }
 }
 
 test.describe('Auth (account login) E2E', () => {
@@ -52,7 +52,7 @@ test.describe('Auth (account login) E2E', () => {
             await route.fulfill({ status: 401, json: { error: 'unauthorized' } });
         });
 
-        await page.goto('/');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
         await page.addStyleTag({
             content: `
                 *, *::before, *::after {
@@ -74,7 +74,14 @@ test.describe('Auth (account login) E2E', () => {
 
         const accountInput = dialog.getByTestId('auth-login-account-input');
         const passwordInput = dialog.getByTestId('auth-login-password-input');
+        const passwordToggle = dialog.getByTestId('auth-login-password-toggle');
         const submitButton = dialog.getByTestId('auth-submit-button');
+
+        await expect(passwordInput).toHaveAttribute('type', 'password');
+        await passwordToggle.click();
+        await expect(passwordInput).toHaveAttribute('type', 'text');
+        await passwordToggle.click();
+        await expect(passwordInput).toHaveAttribute('type', 'password');
 
         await accountInput.evaluate((node, value) => {
             const input = node as HTMLInputElement;

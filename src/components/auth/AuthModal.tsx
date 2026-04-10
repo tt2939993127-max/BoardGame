@@ -6,6 +6,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ModalBase } from '../common/overlays/ModalBase';
 import { LoadingArcaneAether } from '../system/LoadingVariants';
 import { AnimatePresence } from 'framer-motion';
+import { PasswordField } from '../common/PasswordField';
 
 const AUTH_REMEMBERED_FIELDS_STORAGE_KEY = 'auth_modal_remembered_fields_v1';
 
@@ -389,7 +390,7 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
             }}
         >
             <div
-                className="bg-[#fcfbf9] pointer-events-auto w-[calc(100vw-2rem)] max-w-[400px] max-h-[var(--runtime-modal-max-height)] shadow-[0_10px_40px_rgba(67,52,34,0.1)] border border-[#e5e0d0] p-6 sm:p-10 relative rounded-sm mx-4 overflow-y-auto overflow-x-hidden"
+                className="bg-[#fcfbf9] pointer-events-auto relative mx-4 flex w-[calc(100vw-2rem)] max-w-[400px] max-h-[var(--runtime-modal-max-height)] flex-col overflow-hidden rounded-sm border border-[#e5e0d0] shadow-[0_10px_40px_rgba(67,52,34,0.1)]"
                 data-testid="auth-modal"
             >
                 {/* 装饰边角 */}
@@ -421,335 +422,341 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                     )}
                 </AnimatePresence>
 
-                <div className="text-center mb-8">
+                <div className="shrink-0 px-6 pt-6 pb-4 sm:px-10 sm:pt-10 sm:pb-6 text-center">
                     <h2 className="text-2xl font-serif font-bold text-[#433422] tracking-wide mb-2">
                         {t(mode === 'login' ? 'login.title' : mode === 'register' ? 'register.title' : 'reset.title')}
                     </h2>
                     <div className="h-px w-12 bg-[#c0a080] mx-auto opacity-50" />
                 </div>
 
-                {error && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-2 mb-6 font-serif text-center"
-                    >
-                        {error}
-                    </motion.div>
-                )}
+                <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col font-serif">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 sm:px-10 sm:pb-6">
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-2 mb-6 font-serif text-center"
+                            >
+                                {error}
+                            </motion.div>
+                        )}
 
-                <form onSubmit={handleSubmit} className="space-y-5 font-serif">
-                    {mode === 'register' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            className="space-y-5"
-                        >
-                            <div>
-                                <label className={fieldLabelClassName}>
-                                    {t('email.label.address')}
-                                </label>
-                                <div className="flex flex-wrap gap-2 items-end" data-testid="auth-register-email-row">
-                                    <div className="min-w-0 flex-1">
+                        <div className="space-y-5">
+                            {mode === 'register' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="space-y-5"
+                                >
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.address')}
+                                        </label>
+                                        <div className="flex flex-wrap gap-2 items-end" data-testid="auth-register-email-row">
+                                            <div className="min-w-0 flex-1">
+                                                <input
+                                                    type="email"
+                                                    value={email}
+                                                    onChange={(e) => handleEmailChange(e.target.value)}
+                                                    className={textInputClassName}
+                                                    placeholder={t('email.placeholder.address')}
+                                                    required
+                                                    autoComplete="email"
+                                                    autoFocus
+                                                    data-testid="auth-register-email-input"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleSendCode}
+                                                disabled={isSendingCode || countdown > 0}
+                                                className={codeActionButtonClassName}
+                                                data-testid="auth-register-send-code"
+                                            >
+                                                {isSendingCode
+                                                    ? t('email.button.sending')
+                                                    : countdown > 0
+                                                        ? t('email.button.resendCountdown', { count: countdown })
+                                                        : codeSent
+                                                            ? t('email.button.resend')
+                                                            : t('email.button.sendCode')}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.code')}
+                                        </label>
                                         <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => handleEmailChange(e.target.value)}
+                                            type="text"
+                                            value={code}
+                                            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                             className={textInputClassName}
-                                            placeholder={t('email.placeholder.address')}
+                                            placeholder={t('email.placeholder.code')}
                                             required
-                                            autoComplete="email"
-                                            autoFocus
-                                            data-testid="auth-register-email-input"
+                                            maxLength={6}
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            data-testid="auth-register-code-input"
                                         />
                                     </div>
-                                    <button
-                                        type="button"
-                                        onClick={handleSendCode}
-                                        disabled={isSendingCode || countdown > 0}
-                                        className={codeActionButtonClassName}
-                                        data-testid="auth-register-send-code"
-                                    >
-                                        {isSendingCode
-                                            ? t('email.button.sending')
-                                            : countdown > 0
-                                                ? t('email.button.resendCountdown', { count: countdown })
-                                                : codeSent
-                                                    ? t('email.button.resend')
-                                                    : t('email.button.sendCode')}
-                                    </button>
-                                </div>
-                            </div>
+                                </motion.div>
+                            )}
 
-                            <div>
-                                <label className={fieldLabelClassName}>
-                                    {t('email.label.code')}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={code}
-                                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    className={textInputClassName}
-                                    placeholder={t('email.placeholder.code')}
-                                    required
-                                    maxLength={6}
-                                    inputMode="numeric"
-                                    autoComplete="one-time-code"
-                                    data-testid="auth-register-code-input"
-                                />
-                            </div>
-                        </motion.div>
-                    )}
+                            {mode === 'reset' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="space-y-5"
+                                >
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.address')}
+                                        </label>
+                                        <div className="flex flex-wrap gap-2 items-end" data-testid="auth-reset-email-row">
+                                            <div className="min-w-0 flex-1">
+                                                <input
+                                                    type="email"
+                                                    value={resetEmail}
+                                                    onChange={(e) => handleResetEmailChange(e.target.value)}
+                                                    className={textInputClassName}
+                                                    placeholder={t('email.placeholder.address')}
+                                                    required
+                                                    autoComplete="email"
+                                                    autoFocus
+                                                    data-testid="auth-reset-email-input"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleSendResetCode}
+                                                disabled={isSendingResetCode || resetCountdown > 0}
+                                                className={codeActionButtonClassName}
+                                                data-testid="auth-reset-send-code"
+                                            >
+                                                {isSendingResetCode
+                                                    ? t('email.button.sending')
+                                                    : resetCountdown > 0
+                                                        ? t('email.button.resendCountdown', { count: resetCountdown })
+                                                        : resetCodeSent
+                                                            ? t('email.button.resend')
+                                                            : t('email.button.sendCode')}
+                                            </button>
+                                        </div>
+                                    </div>
 
-                    {mode === 'reset' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            className="space-y-5"
-                        >
-                            <div>
-                                <label className={fieldLabelClassName}>
-                                    {t('email.label.address')}
-                                </label>
-                                <div className="flex flex-wrap gap-2 items-end" data-testid="auth-reset-email-row">
-                                    <div className="min-w-0 flex-1">
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.code')}
+                                        </label>
                                         <input
-                                            type="email"
-                                            value={resetEmail}
-                                            onChange={(e) => handleResetEmailChange(e.target.value)}
+                                            type="text"
+                                            value={resetCode}
+                                            onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                             className={textInputClassName}
-                                            placeholder={t('email.placeholder.address')}
+                                            placeholder={t('email.placeholder.code')}
                                             required
-                                            autoComplete="email"
-                                            autoFocus
-                                            data-testid="auth-reset-email-input"
+                                            maxLength={6}
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            data-testid="auth-reset-code-input"
                                         />
                                     </div>
+                                </motion.div>
+                            )}
+
+                            {mode === 'login' ? (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.account')}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={account}
+                                        onChange={(e) => handleAccountChange(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.account')}
+                                        required
+                                        autoComplete="username"
+                                        autoFocus
+                                        data-testid="auth-login-account-input"
+                                    />
+                                </div>
+                            ) : mode === 'register' ? (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.username')}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => handleUsernameChange(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.username')}
+                                        required
+                                        autoComplete="nickname"
+                                        data-testid="auth-register-username-input"
+                                    />
+                                </div>
+                            ) : null}
+
+                            {mode === 'login' && (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.password')}
+                                    </label>
+                                    <PasswordField
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="current-password"
+                                        data-testid="auth-login-password-input"
+                                        toggleButtonTestId="auth-login-password-toggle"
+                                    />
+                                </div>
+                            )}
+
+                            {mode === 'register' && (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.password')}
+                                    </label>
+                                    <PasswordField
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-register-password-input"
+                                        toggleButtonTestId="auth-register-password-toggle"
+                                    />
+                                </div>
+                            )}
+
+                            {mode === 'reset' && (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.newPassword')}
+                                    </label>
+                                    <PasswordField
+                                        value={resetNewPassword}
+                                        onChange={(e) => setResetNewPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-reset-new-password-input"
+                                        toggleButtonTestId="auth-reset-new-password-toggle"
+                                    />
+                                </div>
+                            )}
+
+                            {mode === 'register' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                >
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.confirmPassword')}
+                                    </label>
+                                    <PasswordField
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-register-confirm-password-input"
+                                        toggleButtonTestId="auth-register-confirm-password-toggle"
+                                    />
+                                </motion.div>
+                            )}
+
+                            {mode === 'reset' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                >
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.confirmPassword')}
+                                    </label>
+                                    <PasswordField
+                                        value={resetConfirmPassword}
+                                        onChange={(e) => setResetConfirmPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-reset-confirm-password-input"
+                                        toggleButtonTestId="auth-reset-confirm-password-toggle"
+                                    />
+                                </motion.div>
+                            )}
+
+                            {mode === 'login' && (
+                                <div className="text-right">
                                     <button
                                         type="button"
-                                        onClick={handleSendResetCode}
-                                        disabled={isSendingResetCode || resetCountdown > 0}
-                                        className={codeActionButtonClassName}
-                                        data-testid="auth-reset-send-code"
+                                        onClick={() => switchMode('reset')}
+                                        className={secondaryTextButtonClassName}
                                     >
-                                        {isSendingResetCode
-                                            ? t('email.button.sending')
-                                            : resetCountdown > 0
-                                                ? t('email.button.resendCountdown', { count: resetCountdown })
-                                                : resetCodeSent
-                                                    ? t('email.button.resend')
-                                                    : t('email.button.sendCode')}
+                                        {t('login.forgot')}
                                     </button>
                                 </div>
-                            </div>
-
-                            <div>
-                                <label className={fieldLabelClassName}>
-                                    {t('email.label.code')}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={resetCode}
-                                    onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                                    className={textInputClassName}
-                                    placeholder={t('email.placeholder.code')}
-                                    required
-                                    maxLength={6}
-                                    inputMode="numeric"
-                                    autoComplete="one-time-code"
-                                    data-testid="auth-reset-code-input"
-                                />
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {mode === 'login' ? (
-                        <div>
-                            <label className={fieldLabelClassName}>
-                                {t('label.account')}
-                            </label>
-                            <input
-                                type="text"
-                                value={account}
-                                onChange={(e) => handleAccountChange(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.account')}
-                                required
-                                autoComplete="username"
-                                autoFocus
-                                data-testid="auth-login-account-input"
-                            />
+                            )}
                         </div>
-                    ) : mode === 'register' ? (
-                        <div>
-                            <label className={fieldLabelClassName}>
-                                {t('label.username')}
-                            </label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => handleUsernameChange(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.username')}
-                                required
-                                autoComplete="nickname"
-                                data-testid="auth-register-username-input"
-                            />
-                        </div>
-                    ) : null}
+                    </div>
 
-                    {mode === 'login' && (
-                        <div>
-                            <label className={fieldLabelClassName}>
-                                {t('label.password')}
-                            </label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                                autoComplete="current-password"
-                                data-testid="auth-login-password-input"
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'register' && (
-                        <div>
-                            <label className={fieldLabelClassName}>
-                                {t('label.password')}
-                            </label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                                autoComplete="new-password"
-                                data-testid="auth-register-password-input"
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'reset' && (
-                        <div>
-                            <label className={fieldLabelClassName}>
-                                {t('label.newPassword')}
-                            </label>
-                            <input
-                                type="password"
-                                value={resetNewPassword}
-                                onChange={(e) => setResetNewPassword(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                                autoComplete="new-password"
-                                data-testid="auth-reset-new-password-input"
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'register' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
+                    <div className="shrink-0 border-t border-[#e5e0d0] bg-[#fcfbf9] px-6 py-4 sm:px-10 sm:py-6">
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                            data-testid="auth-submit-button"
                         >
-                            <label className={fieldLabelClassName}>
-                                {t('label.confirmPassword')}
-                            </label>
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                                autoComplete="new-password"
-                                data-testid="auth-register-confirm-password-input"
-                            />
-                        </motion.div>
-                    )}
+                            {isLoading
+                                ? t('button.processing')
+                                : t(mode === 'login' ? 'login.submit' : mode === 'register' ? 'register.submit' : 'reset.submit')}
+                        </button>
 
-                    {mode === 'reset' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                        >
-                            <label className={fieldLabelClassName}>
-                                {t('label.confirmPassword')}
-                            </label>
-                            <input
-                                type="password"
-                                value={resetConfirmPassword}
-                                onChange={(e) => setResetConfirmPassword(e.target.value)}
-                                className={textInputClassName}
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                                autoComplete="new-password"
-                                data-testid="auth-reset-confirm-password-input"
-                            />
-                        </motion.div>
-                    )}
-
-                    {mode === 'login' && (
-                        <div className="text-right">
+                        <div className="mt-4 flex items-center justify-center gap-4 text-sm font-serif italic">
                             <button
                                 type="button"
-                                onClick={() => switchMode('reset')}
-                                className={secondaryTextButtonClassName}
+                                onClick={() => mode !== 'login' && switchMode('login')}
+                                className={clsx(
+                                    "group relative cursor-pointer transition-colors px-1 py-1",
+                                    mode === 'login' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
+                                )}
+                                data-testid="auth-switch-login"
                             >
-                                {t('login.forgot')}
+                                <span className="relative z-10">{t('menu.login')}</span>
+                                <span className="underline-center h-[1px] opacity-60" />
+                            </button>
+                            <div className="w-px h-3 bg-[#c0a080] opacity-40" />
+                            <button
+                                type="button"
+                                onClick={() => mode !== 'register' && switchMode('register')}
+                                className={clsx(
+                                    "group relative cursor-pointer transition-colors px-1 py-1",
+                                    mode === 'register' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
+                                )}
+                                data-testid="auth-switch-register"
+                            >
+                                <span className="relative z-10">{t('menu.register')}</span>
+                                <span className="underline-center h-[1px] opacity-60" />
                             </button>
                         </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-4 cursor-pointer"
-                        data-testid="auth-submit-button"
-                    >
-                        {isLoading
-                            ? t('button.processing')
-                            : t(mode === 'login' ? 'login.submit' : mode === 'register' ? 'register.submit' : 'reset.submit')}
-                    </button>
+                    </div>
                 </form>
-
-                <div className="mt-6 flex items-center justify-center gap-4 text-sm font-serif italic pb-2">
-                    <button
-                        type="button"
-                        onClick={() => mode !== 'login' && switchMode('login')}
-                        className={clsx(
-                            "group relative cursor-pointer transition-colors px-1 py-1",
-                            mode === 'login' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
-                        )}
-                        data-testid="auth-switch-login"
-                    >
-                        <span className="relative z-10">{t('menu.login')}</span>
-                        <span className="underline-center h-[1px] opacity-60" />
-                    </button>
-                    <div className="w-px h-3 bg-[#c0a080] opacity-40" />
-                    <button
-                        type="button"
-                        onClick={() => mode !== 'register' && switchMode('register')}
-                        className={clsx(
-                            "group relative cursor-pointer transition-colors px-1 py-1",
-                            mode === 'register' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
-                        )}
-                        data-testid="auth-switch-register"
-                    >
-                        <span className="relative z-10">{t('menu.register')}</span>
-                        <span className="underline-center h-[1px] opacity-60" />
-                    </button>
-                </div>
             </div>
         </ModalBase>
     );
