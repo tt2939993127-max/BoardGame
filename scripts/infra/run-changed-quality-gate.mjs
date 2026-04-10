@@ -535,12 +535,24 @@ function collectCommands(files, baseRef, affectsTypecheck) {
   }
 
   if (hasAny(files, (file) => file.startsWith('src/server/') || file.startsWith('src/api/'))) {
-    commands.push({
-      label: 'Server tests',
-      reason: '服务端目录有改动',
-      command: 'npm',
-      args: ['run', 'test:server'],
-    });
+    if (isPrePushMode) {
+      const serverTargets = ['src/server', 'src/api'];
+      serverTargets.forEach((target, index) => {
+        commands.push({
+          label: serverTargets.length === 1 ? 'Server tests' : `Server tests (${index + 1}/${serverTargets.length})`,
+          reason: '服务端目录有改动，pre-push 拆分执行以降低 Vitest OOM 风险',
+          command: process.execPath,
+          args: [...VITEST_SAFE_ENTRY, 'run', target, '--configLoader', 'native', ...FAST_VITEST_ARGS],
+        });
+      });
+    } else {
+      commands.push({
+        label: 'Server tests',
+        reason: '服务端目录有改动',
+        command: 'npm',
+        args: ['run', 'test:server'],
+      });
+    }
   }
 
   if (hasAny(files, (file) => file.startsWith('src/ugc/'))) {
