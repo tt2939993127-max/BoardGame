@@ -145,13 +145,16 @@ jobs:
         run: |
           short_sha="$(git rev-parse --short=7 HEAD)"
           current_ref="$(git rev-parse HEAD)"
+          package_version="$(node -p "require('./package.json').version")"
+          built_at="$(date -u +%Y-%m-%dT%H-%M-%S-%3NZ)"
           manifest_url="${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/app-updates/android/${{ steps.params.outputs.channel }}/latest.json"
-          bundle_version="gha-${{ steps.params.outputs.channel }}-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}-${short_sha}"
+          bundle_version="${package_version}-ota-${built_at}"
           notes="GitHub Actions ${{ steps.params.outputs.source_mode }} OTA publish ${current_ref}@${short_sha}"
 
           {
             echo "short_sha=${short_sha}"
             echo "current_ref=${current_ref}"
+            echo "package_version=${package_version}"
             echo "manifest_url=${manifest_url}"
             echo "bundle_version=${bundle_version}"
             echo "notes=${notes}"
