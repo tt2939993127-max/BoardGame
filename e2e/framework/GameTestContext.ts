@@ -279,7 +279,8 @@ export class GameTestContext {
         }
 
         return error.message.includes('waitForFunction: Timeout')
-            || error.message.includes('page.goto: Timeout');
+            || error.message.includes('page.goto: Timeout')
+            || error.message.includes('game-load-failed');
     }
 
     private async gotoWithRetry(url: string, timeout: number): Promise<void> {
@@ -332,6 +333,14 @@ export class GameTestContext {
         );
     }
 
+    private async detectGameLoadError(timeout = 800): Promise<string | null> {
+        const errorScreen = this.page.locator('[data-bg-friendly-screen="true"]');
+        const isVisible = await errorScreen.isVisible({ timeout }).catch(() => false);
+        if (!isVisible) return null;
+        const text = await errorScreen.innerText().catch(() => '游戏加载失败');
+        return text.replace(/\s+/g, ' ').trim();
+    }
+
     /**
      * 打开启用 TestHarness 的测试游戏页，并等待状态注入能力就绪。
      *
@@ -381,6 +390,11 @@ export class GameTestContext {
                     () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
                     { timeout: attemptTimeout, polling: 200 },
                 );
+                await this.page.waitForTimeout(200);
+                const loadError = await this.detectGameLoadError(600);
+                if (loadError) {
+                    throw new Error(`game-load-failed: ${loadError}`);
+                }
                 return;
             } catch (error) {
                 lastError = error;
