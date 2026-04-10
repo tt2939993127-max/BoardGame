@@ -8,6 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildActionMinionTargetOptions, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
+import { buildTargetAiHint } from '../../../engine/ai';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -17,6 +18,7 @@ import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { FACTION_DISPLAY_NAMES } from '../domain/ids';
 import { getOpponentLabel, resolveLiveBaseIndex } from '../domain/utils';
+import { mergeDeferredPostScoringCompatibility } from '../domain/scoringSession';
 
 /** 注册海盗派系所有能力*/
 export function registerPirateAbilities(): void {
@@ -110,7 +112,14 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
         id: `target-${i}`,
         label: c.label,
         value: { baseIndex: c.baseIndex, baseDefId: ctx.state.bases[c.baseIndex].defId, targetPlayerId: c.targetPlayerId },
-        displayMode: 'card' as const
+        displayMode: 'card' as const,
+        _ai: buildTargetAiHint({
+            actorPlayerId: ctx.playerId,
+            targetPlayerId: c.targetPlayerId,
+            effectIntent: 'destroy',
+            targetKind: 'player',
+            priorityHint: c.count * 10,
+        }),
     }));
     const interaction = createSimpleChoice(
         `pirate_broadside_${ctx.now}`, ctx.playerId,
@@ -966,17 +975,7 @@ export function registerPirateInteractionHandlers(): void {
         
         // 【通用修复】检查是否有延迟事件需要补发
         // 引擎层 resolveInteraction 已自动传递延迟事件，这里只需要在最后一个交互时补发
-        const deferredEvents = (iData?.continuationContext as any)?._deferredPostScoringEvents as 
-            { type: string; payload: unknown; timestamp: number }[] | undefined;
-        const hasNextInteraction =
-            !!state.sys.interaction?.current
-            || (state.sys.interaction?.queue?.length ?? 0) > 0;
-        
         if (selected.skip) {
-            // 跳过时，如果这是最后一个交互，补发延迟事件
-            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-                return { state, events: deferredEvents as any[] };
-            }
             return { state, events: [] };
         }
         
@@ -986,9 +985,6 @@ export function registerPirateInteractionHandlers(): void {
         if (!ctx) return undefined;
         const resolvedDestBase = resolveLiveBaseIndex(state.core, destBase, selected.baseDefId);
         if (resolvedDestBase === undefined) {
-            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-                return { state, events: deferredEvents as any[] };
-            }
             return { state, events: [] };
         }
         const events: SmashUpEvent[] = [moveMinion(
@@ -999,12 +995,15 @@ export function registerPirateInteractionHandlers(): void {
             ctx.mateDefId === 'pirate_first_mate_pod' ? 'pirate_first_mate_pod' : 'pirate_first_mate',
             timestamp
         )];
-        
-        // 【通用修复】如果这是最后一个交互，补发延迟事件
-        if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
-            events.push(...deferredEvents as SmashUpEvent[]);
+
+        const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+            primaryEvents: events,
+            primaryOrder: 'after',
+        });
+        if (compatibility) {
+            return compatibility;
         }
-        
+
         return { state, events };
     });
 }

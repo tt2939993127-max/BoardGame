@@ -1,4 +1,4 @@
-package top.easyboardgame.app.debug;
+package top.easyboardgame.app;
 
 import android.content.pm.ActivityInfo;
 import android.os.Bundle;

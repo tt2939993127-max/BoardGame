@@ -261,7 +261,7 @@ describe('StatusEffectsIcons', () => {
         expect(getDiceSpritePosition(6)).toEqual({ xPos: 100, yPos: 100 });
     });
 
-    it('dice sprite 缺失时不应渲染占位文本内容', () => {
+    it('dice sprite 缺失时应渲染 fallback 骰面字形，避免整块空白', () => {
         const html = renderToStaticMarkup(
             <Dice3D
                 value={6}
@@ -274,6 +274,9 @@ describe('StatusEffectsIcons', () => {
 
         expect(html).toContain('data-sprite-ready="false"');
         expect(html).toContain('data-face-id="1"');
-        expect(html).not.toContain('data-face-symbol=');
+        expect(html).toContain('data-face-fallback="true"');
+        expect(html).toContain('data-face-symbol="bow"');
+        expect(html).toContain('>弓<');
+        expect(html).toContain('>月<');
     });
 });

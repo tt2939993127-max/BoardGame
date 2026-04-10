@@ -1,5 +1,5 @@
 import type { MatchState } from '../types';
-import type { AiInteractionSnapshot, AiResponseWindowSnapshot } from './types';
+import type { AiHint, AiInteractionSnapshot, AiResponseWindowSnapshot } from './types';
 
 const toJsonSafe = <T>(value: T): T => {
     if (value === undefined) return value;
@@ -38,6 +38,7 @@ export function extractAiInteractionSnapshot(viewState: unknown): AiInteractionS
                 ...(option.value !== undefined ? { value: toJsonSafe(option.value) } : {}),
                 ...(typeof option.disabled === 'boolean' ? { disabled: option.disabled } : {}),
                 ...(typeof option.displayMode === 'string' ? { displayMode: option.displayMode } : {}),
+                ...(option._ai && typeof option._ai === 'object' ? { _ai: toJsonSafe(option._ai as AiHint) } : {}),
             }))
         : [];
 

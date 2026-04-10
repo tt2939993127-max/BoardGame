@@ -8,7 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import { SU_EVENTS } from '../domain/types';
 import type {
-    DeckReshuffledEvent,
+    DeckReorderedEvent,
     SmashUpEvent,
     MinionCardDef,
     MinionPlayedEvent,
@@ -556,7 +556,7 @@ export function registerZombieInteractionHandlers(): void {
             const deckUids = shuffled.map(c => c.uid); // 只洗牌库，不包含弃牌堆
             return {
                 state, events: [
-                    { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
+                    { type: SU_EVENTS.DECK_REORDERED, payload: { playerId, deckUids }, timestamp } as DeckReorderedEvent,
                     buildAbilityFeedback(playerId, 'feedback.deck_search_no_match', timestamp),
                 ]
             };
@@ -570,8 +570,8 @@ export function registerZombieInteractionHandlers(): void {
         return {
             state,
             events: [
-                // 1. 重建牌库：只洗牌库，不合并弃牌堆（DECK_RESHUFFLED 会检查 deckUids 是否包含弃牌堆的卡）
-                { type: SU_EVENTS.DECK_RESHUFFLED, payload: { playerId, deckUids }, timestamp } as DeckReshuffledEvent,
+                // 1. 重建牌库：只洗牌库，不合并弃牌堆
+                { type: SU_EVENTS.DECK_REORDERED, payload: { playerId, deckUids }, timestamp } as DeckReorderedEvent,
                 // 2. 弃牌：同名卡从 deck 移入 discard
                 { type: SU_EVENTS.CARDS_MILLED, payload: { playerId, cardUids: uids, reason: 'zombie_mall_crawl' }, timestamp } as CardsMilledEvent,
             ],

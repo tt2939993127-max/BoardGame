@@ -41,7 +41,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "top.easyboardgame.app.debug"
+    namespace = "top.easyboardgame.app"
     compileSdk = rootProject.ext.compileSdkVersion
     signingConfigs {
         release {
@@ -54,7 +54,7 @@ android {
         }
     }
     defaultConfig {
-        applicationId "top.easyboardgame.app.debug"
+        applicationId "top.easyboardgame.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
         versionCode packageVersionCode

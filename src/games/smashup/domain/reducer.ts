@@ -72,6 +72,7 @@ import { fireTriggers, collectTriggers, hasPlayerTurnRestriction, isMinionProtec
 import { maybeResolveReactionQueue } from './reactionQueue';
 import { canPlayFromDiscard } from './discardPlayability';
 import { reduce } from './reduce';
+import { getEffectivePower } from './ongoingModifiers';
 
 // ============================================================================
 // execute：命令 → 事件
@@ -377,6 +378,7 @@ function executeCommand(
                     const baseCtx = {
                         state: core,
                         matchState: currentActionMS,
+                        random,
                         baseIndex: targetBaseIdx,
                         baseDefId: base.defId,
                         playerId: command.playerId,
@@ -790,10 +792,13 @@ export function filterProtectedDestroyEvents(
         // 对于 reason='base_*' 的事件，把 source 视为“目标自己”，从而不会触发
         // “只有对手才会被拦截”的保护（如 deep_roots / elder_thing 等）。
         const effectiveSource = de.payload.reason?.startsWith('base_') ? minion.controller : rawSource;
+        const sourceKind = (de.payload as { sourceKind?: 'action' | 'nonAction' }).sourceKind;
         // 检查 destroy 保护和 action 保护
         if (isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'destroy')) continue;
         // 检查 'action' 和 'affect' 两种广义保护类型（tooth_and_claw 注册为 'affect'）
-        const actionProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'action');
+        const actionProtected = sourceKind === 'nonAction'
+            ? false
+            : isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'action');
         const affectProtected = isMinionProtected(core, minion, fromBaseIndex, effectiveSource, 'affect');
         if (actionProtected || affectProtected) {
             // 消耗型保护：发射自毁事件
@@ -883,6 +888,7 @@ export function processDestroyTriggers(
                     const baseCtx = {
                         state: core,
                         matchState: ms ?? state,
+                        random,
                         baseIndex: fromBaseIndex,
                         baseDefId: base.defId,
                         playerId: ownerId,
@@ -901,6 +907,7 @@ export function processDestroyTriggers(
             const baseCtx = {
                 state: core,
                 matchState: ms ?? state,
+                random,
                 baseIndex: fromBaseIndex,
                 baseDefId: base.defId,
                 playerId: ownerId,
@@ -925,6 +932,7 @@ export function processDestroyTriggers(
             baseIndex: fromBaseIndex,
             triggerMinionUid: minionUid,
             triggerMinionDefId: minionDefId,
+            triggerMinionPower: minion ? getEffectivePower(core, minion, fromBaseIndex) : undefined,
             triggerMinion: minion,
             destroyerId,
             reason: de.payload.reason,
@@ -995,6 +1003,7 @@ export function processDestroyTriggers(
                 baseIndex: fromBaseIndex,
                 triggerMinionUid: minionUid,
                 triggerMinionDefId: minionDefId,
+                triggerMinionPower: minion ? getEffectivePower(core, minion, fromBaseIndex) : undefined,
                 triggerMinion: minion,
                 destroyerId,
                 reason: de.payload.reason,
@@ -1303,6 +1312,7 @@ export function processMoveTriggers(
             const baseCtx = {
                 state: core,
                 matchState: ms ?? state,
+                random,
                 baseIndex: toBaseIndex,
                 baseDefId: targetBase.defId,
                 playerId,

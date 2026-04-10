@@ -23,9 +23,10 @@ export const ActiveModifierBadge: React.FC<ActiveModifierBadgeProps> = ({ modifi
 
     if (modifiers.length === 0) return null;
     const hasBonusDamage = bonusDamage > 0;
-    const badgeText = hasBonusDamage
+    const badgeLabel = hasBonusDamage ? t('modifierActive.label') : t('modifierActive.shortLabel');
+    const badgeValue = hasBonusDamage
         ? `+${bonusDamage}`
-        : `${t('modifierActive.shortLabel')}${modifiers.length > 1 ? `×${modifiers.length}` : ''}`;
+        : modifiers.length > 1 ? `×${modifiers.length}` : '';
 
     const tooltipContent = modifiers.map((mod) => {
         const name = t(mod.nameKey);
@@ -51,11 +52,18 @@ export const ActiveModifierBadge: React.FC<ActiveModifierBadgeProps> = ({ modifi
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
             >
-                <div className="flex h-[1.65vw] items-center justify-center gap-[0.35vw] px-[0.7vw] rounded-full bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-500/50 shadow-[0_0_1vw_rgba(245,158,11,0.3)] backdrop-blur-sm cursor-default">
+                <div className="flex h-[1.9vw] items-center justify-center gap-[0.4vw] px-[0.78vw] rounded-full bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-500/50 shadow-[0_0_1vw_rgba(245,158,11,0.3)] backdrop-blur-sm cursor-default">
                     <Zap className="w-[0.82vw] h-[0.82vw] text-amber-400 fill-amber-400" />
-                    <span className="text-amber-200 text-[0.72vw] font-bold tracking-wide whitespace-nowrap leading-none">
-                        {badgeText}
-                    </span>
+                    <div className="flex items-center gap-[0.28vw] whitespace-nowrap leading-none">
+                        <span className="text-amber-100/90 text-[0.62vw] font-semibold tracking-[0.08em] uppercase">
+                            {badgeLabel}
+                        </span>
+                        {badgeValue && (
+                            <span className="text-amber-200 text-[0.78vw] font-black tracking-wide">
+                                {badgeValue}
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <InfoTooltip
                     title={t('modifierActive.tooltip')}

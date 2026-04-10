@@ -647,15 +647,15 @@ describe('base_the_homeworld: 母星 E2E Pipeline 额外出牌', () => {
         expect(result.finalState.core.players['0'].minionLimit).toBe(1);
     });
 
-    it('每回合一次：同回合第三次随从打出应失败', () => {
+    it('同回合连续打出低战力随从时，应持续获得额外额度', () => {
         const core: SmashUpCore = {
             players: {
                 '0': {
                     id: '0', vp: 0,
                     hand: [
-                        { uid: 'c1', defId: 'alien_invader', type: 'minion', owner: '0' },
+                        { uid: 'c1', defId: 'alien_collector', type: 'minion', owner: '0' },
                         { uid: 'c2', defId: 'alien_collector', type: 'minion', owner: '0' },
-                        { uid: 'c3', defId: 'dino_armor_stego', type: 'minion', owner: '0' },
+                        { uid: 'c3', defId: 'alien_collector', type: 'minion', owner: '0' },
                     ],
                     deck: [], discard: [],
                     minionsPlayed: 0, minionLimit: 1,
@@ -684,20 +684,19 @@ describe('base_the_homeworld: 母星 E2E Pipeline 额外出牌', () => {
 
         const runner = createCustomRunner(makeFullMatchState(core));
         const result = runner.run({
-            name: '母星每回合一次额外随从',
+            name: '母星连续额外随从',
             commands: [
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c1', baseIndex: 0 } },
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c2', baseIndex: 0 } },
                 { type: SU_COMMANDS.PLAY_MINION, playerId: '0', payload: { cardUid: 'c3', baseIndex: 0 } },
             ],
-            expect: {
-                expectError: { command: SU_COMMANDS.PLAY_MINION, error: '鏈洖鍚堥殢浠庨搴﹀凡鐢ㄥ畬' },
-            },
         });
 
         expect(result.steps[0]?.success).toBe(true);
         expect(result.steps[1]?.success).toBe(true);
-        expect(result.steps[2]?.success).toBe(false);
+        expect(result.steps[2]?.success).toBe(true);
+        expect(result.finalState.core.players['0'].minionsPlayed).toBe(3);
+        expect(result.finalState.core.bases[0].minions.length).toBe(3);
     });
 
     it('POD 母星走完整 Pipeline 时也应授予一次额外随从额度', () => {

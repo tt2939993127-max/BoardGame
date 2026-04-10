@@ -99,6 +99,7 @@
     "progress": "加载页面模块..."
   },
   "unknownUser": "未知用户",
+  "unknownError": "发生未知错误",
   "notFound": {
     "seoTitle": "404 - 页面未找到",
     "seoDescription": "你访问的页面不存在。",

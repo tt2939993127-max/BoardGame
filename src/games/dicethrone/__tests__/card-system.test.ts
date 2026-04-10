@@ -206,5 +206,45 @@ describe('卡牌系统', () => {
             });
             expect(result.assertionErrors).toEqual([]);
         });
+
+        it('进入 defensiveRoll 后防御方可以先打出下次不算', () => {
+            const runner = createRunner(fixedRandom);
+            const result = runner.run({
+                name: '下次不算在 defensiveRoll 可提前打出',
+                setup: createSetupWithHand(['card-next-time'], {
+                    playerId: '1',
+                    cp: 1,
+                    mutate: (core) => {
+                        core.players['0'].hand = [];
+                        core.players['1'].hand = [core.players['1'].hand[0]];
+                    },
+                }),
+                commands: [
+                    ...advanceTo('offensiveRoll'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
+                    cmd('ADVANCE_PHASE', '0'), // -> defensiveRoll
+                    cmd('PLAY_CARD', '1', { cardId: 'card-next-time' }),
+                ],
+                expect: {
+                    turnPhase: 'defensiveRoll',
+                    players: {
+                        '1': {
+                            handSize: 0,
+                            discardSize: 1,
+                        },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].damageShields).toEqual([
+                expect.objectContaining({
+                    sourceId: 'card-next-time',
+                    value: 6,
+                }),
+            ]);
+        });
     });
 });

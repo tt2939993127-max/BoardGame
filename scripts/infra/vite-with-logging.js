@@ -84,12 +84,20 @@ function readCliFlagValue(args, flagName) {
 function createViteArgs() {
   const viteArgs = process.argv.slice(2);
   const configLoader = process.env.VITE_CONFIG_LOADER?.trim();
+  const configFile = process.env.VITE_CONFIG_FILE?.trim();
   const hasExplicitConfigLoader = viteArgs.some((arg) => arg === '--configLoader' || arg.startsWith('--configLoader='));
+  const hasExplicitConfig = viteArgs.some((arg) => arg === '--config' || arg.startsWith('--config='));
   const hasExplicitHost = viteArgs.some((arg) => arg === '--host' || arg.startsWith('--host='));
   const hasExplicitPort = viteArgs.some((arg) => arg === '--port' || arg.startsWith('--port='));
   const explicitHost = readCliFlagValue(viteArgs, '--host');
   const configuredHost = explicitHost || process.env.VITE_HOST?.trim() || '127.0.0.1';
   const configuredPort = process.env.VITE_DEV_PORT?.trim();
+  const preferredTsConfigPath = join(process.cwd(), 'vite.config.ts');
+  const resolvedConfigFile = configFile || (existsSync(preferredTsConfigPath) ? preferredTsConfigPath : '');
+
+  if (resolvedConfigFile && !hasExplicitConfig) {
+    viteArgs.push('--config', resolvedConfigFile);
+  }
 
   if (configLoader && !hasExplicitConfigLoader) {
     viteArgs.push('--configLoader', configLoader);

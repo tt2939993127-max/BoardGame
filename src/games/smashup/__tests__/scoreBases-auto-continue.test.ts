@@ -15,6 +15,7 @@ import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../type
 import { runCommand } from './testRunner';
 import { SU_COMMANDS } from '../domain/types';
 import { initAllAbilities } from '../abilities';
+import { buildMinionTargetOptions, buildPlayerTargetOptions } from '../domain/abilityHelpers';
 
 /** 构造最小 SmashUpCore 用于测试 */
 function makeMinimalCore(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
@@ -1100,5 +1101,290 @@ describe('scoreBases 阶段自动推进', () => {
             && (action.metadata as any)?.titanUid === 't-megabot-setaside',
         )).toBe(true);
         expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
+    });
+
+    it('buff 型随从目标交互应透传 AI hints，且 AI 优先选择己方随从', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const ownMinion: MinionOnBase = {
+            ...makeMinion('0', 'robot_microbot_alpha', 2),
+            uid: 'own-buff-target',
+        };
+        const enemyMinion: MinionOnBase = {
+            ...makeMinion('1', 'pirate_first_mate', 3),
+            uid: 'enemy-buff-target',
+        };
+
+        const core = makeMinimalCore({
+            bases: [makeBase('base_pirate_cove', [ownMinion, enemyMinion])],
+        });
+
+        const state: MatchState<SmashUpCore> = {
+            core,
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'buff-target-choice',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'werewolves_great_wolf_spirit_talent',
+                            options: buildMinionTargetOptions([
+                                { uid: ownMinion.uid, defId: ownMinion.defId, baseIndex: 0, label: '己方随从' },
+                                { uid: enemyMinion.uid, defId: enemyMinion.defId, baseIndex: 0, label: '敌方随从' },
+                            ], {
+                                state: core,
+                                sourcePlayerId: '0',
+                                effectType: 'buff',
+                            }),
+                            targetType: 'minion',
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions).toHaveLength(2);
+        const ownAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { minionUid?: string } })?.optionValue?.minionUid === ownMinion.uid,
+        );
+        const enemyAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { minionUid?: string } })?.optionValue?.minionUid === enemyMinion.uid,
+        );
+
+        expect(ownAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'self',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+            targetControllerId: '0',
+        });
+        expect(enemyAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'enemy',
+            effectIntent: 'buff',
+            targetKind: 'minion',
+            targetControllerId: '1',
+        });
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: state as any,
+            matchId: 'smashup-buff-target-ai',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
+            .toBe(ownAction?.metadata?.optionId);
+    });
+
+    it('inspect 型玩家目标交互应透传 AI hints，且 AI 优先查看敌方信息', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore(),
+            sys: {
+                phase: 'playCards',
+                turnNumber: 1,
+                interaction: {
+                    current: {
+                        id: 'inspect-player-choice',
+                        playerId: '0',
+                        kind: 'simple-choice',
+                        data: {
+                            sourceId: 'alien_probe_choose_target',
+                            options: buildPlayerTargetOptions(
+                                [
+                                    {
+                                        id: 'inspect-self',
+                                        label: '查看自己',
+                                        targetPlayerId: '0',
+                                    },
+                                    {
+                                        id: 'inspect-enemy',
+                                        label: '查看对手',
+                                        targetPlayerId: '1',
+                                    },
+                                ],
+                                {
+                                    sourcePlayerId: '0',
+                                    effectIntent: 'inspect',
+                                },
+                            ),
+                            targetType: 'player',
+                        },
+                    },
+                    queue: [],
+                },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        expect(legalActions).toHaveLength(2);
+        const selfAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { targetPlayerId?: string } })?.optionValue?.targetPlayerId === '0',
+        );
+        const enemyAction = legalActions.find(action =>
+            (action.metadata as { optionValue?: { targetPlayerId?: string } })?.optionValue?.targetPlayerId === '1',
+        );
+
+        expect(selfAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'self',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+            targetPlayerId: '0',
+        });
+        expect(enemyAction?.aiHints?.[0]).toMatchObject({
+            relationToActor: 'enemy',
+            effectIntent: 'inspect',
+            targetKind: 'player',
+            targetPlayerId: '1',
+        });
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: state as any,
+            matchId: 'smashup-inspect-player-target-ai',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
+            .toBe(enemyAction?.metadata?.optionId);
+    });
+
+    it('两个基地都接近爆点时，AI 应优先把随从投到自己能拿第一的基地', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                        factionIds: ['robot', 'pirate'],
+                        hand: [{
+                            uid: 'warbot-hand',
+                            defId: 'robot_warbot',
+                            type: 'minion',
+                            owner: '0',
+                        }] as any,
+                    },
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                        factionIds: ['pirate', 'robot'],
+                    },
+                },
+                bases: [
+                    makeBase('base_pirate_cove', [
+                        makeMinion('0', 'robot_microbot_alpha', 1),
+                        makeMinion('1', 'pirate_king', 5),
+                        makeMinion('1', 'pirate_buccaneer', 4),
+                        makeMinion('1', 'robot_warbot', 4),
+                    ]),
+                    makeBase('base_egg_chamber', [
+                        makeMinion('0', 'pirate_king', 5),
+                        makeMinion('0', 'pirate_buccaneer', 4),
+                        makeMinion('1', 'robot_warbot', 4),
+                    ]),
+                ],
+            }),
+            sys: {
+                phase: 'playCards',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: state as any,
+        });
+
+        const playMinionActions = legalActions.filter((action) => action.kind === 'play-minion');
+        expect(playMinionActions).toHaveLength(2);
+        expect((playMinionActions[0]?.commands[0]?.payload as { baseIndex?: number } | undefined)?.baseIndex).toBe(0);
+        expect((playMinionActions[1]?.commands[0]?.payload as { baseIndex?: number } | undefined)?.baseIndex).toBe(1);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: state as any,
+            matchId: 'smashup-ai-prefers-winning-base',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('play-minion');
+        expect((resolution?.action.commands[0]?.payload as { baseIndex?: number } | undefined)?.baseIndex).toBe(1);
+    });
+
+    it('两个基地同样快到爆点但只有一个仍可争第一时，AI 应优先经营可争夺的基地', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const state: MatchState<SmashUpCore> = {
+            core: makeMinimalCore({
+                players: {
+                    '0': {
+                        ...makeMinimalCore().players['0'],
+                        factionIds: ['robot', 'pirate'],
+                        hand: [{
+                            uid: 'hoverbot-hand',
+                            defId: 'robot_hoverbot',
+                            type: 'minion',
+                            owner: '0',
+                        }] as any,
+                    },
+                    '1': {
+                        ...makeMinimalCore().players['1'],
+                        factionIds: ['pirate', 'robot'],
+                    },
+                },
+                bases: [
+                    makeBase('base_pirate_cove', [
+                        makeMinion('0', 'robot_microbot_alpha', 1),
+                        makeMinion('1', 'pirate_king', 5),
+                        makeMinion('1', 'pirate_buccaneer', 4),
+                        makeMinion('1', 'pirate_first_mate', 3),
+                    ]),
+                    makeBase('base_egg_chamber', [
+                        makeMinion('0', 'pirate_king', 5),
+                        makeMinion('0', 'pirate_buccaneer', 4),
+                        makeMinion('1', 'robot_warbot', 4),
+                    ]),
+                ],
+            }),
+            sys: {
+                phase: 'playCards',
+                flowHalted: false,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+            } as any,
+        };
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: state as any,
+            matchId: 'smashup-ai-prefers-contestable-base',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('play-minion');
+        expect((resolution?.action.commands[0]?.payload as { baseIndex?: number } | undefined)?.baseIndex).toBe(1);
     });
 });

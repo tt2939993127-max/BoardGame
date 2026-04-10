@@ -678,9 +678,20 @@ const matchesPendingDamagePlayCondition = (
     state: DiceThroneCore,
     playerId: PlayerId,
     pendingDamageCondition: NonNullable<NonNullable<AbilityCard['playCondition']>['pendingDamage']>,
+    phase?: TurnPhase,
 ): boolean => {
     const pendingDamage = state.pendingDamage;
     if (!pendingDamage) {
+        // 规则 §7.2：若攻击会进入防御阶段，防御方的减伤牌可在防御能力启动前或后打出。
+        // 这时尚未生成 pendingDamage，因此允许 beforeDamageReceived 类卡牌在 defensiveRoll 先落成一次性护盾。
+        if (
+            phase === 'defensiveRoll'
+            && pendingDamageCondition.responseType === 'beforeDamageReceived'
+            && state.pendingAttack?.defenderId === playerId
+            && state.pendingAttack?.isDefendable
+        ) {
+            return pendingDamageCondition.role !== 'source';
+        }
         return false;
     }
 
@@ -891,7 +902,7 @@ export const checkPlayCard = (
             }
         }
 
-        if (cond.pendingDamage && !matchesPendingDamagePlayCondition(state, playerId, cond.pendingDamage)) {
+        if (cond.pendingDamage && !matchesPendingDamagePlayCondition(state, playerId, cond.pendingDamage, phase)) {
             return { ok: false, reason: 'requirePendingDamage' };
         }
     }
@@ -1167,7 +1178,7 @@ export const isCardPlayableInResponseWindow = (
             }
         }
 
-        if (cond.pendingDamage && !matchesPendingDamagePlayCondition(state, playerId, cond.pendingDamage)) {
+        if (cond.pendingDamage && !matchesPendingDamagePlayCondition(state, playerId, cond.pendingDamage, phase)) {
             return false;
         }
     }

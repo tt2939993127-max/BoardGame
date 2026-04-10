@@ -284,7 +284,7 @@ test.describe('Token 响应窗口真实入口', () => {
             await expect(defenseAdvanceButton).toBeEnabled({ timeout: 5000 });
             await defenseAdvanceButton.click();
 
-            const honorLabel = hostPage.getByText(/^Honor$/).first();
+            const honorLabel = hostPage.getByText(/^荣誉$|^Honor$/).first();
             const useButton = hostPage.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
             await expect(honorLabel).toBeVisible({ timeout: 8000 });
             await expect(useButton).toBeVisible({ timeout: 5000 });
@@ -396,7 +396,7 @@ test.describe('Token 响应窗口真实入口', () => {
             await expect(defenseAdvanceButton).toBeEnabled({ timeout: 5000 });
             await defenseAdvanceButton.click();
 
-            const backStrikeLabel = guestPage.getByText(/^Back Strike$/).first();
+            const backStrikeLabel = guestPage.getByText(/^反击$|^Back Strike$|^Retribution$/).first();
             const useButton = guestPage.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
 
             await expect(backStrikeLabel).toBeVisible({ timeout: 8000 });

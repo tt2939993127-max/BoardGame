@@ -237,7 +237,7 @@ describe('攻击修正指示器撤回测试', () => {
         expect(html).toContain('data-testid="active-modifier-badge"');
         expect(html).toContain('data-bonus-damage="2"');
         expect(html).toContain('bottom-full');
-        expect(html).toContain('items-center justify-center gap-[0.35vw]');
+        expect(html).toContain('pointer-events-none absolute left-1/2 bottom-full');
         expect(html).not.toContain('data-testid="attack-modifier-bonus-badge"');
         expect(html).not.toContain('-top-[2.2vw]');
         expect(html).not.toContain('-top-[3.8vw]');

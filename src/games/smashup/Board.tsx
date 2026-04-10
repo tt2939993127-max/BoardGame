@@ -78,6 +78,7 @@ import type { SpotlightItem } from '../../components/game/framework';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { RevealOverlay } from './ui/RevealOverlay';
 import { useSmashUpOverlay } from './ui/SmashUpOverlayContext';
+import { resolveSmashUpHandInteractionMode, resolveSmashUpHandPromptUiMode } from './ui/interactionMode';
 import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 import { resolveRuntimeLayoutScaleMetrics } from '../mobileSupport';
@@ -361,9 +362,18 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     
     // 对手视角切换状态（必须在使用前声明，避免 TDZ 错误）
     const [viewMode, setViewMode] = useState<'self' | 'opponent'>('self');
+    const opponentScoreTouchHandledAtRef = useRef(0);
     const toggleViewMode = useCallback(() => {
         setViewMode(prev => prev === 'self' ? 'opponent' : 'self');
     }, []);
+    const triggerOpponentViewFromTouch = useCallback(() => {
+        const now = Date.now();
+        if (now - opponentScoreTouchHandledAtRef.current < 400) {
+            return;
+        }
+        opponentScoreTouchHandledAtRef.current = now;
+        toggleViewMode();
+    }, [toggleViewMode]);
     
     // 对手玩家数据
     const opponentPid = coreTurnOrder.find(pid => pid !== rootPid) || '1';
@@ -452,23 +462,25 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         });
     }, [core, isMyTurn, phase, playerID, myPlayer]);
 
-    // 手牌弃牌交互检测：当前 interaction 的所有选项都对应手牌时，用手牌区直接选择
+    // 手牌交互语义分流：
+    // - direct: 单选 hand prompt，由手牌区直接承接点击
+    // - overlay: 多选 hand prompt，继续走 PromptOverlay
     const currentInteraction = G?.sys?.interaction?.current;
     const currentPrompt = useMemo(() => asSimpleChoice(currentInteraction), [currentInteraction]);
-
-    const isHandDiscardPrompt = useMemo(() => {
-        if (!currentPrompt || currentPrompt.playerId !== playerID) return false;
-        // 多选交互（如疯狂解放）不走手牌直选，交给 PromptOverlay 处理
-        if (currentPrompt.multi) return false;
-
-        const data = currentInteraction?.data as Record<string, unknown> | undefined;
-        return data?.targetType === 'hand';
-    }, [currentPrompt, playerID, currentInteraction]);
+    const currentPromptTargetType = (currentInteraction?.data as Record<string, unknown> | undefined)?.targetType;
+    const handPromptUiMode = useMemo(() => {
+        return resolveSmashUpHandPromptUiMode({
+            currentPrompt,
+            playerID,
+            targetType: currentPromptTargetType,
+        });
+    }, [currentPrompt, currentPromptTargetType, playerID]);
+    const isDirectHandSelectPrompt = handPromptUiMode === 'direct';
 
     // 手牌交互中不可选的 uid 集合（置灰）
     // 框架层已支持通用刷新（所有交互自动刷新），此处只处理明确禁用的选项
     const handPromptDisabledUids = useMemo<Set<string> | undefined>(() => {
-        if (!isHandDiscardPrompt || !currentPrompt || !myPlayer) return undefined;
+        if (!isDirectHandSelectPrompt || !currentPrompt || !myPlayer) return undefined;
 
         // 只标记选项中明确禁用的卡牌（opt.disabled === true）
         const disabled = new Set<string>();
@@ -480,21 +492,21 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         }
 
         return disabled.size > 0 ? disabled : undefined;
-    }, [isHandDiscardPrompt, currentPrompt, myPlayer]);
+    }, [isDirectHandSelectPrompt, currentPrompt, myPlayer]);
 
     const handPromptTitanUids = useMemo<Set<string>>(() => {
-        if (!isHandDiscardPrompt || !currentPrompt) return new Set();
+        if (!isDirectHandSelectPrompt || !currentPrompt) return new Set();
         const titanUids = new Set<string>();
         for (const opt of currentPrompt.options) {
             const val = opt.value as CardOrTitanChoiceValue | undefined;
             if (val?.titanUid) titanUids.add(val.titanUid);
         }
         return titanUids;
-    }, [isHandDiscardPrompt, currentPrompt]);
+    }, [isDirectHandSelectPrompt, currentPrompt]);
 
     // 手牌选择中的非手牌选项（如"跳过"/"完成"），需要作为浮动按钮显示
     const handSelectExtraOptions = useMemo(() => {
-        if (!isHandDiscardPrompt || !currentPrompt) return [];
+        if (!isDirectHandSelectPrompt || !currentPrompt) return [];
         return currentPrompt.options.filter(opt => {
             const val = opt.value as Record<string, unknown> | undefined;
             if (!val) return false;
@@ -504,7 +516,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             ...opt,
             label: resolvePromptOptionLabel(opt),
         }));
-    }, [isHandDiscardPrompt, currentPrompt, resolvePromptOptionLabel]);
+    }, [isDirectHandSelectPrompt, currentPrompt, resolvePromptOptionLabel]);
 
     // 基地选择交互检测：当前 interaction 的选项包含有效 baseIndex 时，用基地区直接点击选择
     const isBaseSelectPrompt = useMemo(() => {
@@ -722,10 +734,10 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         if (isBaseSelectPrompt && currentPrompt) raw = currentPrompt.title;
         else if (isBuriedSelectPrompt && currentPrompt) raw = currentPrompt.title;
         else if (isMinionSelectPrompt && currentPrompt) raw = currentPrompt.title;
-        else if (isHandDiscardPrompt && currentPrompt) raw = currentPrompt.title;
+        else if (isDirectHandSelectPrompt && currentPrompt) raw = currentPrompt.title;
         else if (isOngoingSelectPrompt && currentPrompt) raw = currentPrompt.title;
         return raw ? resolveI18nKeys(raw, t) : '';
-    }, [isBaseSelectPrompt, isBuriedSelectPrompt, isMinionSelectPrompt, isHandDiscardPrompt, isOngoingSelectPrompt, currentPrompt, t]);
+    }, [isBaseSelectPrompt, isBuriedSelectPrompt, isMinionSelectPrompt, isDirectHandSelectPrompt, isOngoingSelectPrompt, currentPrompt, t]);
 
     // 弃牌堆随从选择交互检测（僵尸领主等）：targetType === 'discard_minion'
     const isDiscardMinionPrompt = useMemo(() => {
@@ -733,6 +745,38 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const data = currentInteraction?.data as Record<string, unknown> | undefined;
         return data?.targetType === 'discard_minion';
     }, [currentPrompt, playerID, currentInteraction]);
+
+    const activePromptSurface = useMemo<'none' | 'hand' | 'board' | 'overlay'>(() => {
+        if (!currentPrompt || currentPrompt.playerId !== playerID) return 'none';
+        if (isDirectHandSelectPrompt) return 'hand';
+        if (isBaseSelectPrompt || isBuriedSelectPrompt || isMinionSelectPrompt || isOngoingSelectPrompt || isDiscardMinionPrompt) {
+            return 'board';
+        }
+        return 'overlay';
+    }, [
+        currentPrompt,
+        isBaseSelectPrompt,
+        isBuriedSelectPrompt,
+        isDiscardMinionPrompt,
+        isDirectHandSelectPrompt,
+        isMinionSelectPrompt,
+        isOngoingSelectPrompt,
+        playerID,
+    ]);
+
+    const shouldLockNormalHandInteraction = activePromptSurface !== 'none' && activePromptSurface !== 'hand';
+
+    // 手牌区交互模式需要额外门禁：
+    // - 用户全局偏好可以是 drag
+    // - 但只要进入任意 prompt / 弃牌态，当前就已经不是“正常打牌语义”
+    // - 此时必须统一退回 click，避免把 hand/base/minion/generic 等 prompt 误吃成拖拽偏好。
+    const handInteractionMode = useMemo<'click' | 'drag'>(() => {
+        return resolveSmashUpHandInteractionMode({
+            preferredMode: interactionMode,
+            needDiscard,
+            activePromptSurface,
+        });
+    }, [activePromptSurface, interactionMode, needDiscard]);
 
 
 
@@ -836,13 +880,13 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [responseWindow, playerID]);
 
     // 响应窗口期间禁用不匹配的卡牌（置灰）
-    // 但当有手牌选择交互时（isHandDiscardPrompt），不禁用手牌（交互会自己处理可选项）
+    // 但当有手牌直选交互时（isDirectHandSelectPrompt），不禁用手牌（交互会自己处理可选项）
     const meFirstDisabledUids = useMemo<Set<string> | undefined>(() => {
         // 只在响应窗口期间且轮到我时生效
         const isMyResponseTurn = isMeFirstResponse || isAfterScoringResponse;
         if (!isMyResponseTurn || !myPlayer) return undefined;
         // 有手牌选择交互时，不应用响应窗口禁用规则（交互自己控制可选项）
-        if (isHandDiscardPrompt) return undefined;
+        if (isDirectHandSelectPrompt) return undefined;
         
         const disabled = new Set<string>();
         const windowType = responseWindow?.windowType;
@@ -875,7 +919,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
         }
         return disabled.size > 0 ? disabled : undefined;
-    }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isHandDiscardPrompt, responseWindow?.windowType]);
+    }, [isMeFirstResponse, isAfterScoringResponse, myPlayer, isDirectHandSelectPrompt, responseWindow?.windowType]);
 
     // Me First! 可选基地集合（达到临界点的基地索引）
     // 使用统一查询函数：优先使用进入 scoreBases 阶段时锁定的列表（Wiki Phase 3 Step 4）
@@ -1449,7 +1493,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [phase, currentPid]);
 
     useEffect(() => {
-        if (interactionMode === 'drag' && viewMode !== 'opponent') return;
+        if (handInteractionMode === 'drag' && viewMode !== 'opponent') return;
         let cancelled = false;
         queueMicrotask(() => {
             if (cancelled) return;
@@ -1458,7 +1502,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         return () => {
             cancelled = true;
         };
-    }, [interactionMode, viewMode]);
+    }, [handInteractionMode, viewMode]);
 
     useEffect(() => {
         if (endTurnCooldownUntil <= Date.now()) return;
@@ -1560,7 +1604,10 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const isSpecialAction = card.type === 'fusion'
             ? cardDef?.actionSubtype === 'special'
             : cardDef?.subtype === 'special';
-        if (!isSpecialAction && myPlayer && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
+        const isResponseWindowAction = !!responseWindow
+            && !!cardDef
+            && isActionLikeRespondableInWindow(cardDef, responseWindow.windowType);
+        if (!isSpecialAction && !isResponseWindowAction && myPlayer && myPlayer.actionsPlayed >= myPlayer.actionLimit) {
             playDeniedSound();
             toast(t('ui.action_limit_reached', { defaultValue: '本回合战术额度已用完' }));
             setSelectedCardUid(null);
@@ -1572,7 +1619,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setSelectedCardUid(null);
         setSelectedCardMode(null);
         return true;
-    }, [dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, t, validateImmediateActionPlay]);
+    }, [dispatch, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, responseWindow, t, validateImmediateActionPlay]);
 
     const enterActionTargetSelection = useCallback((card: CardInstance, cardMode: 'action' | 'ongoing' | 'ongoing-minion' | 'action-minion') => {
         if (cardMode !== 'action') {
@@ -1724,7 +1771,11 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
     const handleSetAsideTitanSelect = useCallback((titanUid: string) => {
         if (!playerID) return;
-        if (isHandDiscardPrompt && currentPrompt && handPromptTitanUids.has(titanUid)) {
+        if (shouldLockNormalHandInteraction) {
+            playDeniedSound();
+            return;
+        }
+        if (isDirectHandSelectPrompt && currentPrompt && handPromptTitanUids.has(titanUid)) {
             const option = currentPrompt.options.find(
                 opt => (opt.value as CardOrTitanChoiceValue | undefined)?.titanUid === titanUid,
             );
@@ -1750,13 +1801,17 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         setDiscardStripSelectedUid(null);
         setMeFirstPendingCard(null);
         setSelectedSetAsideTitanUid(activeSelectedSetAsideTitanUid === titanUid ? null : titanUid);
-    }, [playerID, isHandDiscardPrompt, currentPrompt, handPromptTitanUids, dispatch, setAsideTitanActivationState, activeSelectedSetAsideTitanUid]);
+    }, [playerID, shouldLockNormalHandInteraction, isDirectHandSelectPrompt, currentPrompt, handPromptTitanUids, dispatch, setAsideTitanActivationState, activeSelectedSetAsideTitanUid]);
 
     const handleCardClick = useCallback((card: CardInstance) => {
         if (activeSelectedSetAsideTitanUid) {
             setSelectedSetAsideTitanUid(null);
         }
-        if (isHandDiscardPrompt && currentPrompt) {
+        if (shouldLockNormalHandInteraction) {
+            playDeniedSound();
+            return;
+        }
+        if (isDirectHandSelectPrompt && currentPrompt) {
             const option = currentPrompt.options.find(
                 opt => (opt.value as { cardUid?: string })?.cardUid === card.uid
             );
@@ -1942,7 +1997,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             setSelectedCardUid(card.uid);
             setSelectedCardMode('minion');
         }
-    }, [activeSelectedSetAsideTitanUid, core, currentPrompt, discardCount, dispatch, enterActionTargetSelection, handlePlayActionWithoutTarget, isAfterScoringResponse, isHandDiscardPrompt, isMeFirstResponse, isMyTurn, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, needDiscard, pendingFusionChoiceUid, phase, responseWindow, selectedCardMode, selectedCardUid, t, validateImmediateActionPlay]);
+    }, [activeSelectedSetAsideTitanUid, core, currentPrompt, discardCount, dispatch, enterActionTargetSelection, handlePlayActionWithoutTarget, isAfterScoringResponse, isDirectHandSelectPrompt, isMeFirstResponse, isMyTurn, isTutorialCommandAllowed, isTutorialTargetAllowed, myPlayer, needDiscard, pendingFusionChoiceUid, phase, responseWindow, selectedCardMode, selectedCardUid, shouldLockNormalHandInteraction, t, validateImmediateActionPlay]);
 
     const confirmFusionPlayAs = useCallback((playAs: 'minion' | 'action') => {
         if (!pendingFusionChoiceUid || !myPlayer) return;
@@ -2091,8 +2146,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
     }, [core.bases, getDeployableBaseStateForCard, resolvePlayableCardMode]);
 
     const handleCardDragPlay = useCallback((card: CardInstance, dropTarget: HandAreaDropTarget) => {
-        if (interactionMode !== 'drag') return;
-        if (isHandDiscardPrompt || needDiscard || isBaseSelectPrompt || isMinionSelectPrompt || isOngoingSelectPrompt || isDiscardMinionPrompt) return;
+        if (handInteractionMode !== 'drag') return;
+        if (needDiscard || activePromptSurface !== 'none' || shouldLockNormalHandInteraction) return;
 
         const cardMode = resolvePlayableCardMode(card);
         if (!cardMode) {
@@ -2153,13 +2208,18 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return;
         }
         handlePlayMinion(card.uid, dropTarget.baseIndex);
-    }, [getDeployableBaseStateForCard, handlePlayActionWithoutTarget, handlePlayMinion, handlePlayOngoingAction, handlePlayOngoingToMinion, interactionMode, isBaseSelectPrompt, isDiscardMinionPrompt, isHandDiscardPrompt, isMinionSelectPrompt, isMyTurn, isOngoingSelectPrompt, isTutorialCommandAllowed, isTutorialTargetAllowed, needDiscard, phase, resolvePlayableCardMode]);
+    }, [activePromptSurface, getDeployableBaseStateForCard, handlePlayActionWithoutTarget, handlePlayMinion, handlePlayOngoingAction, handlePlayOngoingToMinion, handInteractionMode, isMyTurn, isTutorialCommandAllowed, isTutorialTargetAllowed, needDiscard, phase, resolvePlayableCardMode, shouldLockNormalHandInteraction]);
 
 
 
     const handleViewAction = useCallback((defId: string) => {
         setViewingCard({ defId, type: 'action' });
     }, [setViewingCard]);
+
+    const visibleActivatableTitanUids = useMemo<Set<string>>(() => {
+        if (shouldLockNormalHandInteraction) return new Set();
+        return selectableSetAsideTitanUids;
+    }, [selectableSetAsideTitanUids, shouldLockNormalHandInteraction]);
 
     const dragGuideTarget = useMemo(() => {
         if (!handDragPreview?.dropTarget || typeof document === 'undefined') return null;
@@ -2216,15 +2276,17 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             normalX *= -1;
             normalY *= -1;
         }
-        const curveLift = Math.min(184, Math.max(92, distance * 0.22));
+        // 旧实现把前段抬得过高、尾段又几乎贴直线，容易形成“前鼓后折”的怪曲线。
+        // 这里改成更平顺的双控制点抬升：前段抬升更克制，尾段保留较小弧度，让箭头更像自然的拖拽引导。
+        const curveLift = Math.min(108, Math.max(34, distance * 0.14));
         const startInset = 18;
         const visibleStartX = startX + unitX * startInset;
         const visibleStartY = startY + unitY * startInset;
-        const control1X = visibleStartX + deltaX * 0.12 + normalX * curveLift;
-        const control1Y = visibleStartY + deltaY * 0.04 + normalY * curveLift;
-        const endTangent = Math.min(104, Math.max(56, distance * 0.2));
-        const control2X = endX - unitX * endTangent;
-        const control2Y = endY - unitY * endTangent;
+        const trailingLift = Math.max(14, curveLift * 0.42);
+        const control1X = visibleStartX + deltaX * 0.24 + normalX * curveLift;
+        const control1Y = visibleStartY + deltaY * 0.18 + normalY * curveLift;
+        const control2X = visibleStartX + deltaX * 0.78 + normalX * trailingLift;
+        const control2Y = visibleStartY + deltaY * 0.84 + normalY * trailingLift;
         return {
             startX: visibleStartX,
             startY: visibleStartY,
@@ -2352,7 +2414,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
                     {/* Right: Score Sheet + Player Info */}
                     <div
-                        className={`bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] rounded-sm ${isMobileViewport ? 'pointer-events-none' : 'pointer-events-auto'}`}
+                        className="bg-white text-slate-900 p-4 shadow-[3px_4px_10px_rgba(0,0,0,0.3)] rotate-1 max-w-[500px] rounded-sm pointer-events-auto"
                         data-tutorial-id="su-scoreboard"
                         style={scoreboardStyle}
                     >
@@ -2383,12 +2445,32 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                         </span>
                                         <motion.div
                                             key={`vp-${pid}-${core.players[pid]?.vp ?? 0}`}
+                                            data-testid={`su-score-vp-${pid}`}
                                             className={`w-10 h-10 rounded-full flex items-center justify-center text-xl font-black text-white shadow-md border-2 border-white ${conf.bg} ${isOpponent ? 'cursor-pointer relative' : ''}`}
                                             initial={{ scale: 1 }}
                                             animate={{ scale: [1, 1.3, 1] }}
                                             transition={{ duration: 0.4, ease: 'easeOut' }}
+                                            onPointerUp={(event) => {
+                                                if (!isOpponent || event.pointerType !== 'touch') {
+                                                    return;
+                                                }
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                triggerOpponentViewFromTouch();
+                                            }}
+                                            onTouchEnd={(event) => {
+                                                if (!isOpponent) {
+                                                    return;
+                                                }
+                                                event.preventDefault();
+                                                event.stopPropagation();
+                                                triggerOpponentViewFromTouch();
+                                            }}
                                             onClick={() => {
                                                 if (isOpponent) {
+                                                    if (Date.now() - opponentScoreTouchHandledAtRef.current < 400) {
+                                                        return;
+                                                    }
                                                     toggleViewMode();
                                                 }
                                             }}
@@ -2672,7 +2754,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
                 {/* --- 交互选择提示横幅（基地/随从/手牌选择） --- */}
                 <AnimatePresence>
-                    {(isBaseSelectPrompt || isBuriedSelectPrompt || isMinionSelectPrompt || isHandDiscardPrompt || isOngoingSelectPrompt) && (
+                    {(isBaseSelectPrompt || isBuriedSelectPrompt || isMinionSelectPrompt || isDirectHandSelectPrompt || isOngoingSelectPrompt) && (
                         <motion.div
                             initial={{ y: -20, opacity: 0, scale: 0.95 }}
                             animate={{ y: 0, opacity: 1, scale: 1 }}
@@ -2818,7 +2900,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
                 {/* --- 手牌选择浮动操作栏（跳过按钮） --- */}
                 <AnimatePresence>
-                    {isHandDiscardPrompt && handSelectExtraOptions.length > 0 && (
+                    {isDirectHandSelectPrompt && handSelectExtraOptions.length > 0 && (
                         <motion.div
                             initial={{ y: 40, opacity: 0 }}
                             animate={{ y: 0, opacity: 1 }}
@@ -2882,7 +2964,6 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 >
                     <div
                         className="absolute inset-0 flex items-center justify-center overflow-x-auto overflow-y-hidden no-scrollbar"
-                        data-testid="su-battlefield-zoom-target"
                         data-tutorial-id="su-base-area"
                         style={{
                             paddingTop: `${layout.boardPaddingTop}px`,
@@ -2891,6 +2972,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     >
                         <div
                             className="flex items-center min-w-max"
+                            data-testid="su-battlefield-zoom-target"
                             data-mobile-battlefield-zoom-target="true"
                             style={{
                                 gap: `${layout.baseGap}vw`,
@@ -3002,7 +3084,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                         </div>
                     </motion.div>
                 )}
-                {interactionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && typeof document !== 'undefined' && createPortal(
+                {handInteractionMode === 'drag' && handDragPreview && viewMode !== 'opponent' && typeof document !== 'undefined' && createPortal(
                     <div className="fixed inset-0 z-[58] pointer-events-none">
                         <svg className="absolute inset-0 w-full h-full overflow-visible">
                             {dragGuidePaths && (
@@ -3064,18 +3146,20 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                 selectedCardUid={selectedCardUid}
                                 onCardSelect={handleCardClick}
                                 compactLayout={isMobileViewport}
-                                isDiscardMode={needDiscard || isHandDiscardPrompt}
+                                isDiscardMode={needDiscard || isDirectHandSelectPrompt}
                                 discardSelection={discardSelection}
                                 // 教学模式下，当不允许打出随从和行动时禁用手牌交互（摇头反馈）
                                 disableInteraction={
+                                    shouldLockNormalHandInteraction ||
                                     isTutorialActive &&
+                                    !isDirectHandSelectPrompt &&
                                     !isTutorialCommandAllowed(SU_COMMANDS.PLAY_MINION) &&
                                     !isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION)
                                 }
                                 disabledCardUids={meFirstDisabledUids ?? handPromptDisabledUids ?? tutorialDisabledUids}
                                 onCardView={handleViewCardDetail}
                                 isOpponentView={viewMode === 'opponent'}
-                                interactionMode={interactionMode}
+                                interactionMode={handInteractionMode}
                                 onResolveDropTarget={resolveHandDropTarget}
                                 onCardDragPlay={handleCardDragPlay}
                                 onDragStateChange={setHandDragPreview}
@@ -3151,7 +3235,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                     : () => { setDiscardStripSelectedUid(null); }
                                 }
                                 setAsideTitans={setAsideTitansForDisplay}
-                                activatableTitanUids={selectableSetAsideTitanUids}
+                                activatableTitanUids={visibleActivatableTitanUids}
                                 selectedTitanUid={activeSelectedSetAsideTitanUid}
                                 onSelectTitan={handleSetAsideTitanSelect}
                                 onViewTitan={(defId) => setViewingCard({ defId, type: 'titan' })}
@@ -3217,7 +3301,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
 
                 {/* PROMPT OVERLAY（手牌弃牌/基地选择/随从选择/行动卡选择/弃牌堆出牌交互时隐藏，由对应区域直接处理） */}
                 {(() => {
-                    const shouldRender = !isHandDiscardPrompt && !isBaseSelectPrompt && !isBuriedSelectPrompt && !isMinionSelectPrompt && !isOngoingSelectPrompt && !isDiscardMinionPrompt;
+                    const shouldRender = !isDirectHandSelectPrompt && !isBaseSelectPrompt && !isBuriedSelectPrompt && !isMinionSelectPrompt && !isOngoingSelectPrompt && !isDiscardMinionPrompt;
                     return shouldRender ? (
                         <PromptOverlay
                             interaction={G.sys.interaction?.current}

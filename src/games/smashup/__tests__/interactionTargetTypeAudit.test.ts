@@ -17,6 +17,7 @@ import {
     inferDirectTargetTypeFromOptions,
     isCreateSimpleChoiceCall,
 } from './helpers/simpleChoiceAst';
+import { resolveSmashUpHandInteractionMode, resolveSmashUpHandPromptUiMode } from '../ui/interactionMode';
 
 interface TargetTypeIssue {
     file: string;
@@ -833,5 +834,55 @@ describe('SmashUp Interaction targetType 审计', () => {
         }
 
         expect(violations, violations.join('\n\n')).toEqual([]);
+    });
+
+    it('hand targetType 的交互必须先按 direct / overlay 分流，再决定是否允许拖拽', () => {
+        expect(resolveSmashUpHandPromptUiMode({
+            currentPrompt: { playerId: '0', multi: undefined },
+            playerID: '0',
+            targetType: 'hand',
+        })).toBe('direct');
+
+        expect(resolveSmashUpHandPromptUiMode({
+            currentPrompt: { playerId: '0', multi: { min: 0, max: 2 } },
+            playerID: '0',
+            targetType: 'hand',
+        })).toBe('overlay');
+
+        expect(resolveSmashUpHandPromptUiMode({
+            currentPrompt: { playerId: '0', multi: undefined },
+            playerID: '0',
+            targetType: 'minion',
+        })).toBe('none');
+
+        expect(resolveSmashUpHandInteractionMode({
+            preferredMode: 'drag',
+            needDiscard: false,
+            activePromptSurface: 'hand',
+        })).toBe('click');
+
+        expect(resolveSmashUpHandInteractionMode({
+            preferredMode: 'drag',
+            needDiscard: false,
+            activePromptSurface: 'overlay',
+        })).toBe('click');
+
+        expect(resolveSmashUpHandInteractionMode({
+            preferredMode: 'drag',
+            needDiscard: true,
+            activePromptSurface: 'none',
+        })).toBe('click');
+
+        expect(resolveSmashUpHandInteractionMode({
+            preferredMode: 'drag',
+            needDiscard: false,
+            activePromptSurface: 'none',
+        })).toBe('drag');
+
+        expect(resolveSmashUpHandInteractionMode({
+            preferredMode: 'click',
+            needDiscard: false,
+            activePromptSurface: 'none',
+        })).toBe('click');
     });
 });

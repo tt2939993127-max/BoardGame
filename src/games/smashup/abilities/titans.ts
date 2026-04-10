@@ -8,6 +8,7 @@
  * - 鲜血领主
  */
 
+import type { MatchState } from '../../../engine/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { getBaseDef, getCardDef, getMinionLikePower, getTitanDef } from '../data/cards';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
@@ -20,6 +21,7 @@ import {
     addTitanPowerCounter,
     buildAbilityFeedback,
     buildBaseTargetOptions,
+    buildPlayerTargetOptions,
     buildStandardDrawEvents,
     buildMinionTargetOptions,
     changeMinionController,
@@ -43,6 +45,12 @@ import { continueActiveDuel } from '../domain/duel';
 import { registerInterceptor, registerProtection, registerRestriction, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getPlayerEffectivePowerOnBase, registerTitanPowerModifier } from '../domain/ongoingModifiers';
+import {
+    appendPendingPostScoringActions,
+    getDeferredPostScoringEvents as readDeferredPostScoringEvents,
+    getDeferredReplacementBaseDefId,
+    mergeDeferredPostScoringCompatibility,
+} from '../domain/scoringSession';
 import { validateActionPlaySemantics } from '../domain/playLegality';
 import {
     registerTitanSpecialValidator,
@@ -58,6 +66,7 @@ import type {
     MinionDestroyedEvent,
     MinionCardDef,
     PowerCounterAddedEvent,
+    SmashUpCore,
     SmashUpEvent,
     TitanState,
     TitanPowerCounterAddedEvent,
@@ -194,24 +203,11 @@ function getMajorUrsaEnemyMinionTargets(state: AbilityContext['state'], playerId
         });
 }
 
-function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
-    const continuation = interactionData?.continuationContext as { _deferredPostScoringEvents?: SmashUpEvent[] } | undefined;
-    return continuation?._deferredPostScoringEvents;
-}
-
-function appendDeferredPostScoringEventsIfLast(
-    state: AbilityContext['matchState'],
+function getDeferredPostScoringEvents(
+    state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
-    events: SmashUpEvent[],
-): SmashUpEvent[] {
-    const deferredEvents = getDeferredPostScoringEvents(interactionData);
-    const hasPendingInteraction =
-        !!state.sys.interaction?.current
-        || (state.sys.interaction?.queue?.length ?? 0) > 0;
-    if (deferredEvents && deferredEvents.length > 0 && !hasPendingInteraction) {
-        events.push(...deferredEvents);
-    }
-    return events;
+): SmashUpEvent[] | undefined {
+    return readDeferredPostScoringEvents(state, interactionData) as SmashUpEvent[] | undefined;
 }
 
 function schedulePowerModifierUntilNextTurnStart(
@@ -1338,12 +1334,18 @@ function superSpiesMoonZeroThreeTalent(ctx: AbilityContext): AbilityResult {
         `titan_super_spies_moon_zero_three_choose_player_${ctx.now}`,
         ctx.playerId,
         '三号空间站：选择要查看的牌库',
-        playerOptions.map((option, index) => ({
-            id: `player-${index}`,
-            label: option.label,
-            value: { targetPlayerId: option.targetPlayerId },
-            displayMode: 'button' as const,
-        })),
+        buildPlayerTargetOptions(
+            playerOptions.map((option, index) => ({
+                id: `player-${index}`,
+                label: option.label,
+                targetPlayerId: option.targetPlayerId,
+                displayMode: 'button' as const,
+            })),
+            {
+                sourcePlayerId: ctx.playerId,
+                effectIntent: 'inspect',
+            },
+        ),
         { sourceId: 'titan_super_spies_moon_zero_three_choose_player', targetType: 'player' },
     );
     (interaction.data as { continuationContext?: unknown }).continuationContext = {
@@ -1515,15 +1517,22 @@ function buildCthulhuTitanTransferOptions(state: AbilityContext['state'], player
     const madnessCard = player.hand.find(card => card.defId === MADNESS_CARD_DEF_ID);
     if (!madnessCard) return [];
 
-    return state.turnOrder
-        .filter(pid => pid !== playerId)
-        .filter(pid => Boolean(state.players[pid]))
-        .map(pid => ({
-            id: `player-${pid}`,
-            label: getPlayerLabel(pid),
-            value: { targetPlayerId: pid, madnessUid: madnessCard.uid },
-            displayMode: 'button' as const,
-        }));
+    return buildPlayerTargetOptions<{ madnessUid: string }>(
+        state.turnOrder
+            .filter(pid => pid !== playerId)
+            .filter(pid => Boolean(state.players[pid]))
+            .map(pid => ({
+                id: `player-${pid}`,
+                label: getPlayerLabel(pid),
+                targetPlayerId: pid,
+                value: { madnessUid: madnessCard.uid },
+                displayMode: 'button' as const,
+            })),
+        {
+            sourcePlayerId: playerId,
+            effectIntent: 'debuff',
+        },
+    );
 }
 
 function queueCthulhuTitanTransferInteraction(
@@ -1682,6 +1691,29 @@ function getGreatWolfSpiritTalentTargets(state: AbilityContext['state'], playerI
     );
 }
 
+function getGreatWolfSpiritMoveOptions(
+    state: AbilityContext['state'],
+    playerId: string,
+    currentBaseIndex: number,
+) {
+    return state.bases
+        .map((base, baseIndex) => {
+            if (baseIndex === currentBaseIndex) return null;
+            const myPower = getPlayerEffectivePowerOnBase(state, base, baseIndex, playerId);
+            if (myPower <= 0) return null;
+            const hasStrictlyMostPower = Object.keys(state.players).every(pid => {
+                if (pid === playerId) return true;
+                return getPlayerEffectivePowerOnBase(state, base, baseIndex, pid) < myPower;
+            });
+            if (!hasStrictlyMostPower) return null;
+            return {
+                baseIndex,
+                label: getBaseDef(base.defId)?.name ?? `Base ${baseIndex + 1}`,
+            };
+        })
+        .filter((value): value is { baseIndex: number; label: string } => value !== null);
+}
+
 function werewolvesGreatWolfSpiritSpecial(ctx: AbilityContext): AbilityResult {
     const eligibleBases = getGreatWolfSpiritEligibleBases(ctx.state, ctx.playerId);
     if (eligibleBases.length < 2) return { events: [] };
@@ -1704,6 +1736,41 @@ function werewolvesGreatWolfSpiritTalent(ctx: AbilityContext): AbilityResult {
         buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'buff' }),
         { sourceId: 'titan_werewolves_great_wolf_spirit_talent', targetType: 'minion' },
     );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
+function werewolvesGreatWolfSpiritOnTurnStart(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
+    if (!ctx.matchState) return [];
+
+    const titan = (ctx.state.titans ?? []).find(candidate =>
+        candidate.defId === 'werewolves_great_wolf_spirit'
+        && candidate.controllerId === ctx.playerId
+        && candidate.location.zone === 'base',
+    );
+    if (!titan || titan.location.zone !== 'base') return [];
+
+    const baseOptions = getGreatWolfSpiritMoveOptions(ctx.state, ctx.playerId, titan.location.baseIndex);
+    if (baseOptions.length === 0) return [];
+
+    const interaction = createSimpleChoice(
+        `titan_werewolves_great_wolf_spirit_move_${ctx.now}`,
+        ctx.playerId,
+        '巨狼之灵：你可以将此泰坦移动到一个你战力高于任何其他玩家的基地',
+        [
+            ...buildBaseTargetOptions(baseOptions, ctx.state),
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
+        ],
+        { sourceId: 'titan_werewolves_great_wolf_spirit_move', targetType: 'base', autoResolveIfSingle: false },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        titanUid: titan.uid,
+        titanDefId: titan.defId,
+        fromBaseIndex: titan.location.baseIndex,
+    };
 
     return {
         events: [],
@@ -2575,6 +2642,7 @@ export function registerTitanAbilities(): void {
             : '此基地不满足巨狼之灵的进场条件';
     });
     registerAbility('werewolves_great_wolf_spirit', 'talent', werewolvesGreatWolfSpiritTalent);
+    registerTrigger('werewolves_great_wolf_spirit', 'onTurnStart', werewolvesGreatWolfSpiritOnTurnStart, { global: true, optional: true });
     registerTitanTalentValidator('werewolves_great_wolf_spirit', ({ state, titan, playerId }) => {
         if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getGreatWolfSpiritTalentTargets(state, playerId).length > 0
@@ -3324,8 +3392,7 @@ export function registerTitanInteractionHandlers(): void {
             baseIndex?: number;
         } | undefined;
         if (selected?.skip) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
         if (!selected?.cardUid || selected.baseIndex === undefined) {
             return { state, events: [] };
@@ -3343,12 +3410,7 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
-        const events = appendDeferredPostScoringEventsIfLast(
-            state,
-            data as Record<string, unknown> | undefined,
-            [returnEvent],
-        );
-        return { state, events };
+        return { state, events: [returnEvent] };
     });
 
     registerInteractionHandler('titan_sphinx_talent', (state, playerId, value, data, random, timestamp) => {
@@ -3552,7 +3614,7 @@ export function registerTitanInteractionHandlers(): void {
             continuationContext?: { titanUid?: string; titanDefId?: string };
         } | undefined)?.continuationContext;
         const titan = continuation?.titanUid ? getTitanByUid(state.core, continuation.titanUid) : undefined;
-        const replacementEvent = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined)?.find(
+        const replacementEvent = getDeferredPostScoringEvents(state, data as Record<string, unknown> | undefined)?.find(
             event => event.type === SU_EVENTS.BASE_REPLACED,
         );
         const replacementBaseIndex = replacementEvent?.payload?.baseIndex;
@@ -3561,26 +3623,26 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
+        const pendingAction = {
+            kind: 'playTitanOnReplacementBase' as const,
+            titanUid: titan.uid,
+            defId: continuation.titanDefId,
+            ownerId: titan.ownerId,
+            controllerId: titan.controllerId,
+            baseIndex: replacementBaseIndex,
+            targetBaseDefId: replacementBaseDefId,
+            reason: 'itty_critters_rainboroc_special',
+        };
+
+        const compatibility = mergeDeferredPostScoringCompatibility(state, data as Record<string, unknown> | undefined, timestamp, {
+            extraPendingActions: [pendingAction],
+        });
+        if (compatibility) {
+            return compatibility;
+        }
+
         return {
-            state: {
-                ...state,
-                core: {
-                    ...state.core,
-                    pendingPostScoringActions: [
-                        ...(state.core.pendingPostScoringActions ?? []),
-                        {
-                            kind: 'playTitanOnReplacementBase',
-                            titanUid: titan.uid,
-                            defId: continuation.titanDefId,
-                            ownerId: titan.ownerId,
-                            controllerId: titan.controllerId,
-                            baseIndex: replacementBaseIndex,
-                            targetBaseDefId: replacementBaseDefId,
-                            reason: 'itty_critters_rainboroc_special',
-                        },
-                    ],
-                },
-            },
+            state: appendPendingPostScoringActions(state, [pendingAction]),
             events: [],
         };
     });
@@ -3924,34 +3986,28 @@ export function registerTitanInteractionHandlers(): void {
         let nextState = state;
 
         if (selected?.play && continuation?.titanUid && continuation.titanDefId && continuation.ownerId && continuation.controllerId && continuation.scoringBaseIndex !== undefined) {
-            const deferredEvents = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined) ?? [];
-            const replacementBaseDefId = (deferredEvents as Array<{ type: string; payload?: { newBaseDefId?: string } }>).find(
-                event => event.type === SU_EVENTS.BASE_REPLACED,
-            )?.payload?.newBaseDefId;
+            const replacementBaseDefId = getDeferredReplacementBaseDefId(state, data as Record<string, unknown> | undefined);
             if (replacementBaseDefId) {
-                nextState = {
-                    ...state,
-                    core: {
-                        ...state.core,
-                        pendingPostScoringActions: [
-                            ...(state.core.pendingPostScoringActions ?? []),
-                            {
-                                kind: 'playTitanOnReplacementBase',
-                                titanUid: continuation.titanUid,
-                                defId: continuation.titanDefId,
-                                ownerId: continuation.ownerId,
-                                controllerId: continuation.controllerId,
-                                baseIndex: continuation.scoringBaseIndex,
-                                targetBaseDefId: replacementBaseDefId,
-                                reason: 'pirates_the_kraken_after_scoring_play',
-                            },
-                        ],
-                    },
+                const pendingAction = {
+                    kind: 'playTitanOnReplacementBase' as const,
+                    titanUid: continuation.titanUid,
+                    defId: continuation.titanDefId,
+                    ownerId: continuation.ownerId,
+                    controllerId: continuation.controllerId,
+                    baseIndex: continuation.scoringBaseIndex,
+                    targetBaseDefId: replacementBaseDefId,
+                    reason: 'pirates_the_kraken_after_scoring_play',
                 };
+                const compatibility = mergeDeferredPostScoringCompatibility(state, data as Record<string, unknown> | undefined, _timestamp, {
+                    extraPendingActions: [pendingAction],
+                });
+                if (compatibility) {
+                    return compatibility;
+                }
+                nextState = appendPendingPostScoringActions(state, [pendingAction]);
             }
         }
 
-        appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, events);
         return { state: nextState, events };
     });
 
@@ -3959,8 +4015,7 @@ export function registerTitanInteractionHandlers(): void {
         const selected = value as { skip?: boolean; minionUid?: string; defId?: string; baseIndex?: number } | undefined;
         const continuation = (data as { continuationContext?: { scoringBaseIndex?: number } } | undefined)?.continuationContext;
         if (selected?.skip || continuation?.scoringBaseIndex === undefined) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
         if (!selected?.minionUid || !selected.defId) {
             return { state, events: [] };
@@ -3968,8 +4023,7 @@ export function registerTitanInteractionHandlers(): void {
 
         const baseOptions = getOtherBaseOptions(state.core, continuation.scoringBaseIndex);
         if (baseOptions.length === 0) {
-            const events = appendDeferredPostScoringEventsIfLast(state, data as Record<string, unknown> | undefined, []);
-            return { state, events };
+            return { state, events: [] };
         }
 
         const interaction = createSimpleChoice(
@@ -4000,10 +4054,9 @@ export function registerTitanInteractionHandlers(): void {
             return { state, events: [] };
         }
 
-        const events = appendDeferredPostScoringEventsIfLast(
+        return {
             state,
-            data as Record<string, unknown> | undefined,
-            [
+            events: [
                 moveMinion(
                     continuation.minionUid,
                     continuation.minionDefId,
@@ -4014,9 +4067,7 @@ export function registerTitanInteractionHandlers(): void {
                     selected.baseDefId,
                 ),
             ],
-        );
-
-        return { state, events };
+        };
     });
 
     registerInteractionHandler('titan_pirates_the_kraken_talent', (state, _playerId, value, data, _random, timestamp) => {
@@ -4188,6 +4239,39 @@ export function registerTitanInteractionHandlers(): void {
                     1,
                     'werewolves_great_wolf_spirit_talent',
                     timestamp,
+                ),
+            ],
+        };
+    });
+
+    registerInteractionHandler('titan_werewolves_great_wolf_spirit_move', (state, _playerId, value, data, _random, timestamp) => {
+        const selected = value as { skip?: boolean; baseIndex?: number; baseDefId?: string } | undefined;
+        const continuation = (data as {
+            continuationContext?: { titanUid?: string; titanDefId?: string; fromBaseIndex?: number };
+        } | undefined)?.continuationContext;
+        if (selected?.skip) {
+            return { state, events: [] };
+        }
+        if (
+            selected?.baseIndex === undefined
+            || !continuation?.titanUid
+            || !continuation.titanDefId
+            || continuation.fromBaseIndex === undefined
+        ) {
+            return { state, events: [] };
+        }
+
+        return {
+            state,
+            events: [
+                moveTitan(
+                    continuation.titanUid,
+                    continuation.titanDefId,
+                    continuation.fromBaseIndex,
+                    selected.baseIndex,
+                    'werewolves_great_wolf_spirit_move',
+                    timestamp,
+                    selected.baseDefId,
                 ),
             ],
         };

@@ -11,6 +11,7 @@ import type { Command, GameEvent, MatchState, PlayerId, RandomFn } from '../type
 import { isDevEnv } from '../env';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+import { hasBlockingResolutionFrame } from './resolutionStack';
 
 const isDev = isDevEnv();
 const isFlowDebugEnabled = (): boolean => {
@@ -210,6 +211,13 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
     const from = getCurrentPhase(state) || hooks.initialPhase;
     logDev(`[FlowSystem][${logLabel}] ADVANCE_PHASE from=${from} playerId=${command.playerId}`);
 
+    if (hasBlockingResolutionFrame(state, from)) {
+        logDev(`[FlowSystem][${logLabel}] blocked by active resolution frame`);
+        return invalidPlayerStrategy === 'error'
+            ? { halt: true, error: 'resolution_blocked' }
+            : undefined;
+    }
+
     // 引擎层通用校验：命令发送者必须是当前活跃玩家
     // 防止快速点击导致命令队列越过回合边界，推进对手的阶段
     if (hooks.getCurrentPlayerId) {
@@ -371,7 +379,6 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
 
             // 自动继续：执行与 ADVANCE_PHASE 相同的逻辑
             const { playerId } = result;
-            const from = getCurrentPhase(state) || hooks.initialPhase;
             const syntheticCommand: Command = {
                 type: FLOW_COMMANDS.ADVANCE_PHASE,
                 playerId,

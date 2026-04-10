@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { setChineseLocale } from './helpers/common';
 
+const SOCIAL_MOBILE_CHAT_SCREENSHOT_PATH = 'test-results/evidence-screenshots/social-chat-mobile-input-visible.png';
+
 test.describe('社交中心 E2E', () => {
 
     // Mock Data
@@ -135,7 +137,7 @@ test.describe('社交中心 E2E', () => {
         page.on('pageerror', err => console.log(`[Browser Error]: ${err.message}`));
 
         // 3. Go to Home
-        await page.goto('/');
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
     });
 
     test('可以通过全局 HUD 打开社交并查看好友聊天', async ({ page }) => {
@@ -153,7 +155,6 @@ test.describe('社交中心 E2E', () => {
 
         // 4. Verify Modal Opened
         // Modal usually has a backdrop and container
-        const modal = page.locator('div[role="dialog"]'); // Assuming modal uses role="dialog" or we use a generic selector
         // If headless UI doesn't use role="dialog" by default, fallback to class
         // Our ModalStack uses a simple div structure usually.
         // Let's look for text "Social" or "好友" as header in the modal.
@@ -183,5 +184,59 @@ test.describe('社交中心 E2E', () => {
         ]);
         expect(sendResponse.ok()).toBeTruthy();
         await expect(page.locator('.whitespace-pre-wrap', { hasText: '稍后再玩！' })).toBeVisible();
+    });
+
+    test('移动端社交聊天输入聚焦后仍应保持可见', async ({ page }) => {
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/', { waitUntil: 'domcontentloaded' });
+
+        const hudTrigger = page.locator('[data-testid="fab-menu"] [data-fab-id]').first();
+        await expect(hudTrigger).toBeVisible();
+        await hudTrigger.click();
+
+        const socialButton = page.locator('[data-fab-id="social"]');
+        await expect(socialButton).toBeVisible();
+        await socialButton.click();
+
+        await expect(page.getByText('好友甲')).toBeVisible();
+        await page.getByRole('button', { name: /好友甲/i }).click();
+
+        const chatInput = page.getByPlaceholder('输入消息...');
+        await expect(chatInput).toBeVisible();
+
+        await page.evaluate(() => {
+            const root = document.documentElement;
+            root.style.setProperty('--runtime-viewport-height', '564px');
+            root.style.setProperty('--keyboard-inset-height', '280px');
+            root.dataset.keyboardVisible = 'true';
+        });
+
+        await chatInput.click();
+        await chatInput.fill('移动端社交聊天输入可见性校验');
+        await expect(chatInput).toHaveValue('移动端社交聊天输入可见性校验');
+
+        const metrics = await chatInput.evaluate((node) => {
+            const rect = node.getBoundingClientRect();
+            const fontSize = Number.parseFloat(window.getComputedStyle(node).fontSize || '0');
+            const runtimeViewportHeight = Number.parseFloat(
+                window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0',
+            );
+            return {
+                right: rect.right,
+                bottom: rect.bottom,
+                viewportWidth: window.innerWidth,
+                runtimeViewportHeight,
+                fontSize,
+            };
+        });
+
+        expect(metrics.right).toBeLessThanOrEqual(metrics.viewportWidth);
+        expect(metrics.bottom).toBeLessThanOrEqual(metrics.runtimeViewportHeight);
+        expect(metrics.fontSize).toBeGreaterThanOrEqual(16);
+
+        await page.screenshot({
+            path: SOCIAL_MOBILE_CHAT_SCREENSHOT_PATH,
+            fullPage: false,
+        });
     });
 });
