@@ -652,16 +652,28 @@ function normalizePreloadedImageCacheKey(src: string, locale?: string): string {
     return getOptimizedImageUrls(getLocalizedAssetPath(normalized, effectiveLocale)).webp;
 }
 
+function stripVersionParam(value: string): string {
+    const { path, query, hash } = splitUrlParts(value);
+    if (!query) return value;
+    const params = new URLSearchParams(query);
+    if (!params.has(VERSION_PARAM)) return value;
+    params.delete(VERSION_PARAM);
+    const nextQuery = params.toString();
+    return nextQuery ? `${path}?${nextQuery}${hash}` : `${path}${hash}`;
+}
+
 function getPreloadedImageCacheKeys(src: string, locale?: string): string[] {
     const keys = new Set<string>();
     const exactKey = assetsPath(src);
     if (exactKey) {
         keys.add(exactKey);
+        keys.add(stripVersionParam(exactKey));
     }
 
     const normalizedKey = normalizePreloadedImageCacheKey(src, locale);
     if (normalizedKey) {
         keys.add(normalizedKey);
+        keys.add(stripVersionParam(normalizedKey));
     }
 
     return [...keys];
