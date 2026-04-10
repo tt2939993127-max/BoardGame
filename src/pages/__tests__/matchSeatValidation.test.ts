@@ -11,8 +11,6 @@ import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
 import {
     applyAiAutoRecoveryRejection,
-    resolveForceAdvancePhaseAfterRecovery,
-    resolveForceEndTurnFollowUpAfterConfirmation,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -128,6 +126,63 @@ describe('onlineAiSeats', () => {
         expect(state.seatCredentials).toEqual({});
     });
 
+    it('缺少 enableAi 标记时，即使残留了 seatControllers 也不得把真人房识别成 AI 房', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-stale-ai-config',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: '真人' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {},
+            claimMissingSeatCredential,
+        });
+
+        expect(state.seatControllers).toEqual({
+            '0': { type: 'human' },
+            '1': { type: 'human' },
+        });
+        expect(state.seatCredentials).toEqual({});
+        expect(claimMissingSeatCredential).not.toHaveBeenCalled();
+    });
+
+    it('显式 enableAi=false 时，应忽略残留的 AI seatControllers 与本地旧凭据', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-disabled',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: '真人' }],
+                setupData: {
+                    enableAi: false,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: { '1': 'stale-credential' },
+            claimMissingSeatCredential,
+        });
+
+        expect(state.seatControllers).toEqual({
+            '0': { type: 'human' },
+            '1': { type: 'human' },
+        });
+        expect(state.seatCredentials).toEqual({});
+        expect(claimMissingSeatCredential).not.toHaveBeenCalled();
+    });
+
     it('回归：房主重进在线房间时，本地缺失 AI 凭据也不能把 AI 座位降级成人类', async () => {
         const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
 
@@ -138,6 +193,7 @@ describe('onlineAiSeats', () => {
                 gameName: 'smashup',
                 players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
                 setupData: {
+                    enableAi: true,
                     seatControllers: {
                         '0': { type: 'human' },
                         '1': { type: 'local-ai', difficulty: 'normal' },
@@ -162,6 +218,7 @@ describe('onlineAiSeats', () => {
                 gameName: 'smashup',
                 players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
                 setupData: {
+                    enableAi: true,
                     seatControllers: {
                         '0': { type: 'human' },
                         '1': { type: 'local-ai', difficulty: 'normal' },
@@ -185,6 +242,7 @@ describe('onlineAiSeats', () => {
                 gameName: 'smashup',
                 players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }, { id: 2, name: 'P2' }],
                 setupData: {
+                    enableAi: true,
                     seatControllers: {
                         '0': { type: 'human' },
                         '1': { type: 'local-ai', difficulty: 'hard' },
@@ -203,6 +261,76 @@ describe('onlineAiSeats', () => {
             '1': 'existing-ai-1',
             '2': 'claimed-2',
         });
+    });
+
+    it('兼容旧房间：缺少 enableAi 标记但已有本地 AI 凭据时，仍保留显式 AI 座位定义', async () => {
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-legacy',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+        });
+
+        expect(state.seatControllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
+        expect(state.seatCredentials).toEqual({ '1': 'existing-ai-1' });
+    });
+
+    it('enableAi=true 的真 AI 房，仍然允许 force-end-turn 收口卡死 AI', async () => {
+        const onlineAiState = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-force-end-turn',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    enableAi: true,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+        });
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                    turnNumber: 3,
+                    phase: 'playCards',
+                },
+            } as MatchState<unknown>,
+            seatControllers: onlineAiState.seatControllers,
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('active-turn');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
     });
 
     it('仅凭据有变化时才触发持久化', () => {
@@ -1050,7 +1178,7 @@ describe('resolveForceSkippableHiddenAiInteraction', () => {
 });
 
 describe('resolveForceEndTurnForStalledAi', () => {
-    it('隐藏交互卡住 8 秒后，应先单独收口交互，等待确认后再决定是否推进阶段', () => {
+    it('隐藏交互卡住 8 秒后，应先收口交互再 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1093,13 +1221,13 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('hidden-interaction');
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'skip' } },
+            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
-    it('不可跳过的交互卡住时，应先单独 CANCEL，等待确认后再决定是否推进阶段', () => {
+    it('不可跳过的交互卡住时，应改为 CANCEL 后再 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1131,13 +1259,13 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('visible-interaction');
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'SYS_INTERACTION_CANCEL', payload: {} },
+            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
-    it('响应窗口卡住时，应先单独 RESPONSE_PASS，等待确认后再决定是否推进阶段', () => {
+    it('响应窗口卡住时，应 RESPONSE_PASS 后再 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1163,13 +1291,13 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('response-window');
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'RESPONSE_PASS', payload: {} },
+            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
-    it('无交互阻塞但轮到 AI 且共享态 8 秒未变化时，应允许强制 ADVANCE_PHASE 收口主动回合卡死', () => {
+    it('无交互阻塞但轮到 AI 时，应直接 ADVANCE_PHASE', () => {
         const candidate = resolveForceEndTurnForStalledAi({
             sharedState: {
                 core: {
@@ -1197,220 +1325,6 @@ describe('resolveForceEndTurnForStalledAi', () => {
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'ADVANCE_PHASE', payload: {} },
         ]);
-    });
-
-    it('当前轮到 human 时，不应把玩家回合误判成 AI active-turn 卡死并强制推进', () => {
-        expect(resolveForceEndTurnForStalledAi({
-            sharedState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                    },
-                    responseWindow: {
-                        current: undefined,
-                    },
-                    turnNumber: 3,
-                    phase: 'playCards',
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '0': { type: 'human' },
-                '1': { type: 'local-ai' },
-            },
-            seatStates: {},
-        })).toBeNull();
-    });
-
-    it('响应窗口当前 responder 是 human 时，不应自动 RESPONSE_PASS 或误转成 AI active-turn', () => {
-        expect(resolveForceEndTurnForStalledAi({
-            sharedState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                    },
-                    responseWindow: {
-                        current: {
-                            responderQueue: ['0', '1'],
-                            currentResponderIndex: 0,
-                        },
-                    },
-                    turnNumber: 3,
-                    phase: 'playCards',
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '0': { type: 'human' },
-                '1': { type: 'local-ai' },
-            },
-            seatStates: {},
-        })).toBeNull();
-    });
-});
-
-describe('resolveForceAdvancePhaseAfterRecovery', () => {
-    it('恢复成功后仍是该 AI 的回合且无新阻塞时，应返回单独 ADVANCE_PHASE', () => {
-        const resolution = resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    turnNumber: 3,
-                    phase: 'playCards',
-                    eventStream: { nextId: 11 },
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                        isBlocked: false,
-                    },
-                    responseWindow: {
-                        current: undefined,
-                    },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        });
-
-        expect(resolution?.action.commands).toEqual([{ type: 'ADVANCE_PHASE', payload: {} }]);
-        expect(resolution?.attemptKey).toContain('force-end-turn:1:follow-up:1:3:playCards:11');
-    });
-
-    it('恢复后若已经切到人类/出现新交互/仍有响应窗口，则不应继续 ADVANCE_PHASE', () => {
-        expect(resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: { current: undefined, queue: [], isBlocked: false },
-                    responseWindow: { current: undefined },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        })).toBeNull();
-
-        expect(resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    interaction: {
-                        current: { id: 'next-choice', playerId: '1' },
-                        queue: [],
-                        isBlocked: false,
-                    },
-                    responseWindow: { current: undefined },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        })).toBeNull();
-
-        expect(resolveForceAdvancePhaseAfterRecovery({
-            authoritativeState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    interaction: { current: undefined, queue: [], isBlocked: false },
-                    responseWindow: { current: { responderQueue: ['1'], currentResponderIndex: 0 } },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            playerId: '1',
-        })).toBeNull();
-    });
-});
-
-describe('resolveForceEndTurnFollowUpAfterConfirmation', () => {
-    it('恢复后若已切到人类回合，则桥接层不应再生成 follow-up ADVANCE_PHASE', () => {
-        const candidate = resolveForceEndTurnForStalledAi({
-            sharedState: {
-                core: {
-                    activePlayerId: '1',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                        isBlocked: true,
-                    },
-                    responseWindow: {
-                        current: {
-                            responderQueue: ['1'],
-                            currentResponderIndex: 0,
-                        },
-                    },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-            seatStates: {
-                '1': {
-                    core: {
-                        activePlayerId: '1',
-                    },
-                    sys: {
-                        interaction: {
-                            current: undefined,
-                            queue: [],
-                            isBlocked: false,
-                        },
-                        responseWindow: {
-                            current: {
-                                responderQueue: ['1'],
-                                currentResponderIndex: 0,
-                            },
-                        },
-                    },
-                } as MatchState<unknown>,
-            },
-            now: 10_000,
-            thresholdMs: 8_000,
-        });
-
-        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
-        expect(resolveForceEndTurnFollowUpAfterConfirmation({
-            candidate: candidate!,
-            authoritativeState: {
-                core: {
-                    activePlayerId: '0',
-                },
-                sys: {
-                    interaction: {
-                        current: undefined,
-                        queue: [],
-                        isBlocked: false,
-                    },
-                    responseWindow: {
-                        current: undefined,
-                    },
-                },
-            } as MatchState<unknown>,
-            seatControllers: {
-                '1': { type: 'local-ai' },
-            },
-        })).toBeNull();
     });
 });
 
