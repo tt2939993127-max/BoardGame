@@ -19,6 +19,7 @@ import { abilityRegistry } from './domain/abilities';
 import { getActivatableAbilities, canActivateAbility } from './domain/abilityHelpers';
 import {
     BOARD_COLS,
+    BOARD_ROWS,
     getAdjacentCells,
     getPlayerUnits,
     getSummoner,
@@ -115,6 +116,54 @@ const buildSimpleChoicePayload = (
             : { optionId: optionIds[0], mergedValue: optionValue };
     }
     return { optionIds };
+};
+
+const buildOptionCombinations = (
+    optionIds: string[],
+    minCount: number,
+    maxCount: number,
+): string[][] => {
+    if (optionIds.length === 0) return [];
+    const normalizedMin = Math.max(1, minCount);
+    const normalizedMax = Math.max(normalizedMin, maxCount);
+    const results: string[][] = [];
+
+    const walk = (start: number, selected: string[]): void => {
+        if (selected.length >= normalizedMin && selected.length <= normalizedMax) {
+            results.push([...selected]);
+        }
+        if (selected.length >= normalizedMax) return;
+        for (let index = start; index < optionIds.length; index += 1) {
+            selected.push(optionIds[index]);
+            walk(index + 1, selected);
+            selected.pop();
+        }
+    };
+
+    walk(0, []);
+    return results;
+};
+
+const getAllBoardUnitTargets = (core: SummonerWarsCore): Array<{ unit: BoardUnit; position: CellCoord }> => {
+    const targets: Array<{ unit: BoardUnit; position: CellCoord }> = [];
+    for (let row = 0; row < BOARD_ROWS; row += 1) {
+        for (let col = 0; col < BOARD_COLS; col += 1) {
+            const unit = core.board[row][col].unit;
+            if (!unit) continue;
+            targets.push({ unit, position: { row, col } });
+        }
+    }
+    return targets;
+};
+
+const getAllBoardPositions = (): CellCoord[] => {
+    const positions: CellCoord[] = [];
+    for (let row = 0; row < BOARD_ROWS; row += 1) {
+        for (let col = 0; col < BOARD_COLS; col += 1) {
+            positions.push({ row, col });
+        }
+    }
+    return positions;
 };
 
 const getEnemyPlayerId = (playerId: PlayerId): PlayerId => (playerId === '0' ? '1' : '0');
@@ -529,6 +578,28 @@ const buildInteractionActions = (
             return typeof option.id === 'string' && option.disabled !== true;
         });
         const minCount = Math.max(1, data.multi?.min ?? 1);
+        const maxCount = Math.max(minCount, data.multi?.max ?? minCount);
+
+        if (minCount > 1 || maxCount > 1) {
+            const combos = buildOptionCombinations(
+                availableOptions.map((option) => option.id),
+                minCount,
+                maxCount,
+            );
+            return combos.map((combo, index) => ({
+                actionId: createAiLegalActionId('interaction', current.id, ...combo),
+                kind: 'interaction-choice',
+                label: `交互组合 ${index + 1}`,
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: buildSimpleChoicePayload(combo, data.multi),
+                }],
+                metadata: {
+                    interactionId: current.id,
+                    optionIds: combo,
+                },
+            }));
+        }
 
         return availableOptions.map((option, index) => ({
             actionId: createAiLegalActionId('interaction', current.id, option.id),
@@ -536,11 +607,7 @@ const buildInteractionActions = (
             label: option.label ?? `交互选择 ${index + 1}`,
             commands: [{
                 type: 'SYS_INTERACTION_RESPOND',
-                payload: buildSimpleChoicePayload(
-                    minCount > 1 ? availableOptions.slice(0, minCount).map((item) => item.id) : [option.id],
-                    data.multi,
-                    option.value,
-                ),
+                payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
             }],
             metadata: {
                 interactionId: current.id,
@@ -656,7 +723,6 @@ const buildActivatedAbilityActions = (
             const abilityDef = abilityRegistry.get(abilityId);
             if (!abilityDef) continue;
             if (abilityDef.trigger !== 'activated') continue;
-            if (abilityDef.requiresTargetSelection) continue;
             if (!canActivateAbility(state.core, unit, abilityId, playerId)) continue;
             const semantics = buildActivatedAbilitySemantics({
                 state,
@@ -665,23 +731,132 @@ const buildActivatedAbilityActions = (
                 abilityDef,
             });
 
-            appendAction(actions, state, playerId, {
-                actionId: createAiLegalActionId('activate-ability', unit.instanceId, abilityId),
-                kind: 'activate-ability',
-                label: `发动技能 ${abilityDef.name}`,
-                commands: [{
-                    type: SW_COMMANDS.ACTIVATE_ABILITY,
-                    payload: {
-                        abilityId,
+            if (!abilityDef.requiresTargetSelection) {
+                appendAction(actions, state, playerId, {
+                    actionId: createAiLegalActionId('activate-ability', unit.instanceId, abilityId),
+                    kind: 'activate-ability',
+                    label: `发动技能 ${abilityDef.name}`,
+                    commands: [{
+                        type: SW_COMMANDS.ACTIVATE_ABILITY,
+                        payload: {
+                            abilityId,
+                            sourceUnitId: unit.instanceId,
+                        },
+                    }],
+                    metadata: withAiActionStrategyTags({
+                        ...semantics.metadata,
                         sourceUnitId: unit.instanceId,
-                    },
-                }],
-                metadata: withAiActionStrategyTags({
-                    ...semantics.metadata,
-                    sourceUnitId: unit.instanceId,
-                    sourcePosition: unit.position,
-                }, semantics.strategyTags),
-            });
+                        sourcePosition: unit.position,
+                    }, semantics.strategyTags),
+                });
+                continue;
+            }
+
+            const targetSelection = abilityDef.targetSelection;
+            if (!targetSelection || targetSelection.count !== 1) continue;
+
+            if (targetSelection.type === 'unit') {
+                const targets = getAllBoardUnitTargets(state.core);
+                for (const target of targets) {
+                    const targetUnit = target.unit;
+                    const targetLifeRemaining = targetUnit.card.life - targetUnit.damage;
+                    const strategyTags = [...semantics.strategyTags];
+                    if (targetUnit.owner === playerId) {
+                        pushStrategyTag(strategyTags, 'board-control');
+                        if (targetUnit.card.unitClass === 'summoner') {
+                            pushStrategyTag(strategyTags, 'summoner-defense');
+                        }
+                    } else {
+                        pushStrategyTag(strategyTags, 'summoner-pressure');
+                    }
+
+                    appendAction(actions, state, playerId, {
+                        actionId: createAiLegalActionId(
+                            'activate-ability',
+                            unit.instanceId,
+                            abilityId,
+                            target.position.row,
+                            target.position.col,
+                        ),
+                        kind: 'activate-ability',
+                        label: `发动技能 ${abilityDef.name} → ${targetUnit.card.name}`,
+                        commands: [{
+                            type: SW_COMMANDS.ACTIVATE_ABILITY,
+                            payload: {
+                                abilityId,
+                                sourceUnitId: unit.instanceId,
+                                targetPosition: target.position,
+                            },
+                        }],
+                        metadata: withAiActionStrategyTags({
+                            ...semantics.metadata,
+                            sourceUnitId: unit.instanceId,
+                            sourcePosition: unit.position,
+                            targetPosition: target.position,
+                            targetOwner: targetUnit.owner,
+                            targetType: targetUnit.card.unitClass,
+                            targetUnitClass: targetUnit.card.unitClass,
+                            targetLifeRemaining,
+                        }, strategyTags),
+                    });
+                }
+                continue;
+            }
+
+            if (targetSelection.type === 'position') {
+                const positions = getAllBoardPositions();
+                for (const targetPosition of positions) {
+                    const targetUnit = getUnitAt(state.core, targetPosition);
+                    const targetStructure = getStructureAt(state.core, targetPosition);
+                    const targetType = targetUnit
+                        ? targetUnit.card.unitClass
+                        : targetStructure
+                            ? 'structure'
+                            : 'position';
+                    const targetOwner = targetUnit?.owner ?? targetStructure?.owner;
+                    const targetLifeRemaining = targetUnit
+                        ? targetUnit.card.life - targetUnit.damage
+                        : targetStructure
+                            ? targetStructure.card.life - targetStructure.damage
+                            : undefined;
+                    const strategyTags = [...semantics.strategyTags];
+                    if (targetOwner === playerId) {
+                        pushStrategyTag(strategyTags, 'board-control');
+                    } else if (targetOwner) {
+                        pushStrategyTag(strategyTags, 'summoner-pressure');
+                    }
+
+                    appendAction(actions, state, playerId, {
+                        actionId: createAiLegalActionId(
+                            'activate-ability',
+                            unit.instanceId,
+                            abilityId,
+                            targetPosition.row,
+                            targetPosition.col,
+                        ),
+                        kind: 'activate-ability',
+                        label: `发动技能 ${abilityDef.name} → (${targetPosition.row},${targetPosition.col})`,
+                        commands: [{
+                            type: SW_COMMANDS.ACTIVATE_ABILITY,
+                            payload: {
+                                abilityId,
+                                sourceUnitId: unit.instanceId,
+                                targetPosition,
+                            },
+                        }],
+                        metadata: withAiActionStrategyTags({
+                            ...semantics.metadata,
+                            sourceUnitId: unit.instanceId,
+                            sourcePosition: unit.position,
+                            targetPosition,
+                            targetOwner,
+                            targetType,
+                            targetUnitClass: targetUnit?.card.unitClass,
+                            targetLifeRemaining,
+                        }, strategyTags),
+                    });
+                }
+            }
         }
     }
 
@@ -1294,7 +1469,7 @@ const discardScorer: LocalAiActionScorer = {
 
 const activatedAbilityTargetScorer: LocalAiActionScorer = {
     id: 'activated-ability-target',
-    score(_context, action) {
+    score(context, action) {
         if (action.kind !== 'activate-ability') return null;
         const targetOwner = typeof action.metadata?.targetOwner === 'string'
             ? action.metadata.targetOwner
@@ -1311,6 +1486,10 @@ const activatedAbilityTargetScorer: LocalAiActionScorer = {
             ? action.metadata.sourceOwner
             : null;
         const isEnemy = sourceOwner ? targetOwner !== sourceOwner : false;
+        const visibleState = context.visibleState as SummonerWarsState | undefined;
+        const ownThreat = visibleState && sourceOwner
+            ? estimateSummonerThreat(visibleState.core, sourceOwner)
+            : null;
 
         let score = 0;
         if (isEnemy) {
@@ -1324,7 +1503,13 @@ const activatedAbilityTargetScorer: LocalAiActionScorer = {
         }
 
         score = 30;
-        if (targetType === 'summoner') score += 110;
+        if (targetType === 'summoner') {
+            const underPressure = ownThreat
+                ? (ownThreat.remainingLife > 0 && ownThreat.directThreatDamage >= ownThreat.remainingLife)
+                    || ownThreat.nearbyEnemyPressure >= 8
+                : false;
+            score += underPressure ? 110 : 40;
+        }
         else if (targetType === 'champion') score += 60;
         else if (targetType === 'common') score += 30;
         if (distanceToOwnSummoner <= 1) score += 24;
