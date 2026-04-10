@@ -328,7 +328,6 @@ function finalizeCurrentScoringBase(
     if (!session || !currentBaseRef) {
         return { updatedState: state, events: [] };
     }
-
     const events: SmashUpEvent[] = [];
     const baseIndex = resolveScoringBaseRefSlotIndex(state, currentBaseRef);
     const initialPowers = session.afterScoringInitialPowers;
@@ -534,11 +533,51 @@ export function scoreOneBase(
     // 璁＄畻鎺掑悕锛堜娇鐢?reduce 鍚庣殑 core锛屽寘鍚?beforeScoring 鐨勪复鏃跺姏閲忎慨姝?+ ongoing 鍗″姏閲忚础鐚級
     const updatedBase = updatedCore.bases[baseIndex];
     const playerPowers = collectQualifiedPlayerPowers(updatedCore, updatedBase, baseIndex);
-    const rankings = buildBaseRankings(baseDef, playerPowers);
+    const preliminaryRankings = buildBaseRankings(baseDef, playerPowers);
+
+    const alreadyTriggeredWhenScoring = updatedCore.whenScoringTriggeredBases?.includes(baseIndex) ?? false;
+    if (!alreadyTriggeredWhenScoring) {
+        const queuedWhenScoringBase = collectBaseAbilityTriggers({
+            core: updatedCore,
+            timing: 'whenScoring',
+            ownerPlayerId: pid,
+            baseIndex,
+            rankings: preliminaryRankings,
+            now,
+        });
+        if (queuedWhenScoringBase) {
+            events.push(queuedWhenScoringBase as unknown as SmashUpEvent);
+            updatedCore = reduce(updatedCore, queuedWhenScoringBase as unknown as SmashUpEvent);
+            if (ms) ms = { ...ms, core: updatedCore };
+            const rq = maybeResolveReactionQueue(ms ? ms : ({ core: updatedCore, sys: { interaction: { current: undefined, queue: [] } } } as any), rng, now);
+            if (rq) {
+                events.push(...rq.events);
+                ms = rq.state;
+                updatedCore = rq.state.core;
+            }
+        }
+
+        const whenScoringTriggeredEvent = {
+            type: SU_EVENT_TYPES.WHEN_SCORING_TRIGGERED,
+            payload: { baseIndex },
+            timestamp: now,
+        };
+        events.push(whenScoringTriggeredEvent as unknown as SmashUpEvent);
+        updatedCore = reduce(updatedCore, whenScoringTriggeredEvent as unknown as SmashUpEvent);
+        if (ms) ms = { ...ms, core: updatedCore };
+
+        if (ms?.sys?.interaction?.current) {
+            return { events, newBaseDeck: baseDeck, matchState: ms };
+        }
+    }
+
+    const scoringBase = updatedCore.bases[baseIndex] ?? updatedBase;
+    const finalPlayerPowers = collectQualifiedPlayerPowers(updatedCore, scoringBase, baseIndex);
+    const rankings = buildBaseRankings(baseDef, finalPlayerPowers);
 
     // 鏀堕泦姣忎綅鐜╁鐨勯殢浠庡姏閲?breakdown锛堢敤浜?ActionLog 灞曠ず锛?
     const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
-    for (const m of updatedBase.minions) {
+    for (const m of scoringBase.minions) {
         const bd = getEffectivePowerBreakdown(updatedCore, m, baseIndex);
         if (!minionBreakdowns[m.controller]) minionBreakdowns[m.controller] = [];
         minionBreakdowns[m.controller].push({
@@ -555,14 +594,14 @@ export function scoreOneBase(
 
     const scoreEvt: BaseScoredEvent = {
         type: SU_EVENTS.BASE_SCORED,
-        payload: { baseIndex, baseDefId: base.defId, rankings, minionBreakdowns },
+        payload: { baseIndex, baseDefId: scoringBase.defId, rankings, minionBreakdowns },
         timestamp: now,
     };
     events.push(scoreEvt);
 
     // 瑙﹀彂 onMinionDiscardedFromBase锛堝熀鍦扮粨绠楀純缃紝闈炴秷鐏級
     // 鍦?BASE_SCORED 鍚庛€乤fterScoring 鍓嶈Е鍙戯紝姝ゆ椂闅忎粠浠嶅湪 core 涓紙reducer 灏氭湭鎵ц锛?
-    for (const m of base.minions) {
+    for (const m of scoringBase.minions) {
         const queued = collectTriggers(core, 'onMinionDiscardedFromBase', {
             state: core,
             matchState: ms,
@@ -707,7 +746,7 @@ export function scoreOneBase(
     const postScoringEvents: SmashUpEvent[] = [];
     const clearEvt: BaseClearedEvent = {
         type: SU_EVENTS.BASE_CLEARED,
-        payload: { baseIndex, baseDefId: base.defId },
+        payload: { baseIndex, baseDefId: scoringBase.defId },
         timestamp: now,
     };
     postScoringEvents.push(clearEvt);
@@ -734,7 +773,7 @@ export function scoreOneBase(
             type: SU_EVENTS.BASE_REPLACED,
             payload: {
                 baseIndex,
-                oldBaseDefId: base.defId,
+                oldBaseDefId: scoringBase.defId,
                 newBaseDefId,
             },
             timestamp: now,
@@ -1164,6 +1203,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         timestamp: now,
                     } as SmashUpEvent);
                     events.push({
+                        type: SU_EVENT_TYPES.WHEN_SCORING_CLEARED,
+                        payload: {},
+                        timestamp: now,
+                    } as SmashUpEvent);
+                    events.push({
                         type: SU_EVENT_TYPES.AFTER_SCORING_CLEARED,
                         payload: {},
                         timestamp: now,
@@ -1256,8 +1300,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         let hasSysUpdate = false;
 
         if (to === 'startTurn') {
-            // Safety: afterScoringInitialPowers is only meaningful immediately after closing the afterScoring window.
-            // If it ever leaks across turns, it can cause unintended base clear/replace on later scoreBases exits.
             if ((currentMatchState.sys as any).afterScoringInitialPowers) {
                 currentMatchState = {
                     ...currentMatchState,
@@ -1392,6 +1434,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         if (to === 'scoreBases') {
             events.push({
                 type: SU_EVENT_TYPES.BEFORE_SCORING_CLEARED,
+                payload: {},
+                timestamp: now,
+            } as GameEvent);
+            events.push({
+                type: SU_EVENT_TYPES.WHEN_SCORING_CLEARED,
                 payload: {},
                 timestamp: now,
             } as GameEvent);

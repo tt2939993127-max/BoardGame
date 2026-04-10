@@ -1315,6 +1315,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 greatWolfSpiritDoubleTalentCardUids: undefined,
                 // 清空计分后延迟 special 记录
                 pendingAfterScoringSpecials: undefined,
+                // 清空计分后等待基地替换完成的动作
+                pendingPostScoringActions: undefined,
                 // 清空计分阶段锁定的 eligible 基地列表
                 scoringEligibleBaseIndices: undefined,
                 // 清空本回合已使用的持续行动 UID 追踪
@@ -1369,6 +1371,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // 否则新基地达到 breakpoint 时会被跳过，无法计分
             const cleanedBeforeScoring = (state.beforeScoringTriggeredBases ?? [])
                 .filter(idx => idx !== baseIndex);
+            const cleanedWhenScoring = (state.whenScoringTriggeredBases ?? [])
+                .filter(idx => idx !== baseIndex);
             const cleanedAfterScoring = (state.afterScoringTriggeredBases ?? [])
                 .filter(idx => idx !== baseIndex);
             
@@ -1383,6 +1387,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     bases: updatedBases,
                     baseDeck: [...newBaseDeck, oldBaseDefId],
                     beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
+                    whenScoringTriggeredBases: cleanedWhenScoring.length > 0 ? cleanedWhenScoring : undefined,
                     afterScoringTriggeredBases: cleanedAfterScoring.length > 0 ? cleanedAfterScoring : undefined,
                 };
             }
@@ -1418,6 +1423,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                 titans: adjustedTitans,
                 baseDeck: newBaseDeck,
                 beforeScoringTriggeredBases: cleanedBeforeScoring.length > 0 ? cleanedBeforeScoring : undefined,
+                whenScoringTriggeredBases: cleanedWhenScoring.length > 0 ? cleanedWhenScoring : undefined,
                 afterScoringTriggeredBases: cleanedAfterScoring.length > 0 ? cleanedAfterScoring : undefined,
                 ...(adjustedEligible ? { scoringEligibleBaseIndices: adjustedEligible } : {}),
             };
@@ -2375,11 +2381,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             // 从手牌或弃牌堆移除疯狂卡，放回疯狂牌库
             const newHand = player.hand.filter(c => c.uid !== cardUid);
             const newDiscard = player.discard.filter(c => c.uid !== cardUid);
-            const removedFromPlayerZone = newHand.length !== player.hand.length || newDiscard.length !== player.discard.length;
-            if (!removedFromPlayerZone) return state;
             return {
                 ...state,
-                madnessDeck: [...state.madnessDeck, MADNESS_CARD_DEF_ID],
                 players: {
                     ...state.players,
                     [playerId]: { ...player, hand: newHand, discard: newDiscard },
@@ -2596,6 +2599,23 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             };
         }
 
+        case SU_EVENT_TYPES.WHEN_SCORING_TRIGGERED: {
+            const { baseIndex } = event.payload as { baseIndex: number };
+            const existing = state.whenScoringTriggeredBases ?? [];
+            if (existing.includes(baseIndex)) return state;
+            return {
+                ...state,
+                whenScoringTriggeredBases: [...existing, baseIndex],
+            };
+        }
+
+        case SU_EVENT_TYPES.WHEN_SCORING_CLEARED: {
+            return {
+                ...state,
+                whenScoringTriggeredBases: undefined,
+            };
+        }
+
         case SU_EVENT_TYPES.AFTER_SCORING_TRIGGERED: {
             const { baseIndex } = event.payload as { baseIndex: number };
             const existing = state.afterScoringTriggeredBases ?? [];
@@ -2612,6 +2632,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             return {
                 ...state,
                 afterScoringTriggeredBases: undefined,
+                pendingPostScoringActions: undefined,
             };
         }
 

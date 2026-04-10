@@ -117,6 +117,8 @@ export const SU_EVENTS = defineEvents({
   'su:after_scoring_triggered': 'silent',  // 标记基地已触发 afterScoring（防止重复触发）
   'su:after_scoring_cleared': 'silent',  // 清空 afterScoring 触发标记（计分阶段结束）
   
+  'su:when_scoring_triggered': 'silent',
+  'su:when_scoring_cleared': 'silent',
   'su:ability_feedback': { audio: 'immediate', sound: UPDATE_CHIME_KEY },
   'su:ability_triggered': 'fx',        // 持续效果/触发器激活（FX 动画）
 
@@ -202,6 +204,8 @@ export const SU_EVENT_TYPES = {
   SCORING_ELIGIBLE_BASES_LOCKED: SU_EVENTS['su:scoring_eligible_bases_locked'].type,
   BEFORE_SCORING_TRIGGERED: SU_EVENTS['su:before_scoring_triggered'].type,
   BEFORE_SCORING_CLEARED: SU_EVENTS['su:before_scoring_cleared'].type,
+  WHEN_SCORING_TRIGGERED: SU_EVENTS['su:when_scoring_triggered'].type,
+  WHEN_SCORING_CLEARED: SU_EVENTS['su:when_scoring_cleared'].type,
   AFTER_SCORING_TRIGGERED: SU_EVENTS['su:after_scoring_triggered'].type,
   AFTER_SCORING_CLEARED: SU_EVENTS['su:after_scoring_cleared'].type,
   ABILITY_FEEDBACK: SU_EVENTS['su:ability_feedback'].type,

@@ -54,11 +54,11 @@ import {
 export type BaseTriggerTiming =
     | 'onMinionPlayed'    // 随从入场时
     | 'beforeScoring'     // 记分前
+    | 'whenScoring'       // 计分时
     | 'afterScoring'      // 记分后
     | 'onTurnStart'       // 回合开始时
     | 'onActionPlayed';   // 行动卡打出时
 
-/** 基地能力执行上下文 */
 export interface BaseAbilityContext {
     state: SmashUpCore;
     /** 完整的 match 状态，用于调用 queueInteraction */
@@ -409,7 +409,7 @@ export function registerBaseAbilities(): void {
 
     // base_rhodes_plaza: 罗德百货商场
     // "在这个基地计分时，每位玩家在这里每有一个随从就获得1VP"
-    registerBaseAbility('base_rhodes_plaza', 'beforeScoring', (ctx) => {
+    registerBaseAbility('base_rhodes_plaza', 'whenScoring', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return { events: [] };
         const playerMinionCounts = new Map<PlayerId, number>();
@@ -507,7 +507,7 @@ export function registerBaseAbilities(): void {
 
     // base_the_factory: 436-1337工厂
     // "当这个基地计分时，冠军在这里每有5力量就获得1VP"
-    registerBaseAbility('base_the_factory', 'beforeScoring', (ctx) => {
+    registerBaseAbility('base_the_factory', 'whenScoring', (ctx) => {
         const base = ctx.state.bases[ctx.baseIndex];
         if (!base) return { events: [] };
         const playerPowers = new Map<PlayerId, number>();
@@ -1643,10 +1643,8 @@ export function registerBaseInteractionHandlers(): void {
             '海盗湾：选择移动到的基地', options,
             { sourceId: 'base_pirate_cove_choose_base', targetType: 'base' },
         );
-        
         // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
         const deferredEvents = getDeferredPostScoringEvents(iData);
-        
         return {
             // 使用 urgent 标志，确保链式交互的第二步不被其他交互插队
             state: queueInteraction(state, {
@@ -1824,11 +1822,18 @@ export function registerBaseInteractionHandlers(): void {
                 '刚柔流寺庙：选择放入牌库底的最高力量随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: playerId }),
                 { sourceId: 'base_temple_of_goju_tiebreak', targetType: 'minion' },
             );
-            
-            // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
             const deferredEvents = getDeferredPostScoringEvents(iData);
             
-            return { 
+            // 关键修复：将延迟的 BASE_CLEARED 事件传递到链式交互
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryEvents: events,
+                primaryOrder: 'after',
+            });
+            if (compatibility) {
+                return compatibility;
+            }
+
+            return {
                 // 使用 urgent 标志，确保链式交互的后续步骤不被其他交互插队
                 state: queueInteraction(state, { 
                     ...interaction, 
@@ -1842,7 +1847,7 @@ export function registerBaseInteractionHandlers(): void {
                         } 
                     } 
                 }, { urgent: true }), // 链式交互的后续步骤标记为 urgent
-                events 
+                events,
             };
         }
 

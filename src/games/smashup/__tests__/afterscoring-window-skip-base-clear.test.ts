@@ -357,7 +357,7 @@ describe('afterScoring 延迟清场回归', () => {
         expect(nextCtx?._deferredPostScoringEvents).toHaveLength(2);
     });
 
-    it('最后一个 afterScoring 交互已补发延迟事件时，不应再次重复补发', () => {
+    it('base_temple_of_goju_tiebreak: session 模式下 legacy 最后一跳只应输出主事件，延迟清场留给 finalize', () => {
         const system = createSmashUpEventSystem();
         const state = wrapState(makeCore({
             players: {
@@ -365,24 +365,11 @@ describe('afterScoring 延迟清场回归', () => {
                 '1': makePlayer('1'),
             },
             bases: [
-                makeBase('base_tortuga', {
-                    minions: [makeMinion('mate', '0', 2, 'pirate_first_mate')],
-                }),
-                makeBase('base_other'),
-                makeBase('base_else', {
-                    minions: [makeMinion('runner', '1', 2)],
+                makeBase('base_temple_of_goju', {
+                    minions: [makeMinion('winner', '0', 4, 'giant_ant_worker')],
                 }),
             ],
             baseDeck: ['base_secret_garden'],
-            pendingPostScoringActions: [{
-                kind: 'moveMinionToReplacementBase',
-                minionUid: 'runner',
-                minionDefId: 'd1',
-                fromBaseIndex: 2,
-                toBaseIndex: 1,
-                targetBaseDefId: 'base_secret_garden',
-                reason: '托尔图加：亚军移动随从到替换基地',
-            }],
         }));
 
         const result = system.afterEvents?.({
@@ -391,56 +378,45 @@ describe('afterScoring 延迟清场回归', () => {
             events: [{
                 type: INTERACTION_EVENTS.RESOLVED,
                 payload: {
-                    interactionId: 'i-first-mate',
+                    interactionId: 'i-goju-last',
                     playerId: '0',
-                    optionId: 'base-1',
-                    value: { baseIndex: 1 },
-                    sourceId: 'pirate_first_mate_choose_base',
+                    optionId: 'minion-0',
+                    value: { minionUid: 'winner', defId: 'giant_ant_worker', baseIndex: 0 },
+                    sourceId: 'base_temple_of_goju_tiebreak',
                     interactionData: {
-                        sourceId: 'pirate_first_mate_choose_base',
+                        sourceId: 'base_temple_of_goju_tiebreak',
                         continuationContext: {
-                            mateUid: 'mate',
-                            mateDefId: 'pirate_first_mate',
-                            scoringBaseIndex: 0,
+                            baseIndex: 0,
+                            remainingPlayers: [],
                             _deferredPostScoringEvents: [
                                 {
                                     type: SU_EVENTS.BASE_CLEARED,
-                                    payload: { baseIndex: 0, baseDefId: 'base_tortuga' },
-                                    timestamp: 2300,
+                                    payload: { baseIndex: 0, baseDefId: 'base_temple_of_goju' },
+                                    timestamp: 2350,
                                 },
                                 {
                                     type: SU_EVENTS.BASE_REPLACED,
                                     payload: {
                                         baseIndex: 0,
-                                        oldBaseDefId: 'base_tortuga',
+                                        oldBaseDefId: 'base_temple_of_goju',
                                         newBaseDefId: 'base_secret_garden',
                                     },
-                                    timestamp: 2300,
+                                    timestamp: 2350,
                                 },
                             ],
                         },
                     },
                 },
-                timestamp: 2300,
+                timestamp: 2350,
             } as any],
         });
 
         const emittedEvents = result?.events as SmashUpEvent[] | undefined;
         expect(emittedEvents?.map(event => event.type)).toEqual([
-            SU_EVENTS.MINION_MOVED,
-            SU_EVENTS.BASE_CLEARED,
-            SU_EVENTS.BASE_REPLACED,
-            SU_EVENTS.MINION_MOVED,
+            SU_EVENTS.CARD_TO_DECK_BOTTOM,
         ]);
-        expect(emittedEvents?.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
-        expect(emittedEvents?.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
-        expect(result?.state.core.pendingPostScoringActions).toBeUndefined();
-
-        const finalCore = emittedEvents?.reduce((core, event) => reduce(core, event), state.core as SmashUpCore);
-        expect(finalCore?.bases[0].defId).toBe('base_secret_garden');
-        expect(finalCore?.bases[0].minions.map(minion => minion.uid)).toEqual(['runner']);
-        expect(finalCore?.bases[1].minions.map(minion => minion.uid)).toEqual(['mate']);
-        expect(finalCore?.bases[2].minions).toHaveLength(0);
+        expect(emittedEvents?.some(event => event.type === SU_EVENTS.BASE_CLEARED)).toBe(false);
+        expect(emittedEvents?.some(event => event.type === SU_EVENTS.BASE_REPLACED)).toBe(false);
     });
 
     it('海盗湾最后一步若随从已暂离来源基地但仍处于延迟清场链，应继续发出移动事件', () => {

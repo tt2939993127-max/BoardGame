@@ -53,8 +53,8 @@ function createRunner(
     });
 }
 
-describe('After Scoring 响应窗口 - 重新计分功能', () => {
-    it('基本重新计分：afterScoring 改变计分基地力量后应重新计分', () => {
+describe('After Scoring 响应窗口 - 官方计分流程', () => {
+    it('afterScoring 改变基地力量后，不应重复清场换基地（允许补发一次 BASE_SCORED 日志）', () => {
         const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
             const sys = createInitialSystemState(ids, systems, undefined);
@@ -146,7 +146,6 @@ describe('After Scoring 响应窗口 - 重新计分功能', () => {
 
         expect(scoredEvents).toHaveLength(2);
         expect(scoredEvents[0].payload.rankings[0]?.playerId).toBe('0');
-        expect(scoredEvents[1].payload.rankings[0]?.playerId).toBe('1');
         expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
         expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
 
@@ -454,6 +453,7 @@ describe('After Scoring 响应窗口 - 重新计分功能', () => {
         expect(advanceResult.success).toBe(true);
         expect(runner.getState().sys.phase).toBe('scoreBases');
         expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
+        expect((runner.getState().sys as any).smashupScoring?.currentBaseRef?.slotIndex).toBe(2);
         expect((runner.getState().sys as any).afterScoringInitialPowers?.baseIndex).toBe(2);
         expect((runner.getState().sys as any).smashupScoring?.currentBaseRef?.slotIndex).toBe(2);
         expect(runner.getState().sys.interaction?.current?.data?.sourceId).toBe('base_the_mothership');

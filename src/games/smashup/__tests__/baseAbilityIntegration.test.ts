@@ -2,10 +2,10 @@
  * 大杀四方 - 具体基地能力集成测试
  *
  * 覆盖：
- * - base_rhodes_plaza: beforeScoring 每位玩家每个随从 1VP
+ * - base_rhodes_plaza: whenScoring 每位玩家每个随从 1VP
  * - base_castle_blood: onTurnStart 有随从则抽牌
  * - base_central_brain: onMinionPlayed +1 力量指示物
- * - base_the_factory: beforeScoring 冠军每5力量1VP
+ * - base_the_factory: whenScoring 冠军每5力量1VP
  * - base_cave_of_shinies: onMinionDestroyed 拥有者获得1VP（扩展时机）
  * - Property 17: 基地能力事件顺序
  */
@@ -158,11 +158,11 @@ describe('base_central_brain: 持续被动 +1 力量', () => {
 });
 
 // ============================================================================
-// base_rhodes_plaza: 罗德百货商场 - beforeScoring 每个随从 1VP
+// base_rhodes_plaza: 罗德百货商场 - whenScoring 每个随从 1VP
 // ============================================================================
 
 describe('base_rhodes_plaza: 计分时每个随从 1VP', () => {
-    it('注册表中 beforeScoring 能力正确触发', () => {
+    it('注册表中 whenScoring 能力正确触发', () => {
         // 直接测试 triggerBaseAbility
         const ctx: BaseAbilityContext = {
             state: {
@@ -188,7 +188,7 @@ describe('base_rhodes_plaza: 计分时每个随从 1VP', () => {
             now: 1000,
         };
 
-        const { events } = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_rhodes_plaza', 'whenScoring' as any, ctx);
         expect(events.length).toBe(2); // P0 得 2VP，P1 得 1VP
 
         const p0Event = events.find((e) => e.type === SU_EVENTS.VP_AWARDED && (e as any).payload.playerId === '0');
@@ -201,7 +201,7 @@ describe('base_rhodes_plaza: 计分时每个随从 1VP', () => {
 });
 
 // ============================================================================
-// base_the_factory: 工厂 - beforeScoring 冠军每5力量1VP
+// base_the_factory: 工厂 - whenScoring 冠军每5力量1VP
 // ============================================================================
 
 describe('base_the_factory: 冠军每5力量1VP', () => {
@@ -230,7 +230,7 @@ describe('base_the_factory: 冠军每5力量1VP', () => {
             now: 1000,
         };
 
-        const { events } = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_the_factory', 'whenScoring' as any, ctx);
         expect(events.length).toBe(1);
         expect((events[0] as any).payload.playerId).toBe('0');
         expect((events[0] as any).payload.amount).toBe(2); // 10 / 5 = 2
@@ -260,7 +260,7 @@ describe('base_the_factory: 冠军每5力量1VP', () => {
             now: 1000,
         };
 
-        const { events } = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_the_factory', 'whenScoring' as any, ctx);
         expect(events.length).toBe(1);
         expect((events[0] as any).payload.amount).toBe(1); // 7 / 5 = 1
     });
@@ -286,7 +286,7 @@ describe('base_the_factory: 冠军每5力量1VP', () => {
             now: 1000,
         };
 
-        const { events } = triggerBaseAbility('base_the_factory', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_the_factory', 'whenScoring' as any, ctx);
         expect(events.length).toBe(0);
     });
 });
@@ -428,8 +428,8 @@ describe('base_cave_of_shinies: 随从被消灭获得1VP', () => {
 // ============================================================================
 
 describe('Property 17: 基地能力事件顺序', () => {
-    it('beforeScoring 事件在 BASE_SCORED 之前（单元验证）', () => {
-        // 模拟：先触发 beforeScoring 基地能力，再记录 BASE_SCORED
+    it('whenScoring 事件在 BASE_SCORED 之前（单元验证）', () => {
+        // 模拟：先触发 whenScoring 基地能力，再记录 BASE_SCORED
         const triggered: string[] = [];
 
         const ctx: BaseAbilityContext = {
@@ -456,21 +456,21 @@ describe('Property 17: 基地能力事件顺序', () => {
             now: 1000,
         };
 
-        const { events: baseEvents } = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
+        const { events: baseEvents } = triggerBaseAbility('base_rhodes_plaza', 'whenScoring' as any, ctx);
         for (const e of baseEvents) triggered.push(e.type);
         triggered.push(SU_EVENTS.BASE_SCORED);
 
-        // beforeScoring VP 事件在 BASE_SCORED 之前
+        // whenScoring VP 事件在 BASE_SCORED 之前
         const vpIdx = triggered.indexOf(SU_EVENTS.VP_AWARDED);
         const scoredIdx = triggered.indexOf(SU_EVENTS.BASE_SCORED);
         expect(vpIdx).toBeLessThan(scoredIdx);
     });
 
-    it('beforeScoring 事件在 BASE_SCORED 之前（通过 scoreOneBase 保证）', () => {
+    it('whenScoring 事件在 BASE_SCORED 之前（通过 scoreOneBase 保证）', () => {
         // scoreOneBase 中：
-        // 1. 先调用 triggerBaseAbility(beforeScoring)
+        // 1. 先调用 triggerBaseAbility(whenScoring)
         // 2. 再生成 BASE_SCORED 事件
-        // 此处验证注册表能正确返回 beforeScoring 事件
+        // 此处验证注册表能正确返回 whenScoring 事件
         const ctx: BaseAbilityContext = {
             state: {
                 bases: [{
@@ -493,7 +493,7 @@ describe('Property 17: 基地能力事件顺序', () => {
             now: 1000,
         };
 
-        const { events } = triggerBaseAbility('base_rhodes_plaza', 'beforeScoring', ctx);
+        const { events } = triggerBaseAbility('base_rhodes_plaza', 'whenScoring' as any, ctx);
         expect(events.length).toBe(1);
         expect(events[0].type).toBe(SU_EVENTS.VP_AWARDED);
         // 在实际 scoreOneBase 中，这些事件会在 BASE_SCORED 之前被 push
