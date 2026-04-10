@@ -181,6 +181,7 @@
       "errorTitle": "更新失败",
       "errorDescription": "下载或切换新版本失败，请重试。",
       "bundleVersion": "目标本体版本",
+      "currentAppVersion": "当前 App 版本",
       "requiredAppVersion": "所需 App 版本",
       "progressLabel": "下载进度",
       "progressPercent": "{{percent}}%",

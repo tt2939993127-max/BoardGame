@@ -189,7 +189,7 @@ const buildOtaArgs = (sourceArgs = args) => collectPassthroughArgs(
         'force-update-message',
         'notes',
     ]),
-    new Set(['dry-run', 'skip-latest', 'force-update', 'no-force-update']),
+    new Set(['dry-run', 'skip-latest', 'force-update', 'no-force-update', 'allow-legacy-shells']),
     sourceArgs,
 );
 

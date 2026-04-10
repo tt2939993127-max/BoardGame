@@ -38,6 +38,8 @@ import { createFlowSystem, createBaseSystems } from '../../../engine/systems';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
 import { initAllAbilities } from '../abilities';
+import { DINOSAUR_ACTIONS } from '../data/factions/dinosaurs';
+import { DINOSAUR_POD_ACTIONS } from '../data/factions/dinosaurs_pod';
 
 
 beforeAll(() => {
@@ -68,6 +70,14 @@ function wrapState(core: SmashUpCore) {
 }
 
 describe('Audit D1+D33: dino_survival_of_the_fittest（适者生存）', () => {
+    it('D8: 数据接线 — 适者生存应声明 playNeedsBase，确保 UI 进入选基地流程', () => {
+        const baseDef = DINOSAUR_ACTIONS.find((card) => card.id === 'dino_survival_of_the_fittest');
+        const podDef = DINOSAUR_POD_ACTIONS.find((card) => card.id === 'dino_survival_of_the_fittest_pod');
+
+        expect(baseDef?.playNeedsBase).toBe(true);
+        expect(podDef?.playNeedsBase).toBe(true);
+    });
+
     it('D1: 全局扫描 — 单基地单个最低力量随从自动消灭', () => {
         const runner = createRunner();
         

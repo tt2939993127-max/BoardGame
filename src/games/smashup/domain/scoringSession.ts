@@ -242,7 +242,7 @@ export function getDeferredReplacementBaseDefId(
 export function flushDeferredPostScoringCompatibility(
     state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
-    timestamp: number,
+    _timestamp: number,
 ): { state: MatchState<SmashUpCore>; events: SmashUpEvent[]; flushed: boolean } {
     if (getScoringSession(state)) {
         return { state, events: [], flushed: false };

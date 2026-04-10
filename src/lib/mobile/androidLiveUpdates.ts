@@ -142,6 +142,7 @@ export interface AndroidForceUpdateState {
     blocking: boolean;
     version?: string;
     progressPercent?: number;
+    currentNativeVersion?: string;
     requiredNativeVersion?: string;
     title?: string;
     message?: string;
@@ -992,6 +993,7 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                             phase: 'native-update-required',
                             blocking: true,
                             version: manifest.version,
+                            currentNativeVersion: current.native,
                             requiredNativeVersion,
                             title: buildForceUpdateTitle(manifest, '需要更新 App'),
                             message: buildForceUpdateMessage(

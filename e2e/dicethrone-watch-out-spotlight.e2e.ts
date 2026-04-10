@@ -669,6 +669,146 @@ async function waitForSamuraiTokenResponseScene(
     }, options, { timeout: 30000, polling: 200 });
 }
 
+async function injectGunslingerLoadedChoiceScene(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!harness || !state) {
+            throw new Error('TestHarness state not ready');
+        }
+
+        harness.dice.setValues([1]);
+
+        const random = {
+            random: () => 0.5,
+            d: (max: number) => Math.min(max, 1),
+            range: (min: number) => min,
+            shuffle: <T,>(array: T[]) => [...array],
+        };
+
+        const [{ initHeroState, ALL_TOKEN_DEFINITIONS }, { TOKEN_IDS }] = await Promise.all([
+            import('/src/games/dicethrone/domain/characters.ts'),
+            import('/src/games/dicethrone/domain/ids.ts'),
+        ]);
+
+        const gunslingerBase = initHeroState('0', 'gunslinger', random as any);
+        const monkBase = initHeroState('1', 'monk', random as any);
+
+        const currentInteraction = {
+            id: 'dt-interaction-gunslinger-loaded-scene',
+            kind: 'simple-choice',
+            playerId: '0',
+            data: {
+                title: 'offensiveRollEndToken.title',
+                sourceId: 'revolver-3',
+                options: [
+                    {
+                        id: 'loaded-option',
+                        label: 'tokens.loaded.name',
+                        value: { tokenId: TOKEN_IDS.LOADED, customId: 'use-loaded', value: 1 },
+                    },
+                    {
+                        id: 'skip-option',
+                        label: 'tokenResponse.skip',
+                        value: { customId: 'skip', value: 0 },
+                    },
+                ],
+            },
+        };
+
+        const nextState = {
+            ...state,
+            sys: {
+                ...state.sys,
+                phase: 'offensiveRoll',
+                interaction: {
+                    current: currentInteraction,
+                    queue: [],
+                },
+            },
+            core: {
+                ...state.core,
+                activePlayerId: '0',
+                hostStarted: true,
+                tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+                selectedCharacters: {
+                    ...(state.core.selectedCharacters ?? {}),
+                    '0': 'gunslinger',
+                    '1': 'monk',
+                },
+                readyPlayers: {
+                    ...(state.core.readyPlayers ?? {}),
+                    '0': true,
+                    '1': true,
+                },
+                players: {
+                    ...state.core.players,
+                    '0': {
+                        ...gunslingerBase,
+                        hand: [],
+                        discard: [],
+                        resources: {
+                            ...gunslingerBase.resources,
+                            cp: 2,
+                            hp: 50,
+                        },
+                        tokens: {
+                            ...gunslingerBase.tokens,
+                            [TOKEN_IDS.LOADED]: 1,
+                        },
+                    },
+                    '1': {
+                        ...monkBase,
+                        hand: [],
+                        discard: [],
+                        resources: {
+                            ...monkBase.resources,
+                            cp: 2,
+                            hp: 50,
+                        },
+                    },
+                },
+                pendingAttack: {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'revolver-3',
+                    damage: 4,
+                    bonusDamage: 0,
+                    attackModifierBonusDamage: 0,
+                    damageResolved: false,
+                    resolvedDamage: 0,
+                    preDefenseResolved: true,
+                    offensiveRollEndTokenResolved: false,
+                },
+                pendingDamage: null,
+                rollCount: 1,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 1, isKept: false, playerId: '0' },
+                    { id: 1, value: 2, isKept: false, playerId: '0' },
+                    { id: 2, value: 3, isKept: false, playerId: '0' },
+                    { id: 3, value: 4, isKept: false, playerId: '0' },
+                    { id: 4, value: 5, isKept: false, playerId: '0' },
+                ],
+            },
+        };
+
+        harness.state.set(nextState);
+        (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    });
+}
+
+async function waitForGunslingerLoadedChoiceScene(page: Page): Promise<void> {
+    await page.waitForFunction(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        return state?.core?.players?.['0']?.characterId === 'gunslinger'
+            && state?.core?.players?.['0']?.tokens?.loaded === 1
+            && state?.sys?.interaction?.current?.id === 'dt-interaction-gunslinger-loaded-scene'
+            && state?.core?.pendingAttack?.sourceAbilityId === 'revolver-3';
+    }, undefined, { timeout: 30000, polling: 200 });
+}
+
 async function injectGunslingerTheLawInteractionScene(page: Page): Promise<void> {
     await page.evaluate(async () => {
         const harness = (window as any).__BG_TEST_HARNESS__;
@@ -2020,6 +2160,57 @@ test('samurai honor token should accumulate to +3 after two real clicks', async 
     expect(finalState.lastEventTypes).toContain('TOKEN_RESPONSE_CLOSED');
     await expect(useButton).toBeHidden({ timeout: 5000 });
     await game.screenshot('19-samurai-honor-finalized-after-second-use', testInfo);
+});
+
+test('gunslinger loaded token should open single-die spotlight after real choice click', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+    await injectGunslingerLoadedChoiceScene(page);
+    await waitForGunslingerLoadedChoiceScene(page);
+
+    await ensureDebugPanelClosed(page);
+    await disableFabMenu(page);
+
+    const loadedLabel = page.getByText(/^装填$|^Loaded$/i).first();
+    await expect(loadedLabel).toBeVisible({ timeout: 5000 });
+    await game.screenshot('20-gunslinger-loaded-choice-before-use', testInfo);
+
+    await loadedLabel.locator('..').click();
+
+    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
+    const singleDieSpotlight = page.locator('[data-testid="bonus-die-single-reroll-spotlight"]');
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
+    await expect(singleDieSpotlight).toBeVisible({ timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/装填|Loaded|伤害|\+1/i, { timeout: 5000 });
+
+    const stateAfterUse = await page.evaluate(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        const settlement = state?.core?.pendingBonusDiceSettlement;
+        return {
+            loaded: state?.core?.players?.['0']?.tokens?.loaded ?? 0,
+            hasChoice: Boolean(state?.sys?.interaction?.current),
+            settlement: settlement
+                ? {
+                    id: settlement.id,
+                    diceCount: settlement.dice?.length ?? 0,
+                    displayOnly: settlement.displayOnly ?? false,
+                    rerollCostTokenId: settlement.rerollCostTokenId ?? null,
+                    dieValue: settlement.dice?.[0]?.value ?? null,
+                    effectKey: settlement.rerollEffectKey ?? null,
+                }
+                : null,
+        };
+    });
+
+    expect(stateAfterUse.loaded).toBe(0);
+    expect(stateAfterUse.hasChoice).toBe(false);
+    expect(stateAfterUse.settlement?.diceCount).toBe(1);
+    expect(stateAfterUse.settlement?.rerollCostTokenId).toBe('loaded');
+    expect(stateAfterUse.settlement?.dieValue).toBe(1);
+
+    await game.screenshot('21-gunslinger-loaded-single-die-spotlight', testInfo);
 });
 
 test('samurai retribution token should retaliate through real click flow', async ({ page, game }, testInfo) => {

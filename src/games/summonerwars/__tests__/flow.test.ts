@@ -14,8 +14,9 @@ import {
     BOARD_ROWS,
     BOARD_COLS,
     getValidSummonPositions,
+    getSummoner,
 } from '../domain/helpers';
-import { createInitializedCore, placeTestUnit } from './test-helpers';
+import { createInitializedCore, placeTestUnit, resetInstanceCounter } from './test-helpers';
 import { engineConfig } from '../game';
 
 const aiTestRandom = {
@@ -99,6 +100,125 @@ function createBoardControlTiebreakAttackCore(): SummonerWarsCore {
             position: { row: 7, col: 0 },
         }
         : undefined;
+    return core;
+}
+
+function createActivatedAbilityHeuristicCore(): SummonerWarsCore {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], aiTestRandom, {
+        faction0: 'barbaric',
+        faction1: 'paladin',
+    });
+    core.phase = 'move';
+    core.currentPlayer = '0';
+
+    for (let row = 0; row < BOARD_ROWS; row += 1) {
+        for (let col = 0; col < BOARD_COLS; col += 1) {
+            const unit = core.board[row][col].unit;
+            if (unit && unit.card.unitClass !== 'summoner') {
+                core.board[row][col].unit = undefined;
+            }
+        }
+    }
+
+    const ownSummoner = getSummoner(core, '0');
+    const enemySummoner = getSummoner(core, '1');
+    if (!ownSummoner || !enemySummoner) {
+        throw new Error('测试场景缺少召唤师');
+    }
+    ownSummoner.hasMoved = true;
+    enemySummoner.hasMoved = true;
+
+    const inspireSourceCard: UnitCard = {
+        id: 'test-inspire-source',
+        cardType: 'unit',
+        name: '测试鼓舞者',
+        unitClass: 'champion',
+        faction: 'barbaric',
+        strength: 2,
+        life: 4,
+        cost: 2,
+        attackType: 'melee',
+        attackRange: 1,
+        abilities: ['inspire'],
+        deckSymbols: [],
+    };
+    const prepareSourceCard: UnitCard = {
+        id: 'test-prepare-source',
+        cardType: 'unit',
+        name: '测试预备者',
+        unitClass: 'common',
+        faction: 'barbaric',
+        strength: 1,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        abilities: ['prepare'],
+        deckSymbols: [],
+    };
+    const allyChampionCard: UnitCard = {
+        id: 'test-inspired-champion',
+        cardType: 'unit',
+        name: '测试前锋冠军',
+        unitClass: 'champion',
+        faction: 'barbaric',
+        strength: 3,
+        life: 4,
+        cost: 3,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const allyCommonCard: UnitCard = {
+        id: 'test-inspired-common',
+        cardType: 'unit',
+        name: '测试护卫兵',
+        unitClass: 'common',
+        faction: 'barbaric',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+
+    const inspireSourcePos = {
+        row: ownSummoner.position.row - 1,
+        col: ownSummoner.position.col,
+    };
+    placeTestUnit(core, inspireSourcePos, {
+        card: inspireSourceCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: inspireSourcePos.row,
+        col: inspireSourcePos.col - 1,
+    }, {
+        card: allyChampionCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: inspireSourcePos.row,
+        col: inspireSourcePos.col + 1,
+    }, {
+        card: allyCommonCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: ownSummoner.position.row - 2,
+        col: 0,
+    }, {
+        card: prepareSourceCard,
+        owner: '0',
+        hasMoved: false,
+        tempAbilities: ['immobile'],
+    });
+
     return core;
 }
 
@@ -1001,6 +1121,68 @@ describe('召唤师战争本地 AI', () => {
         expect(championAttackScore).toBeGreaterThan(commonAttackScore);
         expect(championEval?.totalScore ?? -Infinity).toBeGreaterThan(commonEval?.totalScore ?? -Infinity);
         expect(decision?.actionId).toBe(championAttack?.actionId);
+    });
+
+    it('activated ability 会根据效果目标自动补齐 strategy tags', () => {
+        const core = createActivatedAbilityHeuristicCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const inspireAction = actions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'inspire';
+        });
+        const prepareAction = actions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'prepare';
+        });
+
+        expect(inspireAction?.metadata?.strategyTags).toContain('ability-tempo');
+        expect(inspireAction?.metadata?.strategyTags).toContain('board-control');
+        expect(inspireAction?.metadata?.strategyTags).toContain('summoner-defense');
+        expect(inspireAction?.metadata?.adjacentAllyCount).toBe(3);
+        expect(inspireAction?.metadata?.adjacentChampionCount).toBe(1);
+        expect(inspireAction?.metadata?.adjacentSummonerCount).toBe(1);
+
+        expect(prepareAction?.metadata?.strategyTags).toEqual(['ability-tempo']);
+        expect(prepareAction?.metadata?.selfChargeGain).toBe(1);
+    });
+
+    it('多个无目标 activated ability 同时可用时，应优先选择能强化多名友军的能力', async () => {
+        const core = createActivatedAbilityHeuristicCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-activated-ability-heuristics',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            totalScore: number;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const inspireAction = context.legalActions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'inspire';
+        });
+        const prepareAction = context.legalActions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'prepare';
+        });
+        const inspireEval = evaluations.find((item) => item.actionId === inspireAction?.actionId);
+        const prepareEval = evaluations.find((item) => item.actionId === prepareAction?.actionId);
+        const inspireAbilityScore = inspireEval?.contributions.find((item) => item.scorerId === 'activated-ability')?.score ?? -Infinity;
+        const prepareAbilityScore = prepareEval?.contributions.find((item) => item.scorerId === 'activated-ability')?.score ?? -Infinity;
+
+        expect(inspireAbilityScore).toBeGreaterThan(prepareAbilityScore);
+        expect(inspireEval?.totalScore ?? -Infinity).toBeGreaterThan(prepareEval?.totalScore ?? -Infinity);
+        expect(decision?.actionId).toBe(inspireAction?.actionId);
     });
 
     it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {

@@ -526,6 +526,93 @@ describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 分两步交互�
         expect(legacy?.events ?? []).toHaveLength(0);
     });
 
+    it('从其他基地选择随从时，第二步只能移动到齐柏林所在基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [makeMinion('home-minion', 'pirate_first_mate', '0', 3, { powerModifier: 0 })],
+                    ongoingActions: [makeOngoing('oa1', 'steampunk_zeppelin', '0')],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [makeMinion('away-minion', 'pirate_saucy_wench', '0', 2, { powerModifier: 0 })],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_c',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const chooseMinion = getInteractionHandler('steampunk_zeppelin_choose_minion');
+        expect(chooseMinion).toBeDefined();
+
+        const result = chooseMinion!(
+            makeMatchState(core),
+            '0',
+            { minionUid: 'away-minion', baseIndex: 1 },
+            { continuationContext: { zepBaseIndex: 0 } } as any,
+            defaultRandom,
+            2200,
+        );
+        const chooseBaseInteraction = result ? getInteractionsFromMS(result.state)[0] : undefined;
+        const options = chooseBaseInteraction?.data?.options ?? [];
+        expect(chooseBaseInteraction?.data?.sourceId).toBe('steampunk_zeppelin_choose_base');
+        expect(chooseBaseInteraction?.data?.autoResolveIfSingle).toBe(true);
+        expect(options).toHaveLength(1);
+        expect(options[0]?.value?.baseIndex).toBe(0);
+    });
+
+    it('从齐柏林所在基地选择随从时，只能移动到其他基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [makeMinion('home-minion', 'pirate_first_mate', '0', 3, { powerModifier: 0 })],
+                    ongoingActions: [makeOngoing('oa1', 'steampunk_zeppelin', '0')],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [makeMinion('away-minion', 'pirate_saucy_wench', '0', 2, { powerModifier: 0 })],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_c',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const chooseMinion = getInteractionHandler('steampunk_zeppelin_choose_minion');
+        expect(chooseMinion).toBeDefined();
+
+        const result = chooseMinion!(
+            makeMatchState(core),
+            '0',
+            { minionUid: 'home-minion', baseIndex: 0 },
+            { continuationContext: { zepBaseIndex: 0 } } as any,
+            defaultRandom,
+            2201,
+        );
+        const chooseBaseInteraction = result ? getInteractionsFromMS(result.state)[0] : undefined;
+        const options = chooseBaseInteraction?.data?.options ?? [];
+        expect(chooseBaseInteraction?.data?.sourceId).toBe('steampunk_zeppelin_choose_base');
+        expect(options).toHaveLength(2);
+        expect(options.map((option: any) => option.value.baseIndex)).toEqual([1, 2]);
+    });
+
     it('reduce 后 talentUsed 标记为 true', () => {
         const core = makeState({
             bases: [

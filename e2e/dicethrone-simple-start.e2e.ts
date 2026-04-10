@@ -2068,8 +2068,7 @@ test.describe('DiceThrone Simple Start', () => {
                     return Array.from(document.querySelectorAll('*')).some((node) => {
                         const text = node.textContent?.trim() ?? '';
                         return text.includes('强制结束 AI 回合未成功')
-                            || text.includes('AI 强制结束在 recover-interaction 阶段失败')
-                            || text.includes('AI 强制结束在 follow-up-advance 阶段失败');
+                            || text.includes('AI 强制结束失败（');
                     });
                 });
                 return {

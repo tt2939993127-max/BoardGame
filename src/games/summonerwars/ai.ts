@@ -19,6 +19,7 @@ import { abilityRegistry } from './domain/abilities';
 import { getActivatableAbilities, canActivateAbility } from './domain/abilityHelpers';
 import {
     BOARD_COLS,
+    getAdjacentCells,
     getPlayerUnits,
     getSummoner,
     getUnitAt,
@@ -31,12 +32,14 @@ import {
 } from './domain/helpers';
 import { SW_COMMANDS } from './domain/types';
 import type {
+    BoardUnit,
     Card,
     CellCoord,
     FactionId,
     GamePhase,
     SummonerWarsCore,
 } from './domain/types';
+import type { AbilityDef } from './domain/abilities';
 
 type SummonerWarsState = MatchState<SummonerWarsCore>;
 type SetupPhase = 'setup';
@@ -380,6 +383,160 @@ const buildAttackStrategyTags = (args: {
     return tags;
 };
 
+type ActivatedAbilityTargetSummary = {
+    count: number;
+    championCount: number;
+    summonerCount: number;
+    nearOwnSummonerCount: number;
+    attackReadyCount: number;
+    enemySummonerPressureCount: number;
+};
+
+const summarizeAbilityTargetUnits = (
+    state: SummonerWarsState,
+    units: BoardUnit[],
+    ownSummonerPosition: CellCoord | null,
+    enemySummonerPosition: CellCoord | null,
+): ActivatedAbilityTargetSummary => {
+    let championCount = 0;
+    let summonerCount = 0;
+    let nearOwnSummonerCount = 0;
+    let attackReadyCount = 0;
+    let enemySummonerPressureCount = 0;
+
+    for (const unit of units) {
+        if (unit.card.unitClass === 'champion') {
+            championCount += 1;
+        }
+        if (unit.card.unitClass === 'summoner') {
+            summonerCount += 1;
+        }
+        if (
+            ownSummonerPosition
+            && manhattanDistance(unit.position, ownSummonerPosition) <= 1
+        ) {
+            nearOwnSummonerCount += 1;
+        }
+
+        const attackTargets = getValidAttackTargetsEnhanced(state.core, unit.position);
+        if (attackTargets.length > 0) {
+            attackReadyCount += 1;
+        }
+        if (
+            enemySummonerPosition
+            && attackTargets.some((target) => {
+                return target.row === enemySummonerPosition.row && target.col === enemySummonerPosition.col;
+            })
+        ) {
+            enemySummonerPressureCount += 1;
+        }
+    }
+
+    return {
+        count: units.length,
+        championCount,
+        summonerCount,
+        nearOwnSummonerCount,
+        attackReadyCount,
+        enemySummonerPressureCount,
+    };
+};
+
+const buildActivatedAbilitySemantics = (args: {
+    state: SummonerWarsState;
+    playerId: PlayerId;
+    unit: BoardUnit;
+    abilityDef: AbilityDef;
+}): {
+    strategyTags: SummonerWarsStrategyTag[];
+    metadata: Record<string, unknown>;
+} => {
+    const { state, playerId, unit, abilityDef } = args;
+    const strategyTags: SummonerWarsStrategyTag[] = ['ability-tempo'];
+    const ownSummoner = getSummoner(state.core, playerId);
+    const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
+    const adjacentAllies = getAdjacentCells(unit.position)
+        .map((position) => getUnitAt(state.core, position))
+        .filter((candidate): candidate is BoardUnit => Boolean(candidate) && candidate.owner === playerId);
+    const allAllies = getPlayerUnits(state.core, playerId).filter((candidate) => candidate.instanceId !== unit.instanceId);
+    const effectTypes = abilityDef.effects.map((effect) => effect.type);
+    const sourceAttackTargets = getValidAttackTargetsEnhanced(state.core, unit.position);
+
+    const metadata: Record<string, unknown> = {
+        abilityId: abilityDef.id,
+        abilityEffectTypes: effectTypes,
+        sourceUnitClass: unit.card.unitClass,
+        sourceBoostsBefore: unit.boosts ?? 0,
+        sourceAttackTargetCount: sourceAttackTargets.length,
+        costsMoveAction: abilityDef.costsMoveAction === true,
+        costsAttackAction: abilityDef.costsAttackAction === true,
+        selfChargeGain: 0,
+        adjacentAllyCount: 0,
+        adjacentChampionCount: 0,
+        adjacentSummonerCount: 0,
+        adjacentAttackReadyCount: 0,
+        adjacentEnemySummonerPressureCount: 0,
+        allAllyCount: 0,
+        allChampionCount: 0,
+        allSummonerCount: 0,
+        allAttackReadyCount: 0,
+        allEnemySummonerPressureCount: 0,
+    };
+
+    const applyFriendlyTargetSemantics = (target: string): void => {
+        const summary = summarizeAbilityTargetUnits(
+            state,
+            target === 'adjacentAllies' ? adjacentAllies : allAllies,
+            ownSummoner?.position ?? null,
+            enemySummoner?.position ?? null,
+        );
+        const prefix = target === 'adjacentAllies' ? 'adjacent' : 'all';
+        metadata[`${prefix}AllyCount`] = summary.count;
+        metadata[`${prefix}ChampionCount`] = summary.championCount;
+        metadata[`${prefix}SummonerCount`] = summary.summonerCount;
+        metadata[`${prefix}NearOwnSummonerCount`] = summary.nearOwnSummonerCount;
+        metadata[`${prefix}AttackReadyCount`] = summary.attackReadyCount;
+        metadata[`${prefix}EnemySummonerPressureCount`] = summary.enemySummonerPressureCount;
+
+        if (summary.count > 0) {
+            pushStrategyTag(strategyTags, 'board-control');
+        }
+        if (summary.summonerCount > 0 || summary.nearOwnSummonerCount > 0) {
+            pushStrategyTag(strategyTags, 'summoner-defense');
+        }
+        if (summary.attackReadyCount > 0 || summary.enemySummonerPressureCount > 0) {
+            pushStrategyTag(strategyTags, 'summoner-pressure');
+        }
+    };
+
+    for (const effect of abilityDef.effects) {
+        switch (effect.type) {
+            case 'addCharge':
+                if (effect.target === 'self') {
+                    metadata.selfChargeGain = (metadata.selfChargeGain as number) + effect.value;
+                } else if (effect.target === 'adjacentAllies' || effect.target === 'allAllies') {
+                    applyFriendlyTargetSemantics(effect.target);
+                }
+                break;
+            case 'heal':
+            case 'modifyStrength':
+            case 'modifyLife':
+            case 'grantExtraAttack':
+                if (effect.target === 'adjacentAllies' || effect.target === 'allAllies') {
+                    applyFriendlyTargetSemantics(effect.target);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    return {
+        strategyTags,
+        metadata,
+    };
+};
+
 const buildInteractionActions = (
     state: SummonerWarsState,
     playerId: PlayerId,
@@ -572,7 +729,12 @@ const buildActivatedAbilityActions = (
             if (abilityDef.trigger !== 'activated') continue;
             if (abilityDef.requiresTargetSelection) continue;
             if (!canActivateAbility(state.core, unit, abilityId, playerId)) continue;
-            const strategyTags: SummonerWarsStrategyTag[] = ['ability-tempo'];
+            const semantics = buildActivatedAbilitySemantics({
+                state,
+                playerId,
+                unit,
+                abilityDef,
+            });
 
             appendAction(actions, state, playerId, {
                 actionId: createAiLegalActionId('activate-ability', unit.instanceId, abilityId),
@@ -586,10 +748,10 @@ const buildActivatedAbilityActions = (
                     },
                 }],
                 metadata: withAiActionStrategyTags({
-                    abilityId,
+                    ...semantics.metadata,
                     sourceUnitId: unit.instanceId,
                     sourcePosition: unit.position,
-                }, strategyTags),
+                }, semantics.strategyTags),
             });
         }
     }
@@ -1205,9 +1367,86 @@ const abilityScorer: LocalAiActionScorer = {
     id: 'activated-ability',
     score(_context, action) {
         if (action.kind !== 'activate-ability') return null;
+        const abilityId = String(action.metadata?.abilityId ?? '');
+        const selfChargeGain = typeof action.metadata?.selfChargeGain === 'number'
+            ? action.metadata.selfChargeGain
+            : 0;
+        const sourceBoostsBefore = typeof action.metadata?.sourceBoostsBefore === 'number'
+            ? action.metadata.sourceBoostsBefore
+            : 0;
+        const costsMoveAction = action.metadata?.costsMoveAction === true;
+        const costsAttackAction = action.metadata?.costsAttackAction === true;
+        const adjacentAllyCount = typeof action.metadata?.adjacentAllyCount === 'number'
+            ? action.metadata.adjacentAllyCount
+            : 0;
+        const adjacentChampionCount = typeof action.metadata?.adjacentChampionCount === 'number'
+            ? action.metadata.adjacentChampionCount
+            : 0;
+        const adjacentSummonerCount = typeof action.metadata?.adjacentSummonerCount === 'number'
+            ? action.metadata.adjacentSummonerCount
+            : 0;
+        const adjacentAttackReadyCount = typeof action.metadata?.adjacentAttackReadyCount === 'number'
+            ? action.metadata.adjacentAttackReadyCount
+            : 0;
+        const adjacentEnemySummonerPressureCount = typeof action.metadata?.adjacentEnemySummonerPressureCount === 'number'
+            ? action.metadata.adjacentEnemySummonerPressureCount
+            : 0;
+        const allAllyCount = typeof action.metadata?.allAllyCount === 'number'
+            ? action.metadata.allAllyCount
+            : 0;
+        const allChampionCount = typeof action.metadata?.allChampionCount === 'number'
+            ? action.metadata.allChampionCount
+            : 0;
+        const allAttackReadyCount = typeof action.metadata?.allAttackReadyCount === 'number'
+            ? action.metadata.allAttackReadyCount
+            : 0;
+        const allEnemySummonerPressureCount = typeof action.metadata?.allEnemySummonerPressureCount === 'number'
+            ? action.metadata.allEnemySummonerPressureCount
+            : 0;
+        const sourceAttackTargetCount = typeof action.metadata?.sourceAttackTargetCount === 'number'
+            ? action.metadata.sourceAttackTargetCount
+            : 0;
+
+        let score = 72;
+        const reasons: string[] = [];
+
+        if (selfChargeGain > 0) {
+            score += selfChargeGain * 16;
+            score += sourceBoostsBefore === 0 ? 24 : 8;
+            if (costsMoveAction) {
+                score -= 12;
+            }
+            if (costsAttackAction) {
+                score -= 16;
+            }
+            if (sourceAttackTargetCount > 0 && costsAttackAction) {
+                score -= 12;
+            }
+            reasons.push(sourceBoostsBefore === 0 ? '先给关键单位充能' : '继续累积充能资源');
+        }
+
+        const supportTargetCount = adjacentAllyCount + allAllyCount;
+        if (supportTargetCount > 0) {
+            const championCount = adjacentChampionCount + allChampionCount;
+            const attackReadyCount = adjacentAttackReadyCount + allAttackReadyCount;
+            const enemySummonerPressureCount = adjacentEnemySummonerPressureCount + allEnemySummonerPressureCount;
+            score += supportTargetCount * 24;
+            score += championCount * 18;
+            score += (adjacentSummonerCount > 0 ? 22 : 0);
+            score += attackReadyCount * 12;
+            score += enemySummonerPressureCount * 18;
+            reasons.push(
+                supportTargetCount >= 2
+                    ? '一次能强化多个友军'
+                    : '能顺手强化周围友军',
+            );
+        }
+
         return {
-            score: 75,
-            reason: `可无目标发动的技能通常有即时收益：${String(action.metadata?.abilityId ?? '')}`,
+            score,
+            reason: reasons.length > 0
+                ? `${reasons.join('，')}：${abilityId}`
+                : `可无目标发动的技能通常有即时收益：${abilityId}`,
         };
     },
 };
