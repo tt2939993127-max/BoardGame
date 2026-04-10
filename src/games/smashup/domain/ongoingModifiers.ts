@@ -107,6 +107,10 @@ export type TitanPowerModifierFn = (ctx: TitanPowerModifierContext) => number;
 
 const titanPowerModifiers: Map<string, TitanPowerModifierFn> = new Map();
 
+function normalizeDefId(defId: string): string {
+    return defId.endsWith('_pod') ? defId.slice(0, -4) : defId;
+}
+
 function getFilteredPowerModifierContext(
     state: SmashUpCore,
     minion: MinionOnBase,
@@ -447,6 +451,10 @@ export function getOngoingPowerModifierDetails(
 
     const details: PowerModifierDetail[] = [];
     for (const entry of modifierRegistry) {
+        if (isCardSuppressed(state, minion.uid)
+            && normalizeDefId(minion.defId) === normalizeDefId(entry.sourceDefId)) {
+            continue;
+        }
         const ctx = getFilteredPowerModifierContext(
             state,
             minion,
@@ -517,6 +525,10 @@ export function getOngoingPowerModifier(
 
     let total = 0;
     for (const entry of modifierRegistry) {
+        if (isCardSuppressed(state, minion.uid)
+            && normalizeDefId(minion.defId) === normalizeDefId(entry.sourceDefId)) {
+            continue;
+        }
         const ctx = getFilteredPowerModifierContext(
             state,
             minion,

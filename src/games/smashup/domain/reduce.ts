@@ -2379,10 +2379,14 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
             const player = state.players[playerId];
             if (!player || !state.madnessDeck) return state;
             // 从手牌或弃牌堆移除疯狂卡，放回疯狂牌库
+            const returningCard = player.hand.find(c => c.uid === cardUid)
+                ?? player.discard.find(c => c.uid === cardUid);
+            if (!returningCard) return state;
             const newHand = player.hand.filter(c => c.uid !== cardUid);
             const newDiscard = player.discard.filter(c => c.uid !== cardUid);
             return {
                 ...state,
+                madnessDeck: [...state.madnessDeck, returningCard.defId],
                 players: {
                     ...state.players,
                     [playerId]: { ...player, hand: newHand, discard: newDiscard },

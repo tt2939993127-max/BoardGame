@@ -56,9 +56,10 @@ describe('响应窗口跳过逻辑', () => {
                 }));
                 core.bases[0].minions = fakeMinions;
                 
-                // 玩家 0 有 special 卡（pirate_full_sail - 简单的 special 卡，不需要交互），玩家 1 没有
+                // 玩家 0 有 special 卡（pirate_full_sail），玩家 1 没有
                 core.players['0'].hand = [
                     { uid: 'card-1', defId: 'pirate_full_sail', type: 'action', owner: '0' },
+                    { uid: 'card-3', defId: 'pirate_full_sail', type: 'action', owner: '0' },
                 ];
                 core.players['1'].hand = [
                     { uid: 'card-2', defId: 'robot_microbot_alpha', type: 'minion', owner: '1' },
@@ -78,11 +79,19 @@ describe('响应窗口跳过逻辑', () => {
         expect(state1.sys.responseWindow?.current?.responderQueue).toEqual(['0', '1']);
         expect(state1.sys.responseWindow?.current?.currentResponderIndex).toBe(0);
         
-        // 玩家 0 打出 special 卡（pirate_full_sail - 不创建交互）
+        // 玩家 0 打出 special 卡（pirate_full_sail - 现在会创建交互）
         runner.dispatch('su:play_action', {
             playerId: '0',
             cardUid: 'card-1',
         });
+
+        // 解决 Full Sail 的交互（选择“完成移动”直接结束）
+        const stateAfterPlay = runner.getState();
+        expect(stateAfterPlay.sys.interaction?.current?.data?.sourceId).toBe('pirate_full_sail_choose_minion');
+        const doneOption = stateAfterPlay.sys.interaction!.current!.data.options.find(
+            (opt: any) => opt.id === 'done',
+        );
+        runner.resolveInteraction('0', { optionId: doneOption!.id });
         
         // 验证：窗口仍然打开，推进到玩家 1，但玩家 1 没有 special 卡，应该被跳过，重新回到玩家 0
         const state2 = runner.getState();
