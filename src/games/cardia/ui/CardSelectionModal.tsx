@@ -91,7 +91,7 @@ export const CardSelectionModal: React.FC<CardSelectionModalProps> = ({
             style={{ zIndex: UI_Z_INDEX.modalOverlay }}
         >
             <div
-                className="flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border-2 border-purple-500 bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl sm:rounded-lg"
+                className="flex max-h-[calc(100vh-1rem)] w-full max-w-4xl flex-col overflow-hidden rounded-t-2xl border-2 border-purple-500 bg-gradient-to-br from-slate-800 to-slate-900 shadow-2xl sm:max-h-[88vh] sm:rounded-lg"
                 style={{ zIndex: UI_Z_INDEX.modalContent }}
             >
                 {/* 标题栏 */}
@@ -106,7 +106,7 @@ export const CardSelectionModal: React.FC<CardSelectionModalProps> = ({
                 </div>
                 
                 {/* 卡牌列表 */}
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="flex-1 overflow-y-auto p-4 pb-3 sm:p-6">
                     {cards.length === 0 ? (
                         <div className="text-center text-gray-400 py-8">
                             {t('noCardsAvailable')}
@@ -235,7 +235,7 @@ export const CardSelectionModal: React.FC<CardSelectionModalProps> = ({
                 </div>
                 
                 {/* 操作按钮 */}
-                <div className="flex flex-col gap-3 border-t border-purple-500/30 px-4 py-3 sm:flex-row sm:px-6 sm:py-4">
+                <div className="sticky bottom-0 flex flex-col gap-3 border-t border-purple-500/30 bg-slate-900/95 px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3 sm:flex-row sm:px-6 sm:py-4">
                     <button
                         onClick={handleConfirm}
                         disabled={!canConfirm}
