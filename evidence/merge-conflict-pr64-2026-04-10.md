@@ -99,6 +99,8 @@
   - 建议同步落点：`src/games/smashup/rule/`、相关审计测试注释、`evidence/` 中的 afterScoring/计分流程文档
 
 ## 6. 结果
-- merge commit：待回填
-- merge audit：待回填
-- push：待回填
+- merge commit：`dac8b685 合并 main 到 PR64 并解决官方计分流程冲突`
+- merge audit：
+  - `npm run merge:audit -- HEAD` → 9 个冲突文件全部为“混合结果”
+  - `npm run merge:audit:strict -- HEAD` → 通过；`完全等于父1/父2` 均为 0
+- push：目标分支 `deathcats4/codex/smashup-base-scoring-official-rules`
