@@ -14,3 +14,9 @@ export const formatPackageBytes = (bytes: number | undefined, unknownLabel: stri
     const digits = value >= 100 || unitIndex === 0 ? 0 : value >= 10 ? 1 : 2;
     return `${value.toFixed(digits)} ${units[unitIndex]}`;
 };
+
+export const hasKnownPackageBytes = (bytes: number | undefined) => (
+    typeof bytes === 'number'
+    && Number.isFinite(bytes)
+    && bytes > 0
+);

@@ -30,6 +30,15 @@ export interface RuntimeViewportSize {
     height: number;
 }
 
+export interface RuntimeLayoutScaleMetrics {
+    designWidth: number;
+    scale: number;
+    inverseScale: number;
+    logicalHeight: number;
+    inlineUnit: number;
+    blockUnit: number;
+}
+
 const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
     'data-game-page',
     'data-game-id',
@@ -252,5 +261,33 @@ export const resolveStableViewportSize = (
     return {
         width: pickDimension('width'),
         height: pickDimension('height'),
+    };
+};
+
+export const resolveRuntimeLayoutScaleMetrics = (
+    viewport: RuntimeViewportSize,
+    designWidth: number,
+): RuntimeLayoutScaleMetrics => {
+    const resolvedDesignWidth = isUsableViewportDimension(designWidth)
+        ? designWidth
+        : isUsableViewportDimension(viewport.width)
+            ? viewport.width
+            : 1;
+    const safeViewportWidth = isUsableViewportDimension(viewport.width) ? viewport.width : resolvedDesignWidth;
+    const safeViewportHeight = isUsableViewportDimension(viewport.height) ? viewport.height : 0;
+    const scale = resolvedDesignWidth > 0 ? safeViewportWidth / resolvedDesignWidth : 1;
+    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+    const inverseScale = 1 / safeScale;
+    const logicalHeight = safeViewportHeight > 0 ? safeViewportHeight / safeScale : 0;
+    const inlineUnit = resolvedDesignWidth / 100;
+    const blockUnit = logicalHeight / 100;
+
+    return {
+        designWidth: resolvedDesignWidth,
+        scale: safeScale,
+        inverseScale,
+        logicalHeight,
+        inlineUnit,
+        blockUnit,
     };
 };

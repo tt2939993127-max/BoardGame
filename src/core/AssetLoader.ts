@@ -20,6 +20,7 @@ const LOCAL_ASSETS_BASE_URL = '/assets';
 const COMPRESSED_SUBDIR = 'compressed';
 const LOCALIZED_ASSETS_SUBDIR = 'i18n';
 const VERSION_PARAM = 'v';
+const COMMON_AUDIO_BASE_PATH = 'common/audio';
 
 const normalizeAssetsBaseUrl = (value?: string) => {
     if (!value) return null;
@@ -71,6 +72,7 @@ export function resolveAssetsBaseUrlFromEnv(env?: AssetEnvLike): string {
 let assetsBaseUrl = resolveAssetsBaseUrlFromEnv(import.meta.env);
 let assetHashes: Record<string, string> = typeof __ASSET_HASHES__ !== 'undefined' ? __ASSET_HASHES__ : {};
 const gameAssetBaseOverrides = new Map<string, string>();
+let commonAudioAssetBaseOverride: string | undefined;
 
 export function setAssetsBaseUrl(value?: string): void {
     assetsBaseUrl = normalizeAssetsBaseUrl(value) ?? resolveAssetsBaseUrlFromEnv(import.meta.env);
@@ -78,6 +80,10 @@ export function setAssetsBaseUrl(value?: string): void {
 
 export function getAssetsBaseUrl(): string {
     return assetsBaseUrl;
+}
+
+export function setCommonAudioAssetBaseOverride(value?: string): void {
+    commonAudioAssetBaseOverride = normalizeAssetsBaseUrl(value) ?? undefined;
 }
 
 export function setGameAssetBaseOverride(gameId: string, value?: string): void {
@@ -932,6 +938,12 @@ const resolveGameIdFromAssetRelativePath = (value: string) => {
     return segments[0];
 };
 const resolveAssetBaseUrlForPath = (value: string) => {
+    if (commonAudioAssetBaseOverride) {
+        const trimmed = stripKnownAssetPrefixes(value);
+        if (trimmed === COMMON_AUDIO_BASE_PATH || trimmed.startsWith(`${COMMON_AUDIO_BASE_PATH}/`)) {
+            return commonAudioAssetBaseOverride;
+        }
+    }
     const gameId = resolveGameIdFromAssetRelativePath(value);
     return gameId ? gameAssetBaseOverrides.get(gameId) : undefined;
 };
