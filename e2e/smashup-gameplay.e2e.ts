@@ -323,7 +323,7 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
         await game.screenshot('active-base-ability-badge-centered', testInfo);
     });
 
-    test('适者生存应先进入选基地流程，再按所选基地结算全场最低力量随从消灭', async ({ page, game }, testInfo) => {
+    test('适者生存应先进入选基地流程；若目标基地最低力量平局，则继续进入平局选择', async ({ page, game }, testInfo) => {
         test.setTimeout(90000);
 
         await game.openTestGame('smashup', {
@@ -362,7 +362,7 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
                 {
                     defId: 'base_wizard_academy',
                     minions: [
-                        { uid: 'b1-weak', defId: 'robot_microbot_fixer', owner: '1', controller: '1', power: 1 },
+                        { uid: 'b1-weak', defId: 'robot_microbot_guard', owner: '1', controller: '1', power: 1 },
                         { uid: 'b1-mid-a', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', power: 2 },
                         { uid: 'b1-mid-b', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', power: 2 },
                     ],
@@ -392,7 +392,7 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
         await handCard.click();
         await page.waitForTimeout(300);
 
-        await expect(handCard, '第一击后应进入选基地态，卡牌仍留在手牌等待选基地').toBeVisible();
+        await expect(handCard, '点卡后应进入选基地态，不能直接弹“场上没有符合条件的目标”').toBeVisible();
         await expect(page.getByText('场上没有符合条件的目标')).toHaveCount(0);
         await game.screenshot('sotf-after-card-click-awaiting-base', testInfo);
 
@@ -402,18 +402,25 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
             const state = await game.getState();
             return {
                 inHand: state.core.players['0'].hand.some((card: any) => card.uid === 'p0-sotf'),
-                base0WeakAlive: state.core.bases[0].minions.some((minion: any) => minion.uid === 'b0-weak'),
                 base1WeakAlive: state.core.bases[1].minions.some((minion: any) => minion.uid === 'b1-weak'),
                 base2OnlyAlive: state.core.bases[2].minions.some((minion: any) => minion.uid === 'b2-only'),
+                interactionSourceId: state.sys.interaction?.current?.data?.sourceId ?? null,
+                tieBreakOptions: (state.sys.interaction?.current?.data?.options ?? []).map((option: any) => option?.value?.minionUid ?? null),
             };
         }, { timeout: 5000 }).toEqual({
             inHand: false,
-            base0WeakAlive: false,
             base1WeakAlive: false,
             base2OnlyAlive: true,
+            interactionSourceId: 'dino_survival_tiebreak',
+            tieBreakOptions: expect.arrayContaining(['b0-weak', 'b0-enemy']),
         });
 
         await expect(page.getByText('场上没有符合条件的目标')).toHaveCount(0);
-        await game.screenshot('sotf-after-base-selection-resolved', testInfo);
+        await expect(page.getByText('选择要消灭的最低力量随从')).toBeVisible();
+        await game.screenshot('sotf-after-base-selection-awaiting-tiebreak', testInfo);
+
+        await expect(page.locator('[data-minion-uid="b0-weak"]')).toBeVisible();
+        await expect(page.locator('[data-minion-uid="b0-enemy"]')).toBeVisible();
+        await game.screenshot('sotf-tiebreak-candidates-visible', testInfo);
     });
 });

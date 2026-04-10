@@ -254,4 +254,41 @@ describe('Audit D1+D33: dino_survival_of_the_fittest（适者生存）', () => {
         expect(state.core.bases[0].minions.find(m => m.uid === 'm2')).toBeUndefined();
         expect(state.core.bases[0].minions.find(m => m.uid === 'm1')).toBeDefined();
     });
+
+    it('D33: POD 版也应沿同一全局扫描链路处理多基地最低力量随从', () => {
+        const runner = createRunner();
+
+        runner.setState(wrapState({
+            players: {
+                '0': { id: '0', vp: 0, hand: [{ uid: 'a1', defId: 'dino_survival_of_the_fittest_pod', type: 'action', subtype: 'standard', owner: '0' }], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['dinosaurs_pod', 'innsmouth_pod'] },
+                '1': { id: '1', vp: 0, hand: [], deck: [], discard: [], minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1, factions: ['robots', 'wizards'] },
+            },
+            bases: [
+                {
+                    defId: 'test_base_1',
+                    minions: [
+                        { uid: 'm1', defId: 'test_minion', controller: '0', owner: '0', basePower: 4, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false },
+                        { uid: 'm2', defId: 'test_minion', controller: '1', owner: '1', basePower: 2, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false },
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'test_base_2',
+                    minions: [
+                        { uid: 'm3', defId: 'test_minion', controller: '1', owner: '1', basePower: 3, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false },
+                        { uid: 'm4', defId: 'test_minion', controller: '0', owner: '0', basePower: 1, attachedActions: [], powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false },
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+        }));
+
+        runner.executeCommand(SU_COMMANDS.PLAY_ACTION, { playerId: '0', cardUid: 'a1', targetBaseIndex: 0 });
+
+        const state = runner.getState();
+        expect(state.core.bases[0].minions.find(m => m.uid === 'm2')).toBeUndefined();
+        expect(state.core.bases[1].minions.find(m => m.uid === 'm4')).toBeUndefined();
+    });
 });

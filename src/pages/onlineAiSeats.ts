@@ -21,6 +21,21 @@ const toPlainRecord = (value: unknown): Record<string, unknown> => (
         : {}
 );
 
+function shouldTrustOnlineAiSeatControllers(args: {
+    setupData: Record<string, unknown>;
+    storedAiSeatCredentials: Record<string, string>;
+}): boolean {
+    if (args.setupData.enableAi === true) {
+        return true;
+    }
+
+    if (args.setupData.enableAi === false) {
+        return false;
+    }
+
+    return Object.keys(args.storedAiSeatCredentials).length > 0;
+}
+
 export const isAiSeatController = (controller: AiSeatController | undefined): boolean => (
     Boolean(controller) && controller.type !== 'human'
 );
@@ -46,12 +61,17 @@ export async function loadOnlineAiSeatState({
 }: LoadOnlineAiSeatStateArgs): Promise<OnlineAiSeatState> {
     const setupData = toPlainRecord(matchInfo.setupData);
     const rawSeatControllers = toPlainRecord(setupData.seatControllers);
+    const trustSeatControllers = shouldTrustOnlineAiSeatControllers({
+        setupData,
+        storedAiSeatCredentials,
+    });
     const seatControllers: Record<string, AiSeatController> = {};
     for (let index = 0; index < matchInfo.players.length; index += 1) {
         const playerId = String(index);
         const rawController = rawSeatControllers[playerId];
         seatControllers[playerId] = (
-            rawController
+            trustSeatControllers
+            && rawController
             && typeof rawController === 'object'
             && !Array.isArray(rawController)
             && typeof rawController.type === 'string'
@@ -60,7 +80,9 @@ export async function loadOnlineAiSeatState({
             : { type: 'human' };
     }
 
-    const seatCredentials: Record<string, string> = { ...storedAiSeatCredentials };
+    const seatCredentials: Record<string, string> = trustSeatControllers
+        ? { ...storedAiSeatCredentials }
+        : {};
     if (claimMissingSeatCredential) {
         for (let index = 0; index < matchInfo.players.length; index += 1) {
             const playerId = String(index);
