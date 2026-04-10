@@ -147,6 +147,52 @@ describe('基地记分与力量计算', () => {
             expect(finalState.players['0'].vp).toBe(scoredEvent.payload.rankings[0].vp + 1);
         });
 
+        it('scoreOneBase 在 matchState.core 已更新时使用最新基地状态计分', () => {
+            const staleState: SmashUpCore = {
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1'),
+                },
+                turnOrder: PLAYER_IDS,
+                currentPlayerIndex: 0,
+                bases: [{
+                    defId: 'base_great_library',
+                    minions: [
+                        { uid: 'p0-a', defId: 'ally_p0_a', controller: '0', owner: '0', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'p0-b', defId: 'ally_p0_b', controller: '0', owner: '0', basePower: 2, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'p1-top', defId: 'enemy_top', controller: '1', owner: '1', basePower: 6, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                        { uid: 'p1-low', defId: 'enemy_low', controller: '1', owner: '1', basePower: 3, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [] },
+                    ],
+                    ongoingActions: [],
+                }],
+                baseDeck: [],
+                turnNumber: 1,
+                nextUid: 10,
+            };
+
+            const updatedState: SmashUpCore = {
+                ...staleState,
+                bases: [{
+                    ...staleState.bases[0],
+                    minions: staleState.bases[0].minions.filter((minion) => minion.uid !== 'p1-top'),
+                }],
+            };
+
+            const matchState = {
+                core: updatedState,
+                sys: { interaction: { current: undefined, queue: [] } },
+            } as any;
+
+            const result = scoreOneBase(staleState, 0, [], '0', 1000, undefined, matchState);
+            const scoredEvent = result.events.find((event) => event.type === SU_EVENTS.BASE_SCORED) as any;
+
+            expect(scoredEvent).toBeDefined();
+            expect(scoredEvent.payload.rankings).toEqual([
+                { playerId: '0', power: 5, vp: 4 },
+                { playerId: '1', power: 3, vp: 2 },
+            ]);
+        });
+
         it('scoreOneBase 会让 Samurai-Chan POD 在基地计分弃牌后抓 1 张牌', () => {
             const state: SmashUpCore = {
                 players: {
