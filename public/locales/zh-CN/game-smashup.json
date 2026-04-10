@@ -2888,7 +2888,7 @@
     },
     "ancient_egyptians_plague_of_locusts": {
       "name": "Plague of Locusts",
-      "effectText": "Special: Play before a base scores. Choose a base. All other players' minions there have -1 power until the end of the turn."
+      "effectText": "特殊：在一个基地计分前，你可以打出本卡。选择一个基地。该基地上所有其他玩家的随从本回合力量-1。"
     },
     "ancient_egyptians_mummy_strength": {
       "name": "Mummy Strength",
@@ -2896,7 +2896,7 @@
     },
     "ancient_egyptians_lost_knowledge": {
       "name": "Lost Knowledge",
-      "effectText": "Special: Play before a base scores. Bury a card from your hand OR uncover one of your buried cards."
+      "effectText": "特殊：在一个基地计分前，你可以打出本卡。埋葬你手牌中的一张卡牌，或揭开你已埋藏的一张卡牌。"
     },
     "ancient_egyptians_blessing_of_anubis": {
       "name": "Blessing of Anubis",
@@ -3040,7 +3040,7 @@
     },
     "samurai_heart_of_the_battle": {
       "name": "Heart of the Battle",
-      "effectText": "Special: Play before a base scores. One of your minions there duels another player's minion there. Destroy the losing minion."
+      "effectText": "特殊：在一个基地计分前，你可以打出本卡。你在该基地上的一个随从与另一位玩家在该基地的一个随从决斗，消灭输者随从。"
     },
     "samurai_final_haiku": {
       "name": "Final Haiku",
@@ -3088,7 +3088,7 @@
     },
     "samurai_heart_of_the_battle_pod": {
       "name": "Heart of the Battle",
-      "effectText": "Special: Play before a base scores. One of your minions there duels another player's minion there. Destroy the losing minion."
+      "effectText": "特殊：在一个基地计分前，你可以打出本卡。你在该基地上的一个随从与另一位玩家在该基地的一个随从决斗，消灭输者随从。"
     },
     "samurai_final_haiku_pod": {
       "name": "Final Haiku",
@@ -3329,3 +3329,4 @@
     }
   }
 }
+
