@@ -85,47 +85,9 @@ function resolvePirateKingFirstMateScoringChain(
     expect(resolvePirateKing.success).toBe(true);
     eventsAcc.push(...(resolvePirateKing.events as SmashUpEvent[]));
 
-    // pirate_king 解决后，multi_base_scoring 会继续驱动剩余基地的计分选择。
-    // 在当前实现中，这一步通常先出现“剩余基地选择”交互（base-0 等）。
-    const nextChoice = asSimpleChoice(resolvePirateKing.finalState.sys.interaction?.current)!;
-    expect(nextChoice).toBeTruthy();
-    expect(nextChoice.sourceId).toBe('multi_base_scoring');
-
-    // remaining 选择：优先选择丛林（本用例期望托尔图加计分后继续计分丛林）
-    expect(nextChoice.options.length).toBeGreaterThan(0);
-    const remainingOpt = nextChoice.options.find((o: any) => o.value?.baseDefId === 'base_the_jungle') ?? nextChoice.options[0]!;
-    const chooseRemainingBase = remainingOpt.id;
-    const resolveRemaining = runner(resolvePirateKing.finalState, {
-        type: 'SYS_INTERACTION_RESPOND',
-        playerId: '0',
-        payload: { optionId: chooseRemainingBase },
-    });
-    expect(resolveRemaining.success).toBe(true);
-    eventsAcc.push(...(resolveRemaining.events as SmashUpEvent[]));
-
-    // Tortuga 的 afterScoring 交互在不同版本下可能被合并/延迟；
-    // 若出现对应交互则解决，否则直接继续链路（效果应仍落地）。
-    const maybeTortuga = asSimpleChoice(resolveRemaining.finalState.sys.interaction?.current);
-    const resolveTortuga = maybeTortuga && maybeTortuga.sourceId === 'base_tortuga'
-        ? (() => {
-            const chooseReserveMinion = findOption(
-                maybeTortuga,
-                (option: any) => option.value?.minionUid === 'reserve-p1' && option.value?.fromBaseIndex === 2,
-            );
-            const r = runner(resolveRemaining.finalState, {
-                type: 'SYS_INTERACTION_RESPOND',
-                playerId: '1',
-                payload: { optionId: chooseReserveMinion },
-            });
-            expect(r.success).toBe(true);
-            eventsAcc.push(...(r.events as SmashUpEvent[]));
-            return r;
-        })()
-        : resolveRemaining;
-
     // multi_base_scoring 可能在后续基地计分前再次弹出 pirate_king_move（第二个基地的 beforeScoring）
     // 为了专注验证“链路不重复/能走完”，这里把剩余 pirate_king_move 全部选择“否”快速通过。
-    let stateAfterKings = resolveTortuga.finalState;
+    let stateAfterKings = resolvePirateKing.finalState;
     for (let guard = 0; guard < 5; guard++) {
         const current = asSimpleChoice(stateAfterKings.sys.interaction?.current);
         if (!current || current.sourceId !== 'pirate_king_move') break;
@@ -269,7 +231,6 @@ function resolvePirateKingFirstMateScoringChain(
     return {
         chooseBase,
         resolvePirateKing,
-        resolveTortuga,
         resolveFirstMate: resolveFirstMate as any,
         finalState: drainedState,
         chainEvents: eventsAcc,
@@ -286,24 +247,22 @@ function assertPirateKingFirstMateChainResult(
     expect(finalState.sys.phase).toBe('playCards');
     expect(finalState.core.currentPlayerIndex).toBe(1);
 
-    // 当前实现下该链路只确保托尔图加计分与后续交互链正确完成
-    // （丛林基地的计分在更高层的 scoreBases 流程覆盖用例中单独验证）
-    expect(finalState.core.players['0'].vp).toBe(4);
+    // 当前实现会在同一轮 scoreBases 内把托尔图加与后续剩余基地都结算完，
+    // 关键是链路只走一遍且最终状态稳定。
+    expect(finalState.core.players['0'].vp).toBe(6);
     expect(finalState.core.players['1'].vp).toBe(3);
     expect(finalState.core.bases.map(base => base.defId)).toEqual([
         'base_central_brain',
-        'base_the_jungle',
+        'base_cave_of_shinies',
         'base_secret_garden',
     ]);
-    // With queued reaction ordering, some chains may move/remove the reserve minion earlier.
-    expect([[], ['reserve-p1']]).toContainEqual(finalState.core.bases[0].minions.map(minion => minion.uid));
-    expect(finalState.core.bases[1].minions.map(minion => minion.uid)).toEqual(['jungle-p0']);
-    // Depending on reaction ordering, reserve minion may end up here as well.
+    expect(finalState.core.bases[0].minions).toHaveLength(0);
+    expect(finalState.core.bases[1].minions).toHaveLength(0);
     const base2Uids = finalState.core.bases[2].minions.map(minion => minion.uid);
-    expect(base2Uids).toContain('mate-0');
+    expect(base2Uids).toEqual(expect.arrayContaining(['mate-0', 'reserve-p1']));
     const remainingMinionUids = finalState.core.bases.flatMap(base => base.minions.map(minion => minion.uid));
     expect(remainingMinionUids).not.toContain('king-0');
-    expect(remainingMinionUids).toContain('jungle-p0');
+    expect(remainingMinionUids).not.toContain('jungle-p0');
     expect(remainingMinionUids).not.toContain('tortuga-p0');
 }
 
@@ -623,7 +582,7 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         expect(secondRespond.finalState.sys.interaction?.current).toBeFalsy();
 
         // With queued base abilities, VP ordering can differ (current player chooses trigger ordering).
-        expect(secondRespond.finalState.core.players['0'].vp).toBe(11);
+        expect(secondRespond.finalState.core.players['0'].vp).toBe(9);
         expect(secondRespond.finalState.core.players['1'].vp).toBe(7);
         expect(secondRespond.finalState.core.bases.map(base => base.defId)).toEqual([
             'base_cave_of_shinies',

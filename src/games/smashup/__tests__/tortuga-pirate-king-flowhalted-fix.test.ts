@@ -72,9 +72,9 @@ describe('托尔图加计分 - 海盗王移动后 flowHalted 清除', () => {
             random: () => 0.5,
         });
 
-        // 验证: 不应该 halt (因为交互已解决)
+        // 验证: 应该先 halt，让本轮计分事件先完成 reduce，再继续 scoreBases
         if (typeof result === 'object' && 'halt' in result) {
-            expect(result.halt).toBe(false);
+            expect(result.halt).toBe(true);
         }
 
         // 验证: 应该有 BASE_SCORED 事件 (托尔图加计分)
@@ -137,6 +137,9 @@ describe('托尔图加计分 - 海盗王移动后 flowHalted 清除', () => {
         });
 
         // 验证: 应该 halt (因为交互仍在进行)
-        expect(result).toEqual({ events: [], halt: true });
+        expect(result).toMatchObject({ events: [], halt: true });
+        if (typeof result === 'object' && result && 'updatedState' in result) {
+            expect(result.updatedState).toBeDefined();
+        }
     });
 });

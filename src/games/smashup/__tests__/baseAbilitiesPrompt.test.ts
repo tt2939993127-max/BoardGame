@@ -807,18 +807,32 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
             2001,
         );
 
-        expect(resolved?.events ?? []).toHaveLength(0);
-        expect(resolved?.state.core.pendingPostScoringActions).toEqual([
-            {
-                kind: 'moveMinionToReplacementBase',
-                minionUid: 'm3',
-                minionDefId: 'd1',
-                fromBaseIndex: 1,
-                toBaseIndex: 0,
-                targetBaseDefId: 'base_secret_garden',
-                reason: '托尔图加：亚军移动随从到替换基地',
-            },
+        expect(resolved?.events ?? []).toEqual([
+            expect.objectContaining({
+                type: SU_EVENTS.BASE_CLEARED,
+                payload: expect.objectContaining({ baseIndex: 0, baseDefId: 'base_tortuga' }),
+            }),
+            expect.objectContaining({
+                type: SU_EVENTS.BASE_REPLACED,
+                payload: expect.objectContaining({
+                    baseIndex: 0,
+                    oldBaseDefId: 'base_tortuga',
+                    newBaseDefId: 'base_secret_garden',
+                }),
+            }),
+            expect.objectContaining({
+                type: SU_EVENTS.MINION_MOVED,
+                payload: expect.objectContaining({
+                    minionUid: 'm3',
+                    minionDefId: 'd1',
+                    fromBaseIndex: 1,
+                    toBaseIndex: 0,
+                    toBaseDefId: 'base_secret_garden',
+                    reason: '托尔图加：亚军移动随从到替换基地',
+                }),
+            }),
         ]);
+        expect(resolved?.state.core.pendingPostScoringActions).toBeUndefined();
     });
 });
 
