@@ -16,6 +16,10 @@ on:
         description: '要发布的 git ref（分支、tag 或 commit SHA，留空默认当前触发 ref）'
         required: false
         type: string
+      expected_base_version:
+        description: '本次发布的目标基础版本（必填，例如 0.5.33）；必须与 package.json.version 完全一致'
+        required: true
+        type: string
       dry_run:
         description: '仅预演，不上传'
         required: true
@@ -65,16 +69,11 @@ jobs:
             force_update="${{ inputs.force_update }}"
             force_update_title="${{ inputs.force_update_title }}"
             force_update_message="${{ inputs.force_update_message }}"
+            expected_base_version="${{ inputs.expected_base_version }}"
             source_mode="manual"
           else
-            channel="${{ vars.ANDROID_OTA_AUTO_CHANNEL || 'edge' }}"
-            target_ref="${GITHUB_SHA}"
-            dry_run="false"
-            skip_latest="false"
-            force_update="true"
-            force_update_title=""
-            force_update_message=""
-            source_mode="auto"
+            echo "::error::自动 OTA 已禁用隐式版本；请使用 workflow_dispatch 并显式提供 expected_base_version。"
+            exit 1
           fi
 
           if [[ -z "${target_ref}" ]]; then
@@ -84,6 +83,7 @@ jobs:
           {
             echo "channel=${channel}"
             echo "target_ref=${target_ref}"
+            echo "expected_base_version=${expected_base_version}"
             echo "dry_run=${dry_run}"
             echo "skip_latest=${skip_latest}"
             echo "force_update=${force_update}"
@@ -148,6 +148,17 @@ jobs:
           package_version="$(node -p "require('./package.json').version")"
           built_at="$(date -u +%Y-%m-%dT%H-%M-%S-%3NZ)"
           manifest_url="${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/app-updates/android/${{ steps.params.outputs.channel }}/latest.json"
+
+          if [[ -z "${{ steps.params.outputs.expected_base_version }}" ]]; then
+            echo "::error::禁止隐式版本发布：expected_base_version 不能为空。"
+            exit 1
+          fi
+
+          if [[ "${package_version}" != "${{ steps.params.outputs.expected_base_version }}" ]]; then
+            echo "::error::Android OTA 基线版本不匹配：expected_base_version=${{ steps.params.outputs.expected_base_version }}，package.json.version=${package_version}"
+            exit 1
+          fi
+
           bundle_version="${package_version}-ota-${built_at}"
           notes="GitHub Actions ${{ steps.params.outputs.source_mode }} OTA publish ${current_ref}@${short_sha}"
 
@@ -203,6 +214,7 @@ jobs:
           args=(
             --channel "${{ steps.params.outputs.channel }}"
             --version "${{ steps.bundle.outputs.bundle_version }}"
+            --expected-base-version "${{ steps.params.outputs.expected_base_version }}"
             --notes "${{ steps.bundle.outputs.notes }}"
           )
 
@@ -242,6 +254,7 @@ jobs:
             echo "| Channel | ${{ steps.params.outputs.channel }} |"
             echo "| 结果 | ${{ steps.prereq.outputs.ready == 'true' && '已执行' || '已跳过' }} |"
             echo "| Git Ref | ${{ steps.bundle.outputs.current_ref || steps.params.outputs.target_ref }} |"
+            echo "| Expected Base Version | ${{ steps.params.outputs.expected_base_version || '未提供' }} |"
             echo "| Bundle Version | ${{ steps.bundle.outputs.bundle_version || '未生成' }} |"
             echo "| Dry Run | ${{ steps.params.outputs.dry_run }} |"
             echo "| Skip Latest | ${{ steps.params.outputs.skip_latest }} |"

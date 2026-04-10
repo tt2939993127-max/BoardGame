@@ -36,8 +36,10 @@ Android 统一发布入口
   --dry-run
   --skip-latest
 
-native / full 额外选项:
+ota / native / full 额外选项:
   --bump <patch|minor|major>   自动更新 package.json / package-lock.json 版本
+
+native / full 额外选项:
   --skip-build                 跳过 native build:release, 直接发布现有 APK
 
 full 额外选项:
@@ -45,9 +47,9 @@ full 额外选项:
   --game <gameId>              指定游戏包; 传了该参数会自动启用 packages 阶段
 
 说明:
-  - OTA 默认不改 package.json.version
+  - OTA 发布已禁止隐式版本；发布时会强制传 --expected-base-version=<package.json.version>
+  - OTA / native / full 可使用 --bump 自动递增版本后再发布
   - full 的顺序固定为: OTA -> packages(可选) -> native
-  - 若 native 阶段使用 --bump, 版本会在 native 阶段开始前写回仓库文件
   - native / full 不接受 --version 覆盖原生版本, 原生版本以 package.json 为单一真实来源
 `.trim();
 
@@ -182,6 +184,7 @@ const buildOtaArgs = (sourceArgs = args) => collectPassthroughArgs(
         'channel',
         'version',
         'native-version',
+        'expected-base-version',
         'force-update-title',
         'force-update-message',
         'notes',
@@ -224,11 +227,46 @@ const runBuildRelease = async () => {
     await runNodeScript('scripts/mobile/android.mjs', ['build-release']);
 };
 
+const prepareReleaseVersion = () => {
+    const bumpType = readArgValue('bump', '', args);
+    const currentVersion = readJsonFile(packageJsonPath).version;
+    if (!bumpType) {
+        return {
+            version: currentVersion,
+            bumped: false,
+        };
+    }
+    if (!new Set(['patch', 'minor', 'major']).has(bumpType)) {
+        throw new Error(`--bump 只支持 patch | minor | major，当前值为: ${bumpType}`);
+    }
+    if (hasFlag('dry-run', args)) {
+        throw new Error('--dry-run 不能与 --bump 同时使用；预演不会改版本文件。');
+    }
+    const nextVersion = bumpSemver(currentVersion, bumpType);
+    updateProjectVersion(nextVersion);
+    logStep(`已更新项目版本: ${currentVersion} -> ${nextVersion}`);
+    return {
+        version: nextVersion,
+        bumped: true,
+    };
+};
+
+const buildOtaArgsWithExpectedVersion = (releaseVersion, sourceArgs = args) => [
+    ...buildOtaArgs(sourceArgs).filter((arg, index, list) => {
+        if (arg === '--expected-base-version') return false;
+        const prev = list[index - 1];
+        if (prev === '--expected-base-version') return false;
+        return true;
+    }),
+    `--expected-base-version=${releaseVersion}`,
+];
+
 const runOtaRelease = async () => {
+    const releaseInfo = prepareReleaseVersion();
     await runDoctor();
     await runSync();
-    logStep('发布 Android OTA');
-    await runNodeScript('scripts/mobile/publish-android-ota.mjs', buildOtaArgs());
+    logStep(`发布 Android OTA (expectedBaseVersion=${releaseInfo.version})`);
+    await runNodeScript('scripts/mobile/publish-android-ota.mjs', buildOtaArgsWithExpectedVersion(releaseInfo.version));
 };
 
 const runPackagesRelease = async (sourceArgs = args) => {
@@ -238,34 +276,10 @@ const runPackagesRelease = async (sourceArgs = args) => {
 
 const prepareNativeVersion = () => {
     ensureNoNativeVersionOverride();
-
-    const bumpType = readArgValue('bump', '', args);
-    if (!bumpType) {
-        const currentVersion = readJsonFile(packageJsonPath).version;
-        return {
-            version: currentVersion,
-            bumped: false,
-        };
-    }
-
-    if (!new Set(['patch', 'minor', 'major']).has(bumpType)) {
-        throw new Error(`--bump 只支持 patch | minor | major，当前值为: ${bumpType}`);
-    }
-    if (hasFlag('dry-run', args)) {
-        throw new Error('--dry-run 不能与 --bump 同时使用；预演不会改仓库版本文件。');
-    }
-    if (hasFlag('skip-build', args)) {
+    if (hasFlag('skip-build', args) && readArgValue('bump', '', args)) {
         throw new Error('--skip-build 不能与 --bump 同时使用；否则 APK 版本与 package.json 会失配。');
     }
-
-    const currentVersion = readJsonFile(packageJsonPath).version;
-    const nextVersion = bumpSemver(currentVersion, bumpType);
-    updateProjectVersion(nextVersion);
-    logStep(`已更新项目版本: ${currentVersion} -> ${nextVersion}`);
-    return {
-        version: nextVersion,
-        bumped: true,
-    };
+    return prepareReleaseVersion();
 };
 
 const runNativeRelease = async () => {
@@ -286,8 +300,8 @@ const runFullRelease = async () => {
     const nativeInfo = prepareNativeVersion();
     await runDoctor();
     await runSync();
-    logStep('发布 Android OTA');
-    await runNodeScript('scripts/mobile/publish-android-ota.mjs', buildOtaArgs());
+    logStep(`发布 Android OTA (expectedBaseVersion=${nativeInfo.version})`);
+    await runNodeScript('scripts/mobile/publish-android-ota.mjs', buildOtaArgsWithExpectedVersion(nativeInfo.version));
     if (shouldRunPackagesInFull()) {
         await runPackagesRelease(args);
     }
