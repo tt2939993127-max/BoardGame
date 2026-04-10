@@ -67,7 +67,7 @@ export const ChoiceModal = ({
     playerNames?: Record<string, string>;
     teamIdByPlayerId?: Record<string, string>;
 }) => {
-    const { t, i18n } = useTranslation('game-dicethrone');
+    const { t } = useTranslation('game-dicethrone');
     // 防御性检查：如果 choice 存在但 options 为空，不显示模态框
     const hasValidOptions = choice && choice.options && choice.options.length > 0;
     const isOpen = !!hasValidOptions;
@@ -85,7 +85,7 @@ export const ChoiceModal = ({
                 return t('choices.option', { index: index + 1 });
             }
         }
-        return i18n.exists(label) ? t(label) : label;
+        return t(label, { defaultValue: label });
     };
 
     const handleSliderConfirm = (selectedValue: number) => {
@@ -105,7 +105,7 @@ export const ChoiceModal = ({
     };
 
     const skipLabel = choice?.slider?.skipLabelKey
-        ? (i18n.exists(choice.slider.skipLabelKey) ? t(choice.slider.skipLabelKey) : choice.slider.skipLabelKey)
+        ? t(choice.slider.skipLabelKey, { defaultValue: choice.slider.skipLabelKey })
         : skipOption ? resolveOptionLabel(skipOption.label) : '';
     const isTargetChoice = Boolean(
         choice
@@ -474,7 +474,7 @@ const SliderChoice = ({
             {/* 提示文案（由领域层配置） */}
             {hintKey && (
                 <p className="text-sm text-slate-400">
-                    {i18n.exists(hintKey) ? t(hintKey, { value }) : hintKey}
+                    {t(hintKey, { value, defaultValue: hintKey })}
                 </p>
             )}
 
@@ -486,7 +486,7 @@ const SliderChoice = ({
                     variant="primary"
                     className="min-w-[140px]"
                 >
-                    {i18n.exists(confirmLabelKey) ? t(confirmLabelKey, { count: value }) : confirmLabelKey}
+                    {t(confirmLabelKey, { count: value, defaultValue: confirmLabelKey })}
                 </GameButton>
                 {onSkip && skipLabel && (
                     <GameButton

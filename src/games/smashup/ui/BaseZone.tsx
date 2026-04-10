@@ -519,8 +519,8 @@ export const BaseZone: React.FC<{
             {/* --- BASE CARD --- */}
             <div
                 onClick={(event) => {
+                    event.stopPropagation();
                     if (shouldBlockBaseClick(`base-${baseIndex}`)) {
-                        event.stopPropagation();
                         return;
                     }
                     setExpandedMinionUid(null);

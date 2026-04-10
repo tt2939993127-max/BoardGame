@@ -1737,6 +1737,53 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
             expect(result.finalState.core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
         });
+
+        it('base loaded choice should create single-die display settlement and add rounded damage', () => {
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 2, 3, 4, 5, 1]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].tokens.loaded = 1;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger base loaded display settlement',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
+                ],
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.sys.interaction.current).toBeUndefined();
+            expect(result.finalState.core.players['0'].tokens.loaded).toBe(0);
+            expect(result.finalState.core.pendingAttack?.sourceAbilityId).toBe('revolver-3');
+            expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(1);
+            expect(result.finalState.core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.displayOnly).toBe(true);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.dice).toHaveLength(1);
+            expect(result.finalState.core.pendingBonusDiceSettlement?.dice?.[0]).toMatchObject({
+                value: 1,
+                effectKey: 'bonusDie.effect.gunslingerLoadedDie',
+            });
+        });
     });
 
     describe('samurai vs monk', () => {
