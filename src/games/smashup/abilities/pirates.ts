@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { destroyMinion, addTempPower, moveMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, buildAbilityFeedback, buildPlayerTargetOptions } from '../domain/abilityHelpers';
 import type { SmashUpEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
@@ -105,11 +105,18 @@ function pirateBroadside(ctx: AbilityContext): AbilityResult {
 
     if (candidates.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    const options = candidates.map((c, i) => ({
-        id: `target-${i}`,
-        label: c.label,
-        value: { baseIndex: c.baseIndex, targetPlayerId: c.targetPlayerId }
-    }));
+    const options = buildPlayerTargetOptions(
+        candidates.map((c, i) => ({
+            id: `target-${i}`,
+            label: c.label,
+            targetPlayerId: c.targetPlayerId,
+            value: { baseIndex: c.baseIndex },
+        })),
+        {
+            sourcePlayerId: ctx.playerId,
+            effectIntent: 'destroy',
+        },
+    );
     const interaction = createSimpleChoice(
         `pirate_broadside_${ctx.now}`, ctx.playerId,
         '选择基地和玩家，消灭该玩家所有力量≤2的随从', options, 'pirate_broadside',

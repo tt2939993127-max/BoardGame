@@ -2372,8 +2372,17 @@ export function registerTitanAbilities(): void {
         '企鹅帝皇只能在你的回合开始时通过特殊能力进场');
     registerAbility('penguins_emperor_penguin', 'ongoingActivation', penguinsEmperorPenguinOngoingActivation);
     registerAbility('penguins_emperor_penguin', 'talent', penguinsEmperorPenguinTalent);
-    registerTitanOngoingActivationValidator('penguins_emperor_penguin', ({ titan }) => {
+    registerTitanOngoingActivationValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {
         if (titan.location.zone !== 'base') return '该泰坦当前不在场';
+        const player = state.players[playerId];
+        if (!player) return '玩家不存在';
+        if (player.minionsPlayed >= player.minionLimit) {
+            return '本回合随从额度已用完';
+        }
+        const topCard = player.deck[0];
+        if (!topCard || (topCard.type !== 'minion' && topCard.type !== 'fusion')) {
+            return '牌库顶没有可打出的随从';
+        }
         return null;
     });
     registerTitanTalentValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {

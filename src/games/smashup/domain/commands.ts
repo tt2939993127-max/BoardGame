@@ -20,6 +20,7 @@ import {
     getActionLikeResponseWindowTiming,
     canUseBaseLimitedMinionQuota,
     canUseSameNameMinionQuota,
+    getMaxRemainingBaseLimitedPowerQuota,
     getMaxRemainingGlobalPowerLimitedQuota,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
@@ -246,6 +247,8 @@ export function validate(
                     minionDefId: discardCard.defId,
                     basePower,
                     usesBaseLimitedMinionQuota,
+                    cardUid: discardCard.uid,
+                    fromDiscard: true,
                 })) {
                     return { valid: false, error: '该基地禁止打出该随从' };
                 }
@@ -297,6 +300,13 @@ export function validate(
                         return { valid: false, error: `只能打出与触发能力的随从同名的随从（${requiredName}）` };
                     }
                 }
+                if (!canUseBaseLimitedMinionQuota(core, player, baseIndex, card.defId, basePower)) {
+                    const maxAllowedPower = getMaxRemainingBaseLimitedPowerQuota(player, baseIndex);
+                    if (maxAllowedPower !== undefined && basePower > maxAllowedPower) {
+                        return { valid: false, error: `额外出牌只能打出力量≤${maxAllowedPower}的随从` };
+                    }
+                    return { valid: false, error: '该基地禁止打出该随从' };
+                }
             }
             // 全局力量限制检查：额外出牌机会可能有力量上限（如家园：力量≤2）
             if (mustUseGlobalPowerLimitedMinionQuota(core, player, baseIndex, card.defId, basePower)) {
@@ -310,6 +320,8 @@ export function validate(
                 minionDefId: card.defId,
                 basePower,
                 usesBaseLimitedMinionQuota,
+                cardUid: card.uid,
+                fromDiscard: false,
             })) {
                 return { valid: false, error: '该基地禁止打出该随从' };
             }
@@ -568,7 +580,18 @@ export function validate(
                 // 巨石阵例外：允许一个随从每回合使用才能两次
                 const isStandingStones = targetBase.defId === 'base_standing_stones';
                 const doubleTalentAvailable = !core.standingStonesDoubleTalentMinionUid;
-                if (!(isStandingStones && doubleTalentAvailable)) {
+                const greatWolfSpirit = (core.titans ?? []).find(titan =>
+                    titan.defId === 'werewolves_great_wolf_spirit'
+                    && titan.location.zone === 'base'
+                    && titan.controllerId === command.playerId
+                    && !(core.titanOngoingSuppressedUntilTurnEnd ?? []).includes(titan.uid),
+                );
+                const greatWolfSpiritBaseIndex = greatWolfSpirit?.location.baseIndex;
+                const canUseGreatWolfSpiritDouble =
+                    greatWolfSpiritBaseIndex === baseIndex
+                    && !((core.greatWolfSpiritDoubleTalentCardUids ?? []).includes(minionUid));
+
+                if (!(isStandingStones && doubleTalentAvailable) && !canUseGreatWolfSpiritDouble) {
                     return { valid: false, error: '本回合天赋已使用' };
                 }
             }
