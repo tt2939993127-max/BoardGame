@@ -148,6 +148,11 @@
 - **THEN** 系统 MUST 从最近 checkpoint 恢复运行视图
 - **AND** 用户 MUST 能看到该运行是“继续执行”“等待决策”还是“失败待处理”
 
+#### Scenario: checkpoint 区分 false-active
+- **WHEN** 长任务长时间没有新 checkpoint、没有新产物也没有健康心跳
+- **THEN** 系统 MUST 将该运行标记为 `false-active` 候选而不是继续显示为正常运行
+- **AND** 恢复界面 MUST 提供恢复、重试或升级为 blocker 的后续动作
+
 ### Requirement: 监察者模式 MUST 作为 post-run Completion Gate 工作
 
 系统 MUST 将监察者模式定义为每轮执行结果之后的后置裁决层，而不是前置路由器或定时 `continue` 恢复器。
@@ -176,6 +181,20 @@
 - **THEN** 用户可见总结 MUST 包含最终结果与 continue 过程摘要
 - **AND** 不得只返回最后一轮结果而丢失中间推进轨迹
 
+### Requirement: 进入执行层前 MUST 生成 DecisionRecord
+
+系统 MUST 在用户意图进入执行层之前生成结构化 `DecisionRecord`，用于承载规范化意图、风险判断、执行偏好和门禁命中结果。
+
+#### Scenario: 用户消息被规范化
+- **WHEN** 用户提交新的仓库任务、修复请求、交付请求或部署请求
+- **THEN** 系统 MUST 先生成 `DecisionRecord`
+- **AND** 其中 MUST 包含 `normalizedIntent`、`actionMode`、`riskLevel`、`preferredExecutor` 与 `reportPolicy`
+
+#### Scenario: 硬规则命中导致阻塞
+- **WHEN** 生产部署前置检查、目录边界、版本完整性或外部发信等硬规则被命中
+- **THEN** `DecisionRecord` MUST 记录 `ruleHits` 与 `blockReasons`
+- **AND** 系统 MUST 在阻塞解除前禁止把该请求直接下发给执行器
+
 ### Requirement: ArtifactBundle MUST 同时保存原始证据与网页摘要
 
 系统 MUST 将执行环境产物整理为 `ArtifactBundle`，同时保存原始文件索引与网页可浏览摘要，避免只有卡片没有原始证据，或只有文件没有人类可读结论。
@@ -203,3 +222,17 @@
 - **WHEN** 仓库策略、分支保护或权限限制禁止自动 merge
 - **THEN** 系统 MUST 降级为输出 PR 链接与待办说明
 - **AND** 不得将该运行标记为“已 merge 完成”
+
+### Requirement: 执行层 hand-off MUST 保留裁决语义
+
+系统 MUST 在 Local Model / Hard Rules 完成裁决后，以结构化 hand-off 把执行语义传给真正的执行层，而不是只传一段自由文本。
+
+#### Scenario: 裁决结果传给执行器
+- **WHEN** `DecisionRecord` 已完成并允许进入执行层
+- **THEN** 系统 MUST 向执行器传递至少 `normalized_intent`、`action_mode`、`preferred_executor`、`requires_preflight`、`checkpoint_policy` 与 `report_policy`
+- **AND** 执行器 MUST 以这些字段为边界推进，而不是重新自由解释原始消息
+
+#### Scenario: 需要 preflight 的任务不能直接执行
+- **WHEN** hand-off 中 `requires_preflight=true`
+- **THEN** 执行器 MUST 先完成对应 preflight 节点或检查
+- **AND** 不得跳过前置核验直接进入部署、merge 或其他高风险动作

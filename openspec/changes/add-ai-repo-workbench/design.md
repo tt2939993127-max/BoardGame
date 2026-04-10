@@ -91,6 +91,25 @@
 - 绑定的 `gameId`、任务类型、当前 `workflowTemplateId`
 - 会话级安全策略：允许写入范围、允许网络操作范围、是否允许提交/PR/merge
 
+### DecisionRecord
+
+DecisionRecord 是消息意图进入执行层前的统一裁决载体，用来把“老板说了什么”变成“系统准备怎么执行”。
+
+- `decisionId`
+- `runId?` / `repoSessionId?` / `sourceMessageId?`
+- `rawIntent` / `normalizedIntent` / `confidence`
+- `actionMode`: `draft | analyze | execute | deliver`
+- `riskLevel`: `low | medium | high`
+- `requiresApproval`
+- `requiresPreflight`
+- `blocked`
+- `preferredExecutor`: `acp | exec | workflow | manual`
+- `reportPolicy`: `silent | milestone | final | milestone_and_final`
+- `ruleHits`
+- `blockReasons`
+- `suggestedNextActions`
+- `createdAt` / `updatedAt`
+
 ### WorkflowTemplate
 
 - `templateId`
@@ -108,6 +127,19 @@
 - 可恢复检查点与最近一次快照
 - 节点级日志、耗时、产物引用
 - 与 `RepoSession`、`DecisionRequest`、`ArtifactBundle` 的关联
+
+#### Checkpoint
+
+每次写入 checkpoint 时，至少保留：
+
+- `currentNode`
+- `inputSummary`
+- `outputSummary`
+- `failureReason`
+- `nextAction`
+- `artifactIndex`
+- `healthState`: `active | waiting-decision | idle | false-active`
+- `updatedAt`
 
 ### WorkflowNode
 
@@ -170,6 +202,7 @@
 - checkpoint 至少包含：当前节点、输入摘要、输出摘要、失败原因、下一步动作、关联产物索引。
 - 工作台刷新、进程重启或 agent 重连后，系统应从最近 checkpoint 恢复展示，并允许继续执行或重新运行当前节点。
 - 对长任务，恢复界面必须区分“真实活跃”“等待决策”“假活跃/健康检查失败”。
+- 若运行长期无新 checkpoint、无产物变化、无健康心跳，系统应将其从 `active` 降级为 `false-active` 候选，而不是持续伪装为运行中。
 
 ## Artifact Return Path
 
@@ -239,6 +272,23 @@
 - `should_notify_user=true`
 - `archive=optional`
 
+### Execution Layer Hand-off
+
+Completion Gate 之前的执行层至少需要接收以下裁决字段：
+
+- `normalized_intent`
+- `action_mode`
+- `preferred_executor`
+- `requires_preflight`
+- `checkpoint_policy`
+- `report_policy`
+
+这意味着整体分层应为：
+
+1. **Hard Rules**：确定性规则层，负责生产部署、外部发信、目录边界、版本完整性等硬拦截
+2. **Local Model Layer**：负责意图归一化、歧义解释、裁决摘要、候选执行器选择
+3. **Execution Layer**：负责真正调用 ACP / exec / workflow / ClawFlow / delivery nodes
+
 ### Continue Record
 
 每次 `continue` 都必须留下结构化记录，至少包含：
@@ -269,6 +319,7 @@
 
 ## Open Questions
 
-- 工作台首版是否要求支持远程 GitHub 仓库，还是先只支持本地仓库与固定模板仓库。
-- E2E 截图回传是落对象存储、数据库还是文件系统索引。
-- 自动 merge 的默认策略是只支持非保护分支，还是支持受保护分支下的 PR merge。
+- 远程 GitHub 仓库接入首版是否直接支持，还是先限制为本地仓库与固定模板仓库。
+- ArtifactBundle 首版落点是对象存储、数据库索引还是文件系统索引。
+- 自动 merge 默认是否只支持非保护分支，受保护分支是否统一降级为 PR/建议交付。
+- DecisionRecord 与 WorkflowRun 是直接绑定单次消息，还是允许一个 run 聚合多个源消息。

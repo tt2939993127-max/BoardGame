@@ -8,12 +8,14 @@
 - [x] 2.2 设计 skill 到工作流节点的映射方式，明确哪些节点是自动执行、哪些节点是人工决策、哪些节点是门禁验收。
 - [x] 2.3 设计 E2E 产物回传链路，确保截图、日志、证据摘要可以从执行环境返回网页。
 - [x] 2.4 补充 `WorkflowNode` 分类、checkpoint / resume 模型与 delivery 节点边界。
+- [x] 2.5 补充 `DecisionRecord`、checkpoint healthState、execution-layer hand-off 的运行时数据契约。
 
 ## 3. Execution
 - [x] 3.1 设计“新建游戏”和“导入本地目录”两种仓库入口模式的隔离执行策略。
 - [x] 3.2 设计至少三条首批模板工作流：新建游戏、数据录入、Bug 修复。
 - [x] 3.3 设计从工作流通过到 `commit -> PR -> merge` 的自动推进规则与阻断条件。
 - [ ] 3.4 细化远程 GitHub 仓库接入与受保护分支降级策略。
+- [x] 3.5 明确 Hard Rules → Local Model → Execution Layer 的 hand-off 语义，避免执行器重新自由解释原始消息。
 
 ## 4. UX
 - [x] 4.1 设计小白模式的最小输入面板，默认只要求需求与素材。
@@ -27,3 +29,4 @@
 - [ ] 5.2 将首批模板拆成可实施的后续实现 change 或开发任务。
 - [ ] 5.3 评估是否需要新增 repo-provider / artifact-storage 等相邻 capability，而不是把实现细节全部塞进本 spec。
 - [x] 5.4 清理旧 Kiro auto-continue 入口与误导性文档引用，避免与新监察者模式混淆。
+- [ ] 5.5 细化 `false-active` 监测阈值、checkpoint policy 与 watcher 恢复策略的实现方案。
