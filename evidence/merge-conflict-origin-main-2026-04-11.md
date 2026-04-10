@@ -34,6 +34,8 @@
   - `npm run i18n:check`（仅动态 key 警告）
   - `openspec validate --all --strict --no-interactive`
   - `npx eslint src/games/dicethrone/ui/BonusDieOverlay.tsx src/games/smashup/Board.tsx src/games/smashup/__tests__/baseAbilitiesPrompt.test.ts src/games/smashup/__tests__/factionAbilities.test.ts src/games/smashup/__tests__/madnessPromptAbilities.test.ts src/games/smashup/__tests__/multi-base-afterscoring-bug.test.ts src/games/smashup/__tests__/tortuga-pirate-king-flowhalted-fix.test.ts src/games/summonerwars/Board.tsx`（仅 warnings）
+  - `npm run merge:audit -- 4101a435`（11 个文件均为“混合结果”）
+  - `npm run merge:audit:strict -- 4101a435`（通过，未出现单边覆盖）
   - `npm run check:prod-deps`（失败：脚本 CRLF 导致 `set: pipefail` 报错）
 - 未运行：单元/集成/E2E 测试（用户要求仅静态检查）
 
