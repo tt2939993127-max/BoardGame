@@ -114,6 +114,21 @@ pm run dev / 相关服务启动链路的各阶段耗时。
 ### Status
 - completed
 
+## Addendum（2026-03-25）：DiceThrone E2E 复验
+
+### Goal
+- 在不切换 worktree、不改方向的前提下，确认当前 DiceThrone E2E 补丁是否已经从“环境 blocker”转为“真实测试失败”
+
+### Result
+- [x] 已重新读取 Plan-with-Files 上下文与 `temp/dicethrone-e2e-progress.md`
+- [x] 已确认当前待处理补丁集没有扩散到其他模块，仍聚焦 DiceThrone E2E
+- [x] 已重新执行 `npm run test:e2e:ci -- e2e/dicethrone.e2e.ts`
+- [x] 已确认失败点未变化，仍为 `fork -> spawn EPERM`
+- [x] 已补跑与该补丁直接相关的静态校验（编码 / ESLint / TypeScript）
+
+### Status
+- blocked_by_environment
+
 ### Result（2026-03-11 更新）
 - [x] 回归分析完成：确认 `dev:frontend:wait`（2026-03-09）放大了后端慢启动体感；API 主启动文件近期未见同等级别逻辑扩张。
 - [x] 低风险优化完成：API Sentry 改为后台惰性初始化；game-server 启动清理改为监听后后台执行；`dev` 改为分阶段编排；启动命令去除 `npx`。

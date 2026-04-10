@@ -1,5 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { E2E_SINGLE_WORKER_PORTS } from './e2e-port-config.js';
+import { allocateAvailablePortsFrom, arePortsBindable } from './port-allocator.js';
 import { withWindowsHide } from './windows-hide.js';
 
 const playwrightCli = path.resolve(process.cwd(), 'node_modules', 'playwright', 'cli.js');
@@ -102,6 +104,31 @@ const modeEnv = (() => {
 
 if (hasExplicitPlaywrightTarget(extraArgs)) {
     modeEnv.PW_HAS_EXPLICIT_TARGET = 'true';
+}
+
+const resolvedWorkers = Number.parseInt(modeEnv.PW_WORKERS || process.env.PW_WORKERS || '1', 10);
+const useDevServers = modeEnv.PW_USE_DEV_SERVERS === 'true';
+
+if (!useDevServers && resolvedWorkers <= 1) {
+    const preferredPorts = E2E_SINGLE_WORKER_PORTS;
+    const bindable = await arePortsBindable(preferredPorts);
+    if (!bindable) {
+        const fallbackPorts = await allocateAvailablePortsFrom(preferredPorts);
+        modeEnv.PW_E2E_FRONTEND_PORT = String(fallbackPorts.frontend);
+        modeEnv.PW_E2E_GAME_SERVER_PORT = String(fallbackPorts.gameServer);
+        modeEnv.PW_E2E_API_SERVER_PORT = String(fallbackPorts.apiServer);
+        modeEnv.GAME_SERVER_PORT = String(fallbackPorts.gameServer);
+        modeEnv.PW_GAME_SERVER_PORT = String(fallbackPorts.gameServer);
+        modeEnv.API_SERVER_PORT = String(fallbackPorts.apiServer);
+        modeEnv.PW_API_SERVER_PORT = String(fallbackPorts.apiServer);
+
+        console.warn(
+            `⚠️ 默认单 worker E2E 端口不可绑定，改用本次运行专用端口：${fallbackPorts.frontend}/${fallbackPorts.gameServer}/${fallbackPorts.apiServer}`,
+        );
+        console.warn(
+            `   原默认端口：${preferredPorts.frontend}/${preferredPorts.gameServer}/${preferredPorts.apiServer}`,
+        );
+    }
 }
 
 run(process.execPath, ['scripts/infra/assert-child-process-support.mjs', 'E2E', '--probe-fork', '--probe-esbuild'], modeEnv);

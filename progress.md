@@ -165,4 +165,26 @@
   - 用 Python 重新扫描文件，确认重复 key 数量为 `0`
   - 直接运行 esbuild 打包 `server.ts`，确认不再出现 `duplicate-object-key` warning
 - Notes:
+  - 历史记录：当前终端环境会拦截部分 `child_process.spawn`，因此本轮继续记录 DiceThrone E2E 复验结果
+
+## Session: 2026-03-25 DiceThrone E2E 复验
+- **Status:** blocked_by_environment
+- Actions taken:
+  - 读取 `task_plan.md`、`findings.md`、`progress.md` 与 `temp/dicethrone-e2e-progress.md`，恢复当前 worktree 的 DiceThrone E2E 上下文
+  - 审查当前未提交补丁，确认变更仍只集中在 `e2e/dicethrone.e2e.ts`、`e2e/helpers/dicethrone.ts`、`scripts/infra/e2e-port-config.js` 与 `evidence/dicethrone-e2e-test.md`
+  - 重新执行真实命令 `npm run test:e2e:ci -- e2e/dicethrone.e2e.ts`，确认失败点没有变化，仍然在进入 Playwright 前就卡在 `fork -> spawn EPERM`
+  - 补跑静态校验，确认这组补丁在当前仓库下可通过编码检查、ESLint 与 TypeScript `--noEmit`
+
+### Test Results
+| Test | Input | Expected | Actual | Status |
+|------|-------|----------|--------|--------|
+| DiceThrone E2E 真实执行 | `npm run test:e2e:ci -- e2e/dicethrone.e2e.ts` | 进入 Playwright 并执行用例 | 启动前失败：`fork -> spawn EPERM` | blocked |
+| 编码检查 | `node scripts/infra/check-file-encoding.mjs e2e/dicethrone.e2e.ts e2e/helpers/dicethrone.ts scripts/infra/e2e-port-config.js evidence/dicethrone-e2e-test.md` | 通过 | 通过 | ✅ |
+| ESLint | `node node_modules/eslint/bin/eslint.js e2e/dicethrone.e2e.ts e2e/helpers/dicethrone.ts scripts/infra/e2e-port-config.js` | 通过 | 通过 | ✅ |
+| TypeScript | `node node_modules/typescript/bin/tsc --noEmit --pretty false` | 通过 | 通过 | ✅ |
+
+### Error Log
+| Timestamp | Error | Attempt | Resolution |
+|-----------|-------|---------|------------|
+| 2026-03-25 | E2E 基建启动前 `fork -> spawn EPERM` | 1 | 确认属于当前沙箱 child_process 限制；停止重复重试，转为记录 blocker |
   - 当前终端环境会拦截 Node 内部 `child_process.spawn`，因此 `smoke:startup` 在这里会假失败；本轮改用直接 bundle 作为验证手段

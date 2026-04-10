@@ -119,13 +119,17 @@ async function findAvailablePort(startPort) {
   throw new Error(`未找到可绑定端口，起始端口 ${startPort}，扫描范围 ${PORT_SCAN_RANGE}`);
 }
 
+export async function allocateAvailablePortsFrom(preferredPorts) {
+  return {
+    frontend: await findAvailablePort(preferredPorts.frontend),
+    gameServer: await findAvailablePort(preferredPorts.gameServer),
+    apiServer: await findAvailablePort(preferredPorts.apiServer),
+  };
+}
+
 export async function allocateAvailablePorts(workerId) {
   const preferred = allocatePorts(workerId);
-  return {
-    frontend: await findAvailablePort(preferred.frontend),
-    gameServer: await findAvailablePort(preferred.gameServer),
-    apiServer: await findAvailablePort(preferred.apiServer),
-  };
+  return allocateAvailablePortsFrom(preferred);
 }
 
 export function getPortPids(port) {

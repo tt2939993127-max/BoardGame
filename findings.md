@@ -179,3 +179,18 @@
 - 删除后重新扫描，重复 key 数量为 `0`
 - 直接执行 esbuild 打包 `server.ts`，未再出现 `duplicate-object-key` / `base_great_library` warning
 - 当前终端环境会拦截 Node 内部 `child_process.spawn`，因此这里不用 `smoke:startup` 作为最终验证，而改用直接 bundle 验证
+## 2026-03-25 DiceThrone E2E 复验
+- 当前 worktree 待交付的 DiceThrone E2E 补丁仍然只涉及：
+  - `e2e/dicethrone.e2e.ts`
+  - `e2e/helpers/dicethrone.ts`
+  - `scripts/infra/e2e-port-config.js`
+  - `evidence/dicethrone-e2e-test.md`
+- 重新执行 `npm run test:e2e:ci -- e2e/dicethrone.e2e.ts` 后，失败形态没有变化：
+  - 仍在进入 Playwright 前失败
+  - 失败阶段仍为 `fork`
+  - 具体错误仍为 `spawn EPERM`
+- 这说明当前 blocker 依旧是环境不允许 Node 子进程，不是 DiceThrone E2E 用例进入了新的业务断言失败
+- 与该补丁直接相关的静态校验现状：
+  - 编码检查通过
+  - ESLint 通过
+  - TypeScript `--noEmit` 通过
