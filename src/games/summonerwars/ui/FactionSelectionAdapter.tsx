@@ -345,6 +345,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
+      data-testid="sw-faction-selection"
       className="fixed inset-0 flex flex-col bg-[#0d1117] overflow-hidden select-none text-white font-sans w-screen h-screen"
       style={{ zIndex: UI_Z_INDEX.overlay }}
     >
@@ -445,6 +446,7 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
               animate={{ opacity: 1, y: 0 }}
               whileHover={{ scale: 1.02, y: -4 }}
               whileTap={{ scale: 0.98 }}
+              data-testid="sw-custom-deck-entry"
               transition={{
                 delay: (availableFactions.length + (savedDecks.length > 0 ? 1 : 0)) * 0.06,
                 duration: 0.3,
@@ -636,6 +638,9 @@ const FactionCard: React.FC<FactionCardProps> = ({
       animate={{ opacity: 1, y: 0 }}
       whileHover={{ scale: 1.02, y: -4 }}
       whileTap={{ scale: 0.98 }}
+      data-testid={`sw-faction-card-${faction.id}`}
+      data-faction-id={faction.id}
+      data-selected={isSelectedByMe ? 'true' : 'false'}
       transition={{
         delay: index * 0.06,
         duration: 0.3,
@@ -767,6 +772,10 @@ const PlayerStatusCard: React.FC<PlayerStatusCardProps> = ({
 
   return (
     <div
+      data-testid={`sw-player-status-${pid}`}
+      data-player-id={pid}
+      data-faction-id={factionId ?? 'unselected'}
+      data-ready={isReady ? 'true' : 'false'}
       className={clsx(
         'relative flex items-center gap-[0.8vw] px-[1vw] py-[0.6vw] rounded-lg transition-all duration-300',
         'border backdrop-blur-md overflow-hidden',
@@ -865,6 +874,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         animate={{ opacity: 1 }}
         disabled={!everyoneReady}
         onClick={onStart}
+        data-testid="sw-faction-start"
         className={clsx(
           'px-[2.5vw] py-[0.7vw] rounded-xl text-[clamp(12px,0.9vw,18px)] font-black tracking-[0.2em] uppercase',
           'border-2 transition-[background-color,border-color,opacity,transform,box-shadow] duration-200',
@@ -886,6 +896,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={onReady}
+        data-testid="sw-faction-ready"
         className="px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider bg-gradient-to-b from-emerald-400 to-emerald-600 text-white border-2 border-emerald-300 shadow-[0_3px_0_#047857] hover:brightness-110 active:translate-y-[2px] active:shadow-none cursor-pointer transition-[transform] duration-200"
       >
         {t('factionSelection.ready')}
@@ -899,6 +910,7 @@ const ActionButton: React.FC<ActionButtonProps> = ({
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={onUnready}
+        data-testid="sw-faction-unready"
         className="px-[2vw] py-[0.6vw] rounded-xl text-[clamp(11px,0.85vw,16px)] font-bold tracking-wider border-2 bg-white/5 text-emerald-400/70 border-emerald-400/30 hover:bg-red-500/20 hover:text-red-400 hover:border-red-400/50 cursor-pointer transition-all duration-200"
       >
         {t('factionSelection.cancelReady')}

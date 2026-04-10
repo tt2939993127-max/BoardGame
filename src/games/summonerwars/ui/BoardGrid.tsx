@@ -172,6 +172,7 @@ const GridLayer: React.FC<{
             key={cellKey}
             onClick={() => props.onCellClick(viewCoord.row, viewCoord.col)}
             data-testid={`sw-cell-${gameCoord.row}-${gameCoord.col}`}
+            data-cell-coord={`${gameCoord.row}-${gameCoord.col}`}
             data-row={gameCoord.row}
             data-col={gameCoord.col}
             data-selected={isSelected ? 'true' : 'false'}
@@ -489,6 +490,8 @@ const UnitCell: React.FC<{
       ref={scope}
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-unit-${row}-${col}`}
+      data-cell-coord={`${row}-${col}`}
+      data-unit-id={unit.instanceId}
       data-tutorial-id={
         unit.card.unitClass === 'summoner' && unit.owner === myPlayerId ? 'sw-my-summoner'
         : unit.card.unitClass === 'summoner' && unit.owner !== myPlayerId ? 'sw-enemy-summoner'
@@ -674,6 +677,8 @@ const StructureCell: React.FC<{
     <motion.div
       className="absolute flex items-center justify-center cursor-pointer pointer-events-auto"
       data-testid={`sw-structure-${row}-${col}`}
+      data-cell-coord={`${row}-${col}`}
+      data-structure-id={structure.cardId}
       data-tutorial-id={structure.card.isGate && structure.owner === myPlayerId ? 'sw-my-gate' : undefined}
       data-owner={structure.owner}
       data-structure-name={structure.card.name}

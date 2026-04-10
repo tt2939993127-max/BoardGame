@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DEV_SERVER_PORTS, E2E_SINGLE_WORKER_PORTS } from './scripts/infra/e2e-port-config.js';
+import { allocateAvailablePortSet, arePortsBindable, loadWorkerPorts, saveWorkerPorts } from './scripts/infra/port-allocator.js';
 import { ensureSharedTestApiToken } from './src/server/testApiToken';
 
 dotenv.config({ quiet: true });
@@ -28,7 +29,26 @@ process.env.PW_RUNTIME_SCOPE = runtimeScope;
 process.env.PW_REUSE_EXISTING_SERVERS = shouldReuseExistingServers ? 'true' : 'false';
 ensureSharedTestApiToken(process.env);
 
-const ports = useDevServers ? DEV_PORTS : SINGLE_WORKER_PORTS;
+async function resolveSingleWorkerPorts() {
+    const persisted = loadWorkerPorts(0);
+    if (persisted) {
+        return persisted;
+    }
+
+    if (await arePortsBindable(SINGLE_WORKER_PORTS)) {
+        saveWorkerPorts(0, SINGLE_WORKER_PORTS);
+        return SINGLE_WORKER_PORTS;
+    }
+
+    const allocated = await allocateAvailablePortSet(SINGLE_WORKER_PORTS);
+    saveWorkerPorts(0, allocated);
+    return allocated;
+}
+
+const resolvedSingleWorkerPorts = !isMultiWorker && !useDevServers
+    ? await resolveSingleWorkerPorts()
+    : SINGLE_WORKER_PORTS;
+const ports = useDevServers ? DEV_PORTS : resolvedSingleWorkerPorts;
 
 function collectFrameworkBackedTests(rootDir: string): string[] {
     const matches: string[] = [];

@@ -16,6 +16,14 @@ import {
 } from './common';
 
 export const GAME_NAME = 'summonerwars';
+export const SUMMONERWARS_FACTION_INDEX: Record<string, number> = {
+  necromancer: 0,
+  trickster: 1,
+  phoenix_elf: 2,
+  goblin: 3,
+  frost: 4,
+  barbaric: 5,
+};
 
 // ============================================================================
 // SW 专用上下文初始化
@@ -120,9 +128,50 @@ export const ensurePlayerIdInUrl = async (page: Page, expectedPlayerId: string) 
 };
 
 /** 通过 UI 点击选择阵营（按索引） */
+export const getFactionSelectionRoot = (page: Page) => page.getByTestId('sw-faction-selection');
+export const getFactionCard = (page: Page, factionId: string) => page.getByTestId(`sw-faction-card-${factionId}`);
+export const getFactionReadyButton = (page: Page) => page.getByTestId('sw-faction-ready');
+export const getFactionUnreadyButton = (page: Page) => page.getByTestId('sw-faction-unready');
+export const getFactionStartButton = (page: Page) => page.getByTestId('sw-faction-start');
+export const getPlayerStatusCard = (page: Page, playerId: string) => page.getByTestId(`sw-player-status-${playerId}`);
+export const getBoardCell = (page: Page, row: number, col: number) => page.getByTestId(`sw-cell-${row}-${col}`);
+export const getBoardUnit = (page: Page, row: number, col: number) =>
+  page.locator(`[data-testid="sw-unit-${row}-${col}"]`).first();
+export const getBoardStructure = (page: Page, row: number, col: number) => page.getByTestId(`sw-structure-${row}-${col}`);
+export const getUnitByInstanceId = (page: Page, unitId: string) => page.locator(`[data-unit-id="${unitId}"]`);
+export const getCellByCoord = (page: Page, row: number, col: number) => page.locator(`[data-cell-coord="${row}-${col}"]`);
+
 export const selectFaction = async (page: Page, factionIndex: number) => {
-  const factionCards = page.locator('.grid > div');
-  await factionCards.nth(factionIndex).click();
+  const factionId = Object.entries(SUMMONERWARS_FACTION_INDEX).find(([, index]) => index === factionIndex)?.[0];
+  if (!factionId) {
+    throw new Error(`Unknown SummonerWars faction index: ${factionIndex}`);
+  }
+  await selectFactionById(page, factionId);
+};
+
+export const selectFactionById = async (page: Page, factionId: string) => {
+  const factionCard = getFactionCard(page, factionId);
+  await expect(factionCard).toBeVisible({ timeout: 10000 });
+  await factionCard.click();
+};
+
+export const clickFactionReady = async (page: Page) => {
+  const readyButton = getFactionReadyButton(page);
+  await expect(readyButton).toBeVisible({ timeout: 5000 });
+  await readyButton.click();
+};
+
+export const clickFactionUnready = async (page: Page) => {
+  const unreadyButton = getFactionUnreadyButton(page);
+  await expect(unreadyButton).toBeVisible({ timeout: 5000 });
+  await unreadyButton.click();
+};
+
+export const clickFactionStart = async (page: Page) => {
+  const startButton = getFactionStartButton(page);
+  await expect(startButton).toBeVisible({ timeout: 5000 });
+  await expect(startButton).toBeEnabled({ timeout: 5000 });
+  await startButton.click();
 };
 
 // ============================================================================
@@ -145,8 +194,8 @@ export const waitForSummonerWarsUI = async (page: Page, timeout = 30000) => {
   await disableFabMenu(page);
 };
 
-/** 等待阵营选择界面出现；开发态首屏资源装载较慢，窗口需覆盖完整客户端加载。 */
-export const waitForFactionSelection = async (page: Page, timeout = 60000) => {
+/** 等待阵营选择界面出现 */
+export const waitForFactionSelection = async (page: Page, timeout = 30000) => {
   await page.waitForFunction(
     () => {
       const h1 = document.querySelector('h1');
@@ -159,27 +208,9 @@ export const waitForFactionSelection = async (page: Page, timeout = 60000) => {
   );
 };
 
-/** 等待 overlay 进入打开或关闭态，兼容页面上存在多个同 test id 的常驻实例。 */
-export const waitForOverlayState = async (
-  page: Page,
-  overlayTestId: string,
-  expected: 'open' | 'closed',
-  timeout = 5000,
-) => {
-  await expect.poll(
-    async () => page.evaluate(({ testId, target }) => {
-      const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
-      const visibleCount = overlays.filter((overlay) => {
-        const styles = window.getComputedStyle(overlay);
-        return styles.display !== 'none'
-          && styles.visibility !== 'hidden'
-          && styles.pointerEvents !== 'none'
-          && styles.opacity !== '0';
-      }).length;
-      return target === 'open' ? visibleCount > 0 : visibleCount === 0;
-    }, { testId: overlayTestId, target: expected }),
-    { timeout },
-  ).toBe(true);
+export const waitForFactionSelectionReady = async (page: Page, timeout = 30000) => {
+  await waitForFactionSelection(page, timeout);
+  await expect(getFactionSelectionRoot(page)).toBeVisible({ timeout });
 };
 
 // ============================================================================
@@ -249,15 +280,16 @@ export const selectFactionsViaUI = async (
   hostFactionIndex: number,
   guestFactionIndex: number,
 ) => {
+  await waitForFactionSelectionReady(hostPage, 20000);
+  await waitForFactionSelectionReady(guestPage, 20000);
   const selectionHeading = (page: Page) =>
     page.locator('h1').filter({ hasText: /选择你的阵营|Choose your faction/i });
   await expect(selectionHeading(hostPage)).toBeVisible({ timeout: 20000 });
   await expect(selectionHeading(guestPage)).toBeVisible({ timeout: 20000 });
 
-  const factionCards = (page: Page) => page.locator('.grid > div');
-  await factionCards(hostPage).nth(hostFactionIndex).click();
+  await selectFaction(hostPage, hostFactionIndex);
   await hostPage.waitForTimeout(500);
-  await factionCards(guestPage).nth(guestFactionIndex).click();
+  await selectFaction(guestPage, guestFactionIndex);
   await guestPage.waitForTimeout(500);
 
   const readyButton = guestPage.locator('button').filter({ hasText: /准备|Ready/i });
@@ -436,13 +468,24 @@ export const completeFactionSelection = async (hostPage: Page, guestPage: Page) 
  * 使用 dispatchEvent 直接触发点击事件
  */
 export const clickBoardElement = async (page: Page, selector: string) => {
-  const clicked = await page.evaluate((sel) => {
-    const el = document.querySelector(sel);
-    if (!el) return false;
-    el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-    return true;
-  }, selector);
-  if (!clicked) throw new Error(`无法点击元素: ${selector}`);
+  const locator = page.locator(selector).first();
+  try {
+    await locator.click({ force: true, timeout: 3000 });
+    return;
+  } catch {
+    const clicked = await page.evaluate((sel) => {
+      const candidates = Array.from(document.querySelectorAll<HTMLElement>(sel));
+      const el = candidates.find((node) => {
+        const style = window.getComputedStyle(node);
+        const rect = node.getBoundingClientRect();
+        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+      }) ?? candidates[0];
+      if (!el) return false;
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+      return true;
+    }, selector);
+    if (!clicked) throw new Error(`无法点击元素: ${selector}`);
+  }
 };
 
 // ============================================================================
@@ -557,6 +600,6 @@ export const setupOnlineMatchViaUI = async (
 ): Promise<Omit<SWMatchSetup, 'matchId'> | null> => {
   const result = await setupSWOnlineMatch(browser, baseURL, 'necromancer', 'trickster');
   if (!result) return null;
-  const { matchId, ...rest } = result;
+  const { matchId: _matchId, ...rest } = result;
   return rest;
 };
