@@ -27,9 +27,6 @@ const allowedValueArgs = new Set([
     'channel',
     'version',
     'native-version',
-    'target-native-version',
-    'min-native-version',
-    'max-native-version',
     'force-update-title',
     'force-update-message',
     'notes',
@@ -37,7 +34,6 @@ const allowedValueArgs = new Set([
 const allowedBooleanArgs = new Set([
     'force-update',
     'no-force-update',
-    'allow-legacy-shells',
     'dry-run',
     'skip-latest',
     'help',
@@ -46,27 +42,20 @@ const helpText = `
 Android OTA 发布脚本
 
 默认策略：
-- stable 默认收紧到当前原生版本：若未显式传兼容参数，会自动写入 minNativeVersion=<nativeVersion>
-- stable 默认也会开启 forceUpdate，让旧壳直接进入原生 App 升级链路
-- 如确需放行旧壳，必须显式传 --allow-legacy-shells
-- 非 stable channel 仍保持显式传参才生成原生版本门禁
+- OTA 默认面向所有已安装版本，不按原生版本做 target/min/max 门禁
+- 如需让客户端拿到更新后立即切换 bundle，可显式传 --force-update
+- 若误传任何 target/min/max 原生版本兼容参数，脚本会直接失败，防止再次发出“只给某个原生版本”的错误 OTA
 
 常见用法：
 - node scripts/mobile/publish-android-ota.mjs --channel stable
 - node scripts/mobile/publish-android-ota.mjs --channel edge --dry-run
-- node scripts/mobile/publish-android-ota.mjs --channel stable --target-native-version 0.5.1
-- node scripts/mobile/publish-android-ota.mjs --channel stable --min-native-version 0.5.0 --max-native-version 0.5.2
-- node scripts/mobile/publish-android-ota.mjs --channel stable --allow-legacy-shells --no-force-update
+- node scripts/mobile/publish-android-ota.mjs --channel stable --force-update
 
 参数：
 - --channel <name>
 - --version <bundleVersion>
 - --native-version <version>
-- --target-native-version <version[,version]>
-- --min-native-version <version>
-- --max-native-version <version>
 - --force-update / --no-force-update
-- --allow-legacy-shells
 - --force-update-title <text>
 - --force-update-message <text>
 - --notes <text>
@@ -134,16 +123,20 @@ if (hasFlag('help') || args.includes('-h')) {
 
 const channel = readArgValue('channel', process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || 'stable');
 const nativeVersion = readArgValue('native-version', packageJson.version);
-const explicitTargetNativeVersion = readArgValue('target-native-version', '');
-const explicitMinNativeVersion = readArgValue('min-native-version', '');
-const maxNativeVersion = readArgValue('max-native-version', '');
 const explicitBundleVersion = readArgValue('version', '');
 const notes = readArgValue('notes', 'Android embedded OTA bundle');
-const allowLegacyShells = hasFlag('allow-legacy-shells');
-const stableChannel = channel === 'stable';
-const minNativeVersion = stableChannel && !allowLegacyShells && !explicitTargetNativeVersion && !explicitMinNativeVersion
-    ? nativeVersion
-    : explicitMinNativeVersion;
+const forbiddenCompatibilityArgs = [
+    'target-native-version',
+    'min-native-version',
+    'max-native-version',
+    'allow-legacy-shells',
+].filter((name) => hasFlag(name) || readArgValue(name, '') !== '');
+if (forbiddenCompatibilityArgs.length > 0) {
+    throw new Error(
+        `已禁止按原生版本做 OTA 门禁：${forbiddenCompatibilityArgs.map((name) => `--${name}`).join(', ')}。`
+        + ' 当前项目规则是“所有版本都必须更新”，OTA manifest 不得再写 targetNativeVersion/minNativeVersion/maxNativeVersion。',
+    );
+}
 const {
     forceUpdate,
     forceUpdateTitle,
@@ -153,7 +146,7 @@ const {
     noForceUpdateFlag: hasFlag('no-force-update'),
     forceUpdateTitle: readArgValue('force-update-title', ''),
     forceUpdateMessage: readArgValue('force-update-message', ''),
-    defaultForceUpdate: stableChannel && !allowLegacyShells,
+    defaultForceUpdate: false,
 });
 const dryRun = hasFlag('dry-run');
 const skipLatest = hasFlag('skip-latest');
@@ -282,29 +275,11 @@ if (zipBuffer.length > MAX_ANDROID_OTA_ZIP_BYTES) {
     );
 }
 const checksum = createHash('sha256').update(zipBuffer).digest('hex');
-const normalizedTargetNativeVersion = explicitTargetNativeVersion
-    ? explicitTargetNativeVersion
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean)
-    : [];
-// stable 默认要求旧壳先升到当前原生版本，避免继续吃到新 OTA。
-// 如确需放行旧壳，必须显式传 --allow-legacy-shells，或手动指定 target/min/max。
-const resolvedTargetNativeVersion = normalizedTargetNativeVersion;
 const manifest = {
     version: bundleVersion,
     url: bundleUrl,
     checksum,
     channel,
-    ...(resolvedTargetNativeVersion.length > 0
-        ? {
-            targetNativeVersion: resolvedTargetNativeVersion.length === 1
-                ? resolvedTargetNativeVersion[0]
-                : resolvedTargetNativeVersion,
-        }
-        : {}),
-    ...(minNativeVersion ? { minNativeVersion } : {}),
-    ...(maxNativeVersion ? { maxNativeVersion } : {}),
     ...(forceUpdate ? { forceUpdate: true } : {}),
     ...(forceUpdateTitle ? { forceUpdateTitle } : {}),
     ...(forceUpdateMessage ? { forceUpdateMessage } : {}),
@@ -338,8 +313,7 @@ console.log(`bundleVersion=${bundleVersion}`);
 console.log(`nativeVersion=${nativeVersion}`);
 console.log(`mode=${dryRun ? 'dry-run' : 'publish'}`);
 console.log(`forceUpdate=${forceUpdate ? 'true' : 'false'}`);
-console.log(`allowLegacyShells=${allowLegacyShells ? 'true' : 'false'}`);
-console.log(`effectiveMinNativeVersion=${minNativeVersion || '(none)'}`);
+console.log('nativeCompatibilityMode=disabled');
 console.log(`skipLatest=${skipLatest ? 'true' : 'false'}`);
 console.log(`zipBytes=${zipBuffer.length}`);
 console.log(`otaIncludedFiles=${otaCollectionStats.includedFiles}`);
