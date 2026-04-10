@@ -1,4 +1,4 @@
-<!-- OPENSPEC:START -->
+﻿<!-- OPENSPEC:START -->
 # OpenSpec Instructions
 
 These instructions are for AI assistants working in this project.
@@ -228,7 +228,9 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 #### 1.4 分支、协作与 Git 纪律（强制）
 - **开工先查分支职责**：开始任何实质工作前，必须确认当前分支/工作树与当前任务职责一致。若当前分支明显服务于另一任务线、另一游戏、另一 PR 或另一 worktree，禁止直接在此继续改。
-- **分支和 worktree 有固定职责**：新分支必须从主分支创建；仓库根目录默认只承担 `main` 主工作树职责；未获确认时禁止自行创建 `git worktree`。
+- **分支和 worktree 有固定职责**：新分支必须从主分支创建；仓库根目录默认只承担 main 主工作树职责；未获确认时禁止自行创建 git worktree。
+- **未经允许不得擅自创建/切换分支**：未获用户明确许可，不得擅自创建、切换、重建、删除分支，默认停留在当前分支处理；若确需切换到 main、功能分支或其他 worktree，必须先说明目标、原因和影响并获得确认。只有用户明确要求“合并到主分支 / 清理分支 / 批量收口”时，才可执行相应切换与删除。
+- **主分支收口规范**：涉及批量收口、统一集成、准备发布、清理工作树时，默认以 main 作为唯一收口分支；除用户明确指定外，不得把“已完成收口”的结果停留在临时分支、同步分支或孤立 worktree 中。
 - **并发改动默认存在**：默认假设工作区里始终有其他 AI 或用户并发改动，禁止把“工作区干净”当作前提；看到陌生改动时，不得擅自回滚、清空、隐藏或覆盖。
 - **Git 回退和 stash 默认禁止**：未经用户明确许可，禁止执行 `git stash*`、历史回滚、`git restore`、`git checkout --` 等会影响现有工作区状态的命令；修 bug 必须通过编辑工具直接改代码。
 - **merge / push 要走项目门禁**：`git merge` 前必须读 `docs/git-merge-checklist.md`；`--no-verify` 默认禁止，仅在文档/配置/样式且无逻辑变更，或用户明确要求无校验推进时才可例外。
