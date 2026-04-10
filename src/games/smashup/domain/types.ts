@@ -693,6 +693,7 @@ export interface SmashUpCore {
     specialLimitUsed?: Record<string, number[]>;
     /** 巨石阵：本回合已使用双才能的随从 UID（每回合只有一个随从可用才能两次） */
     standingStonesDoubleTalentMinionUid?: string;
+    greatWolfSpiritDoubleTalentCardUids?: string[];
     /** 计分后触发的 special 延迟记录（回合开始自动清空） */
     pendingAfterScoringSpecials?: PendingAfterScoringSpecial[];
     /**
