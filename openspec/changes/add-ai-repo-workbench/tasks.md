@@ -20,8 +20,10 @@
 - [x] 4.2 设计决策点汇总卡片，统一承载 Wiki 对照、可信网站、图片处理方式等暂停项。
 - [x] 4.3 设计执行过程面板，展示步骤状态、日志、diff、截图和最终证据。
 - [ ] 4.4 细化 ArtifactBundle 的网页展示层级与失败节点的恢复交互。
+- [x] 4.5 明确监察者模式为 post-run Completion Gate，而不是前置路由或定时 `continue`。
 
 ## 5. Follow-up
 - [ ] 5.1 明确与现有前端页面 / 状态管理的对接落点。
 - [ ] 5.2 将首批模板拆成可实施的后续实现 change 或开发任务。
 - [ ] 5.3 评估是否需要新增 repo-provider / artifact-storage 等相邻 capability，而不是把实现细节全部塞进本 spec。
+- [x] 5.4 清理旧 Kiro auto-continue 入口与误导性文档引用，避免与新监察者模式混淆。

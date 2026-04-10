@@ -199,6 +199,74 @@
 3. 逐步把“数据录入”“Bug 修复”“审计”映射为模板工作流。
 4. 后续再评估是否需要修改或弱化 `ugc-prototype-builder` 的产品定位。
 
+## Completion Gate（监察者模式）
+
+监察者模式不再定义为前置路由器，也不等于任何“定时发 `continue`”恢复脚本。
+
+它应位于执行器之后，作为每轮执行完成后的本地裁决层：
+
+1. 执行器先产出结构化结果包
+2. Completion Gate 判断 `continue | finish`
+3. `continue` 生成内部下一步指令并写 continue record
+4. `finish` 生成用户可见总结，并包含 continue 轨迹摘要
+
+### Completion Gate 输入
+
+- `task_goal`
+- `step_result`
+- `validation`
+- `blockers`
+- `has_explicit_next_step`
+- `candidate_next_step`
+- `draft_user_message`
+- `evidence_refs`
+
+### Completion Gate 输出
+
+#### continue
+
+- `decision=continue`
+- `reason`
+- `next_instruction`
+- `archive=true`
+- `should_notify_user=false`
+
+#### finish
+
+- `decision=finish`
+- `reason`
+- `user_message`
+- `should_notify_user=true`
+- `archive=optional`
+
+### Continue Record
+
+每次 `continue` 都必须留下结构化记录，至少包含：
+
+- 时间戳
+- 当前目标
+- 本轮执行摘要
+- 裁决原因
+- 下一步内部指令
+- 证据引用
+
+这些记录既用于恢复，也必须在最终 `finish` 总结时被压缩成过程摘要回传给用户。
+
+### 与旧 Kiro auto-continue 的关系
+
+旧的 Kiro auto-continue / window-title monitor 文档与脚本，只解决“输入 continue 恢复会话”的历史问题，不再被视为监察者模式本体。
+
+保留价值的是：
+
+- checkpoint / resume 思路
+- false-active 判定
+- 长任务健康语义
+
+需要清理或归档的是：
+
+- 把定时发 `continue` 当作 watcher / supervisor 的入口
+- 继续在 README / CLAUDE / package scripts 中暴露这些旧入口
+
 ## Open Questions
 
 - 工作台首版是否要求支持远程 GitHub 仓库，还是先只支持本地仓库与固定模板仓库。

@@ -122,9 +122,6 @@
     "assets:upload:force": "cross-env FORCE_UPLOAD=1 node scripts/assets/upload-to-r2.js",
     "assets:check": "node scripts/assets/upload-to-r2.js --check",
     "assets:sync": "node scripts/assets/upload-to-r2.js --sync",
-    "monitor:kiro:timer:test": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 0.17 -MaxRetries 5",
-    "monitor:kiro:timer:20min": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 20 -MaxRetries 20",
-    "monitor:kiro:timer:30min": "powershell -ExecutionPolicy Bypass -File scripts/kiro-auto-timer.ps1 -IntervalMinutes 30 -MaxRetries 20",
     "prepare": "simple-git-hooks",
     "dev:parallel": "concurrently \"npm:dev:game\" \"npm:dev:api\" \"npm:dev:frontend:wait\"",
     "dev:game:lite": "cross-env NODE_ENV=development USE_PERSISTENT_STORAGE=false node scripts/infra/dev-bundle-runner.mjs --label game-lite --entry server.ts --outfile temp/dev-bundles/game-lite/server.mjs --tsconfig tsconfig.server.json"

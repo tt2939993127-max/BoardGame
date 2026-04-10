@@ -148,6 +148,34 @@
 - **THEN** 系统 MUST 从最近 checkpoint 恢复运行视图
 - **AND** 用户 MUST 能看到该运行是“继续执行”“等待决策”还是“失败待处理”
 
+### Requirement: 监察者模式 MUST 作为 post-run Completion Gate 工作
+
+系统 MUST 将监察者模式定义为每轮执行结果之后的后置裁决层，而不是前置路由器或定时 `continue` 恢复器。
+
+#### Scenario: 执行结果触发 continue
+- **WHEN** 当前目标尚未达成且存在明确下一步
+- **THEN** Completion Gate MUST 输出 `continue`
+- **AND** 系统 MUST 生成内部 `next_instruction` 而不打扰用户
+
+#### Scenario: 自然收口触发 finish
+- **WHEN** 任务达到自然收口、出现真实阻塞或需要用户决策
+- **THEN** Completion Gate MUST 输出 `finish`
+- **AND** 系统 MUST 生成面向用户的结果总结
+
+### Requirement: Continue Record MUST 留档并进入最终总结
+
+系统 MUST 为每次 `continue` 写入结构化留档，并在最终 `finish` 时把这些过程记录压缩进用户可见总结。
+
+#### Scenario: continue 留档
+- **WHEN** Completion Gate 输出 `continue`
+- **THEN** 系统 MUST 记录本轮执行摘要、裁决原因、下一步指令与证据引用
+- **AND** 这些记录 MUST 与当前 `WorkflowRun` 关联
+
+#### Scenario: finish 汇总 continue 历史
+- **WHEN** Completion Gate 输出 `finish`
+- **THEN** 用户可见总结 MUST 包含最终结果与 continue 过程摘要
+- **AND** 不得只返回最后一轮结果而丢失中间推进轨迹
+
 ### Requirement: ArtifactBundle MUST 同时保存原始证据与网页摘要
 
 系统 MUST 将执行环境产物整理为 `ArtifactBundle`，同时保存原始文件索引与网页可浏览摘要，避免只有卡片没有原始证据，或只有文件没有人类可读结论。
