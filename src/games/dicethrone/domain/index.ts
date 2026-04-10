@@ -156,5 +156,5 @@ export type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent } from './types
 export * from './rules';
 
 // 导出常量
-export { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS } from './ids';
+export { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS, DICETHRONE_COMMANDS } from './ids';
 export { RESOURCE_IDS } from './resources';

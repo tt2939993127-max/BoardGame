@@ -21,7 +21,6 @@ import type {
 import type { InteractionDescriptor as EngineInteractionDescriptor, MultistepChoiceData, PromptMultiConfig } from '../../engine/systems/InteractionSystem';
 import { DiceThroneDomain } from './domain';
 import {
-    DICETHRONE_COMMANDS,
     RESOURCE_IDS,
     STATUS_IDS,
     canAdvancePhase,
@@ -35,6 +34,7 @@ import {
     getNextPhase,
     isCardPlayableInResponseWindow,
 } from './domain';
+import { DICETHRONE_COMMANDS } from './domain/ids';
 import { DICETHRONE_CHARACTER_CATALOG, type SelectableCharacterId } from './domain/types';
 import { findPlayerAbility, getPlayerAbilityBaseDamage } from './domain/abilityLookup';
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';

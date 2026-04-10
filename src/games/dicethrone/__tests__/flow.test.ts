@@ -20,6 +20,7 @@ import { playerView } from '../domain/view';
 import { MONK_CARDS } from '../heroes/monk/cards';
 import { BARBARIAN_CARDS } from '../heroes/barbarian/cards';
 import type { AbilityEffect } from '../domain/combat';
+import { createSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import { GameTestRunner, type TestCase } from '../../../engine/testing';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState, executePipeline } from '../../../engine/pipeline';
@@ -1272,6 +1273,61 @@ describe('王权骰铸流程测试', () => {
 
             expect(state.sys.phase).toBe('defensiveRoll');
             expect(state.core.pendingAttack?.defenderId).toBe('1');
+        });
+
+        it('targetingRoll 无可选目标时 emergency skip 会清理 pendingAttack', () => {
+            const playerIds: PlayerId[] = ['0', '1'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            const random = fixedRandom;
+            let state = createNoResponseSetup()(playerIds, random);
+
+            state = {
+                ...state,
+                sys: {
+                    ...state.sys,
+                    phase: 'targetingRoll',
+                    interaction: {
+                        ...state.sys.interaction,
+                        current: createSimpleChoice(
+                            'targeting-roll-emergency',
+                            '0',
+                            'targeting-roll',
+                            [],
+                            'targeting-roll',
+                        ),
+                    },
+                },
+                core: {
+                    ...state.core,
+                    pendingAttack: {
+                        attackerId: '0',
+                        isDefendable: true,
+                        targetingSelectionPending: true,
+                        targetingSelectionResolved: false,
+                    },
+                },
+            };
+
+            const resolveResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'SYS_INTERACTION_RESPOND',
+                    playerId: '0',
+                    payload: { optionId: '__emergency_skip__' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                random,
+                playerIds
+            );
+
+            expect(resolveResult.success).toBe(true);
+            const nextState = resolveResult.state as MatchState<DiceThroneCore>;
+            expect(nextState.sys.interaction.current).toBeUndefined();
+            expect(nextState.core.pendingAttack).toBeUndefined();
         });
 
         it('4 人模式 targetingRoll 不允许通过 mergedValue 伪造队友为目标', () => {

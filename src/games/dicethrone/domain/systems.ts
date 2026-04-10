@@ -24,6 +24,59 @@ import { getChoiceResolvedEventHandler } from './choiceResolvedEvents';
 import { RESOURCE_IDS } from './resources';
 import { CP_MAX } from './core-types';
 
+const UNSATISFIABLE_CHOICE_REASONS = new Set(['empty-options', 'all-options-disabled', 'min-selection-unreachable']);
+
+type EmergencySkipContext = {
+    sourceId?: string;
+    interactionData?: unknown;
+};
+
+function extractChoiceCustomIds(interactionData: unknown): string[] {
+    const data = interactionData as { options?: Array<{ value?: { customId?: unknown } }> } | undefined;
+    if (!Array.isArray(data?.options)) return [];
+    return data.options
+        .map((option) => option?.value?.customId)
+        .filter((customId): customId is string => typeof customId === 'string');
+}
+
+function isTargetingSelectionChoice(customIds: string[], sourceId?: string): boolean {
+    if (sourceId === 'targeting-roll') return true;
+    if (customIds.length === 0) return false;
+    return customIds.every((customId) => customId.startsWith('select-target:'));
+}
+
+function isOffensiveRollEndTokenChoice(customIds: string[], sourceId?: string): boolean {
+    if (sourceId === 'offensive-roll-end-token') return true;
+    if (customIds.length === 0) return false;
+    return customIds.some((customId) => customId.startsWith('use-'))
+        && customIds.some((customId) => customId === 'skip');
+}
+
+function applyEmergencySkipFallback(core: DiceThroneCore, context: EmergencySkipContext): DiceThroneCore | null {
+    if (!core.pendingAttack) return null;
+    const customIds = extractChoiceCustomIds(context.interactionData);
+
+    if (isTargetingSelectionChoice(customIds, context.sourceId)) {
+        return {
+            ...core,
+            pendingAttack: undefined,
+            pendingBonusDiceSettlement: undefined,
+        };
+    }
+
+    if (isOffensiveRollEndTokenChoice(customIds, context.sourceId) && core.pendingAttack.offensiveRollEndTokenResolved !== true) {
+        return {
+            ...core,
+            pendingAttack: {
+                ...core.pendingAttack,
+                offensiveRollEndTokenResolved: true,
+            },
+        };
+    }
+
+    return null;
+}
+
 // ============================================================================
 // 多步交互类型定义（骰子修改 / 骰子选择）
 // ============================================================================
@@ -456,7 +509,22 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         playerId: string;
                         sourceId?: string;
                         interactionData?: any;
+                        reason?: unknown;
                     };
+
+                    const reason = typeof payload.reason === 'string' ? payload.reason : undefined;
+                    if (reason && UNSATISFIABLE_CHOICE_REASONS.has(reason)) {
+                        const emergencyCore = applyEmergencySkipFallback(newState.core, {
+                            sourceId: typeof payload.sourceId === 'string' ? payload.sourceId : undefined,
+                            interactionData: payload.interactionData,
+                        });
+                        if (emergencyCore) {
+                            newState = {
+                                ...newState,
+                                core: emergencyCore,
+                            };
+                        }
+                    }
 
                     // InteractionSystem 已从 current.data.sourceId 提取到 payload.sourceId，
                     // 直接使用，无需再挖 interactionData（兼容 dt:card-interaction 和 multistep-choice）
