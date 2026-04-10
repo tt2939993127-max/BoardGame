@@ -69,6 +69,7 @@ import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey
 import { SUMMONER_WARS_MANIFEST } from './manifest';
 import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
+import { resolveRuntimeLayoutScaleMetrics } from '../mobileSupport';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
@@ -78,6 +79,7 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
+const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1280;
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.08;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
 const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.05;
@@ -128,6 +130,29 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       '--sw-hand-card-width-ratio': '0.105',
     } as React.CSSProperties
     : undefined;
+
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return;
+    }
+    if (!isPhoneLandscapeViewport || viewport.width <= 0 || viewport.height <= 0) {
+      return;
+    }
+
+    const metrics = resolveRuntimeLayoutScaleMetrics(
+      { width: viewport.width, height: viewport.height },
+      SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH,
+    );
+    const rootStyle = document.documentElement.style;
+    rootStyle.setProperty('--mobile-board-shell-design-width', `${metrics.designWidth}px`);
+    rootStyle.setProperty('--mobile-board-shell-scale', metrics.scale.toFixed(6));
+    rootStyle.setProperty('--mobile-board-shell-inverse-scale', metrics.inverseScale.toFixed(6));
+    rootStyle.setProperty('--mobile-board-shell-logical-height', `${metrics.logicalHeight.toFixed(3)}px`);
+    rootStyle.setProperty('--mobile-board-shell-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
+    rootStyle.setProperty('--mobile-board-shell-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
+    rootStyle.setProperty('--mobile-layout-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
+    rootStyle.setProperty('--mobile-layout-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
+  }, [isPhoneLandscapeViewport, viewport.height, viewport.width]);
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;

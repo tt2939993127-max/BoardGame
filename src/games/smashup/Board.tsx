@@ -223,7 +223,7 @@ function checkPlayConstraintUI(
 const getPhaseNameKey = (phase: string) => `phases.${phase}`;
 
 const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, matchData, isMultiplayer }) => {
-    const { t } = useTranslation('game-smashup');
+    const { t, i18n } = useTranslation('game-smashup');
     const { setSelectedFactions, interactionMode } = useSmashUpOverlay();
 
     const core = G?.core;

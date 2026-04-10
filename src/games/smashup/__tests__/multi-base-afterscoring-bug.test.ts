@@ -116,30 +116,26 @@ function resolvePirateKingFirstMateScoringChain(
     expect(resolvePirateKing.success).toBe(true);
     eventsAcc.push(...(resolvePirateKing.events as SmashUpEvent[]));
 
-    // pirate_king 解决后，multi_base_scoring 会继续驱动剩余基地的计分选择。
-    // 在当前实现中，这一步通常先出现“剩余基地选择”交互（base-0 等）。
-    let stateAfterPirateKing = resolvePirateKing.finalState;
-    let nextChoice = asSimpleChoice(stateAfterPirateKing.sys.interaction?.current)!;
-    for (let guard = 0; guard < 3 && nextChoice?.sourceId === 'reaction_queue_choose_next'; guard++) {
-        const chosen = ['pirate_first_mate', 'base_tortuga', 'base_pirate_cove']
-            .map(id => nextChoice.options.find((o: any) => (o.label as string).includes(id)))
-            .find(Boolean)
-            ?? nextChoice.options[0]!;
-        const resolveOrdering = runner(stateAfterPirateKing, {
+    // multi_base_scoring 可能在后续基地计分前再次弹出 pirate_king_move（第二个基地的 beforeScoring）
+    // 为了专注验证“链路不重复/能走完”，这里把剩余 pirate_king_move 全部选择“否”快速通过。
+    let stateAfterKings = resolvePirateKing.finalState;
+    for (let guard = 0; guard < 5; guard++) {
+        const current = asSimpleChoice(stateAfterKings.sys.interaction?.current);
+        if (!current || current.sourceId !== 'pirate_king_move') break;
+        const chooseNo = findOption(current, (o: any) => o.id === 'no');
+        const r = runner(stateAfterKings, {
             type: 'SYS_INTERACTION_RESPOND',
-            playerId: nextChoice.playerId,
-            payload: { optionId: chosen.id },
+            playerId: current.playerId,
+            payload: { optionId: chooseNo },
         });
-        expect(resolveOrdering.success).toBe(true);
-        eventsAcc.push(...(resolveOrdering.events as SmashUpEvent[]));
-        stateAfterPirateKing = resolveOrdering.finalState;
-        nextChoice = asSimpleChoice(stateAfterPirateKing.sys.interaction?.current)!;
+        expect(r.success).toBe(true);
+        stateAfterKings = r.finalState;
     }
-    expect(nextChoice).toBeTruthy();
 
-    // 新的计分会话会把“剩余基地选择 / reaction queue / first mate”串成一条统一交互链，
-    // 因此这里不再假设 pirate_king 之后一定先出现 multi_base_scoring。
-    let stateAfterKings = stateAfterPirateKing;
+    // 继续推进链路直到 first_mate afterScoring 交互出现：
+    // - multi_base_scoring：选择下一个要计分的基地（取首个选项即可）；
+    // - pirate_king_move：选择“否”快速通过；
+    // - base_tortuga：选择 runner-up 的 reserve minion（本用例固定为 reserve-p1）。
     for (let guard = 0; guard < 30; guard++) {
         const current = asSimpleChoice(stateAfterKings.sys.interaction?.current);
         if (!current) break;
@@ -266,7 +262,6 @@ function resolvePirateKingFirstMateScoringChain(
     return {
         chooseBase,
         resolvePirateKing,
-        resolveTortuga: { success: true, events: [], finalState: stateAfterKings } as any,
         resolveFirstMate: resolveFirstMate as any,
         finalState: drainedState,
         chainEvents: eventsAcc,

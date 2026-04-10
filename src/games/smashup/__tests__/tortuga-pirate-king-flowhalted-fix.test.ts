@@ -138,9 +138,12 @@ describe('托尔图加计分 - 海盗王移动后 flowHalted 清除', () => {
 
         // 验证: 应该 halt (因为交互仍在进行)
         expect(result).toMatchObject({ events: [], halt: true });
-        if ('updatedState' in (result ?? {}) && result?.updatedState) {
-            expect(result.updatedState.sys.phase).toBe('scoreBases');
-            expect(result.updatedState.sys.interaction?.current).toBeTruthy();
+        if (typeof result === 'object' && result && 'updatedState' in result) {
+            expect(result.updatedState).toBeDefined();
+            if (result.updatedState) {
+                expect(result.updatedState.sys.phase).toBe('scoreBases');
+                expect(result.updatedState.sys.interaction?.current).toBeTruthy();
+            }
         }
     });
 });

@@ -88,6 +88,27 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     const isSingleDieRerollSpotlight = Boolean(bonusDice && bonusDice.length === 1);
     const costAmount = rerollCostAmount ?? 1;
     const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
+    const summaryEffectText = React.useMemo(() => {
+        if (!summaryEffectKey || !summaryEffectParams) {
+            return undefined;
+        }
+        if (i18n.exists(summaryEffectKey)) {
+            return t(summaryEffectKey, summaryEffectParams);
+        }
+        if (summaryEffectKey.startsWith('bonusDie.effect.')) {
+            const suffix = summaryEffectKey.slice('bonusDie.effect.'.length);
+            const effectMap = i18n.getResource(
+                i18n.language,
+                'game-dicethrone',
+                'bonusDie.effect'
+            ) as Record<string, string> | undefined;
+            const template = effectMap?.[suffix];
+            if (typeof template === 'string') {
+                return i18n.services.interpolator.interpolate(template, summaryEffectParams, i18n.language);
+            }
+        }
+        return summaryEffectKey;
+    }, [summaryEffectKey, summaryEffectParams, i18n, t]);
 
     // 调试日志：组件渲染
     React.useEffect(() => {
@@ -233,9 +254,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                             className="text-white text-[1.4vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
                             style={{ textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)' }}
                         >
-                            {i18n.exists(summaryEffectKey)
-                                ? t(summaryEffectKey, summaryEffectParams)
-                                : summaryEffectKey}
+                            {summaryEffectText ?? summaryEffectKey}
                         </motion.div>
                     )}
 

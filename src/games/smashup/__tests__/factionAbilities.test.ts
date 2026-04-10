@@ -317,7 +317,7 @@ describe('海盗派系能力', () => {
             ],
         });
 
-        const { events, matchState } = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
         const powerEvents = events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED);
         // 只有己方随从 m0 和 m2 获得 +1
         expect(powerEvents.length).toBe(2);
@@ -457,7 +457,7 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const { events, matchState } = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
         const powerEvents = events.filter(e => e.type === SU_EVENTS.TEMP_POWER_ADDED);
         expect(powerEvents.length).toBe(1); // 只有己方 m0
         expect((powerEvents[0] as any).payload.minionUid).toBe('m0');
@@ -565,7 +565,7 @@ describe('恐龙派系能力', () => {
             ],
         });
 
-        const { events, matchState } = execPlayAction(state, '0', 'a1');
+        const { events, matchState } = execPlayAction(state, '0', 'a1', 0);
         const destroyEvents = events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
         // m1(力量2) 和 m2(力量2) 都是最低力量
         expect(destroyEvents.length).toBe(2);

@@ -354,23 +354,23 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
                 {
                     defId: 'base_innsmouth_base',
                     minions: [
-                        { uid: 'b0-strong', defId: 'dino_king_rex_pod', owner: '0', controller: '0', power: 7 },
-                        { uid: 'b0-weak', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', power: 2 },
-                        { uid: 'b0-enemy', defId: 'robot_microbot_guard', owner: '1', controller: '1', power: 1 },
+                        { uid: 'b0-strong', defId: 'dino_king_rex_pod', owner: '0', controller: '0', basePower: 7 },
+                        { uid: 'b0-weak', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', basePower: 1 },
+                        { uid: 'b0-enemy', defId: 'robot_microbot_guard', owner: '1', controller: '1', basePower: 1 },
                     ],
                 },
                 {
                     defId: 'base_wizard_academy',
                     minions: [
-                        { uid: 'b1-weak', defId: 'robot_microbot_guard', owner: '1', controller: '1', power: 1 },
-                        { uid: 'b1-mid-a', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', power: 2 },
-                        { uid: 'b1-mid-b', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', power: 2 },
+                        { uid: 'b1-weak', defId: 'robot_microbot_guard', owner: '1', controller: '1', basePower: 1 },
+                        { uid: 'b1-mid-a', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', basePower: 2 },
+                        { uid: 'b1-mid-b', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', basePower: 2 },
                     ],
                 },
                 {
                     defId: 'base_the_factory',
                     minions: [
-                        { uid: 'b2-only', defId: 'robot_microbot_alpha', owner: '1', controller: '1', power: 1 },
+                        { uid: 'b2-only', defId: 'robot_microbot_alpha', owner: '1', controller: '1', basePower: 1 },
                     ],
                 },
             ],

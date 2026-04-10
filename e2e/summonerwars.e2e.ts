@@ -3123,7 +3123,11 @@ test.describe('SummonerWars', () => {
     await waitForSummonerWarsHandStable(hostPage);
     await waitForSummonerWarsHandArtReady(hostPage);
     await assertHandAreaVisible(hostPage, 'mobile-basic-flow-after-magic');
-    await assertReachableHandCards(hostPage, 'mobile-basic-flow-after-magic', 3);
+    await assertReachableHandCards(
+      hostPage,
+      'mobile-basic-flow-after-magic',
+      Math.min(3, expectedMagicHandCountAfterDiscard),
+    );
 
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '41-mobile-basic-flow-after-magic', {
