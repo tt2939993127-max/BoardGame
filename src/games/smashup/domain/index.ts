@@ -394,6 +394,12 @@ export function scoreOneBase(
     random?: RandomFn,
     matchState?: MatchState<SmashUpCore>,
 ): { events: SmashUpEvent[]; newBaseDeck: string[]; matchState?: MatchState<SmashUpCore> } {
+    // 响应窗口/交互在 matchState.core 上推进时，调用方传入的 core 可能还是旧快照。
+    // 计分必须以最新 core 为准，否则会把计分前已销毁/移动的随从继续算进排名。
+    if (matchState?.core) {
+        core = matchState.core;
+    }
+
     // 榛樿 random锛堢‘瀹氭€у洖閫€锛岃鍒嗕腑澶у鏁?trigger 涓嶉渶瑕侀殢鏈猴級
     const rng: RandomFn = random ?? {
         random: () => 0.5,
