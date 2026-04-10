@@ -4,7 +4,7 @@
 >
 > 本文把“定义链 / 执行链已接上”描述得过于接近“体验已收口”。后续用户反馈证明，枪手 / 武士仍存在 **攻击修正 UI 可见性不足、5 骰结算缺少汇总文案、武士 token 中文与图标展示不一致** 的体验层漏项，因此本文原先可被理解为“已完整收口”的口径已失效。
 >
-> 2026-04-09 的补审与修复证据见：`evidence/dicethrone-gunslinger-samurai-ux-reaudit-2026-04-09.md`
+> 2026-04-10 的补审与修复证据见：`evidence/dicethrone-gunslinger-samurai-ux-reaudit-2026-04-10.md`
 
 ## 审计范围
 

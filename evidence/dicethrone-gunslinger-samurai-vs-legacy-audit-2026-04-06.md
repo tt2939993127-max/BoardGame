@@ -196,3 +196,7 @@ node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-hero-mechanics.e2e.ts "B
   - 初版结论曾记录：当前剩余主要缺口不是 atlas、升级卡、AI 门禁，而是 `Bushido` 的被动建模仍然分叉。
   - 同日继续修复后：`Bushido` 已改为通用 passive phase trigger 路径，原结构性 finding 已收口；保留的后续议题变为“是否统一 `passiveAbilities` 与 `ability.type='passive'` 两套被动体系”。
   - 同日补充真实在线双人 E2E，并新增 `evidence/dicethrone-new-passives-e2e-test-2026-04-06.md` 作为 UI 侧收口证据；旧的“本轮没有重跑 UI E2E”口径失效。
+- 2026-04-10：
+  - 后续真实反馈进一步证明：即便新角色与老角色共享契约主链已补齐，也不能直接等价成“UI 体验已完整收口”。
+  - 新增 UX 侧补审：`evidence/dicethrone-gunslinger-samurai-ux-reaudit-2026-04-10.md`，专门回写基础 `Loaded` 单骰特写、5 骰汇总文案、token 图标与按钮翻译这几类可见体验缺口。
+  - 因此本文今后只能作为“共享契约对比审计”证据，不能再单独作为“枪手 / 武士全部体验已收口”的证明材料。
