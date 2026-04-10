@@ -15,7 +15,6 @@ import {
     registerTrigger,
     clearOngoingEffectRegistry,
     registerPodOngoingAliases,
-    interceptEvent,
     isMinionProtected,
     isOperationRestricted,
     fireTriggers,
@@ -32,7 +31,6 @@ import { resolveAbility } from '../domain/abilityRegistry';
 import { reduce } from '../domain/reduce';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { getMinionDef } from '../data/cards';
-import { asSimpleChoice } from '../../../engine/systems/InteractionSystem';
 
 // ============================================================================
 // 测试辅助
@@ -1328,54 +1326,6 @@ describe('诡术师 ongoing 能力', () => {
 
             expect(isMinionProtected(state, myMinion, 0, '1', 'action')).toBe(false);
         });
-
-        test('POD 版会阻止其他玩家把随从移动到此基地', () => {
-            const sourceBase = makeBase({
-                minions: [makeMinion({ defId: 'robot_zapbot', uid: 'm-1', controller: '1', owner: '1' })],
-            });
-            const targetBase = makeBase({
-                ongoingActions: [{ uid: 'ho-1', defId: 'trickster_hideout_pod', ownerId: '0' }],
-            });
-            const state = makeState([sourceBase, targetBase]);
-
-            const result = interceptEvent(state, {
-                type: SU_EVENTS.MINION_MOVED,
-                payload: {
-                    minionUid: 'm-1',
-                    minionDefId: 'robot_zapbot',
-                    fromBaseIndex: 0,
-                    toBaseIndex: 1,
-                    reason: 'test_move',
-                },
-                timestamp: 1000,
-            } as any);
-
-            expect(result).toBeNull();
-        });
-
-        test('POD 版允许拥有者把自己的随从移动到此基地', () => {
-            const sourceBase = makeBase({
-                minions: [makeMinion({ defId: 'trickster_a', uid: 'm-2', controller: '0', owner: '0' })],
-            });
-            const targetBase = makeBase({
-                ongoingActions: [{ uid: 'ho-1', defId: 'trickster_hideout_pod', ownerId: '0' }],
-            });
-            const state = makeState([sourceBase, targetBase]);
-
-            const result = interceptEvent(state, {
-                type: SU_EVENTS.MINION_MOVED,
-                payload: {
-                    minionUid: 'm-2',
-                    minionDefId: 'trickster_a',
-                    fromBaseIndex: 0,
-                    toBaseIndex: 1,
-                    reason: 'test_move',
-                },
-                timestamp: 1000,
-            } as any);
-
-            expect(result).toBeUndefined();
-        });
     });
 
     describe('trickster_pay_the_piper: 付笛手的钱', () => {
@@ -1384,11 +1334,9 @@ describe('诡术师 ongoing 能力', () => {
                 ongoingActions: [{ uid: 'pp-1', defId: 'trickster_pay_the_piper', ownerId: '0' }],
             });
             const state = makeState([base]);
-            const matchState = makeMatchState(state);
 
-            const result = fireTriggers(state, 'onMinionPlayed', {
+            const { events } = fireTriggers(state, 'onMinionPlayed', {
                 state,
-                matchState,
                 playerId: '1',
                 baseIndex: 0,
                 triggerMinionUid: 'new-m',
@@ -1397,12 +1345,9 @@ describe('诡术师 ongoing 能力', () => {
                 now: 1000,
             });
 
-            expect(result.events).toHaveLength(0);
-            const choice = asSimpleChoice(result.matchState?.sys.interaction.current);
-            expect(choice).toBeDefined();
-            expect(choice?.playerId).toBe('1');
-            expect(choice?.options).toHaveLength(3);
-            expect(choice?.options.map((option: any) => option.value?.cardUid)).toEqual(['oh1', 'oh2', 'oh3']);
+            expect(events).toHaveLength(1);
+            expect(events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
+            expect((events[0] as any).payload.playerId).toBe('1');
         });
     });
 

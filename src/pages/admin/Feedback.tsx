@@ -23,17 +23,14 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import ImageLightbox from '../../components/common/ImageLightbox';
-import Skeleton from '../../components/common/feedback/Skeleton';
 import {
     CopyFeedbackButton,
     extractText,
     FeedbackContent,
     formatAbsoluteTime,
     formatTime,
-    type FeedbackClientContext,
-    type FeedbackErrorContext,
     hasEmbeddedImage,
-} from './feedback-shared';
+} from './components/FeedbackHelpers';
 import { ADMIN_API_URL } from '../../config/server';
 import { cn } from '../../lib/utils';
 
@@ -43,7 +40,6 @@ interface FeedbackItem {
         _id: string;
         username: string;
         avatar?: string;
-        email?: string;
     };
     content: string;
     type: 'bug' | 'suggestion' | 'other';
@@ -53,16 +49,7 @@ interface FeedbackItem {
     contactInfo?: string;
     actionLog?: string;
     stateSnapshot?: string;
-    clientContext?: FeedbackClientContext;
-    errorContext?: FeedbackErrorContext;
     createdAt: string;
-}
-
-interface FeedbackListResponse {
-    items: FeedbackItem[];
-    total: number;
-    page: number;
-    limit: number;
 }
 
 type StatusOption = { value: FeedbackItem['status']; color: string };
@@ -71,7 +58,6 @@ type IconComponent = ComponentType<{ size?: number; className?: string }>;
 type TypeOption = { value: FeedbackItem['type']; icon: IconComponent; iconColor: string };
 type TypeOptionWithLabel = TypeOption & { label: string };
 type SeverityConfig = Record<FeedbackItem['severity'], { label: string; dot: string; tone: string }>;
-type SortOption = 'newest' | 'oldest';
 
 const STATUS_OPTIONS: StatusOption[] = [
     { value: 'open', color: 'bg-amber-50 text-amber-700 border-amber-200' },
@@ -94,8 +80,6 @@ const SEVERITY_STYLES: Record<FeedbackItem['severity'], { dot: string; tone: str
 };
 
 const POLL_INTERVAL = 30_000;
-const PAGE_SIZE = 20;
-const SEVERITY_ORDER: FeedbackItem['severity'][] = ['critical', 'high', 'medium', 'low'];
 
 const buildStatusOptions = (t: TFunction<'admin'>): StatusOptionWithLabel[] => (
     STATUS_OPTIONS.map((option) => ({
@@ -225,18 +209,14 @@ export default function AdminFeedbackPage() {
     const severityConfig = useMemo(() => buildSeverityConfig(t), [t]);
 
     const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([]);
-    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
-    const [statusFilter, setStatusFilter] = useState<string>('open');
+    const [statusFilter, setStatusFilter] = useState<string>('all');
     const [typeFilter, setTypeFilter] = useState<string>('all');
-    const [severityFilter, setSeverityFilter] = useState<string>('all');
-    const [sortOrder, setSortOrder] = useState<SortOption>('newest');
-    const [page, setPage] = useState(1);
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [activeId, setActiveId] = useState<string | null>(null);
+    const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [isPolling, setIsPolling] = useState(false);
     const [previewImage, setPreviewImage] = useState<string | null>(null);
-    const [aiPayloadPreview, setAiPayloadPreview] = useState<string | null>(null);
 
     const requestIdRef = useRef(0);
     const isMountedRef = useRef(true);
@@ -254,24 +234,18 @@ export default function AdminFeedbackPage() {
         if (silent) setIsPolling(true);
 
         try {
-            const params = new URLSearchParams({
-                page: String(page),
-                limit: String(PAGE_SIZE),
-            });
+            const params = new URLSearchParams({ limit: '100' });
             if (statusFilter !== 'all') params.set('status', statusFilter);
             if (typeFilter !== 'all') params.set('type', typeFilter);
-            if (severityFilter !== 'all') params.set('severity', severityFilter);
-            params.set('sort', sortOrder);
 
             const response = await fetch(`${ADMIN_API_URL}/feedback?${params}`, {
                 headers: { Authorization: `Bearer ${token}` },
             });
             if (!response.ok) throw new Error('fetch_failed');
 
-            const data = await response.json() as FeedbackListResponse;
+            const data = await response.json();
             if (isMountedRef.current && requestId === requestIdRef.current) {
                 setFeedbacks(data.items);
-                setTotal(data.total ?? 0);
             }
         } catch {
             if (!silent) error(t('feedback.messages.fetchFailed'));
@@ -281,7 +255,7 @@ export default function AdminFeedbackPage() {
                 setIsPolling(false);
             }
         }
-    }, [error, page, severityFilter, sortOrder, statusFilter, t, token, typeFilter]);
+    }, [error, statusFilter, t, token, typeFilter]);
 
     useEffect(() => {
         fetchFeedbacks();
@@ -319,8 +293,10 @@ export default function AdminFeedbackPage() {
     );
 
     useEffect(() => {
-        setAiPayloadPreview(null);
-    }, [activeId]);
+        if (!activeFeedback) {
+            setIsDetailOpen(false);
+        }
+    }, [activeFeedback]);
 
     const allSelected = feedbacks.length > 0 && feedbacks.every((feedback) => selectedIds.has(feedback._id));
 
@@ -372,22 +348,12 @@ export default function AdminFeedbackPage() {
             });
             if (!response.ok) throw new Error('delete_failed');
 
-            const nextTotal = Math.max(0, total - 1);
-            const nextTotalPages = Math.max(1, Math.ceil(nextTotal / PAGE_SIZE));
-            const nextPage = Math.min(page, nextTotalPages);
-
             setFeedbacks((prev) => prev.filter((feedback) => feedback._id !== id));
-            setTotal(nextTotal);
             setSelectedIds((prev) => {
                 const next = new Set(prev);
                 next.delete(id);
                 return next;
             });
-            if (nextPage !== page) {
-                setPage(nextPage);
-            } else {
-                fetchFeedbacks();
-            }
             success(t('feedback.messages.deleteSuccess'));
         } catch {
             error(t('feedback.messages.deleteFailed'));
@@ -411,29 +377,27 @@ export default function AdminFeedbackPage() {
 
             success(t('feedback.messages.bulkDeleteSuccess'));
             setSelectedIds(new Set());
-            setPage(1);
+            fetchFeedbacks();
         } catch {
             error(t('feedback.messages.bulkDeleteFailed'));
         }
     };
 
-    const changeFilter = <T extends string>(setter: (value: T) => void, value: T) => {
+    const changeFilter = (setter: (value: string) => void, value: string) => {
         setter(value);
-        setPage(1);
         setSelectedIds(new Set());
         setActiveId(null);
-        setAiPayloadPreview(null);
+        setIsDetailOpen(false);
     };
 
-    const sortOptions: Array<{ value: SortOption; label: string }> = [
-        { value: 'newest', label: t('feedback.filters.newest') },
-        { value: 'oldest', label: t('feedback.filters.oldest') },
-    ];
+    const openDetail = (id: string) => {
+        setActiveId(id);
+        setIsDetailOpen(true);
+    };
 
-    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-    const pageIndicator = `${page} / ${totalPages}`;
-    const canGoPrev = page > 1;
-    const canGoNext = page < totalPages;
+    const closeDetail = () => {
+        setIsDetailOpen(false);
+    };
 
     return (
         <div className="mx-auto flex h-full min-h-0 w-full max-w-[1880px] flex-col gap-1 px-2 py-1">
@@ -441,7 +405,7 @@ export default function AdminFeedbackPage() {
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <h1 className="text-sm font-semibold text-zinc-900">{t('feedback.title')}</h1>
                     <span className="rounded-md bg-zinc-100 px-2 py-0.5 text-[10px] font-medium text-zinc-600">
-                        {t('feedback.count', { count: total })}
+                        {t('feedback.count', { count: feedbacks.length })}
                     </span>
                     {selectedIds.size > 0 && (
                         <span className="rounded-md bg-zinc-900 px-2 py-0.5 text-[10px] font-medium text-white">
@@ -464,168 +428,73 @@ export default function AdminFeedbackPage() {
                             <RefreshCw size={11} className={cn(isPolling && 'animate-spin')} />
                             {t('feedback.refresh')}
                         </button>
-                            {selectedIds.size > 0 && (
-                                <button
-                                    type="button"
-                                    onClick={handleBulkDelete}
-                                    className="inline-flex h-5 items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-100"
-                                >
-                                    <Trash2 size={11} />
-                                    {t('feedback.bulkDelete', { count: selectedIds.size })}
-                                </button>
+                        {selectedIds.size > 0 && (
+                            <button
+                                type="button"
+                                onClick={handleBulkDelete}
+                                className="inline-flex h-5 items-center gap-1 rounded-md border border-red-200 bg-red-50 px-2 text-[10px] font-medium text-red-600 transition-colors hover:bg-red-100"
+                            >
+                                <Trash2 size={11} />
+                                {t('feedback.bulkDelete', { count: selectedIds.size })}
+                            </button>
                         )}
+                    </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                    <div className="flex flex-wrap items-center gap-1">
+                        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                            {t('feedback.filters.status')}
+                        </span>
+                        {[{ value: 'all', label: t('feedback.filters.all') }, ...statusOptions].map((option) => (
+                            <FilterTab
+                                key={option.value}
+                                active={statusFilter === option.value}
+                                onClick={() => changeFilter(setStatusFilter, option.value)}
+                            >
+                                {option.label}
+                            </FilterTab>
+                        ))}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-1">
+                        <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
+                            {t('feedback.filters.type')}
+                        </span>
+                        <FilterTab active={typeFilter === 'all'} onClick={() => changeFilter(setTypeFilter, 'all')}>
+                            {t('feedback.filters.all')}
+                        </FilterTab>
+                        {typeOptions.map((option) => {
+                            const Icon = option.icon;
+                            return (
+                                <FilterTab
+                                    key={option.value}
+                                    active={typeFilter === option.value}
+                                    onClick={() => changeFilter(setTypeFilter, option.value)}
+                                >
+                                    <span className="flex items-center gap-1">
+                                        <Icon size={10} className={option.iconColor} />
+                                        {option.label}
+                                    </span>
+                                </FilterTab>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
 
             <div className="grid flex-1 min-h-0 gap-1.5 xl:grid-cols-[minmax(0,1fr)_312px] 2xl:grid-cols-[minmax(0,1fr)_330px]">
-                <section className="flex min-h-0 flex-col overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
-                    <div
-                        data-testid="feedback-list-controls"
-                        className="flex flex-none flex-col gap-2 border-b border-zinc-200 bg-zinc-50/80 px-2.5 py-2"
-                    >
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <div className="flex flex-wrap items-center gap-1">
-                                <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                                    {t('feedback.filters.status')}
-                                </span>
-                                {[{ value: 'all', label: t('feedback.filters.all') }, ...statusOptions].map((option) => (
-                                    <FilterTab
-                                        key={option.value}
-                                        active={statusFilter === option.value}
-                                        onClick={() => changeFilter(setStatusFilter, option.value)}
-                                    >
-                                        {option.label}
-                                    </FilterTab>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <div className="flex flex-wrap items-center gap-1">
-                                <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                                    {t('feedback.filters.type')}
-                                </span>
-                                <FilterTab active={typeFilter === 'all'} onClick={() => changeFilter(setTypeFilter, 'all')}>
-                                    {t('feedback.filters.all')}
-                                </FilterTab>
-                                {typeOptions.map((option) => {
-                                    const Icon = option.icon;
-                                    return (
-                                        <FilterTab
-                                            key={option.value}
-                                            active={typeFilter === option.value}
-                                            onClick={() => changeFilter(setTypeFilter, option.value)}
-                                        >
-                                            <span className="flex items-center gap-1">
-                                                <Icon size={10} className={option.iconColor} />
-                                                {option.label}
-                                            </span>
-                                        </FilterTab>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                            <div className="flex flex-wrap items-center gap-1">
-                                <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                                    {t('feedback.filters.severity')}
-                                </span>
-                                <FilterTab active={severityFilter === 'all'} onClick={() => changeFilter(setSeverityFilter, 'all')}>
-                                    {t('feedback.filters.all')}
-                                </FilterTab>
-                                {SEVERITY_ORDER.map((severity) => (
-                                    <FilterTab
-                                        key={severity}
-                                        active={severityFilter === severity}
-                                        onClick={() => changeFilter(setSeverityFilter, severity)}
-                                    >
-                                        <span className="flex items-center gap-1">
-                                            <span className={cn('h-2 w-2 rounded-full', severityConfig[severity].dot)} />
-                                            {severityConfig[severity].label}
-                                        </span>
-                                    </FilterTab>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-2 pt-1">
-                            <div className="flex flex-wrap items-center gap-1">
-                                <span className="mr-1 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                                    {t('feedback.filters.sort')}
-                                </span>
-                                {sortOptions.map((option) => (
-                                    <FilterTab
-                                        key={option.value}
-                                        active={sortOrder === option.value}
-                                        onClick={() => changeFilter(setSortOrder, option.value)}
-                                    >
-                                        {option.label}
-                                    </FilterTab>
-                                ))}
-                            </div>
-
-                            <div className="ml-auto flex flex-wrap items-center gap-1">
-                                <div className="inline-flex items-center gap-1 rounded-md border border-zinc-200 bg-white px-1 py-0.5 shadow-sm">
-                                    <button
-                                        type="button"
-                                        data-testid="feedback-pagination-prev"
-                                        onClick={() => canGoPrev && setPage((prev) => prev - 1)}
-                                        disabled={!canGoPrev}
-                                        title={t('feedback.pagination.prev')}
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
-                                    >
-                                        <ChevronLeft size={12} />
-                                    </button>
-                                    <span
-                                        data-testid="feedback-pagination-indicator"
-                                        className="min-w-[54px] text-center text-[10px] font-medium tabular-nums text-zinc-600"
-                                    >
-                                        {pageIndicator}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        data-testid="feedback-pagination-next"
-                                        onClick={() => canGoNext && setPage((prev) => prev + 1)}
-                                        disabled={!canGoNext}
-                                        title={t('feedback.pagination.next')}
-                                        className="inline-flex h-5 w-5 items-center justify-center rounded text-zinc-600 transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:text-zinc-300 disabled:hover:bg-transparent"
-                                    >
-                                        <ChevronRight size={12} />
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
+                <section className="min-h-0 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-sm">
                     {loading ? (
-                        <div className="flex-1 min-h-0 space-y-2 overflow-hidden px-3 py-3">
-                            {Array.from({ length: 8 }, (_, index) => (
-                                <div
-                                    key={`feedback-list-skeleton-${index}`}
-                                    className="grid grid-cols-[32px_minmax(0,1.7fr)_112px_128px_72px_88px_82px_52px] items-center gap-2 rounded-xl border border-zinc-100 bg-white px-2.5 py-2"
-                                >
-                                    <Skeleton className="h-4 w-4 rounded-sm" />
-                                    <div className="space-y-2">
-                                        <Skeleton className="h-4 w-full rounded-lg" />
-                                        <Skeleton className="h-3 w-[78%] rounded-lg" />
-                                    </div>
-                                    <Skeleton className="h-4 w-20 rounded-lg" />
-                                    <Skeleton className="h-4 w-24 rounded-lg" />
-                                    <Skeleton className="h-5 w-12 rounded-full" />
-                                    <Skeleton className="h-5 w-14 rounded-full" />
-                                    <Skeleton className="h-4 w-16 rounded-lg" />
-                                    <Skeleton className="h-8 w-8 justify-self-end rounded-lg" />
-                                </div>
-                            ))}
+                        <div className="flex h-full items-center justify-center py-20">
+                            <RefreshCw className="animate-spin text-zinc-300" size={24} />
                         </div>
                     ) : feedbacks.length === 0 ? (
-                        <div className="flex flex-1 items-center justify-center px-6 text-center text-sm text-zinc-400">
+                        <div className="flex h-full items-center justify-center px-6 text-center text-sm text-zinc-400">
                             {t('feedback.table.empty')}
                         </div>
                     ) : (
-                        <div data-testid="feedback-list-scroll" className="flex-1 min-h-0 overflow-auto">
+                        <div className="h-full min-h-0 overflow-auto">
                             <table className="w-full table-fixed text-[11px]">
                                 <thead className="sticky top-0 z-10 bg-zinc-50/95 backdrop-blur">
                                     <tr className="text-left text-[9px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
@@ -677,9 +546,7 @@ export default function AdminFeedbackPage() {
                     )}
                 </section>
                 <FeedbackDetailPanel
-                    key={activeFeedback?._id ?? 'empty'}
                     item={activeFeedback}
-                    aiPayloadPreview={aiPayloadPreview}
                     typeOptions={typeOptions}
                     severityConfig={severityConfig}
                     statusOptions={statusOptions}
@@ -687,7 +554,6 @@ export default function AdminFeedbackPage() {
                     onStatusUpdate={handleStatusUpdate}
                     onDelete={handleDelete}
                     onImageClick={setPreviewImage}
-                    onAiPayloadCopy={setAiPayloadPreview}
                 />
             </div>
 
@@ -730,13 +596,9 @@ function FeedbackRow({
     const hasImage = hasEmbeddedImage(item.content);
     const hasActionLog = Boolean(item.actionLog);
     const hasSnapshot = Boolean(item.stateSnapshot);
-    const route = item.clientContext?.route?.trim() || null;
-    const errorName = item.errorContext?.name?.trim() || null;
 
     return (
         <tr
-            data-testid="feedback-row"
-            data-feedback-id={item._id}
             onClick={onActivate}
             className={cn(
                 'group cursor-pointer border-b border-zinc-100 transition-colors',
@@ -776,23 +638,6 @@ function FeedbackRow({
                             {hasActionLog && <ScrollText size={10} title={t('feedback.actionLog.title')} />}
                             {hasSnapshot && <span title={t('feedback.stateSnapshot.title')}>JSON</span>}
                         </div>
-                        {(route || errorName) && (
-                            <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] leading-4">
-                                {route && (
-                                    <div className="rounded bg-blue-50 px-1.5 py-0.5 text-blue-700">
-                                        {route}
-                                    </div>
-                                )}
-                                {errorName && (
-                                    <div
-                                        data-testid="feedback-error-context-panel"
-                                        className="rounded bg-red-50 px-1.5 py-0.5 text-red-700"
-                                    >
-                                        {errorName}
-                                    </div>
-                                )}
-                            </div>
-                        )}
                     </div>
                 </div>
             </td>
@@ -863,7 +708,6 @@ function FeedbackRow({
 
 function FeedbackDetailPanel({
     item,
-    aiPayloadPreview,
     typeOptions,
     severityConfig,
     statusOptions,
@@ -871,10 +715,8 @@ function FeedbackDetailPanel({
     onStatusUpdate,
     onDelete,
     onImageClick,
-    onAiPayloadCopy,
 }: {
     item: FeedbackItem | null;
-    aiPayloadPreview: string | null;
     typeOptions: TypeOptionWithLabel[];
     severityConfig: SeverityConfig;
     statusOptions: StatusOptionWithLabel[];
@@ -882,11 +724,12 @@ function FeedbackDetailPanel({
     onStatusUpdate: (id: string, status: string) => void;
     onDelete: (id: string) => void;
     onImageClick: (src: string) => void;
-    onAiPayloadCopy: (payloadText: string) => void;
 }) {
     const [snapshotCopied, setSnapshotCopied] = useState(false);
-    const [actionLogExpanded, setActionLogExpanded] = useState(false);
-    const [snapshotExpanded, setSnapshotExpanded] = useState(false);
+
+    useEffect(() => {
+        setSnapshotCopied(false);
+    }, [item?._id]);
 
     if (!item) {
         return (
@@ -981,7 +824,7 @@ function FeedbackDetailPanel({
                     )}
                     {item.stateSnapshot && <MetaBadge>JSON</MetaBadge>}
                     <div className="ml-auto">
-                        <CopyFeedbackButton item={item} t={t} onAiPayloadCopy={onAiPayloadCopy} />
+                        <CopyFeedbackButton item={item} t={t} />
                     </div>
                 </div>
             </div>
@@ -1054,108 +897,46 @@ function FeedbackDetailPanel({
                                 {item._id}
                             </span>
                         </MetaField>
-
-                        {item.clientContext?.route && (
-                            <MetaField label="Route">
-                                <span className="break-all text-zinc-700">{item.clientContext.route}</span>
-                            </MetaField>
-                        )}
-
-                        {item.errorContext?.name && (
-                            <MetaField label="Error">
-                                <span className="text-zinc-700">{item.errorContext.name}</span>
-                            </MetaField>
-                        )}
                     </div>
                 </section>
 
-                {aiPayloadPreview && (
-                    <section className="rounded-lg border border-zinc-200 bg-white p-2.5">
-                        <p className="mb-2 text-[10px] font-medium uppercase tracking-wide text-zinc-400">
-                            {t('feedback.aiSummary.title')}
-                        </p>
-                        <textarea
-                            readOnly
-                            wrap="off"
-                            data-testid="feedback-ai-payload-viewer"
-                            value={aiPayloadPreview}
-                            className="min-h-[260px] w-full resize-y overflow-x-auto rounded-lg border border-zinc-200 bg-zinc-50 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-700 outline-none"
-                        />
-                    </section>
-                )}
-
                 {item.actionLog && (
-                    <section className="rounded-lg border border-zinc-200 bg-white p-2.5">
-                        <button
-                            type="button"
-                            data-testid="feedback-action-log-toggle"
-                            aria-expanded={actionLogExpanded}
-                            onClick={() => setActionLogExpanded((prev) => !prev)}
-                            className="flex w-full items-center justify-between gap-2 text-left text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-700"
-                        >
-                            <span className="inline-flex items-center gap-2">
-                                <ScrollText size={12} />
-                                {t('feedback.actionLog.title')}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400">
-                                {actionLogExpanded ? t('feedback.detail.collapse') : t('feedback.detail.expand')}
-                                <ChevronRight
-                                    size={12}
-                                    className={cn('transition-transform', actionLogExpanded && 'rotate-90')}
-                                />
-                            </span>
-                        </button>
-                        {actionLogExpanded && (
-                            <pre className="mt-2 max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-100 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-600 whitespace-pre-wrap">
-                                {item.actionLog}
-                            </pre>
-                        )}
-                    </section>
+                    <details className="rounded-lg border border-zinc-200 bg-white p-2.5" open>
+                        <summary className="cursor-pointer text-[11px] font-medium text-zinc-500 hover:text-zinc-700">
+                            {t('feedback.actionLog.title')}
+                        </summary>
+                        <pre className="mt-2 max-h-56 overflow-auto rounded-lg border border-zinc-200 bg-zinc-100 p-2.5 font-mono text-[11px] leading-relaxed text-zinc-600 whitespace-pre-wrap">
+                            {item.actionLog}
+                        </pre>
+                    </details>
                 )}
 
                 {item.stateSnapshot && (
-                    <section className="rounded-lg border border-zinc-200 bg-white p-2.5">
-                        <button
-                            type="button"
-                            data-testid="feedback-state-snapshot-toggle"
-                            aria-expanded={snapshotExpanded}
-                            onClick={() => setSnapshotExpanded((prev) => !prev)}
-                            className="flex w-full items-center justify-between gap-2 text-left text-[11px] font-medium text-zinc-500 transition-colors hover:text-zinc-700"
-                        >
-                            <span className="inline-flex items-center gap-2">
-                                <ScrollText size={12} />
-                                {t('feedback.stateSnapshot.title')}
-                            </span>
-                            <span className="inline-flex items-center gap-1 text-[10px] text-zinc-400">
-                                {snapshotExpanded ? t('feedback.detail.collapse') : t('feedback.detail.expand')}
-                                <ChevronRight
-                                    size={12}
-                                    className={cn('transition-transform', snapshotExpanded && 'rotate-90')}
-                                />
-                            </span>
-                        </button>
-                        {snapshotExpanded && (
-                            <div className="relative mt-2">
-                                <pre className="max-h-72 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-400 whitespace-pre-wrap">
-                                    {item.stateSnapshot}
-                                </pre>
-                                <button
-                                    type="button"
-                                    onClick={(event) => {
-                                        event.stopPropagation();
-                                        navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
-                                            setSnapshotCopied(true);
-                                            setTimeout(() => setSnapshotCopied(false), 2000);
-                                        });
-                                    }}
-                                    className="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] text-white transition-colors hover:bg-emerald-500"
-                                >
-                                    {snapshotCopied ? <Check size={10} /> : <Copy size={10} />}
-                                    {snapshotCopied ? t('feedback.stateSnapshot.copied') : t('feedback.stateSnapshot.copy')}
-                                </button>
-                            </div>
-                        )}
-                    </section>
+                    <details className="rounded-lg border border-zinc-200 bg-white p-2.5">
+                        <summary className="flex cursor-pointer items-center gap-2 text-[11px] font-medium text-zinc-500 hover:text-zinc-700">
+                            <ScrollText size={12} />
+                            {t('feedback.stateSnapshot.title')}
+                        </summary>
+                        <div className="relative mt-2">
+                            <pre className="max-h-72 overflow-auto rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 font-mono text-[11px] leading-relaxed text-emerald-400 whitespace-pre-wrap">
+                                {item.stateSnapshot}
+                            </pre>
+                            <button
+                                type="button"
+                                onClick={(event) => {
+                                    event.stopPropagation();
+                                    navigator.clipboard.writeText(item.stateSnapshot!).then(() => {
+                                        setSnapshotCopied(true);
+                                        setTimeout(() => setSnapshotCopied(false), 2000);
+                                    });
+                                }}
+                                className="absolute right-2 top-2 inline-flex items-center gap-1 rounded bg-emerald-600 px-2 py-1 text-[10px] text-white transition-colors hover:bg-emerald-500"
+                            >
+                                {snapshotCopied ? <Check size={10} /> : <Copy size={10} />}
+                                {snapshotCopied ? t('feedback.stateSnapshot.copied') : t('feedback.stateSnapshot.copy')}
+                            </button>
+                        </div>
+                    </details>
                 )}
             </div>
         </aside>

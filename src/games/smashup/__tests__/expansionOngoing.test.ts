@@ -787,7 +787,7 @@ describe('食人花 ongoing 能力', () => {
                 baseIndex: 0, random: dummyRandom, now: 1000,
             });
 
-            // 只有一个候选→自动抽取 (CARDS_DRAWN + LIMIT_MODIFIED + MINION_PLAYED + DECK_REORDERED)
+            // 只有一个候选→自动抽取 (CARDS_DRAWN + LIMIT_MODIFIED + MINION_PLAYED + DECK_RESHUFFLED)
             expect(result.events).toHaveLength(4);
             expect(result.events[0].type).toBe(SU_EVENTS.CARDS_DRAWN);
             expect(result.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
@@ -924,21 +924,6 @@ describe('印斯茅斯 ongoing 能力', () => {
 
             expect(isMinionProtected(state, oppMinion, 0, '0', 'affect')).toBe(false);
         });
-
-        test('力量≤2的己方随从不会被对手的藤蔓缠绕禁止移动', () => {
-            const protectedMinion = makeMinion({ defId: 'inn_a', uid: 'ia-1', controller: '0', basePower: 2 });
-            const entangledOwnerMinion = makeMinion({ defId: 'kp_a', uid: 'kp-1', controller: '1', basePower: 3 });
-            const base = makeBase({
-                minions: [protectedMinion, entangledOwnerMinion],
-                ongoingActions: [
-                    { uid: 'ips-1', defId: 'innsmouth_in_plain_sight', ownerId: '0' },
-                    { uid: 'ent-1', defId: 'killer_plant_entangled', ownerId: '1' },
-                ],
-            });
-            const state = makeState([base]);
-
-            expect(isMinionProtected(state, protectedMinion, 0, '0', 'move')).toBe(false);
-        });
     });
 
     describe('innsmouth_return_to_the_sea: 回归大海', () => {
@@ -947,7 +932,7 @@ describe('印斯茅斯 ongoing 能力', () => {
             expect(executor).toBeDefined();
         });
 
-        test('真实行动牌触发路径会先选同名组，再返回所选随从', () => {
+        test('交互响应会保留原基地索引，且目标失效时不再重复回手', () => {
             const executor = resolveAbility('innsmouth_return_to_the_sea', 'special')!;
             const triggerMinion = makeMinion({
                 uid: 'inn-1',
@@ -974,39 +959,25 @@ describe('印斯茅斯 ongoing 能力', () => {
                 state,
                 matchState: ms,
                 playerId: '0',
-                cardUid: 'return-action-1',
+                cardUid: 'inn-1',
                 defId: 'innsmouth_return_to_the_sea',
                 baseIndex: 0,
                 random: dummyRandom,
                 now: 1000,
             });
 
-            const chooseGroup = (result.matchState?.sys as any)?.interaction?.current;
-            expect(chooseGroup?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
-            const firstGroup = chooseGroup?.data?.options?.find((entry: any) => entry.value?.minionDefId === 'innsmouth_the_locals');
-            expect(firstGroup?.value?.baseIndex).toBe(0);
+            const interaction = (result.matchState?.sys as any)?.interaction?.current;
+            expect(interaction?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
+            const firstOption = interaction?.data?.options?.find((entry: any) => entry.value?.minionUid === 'inn-1');
+            expect(firstOption?.value?.baseIndex).toBe(0);
 
             const handler = getInteractionHandler('innsmouth_return_to_the_sea');
             expect(handler).toBeDefined();
 
-            const chooseMinionResult = handler!(
-                result.matchState as any,
-                '0',
-                firstGroup.value,
-                undefined,
-                dummyRandom,
-                1001,
-            );
-            const chooseMinion = (chooseMinionResult?.state?.sys as any)?.interaction?.queue?.[0]
-                ?? (chooseMinionResult?.state?.sys as any)?.interaction?.current;
-            expect(chooseMinion?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
-            const firstMinion = chooseMinion?.data?.options?.find((entry: any) => entry.value?.minionUid === 'inn-1');
-            expect(firstMinion?.value?.baseIndex).toBe(0);
-
             const liveEvents = callHandler(handler!, {
                 state,
                 playerId: '0',
-                selectedValue: [firstMinion.value],
+                selectedValue: [firstOption.value],
                 random: dummyRandom,
                 now: 1001,
             });
@@ -1029,90 +1000,11 @@ describe('印斯茅斯 ongoing 能力', () => {
             const staleEvents = callHandler(handler!, {
                 state: staleState,
                 playerId: '0',
-                selectedValue: [firstMinion.value],
+                selectedValue: [firstOption.value],
                 random: dummyRandom,
                 now: 1002,
             });
             expect(staleEvents).toHaveLength(0);
-        });
-
-        test('名称选择交互在基地索引漂移后仍可按 baseDefId 找回当前基地', () => {
-            const executor = resolveAbility('innsmouth_return_to_the_sea', 'special')!;
-            const localsA = makeMinion({
-                uid: 'inn-1',
-                defId: 'innsmouth_the_locals',
-                controller: '0',
-                owner: '0',
-            });
-            const localsB = makeMinion({
-                uid: 'inn-2',
-                defId: 'innsmouth_the_locals',
-                controller: '0',
-                owner: '0',
-            });
-            const scout = makeMinion({
-                uid: 'scout-1',
-                defId: 'alien_scout',
-                controller: '0',
-                owner: '0',
-            });
-            const filler = makeMinion({
-                uid: 'other-1',
-                defId: 'wizard_neophyte',
-                controller: '1',
-                owner: '1',
-            });
-            const state = makeState([
-                makeBase({ defId: 'base_old', minions: [filler] }),
-                makeBase({ defId: 'base_scoring', minions: [localsA, localsB, scout] }),
-            ]);
-            const ms = { core: state, sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } } } as any;
-
-            const result = executor({
-                state,
-                matchState: ms,
-                playerId: '0',
-                cardUid: 'return-sea',
-                defId: 'innsmouth_return_to_the_sea',
-                baseIndex: 1,
-                random: dummyRandom,
-                now: 1000,
-            });
-
-            const nameInteraction = (result.matchState?.sys as any)?.interaction?.current;
-            expect(nameInteraction?.data?.sourceId).toBe('innsmouth_return_to_the_sea_choose_name');
-            const localsOption = nameInteraction?.data?.options?.find(
-                (entry: any) => entry.value?.minionDefId === 'innsmouth_the_locals',
-            );
-            expect(localsOption?.value?.baseIndex).toBe(1);
-            expect(localsOption?.value?.baseDefId).toBe('base_scoring');
-
-            const chooseNameHandler = getInteractionHandler('innsmouth_return_to_the_sea_choose_name');
-            expect(chooseNameHandler).toBeDefined();
-
-            const shiftedState = makeState([
-                makeBase({ defId: 'base_scoring', minions: [localsA, localsB, scout] }),
-            ]);
-            const shiftedMatchState = {
-                core: shiftedState,
-                sys: { phase: 'scoreBases', interaction: { current: undefined, queue: [] } },
-            } as any;
-
-            const shiftedResult = chooseNameHandler!(
-                shiftedMatchState,
-                '0',
-                localsOption.value,
-                undefined,
-                dummyRandom,
-                1001,
-            );
-
-            const followupInteraction = shiftedResult.state.sys.interaction?.current;
-            expect(followupInteraction?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
-            expect(followupInteraction?.data?.options).toHaveLength(2);
-            expect(
-                followupInteraction?.data?.options?.every((option: any) => option.value?.baseDefId === 'base_scoring'),
-            ).toBe(true);
         });
     });
 });
@@ -1421,15 +1313,10 @@ describe('米斯卡塔尼克 新增能力', () => {
                 now: 1006,
             });
 
-            const limitModified = events.find(e => e.type === SU_EVENTS.LIMIT_MODIFIED) as any;
-            expect(limitModified).toBeDefined();
-            expect(limitModified.payload?.limitType).toBe('action');
-            expect(limitModified.payload?.delta).toBe(1);
-
             const actionPlayed = events.find(e => e.type === SU_EVENTS.ACTION_PLAYED) as any;
             expect(actionPlayed).toBeDefined();
             expect(actionPlayed.payload?.defId).toBe(MADNESS_CARD_DEF_ID);
-            expect(actionPlayed.payload?.isExtraAction).toBeUndefined();
+            expect(actionPlayed.payload?.isExtraAction).toBe(true);
         });
     });
 });

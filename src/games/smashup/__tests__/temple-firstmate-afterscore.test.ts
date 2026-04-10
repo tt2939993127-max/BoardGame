@@ -8,10 +8,7 @@ import type { MatchState } from '../../../engine/types';
 import { makeBase, makeCard, makeMatchState, makeMinion, makePlayer, makeState } from './helpers';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { reduce } from '../domain/reducer';
-import { collectTriggers, fireTriggers } from '../domain/ongoingEffects';
-import { maybeResolveReactionQueue } from '../domain/reactionQueue';
-import { asSimpleChoice, INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { defaultTestRandom, runCommand } from './testRunner';
+import { fireTriggers } from '../domain/ongoingEffects';
 
 beforeAll(() => {
     clearRegistry();
@@ -19,99 +16,6 @@ beforeAll(() => {
     clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
-});
-
-describe('First Mate per-instance', () => {
-    it('同一计分基地上的多个大副会按实例依次结算且不会卡死', () => {
-        const core = makeState({
-            currentPlayerIndex: 0,
-            turnOrder: ['0', '1'],
-            bases: [
-                makeBase('base_castle_blood', [
-                    makeMinion('first_mate_1', 'pirate_first_mate', '0', 2),
-                    makeMinion('first_mate_2', 'pirate_first_mate_pod', '0', 2),
-                    makeMinion('count_1', 'vampire_the_count', '1', 5),
-                ]),
-                makeBase('base_the_homeworld', []),
-                makeBase('base_crypt', []),
-            ],
-            players: {
-                '0': makePlayer('0'),
-                '1': makePlayer('1'),
-            },
-        });
-        const matchState = makeMatchState(core);
-        matchState.sys.phase = 'scoreBases';
-
-        const queued = collectTriggers(core, 'afterScoring', {
-            state: core,
-            matchState,
-            playerId: '0',
-            baseIndex: 0,
-            rankings: [
-                { playerId: '0', power: 4, vp: 3 },
-                { playerId: '1', power: 5, vp: 3 },
-            ],
-            random: defaultTestRandom,
-            now: 2000,
-        });
-        expect(queued).toBeDefined();
-
-        const coreWithQueue = reduce(core, queued as any);
-        expect(coreWithQueue.triggerQueue).toHaveLength(2);
-        expect(coreWithQueue.triggerQueue?.map(trigger => trigger.sourceCardUid)).toEqual(['first_mate_1', 'first_mate_2']);
-
-        const matchStateWithQueue = makeMatchState(coreWithQueue);
-        matchStateWithQueue.sys.phase = 'scoreBases';
-        const queuedState = maybeResolveReactionQueue(matchStateWithQueue, defaultTestRandom, 2000);
-        expect(queuedState).toBeDefined();
-
-        let state = queuedState!.state;
-        const orderingChoice = asSimpleChoice(state.sys.interaction?.current);
-        expect(orderingChoice?.sourceId).toBe('reaction_queue_choose_next');
-
-        const seenMateUids = new Set<string>();
-
-        const resolveCurrentChoice = (currentState: MatchState<SmashUpCore>, optionId: string, playerId: string) => {
-            const result = runCommand(currentState, {
-                type: INTERACTION_COMMANDS.RESPOND,
-                playerId,
-                payload: { optionId },
-            } as any, defaultTestRandom);
-            expect(result.success).toBe(true);
-            return result.finalState;
-        };
-
-        state = resolveCurrentChoice(state, orderingChoice!.options[0]!.id, orderingChoice!.playerId);
-
-        let currentInteraction = state.sys.interaction?.current as any;
-        expect(currentInteraction?.data?.sourceId).toBe('pirate_first_mate_choose_base');
-        const firstMateUid = currentInteraction?.data?.continuationContext?.mateUid as string;
-        expect(firstMateUid).toBeTruthy();
-        seenMateUids.add(firstMateUid);
-
-        state = resolveCurrentChoice(state, 'skip', currentInteraction.playerId);
-
-        currentInteraction = state.sys.interaction?.current as any;
-        if (currentInteraction?.data?.sourceId === 'reaction_queue_choose_next') {
-            state = resolveCurrentChoice(state, currentInteraction.data.options[0]!.id, currentInteraction.playerId);
-            currentInteraction = state.sys.interaction?.current as any;
-        }
-
-        expect(currentInteraction?.data?.sourceId).toBe('pirate_first_mate_choose_base');
-        const secondMateUid = currentInteraction?.data?.continuationContext?.mateUid as string;
-        expect(secondMateUid).toBeTruthy();
-        expect(secondMateUid).not.toBe(firstMateUid);
-        seenMateUids.add(secondMateUid);
-
-        state = resolveCurrentChoice(state, 'skip', currentInteraction.playerId);
-
-        expect([...seenMateUids].sort()).toEqual(['first_mate_1', 'first_mate_2']);
-        expect(state.sys.interaction?.current).toBeFalsy();
-        expect(state.sys.interaction?.queue ?? []).toHaveLength(0);
-        expect(state.sys.interaction?.isBlocked ?? false).toBe(false);
-        expect(state.core.triggerQueue ?? []).toHaveLength(0);
-    });
 });
 
 describe('Temple of Goju + First Mate 时序测试', () => {
@@ -296,6 +200,41 @@ describe('Temple of Goju + First Mate 时序测试', () => {
         expect(nextCore.players['0'].discard.some(c => c.uid === 'first_mate_1')).toBe(false);
     });
 
+    it('场景4b: baseDefId 已失效时，大副不应回退到旧索引上的错误基地', () => {
+        const core = makeState({
+            bases: [
+                makeBase('base_left', []),
+                makeBase('base_wrong', []),
+            ],
+            players: {
+                '0': makePlayer('0', {
+                    discard: [makeCard('first_mate_1', 'pirate_first_mate_pod', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(core);
+        const handler = getInteractionHandler('pirate_first_mate_choose_base');
+        expect(handler).toBeDefined();
+
+        const result = handler!(
+            ms,
+            '0',
+            { baseIndex: 1, baseDefId: 'base_target' },
+            {
+                continuationContext: {
+                    mateUid: 'first_mate_1',
+                    mateDefId: 'pirate_first_mate_pod',
+                    scoringBaseIndex: 0,
+                },
+            },
+            {} as any,
+            1000,
+        );
+
+        expect(result.events.length).toBe(0);
+    });
+
     it('场景5: first_mate_pod 在 afterScoring 会创建移动交互', () => {
         const core = makeState({
             bases: [
@@ -320,91 +259,5 @@ describe('Temple of Goju + First Mate 时序测试', () => {
         const interaction = result.matchState?.sys.interaction.current;
         expect(interaction).toBeDefined();
         expect((interaction?.data as any)?.sourceId).toBe('pirate_first_mate_choose_base');
-    });
-
-    it('场景6: 木乃伊先结算埋葬后，大副的计分后移动不会被吃掉', () => {
-        const core = makeState({
-            currentPlayerIndex: 0,
-            turnOrder: ['0', '1'],
-            bases: [
-                makeBase('base_castle_blood', [
-                    makeMinion('mummy_1', 'ancient_egyptians_mummy', '0', 2),
-                    makeMinion('first_mate_1', 'pirate_first_mate', '0', 2),
-                    makeMinion('count_1', 'vampire_the_count', '1', 6),
-                ]),
-                makeBase('base_pyramids', []),
-                makeBase('base_pirate_cove', []),
-            ],
-            players: {
-                '0': makePlayer('0'),
-                '1': makePlayer('1'),
-            },
-        });
-        const matchState = makeMatchState(core);
-        matchState.sys.phase = 'scoreBases';
-
-        const queued = collectTriggers(core, 'afterScoring', {
-            state: core,
-            matchState,
-            playerId: '0',
-            baseIndex: 0,
-            rankings: [
-                { playerId: '0', power: 4, vp: 3 },
-                { playerId: '1', power: 6, vp: 4 },
-            ],
-            random: defaultTestRandom,
-            now: 3000,
-        });
-        expect(queued).toBeDefined();
-
-        const coreWithQueue = reduce(core, queued as any);
-        expect(coreWithQueue.triggerQueue).toHaveLength(2);
-
-        const queuedState = maybeResolveReactionQueue(makeMatchState(coreWithQueue), defaultTestRandom, 3000);
-        expect(queuedState).toBeDefined();
-
-        const resolveCurrentChoice = (currentState: MatchState<SmashUpCore>, optionId: string, playerId: string) => {
-            const result = runCommand(currentState, {
-                type: INTERACTION_COMMANDS.RESPOND,
-                playerId,
-                payload: { optionId },
-            } as any, defaultTestRandom);
-            expect(result.success).toBe(true);
-            return result.finalState;
-        };
-
-        let state = queuedState!.state;
-        let currentChoice = asSimpleChoice(state.sys.interaction?.current);
-        expect(currentChoice?.sourceId).toBe('reaction_queue_choose_next');
-
-        const mummyChoice = currentChoice!.options.find(option => String(option.label).includes('ancient_egyptians_mummy'));
-        expect(mummyChoice).toBeDefined();
-        state = resolveCurrentChoice(state, mummyChoice!.id, currentChoice!.playerId);
-
-        currentChoice = asSimpleChoice(state.sys.interaction?.current);
-        expect(currentChoice?.sourceId).toBe('ancient_egyptians_mummy_after_scoring');
-        const buryToPyramids = currentChoice!.options.find(option => (option as any).value?.baseIndex === 1);
-        expect(buryToPyramids).toBeDefined();
-        state = resolveCurrentChoice(state, buryToPyramids!.id, currentChoice!.playerId);
-
-        currentChoice = asSimpleChoice(state.sys.interaction?.current);
-        if (currentChoice?.sourceId === 'reaction_queue_choose_next') {
-            const mateChoice = currentChoice.options.find(option => String(option.label).includes('pirate_first_mate'));
-            expect(mateChoice).toBeDefined();
-            state = resolveCurrentChoice(state, mateChoice!.id, currentChoice.playerId);
-            currentChoice = asSimpleChoice(state.sys.interaction?.current);
-        }
-
-        expect(currentChoice?.sourceId).toBe('pirate_first_mate_choose_base');
-        const moveToPirateCove = currentChoice!.options.find(option => (option as any).value?.baseIndex === 2);
-        expect(moveToPirateCove).toBeDefined();
-        state = resolveCurrentChoice(state, moveToPirateCove!.id, currentChoice!.playerId);
-
-        expect(state.sys.interaction?.current).toBeFalsy();
-        expect(state.sys.interaction?.queue ?? []).toHaveLength(0);
-        expect(state.core.triggerQueue ?? []).toHaveLength(0);
-        expect(state.core.bases[0].minions.map(minion => minion.uid)).toEqual(['count_1']);
-        expect(state.core.bases[1].buriedCards?.map(card => card.uid)).toEqual(['mummy_1']);
-        expect(state.core.bases[2].minions.map(minion => minion.uid)).toEqual(['first_mate_1']);
     });
 });

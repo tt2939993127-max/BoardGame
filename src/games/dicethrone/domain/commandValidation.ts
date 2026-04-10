@@ -4,7 +4,6 @@
  */
 
 import type { ValidationResult, PlayerId } from '../../../engine/types';
-import type { InteractionDescriptor as EngineInteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type {
     InteractionDescriptor,
     DiceThroneCore,
@@ -26,12 +25,7 @@ import type {
     AdvancePhaseCommand,
     SelectCharacterCommand,
     HostStartGameCommand,
-    MoveSeatCommand,
-    RequestSeatSwapCommand,
-    RespondSeatSwapCommand,
-    CancelSeatSwapCommand,
     PlayerReadyCommand,
-    PlayerUnreadyCommand,
     ResponsePassCommand,
     ModifyDieCommand,
     RerollDieCommand,
@@ -56,10 +50,7 @@ import {
     checkPlayUpgradeCard,
     getAvailableAbilityIds,
     isCardPlayableInResponseWindow,
-    getSeatingOrder,
-    isTeamMode,
 } from './rules';
-import { getMaxTokenUseAmount, getTokenUseOptions } from './tokenTypes';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
 import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
@@ -71,69 +62,11 @@ import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
 const ok = (): ValidationResult => ({ valid: true });
 const fail = (error: string): ValidationResult => ({ valid: false, error });
 const SELECTABLE_CHARACTER_ID_SET = new Set<string>(DICETHRONE_CHARACTER_CATALOG.map(character => character.id));
-type PendingInteractionLike = InteractionDescriptor | EngineInteractionDescriptor;
-
-type DiceInteractionMeta = {
-    dtType?: string;
-    selectCount?: number;
-};
-
-type MultistepInteractionData = {
-    meta?: DiceInteractionMeta;
-    completedDieIds?: number[];
-};
 
 const isCommandType = <TType extends DiceThroneCommand['type']>(
     command: DiceThroneCommand,
     type: TType
 ): command is Extract<DiceThroneCommand, { type: TType }> => command.type === type;
-
-const isEngineInteractionDescriptor = (
-    interaction: PendingInteractionLike
-): interaction is EngineInteractionDescriptor<MultistepInteractionData> =>
-    'kind' in interaction && 'data' in interaction;
-
-const getMultistepInteractionData = (
-    pendingInteraction: PendingInteractionLike | undefined
-): MultistepInteractionData | null => {
-    if (!pendingInteraction || !isEngineInteractionDescriptor(pendingInteraction)) {
-        return null;
-    }
-    if (pendingInteraction.kind !== 'multistep-choice') {
-        return null;
-    }
-    return (pendingInteraction.data ?? {}) as MultistepInteractionData;
-};
-
-const getLegacyDiceInteraction = (
-    pendingInteraction: PendingInteractionLike | undefined
-): InteractionDescriptor | null => {
-    if (!pendingInteraction || isEngineInteractionDescriptor(pendingInteraction)) {
-        return null;
-    }
-    return pendingInteraction;
-};
-
-const hasStatusOrToken = (
-    state: DiceThroneCore,
-    playerId: PlayerId,
-    statusId?: string
-): boolean => {
-    const player = state.players[playerId];
-    if (!player) return false;
-    if (!statusId) {
-        return Object.values(player.statusEffects ?? {}).some(value => value > 0)
-            || Object.values(player.tokens ?? {}).some(value => value > 0);
-    }
-    return (player.statusEffects?.[statusId] ?? 0) > 0
-        || (player.tokens?.[statusId] ?? 0) > 0;
-};
-
-const normalizeTokenPayload = (
-    tokens: Array<{ tokenId: string; amount: number }>
-): string[] => tokens
-    .map(({ tokenId, amount }) => `${tokenId}:${amount}`)
-    .sort();
 
 /**
  * 验证掷骰命令
@@ -144,7 +77,7 @@ const validateRollDice = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    if (phase !== 'offensiveRoll' && phase !== 'targetingRoll' && phase !== 'defensiveRoll') {
+    if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') {
         return fail('invalid_phase');
     }
 
@@ -217,155 +150,6 @@ const validateHostStartGame = (
         return fail('player_mismatch');
     }
 
-    if (state.seatSwapRequest) {
-        return fail('seat_swap_request_pending');
-    }
-
-    return ok();
-};
-
-/**
- * 验证 2v2 站位移动命令
- */
-const validateMoveSeat = (
-    state: DiceThroneCore,
-    cmd: MoveSeatCommand,
-    playerId: PlayerId,
-    phase: TurnPhase
-): ValidationResult => {
-    if (phase !== 'setup') {
-        return fail('invalid_phase');
-    }
-
-    if (!isTeamMode(state)) {
-        return fail('not_team_mode');
-    }
-
-    if (state.hostStarted) {
-        return fail('game_already_started');
-    }
-
-    if (state.seatSwapRequest) {
-        return fail('seat_swap_request_pending');
-    }
-
-    if (!isMoveAllowed(playerId, state.hostPlayerId)) {
-        return fail('player_mismatch');
-    }
-
-    const movingPlayerId = cmd.payload.playerId;
-    if (!state.players[movingPlayerId]) {
-        return fail('player_not_found');
-    }
-
-    const seatingOrder = getSeatingOrder(state);
-    const currentSeatIndex = seatingOrder.indexOf(movingPlayerId);
-    if (currentSeatIndex === -1) {
-        return fail('invalid_seat_target');
-    }
-
-    const { targetSeatIndex } = cmd.payload;
-    if (!Number.isInteger(targetSeatIndex) || targetSeatIndex < 0 || targetSeatIndex >= seatingOrder.length) {
-        return fail('invalid_seat_target');
-    }
-
-    if (targetSeatIndex === currentSeatIndex) {
-        return fail('seat_not_changed');
-    }
-
-    return ok();
-};
-
-const validateRequestSeatSwap = (
-    state: DiceThroneCore,
-    cmd: RequestSeatSwapCommand,
-    playerId: PlayerId,
-    phase: TurnPhase,
-): ValidationResult => {
-    if (phase !== 'setup') {
-        return fail('invalid_phase');
-    }
-
-    if (!isTeamMode(state)) {
-        return fail('not_team_mode');
-    }
-
-    if (state.hostStarted) {
-        return fail('game_already_started');
-    }
-
-    if (!state.players[playerId]) {
-        return fail('player_not_found');
-    }
-
-    const { targetPlayerId } = cmd.payload;
-    if (!state.players[targetPlayerId]) {
-        return fail('player_not_found');
-    }
-
-    if (targetPlayerId === playerId) {
-        return fail('invalid_seat_target');
-    }
-
-    if (state.seatSwapRequest) {
-        return fail('seat_swap_request_pending');
-    }
-
-    const seatingOrder = getSeatingOrder(state);
-    if (!seatingOrder.includes(playerId) || !seatingOrder.includes(targetPlayerId)) {
-        return fail('invalid_seat_target');
-    }
-
-    return ok();
-};
-
-const validateRespondSeatSwap = (
-    state: DiceThroneCore,
-    _cmd: RespondSeatSwapCommand,
-    playerId: PlayerId,
-    phase: TurnPhase,
-): ValidationResult => {
-    if (phase !== 'setup') {
-        return fail('invalid_phase');
-    }
-
-    if (!isTeamMode(state)) {
-        return fail('not_team_mode');
-    }
-
-    if (!state.seatSwapRequest) {
-        return fail('no_pending_seat_swap_request');
-    }
-
-    if (!isMoveAllowed(playerId, state.seatSwapRequest.targetPlayerId)) {
-        return fail('player_mismatch');
-    }
-
-    return ok();
-};
-
-const validateCancelSeatSwap = (
-    state: DiceThroneCore,
-    _cmd: CancelSeatSwapCommand,
-    playerId: PlayerId,
-    phase: TurnPhase,
-): ValidationResult => {
-    if (phase !== 'setup') {
-        return fail('invalid_phase');
-    }
-
-    if (!isTeamMode(state)) {
-        return fail('not_team_mode');
-    }
-
-    if (!state.seatSwapRequest) {
-        return fail('no_pending_seat_swap_request');
-    }
-
-    if (!isMoveAllowed(playerId, state.seatSwapRequest.requesterId)) {
-        return fail('player_mismatch');
-    }
-
     return ok();
 };
 
@@ -392,30 +176,6 @@ const validatePlayerReady = (
 };
 
 /**
- * 验证玩家取消准备命令
- */
-const validatePlayerUnready = (
-    state: DiceThroneCore,
-    _cmd: PlayerUnreadyCommand,
-    playerId: PlayerId,
-    phase: TurnPhase
-): ValidationResult => {
-    if (phase !== 'setup') {
-        return fail('invalid_phase');
-    }
-
-    if (state.hostStarted) {
-        return fail('game_already_started');
-    }
-
-    if (!state.players[playerId]) {
-        return fail('player_not_found');
-    }
-
-    return ok();
-};
-
-/**
  * 验证锁定骰子命令
  */
 const validateToggleDieLock = (
@@ -436,10 +196,6 @@ const validateToggleDieLock = (
     if (state.rollConfirmed) {
         return fail('roll_already_confirmed');
     }
-
-    if (state.rollCount === 0) {
-        return fail('no_roll_yet');
-    }
     
     const die = state.dice.find(d => d.id === cmd.payload.dieId);
     if (!die) {
@@ -458,7 +214,7 @@ const validateConfirmRoll = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    if (phase !== 'offensiveRoll' && phase !== 'targetingRoll' && phase !== 'defensiveRoll') {
+    if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') {
         return fail('invalid_phase');
     }
     
@@ -469,10 +225,6 @@ const validateConfirmRoll = (
     
     if (state.rollCount === 0) {
         return fail('no_roll_yet');
-    }
-
-    if (state.rollConfirmed) {
-        return fail('roll_already_confirmed');
     }
     
     return ok();
@@ -922,164 +674,35 @@ const validateRerollDie = (
 /**
  * 验证移除状态效果命令
  */
-const validateModifyDieStrict = (
-    state: DiceThroneCore,
-    cmd: ModifyDieCommand,
-    playerId: PlayerId,
-    pendingInteraction?: PendingInteractionLike
-): ValidationResult => {
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-
-    const interactionData = getMultistepInteractionData(pendingInteraction);
-    const isLegacyModifyInteraction = !interactionData && pendingInteraction.type === 'modifyDie';
-    if (!interactionData && !isLegacyModifyInteraction) {
-        return fail('invalid_modify_die_interaction');
-    }
-
-    const completedDieIds = interactionData?.completedDieIds ?? [];
-    const selectCount = interactionData?.meta?.selectCount ?? pendingInteraction.selectCount ?? 1;
-    const isAlreadyModifiedDie = completedDieIds.includes(cmd.payload.dieId);
-    if (!isAlreadyModifiedDie && completedDieIds.length >= selectCount) {
-        return fail('modify_die_limit_reached');
-    }
-
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
-    if (cmd.payload.newValue < 1 || cmd.payload.newValue > 6) {
-        return fail('invalid_die_value');
-    }
-    return ok();
-};
-
-const validateRerollDieStrict = (
-    state: DiceThroneCore,
-    cmd: RerollDieCommand,
-    playerId: PlayerId,
-    pendingInteraction?: PendingInteractionLike
-): ValidationResult => {
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-
-    const interactionData = getMultistepInteractionData(pendingInteraction);
-    const legacyInteractionType = (pendingInteraction as { type?: string }).type;
-    const isLegacyRerollInteraction = !interactionData
-        && (legacyInteractionType === 'selectDie' || legacyInteractionType === 'rerollDie');
-    if (!interactionData && !isLegacyRerollInteraction) {
-        return fail('invalid_reroll_die_interaction');
-    }
-
-    const completedDieIds = interactionData?.completedDieIds ?? [];
-    const selectCount = interactionData?.meta?.selectCount ?? pendingInteraction.selectCount ?? 1;
-    const isAlreadyRerolledDie = completedDieIds.includes(cmd.payload.dieId);
-    if (!isAlreadyRerolledDie && completedDieIds.length >= selectCount) {
-        return fail('reroll_die_limit_reached');
-    }
-
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
-    return ok();
-};
-
 const validateRemoveStatus = (
-    state: DiceThroneCore,
-    cmd: RemoveStatusCommand,
+    _state: DiceThroneCore,
+    _cmd: RemoveStatusCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteractionLike
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    const interaction = getLegacyDiceInteraction(pendingInteraction);
-    if (!interaction) {
+    if (!pendingInteraction) {
         return fail('no_pending_interaction');
     }
-    if (interaction.playerId !== playerId) {
+    if (pendingInteraction.playerId !== playerId) {
         return fail('player_mismatch');
     }
-
-    const { targetPlayerId, statusId } = cmd.payload;
-    if (!interaction.targetPlayerIds?.includes(targetPlayerId)) {
-        return fail('invalid_target_player');
-    }
-
-    if (interaction.type === 'selectPlayer') {
-        if (statusId !== undefined) {
-            return fail('invalid_remove_status_interaction');
-        }
-        if (interaction.requiresTargetWithStatus && !hasStatusOrToken(state, targetPlayerId)) {
-            return fail('target_has_no_status');
-        }
-        return ok();
-    }
-
-    if (interaction.type === 'selectStatus') {
-        if (!statusId) {
-            return fail('status_id_required');
-        }
-        if (!hasStatusOrToken(state, targetPlayerId, statusId)) {
-            return fail('status_not_found');
-        }
-        return ok();
-    }
-
-    return fail('invalid_remove_status_interaction');
+    return ok();
 };
 
 /**
  * 验证转移状态效果命令
  */
 const validateTransferStatus = (
-    state: DiceThroneCore,
-    cmd: TransferStatusCommand,
+    _state: DiceThroneCore,
+    _cmd: TransferStatusCommand,
     playerId: PlayerId,
-    pendingInteraction?: PendingInteractionLike
+    pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    const interaction = getLegacyDiceInteraction(pendingInteraction);
-    if (!interaction) {
+    if (!pendingInteraction) {
         return fail('no_pending_interaction');
     }
-    if (interaction.playerId !== playerId) {
+    if (pendingInteraction.playerId !== playerId) {
         return fail('player_mismatch');
-    }
-
-    const isRealtimeTransferFlow =
-        interaction.type === 'selectStatus' && interaction.transferConfig !== undefined;
-    if (interaction.type !== 'selectTargetStatus' && !isRealtimeTransferFlow) {
-        return fail('invalid_transfer_status_interaction');
-    }
-
-    const sourcePlayerId = interaction.transferConfig?.sourcePlayerId ?? cmd.payload.fromPlayerId;
-    const statusId = interaction.transferConfig?.statusId ?? cmd.payload.statusId;
-    if (!sourcePlayerId || !statusId) {
-        return fail('invalid_transfer_status_interaction');
-    }
-    if (isRealtimeTransferFlow && !interaction.targetPlayerIds?.includes(sourcePlayerId)) {
-        return fail('invalid_target_player');
-    }
-    if (!hasStatusOrToken(state, sourcePlayerId, statusId)) {
-        return fail('status_not_found');
-    }
-    if (
-        interaction.type === 'selectTargetStatus'
-        && (cmd.payload.fromPlayerId !== sourcePlayerId || cmd.payload.statusId !== statusId)
-    ) {
-        return fail('interaction_payload_mismatch');
-    }
-    if (cmd.payload.toPlayerId === sourcePlayerId) {
-        return fail('invalid_target_player');
-    }
-    if (!interaction.targetPlayerIds?.includes(cmd.payload.toPlayerId)) {
-        return fail('invalid_target_player');
     }
     return ok();
 };
@@ -1158,21 +781,6 @@ const validateUseToken = (
     }
 
     if (cmd.payload.amount <= 0) {
-        return fail('invalid_amount');
-    }
-
-    if (cmd.payload.amount > currentAmount) {
-        return fail('not_enough_token');
-    }
-
-    const allowedAmounts = getTokenUseOptions(tokenDef, currentAmount);
-    if (!allowedAmounts.includes(cmd.payload.amount)) {
-        return fail('invalid_amount');
-    }
-
-    const maxWindowUsage = getMaxTokenUseAmount(tokenDef);
-    const usedInWindow = state.pendingDamage.tokenUsageTotals?.[cmd.payload.tokenId] ?? 0;
-    if (usedInWindow + cmd.payload.amount > maxWindowUsage) {
         return fail('invalid_amount');
     }
 
@@ -1371,48 +979,7 @@ const validateUsePassiveAbility = (
  */
 const validateGrantTokens = (
     _state: DiceThroneCore,
-    cmd: GrantTokensCommand,
-    playerId: PlayerId,
-    pendingInteraction?: PendingInteractionLike
-): ValidationResult => {
-    const interaction = getLegacyDiceInteraction(pendingInteraction);
-    if (!interaction) {
-        return fail('no_pending_interaction');
-    }
-    if (interaction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-
-    if (interaction.type !== 'selectPlayer') {
-        return fail('invalid_grant_tokens_interaction');
-    }
-    if (!interaction.targetPlayerIds?.includes(cmd.payload.targetPlayerId)) {
-        return fail('invalid_target_player');
-    }
-
-    const expectedTokens = interaction.tokenGrantConfigs ?? (
-        interaction.tokenGrantConfig ? [interaction.tokenGrantConfig] : []
-    );
-    if (expectedTokens.length === 0) {
-        return fail('invalid_grant_tokens_interaction');
-    }
-
-    const expectedPayload = normalizeTokenPayload(expectedTokens);
-    const actualPayload = normalizeTokenPayload(cmd.payload.tokens ?? []);
-    if (expectedPayload.length !== actualPayload.length) {
-        return fail('interaction_payload_mismatch');
-    }
-    for (let index = 0; index < expectedPayload.length; index++) {
-        if (expectedPayload[index] !== actualPayload[index]) {
-            return fail('interaction_payload_mismatch');
-        }
-    }
-    return ok();
-};
-
-const validateResolveInteraction = (
-    _state: DiceThroneCore,
-    cmd: DiceThroneCommand,
+    _cmd: GrantTokensCommand,
     playerId: PlayerId,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
@@ -1422,26 +989,6 @@ const validateResolveInteraction = (
     if (pendingInteraction.playerId !== playerId) {
         return fail('player_mismatch');
     }
-    if (pendingInteraction.type !== 'selectPlayer') {
-        return fail('interaction_type_mismatch');
-    }
-
-    const { selectedPlayerIds = [] } = cmd.payload as { selectedPlayerIds?: PlayerId[] };
-    if (selectedPlayerIds.length === 0) {
-        return fail('no_selected_player');
-    }
-
-    const uniqueSelectedPlayerIds = Array.from(new Set(selectedPlayerIds));
-    if (uniqueSelectedPlayerIds.length > (pendingInteraction.selectCount ?? 1)) {
-        return fail('too_many_selected_players');
-    }
-
-    const targetPlayerIds = pendingInteraction.targetPlayerIds ?? [];
-    const hasInvalidTarget = uniqueSelectedPlayerIds.some(targetId => !targetPlayerIds.includes(targetId));
-    if (hasInvalidTarget) {
-        return fail('invalid_target_player');
-    }
-
     return ok();
 };
 
@@ -1456,7 +1003,7 @@ export const validateCommand = (
     state: DiceThroneCore,
     command: DiceThroneCommand,
     phase: TurnPhase,
-    pendingInteraction?: PendingInteractionLike,
+    pendingInteraction?: InteractionDescriptor,
     responseWindowType?: DtResponseWindowType
 ): ValidationResult => {
     if (command.type.startsWith('SYS_')) {
@@ -1479,18 +1026,12 @@ export const validateCommand = (
     if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId, phase);
     if (isCommandType(command, 'SELECT_CHARACTER')) return validateSelectCharacter(state, command, playerId, phase);
     if (isCommandType(command, 'HOST_START_GAME')) return validateHostStartGame(state, command, playerId, phase);
-    if (isCommandType(command, 'MOVE_SEAT')) return validateMoveSeat(state, command, playerId, phase);
-    if (isCommandType(command, 'REQUEST_SEAT_SWAP')) return validateRequestSeatSwap(state, command, playerId, phase);
-    if (isCommandType(command, 'RESPOND_SEAT_SWAP')) return validateRespondSeatSwap(state, command, playerId, phase);
-    if (isCommandType(command, 'CANCEL_SEAT_SWAP')) return validateCancelSeatSwap(state, command, playerId, phase);
     if (isCommandType(command, 'PLAYER_READY')) return validatePlayerReady(state, command, playerId, phase);
-    if (isCommandType(command, 'PLAYER_UNREADY')) return validatePlayerUnready(state, command, playerId, phase);
     if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);
-    if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDieStrict(state, command, playerId, pendingInteraction);
-    if (isCommandType(command, 'REROLL_DIE')) return validateRerollDieStrict(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDie(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId, pendingInteraction);
-    if (isCommandType(command, 'RESOLVE_INTERACTION')) return validateResolveInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CANCEL_INTERACTION')) return validateCancelInteraction(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'USE_TOKEN')) return validateUseToken(state, command, playerId);
