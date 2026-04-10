@@ -86,6 +86,7 @@ node scripts/mobile/release-android.mjs full --channel stable --with-packages --
 OTA：
 
 - 默认版本形如 `0.5.1-ota-2026-04-05T08-28-06-621Z`
+- 无论走本地脚本还是 GitHub Actions，这个正式命名口径都必须保持一致；未经明确要求，不得擅自改成 `gha-*`、run number 或其他临时别名
 - 这是 bundle 版本，不回写仓库版本文件
 - 这样做的目的，是避免每次发一个 H5 热更新都污染原生版本号
 
@@ -113,3 +114,4 @@ OTA：
 - `--skip-build` 只能在你确认本地 release APK 已经是最新时再用
 - 如果只需要发 H5 修复，优先发 OTA，不要顺手 bump 原生版本
 - 禁止再把 `stable` OTA 当成“只给某些原生版本”的分流工具；所有版本默认都要能收到 OTA
+- 未经老板明确要求，禁止因为切换发布入口（本地脚本 / GitHub Actions）而改变正式 OTA 的用户可见版本命名或展示口径
