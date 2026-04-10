@@ -147,6 +147,7 @@ export const LocalMatchRoom = () => {
     // tutorial_command_blocked / tutorial_step_locked 是教程系统的正常拦截，不弹 toast
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         if (TUTORIAL_SILENT_ERRORS.has(error)) return;
+        if (UI_HINT_ONLY_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `local.rejected.${error}` });
     }, [toast, i18n, gameId]);
@@ -229,3 +230,4 @@ export const LocalMatchRoom = () => {
         </div>
     );
 };
+const UI_HINT_ONLY_ERRORS = new Set(['请先完成当前选择']);

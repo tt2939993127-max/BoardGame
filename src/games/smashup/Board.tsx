@@ -1644,6 +1644,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 opt => (opt.value as { baseIndex?: number })?.baseIndex === index
             );
             if (option) {
+                setSelectedCardUid(null);
+                setSelectedCardMode(null);
                 dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
             }
             return;
@@ -2010,6 +2012,8 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
 
             // 单选模式：立即提交
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
             dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
             return;
         }
@@ -2028,9 +2032,11 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             opt => (opt.value as { cardUid?: string })?.cardUid === ongoingUid
         );
         if (option) {
+            setSelectedCardUid(null);
+            setSelectedCardMode(null);
             dispatch(INTERACTION_COMMANDS.RESPOND, { optionId: option.id });
         }
-    }, [isOngoingSelectPrompt, selectableOngoingUids, currentPrompt, dispatch]);
+    }, [currentPrompt, dispatch, isOngoingSelectPrompt, selectableOngoingUids, setSelectedCardMode, setSelectedCardUid]);
 
     const handleViewCardDetail = useCallback((card: CardInstance) => {
         const nextTarget = { defId: card.defId, type: card.type === 'minion' ? 'minion' : 'action' } as const;

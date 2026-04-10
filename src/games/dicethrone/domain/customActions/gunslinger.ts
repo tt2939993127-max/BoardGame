@@ -116,18 +116,47 @@ function handleLoadedUse({ attackerId, sourceAbilityId, state, timestamp, random
     }
 
     const roll = random.d(6);
+    const face = getPlayerDieFace(state, attackerId, roll) ?? '';
     const bonusDamage = Math.ceil(roll / 2);
 
-    return [{
-        type: 'BONUS_DAMAGE_ADDED',
-        payload: {
-            playerId: attackerId,
-            amount: bonusDamage,
-            sourceCardId: sourceAbilityId,
-        },
-        sourceCommandType: 'ABILITY_EFFECT',
-        timestamp,
-    } as BonusDamageAddedEvent];
+    return [
+        {
+            type: 'BONUS_DIE_ROLLED',
+            payload: {
+                value: roll,
+                face,
+                playerId: attackerId,
+                targetPlayerId: state.pendingAttack?.defenderId ?? attackerId,
+                effectKey: 'bonusDie.effect.gunslingerLoadedDie',
+                effectParams: { value: roll, index: 0 },
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as DiceThroneEvent,
+        createDisplayOnlySettlement(
+            sourceAbilityId,
+            attackerId,
+            state.pendingAttack?.defenderId ?? attackerId,
+            [{
+                index: 0,
+                value: roll,
+                face,
+                effectKey: 'bonusDie.effect.gunslingerLoadedDie',
+                effectParams: { value: roll, index: 0 },
+            }],
+            timestamp + 1,
+        ),
+        {
+            type: 'BONUS_DAMAGE_ADDED',
+            payload: {
+                playerId: attackerId,
+                amount: bonusDamage,
+                sourceCardId: sourceAbilityId,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp: timestamp + 2,
+        } as BonusDamageAddedEvent,
+    ];
 }
 
 function handleBountyReward({ attackerId, sourceAbilityId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {

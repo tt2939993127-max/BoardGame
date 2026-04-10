@@ -75,6 +75,7 @@ import {
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
+const UI_HINT_ONLY_ERRORS = new Set(['请先完成当前选择']);
 const ONLINE_TRANSPORT_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout']);
 // 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
@@ -754,6 +755,7 @@ export const MatchRoom = () => {
             return;
         }
         if (SYSTEM_ERRORS.has(error)) return; // 其他系统错误由独立逻辑处理
+        if (UI_HINT_ONLY_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.error.${error}` });
     }, [toast, i18n, gameId]);
@@ -763,6 +765,7 @@ export const MatchRoom = () => {
     // AI 命令失败的静默已在 LocalGameProvider 层面通过 __tutorialAiCommand 标记处理
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         if (TUTORIAL_SILENT_ERRORS.has(error)) return;
+        if (UI_HINT_ONLY_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.rejected.${error}` });
     }, [toast, i18n, gameId]);
