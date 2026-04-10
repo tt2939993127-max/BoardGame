@@ -24,6 +24,7 @@ import type {
     ReconcileResult,
 } from './types';
 import { executePipeline, createSeededRandom } from '../../pipeline';
+import { resolveNextCommandTimestamp } from '../../utils';
 
 // ============================================================================
 // 公共接口
@@ -434,10 +435,14 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
             }
 
             try {
+                const replayTimestamp = typeof cmd.timestamp === 'number'
+                    ? cmd.timestamp
+                    : Math.max(1, resolveNextCommandTimestamp(currentState));
                 const command: Command = {
                     type: cmd.type,
                     playerId: cmd.playerId,
                     payload: cmd.payload,
+                    timestamp: replayTimestamp,
                 };
 
                 const result = executePipeline(
@@ -458,6 +463,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 const predictedState = applyAnimationMode(result.state, currentState, mode);
                 replayed.push({
                     ...cmd,
+                    timestamp: replayTimestamp,
                     predictedState,
                     previousState: currentState,
                 });
@@ -496,7 +502,8 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
 
             // 尝试本地执行 Pipeline
             try {
-                const command: Command = { type, playerId, payload };
+                const timestamp = Math.max(1, resolveNextCommandTimestamp(currentState));
+                const command: Command = { type, playerId, payload, timestamp };
 
                 // 开发环境断言：显式声明 'deterministic' 的命令，用独立 probe 验证是否真的不调用 random
                 // 若检测到 random 调用，说明 commandDeterminism 配置错误（比不声明更危险，因为跳过了 probe 安全网）
@@ -570,6 +577,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 pendingCommands.push({
                     seq: nextSeq++,
                     type,
+                    timestamp,
                     payload,
                     playerId,
                     predictedState,

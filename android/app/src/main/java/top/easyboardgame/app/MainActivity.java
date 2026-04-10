@@ -22,6 +22,8 @@ import java.util.List;
 import java.util.Map;
 import org.json.JSONException;
 import org.json.JSONObject;
+import top.easyboardgame.app.AppUpdatePlugin;
+import top.easyboardgame.app.GamePackagePlugin;
 
 public class MainActivity extends BridgeActivity {
 

@@ -54,6 +54,31 @@ describe('androidLiveUpdates', () => {
         }).enabled).toBe(false);
     });
 
+    it('debug 测试包默认禁用 OTA，即使环境变量显式开启也不生效', () => {
+        expect(readAndroidLiveUpdateConfig({
+            VITE_ANDROID_OTA_ENABLED: 'true',
+            VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            VITE_CAPACITOR_APP_ID: 'top.easyboardgame.app.debug',
+        }).enabled).toBe(false);
+    });
+
+    it('显式允许 debug 包 OTA 后，测试包才恢复 OTA 能力', () => {
+        expect(readAndroidLiveUpdateConfig({
+            VITE_ANDROID_OTA_ENABLED: 'true',
+            VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            VITE_CAPACITOR_APP_ID: 'top.easyboardgame.app.debug',
+            VITE_ANDROID_OTA_ALLOW_DEBUG_APP: 'true',
+        }).enabled).toBe(true);
+    });
+
+    it('即使只有 CAPACITOR_APP_ID，debug 测试包也必须禁用 OTA', () => {
+        expect(readAndroidLiveUpdateConfig({
+            VITE_ANDROID_OTA_ENABLED: 'true',
+            VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+            CAPACITOR_APP_ID: 'top.easyboardgame.app.debug',
+        }).enabled).toBe(false);
+    });
+
     it('网页端下载入口优先解析 native update latest.json 中的 APK 地址', async () => {
         const result = await resolveAndroidWebAppDownload({
             VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL: 'https://assets.easyboardgame.top/official/native-app-updates/android/stable/latest.json',
@@ -742,6 +767,136 @@ describe('androidLiveUpdates', () => {
         expect(states.some((state) => state.blocking)).toBe(true);
     });
 
+    it('后台自动检查未结束时，手动立即更新不应被背景任务串行阻塞', async () => {
+        vi.resetModules();
+
+        vi.doMock('@capacitor/core', () => ({
+            Capacitor: {
+                isNativePlatform: () => true,
+                getPlatform: () => 'android',
+            },
+            registerPlugin: vi.fn(() => ({})),
+        }));
+
+        let resolveFirstDownload: ((value: {
+            id: string;
+            version: string;
+            downloaded: string;
+            checksum: string;
+            status: 'success';
+        }) => void) | null = null;
+        const downloadMock = vi.fn()
+            .mockImplementationOnce(() => new Promise((resolve) => {
+                resolveFirstDownload = resolve;
+            }))
+            .mockResolvedValueOnce({
+                id: 'bundle-immediate',
+                version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+                downloaded: '2026-04-04T03:45:00.000Z',
+                checksum: 'new',
+                status: 'success',
+            });
+
+        const nextMock = vi.fn().mockResolvedValue(undefined);
+        const setMock = vi.fn().mockResolvedValue(undefined);
+        const reloadMock = vi.fn().mockResolvedValue(undefined);
+        const setMultiDelayMock = vi.fn().mockResolvedValue(undefined);
+
+        vi.doMock('@capgo/capacitor-updater', () => ({
+            CapacitorUpdater: {
+                notifyAppReady: vi.fn(),
+                current: vi.fn().mockResolvedValue({
+                    native: '0.5.1',
+                    bundle: {
+                        id: 'bundle-current',
+                        version: '0.5.1-ota-2026-04-04T03-00-00-000Z',
+                        downloaded: '2026-04-04T03:10:00.000Z',
+                        checksum: 'old',
+                        status: 'success',
+                    },
+                }),
+                list: vi.fn().mockResolvedValue({ bundles: [] }),
+                download: downloadMock,
+                next: nextMock,
+                set: setMock,
+                reload: reloadMock,
+                setMultiDelay: setMultiDelayMock,
+                addListener: vi.fn(async () => ({ remove: async () => undefined })),
+            },
+        }));
+
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+            status: 200,
+            ok: true,
+            headers: {
+                get: (name: string) => (name.toLowerCase() === 'content-type' ? 'application/json' : null),
+            },
+            json: async () => ({
+                version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+                url: 'https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.1-ota-2026-04-04T03-34-46-472Z.zip',
+                checksum: 'new',
+                channel: 'stable',
+                forceUpdate: false,
+            }),
+        }));
+
+        const { startAndroidLiveUpdateBackgroundCheck } = await import('../mobile/androidLiveUpdates');
+
+        const backgroundPromise = startAndroidLiveUpdateBackgroundCheck({
+            applyMode: 'background',
+            envOverride: {
+                VITE_ANDROID_OTA_ENABLED: 'true',
+                VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+                VITE_ANDROID_OTA_CHANNEL: 'stable',
+                VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS: '15000',
+            },
+        });
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        const immediateResult = await startAndroidLiveUpdateBackgroundCheck({
+            force: true,
+            applyMode: 'immediate',
+            envOverride: {
+                VITE_ANDROID_OTA_ENABLED: 'true',
+                VITE_ANDROID_OTA_MANIFEST_URL: 'https://assets.easyboardgame.top/official/app-updates/android/stable/latest.json',
+                VITE_ANDROID_OTA_CHANNEL: 'stable',
+                VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS: '15000',
+            },
+        });
+
+        expect(immediateResult).toEqual({
+            status: 'queued',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            source: 'downloaded',
+            mode: 'immediate',
+        });
+        expect(downloadMock).toHaveBeenCalledTimes(2);
+        expect(setMock).toHaveBeenCalledWith({ id: 'bundle-immediate' });
+        expect(reloadMock).toHaveBeenCalledTimes(1);
+        expect(nextMock).not.toHaveBeenCalled();
+
+        resolveFirstDownload?.({
+            id: 'bundle-background',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            downloaded: '2026-04-04T03:46:00.000Z',
+            checksum: 'new',
+            status: 'success',
+        });
+
+        await expect(backgroundPromise).resolves.toEqual({
+            status: 'queued',
+            version: '0.5.1-ota-2026-04-04T03-34-46-472Z',
+            source: 'downloaded',
+            mode: 'background',
+        });
+        expect(nextMock).toHaveBeenCalledWith({ id: 'bundle-background' });
+        expect(setMultiDelayMock).toHaveBeenCalledWith({
+            delayConditions: [{ kind: 'background', value: '0' }],
+        });
+    });
+
     it('读取原生 APK 自更新配置时，只有启用且 manifest URL 合法才算开启', () => {
         expect(readAndroidNativeUpdateConfig({
             VITE_ANDROID_NATIVE_UPDATE_ENABLED: 'true',
@@ -936,6 +1091,79 @@ describe('androidLiveUpdates', () => {
 
         await waitFor(() => {
             expect(requestNativeUpdateCheckMock).toHaveBeenCalledWith({ interactive: true });
+        });
+    });
+
+    it('AndroidLiveUpdateManager 手动检查已是最新版本时也要主动清掉检查中遮罩', async () => {
+        vi.resetModules();
+
+        let requestListener: ((request: {
+            interactive?: boolean;
+            applyMode?: 'background' | 'immediate';
+            initialImmediatePhase?: 'checking' | 'downloading';
+        }) => void) | null = null;
+        const toastSuccessMock = vi.fn();
+
+        const startMock = vi.fn()
+            .mockResolvedValueOnce({ status: 'up-to-date' })
+            .mockImplementationOnce(async (options?: {
+                onForceStateChange?: (state: { phase: string; blocking: boolean }) => void;
+            }) => {
+                options?.onForceStateChange?.({
+                    phase: 'checking',
+                    blocking: true,
+                });
+                return { status: 'up-to-date' } as const;
+            });
+
+        vi.doMock('../mobile/androidLiveUpdates', () => ({
+            registerAndroidLiveUpdateListeners: vi.fn().mockResolvedValue(undefined),
+            subscribeAndroidLiveUpdateRequests: vi.fn((listener) => {
+                requestListener = listener;
+                return () => undefined;
+            }),
+            startAndroidLiveUpdateBackgroundCheck: startMock,
+        }));
+        vi.doMock('../mobile/androidNativeUpdates', () => ({
+            requestAndroidNativeUpdateCheck: vi.fn(),
+        }));
+        vi.doMock('../mobile/androidRuntime', () => ({
+            isNativeAndroidRuntime: () => true,
+        }));
+        vi.doMock('../../contexts/ToastContext', () => ({
+            useToast: () => ({
+                success: toastSuccessMock,
+                error: vi.fn(),
+            }),
+        }));
+        vi.doMock('../../components/system/AndroidForceUpdateGate', () => ({
+            AndroidForceUpdateGate: ({ state }: { state: { phase: string; blocking: boolean } }) => (
+                createElement('div', { 'data-testid': 'force-update-phase' }, `${state.phase}:${String(state.blocking)}`)
+            ),
+        }));
+
+        const { AndroidLiveUpdateManager } = await import('../../components/system/AndroidLiveUpdateManager');
+        const view = render(createElement(AndroidLiveUpdateManager));
+
+        await waitFor(() => {
+            expect(typeof requestListener).toBe('function');
+            expect(startMock).toHaveBeenCalledTimes(1);
+        });
+
+        await act(async () => {
+            requestListener?.({
+                interactive: true,
+                applyMode: 'immediate',
+                initialImmediatePhase: 'checking',
+            });
+        });
+
+        await waitFor(() => {
+            expect(view.getByTestId('force-update-phase').textContent).toBe('hidden:false');
+            expect(toastSuccessMock).toHaveBeenCalledWith('当前已经是最新版本。', '应用更新', {
+                dedupeKey: 'android-ota-up-to-date',
+                ttlMs: 3000,
+            });
         });
     });
 

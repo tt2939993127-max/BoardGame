@@ -6,10 +6,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import * as fc from 'fast-check';
-import SMASH_UP_TUTORIAL from '../tutorial';
+import { SMASH_UP_BASIC_TUTORIAL } from '../tutorial';
 import { smashUpCheatModifier } from '../cheatModifier';
-import { FLOW_COMMANDS } from '../../../engine/systems/FlowSystem';
-import type { SmashUpCore, CardInstance } from '../domain/types';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { resetUidCounter, arbMinimalGameState } from './properties/arbitraries';
@@ -27,7 +25,7 @@ describe('Property 1: UI introduction steps use infoStep to block all commands',
      */
     it('所有 UI 介绍步骤设置了 infoStep: true', () => {
         // 筛选出 UI 介绍步骤：requireAction=false 且非 setup/finish/scoringPhase(有 aiActions)
-        const uiSteps = SMASH_UP_TUTORIAL.steps.filter(s =>
+        const uiSteps = SMASH_UP_BASIC_TUTORIAL.steps.filter(s =>
             !s.requireAction &&
             s.id !== 'setup' &&
             s.id !== 'finish' &&
@@ -135,7 +133,7 @@ describe('Property 3: Tutorial i18n completeness', () => {
      * 且在 zh-CN 和 en locale 文件中都存在对应翻译。
      */
     it('所有步骤的 content key 在两个 locale 中都有翻译', () => {
-        const steps = SMASH_UP_TUTORIAL.steps;
+        const steps = SMASH_UP_BASIC_TUTORIAL.steps;
 
         fc.assert(
             fc.property(

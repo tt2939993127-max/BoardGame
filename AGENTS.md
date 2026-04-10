@@ -95,6 +95,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/deploy.md` — 部署、构建产物、环境变量注入、线上/本地差异、CDN/R2 资源问题时必读。
   - **生产部署操作规范（强制）**：生产环境更新必须使用 `bash scripts/deploy/deploy-image.sh update`（基于 `docker-compose.prod.yml`）。**禁止在生产服务器上直接运行 `docker compose up -d`**（会使用默认的 `docker-compose.yml`，端口映射和环境变量与生产不同）。排查生产问题时，必须先读 `docs/deploy.md` 了解部署架构，禁止凭猜测给出服务器操作命令。
   - **Android OTA 包体规范（强制）**：Android OTA 只允许承载 H5 bundle 与轻量静态文件，**禁止**把 `public/assets/i18n/**`、大图集、大卡图或其他应走 R2 / 游戏包链路的资源打进 OTA zip。发布 Android OTA 时必须使用 `scripts/mobile/publish-android-ota.mjs` 这条受门禁保护的链路；若产物异常超过轻量包体阈值（当前脚本门禁 `20MB`）必须直接失败，禁止继续发布。
+  - **Android OTA 版本门禁规范（强制）**：当前项目规则是“所有已安装版本默认都必须更新 OTA”。禁止再通过 `targetNativeVersion`、`minNativeVersion`、`maxNativeVersion`、`allow-legacy-shells` 等方式把 OTA 只发给某个原生版本或版本区间；发布脚本与 GitHub Actions 都必须保持这一禁令，若误传相关参数必须直接失败，不能静默带着错误门禁发出去。
+  - **Android OTA 版本命名规范（强制）**：正式 OTA 的用户可见 bundle 版本必须继续沿用项目既有口径 `package.json.version-ota-UTC时间戳`。未经老板明确要求，不得因为切换发布入口（本地脚本 / GitHub Actions / 手工补发）而擅自改成 `gha-*`、run number、临时别名或其他展示格式。
 
 ---
 
@@ -107,6 +109,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 > **核心原则：E2E 测试验证 UI 交互，单元测试验证业务逻辑，绝不混淆**
 > **默认禁止无校验交付**：除非用户明确指明“跳过验证 / 不跑测试 / 直接提交 / 直接 push / 无校验交付”或等价口径，否则不得在未完成与本次改动相匹配的校验前提交、push、宣称完成或要求用户验收。不能因为改动小、赶进度、门禁卡住、已有类似经验，擅自省略验证。
+> **口语化提交口令解释（强制）**：当用户说“看下没问题就提交”“看下没问题就提交 push”“检查没问题就推”或语义等价表达时，默认含义是“这批改动此前已做过动态测试，本轮只需要做静态分析/代码审查/门禁自检，不需要为了这句口令额外再跑一轮测试”。若仓库自身在 `git push` 过程中带有 `pre-push` 校验，则按仓库既有门禁执行；这类门禁不属于“额外违背用户要求的主动复跑测试”。
 > **提交前必须先跑 `npm run i18n:check`**：只要本轮准备提交，无论是否改到 locale 文件、文案、E2E、页面组件或默认文案，都必须先执行一次 `npm run i18n:check`；未跑不得提交，发现缺 key 必须先补齐，禁止在 pre-push 才临时找补。
 
 #### E2E 测试强制要求（UI 交互必须用 E2E）
@@ -190,6 +193,8 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 #### 1.1 需求理解与体验目标（强制）
 - **先校准目的，不机械执行手段**：处理需求、review comment、bug 反馈前，先判断三件事：用户真正想达到的结果、最反感的结果、当前要求里哪些是手段哪些是目的。禁止把最近一句话机械放大为最终需求。
+- **反馈状态即时同步（强制）**：处理线上/批量反馈时，一旦某条反馈确认进入 `in_progress`、`resolved`、`closed` 或 `blocked`，必须立即同步更新当前批次的反馈状态记录；若项目已启用 `temp/feedback-closeout/status-board.json`，则该 JSON 是当前批次反馈进度的单一真实来源，禁止等整批结束再统一回填。
+- **反馈收口证据先于状态（强制）**：`resolved` 必须附至少一条验证记录与证据路径，`closed` 必须写明关闭依据（如重复、误报、建议、已失效）；没有依据不得只改状态不留痕。
 - **用户说是正常路径，就按正常路径排查**：当用户明确说“正常操作也会触发”“不是误点/乱点”时，必须沿正常用户路径做全链路分析，禁止先改写成误操作或边界误触。
 - **用户报 bug 先当 bug 处理**：默认这是实际体验问题，禁止先用“可能只是动画 / 正常表现 / 你看错了”给问题降级；若要否定用户观察，必须先给出可复查证据。
 - **禁止把空间问题曲解成时序/性能问题**：当用户描述的是“右偏 / 左偏 / 太宽 / 太窄 / 位置不对 / 对不齐 / 遮挡 / 比例异常”这类空间现象时，默认按布局、坐标系、锚点、目标盒子、适配条件排查；没有证据前，禁止擅自改写成“延迟 / 节流 / 动画滞后 / 性能问题”。

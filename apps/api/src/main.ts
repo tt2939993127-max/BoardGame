@@ -27,6 +27,7 @@ type TestMongoServerHandle = {
 
 const LOCAL_TEST_MONGO_URI = 'mongodb://127.0.0.1:27017';
 const TEST_MONGO_PROBE_TIMEOUT_MS = 1500;
+const TEST_MONGO_START_RETRIES = 3;
 
 let testMongoServer: TestMongoServerHandle | null = null;
 
@@ -35,11 +36,42 @@ const shouldPrepareTestMongo = () => process.env.NODE_ENV === 'test';
 const configureMongoMemoryServerEnv = () => {
     process.env.MONGOMS_PREFER_GLOBAL_PATH ??= 'true';
     process.env.MONGOMS_DOWNLOAD_DIR ??= path.join(os.homedir(), '.cache', 'mongodb-binaries');
-    process.env.MONGOMS_EXP_NET0LISTEN ??= 'true';
+    process.env.MONGOMS_EXP_NET0LISTEN ??= 'false';
 
     if (process.env.TEST_MONGOD_PATH && !process.env.MONGOMS_SYSTEM_BINARY) {
         process.env.MONGOMS_SYSTEM_BINARY = process.env.TEST_MONGOD_PATH;
     }
+};
+
+const delay = async (ms: number) => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+const createLoopbackMongoMemoryServer = async (): Promise<TestMongoServerHandle> => {
+    configureMongoMemoryServerEnv();
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= TEST_MONGO_START_RETRIES; attempt += 1) {
+        try {
+            return await MongoMemoryServer.create({
+                instance: {
+                    ip: '127.0.0.1',
+                    port: 0,
+                },
+            });
+        } catch (error) {
+            lastError = error;
+            const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+            const isRetryable = code === 'EACCES' || code === 'EADDRINUSE' || code === 'EBUSY' || code === 'ETXTBSY';
+            if (!isRetryable || attempt === TEST_MONGO_START_RETRIES) {
+                throw error;
+            }
+            await delay(attempt * 1000);
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('创建 MongoMemoryServer 失败');
 };
 
 const resolvePreferredTestMongoUri = async (): Promise<{ mongo: TestMongoServerHandle | null; mongoUri: string }> => {
@@ -65,9 +97,7 @@ const resolvePreferredTestMongoUri = async (): Promise<{ mongo: TestMongoServerH
         }
     }
 
-    configureMongoMemoryServerEnv();
-    const { MongoMemoryServer } = await import('mongodb-memory-server');
-    const mongo = await MongoMemoryServer.create();
+    const mongo = await createLoopbackMongoMemoryServer();
     return { mongo, mongoUri: mongo.getUri() };
 };
 

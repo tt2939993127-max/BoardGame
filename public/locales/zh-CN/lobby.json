@@ -33,6 +33,11 @@
     "exitActiveMatch": {
       "title": "退出当前对局",
       "description": "你正在进行对局，确认退出并加入新的房间吗？"
+    },
+    "forceReplaceOwnerRoom": {
+      "title": "强制清理旧房间",
+      "description": "检测到你还有一个活跃房间（#{{id}}）。继续后会先删除旧房间，再创建新房间。",
+      "confirm": "清理并创建"
     }
   },
   "actions": {
@@ -135,6 +140,7 @@
     "runtimeUnsupported": "当前运行环境暂不支持下载游戏包，请在 Android App 内重试。",
     "failedTitle": "下载失败",
     "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",
+    "notificationSettingsAction": "打开通知设置",
     "retryAction": "重新发起",
     "cancelAction": "取消下载",
     "pending": "该游戏的移动端包管理正在接入，入口位置和状态骨架已预留。",
@@ -175,6 +181,7 @@
       "errorTitle": "更新失败",
       "errorDescription": "下载或切换新版本失败，请重试。",
       "bundleVersion": "目标本体版本",
+      "currentAppVersion": "当前 App 版本",
       "requiredAppVersion": "所需 App 版本",
       "progressLabel": "下载进度",
       "progressPercent": "{{percent}}%",
@@ -386,6 +393,8 @@
     "createRoomForbidden": "当前权限不足，无法创建房间。",
     "createRoomNotFound": "游戏服务未找到该游戏，请刷新页面后重试。",
     "createRoomRequestSize": "请求数据异常，请刷新页面后再试。",
+    "createRoomErrorCodeOnly": "（错误码：{{code}}）",
+    "createRoomErrorCodeWithStatus": "（错误码：{{code}} / 状态码：{{status}}）",
     "activeMatchStale": "检测到旧房间已失效，已自动清理，现在可以重新创建房间。",
     "destroyForbidden": "无法销毁房间：凭证无效或已失效，请重新进入房间后再试。",
     "destroyNetwork": "销毁房间失败：网络或服务异常，请稍后重试。",
@@ -398,6 +407,7 @@
     "roomFull": "房间已满",
     "ownerClaimFailed": "无法重连该房间：可能是游客身份丢失或服务器重启导致凭据失效。请使用原浏览器重试，或重新创建房间。",
     "roomCreatedButClaimFailed": "房间已创建但入座失败，请返回大厅重试。",
+    "roomCreatedButEnterFailed": "房间已创建，但自动进入失败，请返回大厅重新进入。",
     "aiSeatClaimFailed": "部分 AI 座位初始化失败，已进入房间，请检查座位状态。",
     "joinRoomFailed": "加入房间失败",
     "actionFailed": "操作失败，请稍后重试。",

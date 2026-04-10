@@ -1,0 +1,34 @@
+# smashup-faction-subtutorials context snapshot
+
+- task statement: 给大杀四方增加“机制说明教程”，在派系详情标题右侧增加入口；无教程时不留占位；教程系统扩展支持子教程；首个子教程为牛仔决斗；必须做到端到端通过并实际看图确认。
+- desired outcome:
+  - `/play/:gameId/tutorial/:tutorialId` 可进入指定子教程
+  - 派系详情标题右侧仅在存在子教程时显示入口按钮
+  - 牛仔派系入口可进入 `cowboys-duel` 教程并完成核心决斗链
+  - 相关静态测试、E2E、截图证据全部通过
+- known facts/evidence:
+  - OpenSpec 变更 `add-smashup-faction-subtutorials` 已存在并批准
+  - `registry / MatchRoom / useGameImplementationReady / App.tsx / smashup/tutorial.ts / factionMeta / FactionSelection / e2e/smashup-tutorial.e2e.ts` 已有半成品改动
+  - 根目录 `task_plan.md/findings.md/progress.md` 正服务其他任务，不能混写
+  - 当前分支为 `main`，工作区存在大量无关脏改，只能收敛到本任务相关文件
+- constraints:
+  - 不使用 git reset / revert / restore / stash / checkout 到旧提交
+  - 全程中文
+  - 用户要求 `$ralph` 持续执行直到端到端验证完成并看图
+  - 若使用子 agent，模型必须为 `gpt-5.4 + high`
+- unknowns/open questions:
+  - 牛仔子教程脚本是否能稳定推进完整决斗链
+  - 子教程路由与默认教程并存时，MatchRoom 启动/退出逻辑是否完全兼容
+  - E2E 新用例中的定位器与链路是否与当前 UI/交互实现一致
+- likely codebase touchpoints:
+  - `src/games/registry.ts`
+  - `src/hooks/useGameImplementationReady.ts`
+  - `src/App.tsx`
+  - `src/pages/MatchRoom.tsx`
+  - `src/games/smashup/tutorial.ts`
+  - `src/games/smashup/ui/FactionSelection.tsx`
+  - `src/games/smashup/ui/factionMeta.ts`
+  - `public/locales/zh-CN/game-smashup.json`
+  - `public/locales/en/game-smashup.json`
+  - `e2e/smashup-tutorial.e2e.ts`
+  - `evidence/smashup-faction-subtutorials-e2e-test.md`

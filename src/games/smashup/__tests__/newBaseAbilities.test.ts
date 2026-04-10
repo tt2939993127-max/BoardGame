@@ -1845,6 +1845,163 @@ describe('Oops Samurai bases', () => {
         expect(drawEvents.every(event => event.payload.playerId === '0' && event.payload.count === 1)).toBe(true);
     });
 
+    it('base_sakura_garden 与 samurai_samurai_chan_pod 同时触发时，先结算基地后仍会再结算武士酱抓牌', () => {
+        const core = makeState({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            players: {
+                '0': {
+                    id: '0', vp: 0, hand: [],
+                    deck: [
+                        makeCard('draw-1', '0', 'robot_microbot_alpha'),
+                        makeCard('draw-2', '0', 'robot_microbot_alpha'),
+                    ],
+                    discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1', vp: 0, hand: [], deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                },
+            } as any,
+            bases: [{
+                defId: 'base_sakura_garden_pod',
+                minions: [makeMinion('chan-1', '0', 2, 'samurai_samurai_chan_pod')],
+                ongoingActions: [],
+            }],
+        });
+
+        const queued = collectTriggers(core, 'onMinionDestroyed', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: core.bases[0].minions[0],
+            triggerMinionUid: 'chan-1',
+            triggerMinionDefId: 'samurai_samurai_chan_pod',
+            destroyerId: '0',
+            reason: 'samurai_yokai_attack',
+            random: dummyRandom,
+            now: 1000,
+        });
+
+        expect(queued).toBeDefined();
+        const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+        const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1000);
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+
+        const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+        const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
+            const trigger = firstQueueById.get(option.value.triggerId) as any;
+            return trigger?.sourceDefId === 'base_sakura_garden_pod';
+        }) ?? (firstPrompt!.state.sys.interaction.current as any).data.options[0];
+        const firstResolved = runCommand(
+            firstPrompt!.state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: firstOption.id } } as any,
+            dummyRandom,
+        );
+
+        const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
+        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+            ? (() => {
+                const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+                const secondOption = secondPrompt.data.options.find((option: any) => {
+                    const trigger = secondQueueById.get(option.value.triggerId) as any;
+                    return trigger?.sourceDefId === 'samurai_samurai_chan_pod';
+                }) ?? secondPrompt.data.options[0];
+                return runCommand(
+                    firstResolved.finalState,
+                    { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: secondOption.id } } as any,
+                    dummyRandom,
+                );
+            })()
+            : { events: [], finalState: firstResolved.finalState };
+
+        const drawEvents = [...firstResolved.events, ...secondResolved.events].filter(event => event.type === SU_EVENTS.CARDS_DRAWN) as any[];
+        expect(drawEvents).toHaveLength(2);
+        expect(drawEvents.every(event => event.payload.playerId === '0' && event.payload.count === 1)).toBe(true);
+    });
+
+    it('base_sakura_garden_pod 与 samurai_samurai_chan_pod 同时触发时两者都会结算抓牌', () => {
+        const core = makeState({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            players: {
+                '0': {
+                    id: '0', vp: 0, hand: [],
+                    deck: [
+                        makeCard('draw-1', '0', 'robot_microbot_alpha'),
+                        makeCard('draw-2', '0', 'robot_microbot_alpha'),
+                    ],
+                    discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.SAMURAI_POD, SMASHUP_FACTION_IDS.ALIENS],
+                },
+                '1': {
+                    id: '1', vp: 0, hand: [], deck: [], discard: [],
+                    minionsPlayed: 0, minionLimit: 1, actionsPlayed: 0, actionLimit: 1,
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.WIZARDS],
+                },
+            } as any,
+            bases: [{
+                defId: 'base_sakura_garden_pod',
+                minions: [makeMinion('chan-pod-1', '0', 2, 'samurai_samurai_chan_pod')],
+                ongoingActions: [],
+            }],
+        });
+
+        const queued = collectTriggers(core, 'onMinionDestroyed', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinion: core.bases[0].minions[0],
+            triggerMinionUid: 'chan-pod-1',
+            triggerMinionDefId: 'samurai_samurai_chan_pod',
+            destroyerId: '1',
+            random: dummyRandom,
+            now: 1005,
+        });
+
+        expect(queued).toBeDefined();
+        const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+        const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1005);
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+
+        const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+        const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
+            const trigger = firstQueueById.get(option.value.triggerId) as any;
+            return trigger?.sourceDefId === 'base_sakura_garden_pod';
+        }) ?? (firstPrompt!.state.sys.interaction.current as any).data.options[0];
+        const firstResolved = runCommand(
+            firstPrompt!.state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: firstOption.id } } as any,
+            dummyRandom,
+        );
+
+        const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
+        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+            ? (() => {
+                const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+                const secondOption = secondPrompt.data.options.find((option: any) => {
+                    const trigger = secondQueueById.get(option.value.triggerId) as any;
+                    return trigger?.sourceDefId === 'samurai_samurai_chan_pod';
+                }) ?? secondPrompt.data.options[0];
+                return runCommand(
+                    firstResolved.finalState,
+                    { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: secondOption.id } } as any,
+                    dummyRandom,
+                );
+            })()
+            : { events: [], finalState: firstResolved.finalState };
+
+        const drawEvents = [...firstResolved.events, ...secondResolved.events].filter(event => event.type === SU_EVENTS.CARDS_DRAWN) as any[];
+        expect(drawEvents).toHaveLength(2);
+        expect(drawEvents.every(event => event.payload.playerId === '0' && event.payload.count === 1)).toBe(true);
+    });
+
     it('base_sakura_garden 同回合第二次有同一玩家的随从被消灭时不应再次抽牌', () => {
         const state = makeState({
             bases: [{

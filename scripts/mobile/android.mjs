@@ -18,11 +18,13 @@ const androidDir = path.join(rootDir, 'android');
 const capacitorCliPath = path.join(rootDir, 'node_modules', '@capacitor', 'cli', 'bin', 'capacitor');
 const capacitorAndroidBuildGradlePath = path.join(rootDir, 'node_modules', '@capacitor', 'android', 'capacitor', 'build.gradle');
 const viteCliPath = path.join(rootDir, 'node_modules', 'vite', 'bin', 'vite.js');
+const viteSafeCliPath = path.join(rootDir, 'scripts', 'infra', 'vite-cli-safe.mjs');
 const gradleWrapper = process.platform === 'win32'
     ? path.join(androidDir, 'gradlew.bat')
     : path.join(androidDir, 'gradlew');
-const defaultAppId = 'top.easyboardgame.app';
-const defaultAppName = '易桌游';
+const defaultAppId = 'top.easyboardgame.app.debug';
+const defaultAppName = '易桌游测试';
+const stableAndroidSourcePackage = 'top.easyboardgame.app';
 const defaultAndroidWebviewMode = 'embedded';
 const supportedAndroidWebviewModes = new Set(['embedded', 'remote']);
 const command = process.argv[2];
@@ -33,13 +35,17 @@ const distLocalizedAssetsDir = path.join(distDir, 'assets', 'i18n');
 const androidPublicDir = path.join(androidDir, 'app', 'src', 'main', 'assets', 'public');
 const androidBuildMetaFileName = 'android-build-meta.json';
 const gameManifestGeneratorPath = path.join(rootDir, 'scripts', 'game', 'generate_game_manifests.js');
+const debugAndroidAppIdSegments = new Set(['debug', 'dev', 'test', 'qa']);
 
 const envFiles = ['.env', '.env.android', '.env.android.local'];
 for (const file of envFiles) {
     const fullPath = path.join(rootDir, file);
     if (!existsSync(fullPath)) continue;
-    dotenv.config({ path: fullPath, override: true, quiet: true });
+    dotenv.config({ path: fullPath, override: false, quiet: true });
 }
+process.env.VITE_CAPACITOR_APP_ID = process.env.VITE_CAPACITOR_APP_ID?.trim()
+    || process.env.CAPACITOR_APP_ID?.trim()
+    || defaultAppId;
 
 const runCommand = (cmd, args, options = {}) => new Promise((resolve, reject) => {
     const child = spawn(cmd, args, {
@@ -74,6 +80,8 @@ const quoteCmdArg = (value) => {
     return `"${value.replace(/"/g, '""')}"`;
 };
 
+const parseBooleanEnv = (value) => /^(1|true|yes|on)$/i.test((value || '').trim());
+
 const runWindowsBatch = async (scriptPath, args, options = {}) => {
     const comSpec = process.env.ComSpec || 'cmd.exe';
     const cmdLine = [scriptPath, ...args].map(quoteCmdArg).join(' ');
@@ -85,7 +93,7 @@ const runCapacitor = async (args) => {
 };
 
 const runAndroidWebBuild = async () => {
-    await runNodeScript(viteCliPath, ['build', '--mode', 'android']);
+    await runNodeScript(viteSafeCliPath, ['build', '--mode', 'android', '--configLoader', 'bundle', '--config', 'vite.config.ts']);
 };
 
 const runGradle = async (args) => {
@@ -388,6 +396,18 @@ const getAppConfig = () => ({
     appName: process.env.CAPACITOR_APP_NAME?.trim() || defaultAppName,
 });
 
+const isNonReleaseAndroidAppId = (appId) => appId
+    .split('.')
+    .some((segment) => debugAndroidAppIdSegments.has(segment.trim().toLowerCase()));
+
+const isAndroidOtaAllowedForApp = () => {
+    const { appId } = getAppConfig();
+    if (!appId || !isNonReleaseAndroidAppId(appId)) {
+        return true;
+    }
+    return parseBooleanEnv(process.env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP);
+};
+
 const isHttpUrl = (value) => /^http:\/\//i.test(value);
 const isHttpsUrl = (value) => /^https:\/\//i.test(value);
 const resolveEmbeddedAndroidScheme = () => {
@@ -459,7 +479,10 @@ const getAndroidWebviewMode = () => {
 };
 
 const getAndroidRemoteWebUrl = () => process.env.ANDROID_REMOTE_WEB_URL?.trim() || '';
-const getAndroidOtaEnabled = () => /^(1|true|yes|on)$/i.test(process.env.VITE_ANDROID_OTA_ENABLED?.trim() || '');
+const getAndroidOtaEnabled = () => (
+    parseBooleanEnv(process.env.VITE_ANDROID_OTA_ENABLED)
+    && isAndroidOtaAllowedForApp()
+);
 const getAndroidOtaManifestUrl = () => process.env.VITE_ANDROID_OTA_MANIFEST_URL?.trim() || '';
 const getAndroidOtaChannel = () => process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || '';
 
@@ -617,7 +640,7 @@ const updateAppBuildGradle = (appId) => {
         }
 
         next = next
-            .replace(/namespace\s*=\s*"[^"]+"/, `namespace = "${appId}"`)
+            .replace(/namespace\s*=\s*"[^"]+"/, `namespace = "${stableAndroidSourcePackage}"`)
             .replace(/applicationId\s+"[^"]+"/, `applicationId "${appId}"`)
             .replace(/minifyEnabled\s+false/g, 'minifyEnabled true');
 
@@ -764,9 +787,9 @@ const prepareAndroidProject = async () => {
 `,
     );
 
-    moveJavaFileToPackage(mainJavaRoot, 'MainActivity.java', appId);
-    moveJavaFileToPackage(testJavaRoot, 'ExampleUnitTest.java', appId);
-    moveJavaFileToPackage(androidTestJavaRoot, 'ExampleInstrumentedTest.java', appId, (content) => (
+    moveJavaFileToPackage(mainJavaRoot, 'MainActivity.java', stableAndroidSourcePackage);
+    moveJavaFileToPackage(testJavaRoot, 'ExampleUnitTest.java', stableAndroidSourcePackage);
+    moveJavaFileToPackage(androidTestJavaRoot, 'ExampleInstrumentedTest.java', stableAndroidSourcePackage, (content) => (
         content.replace(/assertEquals\(".*?", appContext\.getPackageName\(\)\);/, `assertEquals("${appId}", appContext.getPackageName());`)
     ));
 
@@ -893,6 +916,8 @@ const printDoctor = async () => {
         `VITE_BACKEND_URL=${process.env.VITE_BACKEND_URL || '(未设置)'}`,
         `ANDROID_WEBVIEW_MODE=${getAndroidWebviewMode()}`,
         `ANDROID_REMOTE_WEB_URL=${getAndroidRemoteWebUrl() || '(未设置)'}`,
+        `ANDROID_OTA_CONFIGURED=${parseBooleanEnv(process.env.VITE_ANDROID_OTA_ENABLED) ? 'true' : 'false'}`,
+        `ANDROID_OTA_ALLOW_DEBUG_APP=${parseBooleanEnv(process.env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP) ? 'true' : 'false'}`,
         `ANDROID_OTA_ENABLED=${getAndroidOtaEnabled() ? 'true' : 'false'}`,
         `ANDROID_OTA_MANIFEST_URL=${getAndroidOtaManifestUrl() || '(未设置)'}`,
         `ANDROID_OTA_CHANNEL=${getAndroidOtaChannel() || '(未设置)'}`,

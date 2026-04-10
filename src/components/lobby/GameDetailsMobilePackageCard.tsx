@@ -15,6 +15,7 @@ interface GameDetailsMobilePackageCardProps {
     state: GamePackageCardState;
     onInstall: () => void;
     onRetry?: () => void;
+    failedActionLabel?: string;
     onCancel?: () => void;
     onCollapse?: () => void;
     presentation?: 'install' | 'update-required';
@@ -55,6 +56,7 @@ const getStatusMeta = (
     t: ReturnType<typeof useTranslation<'lobby'>>['t'],
     gameName: string,
     errorMessage?: string,
+    failedActionLabel?: string,
     presentation: 'install' | 'update-required' = 'install',
     requiredAppVersion?: string,
 ) => {
@@ -112,7 +114,7 @@ const getStatusMeta = (
             return {
                 title: t('packageManager.failedTitle'),
                 description: errorMessage || t('packageManager.failedHint'),
-                actionLabel: t('packageManager.retryAction'),
+                actionLabel: failedActionLabel || t('packageManager.retryAction'),
                 icon: AlertTriangle,
                 iconClassName: '',
                 iconToneClassName: 'border-amber-800/20 bg-amber-50/70 text-amber-900',
@@ -144,6 +146,7 @@ export const GameDetailsMobilePackageCard = ({
     state,
     onInstall,
     onRetry,
+    failedActionLabel,
     onCancel,
     onCollapse,
     presentation = 'install',
@@ -151,7 +154,15 @@ export const GameDetailsMobilePackageCard = ({
     className = 'md:hidden',
 }: GameDetailsMobilePackageCardProps) => {
     const { t } = useTranslation('lobby');
-    const statusMeta = getStatusMeta(state.status, t, gameName, state.errorMessage, presentation, requiredAppVersion);
+    const statusMeta = getStatusMeta(
+        state.status,
+        t,
+        gameName,
+        state.errorMessage,
+        failedActionLabel,
+        presentation,
+        requiredAppVersion,
+    );
     const StatusIcon = statusMeta.icon;
     const showLeadingStatusIcon = state.status !== 'not-installed';
     const isInProgress = state.status === 'queued'

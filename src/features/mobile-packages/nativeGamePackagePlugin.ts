@@ -14,6 +14,12 @@ type PluginListenerHandle = {
     remove(): Promise<void>;
 };
 
+type NativeInstallLifecycleStatus =
+    | StoredGamePackageState['status']
+    | 'running'
+    | 'completed'
+    | 'cancelled';
+
 export type NativeNotificationPermissionState =
     | 'granted'
     | 'prompt'
@@ -45,7 +51,7 @@ type NativeGamePackagePlugin = {
         exists?: boolean;
         taskRunning?: boolean;
         gameId?: string;
-        status?: StoredGamePackageState['status'];
+        status?: NativeInstallLifecycleStatus;
         progressPercent?: number;
         progressMode?: StoredGamePackageState['progressMode'];
         errorCode?: GamePackageInstallErrorCode;
@@ -65,7 +71,7 @@ type NativeGamePackagePlugin = {
     }): Promise<{
         accepted?: boolean;
         taskId?: string;
-        status?: StoredGamePackageState['status'];
+        status?: NativeInstallLifecycleStatus;
         gameId: string;
         runtimeChannel?: string;
         installedAt?: number;
@@ -101,7 +107,7 @@ type NativeGamePackagePlugin = {
         eventName: 'installStateChanged',
         listenerFunc: (event: {
             gameId?: string;
-            status?: StoredGamePackageState['status'];
+            status?: NativeInstallLifecycleStatus;
             progressPercent?: number;
             progressMode?: StoredGamePackageState['progressMode'];
             errorCode?: GamePackageInstallErrorCode;
@@ -173,6 +179,30 @@ const isGamePackageInstallErrorCode = (value: string): value is GamePackageInsta
     || value === 'unsupported-runtime'
     || value === 'unknown'
 );
+
+const normalizeNativeInstallStatus = (
+    status: NativeInstallLifecycleStatus | undefined,
+    fallbackStatus: StoredGamePackageState['status'] = 'queued',
+): StoredGamePackageState['status'] | undefined => {
+    switch (status) {
+        case 'not-installed':
+        case 'queued':
+        case 'manifest':
+        case 'downloading':
+        case 'verifying':
+        case 'installed':
+        case 'failed':
+            return status;
+        case 'running':
+            return fallbackStatus === 'not-installed' ? 'manifest' : fallbackStatus;
+        case 'completed':
+            return 'installed';
+        case 'cancelled':
+            return 'failed';
+        default:
+            return undefined;
+    }
+};
 
 const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number, timeoutMessage: string): Promise<T> => {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
@@ -338,9 +368,13 @@ export const readNativeGamePackageInstallState = async (
         }
 
         const assetBaseUrl = toAssetBaseUrl(result.assetRootPath);
+        const normalizedStatus = normalizeNativeInstallStatus(
+            result.status,
+            result.taskRunning === true ? 'manifest' : 'failed',
+        );
         const normalizedState: Partial<StoredGamePackageState> = {
             gameId,
-            status: result.status,
+            status: normalizedStatus,
             progressPercent: clampPercent(result.progressPercent),
             progressMode: result.progressMode,
             errorCode: typeof result.errorCode === 'string' && isGamePackageInstallErrorCode(result.errorCode)
@@ -389,6 +423,25 @@ export const ensureNativeDownloadNotificationPermission = async (): Promise<Nati
         return normalized;
     } catch (error) {
         logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-failed', {
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+    }
+};
+
+export const getNativeDownloadNotificationPermissionStatus = async (): Promise<NativeDownloadNotificationPermissionResult | null> => {
+    const plugin = getNativePlugin();
+    if (!plugin) {
+        return null;
+    }
+
+    try {
+        const result = await plugin.getNotificationPermissionStatus();
+        const normalized = normalizeNotificationPermissionResult(result);
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-status-result', normalized);
+        return normalized;
+    } catch (error) {
+        logMobileRuntimeCritical('NativeGamePackagePlugin', 'notification-permission-status-failed', {
             error: error instanceof Error ? error.message : String(error),
         });
         return null;
@@ -529,8 +582,9 @@ export const createNativeGamePackageInstallHandle = async (
                             options.onInstalledAssetBaseUrl?.(manifest.gameId, assetBaseUrl);
                         }
 
+                        const normalizedStatus = normalizeNativeInstallStatus(event.status, currentState.status);
                         currentState = mergeGamePackageState(currentState, {
-                            status: event.status,
+                            status: normalizedStatus,
                             progressPercent: clampPercent(event.progressPercent),
                             progressMode: event.progressMode,
                             errorCode: typeof event.errorCode === 'string' && isGamePackageInstallErrorCode(event.errorCode)
@@ -552,7 +606,7 @@ export const createNativeGamePackageInstallHandle = async (
                         options.onStateChange(currentState);
                         if (
                             !terminalResolved
-                            && (event.status === 'installed' || event.status === 'failed')
+                            && (normalizedStatus === 'installed' || normalizedStatus === 'failed')
                         ) {
                             terminalResolved = true;
                             resolveTerminalState?.(currentState);
@@ -589,7 +643,7 @@ export const createNativeGamePackageInstallHandle = async (
                 result,
             });
 
-            const acknowledgedStatus = result.status;
+            const acknowledgedStatus = normalizeNativeInstallStatus(result.status, 'manifest');
             if (acknowledgedStatus && acknowledgedStatus !== 'installed') {
                 currentState = mergeGamePackageState(currentState, {
                     status: acknowledgedStatus,

@@ -3,7 +3,7 @@ import type { ComponentType, ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import * as matchApi from '../services/matchApi';
-import { getGameImplementation } from '../games/registry';
+import { getGameImplementation, resolveGameTutorialManifest } from '../games/registry';
 import { GameProvider, LocalGameProvider, BoardBridge, buildAiProgressMarker, useGameClient } from '../engine/transport/react';
 import { GameTransportClient } from '../engine/transport/client';
 import type { GameEngineConfig } from '../engine/transport/server';
@@ -61,6 +61,8 @@ import { resolveGameDisplayName } from '../components/lobby/gameDetailsContent';
 import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
+    applyAiAutoRecoveryRejection,
+    resolveForceAdvancePhaseAfterRecovery,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -74,6 +76,7 @@ import {
 
 // 系统级错误（连接/认证），不需要 toast 提示给玩家
 const SYSTEM_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout', 'command_failed']);
+const UI_HINT_ONLY_ERRORS = new Set(['请先完成当前选择']);
 const ONLINE_TRANSPORT_ERRORS = new Set(['unauthorized', 'match_not_found', 'sync_timeout']);
 // 教程系统正常拦截，不弹 toast（用户跟着教程走时的正常行为）
 const TUTORIAL_SILENT_ERRORS = new Set(['tutorial_command_blocked', 'tutorial_step_locked']);
@@ -137,6 +140,9 @@ const TutorialDispatchBridge = ({ children }: { children: ReactNode }) => {
     return <>{children}</>;
 };
 
+const MAX_FORCE_END_TURN_FOLLOW_UP_STEPS = 16;
+const RECOVERY_FAILURE_SYNC_GRACE_MS = 700;
+
 const OnlineAiSeatBridge = ({
     server,
     matchId,
@@ -161,13 +167,56 @@ const OnlineAiSeatBridge = ({
         key: string;
         firstSeenAt: number;
         autoSubmittedAt: number | null;
+        lastReportedFailureReason: string | null;
         candidate: ForceSkippableHiddenAiInteraction | null;
     } | null>(null);
     const forceEndTurnTrackerRef = useRef<{
         key: string;
         firstSeenAt: number;
         autoSubmittedAt: number | null;
+        lastReportedFailureReason: string | null;
     } | null>(null);
+    const latestSharedStateRef = useRef<MatchState<unknown> | null>(null);
+    const pendingRecoveryCheckTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+    useEffect(() => {
+        latestSharedStateRef.current = state && typeof state === 'object'
+            ? state as MatchState<unknown>
+            : null;
+    }, [state]);
+
+    useEffect(() => {
+        const pendingTimers = pendingRecoveryCheckTimersRef.current;
+        return () => {
+            for (const timer of pendingTimers) {
+                clearTimeout(timer);
+            }
+            pendingTimers.clear();
+        };
+    }, []);
+
+    const scheduleRecoveryFailureNotice = useCallback((args: {
+        targetClient: GameTransportClient;
+        markerBefore: string;
+        onStillStalled: () => void;
+    }) => {
+        const { targetClient, markerBefore, onStillStalled } = args;
+        targetClient.resync();
+        const timer = setTimeout(() => {
+            pendingRecoveryCheckTimersRef.current.delete(timer);
+            const sharedMarker = latestSharedStateRef.current
+                ? buildAiProgressMarker(latestSharedStateRef.current)
+                : markerBefore;
+            const seatMarker = targetClient.latestState && typeof targetClient.latestState === 'object'
+                ? buildAiProgressMarker(targetClient.latestState as MatchState<unknown>)
+                : markerBefore;
+            if (sharedMarker !== markerBefore || seatMarker !== markerBefore) {
+                return;
+            }
+            onStillStalled();
+        }, RECOVERY_FAILURE_SYNC_GRACE_MS);
+        pendingRecoveryCheckTimersRef.current.add(timer);
+    }, []);
 
     useEffect(() => {
         const nextClientKeys = new Set(
@@ -295,6 +344,9 @@ const OnlineAiSeatBridge = ({
 
     useEffect(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
+        const progressMarker = state && typeof state === 'object'
+            ? buildAiProgressMarker(state as MatchState<unknown>)
+            : 'no-shared-state';
         const seatStates = Object.fromEntries(
             Object.entries(clientsRef.current).map(([playerId, client]) => {
                 const latestState = client.latestState;
@@ -321,6 +373,7 @@ const OnlineAiSeatBridge = ({
                 key: candidateKey,
                 firstSeenAt: now,
                 autoSubmittedAt: null,
+                lastReportedFailureReason: null,
                 candidate,
             };
             timer = setTimeout(() => {
@@ -376,22 +429,33 @@ const OnlineAiSeatBridge = ({
             },
             onConfirmed: () => {
                 toast.warning(
-                    'AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。建议通过反馈入口提交问题。',
+                    'AI 自动跳过。',
                     'AI 响应超时',
                     { dedupeKey: `game.ai-force-skip.resolved.${candidateKey}` },
                 );
             },
             onRejected: (reason) => {
                 const tracker = forceSkipTrackerRef.current;
+                let shouldNotify = true;
                 if (tracker?.key === candidateKey) {
-                    tracker.autoSubmittedAt = null;
-                    tracker.firstSeenAt = Date.now();
+                    const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                    forceSkipTrackerRef.current = rejection.nextTracker;
+                    shouldNotify = rejection.shouldNotify;
                 }
-                if (reason === 'unauthorized') {
-                    toast.warning('AI 座位凭据已失效，无法自动跳过这次隐藏交互。建议通过反馈入口提交问题。');
+                if (!shouldNotify) {
                     return;
                 }
-                toast.warning('自动跳过这次 AI 隐藏交互未成功，系统会继续重试。建议通过反馈入口提交问题。');
+                scheduleRecoveryFailureNotice({
+                    targetClient,
+                    markerBefore: progressMarker,
+                    onStillStalled: () => {
+                        toast.warning(
+                            `AI 自动跳过失败（${reason}）`,
+                            undefined,
+                            { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.recover-interaction.${reason}` },
+                        );
+                    },
+                });
             },
         });
 
@@ -400,7 +464,7 @@ const OnlineAiSeatBridge = ({
                 clearTimeout(timer);
             }
         };
-    }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, seatControllers, state, toast]);
+    }, [aiRetryVersion, connectionVersion, forceSkipCheckVersion, scheduleRecoveryFailureNotice, seatControllers, state, toast]);
 
     useEffect(() => {
         if (!state) {
@@ -426,7 +490,7 @@ const OnlineAiSeatBridge = ({
         }
 
         const progressMarker = buildAiProgressMarker(state as MatchState<unknown>);
-        const trackerKey = progressMarker;
+        const trackerKey = `${candidate.playerId}:${candidate.reason}:${candidate.resolution.attemptKey}:${progressMarker}`;
         const now = Date.now();
         const currentTracker = forceEndTurnTrackerRef.current;
 
@@ -435,6 +499,7 @@ const OnlineAiSeatBridge = ({
                 key: trackerKey,
                 firstSeenAt: now,
                 autoSubmittedAt: null,
+                lastReportedFailureReason: null,
             };
             timer = setTimeout(() => {
                 setAiRetryVersion((version) => version + 1);
@@ -475,6 +540,81 @@ const OnlineAiSeatBridge = ({
         }
 
         currentTracker.autoSubmittedAt = now;
+        const submitForceEndTurnAdvanceLoop = (args: {
+            targetClient: GameTransportClient;
+            playerId: string;
+            trackerKey: string;
+            markerBefore: string;
+            authoritativeState: MatchState<unknown> | null | undefined;
+            remainingSteps: number;
+        }) => {
+            const { targetClient, playerId, trackerKey, markerBefore, authoritativeState, remainingSteps } = args;
+            if (remainingSteps <= 0) {
+                toast.warning(
+                    'AI 已强制结束回合。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+                return;
+            }
+
+            const followUpResolution = resolveForceAdvancePhaseAfterRecovery({
+                authoritativeState,
+                seatControllers,
+                playerId,
+            });
+            if (!followUpResolution) {
+                toast.warning(
+                    'AI 已强制结束回合。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+                return;
+            }
+
+            submitOnlineAiResolution({
+                client: targetClient,
+                resolution: followUpResolution,
+                lastAiAttemptKeyRef,
+                scheduleRetry: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
+                onConfirmed: (nextAuthoritativeState) => {
+                    submitForceEndTurnAdvanceLoop({
+                        targetClient,
+                        playerId,
+                        trackerKey,
+                        markerBefore,
+                        authoritativeState: nextAuthoritativeState as MatchState<unknown> | null | undefined,
+                        remainingSteps: remainingSteps - 1,
+                    });
+                },
+                onRejected: (reason) => {
+                    const tracker = forceEndTurnTrackerRef.current;
+                    let shouldNotify = true;
+                    if (tracker?.key === trackerKey) {
+                        const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                        forceEndTurnTrackerRef.current = rejection.nextTracker;
+                        shouldNotify = rejection.shouldNotify;
+                    }
+                    if (!shouldNotify) {
+                        return;
+                    }
+                    scheduleRecoveryFailureNotice({
+                        targetClient,
+                        markerBefore,
+                        onStillStalled: () => {
+                            toast.warning(
+                                `AI 强制结束失败（${reason}）`,
+                                undefined,
+                                { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.follow-up-advance.${reason}` },
+                            );
+                        },
+                    });
+                },
+            });
+        };
+
         submitOnlineAiResolution({
             client: targetClient,
             resolution: candidate.resolution,
@@ -482,24 +622,38 @@ const OnlineAiSeatBridge = ({
             scheduleRetry: () => {
                 setAiRetryVersion((version) => version + 1);
             },
-            onConfirmed: () => {
-                toast.warning(
-                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。建议通过反馈入口提交问题。',
-                    'AI 强制结束回合',
-                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
-                );
+            onConfirmed: (authoritativeState) => {
+                submitForceEndTurnAdvanceLoop({
+                    targetClient,
+                    playerId: candidate.playerId,
+                    trackerKey,
+                    markerBefore: progressMarker,
+                    authoritativeState: authoritativeState as MatchState<unknown> | null | undefined,
+                    remainingSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS,
+                });
             },
             onRejected: (reason) => {
                 const tracker = forceEndTurnTrackerRef.current;
+                let shouldNotify = true;
                 if (tracker?.key === trackerKey) {
-                    tracker.autoSubmittedAt = null;
-                    tracker.firstSeenAt = Date.now();
+                    const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+                    forceEndTurnTrackerRef.current = rejection.nextTracker;
+                    shouldNotify = rejection.shouldNotify;
                 }
-                if (reason === 'unauthorized') {
-                    toast.warning('AI 座位凭据已失效，无法自动强制结束该 AI 回合。建议通过反馈入口提交问题。');
+                if (!shouldNotify) {
                     return;
                 }
-                toast.warning('强制结束 AI 回合未成功，系统会继续重试。建议通过反馈入口提交问题。');
+                scheduleRecoveryFailureNotice({
+                    targetClient,
+                    markerBefore: progressMarker,
+                    onStillStalled: () => {
+                        toast.warning(
+                            `AI 强制结束失败（${reason}）`,
+                            undefined,
+                            { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.recover-interaction.${reason}` },
+                        );
+                    },
+                });
             },
         });
 
@@ -508,7 +662,7 @@ const OnlineAiSeatBridge = ({
                 clearTimeout(timer);
             }
         };
-    }, [aiRetryVersion, connectionVersion, seatControllers, state, toast]);
+    }, [aiRetryVersion, connectionVersion, scheduleRecoveryFailureNotice, seatControllers, state, toast]);
 
     return null;
 };
@@ -661,7 +815,7 @@ const OnlineGameHudBridge = ({
 export const MatchRoom = () => {
     usePerformanceMonitor();
     const { playerID: debugPlayerID, setPlayerID } = useDebug();
-    const { gameId, matchId } = useParams();
+    const { gameId, matchId, tutorialId } = useParams();
     const [searchParams] = useSearchParams();
     const navigate = useNavigate();
     const { startTutorial, closeTutorial, isActive, currentStep, isBoardMounted } = useTutorial();
@@ -694,7 +848,8 @@ export const MatchRoom = () => {
         [gameConfig, gameId],
     );
     const requiresGameNamespace = Boolean(gameConfig);
-    const isTutorialRoute = window.location.pathname.endsWith('/tutorial');
+    const pathname = typeof window !== 'undefined' ? window.location.pathname : '';
+    const isTutorialRoute = /^\/play\/[^/]+\/tutorial(?:\/[^/]+)?\/?$/.test(pathname);
     useEffect(() => syncGamePageDocumentAttributes(gamePageDataAttributes), [gamePageDataAttributes]);
     useEffect(() => {
         appendMatchLoadTrace({
@@ -722,6 +877,7 @@ export const MatchRoom = () => {
             return;
         }
         if (SYSTEM_ERRORS.has(error)) return; // 其他系统错误由独立逻辑处理
+        if (UI_HINT_ONLY_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.error.${error}` });
     }, [toast, i18n, gameId]);
@@ -731,6 +887,7 @@ export const MatchRoom = () => {
     // AI 命令失败的静默已在 LocalGameProvider 层面通过 __tutorialAiCommand 标记处理
     const handleCommandRejected = useCallback((_type: string, error: string) => {
         if (TUTORIAL_SILENT_ERRORS.has(error)) return;
+        if (UI_HINT_ONLY_ERRORS.has(error)) return;
         playDeniedSound();
         toast.warning(resolveCommandError(i18n, error, gameId), undefined, { dedupeKey: `game.rejected.${error}` });
     }, [toast, i18n, gameId]);
@@ -757,8 +914,15 @@ export const MatchRoom = () => {
     } = useGameImplementationReady(gameId, {
         enabled: Boolean(gameId),
         includeTutorial: isTutorialRoute,
+        tutorialId,
     });
     const gameImplReady = isGameImplementationReady;
+    const resolvedTutorialManifest = useMemo(() => {
+        if (!gameId || !isTutorialRoute || !gameImplReady) {
+            return null;
+        }
+        return resolveGameTutorialManifest(gameId, tutorialId);
+    }, [gameId, gameImplReady, isTutorialRoute, tutorialId]);
     const tutorialLoadingProgressText = useMemo(() => {
         if (!isTutorialRoute) return undefined;
         if (!gameId || !isGameNamespaceReady) {
@@ -859,7 +1023,6 @@ export const MatchRoom = () => {
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [onlineAiSeatControllers, setOnlineAiSeatControllers] = useState<Record<string, AiSeatController>>({});
     const [onlineAiSeatCredentials, setOnlineAiSeatCredentials] = useState<Record<string, string>>({});
-    const [tutorialBoardBootstrapComplete, setTutorialBoardBootstrapComplete] = useState(false);
     const tutorialStartedRef = useRef(false);
     const lastTutorialStepIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
@@ -1212,13 +1375,12 @@ export const MatchRoom = () => {
         // 只在未激活且未启动过时调用 startTutorial
         // 不依赖 tutorial.manifestId/steps.length，避免 startTutorial 的 setTutorial 触发循环
         if (!isActive && !tutorialStartedRef.current) {
-            const impl = gameId ? getGameImplementation(gameId) : null;
-            if (impl?.tutorial) {
+            if (resolvedTutorialManifest) {
                 tutorialStartedRef.current = true;
-                startTutorial(impl.tutorial!);
+                startTutorial(resolvedTutorialManifest);
             }
         }
-    }, [startTutorial, isTutorialRoute, isActive, gameId, isGameNamespaceReady]);
+    }, [startTutorial, isTutorialRoute, isActive, isGameNamespaceReady, resolvedTutorialManifest]);
 
     // gameImplReady 变为 true 时补触发一次教程启动
     // 场景：dev 模式首次加载时 i18n namespace 先于游戏实现加载完成，
@@ -1229,12 +1391,24 @@ export const MatchRoom = () => {
         if (!isTutorialRoute) return;
         if (!isGameNamespaceReady) return;
         if (isActive || tutorialStartedRef.current) return;
-        const impl = gameId ? getGameImplementation(gameId) : null;
-        if (impl?.tutorial) {
+        if (resolvedTutorialManifest) {
             tutorialStartedRef.current = true;
-            startTutorial(impl.tutorial!);
+            startTutorial(resolvedTutorialManifest);
         }
-    }, [gameImplReady, isTutorialRoute, isGameNamespaceReady, isActive, gameId, startTutorial]);
+    }, [gameImplReady, isTutorialRoute, isGameNamespaceReady, isActive, startTutorial, resolvedTutorialManifest]);
+
+    useEffect(() => {
+        if (!isTutorialRoute) return;
+        if (!isBoardMounted) return;
+        if (!gameImplReady) return;
+        if (!isGameNamespaceReady) return;
+        if (isActive) return;
+        if (lastTutorialStepIdRef.current === 'finish') return;
+        if (!resolvedTutorialManifest) return;
+
+        tutorialStartedRef.current = true;
+        startTutorial(resolvedTutorialManifest);
+    }, [gameImplReady, isActive, isBoardMounted, isGameNamespaceReady, isTutorialRoute, resolvedTutorialManifest, startTutorial]);
 
     // 组件真正卸载时清理教程
     // 使用 setTimeout(0) 延迟执行：如果是 StrictMode 的 unmount→remount，
@@ -1301,20 +1475,6 @@ export const MatchRoom = () => {
             return () => window.clearTimeout(timer);
         }
     }, [isTutorialRoute, isActive, navigate]);
-
-    useEffect(() => {
-        if (!isTutorialRoute) {
-            setTutorialBoardBootstrapComplete(false);
-            return;
-        }
-        setTutorialBoardBootstrapComplete(false);
-    }, [gameId, isTutorialRoute]);
-
-    useEffect(() => {
-        if (!isTutorialRoute) return;
-        if (!isActive) return;
-        setTutorialBoardBootstrapComplete(true);
-    }, [isTutorialRoute, isActive]);
 
     useEffect(() => {
         // 关键约束：教程提示层只允许在 /tutorial 路由出现。
@@ -1713,26 +1873,17 @@ export const MatchRoom = () => {
                                     ) : hasTutorialBoard && engineConfig && WrappedBoard ? (
                                         <LocalGameProvider config={engineConfig} numPlayers={2} seed={`tutorial-${gameId}`} playerId="0" onCommandRejected={handleCommandRejected}>
                                             <TutorialDispatchBridge>
-                                                {tutorialBoardBootstrapComplete ? (
-                                                    <BoardBridge
-                                                        board={WrappedBoard}
-                                                        loading={(
-                                                            <LoadingScreen
-                                                                anchor="container"
-                                                                title={t('matchRoom.title.tutorial')}
-                                                                description={t('matchRoom.loadingResources')}
-                                                                progressText={tutorialLoadingProgressText}
-                                                            />
-                                                        )}
-                                                    />
-                                                ) : (
-                                                    <LoadingScreen
-                                                        anchor="container"
-                                                        title={t('matchRoom.title.tutorial')}
-                                                        description={t('matchRoom.loadingResources')}
-                                                        progressText={tutorialLoadingProgressText}
-                                                    />
-                                                )}
+                                                <BoardBridge
+                                                    board={WrappedBoard}
+                                                    loading={(
+                                                        <LoadingScreen
+                                                            anchor="container"
+                                                            title={t('matchRoom.title.tutorial')}
+                                                            description={t('matchRoom.loadingResources')}
+                                                            progressText={tutorialLoadingProgressText}
+                                                        />
+                                                    )}
+                                                />
                                             </TutorialDispatchBridge>
                                         </LocalGameProvider>
                                     ) : (

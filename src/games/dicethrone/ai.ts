@@ -1,5 +1,12 @@
 import type { Command, MatchState, PlayerId } from '../../engine/types';
-import { buildDeterministicAiNoise, createAiLegalActionId } from '../../engine/ai';
+import {
+    buildDeterministicAiNoise,
+    createAiLegalActionId,
+    createProfileAwareActionScorer,
+    getAiActionStrategyTags,
+    scoreActionAgainstStrategyProfile,
+    withAiActionStrategyTags,
+} from '../../engine/ai';
 import {
     createActionKindScorer,
     createLookaheadLocalAiPolicy,
@@ -7,6 +14,7 @@ import {
 import type {
     AiDecisionContext,
     AiLegalAction,
+    AiStrategyProfile,
     GameAiRuntime,
     LocalAiActionScorer,
 } from '../../engine/ai';
@@ -32,6 +40,7 @@ import { findPlayerAbility, getPlayerAbilityBaseDamage } from './domain/abilityL
 import { getPlayerPassiveAbilities, isPassiveActionUsable } from './domain/passiveAbility';
 import { areTeammates, getOpponents } from './domain/rules';
 import { hasDebuffs, hasPurifyToken, getUsableTokensForTiming } from './domain/tokenResponse';
+import { getTokenEffectValue } from './domain/tokenTypes';
 import type { TriggerCondition } from './domain/combat';
 import type {
     AbilityCard,
@@ -43,6 +52,13 @@ import type {
 } from './domain/types';
 
 type DiceThroneState = MatchState<DiceThroneCore>;
+type DiceThroneStrategyTag =
+    | 'damage-race'
+    | 'survive-response'
+    | 'economy'
+    | 'dice-setup'
+    | 'upgrade-engine'
+    | 'purify-control';
 
 type DiceRequirement =
     | { kind: 'faces'; faces: Record<string, number> }
@@ -570,6 +586,50 @@ const scoreRemoveAllStatusesTarget = (
     return score;
 };
 
+const scoreRemoveSingleStatusTarget = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    targetPlayerId: PlayerId,
+    effectId: string,
+): number => {
+    const category = getEffectCategory(state, effectId);
+    if (!category) return 0;
+
+    const relationSign = isFriendlyTarget(state, actingPlayerId, targetPlayerId) ? 1 : -1;
+    const removalValue = category === 'debuff' ? relationSign : -relationSign;
+    let score = removalValue * 45;
+
+    const hp = state.core.players[targetPlayerId]?.resources[RESOURCE_IDS.HP] ?? 50;
+    if (category === 'debuff' && relationSign > 0) {
+        score += Math.max(0, 35 - hp);
+    }
+    if (category !== 'debuff' && relationSign < 0) {
+        score += Math.max(0, 35 - hp);
+    }
+
+    return score;
+};
+
+const scoreTransferStatusTarget = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    fromPlayerId: PlayerId,
+    toPlayerId: PlayerId,
+    effectId: string,
+): number => {
+    return scoreRemoveSingleStatusTarget(state, actingPlayerId, fromPlayerId, effectId)
+        + getGrantedEffectValue(state, actingPlayerId, toPlayerId, effectId, 1);
+};
+
+const buildStatusInteractionStrategyTags = (
+    state: DiceThroneState,
+    effectId: string,
+): DiceThroneStrategyTag[] => {
+    const category = getEffectCategory(state, effectId);
+    if (!category) return [];
+    return ['purify-control'];
+};
+
 const buildInteractionActions = (
     state: DiceThroneState,
     playerId: PlayerId,
@@ -732,12 +792,12 @@ const buildInteractionActions = (
                                     type: 'TRANSFER_STATUS',
                                     payload: { fromPlayerId: sourcePlayerId, toPlayerId: targetPlayerId, statusId },
                                 }],
-                                metadata: {
+                                metadata: withAiActionStrategyTags({
                                     interactionId: current.id,
                                     fromPlayerId: sourcePlayerId,
                                     toPlayerId: targetPlayerId,
                                     statusId,
-                                },
+                                }, buildStatusInteractionStrategyTags(state, statusId)),
                             }));
                     });
                 });
@@ -754,11 +814,11 @@ const buildInteractionActions = (
                         type: 'REMOVE_STATUS',
                         payload: { targetPlayerId, statusId },
                     }],
-                    metadata: {
+                    metadata: withAiActionStrategyTags({
                         interactionId: current.id,
                         targetPlayerId,
                         statusId,
-                    },
+                    }, buildStatusInteractionStrategyTags(state, statusId)),
                 }));
             });
         }
@@ -786,12 +846,12 @@ const buildInteractionActions = (
                     type: 'TRANSFER_STATUS',
                     payload: { fromPlayerId: sourcePlayerId, toPlayerId: targetPlayerId, statusId },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     interactionId: current.id,
                     fromPlayerId: sourcePlayerId,
                     toPlayerId: targetPlayerId,
                     statusId,
-                },
+                }, buildStatusInteractionStrategyTags(state, statusId)),
             }));
         }
 
@@ -821,11 +881,11 @@ const buildInteractionActions = (
                 })),
                 { type: 'SYS_INTERACTION_CONFIRM', payload: { interactionId } },
             ],
-            metadata: {
+            metadata: withAiActionStrategyTags({
                 interactionId,
                 dieId: selection[0]?.id,
                 dieIds: selection.map((die) => die.id),
-            },
+            }, ['dice-setup']),
         }));
     }
 
@@ -855,7 +915,7 @@ const buildInteractionActions = (
                         })),
                         { type: 'SYS_INTERACTION_CONFIRM', payload: { interactionId } },
                     ],
-                    metadata: {
+                    metadata: withAiActionStrategyTags({
                         interactionId,
                         dieId: sourceDie?.id,
                         dieIds: diceIds,
@@ -864,7 +924,7 @@ const buildInteractionActions = (
                         mode,
                         sourceDieId: sourceDie?.id,
                         targetDieIds: targetDice.map((die) => die.id),
-                    },
+                    }, ['dice-setup']),
                 };
             });
         }
@@ -894,14 +954,14 @@ const buildInteractionActions = (
                     })),
                     { type: 'SYS_INTERACTION_CONFIRM', payload: { interactionId } },
                 ],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     interactionId,
                     dieId: selection[0]?.id,
                     dieIds: selection.map((die) => die.id),
                     newValue: newValues[0],
                     newValues,
                     mode,
-                },
+                }, ['dice-setup']),
             };
         });
     }
@@ -967,23 +1027,34 @@ const buildSetupActions = (state: DiceThroneState, playerId: PlayerId): AiLegalA
     return actions;
 };
 
+const hasPendingTokenResponseForPlayer = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+): boolean => {
+    const pendingDamage = state.core.pendingDamage as PendingDamage | undefined;
+    return Boolean(pendingDamage && pendingDamage.responderId === playerId);
+};
+
 const buildResponseActions = (state: DiceThroneState, playerId: PlayerId, phase: TurnPhase): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
     const responseWindow = state.sys.responseWindow?.current;
     const player = state.core.players[playerId];
-    if (!responseWindow || !player) return actions;
+    const hasPendingTokenResponse = hasPendingTokenResponseForPlayer(state, playerId);
+    if (!player || (!responseWindow && !hasPendingTokenResponse)) return actions;
 
-    const windowType = responseWindow.windowType as DtResponseWindowType | undefined;
+    const windowType = responseWindow?.windowType as DtResponseWindowType | undefined;
     const pendingDamage = state.core.pendingDamage as PendingDamage | undefined;
 
-    appendAction(actions, state, playerId, {
-        actionId: createAiLegalActionId('response', 'pass'),
-        kind: 'response-pass',
-        label: '跳过响应',
-        commands: [{ type: 'RESPONSE_PASS', payload: {} }],
-    });
+    if (responseWindow) {
+        appendAction(actions, state, playerId, {
+            actionId: createAiLegalActionId('response', 'pass'),
+            kind: 'response-pass',
+            label: '跳过响应',
+            commands: [{ type: 'RESPONSE_PASS', payload: {} }],
+        });
+    }
 
-    if (pendingDamage && pendingDamage.responderId === playerId) {
+    if (hasPendingTokenResponse && pendingDamage) {
         const tokenTiming = pendingDamage.responseType;
         const usableTokens = tokenTiming
             ? getUsableTokensForTiming(state.core, playerId, tokenTiming)
@@ -997,7 +1068,7 @@ const buildResponseActions = (state: DiceThroneState, playerId: PlayerId, phase:
                     type: 'USE_TOKEN',
                     payload: { tokenId: token.id, amount: 1 },
                 }],
-                metadata: { tokenId: token.id },
+                metadata: withAiActionStrategyTags({ tokenId: token.id }, ['survive-response']),
             });
         }
 
@@ -1009,23 +1080,101 @@ const buildResponseActions = (state: DiceThroneState, playerId: PlayerId, phase:
         });
     }
 
-    for (const card of player.hand) {
-        if (!isCardPlayableInResponseWindow(state.core, playerId, card, windowType ?? 'afterCardPlayed', phase)) {
-            continue;
+    if (responseWindow) {
+        for (const card of player.hand) {
+            if (!isCardPlayableInResponseWindow(state.core, playerId, card, windowType ?? 'afterCardPlayed', phase)) {
+                continue;
+            }
+            appendAction(actions, state, playerId, {
+                actionId: createAiLegalActionId('response', 'play-card', card.id),
+                kind: 'response-play-card',
+                label: `打出 ${card.id}`,
+                commands: [{
+                    type: 'PLAY_CARD',
+                    payload: { cardId: card.id },
+                }],
+                metadata: withAiActionStrategyTags({ cardId: card.id }, buildCardStrategyTags(card, 'response-play-card')),
+            });
         }
-        appendAction(actions, state, playerId, {
-            actionId: createAiLegalActionId('response', 'play-card', card.id),
-            kind: 'response-play-card',
-            label: `打出 ${card.id}`,
-            commands: [{
-                type: 'PLAY_CARD',
-                payload: { cardId: card.id },
-            }],
-            metadata: { cardId: card.id },
-        });
     }
 
     return actions;
+};
+
+const getResponseCardShieldValue = (card: AbilityCard): number => {
+    return card.effects?.reduce((sum, effect) => {
+        if (effect.action?.type !== 'grantDamageShield') return sum;
+        return sum + Number(effect.action.value ?? effect.action.shieldValue ?? 0);
+    }, 0) ?? 0;
+};
+
+const scoreResponseDefenseAction = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+    action: AiLegalAction,
+): number | null => {
+    const pendingDamage = state.core.pendingDamage as PendingDamage | undefined;
+    const player = state.core.players[playerId];
+    if (!pendingDamage || pendingDamage.responderId !== playerId || !player) return null;
+
+    const incomingDamage = pendingDamage.currentDamage ?? 0;
+    const hp = player.resources[RESOURCE_IDS.HP] ?? 0;
+    const lethal = incomingDamage >= hp;
+
+    if (action.kind === 'token-response') {
+        const tokenId = typeof action.metadata?.tokenId === 'string' ? action.metadata.tokenId : null;
+        if (!tokenId) return null;
+        const tokenDef = state.core.tokenDefinitions?.find((token) => token.id === tokenId);
+        const effect = tokenDef?.activeUse?.effect;
+        if (!effect) return null;
+
+        if (effect.type === 'modifyDamageReceived') {
+            const prevented = Math.max(0, -getTokenEffectValue(effect, 1, effect.value ?? 0));
+            const remainingDamage = Math.max(0, incomingDamage - prevented);
+            let score = prevented * 55;
+            if (remainingDamage < hp) {
+                score += lethal ? 150 : 80;
+            }
+            return score;
+        }
+
+        if (effect.type === 'rollToNegate') {
+            const range = effect.rollSuccess?.range;
+            if (!range) return lethal ? 120 : 45;
+            const [min, max] = range;
+            const successFaces = Math.max(0, max - min + 1);
+            const successRate = Math.min(1, successFaces / 6);
+            const expectedPrevent = incomingDamage * successRate;
+            let score = expectedPrevent * 42 + successRate * 30;
+            if (lethal) {
+                score += 110 * successRate + 25;
+            }
+            return score;
+        }
+
+        return null;
+    }
+
+    if (action.kind === 'response-play-card') {
+        const cardId = typeof action.metadata?.cardId === 'string'
+            ? action.metadata.cardId
+            : null;
+        if (!cardId) return null;
+        const card = findPlayerHandCard(state, playerId, cardId);
+        if (!card) return null;
+
+        const shieldValue = getResponseCardShieldValue(card);
+        const drawCount = getCardDrawCount(card);
+        const prevented = Math.min(incomingDamage, shieldValue);
+        const remainingDamage = Math.max(0, incomingDamage - prevented);
+        let score = prevented * 60 + drawCount * 18;
+        if (remainingDamage < hp) {
+            score += lethal ? 180 : 90;
+        }
+        return score;
+    }
+
+    return null;
 };
 
 const buildBonusDiceActions = (state: DiceThroneState, playerId: PlayerId): AiLegalAction[] => {
@@ -1042,7 +1191,7 @@ const buildBonusDiceActions = (state: DiceThroneState, playerId: PlayerId): AiLe
                 type: 'REROLL_BONUS_DIE',
                 payload: { dieIndex: die.index },
             }],
-            metadata: { dieIndex: die.index },
+            metadata: withAiActionStrategyTags({ dieIndex: die.index }, ['dice-setup']),
         });
     }
 
@@ -1051,6 +1200,7 @@ const buildBonusDiceActions = (state: DiceThroneState, playerId: PlayerId): AiLe
         kind: 'skip-bonus-dice-reroll',
         label: '确认奖励骰',
         commands: [{ type: 'SKIP_BONUS_DICE_REROLL', payload: {} }],
+        metadata: withAiActionStrategyTags({}, ['dice-setup']),
     });
 
     return actions;
@@ -1077,7 +1227,7 @@ const buildPurifyActions = (state: DiceThroneState, playerId: PlayerId): AiLegal
                 type: 'USE_PURIFY',
                 payload: { statusId },
             }],
-            metadata: { statusId },
+            metadata: withAiActionStrategyTags({ statusId }, ['purify-control', 'survive-response']),
         });
     }
 
@@ -1111,11 +1261,11 @@ const buildPassiveActions = (state: DiceThroneState, playerId: PlayerId, phase: 
                                     targetDieId: die.id,
                                 },
                             }],
-                            metadata: {
+                            metadata: withAiActionStrategyTags({
                                 passiveId: passive.id,
                                 actionIndex,
                                 targetDieId: die.id,
-                            },
+                            }, ['dice-setup']),
                         });
                     });
                 return;
@@ -1132,10 +1282,10 @@ const buildPassiveActions = (state: DiceThroneState, playerId: PlayerId, phase: 
                         actionIndex,
                     },
                 }],
-                metadata: {
+                metadata: withAiActionStrategyTags({
                     passiveId: passive.id,
                     actionIndex,
-                },
+                }, passiveAction.type === 'drawCard' ? ['economy'] : []),
             });
         });
     }
@@ -1158,7 +1308,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                     type: 'DISCARD_CARD',
                     payload: { cardId: card.id },
                 }],
-                metadata: { cardId: card.id },
+                metadata: withAiActionStrategyTags({ cardId: card.id }, buildCardStrategyTags(card, 'discard-card')),
             });
         }
     }
@@ -1169,6 +1319,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
             kind: 'roll-dice',
             label: '掷骰',
             commands: [{ type: 'ROLL_DICE', payload: {} }],
+            metadata: withAiActionStrategyTags({}, ['dice-setup']),
         });
     }
 
@@ -1183,12 +1334,12 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                         type: 'TOGGLE_DIE_LOCK',
                         payload: { dieId: die.id },
                     }],
-                    metadata: {
+                    metadata: withAiActionStrategyTags({
                         dieId: die.id,
                         isKept: die.isKept,
                         dieValue: die.value,
                         dieSymbol: die.symbol,
-                    },
+                    }, ['dice-setup']),
                 });
             }
         }
@@ -1221,7 +1372,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                     type: 'SELECT_ABILITY',
                     payload: { abilityId },
                 }],
-                metadata: { abilityId },
+                metadata: withAiActionStrategyTags({ abilityId }, buildAbilityStrategyTags(state, playerId, abilityId)),
             });
         }
 
@@ -1230,6 +1381,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
             kind: 'confirm-roll',
             label: '确认骰面',
             commands: [{ type: 'CONFIRM_ROLL', payload: {} }],
+            metadata: withAiActionStrategyTags({}, ['dice-setup']),
         });
     }
 
@@ -1248,7 +1400,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                         type: 'PLAY_UPGRADE_CARD',
                         payload: { cardId: card.id, targetAbilityId },
                     }],
-                    metadata: { cardId: card.id, targetAbilityId },
+                    metadata: withAiActionStrategyTags({ cardId: card.id, targetAbilityId }, buildCardStrategyTags(card, 'play-upgrade-card')),
                 });
                 continue;
             }
@@ -1263,7 +1415,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                     type: 'PLAY_CARD',
                     payload: { cardId: card.id },
                 }],
-                metadata: { cardId: card.id },
+                metadata: withAiActionStrategyTags({ cardId: card.id }, buildCardStrategyTags(card, 'play-card')),
             });
         }
 
@@ -1277,7 +1429,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                         type: 'SELL_CARD',
                         payload: { cardId: card.id },
                     }],
-                    metadata: { cardId: card.id },
+                    metadata: withAiActionStrategyTags({ cardId: card.id }, buildCardStrategyTags(card, 'sell-card')),
                 });
             }
         }
@@ -1288,6 +1440,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                 kind: 'undo-sell-card',
                 label: '撤销卖牌',
                 commands: [{ type: 'UNDO_SELL_CARD', payload: {} }],
+                metadata: withAiActionStrategyTags({}, ['economy']),
             });
         }
     }
@@ -1304,6 +1457,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
                 type: DICETHRONE_COMMANDS.PAY_TO_REMOVE_KNOCKDOWN,
                 payload: {},
             }],
+            metadata: withAiActionStrategyTags({}, ['survive-response']),
         });
     }
 
@@ -1313,7 +1467,7 @@ const buildPhaseActions = (state: DiceThroneState, playerId: PlayerId, phase: Tu
             kind: 'advance-phase',
             label: `推进到 ${getNextPhase(state.core, phase)}`,
             commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
-            metadata: { phase, nextPhase: getNextPhase(state.core, phase) },
+            metadata: withAiActionStrategyTags({ phase, nextPhase: getNextPhase(state.core, phase) }, []),
         });
     }
 
@@ -1346,7 +1500,7 @@ export function buildDiceThroneAiLegalActions(args: {
         return bonusDiceActions;
     }
 
-    if (state.sys.responseWindow?.current) {
+    if (state.sys.responseWindow?.current || hasPendingTokenResponseForPlayer(state, args.playerId)) {
         return buildResponseActions(state, args.playerId, phase);
     }
 
@@ -1362,12 +1516,149 @@ const getContextPhase = (context: AiDecisionContext): TurnPhase => {
     return (state.sys.phase ?? state.sys.flow?.phase ?? 'setup') as TurnPhase;
 };
 
+const pushDiceThroneStrategyTag = (
+    tags: DiceThroneStrategyTag[],
+    tag: DiceThroneStrategyTag,
+): void => {
+    if (!tags.includes(tag)) {
+        tags.push(tag);
+    }
+};
+
+const addDiceThroneStrategyWeight = (
+    weights: Partial<Record<DiceThroneStrategyTag, number>>,
+    tag: DiceThroneStrategyTag,
+    value: number,
+): void => {
+    weights[tag] = Number(((weights[tag] ?? 0) + value).toFixed(3));
+};
+
 const findPlayerHandCard = (
     state: DiceThroneState,
     playerId: PlayerId,
     cardId: string,
 ): AbilityCard | null => {
     return state.core.players[playerId]?.hand.find((card) => card.id === cardId) ?? null;
+};
+
+const getDiceThroneStrategyProfile = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+    phase: TurnPhase,
+): AiStrategyProfile<DiceThroneStrategyTag> => {
+    const player = state.core.players[playerId];
+    if (!player) {
+        return { tags: [], tagWeights: {}, summary: [] };
+    }
+
+    const hp = player.resources[RESOURCE_IDS.HP] ?? 0;
+    const cp = player.resources[RESOURCE_IDS.CP] ?? 0;
+    const handSize = player.hand.length;
+    const pendingDamage = state.core.pendingDamage as PendingDamage | undefined;
+    const incomingDamage = pendingDamage?.targetPlayerId === playerId
+        ? pendingDamage.currentDamage ?? 0
+        : 0;
+    const pressured = incomingDamage >= Math.max(4, Math.floor(hp / 2));
+    const lethal = incomingDamage >= hp && hp > 0;
+    const opponentIds = getOpponentIds(state, playerId);
+    const lowestOpponentHp = opponentIds.reduce((best, opponentId) => {
+        const opponentHp = state.core.players[opponentId]?.resources[RESOURCE_IDS.HP] ?? 999;
+        return Math.min(best, opponentHp);
+    }, 999);
+    const weights: Partial<Record<DiceThroneStrategyTag, number>> = {};
+    const summary: string[] = [];
+
+    if (lethal) {
+        addDiceThroneStrategyWeight(weights, 'survive-response', 2.6);
+        addDiceThroneStrategyWeight(weights, 'purify-control', 1.1);
+        summary.push('先保命');
+    } else if (pressured) {
+        addDiceThroneStrategyWeight(weights, 'survive-response', 2.1);
+        addDiceThroneStrategyWeight(weights, 'purify-control', 0.9);
+        summary.push('先稳住血线');
+    } else {
+        addDiceThroneStrategyWeight(weights, 'damage-race', 1.2);
+    }
+
+    if (lowestOpponentHp <= 8) {
+        addDiceThroneStrategyWeight(weights, 'damage-race', 1.4);
+        summary.push('逼近斩杀线');
+    }
+
+    if (phase === 'offensiveRoll' || phase === 'defensiveRoll') {
+        addDiceThroneStrategyWeight(weights, 'dice-setup', phase === 'offensiveRoll' ? 2 : 1.5);
+        summary.push('优先做骰面规划');
+    }
+
+    if (phase === 'main1' || phase === 'main2') {
+        if (cp <= 1 || handSize <= 2) {
+            addDiceThroneStrategyWeight(weights, 'economy', 1.4);
+            summary.push('主阶段优先补资源');
+        }
+        if (handSize > 0) {
+            addDiceThroneStrategyWeight(weights, 'upgrade-engine', 1.1);
+        }
+    }
+
+    if (hasDebuffs(state.core, playerId)) {
+        addDiceThroneStrategyWeight(weights, 'purify-control', 1.2);
+    }
+
+    const tags = (Object.entries(weights) as Array<[DiceThroneStrategyTag, number]>)
+        .filter(([, weight]) => weight >= 0.9)
+        .map(([tag]) => tag);
+
+    return {
+        tags,
+        tagWeights: weights,
+        summary: summary.length > 0 ? [...new Set(summary)] : ['平衡进攻、资源与防守'],
+    };
+};
+
+const buildCardStrategyTags = (
+    card: AbilityCard,
+    actionKind: AiLegalAction['kind'],
+): DiceThroneStrategyTag[] => {
+    const tags: DiceThroneStrategyTag[] = [];
+
+    if (actionKind === 'play-upgrade-card') {
+        pushDiceThroneStrategyTag(tags, 'upgrade-engine');
+        return tags;
+    }
+
+    if (actionKind === 'sell-card' || actionKind === 'discard-card') {
+        pushDiceThroneStrategyTag(tags, 'economy');
+        return tags;
+    }
+
+    if (card.isAttackModifier) {
+        pushDiceThroneStrategyTag(tags, 'damage-race');
+    }
+    if (getCardDrawCount(card) > 0) {
+        pushDiceThroneStrategyTag(tags, 'economy');
+    }
+
+    return tags;
+};
+
+const buildAbilityStrategyTags = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+    abilityId: string,
+): DiceThroneStrategyTag[] => {
+    const tags: DiceThroneStrategyTag[] = [];
+    const match = findPlayerAbility(state.core, playerId, abilityId);
+    if (!match) return tags;
+
+    if (match.ability.type === 'offensive') {
+        pushDiceThroneStrategyTag(tags, 'damage-race');
+        pushDiceThroneStrategyTag(tags, 'dice-setup');
+    }
+    if (match.ability.type === 'defensive' || match.ability.tags?.includes('defensive')) {
+        pushDiceThroneStrategyTag(tags, 'survive-response');
+        pushDiceThroneStrategyTag(tags, 'dice-setup');
+    }
+    return tags;
 };
 
 const diceThroneKindScorer = createActionKindScorer('kind-weight', {
@@ -1660,6 +1951,45 @@ const interactionValueScorer: LocalAiActionScorer = {
             };
         }
 
+        if (action.kind === 'interaction-remove-status') {
+            const targetPlayerId = typeof action.metadata?.targetPlayerId === 'string'
+                ? action.metadata.targetPlayerId
+                : null;
+            const statusId = typeof action.metadata?.statusId === 'string'
+                ? action.metadata.statusId
+                : null;
+            if (!targetPlayerId || !statusId) return null;
+
+            const score = scoreRemoveSingleStatusTarget(state, context.playerId, targetPlayerId, statusId);
+            if (score === 0) return null;
+
+            return {
+                score,
+                reason: '移除状态会优先清理己方减益或敌方关键增益',
+            };
+        }
+
+        if (action.kind === 'interaction-transfer-status') {
+            const fromPlayerId = typeof action.metadata?.fromPlayerId === 'string'
+                ? action.metadata.fromPlayerId
+                : null;
+            const toPlayerId = typeof action.metadata?.toPlayerId === 'string'
+                ? action.metadata.toPlayerId
+                : null;
+            const statusId = typeof action.metadata?.statusId === 'string'
+                ? action.metadata.statusId
+                : null;
+            if (!fromPlayerId || !toPlayerId || !statusId) return null;
+
+            const score = scoreTransferStatusTarget(state, context.playerId, fromPlayerId, toPlayerId, statusId);
+            if (score === 0) return null;
+
+            return {
+                score,
+                reason: '转移状态会优先把己方减益甩给敌方，或把敌方增益剥离出去',
+            };
+        }
+
         return null;
     },
 };
@@ -1858,9 +2188,12 @@ const criticalResponseScorer: LocalAiActionScorer = {
 
         if (action.kind === 'token-response' || action.kind === 'response-play-card') {
             if (!pressured) return null;
+            const defenseScore = scoreResponseDefenseAction(state, context.playerId, action) ?? 0;
             return {
-                score: lethal ? 185 : 110,
-                reason: lethal ? '存在致命伤害，优先用响应保命' : '当前伤害较高，优先找减伤/保命响应',
+                score: (lethal ? 185 : 110) + defenseScore,
+                reason: lethal
+                    ? '存在致命伤害，优先选择更能保命的响应'
+                    : '当前伤害较高，优先选择减伤收益更高的响应',
             };
         }
 
@@ -1921,6 +2254,46 @@ const phaseTempoScorer: LocalAiActionScorer = {
 
         return null;
     },
+};
+
+const strategyProfileScorer = createProfileAwareActionScorer<DiceThroneStrategyTag>({
+    id: 'strategy-profile-fit',
+    allowedKinds: [
+        'token-response',
+        'response-play-card',
+        'use-purify',
+        'pay-remove-knockdown',
+        'bonus-die-reroll',
+        'skip-bonus-dice-reroll',
+        'use-passive-ability',
+        'roll-dice',
+        'toggle-die-lock',
+        'select-ability',
+        'confirm-roll',
+        'play-upgrade-card',
+        'play-card',
+        'sell-card',
+        'undo-sell-card',
+        'discard-card',
+        'interaction-remove-status',
+        'interaction-transfer-status',
+    ],
+    getProfile(context) {
+        const state = context.visibleState as DiceThroneState;
+        return getDiceThroneStrategyProfile(state, context.playerId, getContextPhase(context));
+    },
+});
+
+const DICETHRONE_PROJECTABLE_ACTION_KINDS = new Set<AiLegalAction['kind']>([
+    'play-upgrade-card',
+    'play-card',
+    'sell-card',
+    'advance-phase',
+    'select-ability',
+]);
+
+const isDiceThroneProjectableActionKind = (kind: AiLegalAction['kind']): boolean => {
+    return DICETHRONE_PROJECTABLE_ACTION_KINDS.has(kind);
 };
 
 const getEvaluatorScale = (context: AiDecisionContext): number => {
@@ -2054,6 +2427,10 @@ const projectDiceThroneAction = (args: {
     context: AiDecisionContext;
     action: AiLegalAction;
 }): { score: number; reason: string; metadata?: Record<string, unknown> } | null => {
+    if (!isDiceThroneProjectableActionKind(args.action.kind)) {
+        return null;
+    }
+
     const state = args.context.visibleState as DiceThroneState;
     const player = state.core.players[args.context.playerId];
     if (!player) return null;
@@ -2177,11 +2554,25 @@ const diceThroneLocalPolicyScorers: LocalAiActionScorer[] = [
     criticalResponseScorer,
     statusScorer,
     phaseTempoScorer,
+    strategyProfileScorer,
 ];
 
 const defaultLocalPolicy = createLookaheadLocalAiPolicy({
     id: 'baseline',
     scorers: diceThroneLocalPolicyScorers,
+    rankProjectionCandidate({ context, action }) {
+        if (!isDiceThroneProjectableActionKind(action.kind)) {
+            return 0;
+        }
+        const state = context.visibleState as DiceThroneState;
+        const profile = getDiceThroneStrategyProfile(state, context.playerId, getContextPhase(context));
+        const fit = scoreActionAgainstStrategyProfile({
+            profile,
+            actionTags: getAiActionStrategyTags<DiceThroneStrategyTag>(action),
+            weightMultiplier: 12,
+        });
+        return fit?.score ?? 0;
+    },
     projectAction({ context, action }) {
         return projectDiceThroneAction({ context, action });
     },

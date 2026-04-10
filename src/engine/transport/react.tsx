@@ -59,6 +59,7 @@ import {
 } from '../ai';
 import { persistLocalMatchSnapshot, readLocalMatchSnapshot } from './localSession';
 import { onAppVisible } from '../../lib/mobile/appVisibility';
+import { buildAiProgressMarker } from './onlineAiRecovery';
 
 import { createCommandBatcher, type CommandBatcher } from './latency/commandBatcher';
 import { EventStreamRollbackContext, type EventStreamRollbackValue } from '../hooks/EventStreamRollbackContext';
@@ -66,6 +67,7 @@ import { setUndoAiSeatIds } from '../systems/UndoSystem';
 
 // re-export 供外部使用（测试等场景）
 export { filterPlayedEvents };
+export { buildAiProgressMarker };
 
 // ============================================================================
 // Context 类型
@@ -89,38 +91,6 @@ interface GameClientContextValue {
 }
 
 const GameClientContext = createContext<GameClientContextValue | null>(null);
-
-export function buildAiProgressMarker(state: MatchState<unknown>): string {
-    const turnNumber = typeof state.sys?.turnNumber === 'number' ? state.sys.turnNumber : '';
-    const phase = typeof state.sys?.phase === 'string' ? state.sys.phase : '';
-    const eventStreamNextId = typeof state.sys?.eventStream?.nextId === 'number'
-        ? state.sys.eventStream.nextId
-        : '';
-    const interactionId = typeof state.sys?.interaction?.current?.id === 'string'
-        ? state.sys.interaction.current.id
-        : '';
-    const responderIndex = typeof state.sys?.responseWindow?.current?.currentResponderIndex === 'number'
-        ? state.sys.responseWindow.current.currentResponderIndex
-        : '';
-    const currentPlayerId = (() => {
-        const core = state.core as Record<string, unknown>;
-        if (typeof core.activePlayerId === 'string') return core.activePlayerId;
-        if (typeof core.currentPlayer === 'string') return core.currentPlayer;
-        if (Array.isArray(core.turnOrder) && typeof core.currentPlayerIndex === 'number') {
-            return (core.turnOrder as string[])[core.currentPlayerIndex as number] ?? '';
-        }
-        return '';
-    })();
-
-    return [
-        turnNumber,
-        phase,
-        eventStreamNextId,
-        interactionId,
-        responderIndex,
-        currentPlayerId,
-    ].join('|');
-}
 
 export function shouldRetryLocalAiAttemptAfterDispatch(args: {
     cancelled: boolean;
@@ -425,18 +395,6 @@ export function GameProvider({
                 // 实时刷新交互选项（如果策略是 realtime）
                 const refreshedState = refreshInteractionOptions(finalState);
 
-                // ── 增量诊断日志：交互状态变更 ──
-                const interactionCurrent = (refreshedState as MatchState<unknown>).sys?.interaction?.current;
-                if (interactionCurrent || meta?.stateID !== undefined) {
-                    console.log('[GameProvider:onStateUpdate]', {
-                        stateID: meta?.stateID ?? '-',
-                        interactionId: interactionCurrent?.id ?? 'none',
-                        interactionPlayer: interactionCurrent?.playerId ?? '-',
-                        sourceId: interactionCurrent?.sourceId ?? '-',
-                        ts: Date.now(),
-                    });
-                }
-                
                 setState(refreshedState);
                 setMatchPlayers(players);
             },
@@ -492,19 +450,6 @@ export function GameProvider({
     }, []);
 
     const dispatch = useCallback((type: string, payload: unknown) => {
-        // ── 增量诊断日志：交互/响应窗口命令 ──
-        const isInteractionCmd = type.startsWith('SYS_INTERACTION_') || type === 'RESPONSE_PASS';
-        if (isInteractionCmd) {
-            const pl = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {};
-            console.log('[GameProvider:dispatch]', {
-                type,
-                optionId: pl.optionId ?? pl.optionIds ?? '-',
-                playerId,
-                stateID: lastConfirmedStateIDRef.current,
-                ts: Date.now(),
-            });
-        }
-
         // 内部：走 optimistic engine + batcher/sendCommand 路径
         const dispatchToNetwork = (cmdType: string, cmdPayload: unknown) => {
             // 1. 乐观更新
@@ -549,8 +494,6 @@ export function GameProvider({
         harness.command.register(async (command) => {
             dispatch(command.type, command.payload);
         });
-        
-        console.log('[GameProvider] 测试工具访问器已注册');
     }, [state, dispatch]);
 
     const value = useMemo<GameClientContextValue>(() => ({
@@ -693,13 +636,6 @@ export function LocalGameProvider({
     followCurrentTurnPlayer = false,
     persistSession = false,
 }: LocalGameProviderProps) {
-    console.log('[LocalGameProvider] 组件渲染:', {
-        numPlayers,
-        seed,
-        playerId: localPlayerId,
-        hasSetupData: setupData != null,
-    });
-    
     const playerIds = useMemo(
         () => Array.from({ length: numPlayers }, (_, i) => String(i)),
         [numPlayers],
@@ -727,13 +663,7 @@ export function LocalGameProvider({
     }, [onCommandRejected]);
 
     const [state, setState] = useState<MatchState<unknown>>(() => {
-        console.log('[LocalGameProvider] 初始化状态');
         if (persistedSnapshot?.state) {
-            console.log('[LocalGameProvider] 已恢复本地对局快照:', {
-                gameId: config.gameId,
-                seed,
-                randomCursor: persistedSnapshot.randomCursor,
-            });
             return setUndoAiSeatIds(persistedSnapshot.state, aiSeatIds);
         }
         const random = initialRandom;
@@ -750,8 +680,6 @@ export function LocalGameProvider({
         
         // 优先级：skipInitialization > skipFactionSelect > 正常流程
         if (testConfig?.skipInitialization) {
-            console.log('[LocalGameProvider] skipInitialization=true，创建最小化空白状态');
-            
             // 创建最小化的空白状态（仅包含必要的框架结构）
             const core: any = {
                 players: {},
@@ -783,9 +711,6 @@ export function LocalGameProvider({
             // 直接进入 playCards 阶段（测试会通过 setupScene 注入完整状态）。
             // SystemState 已统一使用顶层 `sys.phase`，这里不能再写历史遗留的 `sys.flow.phase`。
             sys.phase = 'playCards';
-            
-            console.log('[LocalGameProvider] 最小化空白状态已创建，等待测试注入状态');
-            
             return setUndoAiSeatIds({ sys, core }, aiSeatIds);
         }
         
@@ -794,8 +719,6 @@ export function LocalGameProvider({
                                        testConfig.player0Factions.length > 0;
         
         if (shouldSkipFactionSelect) {
-            console.log('[LocalGameProvider] skipFactionSelect=true，同步执行派系选择');
-            
             // 调用 domain.setup 创建初始状态
             const core = config.domain.setup(playerIds, random, setupData) as any;
             const sys = createInitialSystemState(
@@ -826,9 +749,7 @@ export function LocalGameProvider({
                     console.warn(`[LocalGameProvider] 玩家 ${playerId} 的第 ${factionIndex + 1} 个派系未指定，跳过`);
                     continue;
                 }
-                
-                console.log(`[LocalGameProvider] 同步执行派系选择: 玩家 ${playerId}, 派系 ${factionId}`);
-                
+
                 const command: Command = {
                     type: 'su:select_faction',
                     playerId,
@@ -852,15 +773,6 @@ export function LocalGameProvider({
                 
                 currentState = result.state;
             }
-            
-            console.log('[LocalGameProvider] 派系选择完成，游戏状态已就绪:', {
-                phase: currentState.sys.flow?.phase,
-                hasFlow: !!currentState.sys.flow,
-                sysKeys: Object.keys(currentState.sys),
-                player0Hand: (currentState.core as any).players?.['0']?.hand?.length,
-                player1Hand: (currentState.core as any).players?.['1']?.hand?.length,
-            });
-            
             return setUndoAiSeatIds(currentState, aiSeatIds);
         }
         
@@ -870,11 +782,6 @@ export function LocalGameProvider({
             playerIds,
             config.systems as EngineSystem[],
         );
-        console.log('[LocalGameProvider] 状态初始化完成:', {
-            hasCore: !!core,
-            hasSys: !!sys,
-            phase: sys?.flow?.phase,
-        });
         return setUndoAiSeatIds({ sys, core }, aiSeatIds);
     });
     const stateRef = useRef(state);
@@ -1132,20 +1039,13 @@ export function LocalGameProvider({
     // 注册测试工具访问器（仅在测试环境生效）
     useEffect(() => {
         const isTest = isTestEnvironment();
-        console.log('[LocalGameProvider] useEffect 触发:', {
-            isTestEnvironment: isTest,
-            hasWindow: typeof window !== 'undefined',
-            hasFlag: typeof window !== 'undefined' && !!(window as any).__E2E_TEST_MODE__,
-            stateExists: !!state,
-        });
-        
         if (!isTest) return;
-        
+
         // 初始化 TestHarness（挂载到 window）
         TestHarness.init();
-        
+
         const harness = TestHarness.getInstance();
-        
+
         // 注册状态访问器（本地模式可直接读写当前快照）
         // 本地模式没有 playerView 过滤，因此允许 TestHarness 直接注入状态。
         harness.state.register(
@@ -1161,8 +1061,6 @@ export function LocalGameProvider({
         harness.command.register(async (command) => {
             dispatch(command.type, command.payload);
         });
-        
-        console.log('[LocalGameProvider] 测试工具访问器已注册');
     }, [state, dispatch]);
 
     // E2E 测试支持：在本地/教程模式下暴露 dispatch 和 state 到 window，供 Playwright 直接操作
@@ -1298,7 +1196,6 @@ class BoardErrorBoundary extends React.Component<
             console.warn(`[BoardBridge] 检测到可恢复错误，将在 ${delay}ms 后重试 (${this.state.retryCount + 1}/${this.maxRetries})`);
             
             this.retryTimer = setTimeout(() => {
-                console.log(`[BoardBridge] 重试渲染 (${this.state.retryCount + 1}/${this.maxRetries})`);
                 this.setState(prev => ({
                     hasError: false,
                     error: undefined,
@@ -1317,7 +1214,6 @@ class BoardErrorBoundary extends React.Component<
     componentDidUpdate(prevProps: { children: React.ReactNode }) {
         // 如果 children 变化，重置错误状态和重试计数
         if (this.state.hasError && prevProps.children !== this.props.children) {
-            console.log('[BoardBridge] children 变化，重置错误状态');
             this.setState({ hasError: false, error: undefined, retryCount: 0 });
         }
     }

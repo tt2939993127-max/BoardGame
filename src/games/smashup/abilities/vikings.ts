@@ -11,6 +11,7 @@ import {
     buildAbilityFeedback,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
+    buildPlayerTargetOptions,
     buildStandardDrawEvents,
     createSkipOption,
     findMinionOnBases,
@@ -40,7 +41,7 @@ import { reduce } from '../domain/reduce';
 type PlayerChoice = { targetPlayerId: PlayerId };
 type HandChoice = { cardUid: string; defId: string };
 type MinionChoice = { minionUid: string; baseIndex: number };
-type CastRunesChoice = { topCardUid: string };
+type CastRunesChoice = { topCardUid: string; cardUid?: string; defId?: string };
 type RaidingPartyChoice = { cardUid: string; ownerId: PlayerId; defId: string; type: 'action' | 'minion' } | { skip: true };
 
 function getCurrentDeckTopSnapshotCards<T extends { uid: string; defId: string }>(
@@ -59,7 +60,7 @@ function buildCastTheRunesOrderOptions(
     return getCurrentDeckTopSnapshotCards(state, targetPlayerId, revealedCards).map((card, index) => ({
         id: `card-${index}`,
         label: getCardDef(card.defId)?.name ?? card.defId,
-        value: { topCardUid: card.uid },
+        value: { topCardUid: card.uid, cardUid: card.uid, defId: card.defId },
         _source: 'static' as const,
         displayMode: 'card' as const,
     }));
@@ -164,7 +165,7 @@ function vikingsShieldMaidenOnPlay(ctx: AbilityContext): AbilityResult {
         `vikings_shield_maiden_${ctx.now}`,
         ctx.playerId,
         '盾女：选择另一位玩家，展示其牌库顶的一张牌',
-        [createSkipOption('跳过（不揭示）') as any, ...buildPlayerOptions(opponents)] as any[],
+        [createSkipOption('跳过（不揭示）') as any, ...buildPlayerOptions(opponents, { sourcePlayerId: ctx.playerId, effectIntent: 'inspect' })] as any[],
         { sourceId: 'vikings_shield_maiden', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -240,7 +241,7 @@ function vikingsPillageOnPlay(ctx: AbilityContext): AbilityResult {
         `vikings_pillage_${ctx.now}`,
         ctx.playerId,
         '掠夺：选择另一位玩家，随机拿走其一张手牌',
-        buildPlayerOptions(opponents),
+        buildPlayerOptions(opponents, { sourcePlayerId: ctx.playerId, effectIntent: 'debuff' }),
         { sourceId: 'vikings_pillage', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -257,7 +258,7 @@ function vikingsCastTheRunesOnPlay(ctx: AbilityContext): AbilityResult {
         `vikings_cast_the_runes_player_${ctx.now}`,
         ctx.playerId,
         '掷卢恩符文：选择另一位玩家',
-        buildPlayerOptions(opponents),
+        buildPlayerOptions(opponents, { sourcePlayerId: ctx.playerId, effectIntent: 'inspect' }),
         { sourceId: 'vikings_cast_the_runes_player', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -274,7 +275,7 @@ function vikingsRaidingPartyOnPlay(ctx: AbilityContext): AbilityResult {
         `vikings_raiding_party_player_${ctx.now}`,
         ctx.playerId,
         '突袭队：选择另一位玩家，展示其牌库顶三张牌',
-        buildPlayerOptions(opponents),
+        buildPlayerOptions(opponents, { sourcePlayerId: ctx.playerId, effectIntent: 'inspect' }),
         { sourceId: 'vikings_raiding_party_player', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -350,7 +351,7 @@ function vikingsBaseDrakkarOnMinionPlayed(ctx: BaseAbilityContext): AbilityResul
         `base_drakkar_${ctx.now}`,
         ctx.playerId,
         '德拉卡尔号：选择另一位玩家，展示其牌库顶的一张牌',
-        [createSkipOption('跳过（不揭示）') as any, ...buildPlayerOptions(opponents)] as any[],
+        [createSkipOption('跳过（不揭示）') as any, ...buildPlayerOptions(opponents, { sourcePlayerId: ctx.playerId, effectIntent: 'inspect' })] as any[],
         { sourceId: 'base_drakkar', targetType: 'generic' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
@@ -781,13 +782,19 @@ function buildHandCardOptions(cards: CardInstance[]) {
     }));
 }
 
-function buildPlayerOptions(playerIds: PlayerId[]) {
-    return playerIds.map((targetPlayerId, index) => ({
-        id: `player-${index}`,
-        label: `玩家 ${targetPlayerId}`,
-        value: { targetPlayerId },
-        displayMode: 'button' as const,
-    }));
+function buildPlayerOptions(
+    playerIds: PlayerId[],
+    context: { sourcePlayerId: PlayerId; effectIntent?: 'buff' | 'debuff' | 'inspect' | 'resource' },
+) {
+    return buildPlayerTargetOptions(
+        playerIds.map((targetPlayerId, index) => ({
+            id: `player-${index}`,
+            label: `玩家 ${targetPlayerId}`,
+            targetPlayerId,
+            displayMode: 'button' as const,
+        })),
+        context,
+    );
 }
 
 function buildBaseOptions(state: SmashUpCore) {

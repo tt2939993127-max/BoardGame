@@ -575,7 +575,7 @@ async function injectSamuraiTokenResponseScene(
             ...state,
             sys: {
                 ...state.sys,
-                phase: 'main1',
+                phase: 'offensiveRoll',
                 interaction: {
                     current: undefined,
                     queue: [],
@@ -667,6 +667,146 @@ async function waitForSamuraiTokenResponseScene(
             && Array.isArray(state?.core?.tokenDefinitions)
             && state.core.tokenDefinitions.length > 0;
     }, options, { timeout: 30000, polling: 200 });
+}
+
+async function injectGunslingerLoadedChoiceScene(page: Page): Promise<void> {
+    await page.evaluate(async () => {
+        const harness = (window as any).__BG_TEST_HARNESS__;
+        const state = harness?.state?.get?.();
+        if (!harness || !state) {
+            throw new Error('TestHarness state not ready');
+        }
+
+        harness.dice.setValues([1]);
+
+        const random = {
+            random: () => 0.5,
+            d: (max: number) => Math.min(max, 1),
+            range: (min: number) => min,
+            shuffle: <T,>(array: T[]) => [...array],
+        };
+
+        const [{ initHeroState, ALL_TOKEN_DEFINITIONS }, { TOKEN_IDS }] = await Promise.all([
+            import('/src/games/dicethrone/domain/characters.ts'),
+            import('/src/games/dicethrone/domain/ids.ts'),
+        ]);
+
+        const gunslingerBase = initHeroState('0', 'gunslinger', random as any);
+        const monkBase = initHeroState('1', 'monk', random as any);
+
+        const currentInteraction = {
+            id: 'dt-interaction-gunslinger-loaded-scene',
+            kind: 'simple-choice',
+            playerId: '0',
+            data: {
+                title: 'offensiveRollEndToken.title',
+                sourceId: 'revolver-3',
+                options: [
+                    {
+                        id: 'loaded-option',
+                        label: 'tokens.loaded.name',
+                        value: { tokenId: TOKEN_IDS.LOADED, customId: 'use-loaded', value: 1 },
+                    },
+                    {
+                        id: 'skip-option',
+                        label: 'tokenResponse.skip',
+                        value: { customId: 'skip', value: 0 },
+                    },
+                ],
+            },
+        };
+
+        const nextState = {
+            ...state,
+            sys: {
+                ...state.sys,
+                phase: 'offensiveRoll',
+                interaction: {
+                    current: currentInteraction,
+                    queue: [],
+                },
+            },
+            core: {
+                ...state.core,
+                activePlayerId: '0',
+                hostStarted: true,
+                tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+                selectedCharacters: {
+                    ...(state.core.selectedCharacters ?? {}),
+                    '0': 'gunslinger',
+                    '1': 'monk',
+                },
+                readyPlayers: {
+                    ...(state.core.readyPlayers ?? {}),
+                    '0': true,
+                    '1': true,
+                },
+                players: {
+                    ...state.core.players,
+                    '0': {
+                        ...gunslingerBase,
+                        hand: [],
+                        discard: [],
+                        resources: {
+                            ...gunslingerBase.resources,
+                            cp: 2,
+                            hp: 50,
+                        },
+                        tokens: {
+                            ...gunslingerBase.tokens,
+                            [TOKEN_IDS.LOADED]: 1,
+                        },
+                    },
+                    '1': {
+                        ...monkBase,
+                        hand: [],
+                        discard: [],
+                        resources: {
+                            ...monkBase.resources,
+                            cp: 2,
+                            hp: 50,
+                        },
+                    },
+                },
+                pendingAttack: {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'revolver-3',
+                    damage: 4,
+                    bonusDamage: 0,
+                    attackModifierBonusDamage: 0,
+                    damageResolved: false,
+                    resolvedDamage: 0,
+                    preDefenseResolved: true,
+                    offensiveRollEndTokenResolved: false,
+                },
+                pendingDamage: null,
+                rollCount: 1,
+                rollConfirmed: true,
+                dice: [
+                    { id: 0, value: 1, isKept: false, playerId: '0' },
+                    { id: 1, value: 2, isKept: false, playerId: '0' },
+                    { id: 2, value: 3, isKept: false, playerId: '0' },
+                    { id: 3, value: 4, isKept: false, playerId: '0' },
+                    { id: 4, value: 5, isKept: false, playerId: '0' },
+                ],
+            },
+        };
+
+        harness.state.set(nextState);
+        (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    });
+}
+
+async function waitForGunslingerLoadedChoiceScene(page: Page): Promise<void> {
+    await page.waitForFunction(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        return state?.core?.players?.['0']?.characterId === 'gunslinger'
+            && state?.core?.players?.['0']?.tokens?.loaded === 1
+            && state?.sys?.interaction?.current?.id === 'dt-interaction-gunslinger-loaded-scene'
+            && state?.core?.pendingAttack?.sourceAbilityId === 'revolver-3';
+    }, undefined, { timeout: 30000, polling: 200 });
 }
 
 async function injectGunslingerTheLawInteractionScene(page: Page): Promise<void> {
@@ -875,7 +1015,7 @@ async function injectGunslingerTheLawPlayScene(
             ...state,
             sys: {
                 ...state.sys,
-                phase: 'main1',
+                phase: 'offensiveRoll',
                 interaction: {
                     current: undefined,
                     queue: [],
@@ -1117,6 +1257,42 @@ async function waitForHandCardsFlipped(
     await page.waitForTimeout(300);
 }
 
+async function waitForHandCardFrontFacesReady(
+    page: Page,
+    expectedCount: number,
+    expectedAssetFragment = 'ability-cards.webp',
+): Promise<void> {
+    await page.waitForFunction(({ count, assetFragment }) => {
+        const handArea = document.querySelector('[data-testid="hand-area"]');
+        if (!handArea) return false;
+        const cards = Array.from(handArea.querySelectorAll('[data-card-id]'));
+        if (cards.length !== count) return false;
+
+        return cards.every((card) => {
+            const frontFace = card.querySelector('[data-card-face="front"]');
+            if (!(frontFace instanceof HTMLElement)) return false;
+
+            const previewNode = Array.from(frontFace.querySelectorAll('*')).find((node) => {
+                if (!(node instanceof HTMLElement)) return false;
+                const bgImage = window.getComputedStyle(node).backgroundImage;
+                return Boolean(bgImage) && bgImage !== 'none' && bgImage.includes(assetFragment);
+            });
+
+            if (!(previewNode instanceof HTMLElement)) return false;
+
+            const previewStyle = window.getComputedStyle(previewNode);
+            const previewRect = previewNode.getBoundingClientRect();
+            const faceStyle = window.getComputedStyle(frontFace);
+
+            return previewRect.width > 0
+                && previewRect.height > 0
+                && previewStyle.backgroundImage !== 'none'
+                && !previewStyle.backgroundImage.includes('gradient(')
+                && faceStyle.backfaceVisibility === 'hidden';
+        });
+    }, { count: expectedCount, assetFragment: expectedAssetFragment }, { timeout: 10000, polling: 100 });
+}
+
 test('self watch out should show bonus die spotlight', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
@@ -1227,6 +1403,7 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(3, { timeout: 10000 });
     await waitForHandCardsFlipped(page, 3);
+    await waitForHandCardFrontFacesReady(page, 3);
     await saveLocatorEvidenceScreenshot(
         handArea,
         testInfo,
@@ -1259,6 +1436,7 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
     await waitForHandCardsFlipped(page, 6);
+    await waitForHandCardFrontFacesReady(page, 6);
     await saveLocatorEvidenceScreenshot(
         handArea,
         testInfo,
@@ -1277,11 +1455,93 @@ test('samurai and gunslinger hand area should show corrected hand card images', 
     });
     await expect(handArea.locator('[data-card-id]')).toHaveCount(3, { timeout: 10000 });
     await waitForHandCardsFlipped(page, 3);
+    await waitForHandCardFrontFacesReady(page, 3);
     await saveLocatorEvidenceScreenshot(
         handArea,
         testInfo,
         '12-monk-hand-area-reference',
         '12-monk-hand-area-reference.png',
+    );
+});
+
+test('gunslinger hand area should recover after first atlas load failure without manual refresh', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await clearEvidenceScreenshotsForTest(testInfo);
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+
+    await page.evaluate(() => {
+        (window as any).__BG_ASSET_CACHE__?.preloadedImages?.clear?.();
+        const OriginalImage = window.Image;
+        if ((window as any).__BG_FAIL_GUNSLINGER_ATLAS_PATCHED__) {
+            (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ = 0;
+            return;
+        }
+
+        let failed = false;
+        class FailFirstGunslingerAtlasImage extends OriginalImage {
+            get src() {
+                return super.src;
+            }
+
+            set src(value: string) {
+                if (!failed && typeof value === 'string' && value.includes('/dicethrone/images/gunslinger/compressed/ability-cards.webp')) {
+                    failed = true;
+                    (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ = ((window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ ?? 0) + 1;
+                    window.setTimeout(() => {
+                        this.onerror?.(new Event('error'));
+                    }, 0);
+                    return;
+                }
+                super.src = value;
+            }
+        }
+
+        (window as any).__BG_FAIL_GUNSLINGER_ATLAS_PATCHED__ = true;
+        (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ = 0;
+        (window as any).Image = FailFirstGunslingerAtlasImage;
+    });
+
+    const handArea = page.locator('[data-testid="hand-area"]');
+    await injectHeroHandScreenshotScene(page, {
+        heroId: 'gunslinger',
+        opponentId: 'monk',
+        handCardIds: [
+            'upgrade-fan-the-hammer-2',
+            'upgrade-take-cover-2',
+            'upgrade-deadeye-2',
+            'card-wanted',
+            'card-spin-the-chamber',
+            'card-high-noon',
+        ],
+    });
+    await page.waitForFunction((handCardIds) => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        const handIds = state?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [];
+        return state?.core?.selectedCharacters?.['0'] === 'gunslinger'
+            && handIds.length === handCardIds.length
+            && handCardIds.every((cardId: string, index: number) => handIds[index] === cardId);
+    }, [
+        'upgrade-fan-the-hammer-2',
+        'upgrade-take-cover-2',
+        'upgrade-deadeye-2',
+        'card-wanted',
+        'card-spin-the-chamber',
+        'card-high-noon',
+    ], { timeout: 10000, polling: 200 });
+    await expect(handArea.locator('[data-card-id]')).toHaveCount(6, { timeout: 10000 });
+    await waitForHandCardsFlipped(page, 6);
+    await waitForHandCardFrontFacesReady(page, 6);
+
+    const failCount = await page.evaluate(() => (window as any).__BG_GUNSLINGER_ATLAS_FAIL_COUNT__ ?? 0);
+    expect(failCount).toBe(1);
+
+    await saveLocatorEvidenceScreenshot(
+        handArea,
+        testInfo,
+        '13-gunslinger-hand-area-auto-retry-after-fail',
+        '13-gunslinger-hand-area-auto-retry-after-fail.png',
     );
 });
 
@@ -1745,7 +2005,7 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
     await expect(bonusDieOverlay).toContainText(/samuraiRighteousnessKatana|武士刀：\+2 伤害|Katana:\s*\+2 damage|\+2\s*(伤害|damage)/i, { timeout: 5000 });
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
-    await expect(activeBadge).toContainText('+2', { timeout: 5000 });
+    await expect(activeBadge).toContainText(/攻击修正\s*\+2|Attack Modifier\s*\+2/i, { timeout: 5000 });
     expect(stateAfterPlay.attackModifierBonusDamage).toBe(2);
     expect(stateAfterPlay.totalBonusDamage).toBe(2);
     expect(stateAfterPlay.shame).toBe(0);
@@ -1783,7 +2043,8 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
         return settlement?.displayOnly === true && settlement?.dice?.length === 5;
     }, { timeout: 10000, polling: 200 });
 
-    await expect(bonusDieOverlay).toContainText(/Dice Results/i, { timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/Dice Results|投掷结果/i, { timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/2.*(武士刀|Katana).*1.*(耻辱|Shame).*2.*(反击|Back Strike)/i, { timeout: 5000 });
 
     const stateAfterPlay = await page.evaluate(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
@@ -1835,7 +2096,7 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
 
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
-    await expect(activeBadge).toContainText('+2', { timeout: 5000 });
+    await expect(activeBadge).toContainText(/攻击修正\s*\+2|Attack Modifier\s*\+2/i, { timeout: 5000 });
 
     await page.waitForTimeout(900);
     await game.screenshot('10-samurai-zanshin-vs-paladin', testInfo);
@@ -1856,7 +2117,7 @@ test('samurai honor token should accumulate to +3 after two real clicks', async 
     await disableFabMenu(page);
 
     const attackerTitle = page.getByText(/响应（攻击方）|attacker/i).first();
-    const honorLabel = page.getByText(/^Honor$/).first();
+    const honorLabel = page.getByText(/^荣誉$|^Honor$/).first();
     const useButton = page.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
 
     await expect(attackerTitle).toBeVisible({ timeout: 5000 });
@@ -1901,6 +2162,57 @@ test('samurai honor token should accumulate to +3 after two real clicks', async 
     await game.screenshot('19-samurai-honor-finalized-after-second-use', testInfo);
 });
 
+test('gunslinger loaded token should open single-die spotlight after real choice click', async ({ page, game }, testInfo) => {
+    test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
+
+    await game.openTestGame('dicethrone', {}, DICETHRONE_OPEN_TIMEOUT_MS);
+    await waitForTestHarness(page, 40000);
+    await injectGunslingerLoadedChoiceScene(page);
+    await waitForGunslingerLoadedChoiceScene(page);
+
+    await ensureDebugPanelClosed(page);
+    await disableFabMenu(page);
+
+    const loadedLabel = page.getByText(/^装填$|^Loaded$/i).first();
+    await expect(loadedLabel).toBeVisible({ timeout: 5000 });
+    await game.screenshot('20-gunslinger-loaded-choice-before-use', testInfo);
+
+    await loadedLabel.locator('..').click();
+
+    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
+    const singleDieSpotlight = page.locator('[data-testid="bonus-die-single-reroll-spotlight"]');
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
+    await expect(singleDieSpotlight).toBeVisible({ timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/装填|Loaded|伤害|\+1/i, { timeout: 5000 });
+
+    const stateAfterUse = await page.evaluate(() => {
+        const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+        const settlement = state?.core?.pendingBonusDiceSettlement;
+        return {
+            loaded: state?.core?.players?.['0']?.tokens?.loaded ?? 0,
+            hasChoice: Boolean(state?.sys?.interaction?.current),
+            settlement: settlement
+                ? {
+                    id: settlement.id,
+                    diceCount: settlement.dice?.length ?? 0,
+                    displayOnly: settlement.displayOnly ?? false,
+                    rerollCostTokenId: settlement.rerollCostTokenId ?? null,
+                    dieValue: settlement.dice?.[0]?.value ?? null,
+                    effectKey: settlement.rerollEffectKey ?? null,
+                }
+                : null,
+        };
+    });
+
+    expect(stateAfterUse.loaded).toBe(0);
+    expect(stateAfterUse.hasChoice).toBe(false);
+    expect(stateAfterUse.settlement?.diceCount).toBe(1);
+    expect(stateAfterUse.settlement?.rerollCostTokenId).toBe('loaded');
+    expect(stateAfterUse.settlement?.dieValue).toBe(1);
+
+    await game.screenshot('21-gunslinger-loaded-single-die-spotlight', testInfo);
+});
+
 test('samurai retribution token should retaliate through real click flow', async ({ page, game }, testInfo) => {
     test.setTimeout(DICETHRONE_TEST_TIMEOUT_MS);
 
@@ -1917,7 +2229,7 @@ test('samurai retribution token should retaliate through real click flow', async
     await disableFabMenu(page);
 
     const defenderTitle = page.getByText(/响应（防御方）|defender/i).first();
-    const retributionLabel = page.getByText(/^Back Strike$|^Retribution$/).first();
+    const retributionLabel = page.getByText(/^反击$|^Back Strike$|^Retribution$/).first();
     const useButton = page.getByRole('button', { name: /^(使用|Use|Use Token)(?: x\d+)?$/i }).first();
 
     await expect(defenderTitle).toBeVisible({ timeout: 5000 });

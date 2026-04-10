@@ -27,8 +27,10 @@ import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
 import { areAllSeatsOccupied, hasOccupiedPlayers, isSeatOccupied, isSupportedPlayerCount } from './src/server/matchOccupancy';
 import {
+    createMatchWithOwnerConflictRetry,
     decideDuplicateOwnerRoomAction,
     DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
+    planDuplicateOwnerRoomCreate,
 } from './src/server/duplicateOwnerRooms';
 import { buildUgcServerGames } from './src/server/ugcRegistration';
 import { GameTransportServer } from './src/engine/transport/server';
@@ -630,6 +632,8 @@ router.post('/games/:name/create', async (ctx) => {
 
     const body = ctx.request.body as Record<string, unknown> | undefined;
     const numPlayers = Number(body?.numPlayers ?? 2);
+    // 当前策略：默认不自动删除活跃旧房，只有前端确认后才带 forceReplaceOwnerRoom 重试。
+    const forceReplaceOwnerRoom = body?.forceReplaceOwnerRoom === true;
     const requestedOwnerName = typeof body?.playerName === 'string' && body.playerName.trim()
         ? body.playerName.trim()
         : undefined;
@@ -705,31 +709,33 @@ router.post('/games/:name/create', async (ctx) => {
                 };
             }));
 
-            const blockingMatches = existingMatches
-                .filter((match) => match.decision.action === 'block')
-                .sort((a, b) => (b.metadata?.updatedAt ?? 0) - (a.metadata?.updatedAt ?? 0));
+            const createPlan = planDuplicateOwnerRoomCreate(existingMatches, {
+                forceReplaceActive: forceReplaceOwnerRoom,
+            });
 
-            if (blockingMatches.length > 0) {
-                const activeMatch = blockingMatches[0];
+            if (createPlan.action === 'block') {
+                const activeMatch = createPlan.activeMatch;
                 logger.info('duplicate_owner_room_blocked', {
                     ownerKey,
                     ownerType: ownerType ?? 'unknown',
                     matchID: activeMatch.matchID,
                     gameName: activeMatch.gameName,
                     reason: activeMatch.decision.reason,
+                    canForceReplace: true,
                 });
                 ctx.status = 409;
                 ctx.body = {
                     error: 'ACTIVE_MATCH_EXISTS',
                     gameName: activeMatch.gameName,
                     matchID: activeMatch.matchID,
+                    canForceReplace: true,
                 };
                 return;
             }
 
-            const cleanableMatches = existingMatches.filter((match) => match.decision.action === 'cleanup');
+            const cleanableMatches = createPlan.cleanupMatches;
             if (cleanableMatches.length > 0) {
-                logger.info('cleanup_duplicate_owner_rooms', {
+                logger.info(forceReplaceOwnerRoom ? 'force_cleanup_duplicate_owner_rooms' : 'cleanup_duplicate_owner_rooms', {
                     ownerKey,
                     ownerType: ownerType ?? 'unknown',
                     count: cleanableMatches.length,
@@ -781,26 +787,46 @@ router.post('/games/:name/create', async (ctx) => {
         };
     }
 
-    try {
-        await storage.createMatch(matchID, {
-            initialState: {
-                G: initialState,
-                _stateID: 0,
-                randomSeed: seed,
-                randomCursor,
-            },
-            metadata,
-        });
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // 已有活跃房间 → 返回 409 + 已存在的 matchID，前端可直接跳转
-        const activeMatch = msg.match(/ACTIVE_MATCH_EXISTS:([^:]+):([^:]+)/);
-        if (activeMatch) {
-            ctx.status = 409;
-            ctx.body = { error: 'ACTIVE_MATCH_EXISTS', gameName: activeMatch[1], matchID: activeMatch[2] };
-            return;
-        }
-        throw err;
+    const createMatchData = {
+        initialState: {
+            G: initialState,
+            _stateID: 0,
+            randomSeed: seed,
+            randomCursor,
+        },
+        metadata,
+    };
+    const createPersistResult = await createMatchWithOwnerConflictRetry({
+        createMatch: async () => {
+            await storage.createMatch(matchID, createMatchData);
+        },
+        fetchConflictMetadata: async (conflictMatchID) => {
+            const { metadata: conflictMetadata } = await storage.fetch(conflictMatchID, { metadata: true });
+            return conflictMetadata;
+        },
+        cleanupConflictMatch: async (conflictMatchID, conflictMetadata) => {
+            await cleanupMatchRoom(conflictMatchID, conflictMetadata, true);
+        },
+        forceReplaceActive: forceReplaceOwnerRoom,
+        onForceCleanup: async ({ attempt, conflict }) => {
+            logger.info('force_cleanup_duplicate_owner_rooms_race', {
+                ownerKey,
+                ownerType: ownerType ?? 'unknown',
+                matchID: conflict.matchID,
+                gameName: conflict.gameName,
+                attempt,
+            });
+        },
+    });
+    if (createPersistResult.action === 'conflict') {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'ACTIVE_MATCH_EXISTS',
+            gameName: createPersistResult.conflict.gameName,
+            matchID: createPersistResult.conflict.matchID,
+            canForceReplace: true,
+        };
+        return;
     }
 
     ctx.body = {

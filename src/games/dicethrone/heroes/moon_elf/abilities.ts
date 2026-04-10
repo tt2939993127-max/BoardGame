@@ -199,7 +199,7 @@ export const COVERING_FIRE_2: AbilityDef = {
     sfxKey: MOON_ELF_SFX_SHOT,
     variants: [
         { id: 'covering-fire-2', trigger: { type: 'diceSet', faces: { [FACE.BOW]: 2, [FACE.FOOT]: 3 } }, effects: [grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('covering-fire-2', 'gainEvasive'), { timing: 'preDefense' }), damage(9, abilityEffectText('covering-fire-2', 'damage9'))], priority: 1 },
-        { id: 'silencing-trace', trigger: { type: 'diceSet', faces: { [FACE.FOOT]: 3 } }, effects: [grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('silencing-trace', 'gainEvasive'), { timing: 'preDefense' }), { description: '造成 2 不可防御伤害', action: { type: 'damage', target: 'opponent', value: 2, isUndefendable: true } }], priority: 0 },
+        { id: 'silencing-trace', trigger: { type: 'diceSet', faces: { [FACE.FOOT]: 3 } }, tags: ['unblockable'], effects: [grantToken(TOKEN_IDS.EVASIVE, 1, abilityEffectText('silencing-trace', 'gainEvasive'), { timing: 'preDefense' }), { description: '造成 2 不可防御伤害', action: { type: 'damage', target: 'opponent', value: 2 } }], priority: 0 },
     ],
 };
 

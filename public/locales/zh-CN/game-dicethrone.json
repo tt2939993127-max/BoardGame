@@ -242,23 +242,23 @@
       ]
     },
     "honor": {
-      "name": "Honor",
+      "name": "荣誉",
       "description": [
-        "Before your attack deals damage, spend 1 Honor to increase damage by 1."
+        "在你的攻击造成伤害前，可消耗 1 个荣誉，使本次攻击伤害 +1。"
       ]
     },
     "shame": {
-      "name": "Shame",
+      "name": "耻辱",
       "description": [
-        "When you calculate attack damage, remove 1 Shame to reduce that attack's damage by 1."
+        "在计算攻击伤害时，移除 1 个耻辱，使该次攻击伤害 -1。"
       ]
     },
     "samurai_retribution": {
-      "name": "Back Strike",
+      "name": "反击",
       "description": [
-        "When taking attack damage, spend 1 Back Strike and roll 1 die.",
-        "Deal half the result, rounded up, back to the attacker.",
-        "This does not reduce the damage you take."
+        "受到攻击伤害时，可消耗 1 个反击并投掷 1 颗骰子。",
+        "将骰值的一半向上取整，反弹给攻击者。",
+        "这不会减少你本次受到的伤害。"
       ]
     }
   },
@@ -294,7 +294,7 @@
       "unknown": "未知来源",
       "shieldReduction": "护盾减伤",
       "attackModifier": "攻击修正",
-      "backStrike": "Back Strike"
+      "backStrike": "反击"
     },
     "damageOriginal": "（原始 {{amount}}）",
     "damageModifiers": "（原始 {{original}}，{{modifiers}}）",
@@ -517,9 +517,9 @@
       "bullet": "子弹",
       "dash": "冲刺",
       "bullseye": "靶心",
-      "katana": "Katana",
-      "helm": "Helm",
-      "rising_sun": "Rising Sun"
+      "katana": "武士刀",
+      "helm": "头盔",
+      "rising_sun": "旭日"
     }
   },
   "bonusDie": {
@@ -543,6 +543,8 @@
       "gunslingerHighNoonDash": "靴刺：施加击倒",
       "gunslingerHighNoonBullseye": "准心：施加赏金",
       "gunslingerEatMyLeadDie": "吃我的铅弹！投掷：{{value}}",
+      "gunslingerEatMyLead.result": "{{bulletCount}} 个子弹面：本次攻击伤害 +{{bonusDamage}}",
+      "gunslingerEatMyLead.resultKnockdown": "{{bulletCount}} 个子弹面：本次攻击伤害 +{{bonusDamage}}，并施加击倒",
       "barbarianSuppress": "压制投掷：{{value}}",
       "energeticStrength": "星！治疗 2 并施加脑震荡",
       "energeticOther": "抽 1 张牌",
@@ -623,7 +625,8 @@
       "samuraiBackStrikeDie": "反击投掷：{{value}}",
       "samuraiRighteousnessKatana": "武士刀：+2 伤害",
       "samuraiRighteousnessHelm": "头盔：施加 2 层耻辱",
-      "samuraiRighteousnessRisingSun": "旭日：获得 1 个反击指示物"
+      "samuraiRighteousnessRisingSun": "旭日：获得 1 个反击指示物",
+      "samuraiMasamune.result": "{{katanaCount}} 个武士刀：+{{katanaCount}} 伤害；{{shameCount}} 个头盔：施加 {{shameCount}} 层耻辱；{{retributionCount}} 个旭日：获得 {{retributionCount}} 个反击"
     },
     "selectToReroll": "点击骰子花费{{cost}}{{token}}重掷",
     "noTokenToReroll": "没有{{token}}标记可用于重掷",
@@ -742,8 +745,8 @@
     "description": "该技能有多个变体同时满足条件，请选择要发动的变体：",
     "skip": "不发动技能",
     "faceLabel": {
-      "katana": "Katana",
-      "rising_sun": "Rising Sun"
+      "katana": "武士刀",
+      "rising_sun": "旭日"
     }
   },
   "compareRoll": {

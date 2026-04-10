@@ -67,7 +67,6 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
         if (entries.length > 0) {
             const maxId = entries[entries.length - 1].id;
             if (maxId < lastSeenIdRef.current) {
-                console.log('[RevealOverlay] Undo 回退检测，重置队列');
                 queueMicrotask(() => {
                     if (!cancelled) {
                         setQueue([]);
@@ -82,15 +81,7 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
 
         // 过滤新事件（id > lastSeenId）
         const newEntries = entries.filter(e => e.id > lastSeenIdRef.current);
-        
-        console.log('[RevealOverlay] 消费事件:', {
-            newEntriesCount: newEntries.length,
-            currentPlayerId,
-            totalEntries: entries.length,
-            lastSeenId: lastSeenIdRef.current,
-            newEntryIds: newEntries.map(e => e.id),
-        });
-        
+
         if (newEntries.length === 0) return;
 
         // 更新游标
@@ -98,19 +89,7 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
 
         const newItems: RevealItem[] = [];
         for (const entry of newEntries) {
-            console.log('[RevealOverlay] 处理事件:', {
-                entryId: entry.id,
-                eventType: entry.event.type,
-                isTriggerEvent: TRIGGER_EVENTS.has(entry.event.type),
-                payload: entry.event.payload,
-                TRIGGER_EVENTS_ARRAY: Array.from(TRIGGER_EVENTS),
-            });
-            
             if (!TRIGGER_EVENTS.has(entry.event.type)) {
-                console.log('[RevealOverlay] 跳过：不是触发事件', {
-                    eventType: entry.event.type,
-                    expectedTypes: Array.from(TRIGGER_EVENTS),
-                });
                 continue;
             }
             const p = entry.event.payload as {
@@ -119,45 +98,19 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
                 cards: { uid: string; defId: string }[];
                 reason: string;
             };
-            
-            console.log('[RevealOverlay] REVEAL 事件详情:', {
-                targetPlayerId: p.targetPlayerId,
-                viewerPlayerId: p.viewerPlayerId,
-                cardsCount: p?.cards?.length,
-                cards: p?.cards,
-                reason: p.reason,
-            });
-            
+
             if (!p?.cards?.length) {
-                console.log('[RevealOverlay] 跳过：无卡牌数据');
                 continue;
             }
 
             // 权限过滤：单人模式下只有指定查看者能看
             const isAllMode = p.viewerPlayerId === 'all';
             const targetIds = Array.isArray(p.targetPlayerId) ? p.targetPlayerId : [p.targetPlayerId];
-            const isTarget = targetIds.includes(currentPlayerId);
-            
-            console.log('[RevealOverlay] 权限检查:', {
-                reason: p.reason,
-                isAllMode,
-                targetIds,
-                currentPlayerId,
-                isTarget,
-                viewerPlayerId: p.viewerPlayerId,
-                viewerPlayerIdType: typeof p.viewerPlayerId,
-                viewerPlayerIdValue: JSON.stringify(p.viewerPlayerId),
-            });
             
             // 权限过滤：
             // - all 模式：所有人都能看
             // - 单人模式：只有指定查看者能看
             if (!isAllMode && p.viewerPlayerId !== currentPlayerId) {
-                console.log('[RevealOverlay] 跳过：非 all 模式且不是指定查看者', {
-                    viewerPlayerId: p.viewerPlayerId,
-                    currentPlayerId,
-                    match: p.viewerPlayerId === currentPlayerId,
-                });
                 continue;
             }
 
@@ -171,19 +124,15 @@ export function RevealOverlay({ entries, currentPlayerId }: RevealOverlayProps) 
                 reason: p.reason,
                 timestamp: Date.now(),
             };
-            console.log('[RevealOverlay] 添加到队列:', item);
             newItems.push(item);
         }
 
         if (newItems.length > 0) {
-            console.log('[RevealOverlay] 更新队列，新增项:', newItems.length);
             queueMicrotask(() => {
                 if (!cancelled) {
                     setQueue(prev => [...prev, ...newItems].slice(-5));
                 }
             });
-        } else {
-            console.log('[RevealOverlay] 无新项添加到队列');
         }
         return () => {
             cancelled = true;

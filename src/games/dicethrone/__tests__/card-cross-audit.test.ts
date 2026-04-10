@@ -176,6 +176,15 @@ describe('枪手 / 武士 token tooltip 文案完整性', () => {
 
         expect(violations).toEqual([]);
     });
+
+    it('武士新增 token 的中文文案不能退回成英文占位', () => {
+        expect(zhTokens.honor?.name).toBe('荣誉');
+        expect(zhTokens.shame?.name).toBe('耻辱');
+        expect(zhTokens.samurai_retribution?.name).toBe('反击');
+        expect(zhTokens.honor?.description?.[0]).toContain('荣誉');
+        expect(zhTokens.shame?.description?.[0]).toContain('耻辱');
+        expect(zhTokens.samurai_retribution?.description?.[0]).toContain('反击');
+    });
 });
 
 describe('武僧拳术 III 文案一致性', () => {

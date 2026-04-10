@@ -4,7 +4,7 @@ import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
-import { Zip, ZipPassThrough } from 'fflate';
+import { Zip, ZipDeflate } from 'fflate';
 
 const rootDir = process.cwd();
 
@@ -192,7 +192,7 @@ const uploadObject = async (key, body, contentType, cacheControl, contentLength)
     throw lastError;
 };
 
-const createStoredZipFile = async (includedFiles, zipFilePath) => {
+const createAndroidCompatibleZipFile = async (includedFiles, zipFilePath) => {
     mkdirSync(path.dirname(zipFilePath), { recursive: true });
     try {
         unlinkSync(zipFilePath);
@@ -245,7 +245,12 @@ const createStoredZipFile = async (includedFiles, zipFilePath) => {
             try {
                 for (const entry of includedFiles) {
                     await new Promise((entryResolve, entryReject) => {
-                        const zipEntry = new ZipPassThrough(entry.relativePath);
+                        // Android java.util.zip.ZipInputStream 不接受
+                        // “STORED + data descriptor” 这种 fflate ZipPassThrough 流式格式，
+                        // 否则只会读到第一个 entry 并抛出：
+                        // "only DEFLATED entries can have EXT descriptor"。
+                        // 这里改用 DEFLATE level 0，保持体积基本不变，同时让原生解压稳定兼容。
+                        const zipEntry = new ZipDeflate(entry.relativePath, { level: 0 });
                         zipEntry.mtime = STABLE_ZIP_DATE;
                         zip.add(zipEntry);
 
@@ -360,7 +365,7 @@ const publishSharedAudioPackage = async () => {
     }
 
     const tempZipPath = path.join(tempZipRoot, `${runId}-shared-${SHARED_AUDIO_PACK_GAME_ID}.zip`);
-    const zipResult = await createStoredZipFile(includedFiles, tempZipPath);
+    const zipResult = await createAndroidCompatibleZipFile(includedFiles, tempZipPath);
     const checksum = zipResult.checksum;
     const packageVersion = buildSharedAudioPackageVersion(checksum);
     const bundleKey = `${packagePrefix}/bundles/shared/${SHARED_AUDIO_PACK_GAME_ID}/${packageVersion}.zip`;
@@ -408,7 +413,7 @@ const publishSingleGamePackage = async (gameId, sharedAudioPackResult) => {
     const packageVersion = explicitVersion || `${packageJson.version}-${gameId}-pkg-${buildTimestamp}`;
     const { includedFiles } = buildGamePackageEntries(gameId);
     const tempZipPath = path.join(tempZipRoot, `${runId}-${gameId}.zip`);
-    const zipResult = await createStoredZipFile(includedFiles, tempZipPath);
+    const zipResult = await createAndroidCompatibleZipFile(includedFiles, tempZipPath);
     const checksum = zipResult.checksum;
     const bundleKey = `${packagePrefix}/bundles/${gameId}/${packageVersion}.zip`;
     const versionManifestKey = `${packagePrefix}/manifests/${gameId}/${packageVersion}.json`;

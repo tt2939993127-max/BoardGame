@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { 
     setupCardiaTestScenario,
     readCoreState,
@@ -398,7 +398,7 @@ test.describe('Cardia 一号牌组 - 调停者（综合测试）', () => {
             await setup.player2Page.waitForTimeout(1000);
             
             // 等待卡牌选择弹窗出现
-            const modal = setup.player2Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player2Page.locator('[data-testid="card-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 卡牌选择弹窗已显示');
             

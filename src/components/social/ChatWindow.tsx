@@ -234,7 +234,7 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
                         placeholder={t('social:chat.placeholder')}
                         maxLength={MAX_CHAT_LENGTH}
                         disabled={sending}
-                        className="flex-1 bg-parchment-base-bg border border-parchment-card-border/40 rounded-full pl-4 pr-10 py-2.5 text-sm focus:outline-none focus:border-parchment-base-text transition-colors disabled:opacity-60"
+                        className="flex-1 bg-parchment-base-bg border border-parchment-card-border/40 rounded-full pl-4 pr-10 py-2.5 text-base sm:text-sm focus:outline-none focus:border-parchment-base-text transition-colors disabled:opacity-60"
                     />
                     <button
                         type="submit"

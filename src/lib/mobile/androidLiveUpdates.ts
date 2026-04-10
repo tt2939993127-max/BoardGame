@@ -142,6 +142,7 @@ export interface AndroidForceUpdateState {
     blocking: boolean;
     version?: string;
     progressPercent?: number;
+    currentNativeVersion?: string;
     requiredNativeVersion?: string;
     title?: string;
     message?: string;
@@ -172,6 +173,9 @@ export interface AndroidLiveUpdateStartOptions {
 const DEFAULT_OTA_CHANNEL = 'stable';
 const DEFAULT_APP_READY_TIMEOUT_MS = 10000;
 const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60000;
+const DEFAULT_MANIFEST_TIMEOUT_MS = 8000;
+const DEFAULT_APPLY_RELOAD_TIMEOUT_MS = 8000;
+const DEBUG_ANDROID_APP_ID_SEGMENTS = new Set(['debug', 'dev', 'test', 'qa']);
 const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
     phase: 'hidden',
     blocking: false,
@@ -184,6 +188,7 @@ const IDLE_LIVE_UPDATE_ACTIVITY_STATE: AndroidLiveUpdateActivityState = {
 let updaterLoader: Promise<CapacitorUpdaterModule | null> | null = null;
 let notifyAppReadyPromise: Promise<void> | null = null;
 let backgroundUpdatePromise: Promise<AndroidLiveUpdateResult> | null = null;
+let backgroundUpdatePromiseMode: AndroidLiveUpdateApplyMode | null = null;
 let listenerRegistrationPromise: Promise<PluginListenerHandle[] | null> | null = null;
 const liveUpdateRequestListeners = new Set<(request: {
     interactive?: boolean;
@@ -196,6 +201,25 @@ let liveUpdateActivityState: AndroidLiveUpdateActivityState = IDLE_LIVE_UPDATE_A
 const parseBooleanEnv = (value: string | boolean | undefined) => {
     if (typeof value === 'boolean') return value;
     return /^(1|true|yes|on)$/i.test((value || '').trim());
+};
+
+const readTrimmedEnv = (value: string | boolean | undefined) => (
+    typeof value === 'string' ? value.trim() : ''
+);
+
+const isNonReleaseAndroidAppId = (appId: string) => (
+    appId
+        .split('.')
+        .some((segment) => DEBUG_ANDROID_APP_ID_SEGMENTS.has(segment.trim().toLowerCase()))
+);
+
+const isAndroidOtaAllowedForAppId = (env: Record<string, string | boolean | undefined>) => {
+    const appId = readTrimmedEnv(env.VITE_CAPACITOR_APP_ID)
+        || readTrimmedEnv(env.CAPACITOR_APP_ID);
+    if (!appId || !isNonReleaseAndroidAppId(appId)) {
+        return true;
+    }
+    return parseBooleanEnv(env.VITE_ANDROID_OTA_ALLOW_DEBUG_APP);
 };
 
 const parseTimeoutEnv = (value: string | boolean | undefined) => {
@@ -343,15 +367,15 @@ export const compareVersion = (left: string, right: string) => {
 export const readAndroidLiveUpdateConfig = (
     env: Record<string, string | boolean | undefined>,
 ): AndroidLiveUpdateConfig => {
-    const manifestUrl = typeof env.VITE_ANDROID_OTA_MANIFEST_URL === 'string'
-        ? env.VITE_ANDROID_OTA_MANIFEST_URL.trim()
-        : '';
+    const manifestUrl = readTrimmedEnv(env.VITE_ANDROID_OTA_MANIFEST_URL);
 
     return {
-        enabled: parseBooleanEnv(env.VITE_ANDROID_OTA_ENABLED) && isAbsoluteHttpUrl(manifestUrl),
+        enabled: parseBooleanEnv(env.VITE_ANDROID_OTA_ENABLED)
+            && isAbsoluteHttpUrl(manifestUrl)
+            && isAndroidOtaAllowedForAppId(env),
         manifestUrl,
-        channel: typeof env.VITE_ANDROID_OTA_CHANNEL === 'string' && env.VITE_ANDROID_OTA_CHANNEL.trim()
-            ? env.VITE_ANDROID_OTA_CHANNEL.trim()
+        channel: readTrimmedEnv(env.VITE_ANDROID_OTA_CHANNEL)
+            ? readTrimmedEnv(env.VITE_ANDROID_OTA_CHANNEL)
             : DEFAULT_OTA_CHANNEL,
         appReadyTimeoutMs: parseTimeoutEnv(env.VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS),
     };
@@ -418,9 +442,16 @@ const getConfigFromMetaEnv = (envOverride?: Record<string, string | boolean | un
     return readAndroidLiveUpdateConfig(metaEnv);
 };
 
-const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => {
-    logMobileRuntime('OTA', 'manifest-fetch-start', { url });
-    emitCriticalOtaLog('manifest-fetch-start', { url });
+const readManifest = async (
+    url: string,
+    timeoutMs: number = DEFAULT_MANIFEST_TIMEOUT_MS,
+): Promise<AndroidOtaManifest | null> => {
+    logMobileRuntime('OTA', 'manifest-fetch-start', { url, timeoutMs });
+    emitCriticalOtaLog('manifest-fetch-start', { url, timeoutMs });
+    const abortController = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutHandle = setTimeout(() => {
+        abortController?.abort();
+    }, timeoutMs);
     try {
         const response = await fetch(url, {
             method: 'GET',
@@ -429,6 +460,7 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
                 'Cache-Control': 'no-cache',
             },
             cache: 'no-store',
+            ...(abortController ? { signal: abortController.signal } : {}),
         });
         if (response.status === 404) {
             logMobileRuntime('OTA', 'manifest-fetch-404', { url }, 'warn');
@@ -486,6 +518,8 @@ const readManifest = async (url: string): Promise<AndroidOtaManifest | null> => 
             error,
         });
         return null;
+    } finally {
+        clearTimeout(timeoutHandle);
     }
 };
 
@@ -581,8 +615,26 @@ const applyBundleImmediately = async (
     updater: CapacitorUpdaterModule['CapacitorUpdater'],
     bundleId: string,
 ) => {
-    await updater.set({ id: bundleId });
-    await updater.reload();
+    await withTimeout(
+        updater.set({ id: bundleId }),
+        DEFAULT_APPLY_RELOAD_TIMEOUT_MS,
+        `OTA 切换超时：set bundle 超过 ${DEFAULT_APPLY_RELOAD_TIMEOUT_MS}ms`,
+    );
+
+    try {
+        await withTimeout(
+            updater.reload(),
+            DEFAULT_APPLY_RELOAD_TIMEOUT_MS,
+            `OTA 重启超时：reload 超过 ${DEFAULT_APPLY_RELOAD_TIMEOUT_MS}ms`,
+        );
+    } catch (error) {
+        console.warn('[OTA] 原生 reload 未按预期完成，回退到 window.location.reload()', error);
+        if (typeof window !== 'undefined' && typeof window.location?.reload === 'function') {
+            window.location.reload();
+            return;
+        }
+        throw error;
+    }
 };
 
 const removeListenerSafely = async (handle: PluginListenerHandle | null) => {
@@ -761,10 +813,14 @@ export const subscribeAndroidLiveUpdateRequests = (
 export const startAndroidLiveUpdateBackgroundCheck = async (
     options: AndroidLiveUpdateStartOptions = {},
 ): Promise<AndroidLiveUpdateResult> => {
-    if (!backgroundUpdatePromise) {
-        backgroundUpdatePromise = (async () => {
+    const requestedApplyMode = options.applyMode ?? 'background';
+    const shouldStartNewRun = !backgroundUpdatePromise
+        || (requestedApplyMode === 'immediate' && backgroundUpdatePromiseMode === 'background');
+
+    if (shouldStartNewRun) {
+        const runPromise = (async () => {
             const { onForceStateChange } = options;
-            const applyMode = options.applyMode ?? 'background';
+            const applyMode = requestedApplyMode;
             if (applyMode === 'immediate') {
                 const initialImmediatePhase = options.initialImmediatePhase ?? 'checking';
                 emitForceState(onForceStateChange, {
@@ -848,7 +904,10 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                 return { status: 'error', reason: '未能加载 OTA 插件' } as const;
             }
 
-            const manifest = await readManifest(config.manifestUrl);
+            const manifest = await readManifest(
+                config.manifestUrl,
+                Math.max(DEFAULT_MANIFEST_TIMEOUT_MS, config.appReadyTimeoutMs),
+            );
             if (!manifest) {
                 if (applyMode === 'immediate') {
                     clearImmediateActivityPhase();
@@ -934,6 +993,7 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                             phase: 'native-update-required',
                             blocking: true,
                             version: manifest.version,
+                            currentNativeVersion: current.native,
                             requiredNativeVersion,
                             title: buildForceUpdateTitle(manifest, '需要更新 App'),
                             message: buildForceUpdateMessage(
@@ -1212,10 +1272,17 @@ export const startAndroidLiveUpdateBackgroundCheck = async (
                     reason,
                 } as const;
             }
-        })().finally(() => {
-            backgroundUpdatePromise = null;
+        })();
+
+        backgroundUpdatePromise = runPromise;
+        backgroundUpdatePromiseMode = requestedApplyMode;
+        void runPromise.finally(() => {
+            if (backgroundUpdatePromise === runPromise) {
+                backgroundUpdatePromise = null;
+                backgroundUpdatePromiseMode = null;
+            }
         });
     }
 
-    return backgroundUpdatePromise;
+    return backgroundUpdatePromise!;
 };

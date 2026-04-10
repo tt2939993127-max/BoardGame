@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures';
 import { 
     setupCardiaTestScenario,
     readCoreState,
@@ -135,7 +135,7 @@ test.describe('Cardia 一号牌组 - 沼泽守卫（新API）', () => {
             await setup.player1Page.waitForTimeout(1000);
             
             // 6. 等待卡牌选择弹窗出现
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="card-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 卡牌选择弹窗已显示');
             
@@ -307,7 +307,7 @@ test.describe('Cardia 一号牌组 - 沼泽守卫（新API）', () => {
             await setup.player1Page.waitForTimeout(1000);
             
             // 验证：没有弹出卡牌选择弹窗（因为没有有效目标）
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="card-selection-modal"]');
             const modalVisible = await modal.isVisible().catch(() => false);
             expect(modalVisible).toBe(false);
             console.log('✅ 没有弹出卡牌选择弹窗（没有有效目标）');
@@ -405,7 +405,7 @@ test.describe('Cardia 一号牌组 - 沼泽守卫（新API）', () => {
             await setup.player1Page.waitForTimeout(1000);
             
             // 等待卡牌选择弹窗出现
-            const modal = setup.player1Page.locator('.fixed.inset-0.z-50');
+            const modal = setup.player1Page.locator('[data-testid="card-selection-modal"]');
             await modal.waitFor({ state: 'visible', timeout: 5000 });
             console.log('✅ 卡牌选择弹窗已显示');
             

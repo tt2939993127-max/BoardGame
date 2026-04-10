@@ -518,7 +518,7 @@ export const GameHUD = ({
                                 placeholder={isChatReadonly ? t('hud.chat.readonlyPlaceholder') : t('hud.chat.placeholder')}
                                 maxLength={MAX_CHAT_LENGTH}
                                 disabled={isChatReadonly}
-                                className="w-full bg-white/15 border border-white/35 rounded px-2 py-1.5 text-xs text-white placeholder-white/60 focus:outline-none focus:border-neon-blue/70 focus:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed"
+                                className="w-full bg-white/15 border border-white/35 rounded px-2 py-1.5 text-base sm:text-xs text-white placeholder-white/60 focus:outline-none focus:border-neon-blue/70 focus:bg-white/20 disabled:opacity-60 disabled:cursor-not-allowed"
                             />
                             {chatInput.length >= MAX_CHAT_LENGTH && (
                                 <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-amber-300">

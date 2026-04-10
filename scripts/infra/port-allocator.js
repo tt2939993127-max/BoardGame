@@ -3,6 +3,7 @@ import { createServer } from 'node:net';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { E2E_MULTI_WORKER_BASE_PORTS } from './e2e-port-config.js';
+import { withWindowsHide } from './windows-hide.js';
 
 export const BASE_PORTS = {
   ...E2E_MULTI_WORKER_BASE_PORTS,
@@ -17,9 +18,15 @@ const SHARED_RUNTIME_DIR = 'boardgame-e2e';
 const PORT_RESERVATION_DIR = 'port-reservations';
 const PORT_RESERVATION_LOCK = 'port-reservations.lock';
 
+let windowsNetstatCache = null;
+
+function execHidden(command, options = {}) {
+  return execSync(command, withWindowsHide(options));
+}
+
 function runGit(command, cwd = process.cwd()) {
   try {
-    return execSync(command, {
+    return execHidden(command, {
       cwd,
       encoding: 'utf-8',
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -62,11 +69,17 @@ function getReservationFilePath(workerId, scope = process.env.PW_RUNTIME_SCOPE, 
 }
 
 function getWindowsNetstatLines() {
+  if (windowsNetstatCache) {
+    return windowsNetstatCache;
+  }
+
   try {
-    const result = execSync('netstat -ano -p tcp', { encoding: 'utf-8' });
-    return result.split(/\r?\n/).filter(Boolean);
+    const result = execHidden('netstat -ano -p tcp', { encoding: 'utf-8' });
+    windowsNetstatCache = result.split(/\r?\n/).filter(Boolean);
+    return windowsNetstatCache;
   } catch {
-    return [];
+    windowsNetstatCache = [];
+    return windowsNetstatCache;
   }
 }
 
@@ -290,7 +303,7 @@ export function isPortInUse(port) {
       return parseWindowsPortPids(port).length > 0;
     }
 
-    const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
+    const result = execHidden(`lsof -ti:${port}`, { encoding: 'utf-8' });
     return result.trim().length > 0;
   } catch {
     return false;
@@ -436,7 +449,7 @@ export function getPortPids(port) {
       return parseWindowsPortPids(port);
     }
 
-    const result = execSync(`lsof -ti:${port}`, { encoding: 'utf-8' });
+    const result = execHidden(`lsof -ti:${port}`, { encoding: 'utf-8' });
     return result.trim().split('\n').filter(Boolean);
   } catch {
     return [];
@@ -446,9 +459,9 @@ export function getPortPids(port) {
 export function killProcess(pid) {
   try {
     if (process.platform === 'win32') {
-      execSync(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
+      execHidden(`taskkill /F /T /PID ${pid}`, { stdio: 'ignore' });
     } else {
-      execSync(`kill -9 ${pid}`, { stdio: 'ignore' });
+      execHidden(`kill -9 ${pid}`, { stdio: 'ignore' });
     }
 
     return true;

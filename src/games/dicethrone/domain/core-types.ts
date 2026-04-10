@@ -409,6 +409,10 @@ export interface PendingBonusDiceSettlement {
     displayOnly?: boolean;
     /** 是否显示总伤害（默认重投模式下为 true，displayOnly 下为 false） */
     showTotal?: boolean;
+    /** displayOnly 多骰时的汇总说明 key */
+    summaryEffectKey?: string;
+    /** displayOnly 多骰时的汇总说明参数 */
+    summaryEffectParams?: Record<string, string | number>;
     /** 结算模式：默认直接造成伤害；attackBonus 表示把结果加入当前攻击的 bonusDamage */
     resolutionMode?: 'damage' | 'attackBonus' | 'none';
     /** attackBonus 模式下的换算规则 */

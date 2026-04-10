@@ -18,7 +18,7 @@ import { getGameById } from '../../config/games.config';
 import { CreateRoomModal, type RoomConfig } from './CreateRoomModal';
 import { GameReviews } from '../review/GameReviewSection';
 import { PasswordEntryModal } from '../common/overlays/PasswordEntryModal';
-import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, type Room } from './roomActions';
+import { normalizeGameName, shouldPromptExitActiveMatch, resolveActiveMatchExitPayload, buildCreateRoomErrorTip, resolveCreateRoomErrorCode, resolveCreateRoomErrorStatus, type Room } from './roomActions';
 import { RoomList } from './RoomList';
 import { LeaderboardTab } from './LeaderboardTab';
 import { GameDetailsChangelogSection } from './GameDetailsChangelogSection';
@@ -62,6 +62,12 @@ type PendingRoomAction = {
     isHost: boolean;
 };
 
+type PendingForceReplaceCreate = {
+    config: RoomConfig;
+    existingMatchID: string;
+    existingGameName: string;
+};
+
 type MatchEntryLoadingPhase = 'creating' | 'joining';
 const LOBBY_CONNECT_ERROR_TOAST_DELAY_MS = 1500;
 const lastLoggedPackageStateByGame = new Map<string, string>();
@@ -102,6 +108,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const toast = useToast();
     const confirmModalIdRef = useRef<string | null>(null);
     const confirmJoinModalIdRef = useRef<string | null>(null);
+    const forceReplaceCreateModalIdRef = useRef<string | null>(null);
     const normalizedGameId = normalizeGameName(gameId);
     const gameManifest = getGameById(gameId);
     const gameDisplayName = resolveGameDisplayName(gameManifest ?? { id: gameId, titleKey }, t, gameId);
@@ -121,6 +128,8 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         cancelInstall: cancelGamePackageInstall,
         confirmInstall: confirmGamePackageInstall,
         retryInstall: retryGamePackageInstall,
+        notificationPermissionAction: packageNotificationPermissionAction,
+        openNotificationSettings: openGamePackageNotificationSettings,
     } = useGamePackageState({
         gameId,
         gameName: gameDisplayName,
@@ -130,11 +139,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     const isAppUpdateRequiredForMobileGame = isPackageManagedMobileGame && gameManifest?.mobileDelivery?.requiresAppUpdate === true;
     const hasInstalledPackageForMobileGame = packageInstallCardState.status === 'installed'
         && hasUsableInstalledGamePackageVersion(packageInstallCardState.installedVersion);
+    const hasMobilePackageUpdateAvailable = hasInstalledPackageForMobileGame
+        && packageInstallCardState.isUpdateAvailable === true;
     const installedPackageVersionLabel = hasInstalledPackageForMobileGame
         ? formatInstalledPackageVersionForTitle(packageInstallCardState.installedVersion)
         : '';
-    const shouldShowInstalledPackageVersionBadge = hasInstalledPackageForMobileGame && !isAppUpdateRequiredForMobileGame;
-    const mobilePackageCardDisplayState = !hasInstalledPackageForMobileGame && packageInstallCardState.status === 'installed'
+    const shouldShowInstalledPackageVersionBadge = hasInstalledPackageForMobileGame
+        && !hasMobilePackageUpdateAvailable
+        && !isAppUpdateRequiredForMobileGame;
+    const packageInstallFailedActionLabel = packageInstallCardState.errorCode === 'notification-permission-required'
+        && packageNotificationPermissionAction === 'settings'
+        ? t('packageManager.notificationSettingsAction')
+        : t('packageManager.retryAction');
+    const mobilePackageCardDisplayState = (
+        (!hasInstalledPackageForMobileGame || hasMobilePackageUpdateAvailable)
+        && packageInstallCardState.status === 'installed'
+    )
         ? {
             ...packageInstallCardState,
             status: 'not-installed' as const,
@@ -179,7 +199,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     icon: RefreshCw,
                     iconClassName: '',
                     buttonClassName: 'border-amber-800/20 bg-amber-50/92 text-amber-900 hover:bg-amber-100',
-                    label: t('packageManager.retryAction'),
+                    label: packageInstallFailedActionLabel,
                 };
             case 'installed':
                 return {
@@ -203,6 +223,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         mobilePackageCardDisplayState.installedVersion,
         mobilePackageCardDisplayState.status,
         isAppUpdateRequiredForMobileGame,
+        packageInstallFailedActionLabel,
         t,
     ]);
     const MobilePackageToggleIcon = mobilePackageToggleMeta.icon;
@@ -218,6 +239,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         matchID: string;
         gameName?: string;
     } | null>(null);
+    const [pendingForceReplaceCreate, setPendingForceReplaceCreate] = useState<PendingForceReplaceCreate | null>(null);
     const pendingActionRef = useRef<PendingRoomAction | null>(null);
     const isConfirmingActionRef = useRef(false);
     const roomsRef = useRef<Room[]>([]);
@@ -544,12 +566,22 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             status: packageInstallCardState.status,
             errorMessage: packageInstallCardState.errorMessage,
         });
+        if (
+            packageInstallCardState.errorCode === 'notification-permission-required'
+            && packageNotificationPermissionAction === 'settings'
+        ) {
+            void openGamePackageNotificationSettings();
+            return;
+        }
         retryGamePackageInstall();
     }, [
         gameDisplayName,
         gameId,
+        openGamePackageNotificationSettings,
         packageInstallCardState.errorMessage,
+        packageInstallCardState.errorCode,
         packageInstallCardState.status,
+        packageNotificationPermissionAction,
         retryGamePackageInstall,
     ]);
 
@@ -655,10 +687,14 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         }
     };
 
-    // 打开创建房间弹窗
-    const handleOpenCreateRoom = async () => {
-        if (isPreparingCreateRoom) return;
+    const clearLocalActiveMatchState = (matchID: string) => {
+        clearMatchCredentials(matchID);
+        clearOwnerActiveMatch(matchID);
+        setLocalStorageTick((t) => t + 1);
+    };
 
+    const openCreateRoomModal = async () => {
+        if (isPreparingCreateRoom) return;
         const namespace = `game-${gameId}`;
         setIsPreparingCreateRoom(true);
         void ensureGameCriticalImageResolverLoaded(gameId).catch((error: unknown) => {
@@ -734,8 +770,57 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         return { success: true, credentials: claimResult.credentials };
     };
 
+    const handleRoomCreatedButEnterFailed = useCallback((params: {
+        matchID: string;
+        messageKind: 'claim-failed' | 'enter-failed';
+        reason: string;
+        error?: unknown;
+    }) => {
+        const errorMessage = params.error instanceof Error
+            ? params.error.message
+            : params.error
+                ? String(params.error)
+                : null;
+
+        logger.error('[GameDetailsModal] 房间已创建，但自动进入流程失败', {
+            gameId,
+            matchID: params.matchID,
+            reason: params.reason,
+            error: errorMessage,
+        });
+        logMobileRuntimeCritical('GameDetailsModal', 'create-room-post-success-failed', {
+            gameId,
+            matchID: params.matchID,
+            reason: params.reason,
+            error: errorMessage,
+        });
+        appendMatchLoadTrace({
+            stage: 'create-room-post-success-failed',
+            gameId,
+            matchId: params.matchID,
+            payload: {
+                reason: params.reason,
+                error: errorMessage,
+            },
+        });
+
+        setShowCreateRoomModal(false);
+        setLocalStorageTick((t) => t + 1);
+        lobbySocket.requestRefresh(normalizedGameId);
+        if (params.messageKind === 'claim-failed') {
+            toast.warning({ kind: 'i18n', key: 'error.roomCreatedButClaimFailed', ns: 'lobby' });
+            return;
+        }
+        toast.warning({ kind: 'i18n', key: 'error.roomCreatedButEnterFailed', ns: 'lobby' });
+    }, [gameId, normalizedGameId, toast]);
+
     // 实际创建房间逻辑
-    const handleCreateRoom = async (config: RoomConfig) => {
+    const handleCreateRoom = async (
+        config: RoomConfig,
+        options?: {
+            forceReplaceOwnerRoom?: boolean;
+        },
+    ) => {
         let shouldPreserveLoading = false;
         setIsLoading(true);
         setMatchEntryLoadingPhase('creating');
@@ -799,7 +884,12 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             });
             const result = await matchApi.createMatch(
                     gameId,
-                    { numPlayers, setupData, playerName: user?.username || getGuestName() },
+                    {
+                        numPlayers,
+                        setupData,
+                        playerName: user?.username || getGuestName(),
+                        forceReplaceOwnerRoom: options?.forceReplaceOwnerRoom,
+                    },
                     token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
                 );
             const matchID = result.matchID;
@@ -860,131 +950,144 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     });
                 });
 
-            const ownerPlayerName = user?.username || getGuestName();
-            const ownerCredentials = result.ownerCredentials;
-            if (ownerCredentials) {
-                persistMatchCredentials(matchID, {
-                    playerID: result.ownerPlayerID || '0',
-                    credentials: ownerCredentials,
-                    matchID,
-                    gameName: gameId,
-                    playerName: ownerPlayerName,
-                });
-                setOwnerActiveMatch({
-                    matchID,
-                    gameName: gameId,
-                    ownerKey: getOwnerKey(),
-                    ownerType: getOwnerType(),
-                });
-                setLocalStorageTick((t) => t + 1);
-                setShowCreateRoomModal(false);
-                lobbySocket.requestRefresh(normalizedGameId);
-            } else {
-                const claimResult = await tryClaimSeat(matchID, gameId, { navigateOnSuccess: false });
-                if (!claimResult.success) {
-                    console.error('[handleCreateRoom] claim-seat 失败', { matchID, error: claimResult.error });
-                    toast.error({ kind: 'i18n', key: 'error.roomCreatedButClaimFailed', ns: 'lobby' });
-                    // 请求刷新大厅，让用户能看到已创建的房间
-                    lobbySocket.requestRefresh(normalizedGameId);
-                    return;
-                }
-            }
-
-            if (enableAi) {
-                const aiSeatEntries = Object.entries(normalizedSeatControllers).filter(([, controller]) => controller.type !== 'human');
-                persistAiSeatCredentials(matchID, {});
-
-                if (aiSeatEntries.length > 0) {
-                    appendMatchLoadTrace({
-                        stage: 'create-room-ai-seat-claim-background-start',
-                        gameId,
-                        matchId: matchID,
-                        payload: {
-                            seatCount: aiSeatEntries.length,
-                        },
+            try {
+                const ownerPlayerName = user?.username || getGuestName();
+                const ownerCredentials = result.ownerCredentials;
+                if (ownerCredentials) {
+                    persistMatchCredentials(matchID, {
+                        playerID: result.ownerPlayerID || '0',
+                        credentials: ownerCredentials,
+                        matchID,
+                        gameName: gameId,
+                        playerName: ownerPlayerName,
                     });
-
-                    const aiClaimStartedAt = Date.now();
-                    void Promise.allSettled(
-                        aiSeatEntries.map(async ([playerId]) => {
-                            try {
-                                return {
-                                    playerId,
-                                    response: await matchApi.claimSeat(gameId, matchID, playerId, {
-                                        token: token ?? undefined,
-                                        guestId,
-                                        playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
-                                    }),
-                                };
-                            } catch (error) {
-                                throw {
-                                    playerId,
-                                    error,
-                                };
-                            }
-                        }),
-                    ).then((results) => {
-                        const aiSeatCredentials: Record<string, string> = {};
-                        let failureCount = 0;
-
-                        results.forEach((result) => {
-                            if (result.status === 'fulfilled') {
-                                aiSeatCredentials[result.value.playerId] = result.value.response.playerCredentials;
-                                return;
-                            }
-
-                            failureCount += 1;
-                            const failurePayload = result.reason as { playerId?: string; error?: unknown } | undefined;
-                            logger.error('[GameDetailsModal] AI 座位占座失败', {
-                                gameId,
-                                matchID,
-                                playerId: failurePayload?.playerId ?? 'unknown',
-                                error: failurePayload?.error instanceof Error
-                                    ? failurePayload.error.message
-                                    : String(failurePayload?.error ?? result.reason),
-                            });
+                    setOwnerActiveMatch({
+                        matchID,
+                        gameName: gameId,
+                        ownerKey: getOwnerKey(),
+                        ownerType: getOwnerType(),
+                    });
+                    setLocalStorageTick((t) => t + 1);
+                    setShowCreateRoomModal(false);
+                    lobbySocket.requestRefresh(normalizedGameId);
+                } else {
+                    const claimResult = await tryClaimSeat(matchID, gameId, { navigateOnSuccess: false });
+                    if (!claimResult.success) {
+                        console.error('[handleCreateRoom] claim-seat 失败', { matchID, error: claimResult.error });
+                        handleRoomCreatedButEnterFailed({
+                            matchID,
+                            messageKind: 'claim-failed',
+                            reason: 'claim-seat-failed',
+                            error: claimResult.error,
                         });
+                        return;
+                    }
+                }
 
-                        persistAiSeatCredentials(matchID, aiSeatCredentials);
+                if (enableAi) {
+                    const aiSeatEntries = Object.entries(normalizedSeatControllers).filter(([, controller]) => controller.type !== 'human');
+                    persistAiSeatCredentials(matchID, {});
+
+                    if (aiSeatEntries.length > 0) {
                         appendMatchLoadTrace({
-                            stage: 'create-room-ai-seat-claim-background-settled',
+                            stage: 'create-room-ai-seat-claim-background-start',
                             gameId,
                             matchId: matchID,
                             payload: {
                                 seatCount: aiSeatEntries.length,
-                                successCount: Object.keys(aiSeatCredentials).length,
-                                failureCount,
-                                durationMs: Date.now() - aiClaimStartedAt,
                             },
                         });
-                    });
-                }
-            } else {
-                persistAiSeatCredentials(matchID, {});
-            }
 
-            logMobileRuntimeCritical('GameDetailsModal', 'create-room-navigate-match', {
-                gameId,
-                matchID,
-                enableAi,
-                seatControllerCount: Object.keys(normalizedSeatControllers).length,
-            });
-            appendMatchLoadTrace({
-                stage: 'create-room-navigate-match',
-                gameId,
-                matchId: matchID,
-                payload: {
+                        const aiClaimStartedAt = Date.now();
+                        void Promise.allSettled(
+                            aiSeatEntries.map(async ([playerId]) => {
+                                try {
+                                    return {
+                                        playerId,
+                                        response: await matchApi.claimSeat(gameId, matchID, playerId, {
+                                            token: token ?? undefined,
+                                            guestId,
+                                            playerName: t('createRoom.aiPlayerName', { seat: Number(playerId) + 1 }),
+                                        }),
+                                    };
+                                } catch (error) {
+                                    throw {
+                                        playerId,
+                                        error,
+                                    };
+                                }
+                            }),
+                        ).then((results) => {
+                            const aiSeatCredentials: Record<string, string> = {};
+                            let failureCount = 0;
+
+                            results.forEach((result) => {
+                                if (result.status === 'fulfilled') {
+                                    aiSeatCredentials[result.value.playerId] = result.value.response.playerCredentials;
+                                    return;
+                                }
+
+                                failureCount += 1;
+                                const failurePayload = result.reason as { playerId?: string; error?: unknown } | undefined;
+                                logger.error('[GameDetailsModal] AI 座位占座失败', {
+                                    gameId,
+                                    matchID,
+                                    playerId: failurePayload?.playerId ?? 'unknown',
+                                    error: failurePayload?.error instanceof Error
+                                        ? failurePayload.error.message
+                                        : String(failurePayload?.error ?? result.reason),
+                                });
+                            });
+
+                            persistAiSeatCredentials(matchID, aiSeatCredentials);
+                            appendMatchLoadTrace({
+                                stage: 'create-room-ai-seat-claim-background-settled',
+                                gameId,
+                                matchID,
+                                payload: {
+                                    seatCount: aiSeatEntries.length,
+                                    successCount: Object.keys(aiSeatCredentials).length,
+                                    failureCount,
+                                    durationMs: Date.now() - aiClaimStartedAt,
+                                },
+                            });
+                        });
+                    }
+                } else {
+                    persistAiSeatCredentials(matchID, {});
+                }
+
+                logMobileRuntimeCritical('GameDetailsModal', 'create-room-navigate-match', {
+                    gameId,
+                    matchID,
                     enableAi,
                     seatControllerCount: Object.keys(normalizedSeatControllers).length,
-                    targetPath: `/play/${gameId}/match/${matchID}?playerID=0`,
-                },
-            });
-            void prefetchOnlineMatchRoute().catch(() => {
-                // 失败不阻塞进房
-            });
-            onNavigate?.();
-            navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
-            shouldPreserveLoading = true;
+                });
+                appendMatchLoadTrace({
+                    stage: 'create-room-navigate-match',
+                    gameId,
+                    matchId: matchID,
+                    payload: {
+                        enableAi,
+                        seatControllerCount: Object.keys(normalizedSeatControllers).length,
+                        targetPath: `/play/${gameId}/match/${matchID}?playerID=0`,
+                    },
+                });
+                void prefetchOnlineMatchRoute().catch(() => {
+                    // 失败不阻塞进房
+                });
+                onNavigate?.();
+                navigate(`/play/${gameId}/match/${matchID}?playerID=0`);
+                shouldPreserveLoading = true;
+            } catch (postCreateError) {
+                handleRoomCreatedButEnterFailed({
+                    matchID,
+                    messageKind: 'enter-failed',
+                    reason: 'post-create-side-effect-failed',
+                    error: postCreateError,
+                });
+                return;
+            }
         } catch (error) {
             console.error('Failed to create match:', error);
             appendMatchLoadTrace({
@@ -998,13 +1101,15 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             // 解析 ACTIVE_MATCH_EXISTS — 支持 JSON 响应和旧的冒号分隔格式
             let existingGameName: string | undefined;
             let existingMatchID: string | undefined;
+            let canForceReplace = false;
             // 尝试从 JSON 响应体解析（409 响应）
             const jsonMatch = message.match(/\{.*"error"\s*:\s*"ACTIVE_MATCH_EXISTS".*\}/);
             if (jsonMatch) {
                 try {
-                    const parsed = JSON.parse(jsonMatch[0]) as { gameName?: string; matchID?: string };
+                    const parsed = JSON.parse(jsonMatch[0]) as { gameName?: string; matchID?: string; canForceReplace?: boolean };
                     existingGameName = parsed.gameName;
                     existingMatchID = parsed.matchID;
+                    canForceReplace = parsed.canForceReplace === true;
                 } catch { /* 降级到正则 */ }
             }
             // 降级：旧的冒号分隔格式
@@ -1013,15 +1118,30 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 const activeMatch = message.match(activeMatchPattern);
                 if (activeMatch) {
                     [, existingGameName, existingMatchID] = activeMatch;
+                    canForceReplace = true;
                 }
             }
             if (existingGameName && existingMatchID) {
+                if (!options?.forceReplaceOwnerRoom && canForceReplace) {
+                    setPendingForceReplaceCreate({
+                        config,
+                        existingGameName,
+                        existingMatchID,
+                    });
+                    return;
+                }
+
                 setOwnerActiveMatch({
                     matchID: existingMatchID,
                     gameName: existingGameName,
                     ownerKey: getOwnerKey(),
                     ownerType: getOwnerType(),
                 });
+                if (options?.forceReplaceOwnerRoom) {
+                    lobbySocket.requestRefresh(normalizedGameId);
+                    toast.warning({ kind: 'i18n', key: 'error.activeMatchExists', ns: 'lobby' });
+                    return;
+                }
                 const claimResult = await tryClaimSeat(existingMatchID, existingGameName);
                 if (claimResult.success) {
                     lobbySocket.requestRefresh(normalizedGameId);
@@ -1035,14 +1155,24 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                 return;
             }
             const friendlyTip = buildCreateRoomErrorTip(error);
+            const errorCode = resolveCreateRoomErrorCode(error);
+            const errorStatus = resolveCreateRoomErrorStatus(error);
+            const errorCodeText = errorStatus
+                ? t('error.createRoomErrorCodeWithStatus', { ns: 'lobby', code: errorCode, status: errorStatus })
+                : t('error.createRoomErrorCodeOnly', { ns: 'lobby', code: errorCode });
             if (friendlyTip) {
                 toast.error(
-                    { kind: 'i18n', key: friendlyTip.messageKey, ns: 'lobby' },
-                    { kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' }
+                    `${t(friendlyTip.messageKey, { ns: 'lobby' })} ${errorCodeText}`,
+                    { kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' },
+                    { dedupeKey: `create-room-failed.${errorCode}.${errorStatus ?? 'unknown'}` }
                 );
                 return;
             }
-            toast.error({ kind: 'i18n', key: 'error.createRoomFailed', ns: 'lobby' });
+            toast.error(
+                `${t('error.createRoomFailed', { ns: 'lobby' })} ${errorCodeText}`,
+                undefined,
+                { dedupeKey: `create-room-failed.${errorCode}.${errorStatus ?? 'unknown'}` }
+            );
         } finally {
             setIsLoading(false);
             if (!shouldPreserveLoading) {
@@ -1227,6 +1357,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
     const handleCancelJoin = useEffectEvent(() => {
         setPendingJoin(null);
+    });
+
+    const handleConfirmForceReplaceCreate = useEffectEvent(async () => {
+        if (!pendingForceReplaceCreate) return;
+        const nextCreate = pendingForceReplaceCreate;
+        setPendingForceReplaceCreate(null);
+        await handleCreateRoom(nextCreate.config, { forceReplaceOwnerRoom: true });
+    });
+
+    const handleCancelForceReplaceCreate = useEffectEvent(() => {
+        setPendingForceReplaceCreate(null);
     });
 
     const handleForceExitLocal = (matchID: string) => {
@@ -1420,6 +1561,47 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
     }, [closeModal, openModal, pendingJoin, t]);
 
     useEffect(() => {
+        if (pendingForceReplaceCreate && !forceReplaceCreateModalIdRef.current) {
+            forceReplaceCreateModalIdRef.current = openModal({
+                closeOnBackdrop: true,
+                closeOnEsc: true,
+                lockScroll: true,
+                onClose: () => {
+                    handleCancelForceReplaceCreate();
+                    forceReplaceCreateModalIdRef.current = null;
+                },
+                render: ({ close, closeOnBackdrop: stackCloseOnBackdrop }) => (
+                    <ConfirmModal
+                        title={t('confirm.forceReplaceOwnerRoom.title')}
+                        description={t('confirm.forceReplaceOwnerRoom.description', {
+                            id: pendingForceReplaceCreate.existingMatchID.slice(0, 4),
+                        })}
+                        confirmText={t('confirm.forceReplaceOwnerRoom.confirm')}
+                        onConfirm={handleConfirmForceReplaceCreate}
+                        onCancel={() => {
+                            close();
+                        }}
+                        tone="cool"
+                        closeOnBackdrop={stackCloseOnBackdrop}
+                    />
+                ),
+            });
+        }
+
+        if (!pendingForceReplaceCreate && forceReplaceCreateModalIdRef.current) {
+            closeModal(forceReplaceCreateModalIdRef.current);
+            forceReplaceCreateModalIdRef.current = null;
+        }
+    }, [
+        closeModal,
+        handleCancelForceReplaceCreate,
+        handleConfirmForceReplaceCreate,
+        openModal,
+        pendingForceReplaceCreate,
+        t,
+    ]);
+
+    useEffect(() => {
         return () => {
             if (confirmModalIdRef.current) {
                 closeModal(confirmModalIdRef.current);
@@ -1428,6 +1610,10 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
             if (confirmJoinModalIdRef.current) {
                 closeModal(confirmJoinModalIdRef.current);
                 confirmJoinModalIdRef.current = null;
+            }
+            if (forceReplaceCreateModalIdRef.current) {
+                closeModal(forceReplaceCreateModalIdRef.current);
+                forceReplaceCreateModalIdRef.current = null;
             }
         };
     }, [closeModal]);
@@ -1525,6 +1711,88 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
         return null;
     }, [latestStoredMatchCredentials, normalizedGameId, rooms, getOwnerKey]);
 
+    const prepareActiveMatchForCreate = async (): Promise<boolean> => {
+        if (!activeMatch?.matchID) {
+            return true;
+        }
+
+        const matchID = activeMatch.matchID;
+        const gameName = activeMatch.gameName;
+        let playerID = activeMatch.myPlayerID;
+        let credentials = activeMatch.myCredentials;
+        const isHost = activeMatch.isHost || playerID === '0';
+
+        if (!playerID || !credentials) {
+            try {
+                await matchApi.getMatch(gameName, matchID);
+            } catch (error) {
+                if (isMatchNotFoundError(error)) {
+                    clearLocalActiveMatchState(matchID);
+                    lobbySocket.requestRefresh(gameName);
+                    return true;
+                }
+                toast.error({ kind: 'i18n', key: 'error.actionFailed', ns: 'lobby' });
+                return false;
+            }
+
+            const claimResult = await tryClaimSeat(matchID, gameName, { navigateOnSuccess: false });
+            if (!claimResult.success) {
+                if (claimResult.error === 'unauthorized' || claimResult.error === 'forbidden' || claimResult.error === 'not_found') {
+                    clearLocalActiveMatchState(matchID);
+                    lobbySocket.requestRefresh(gameName);
+                    return true;
+                }
+                toast.error({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                return false;
+            }
+
+            playerID = '0';
+            credentials = claimResult.credentials ?? null;
+            setMatchEntryLoadingPhase('creating');
+        }
+
+        if (!playerID || !credentials) {
+            clearLocalActiveMatchState(matchID);
+            lobbySocket.requestRefresh(gameName);
+            return true;
+        }
+
+        const exitResult = await exitMatch(gameName, matchID, playerID, credentials, isHost);
+        if (!exitResult.success) {
+            const errorKey = exitResult.error === 'forbidden'
+                ? (isHost ? 'error.destroyForbidden' : 'error.leaveForbidden')
+                : exitResult.error === 'network'
+                    ? (isHost ? 'error.destroyNetwork' : 'error.leaveNetwork')
+                    : 'error.actionFailed';
+            toast.error({ kind: 'i18n', key: errorKey, ns: 'lobby' });
+            return false;
+        }
+
+        clearLocalActiveMatchState(matchID);
+        lobbySocket.requestRefresh(gameName);
+        return true;
+    };
+
+    const handleOpenCreateRoom = async () => {
+        if (isPreparingCreateRoom || isLoading) return;
+
+        if (activeMatch?.matchID) {
+            setIsLoading(true);
+            setMatchEntryLoadingPhase('creating');
+            try {
+                const released = await prepareActiveMatchForCreate();
+                if (!released) {
+                    return;
+                }
+            } finally {
+                setIsLoading(false);
+                setMatchEntryLoadingPhase(null);
+            }
+        }
+
+        await openCreateRoomModal();
+    };
+
     useEffect(() => {
         if (!isOpen) return;
         if (!activeMatch?.matchID) return;
@@ -1549,17 +1817,17 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
 
     return (
         <>
+            <PasswordEntryModal
+                open={!!passwordModalConfig}
+                onClose={() => setPasswordModalConfig(null)}
+                onConfirm={handlePasswordConfirm}
+                closeOnBackdrop
+            />
             <ModalBase
                 onClose={onClose}
                 closeOnBackdrop={closeOnBackdrop}
                 containerClassName="p-4 sm:p-8"
             >
-                <PasswordEntryModal
-                    open={!!passwordModalConfig}
-                    onClose={() => setPasswordModalConfig(null)}
-                    onConfirm={handlePasswordConfirm}
-                    closeOnBackdrop
-                />
                 <div
                     ref={modalRef}
                     data-testid="game-details-modal-root"
@@ -1610,6 +1878,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                                         state={mobilePackageCardDisplayState}
                                         onInstall={handleOpenMobilePackageInstall}
                                         onRetry={handleRetryPackageInstall}
+                                        failedActionLabel={packageInstallFailedActionLabel}
                                         onCancel={handleCancelPackageInstall}
                                         onCollapse={() => setIsMobilePackageCardExpanded(false)}
                                         presentation={isAppUpdateRequiredForMobileGame ? 'update-required' : 'install'}
@@ -1900,6 +2169,7 @@ export const GameDetailsModal = ({ isOpen, onClose, gameId, titleKey, descriptio
                     closeOnBackdrop
                     onConfirm={handleConfirmPackageInstall}
                     onRetry={handleRetryPackageInstall}
+                    failedActionLabel={packageInstallFailedActionLabel}
                     onClose={handleDismissPackageInstall}
                     onCancel={handleCancelPackageInstall}
                 />

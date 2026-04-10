@@ -10,7 +10,8 @@ import { SmashUpDomain } from '../domain';
 import { postProcessSystemEvents } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
 import { createFlowSystem, createBaseSystems, createInitialSystemState } from '../../../engine';
-import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
+import { resolveAiDifficultyProfile } from '../../../engine/ai/difficulty';
+import { createSimpleChoice, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import type { CardsDrawnEvent, SmashUpCore, SmashUpCommand, SmashUpEvent } from '../domain/types';
 import { MADNESS_CARD_DEF_ID, SU_COMMANDS, SU_EVENTS, getCurrentPlayerId } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -18,7 +19,7 @@ import { getTitanDef } from '../data/cards';
 import { TITAN_CARD_DEFS } from '../data/titans';
 import { getPlayerEffectivePowerOnBase, getRegisteredModifierIds, getTitanPowerContribution } from '../domain/ongoingModifiers';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
-import { addPowerCounter } from '../domain/abilityHelpers';
+import { addPowerCounter, buildPlayerTargetOptions } from '../domain/abilityHelpers';
 import { fireTriggers, interceptEvent } from '../domain/ongoingEffects';
 import { filterProtectedDestroyEvents, filterProtectedMoveEvents, filterProtectedReturnEvents, processAffectTriggers, processMoveTriggers, processReturnToHandTriggers } from '../domain/reducer';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
@@ -1175,6 +1176,249 @@ describe('smashup', () => {
         expect(selectableFactionIds).not.toContain(SMASHUP_FACTION_IDS.ALIENS);
     });
 
+    it('Smash Up baseline AI 第二次选派系时会参考已选派系协同，而不是只按静态优先级', async () => {
+        const runner = createRunner();
+        const result = runner.run({
+            name: 'AI 第二次选派系看协同',
+            commands: [
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.ZOMBIES } },
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.ALIENS } },
+                { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.PIRATES } },
+            ],
+        });
+
+        expect(result.finalState.core.factionSelection?.playerSelections['0']).toEqual([SMASHUP_FACTION_IDS.ZOMBIES]);
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: result.finalState,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-faction-synergy',
+            playerId: '0',
+            visibleState: result.finalState,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.some((action) => action.metadata?.factionId === SMASHUP_FACTION_IDS.ROBOTS)).toBe(true);
+        expect(legalActions.some((action) => action.metadata?.factionId === SMASHUP_FACTION_IDS.WIZARDS)).toBe(true);
+        expect(chosenAction?.metadata?.factionId).toBe(SMASHUP_FACTION_IDS.WIZARDS);
+    });
+
+    it('Smash Up AI legal action 会自动附带 strategy tags，供通用风格评分复用', () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('wizard-summon-1', 'wizard_summon', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.WIZARDS, SMASHUP_FACTION_IDS.ROBOTS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_the_mothership'),
+            ],
+        }));
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const summonAction = legalActions.find((action) =>
+            action.kind === 'play-action' && action.metadata?.defId === 'wizard_summon',
+        );
+
+        expect(summonAction).toBeDefined();
+        expect(summonAction?.metadata?.strategyTags).toContain('action-chain');
+        expect(summonAction?.metadata?.cardStrategyTags).toContain('action-chain');
+    });
+
+    it('Smash Up baseline AI 在玩家目标交互里会把增益留给自己', async () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase('base_the_mothership')],
+        }));
+
+        const interaction = createSimpleChoice(
+            'smashup-ai-player-target-buff',
+            '0',
+            '选择获得增益的玩家',
+            buildPlayerTargetOptions(
+                [
+                    { id: 'self', label: '自己', targetPlayerId: '0', displayMode: 'button' as const },
+                    { id: 'enemy', label: '对手', targetPlayerId: '1', displayMode: 'button' as const },
+                ],
+                {
+                    sourcePlayerId: '0',
+                    effectIntent: 'buff',
+                },
+            ),
+            { sourceId: 'smashup_ai_player_target_buff', targetType: 'player' },
+        );
+        stateForAi.sys.interaction = {
+            ...stateForAi.sys.interaction,
+            current: interaction,
+            queue: [],
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-player-target-buff',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(chosenAction?.kind).toBe('interaction-choice');
+        expect((chosenAction?.metadata?.optionValue as { targetPlayerId?: string } | undefined)?.targetPlayerId).toBe('0');
+    });
+
+    it('Smash Up baseline AI 在玩家目标交互里会把减益或侦察指向对手', async () => {
+        const buildStateWithPlayerTargetInteraction = (effectIntent: 'debuff' | 'inspect') => {
+            const stateForAi = makeMatchState(makeState({
+                currentPlayerIndex: 0,
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1'),
+                },
+                bases: [makeBase('base_the_mothership')],
+            }));
+
+            const interaction = createSimpleChoice(
+                `smashup-ai-player-target-${effectIntent}`,
+                '0',
+                effectIntent === 'debuff' ? '选择承受减益的玩家' : '选择要侦察的玩家',
+                buildPlayerTargetOptions(
+                    [
+                        { id: 'self', label: '自己', targetPlayerId: '0', displayMode: 'button' as const },
+                        { id: 'enemy', label: '对手', targetPlayerId: '1', displayMode: 'button' as const },
+                    ],
+                    {
+                        sourcePlayerId: '0',
+                        effectIntent,
+                    },
+                ),
+                {
+                    sourceId: `smashup_ai_player_target_${effectIntent}`,
+                    targetType: 'player',
+                },
+            );
+            stateForAi.sys.interaction = {
+                ...stateForAi.sys.interaction,
+                current: interaction,
+                queue: [],
+            };
+            return stateForAi;
+        };
+
+        for (const effectIntent of ['debuff', 'inspect'] as const) {
+            const stateForAi = buildStateWithPlayerTargetInteraction(effectIntent);
+            const legalActions = buildSmashUpAiLegalActions({
+                playerId: '0',
+                state: stateForAi,
+            });
+            const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+                gameId: 'smashup',
+                matchId: `test-smashup-ai-player-target-${effectIntent}`,
+                playerId: '0',
+                visibleState: stateForAi,
+                interaction: null,
+                responseWindow: null,
+                legalActions,
+                rulesVersion: null,
+                decisionBudgetMs: 250,
+                difficulty: resolveAiDifficultyProfile('expert'),
+                source: 'local',
+            });
+            const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+            expect(chosenAction?.kind).toBe('interaction-choice');
+            expect((chosenAction?.metadata?.optionValue as { targetPlayerId?: string } | undefined)?.targetPlayerId).toBe('1');
+        }
+    });
+
+    it('Smash Up baseline AI 在 pirate_broadside 这类基地+玩家复合目标里会优先点敌方目标', async () => {
+        const core = makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('broadside-1', 'pirate_broadside', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_pirate_cove',
+                    minions: [
+                        makeMinion('ally-strong', 'pirate_first_mate', '0', 4, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('ally-weak', 'test_minion', '0', 1, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('enemy-weak-a', 'test_minion', '1', 2, { owner: '1', tempPowerModifier: 0 }),
+                        makeMinion('enemy-weak-b', 'test_minion', '1', 1, { owner: '1', tempPowerModifier: 0 }),
+                    ],
+                }),
+            ],
+        });
+        const state = makeMatchState(core, 'playCards', '0');
+        const command: SmashUpCommand = {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'broadside-1', targetBaseIndex: 0 },
+            timestamp: 88,
+        };
+
+        expect(SmashUpDomain.validate(state, command).valid).toBe(true);
+        SmashUpDomain.execute(state, command, FIXED_RANDOM);
+        expect(state.sys.interaction?.current?.data?.sourceId).toBe('pirate_broadside');
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-pirate-broadside-target',
+            playerId: '0',
+            visibleState: state,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(chosenAction?.kind).toBe('interaction-choice');
+        expect((chosenAction?.metadata?.optionValue as { targetPlayerId?: string } | undefined)?.targetPlayerId).toBe('1');
+    });
+
     it('Smash Up baseline AI 在基础出牌阶段优先打随从', async () => {
         const runner = createRunner();
         const drafted = runner.run({
@@ -1228,6 +1472,107 @@ describe('smashup', () => {
 
         expect(legalActions.some((action) => action.kind === 'play-minion')).toBe(true);
         expect(chosenAction?.kind).toBe('play-minion');
+    });
+
+    it('Smash Up baseline AI 会优先把随从投向能直接改写高价值评分的关键基地', async () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('warbot-1', 'robot_warbot', 'minion', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.WIZARDS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_the_mothership',
+                    minions: [
+                        makeMinion('ally-pressure-a', 'robot_hoverbot', '0', 3, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('ally-pressure-b', 'robot_microbot_guard', '0', 3, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('enemy-pressure', 'test_minion', '1', 10, { owner: '1', tempPowerModifier: 0 }),
+                    ],
+                }),
+                makeBase({
+                    defId: 'base_the_jungle',
+                    minions: [
+                        makeMinion('ally-calm', 'wizard_enchantress', '0', 2, { owner: '0', tempPowerModifier: 0 }),
+                        makeMinion('enemy-calm', 'test_minion', '1', 2, { owner: '1', tempPowerModifier: 0 }),
+                    ],
+                }),
+            ],
+        }));
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-critical-base',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.filter((action) => action.kind === 'play-minion')).toHaveLength(2);
+        expect(chosenAction?.kind).toBe('play-minion');
+        expect(chosenAction?.metadata).toMatchObject({
+            baseIndex: 0,
+        });
+    });
+
+    it('Smash Up baseline AI 会结合牌组风格优先选择 action-chain 组件，而不是无标签的泛用行动', async () => {
+        const stateForAi = makeMatchState(makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('wizard-summon-1', 'wizard_summon', 'action', '0'),
+                        makeCard('robot-tech-center-1', 'robot_tech_center', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.WIZARDS, SMASHUP_FACTION_IDS.ROBOTS],
+                    minionsPlayed: 1,
+                    minionLimit: 1,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_the_jungle'),
+            ],
+        }));
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-profile-action-choice',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            difficulty: resolveAiDifficultyProfile('expert'),
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.filter((action) => action.kind === 'play-action').length).toBeGreaterThanOrEqual(2);
+        expect(chosenAction?.kind).toBe('play-action');
+        expect(chosenAction?.metadata?.defId).toBe('wizard_summon');
     });
 
     it('Smash Up baseline AI 在高压评分响应窗口应优先响应，而不是直接 response-pass', async () => {
@@ -1300,6 +1645,121 @@ describe('smashup', () => {
         expect(chosenAction?.metadata).toMatchObject({
             targetBaseIndex: 0,
         });
+    });
+
+    it('Smash Up baseline AI 在非紧急响应窗口会选择 response-pass，避免空耗响应牌', async () => {
+        const core = makeState({
+            currentPlayerIndex: 0,
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('card-lost-knowledge', 'ancient_egyptians_lost_knowledge', 'action', '0'),
+                    ],
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.DINOSAURS],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase({
+                    defId: 'base_pirate_cove',
+                    minions: [
+                        makeMinion('ally-1', 'pirate_first_mate', '0', 2, { owner: '0' }),
+                        makeMinion('enemy-1', 'test_minion', '1', 2, { owner: '1' }),
+                    ],
+                }),
+            ],
+        });
+        const stateForAi = makeMatchState(core);
+        stateForAi.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-calm-window',
+                windowType: 'meFirst',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: '0',
+            state: stateForAi,
+        });
+        const decision = await smashUpAiRuntime.localPolicies!.baseline.decide({
+            gameId: 'smashup',
+            matchId: 'test-smashup-ai-calm-response',
+            playerId: '0',
+            visibleState: stateForAi,
+            interaction: null,
+            responseWindow: stateForAi.sys.responseWindow?.current ?? null,
+            legalActions,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+        });
+        const chosenAction = legalActions.find((action) => action.actionId === decision?.actionId);
+
+        expect(legalActions.some((action) => action.kind === 'response-pass')).toBe(true);
+        expect(chosenAction?.kind).toBe('response-pass');
+    });
+
+    it('Smash Up baseline AI 在同一局面下重复决策应保持稳定，不应表现为完全随机', async () => {
+        const runner = createRunner();
+        const drafted = runner.run({
+            name: '选秀供稳定性 AI 使用',
+            commands: DRAFT_COMMANDS,
+        });
+
+        const pid = getCurrentPlayerId(drafted.finalState.core);
+        const player = drafted.finalState.core.players[pid];
+        const fallbackCards = [...player.hand, ...player.deck];
+        const minionCard = fallbackCards.find((card) => card.type === 'minion' || card.type === 'fusion');
+        const actionCard = fallbackCards.find((card) => card.type === 'action' || card.type === 'fusion');
+        if (!minionCard) {
+            throw new Error('测试缺少可用随从，无法验证稳定性');
+        }
+
+        const stateForAi = {
+            ...drafted.finalState,
+            core: {
+                ...drafted.finalState.core,
+                players: {
+                    ...drafted.finalState.core.players,
+                    [pid]: {
+                        ...player,
+                        hand: actionCard ? [minionCard, actionCard] : [minionCard],
+                        minionsPlayed: 0,
+                        actionsPlayed: 0,
+                    },
+                },
+            },
+        };
+
+        const legalActions = buildSmashUpAiLegalActions({
+            playerId: pid,
+            state: stateForAi,
+        });
+
+        const decisions = await Promise.all(
+            Array.from({ length: 5 }, async (_, index) => {
+                const decision = await Promise.resolve(smashUpAiRuntime.localPolicies!.baseline.decide({
+                    gameId: 'smashup',
+                    matchId: 'test-smashup-ai-stable-repeat',
+                    playerId: pid,
+                    visibleState: stateForAi,
+                    interaction: null,
+                    responseWindow: null,
+                    legalActions,
+                    rulesVersion: null,
+                    decisionBudgetMs: 250,
+                    source: 'local',
+                }));
+                return { index, actionId: decision?.actionId };
+            }),
+        );
+
+        const uniqueActionIds = new Set(decisions.map((decision) => decision.actionId));
+        expect(uniqueActionIds.size).toBe(1);
+        expect(legalActions.some((action) => action.actionId === decisions[0]?.actionId)).toBe(true);
     });
 
     it('domain 注册表加载正确', () => {
@@ -4319,12 +4779,14 @@ describe('smashup', () => {
             bases: [
                 makeBase({
                     minions: [
-                        makeMinion('wolf-used-1', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
-                        makeMinion('wolf-used-2', 'werewolf_howler', '0', 3, { talentUsed: true }),
+                        makeMinion('wolf-outside', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
                     ],
                 }),
                 makeBase({
-                    minions: [makeMinion('wolf-other', 'werewolf_howler', '0', 3)],
+                    minions: [
+                        makeMinion('wolf-gws-a', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
+                        makeMinion('wolf-gws-b', 'werewolf_teenage_wolf', '0', 2, { talentUsed: true }),
+                    ],
                 }),
             ],
             titans: [{
@@ -4340,30 +4802,44 @@ describe('smashup', () => {
         });
 
         const state = makeMatchState(core);
-        const firstExtraUse: SmashUpCommand = {
+        const sameBaseSecondUse: SmashUpCommand = {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
-            payload: { minionUid: 'wolf-used-1', baseIndex: 0 },
+            payload: { minionUid: 'wolf-gws-a', baseIndex: 1 },
             timestamp: 67,
         };
+        const outsideBaseSecondUse: SmashUpCommand = {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'wolf-outside', baseIndex: 0 },
+            timestamp: 68,
+        };
 
-        expect(SmashUpDomain.validate(state, firstExtraUse).valid).toBe(true);
-        const events = SmashUpDomain.execute(state, firstExtraUse, FIXED_RANDOM);
+        expect(SmashUpDomain.validate(state, sameBaseSecondUse).valid).toBe(true);
+        expect(SmashUpDomain.validate(state, outsideBaseSecondUse).valid).toBe(false);
+        const events = SmashUpDomain.execute(state, sameBaseSecondUse, FIXED_RANDOM);
         expect(events.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
         expect(events.map(event => event.type)).toContain(SU_EVENTS.TEMP_POWER_ADDED);
 
         const resolved = events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
-        expect(resolved.players['0'].extraTalentUsesConsumed).toBe(1);
+        expect(resolved.greatWolfSpiritDoubleTalentCardUids).toContain('wolf-gws-a');
 
-        const secondExtraAttempt = makeMatchState(resolved);
-        const blockedCommand: SmashUpCommand = {
+        const afterFirstSecondUse = makeMatchState(resolved);
+        const otherCardSecondUse: SmashUpCommand = {
             type: SU_COMMANDS.USE_TALENT,
             playerId: '0',
-            payload: { minionUid: 'wolf-used-2', baseIndex: 0 },
-            timestamp: 68,
+            payload: { minionUid: 'wolf-gws-b', baseIndex: 1 },
+            timestamp: 69,
+        };
+        const thirdUseAttempt: SmashUpCommand = {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { minionUid: 'wolf-gws-a', baseIndex: 1 },
+            timestamp: 70,
         };
 
-        expect(SmashUpDomain.validate(secondExtraAttempt, blockedCommand).valid).toBe(false);
+        expect(SmashUpDomain.validate(afterFirstSecondUse, otherCardSecondUse).valid).toBe(true);
+        expect(SmashUpDomain.validate(afterFirstSecondUse, thirdUseAttempt).valid).toBe(false);
     });
 
     it('巨狼之灵天赋会创建己方随从目标选择，并让目标直到回合结束获得 +1 战力', () => {
@@ -4802,6 +5278,78 @@ describe('smashup', () => {
         expect(core.players['0'].hand.length).toBe(5);
     });
 
+    it('pecos_bill 未进入决斗触发链时不应被当成可手动打出的泰坦', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS_POD, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({ defId: 'base_saloon_pod', minions: [], ongoingActions: [] })],
+            titans: [{
+                uid: 'pecos-1',
+                defId: 'pecos_bill',
+                faction: SMASHUP_FACTION_IDS.COWBOYS,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            }],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { titanUid: 'pecos-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该泰坦的特殊能力不能手动激活',
+        });
+    });
+
+    it('副警长和警长不应被当成可手动点按的随从 special', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    factions: [SMASHUP_FACTION_IDS.COWBOYS, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ALIENS],
+                }),
+            },
+            bases: [makeBase({
+                defId: 'base_saloon',
+                minions: [
+                    makeMinion('deputy-1', 'cowboys_deputy', '0', 2),
+                    makeMinion('sheriff-1', 'cowboys_sheriff', '0', 5),
+                ],
+                ongoingActions: [],
+            })],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'deputy-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该随从的特殊能力不能手动激活',
+        });
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'sheriff-1', baseIndex: 0 },
+        })).toMatchObject({
+            valid: false,
+            error: '该随从的特殊能力不能手动激活',
+        });
+    });
+
     it('pecos_bill 可在你成为 challenger 时弃 1 张牌部署到该决斗基地', () => {
         const core = makeState({
             players: {
@@ -5064,5 +5612,76 @@ describe('smashup', () => {
         expect(finalPecos?.location).toMatchObject({ zone: 'base', baseIndex: 0 });
         expect(finalPecos?.metadata?.deferClashUntilDuelEnds).toBe(false);
         expect(finalArcane?.location.zone).toBe('setaside');
+    });
+    /*
+
+    it('宸ㄧ嫾涔嬬伒浼氬湪浣犵殑鍥炲悎寮€濮嬫椂鍒涘缓绉诲姩浜や簰锛屽苟鍙兘绉诲姩鍒颁綘涓ユ牸棰嗗厛鐨勫熀鍦?, () => {
+    */
+    it('Great Wolf Spirit creates a start-of-turn move interaction and only offers bases where you are strictly ahead', () => {
+        const core = makeState({
+            bases: [
+                makeBase({
+                    minions: [
+                        makeMinion('wolf-home', 'werewolf_teenage_wolf', '0', 3),
+                        makeMinion('enemy-home', 'ghosts_spectre', '1', 1),
+                    ],
+                }),
+                makeBase({
+                    minions: [
+                        makeMinion('wolf-destination', 'werewolf_howler', '0', 4),
+                        makeMinion('enemy-destination', 'ghosts_spectre', '1', 2),
+                    ],
+                }),
+                makeBase({
+                    minions: [
+                        makeMinion('wolf-tied', 'werewolf_howler', '0', 2),
+                        makeMinion('enemy-tied', 'ghosts_spectre', '1', 2),
+                    ],
+                }),
+            ],
+            titans: [{
+                uid: 't-gws',
+                defId: 'werewolves_great_wolf_spirit',
+                faction: SMASHUP_FACTION_IDS.WEREWOLVES,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+            } satisfies TitanState],
+        });
+
+        const triggerResult = fireTriggers(core, 'onTurnStart', {
+            state: core,
+            matchState: makeMatchState(core, 'startTurn', '0'),
+            playerId: '0',
+            random: FIXED_RANDOM,
+            now: 71,
+        });
+
+        const currentInteraction = triggerResult.matchState?.sys.interaction?.current;
+        expect(currentInteraction?.data?.sourceId).toBe('titan_werewolves_great_wolf_spirit_move');
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.skip === true)).toBe(true);
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.baseIndex === 1)).toBe(true);
+        expect(currentInteraction?.data?.options.some((option: any) => option.value?.baseIndex === 2)).toBe(false);
+
+        const handler = getInteractionHandler('titan_werewolves_great_wolf_spirit_move');
+        expect(handler).toBeDefined();
+
+        const resolved = handler!(
+            triggerResult.matchState!,
+            '0',
+            { baseIndex: 1, baseDefId: core.bases[1].defId },
+            currentInteraction?.data as any,
+            FIXED_RANDOM,
+            72,
+        );
+        expect(resolved.events.map(event => event.type)).toEqual([SU_EVENTS.TITAN_MOVED]);
+
+        const moved = resolved.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        expect(moved.titans?.find(candidate => candidate.uid === 't-gws')?.location).toMatchObject({
+            zone: 'base',
+            baseIndex: 1,
+        });
     });
 });

@@ -6,7 +6,9 @@
  * 在 registerBaseInteractionHandlers() 末尾调用 registerExpansionBaseInteractionHandlers()。
  */
 
+import type { MatchState } from '../../../engine/types';
 import type {
+    SmashUpCore,
     SmashUpEvent,
     MinionDestroyedEvent,
     MinionPlayedEvent,
@@ -32,15 +34,22 @@ import { registerProtection, registerTrigger } from './ongoingEffects';
 import type { ProtectionCheckContext } from './ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { getPlayerLabel } from './utils';
-
-type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
+import {
+    appendPendingPostScoringActions,
+    getDeferredPostScoringEvents as readDeferredPostScoringEvents,
+    getDeferredReplacementBaseDefId,
+    mergeDeferredPostScoringCompatibility,
+} from './scoringSession';
 
 function getContinuationContext<T>(interactionData: Record<string, unknown> | undefined): T | undefined {
     return interactionData?.continuationContext as T | undefined;
 }
 
-function getDeferredPostScoringEvents(interactionData: Record<string, unknown> | undefined): SmashUpEvent[] | undefined {
-    return getContinuationContext<DeferredInteractionContext>(interactionData)?._deferredPostScoringEvents;
+function getDeferredPostScoringEvents(
+    state: MatchState<SmashUpCore>,
+    interactionData: Record<string, unknown> | undefined,
+): SmashUpEvent[] | undefined {
+    return readDeferredPostScoringEvents(state, interactionData) as SmashUpEvent[] | undefined;
 }
 
 // ============================================================================
@@ -850,12 +859,12 @@ export function registerExpansionBaseInteractionHandlers(): void {
         );
         if (!cardInDeck) return { state, events: [] };
         const power = selected.power ?? (getMinionDef(selected.defId!)?.power ?? 0);
-        const deferredEvents = (getDeferredPostScoringEvents(iData) ?? []) as Array<{
+        const deferredEvents = (getDeferredPostScoringEvents(state, iData) ?? []) as Array<{
             type: string;
             payload?: { newBaseDefId?: string };
             timestamp: number;
         }>;
-        const replacementBaseDefId = deferredEvents.find(event => event.type === SU_EVENTS.BASE_REPLACED)?.payload?.newBaseDefId
+        const replacementBaseDefId = getDeferredReplacementBaseDefId(state, iData)
             ?? state.core.bases[ctx.baseIndex]?.defId;
         if (!replacementBaseDefId) return { state, events: [] };
         if (deferredEvents.length > 0) {
@@ -868,17 +877,15 @@ export function registerExpansionBaseInteractionHandlers(): void {
                 targetBaseDefId: replacementBaseDefId,
                 power,
             };
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryOrder: 'before',
+                extraPendingActions: [pendingAction],
+            });
+            if (compatibility) {
+                return compatibility;
+            }
             return {
-                state: {
-                    ...state,
-                    core: {
-                        ...state.core,
-                        pendingPostScoringActions: [
-                            ...(state.core.pendingPostScoringActions ?? []),
-                            pendingAction,
-                        ],
-                    },
-                },
+                state: appendPendingPostScoringActions(state, [pendingAction]),
                 events: [],
             };
         }

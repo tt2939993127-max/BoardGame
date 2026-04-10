@@ -1,15 +1,13 @@
 import { useState, useEffect, useMemo, useReducer, useRef, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-    getAssetsBaseUrl,
-    getLocalizedImageUrls,
+    getLocalizedImageCandidateUrls,
     getPreloadedImageElement,
-    isImagePreloaded,
     markImageLoaded,
     onImageReady,
     type CardPreviewRef,
 } from '../../../core';
-import { getOptimizedImageUrls, getLocalizedAssetPath, getLocalizedLocalAssetPath } from '../../../core/AssetLoader';
+import { getOptimizedImageUrls, getLocalizedAssetPath } from '../../../core/AssetLoader';
 import { OptimizedImage } from './OptimizedImage';
 import { type SpriteAtlasConfig, computeSpriteStyle } from '../../../engine/primitives/spriteAtlas';
 import {
@@ -67,81 +65,171 @@ export type CardPreviewProps = {
     title?: string;
 };
 
-const getFallbackLocale = (locale: string): string => {
-    if (locale === 'zh-CN') return 'en';
-    if (locale === 'en') return 'zh-CN';
-    return 'en';
-};
-
 const MIN_VALID_ATLAS_DIMENSION_PX = 16;
+const LOCAL_ATLAS_CANDIDATE_TIMEOUT_MS = 3000;
+const REMOTE_ATLAS_CANDIDATE_TIMEOUT_MS = 8000;
+const ATLAS_AUTO_RETRY_MAX = 5;
+const ATLAS_AUTO_RETRY_BASE_MS = 2000;
+const ATLAS_AUTO_RETRY_MAX_MS = 30000;
 
 const hasUsableAtlasImage = (img: HTMLImageElement | null | undefined): img is HTMLImageElement =>
     Boolean(img) && img.naturalWidth >= MIN_VALID_ATLAS_DIMENSION_PX && img.naturalHeight >= MIN_VALID_ATLAS_DIMENSION_PX;
 
-const isUsableAtlasUrlLoaded = (url: string): boolean => {
-    if (!isImagePreloaded(url)) return false;
-    return hasUsableAtlasImage(getPreloadedImageElement(url));
+const normalizeComparableUrl = (url: string): string => {
+    if (!url) return '';
+    if (typeof window === 'undefined') return url;
+    try {
+        return new URL(url, window.location.href).href;
+    } catch {
+        return url;
+    }
 };
 
-const REMOTE_ASSET_PREFIX_PATTERN = /^https?:\/\/[^/]+\/official\//i;
-const LOCAL_ASSET_PREFIX = '/assets/';
+const matchLoadedAtlasCandidateUrl = (
+    img: HTMLImageElement | null | undefined,
+    candidateUrls: string[],
+): string => {
+    if (!hasUsableAtlasImage(img)) return '';
 
-const toAtlasRelativeImagePath = (image: string): string => {
-    const withoutQuery = image.split(/[?#]/, 1)[0] ?? image;
-    if (withoutQuery.startsWith(LOCAL_ASSET_PREFIX)) {
-        return withoutQuery.slice(LOCAL_ASSET_PREFIX.length);
+    const normalizedCandidates = candidateUrls.map((candidateUrl) => ({
+        candidateUrl,
+        normalized: normalizeComparableUrl(candidateUrl),
+    }));
+
+    for (const src of [img.currentSrc, img.src]) {
+        const normalizedSrc = normalizeComparableUrl(src);
+        if (!normalizedSrc) continue;
+        const matchedCandidate = normalizedCandidates.find((candidate) => candidate.normalized === normalizedSrc);
+        if (matchedCandidate) {
+            return matchedCandidate.candidateUrl;
+        }
     }
-    if (REMOTE_ASSET_PREFIX_PATTERN.test(withoutQuery)) {
-        return withoutQuery.replace(REMOTE_ASSET_PREFIX_PATTERN, '');
-    }
-    return withoutQuery.replace(/^\/+/, '');
+
+    return '';
 };
 
-const toLocalizedCompressedRelativePath = (image: string, locale: string): string => {
-    const relative = toAtlasRelativeImagePath(image);
-    const localized = relative.startsWith(`i18n/${locale}/`)
-        ? relative
-        : `i18n/${locale}/${relative}`;
-    const base = localized.replace(/\.(webp|png|jpe?g)$/i, '');
-    const lastSlash = base.lastIndexOf('/');
-    const dir = lastSlash >= 0 ? base.slice(0, lastSlash) : '';
-    const filename = lastSlash >= 0 ? base.slice(lastSlash + 1) : base;
-    if (dir.endsWith('/compressed') || dir === 'compressed') {
-        return `${base}.webp`;
+const resolveLoadedAtlasCandidateUrl = (
+    candidateUrls: string[],
+    sourceImage?: string,
+    locale?: string,
+): string => {
+    for (const candidateUrl of candidateUrls) {
+        const matchedCandidate = matchLoadedAtlasCandidateUrl(getPreloadedImageElement(candidateUrl), candidateUrls);
+        if (matchedCandidate) {
+            return matchedCandidate;
+        }
     }
-    return dir ? `${dir}/compressed/${filename}.webp` : `compressed/${filename}.webp`;
+
+    if (sourceImage) {
+        return matchLoadedAtlasCandidateUrl(getPreloadedImageElement(sourceImage, locale), candidateUrls);
+    }
+
+    return '';
 };
+
+const getAtlasCandidateTimeoutMs = (url: string): number => (
+    /^https?:\/\//i.test(url) ? REMOTE_ATLAS_CANDIDATE_TIMEOUT_MS : LOCAL_ATLAS_CANDIDATE_TIMEOUT_MS
+);
+
+const getAtlasRetryDelay = (attempt: number): number => {
+    const base = Math.min(ATLAS_AUTO_RETRY_BASE_MS * 2 ** attempt, ATLAS_AUTO_RETRY_MAX_MS);
+    const jitter = base * (0.75 + Math.random() * 0.5);
+    return Math.round(jitter);
+};
+
+type AtlasCandidateLoaderOptions = {
+    candidateUrls: string[];
+    isCancelled: () => boolean;
+    isStale: () => boolean;
+    onSuccess: (url: string, img: HTMLImageElement) => void;
+    onExhausted: () => void;
+};
+
+function loadAtlasCandidateUrls({
+    candidateUrls,
+    isCancelled,
+    isStale,
+    onSuccess,
+    onExhausted,
+}: AtlasCandidateLoaderOptions): () => void {
+    let disposed = false;
+    let resolved = false;
+    const timerIds = new Set<number>();
+
+    const clearTimers = () => {
+        timerIds.forEach((timerId) => window.clearTimeout(timerId));
+        timerIds.clear();
+    };
+
+    const shouldIgnore = () => disposed || resolved || isCancelled() || isStale();
+
+    const resolveSuccess = (url: string, img: HTMLImageElement) => {
+        if (shouldIgnore()) return;
+        if (!hasUsableAtlasImage(img)) return;
+        resolved = true;
+        clearTimers();
+        onSuccess(url, img);
+    };
+
+    const tryLoad = (index: number) => {
+        if (shouldIgnore()) return;
+        if (index >= candidateUrls.length) {
+            clearTimers();
+            onExhausted();
+            return;
+        }
+
+        const url = candidateUrls[index];
+        const img = new Image();
+        let advanced = false;
+
+        const advance = () => {
+            if (advanced || shouldIgnore()) return;
+            advanced = true;
+            tryLoad(index + 1);
+        };
+
+        const timeoutId = window.setTimeout(() => {
+            timerIds.delete(timeoutId);
+            advance();
+        }, getAtlasCandidateTimeoutMs(url));
+        timerIds.add(timeoutId);
+
+        img.onload = () => {
+            if (shouldIgnore()) return;
+            if (timerIds.has(timeoutId)) {
+                window.clearTimeout(timeoutId);
+                timerIds.delete(timeoutId);
+            }
+            if (!hasUsableAtlasImage(img)) {
+                advance();
+                return;
+            }
+            resolveSuccess(url, img);
+        };
+
+        img.onerror = () => {
+            if (shouldIgnore()) return;
+            if (timerIds.has(timeoutId)) {
+                window.clearTimeout(timeoutId);
+                timerIds.delete(timeoutId);
+            }
+            advance();
+        };
+
+        img.src = url;
+    };
+
+    tryLoad(0);
+
+    return () => {
+        disposed = true;
+        clearTimers();
+    };
+}
 
 export function getCardAtlasCandidateUrls(image: string, locale: string): string[] {
-    if (image.startsWith('data:')) {
-        return [image];
-    }
-    const fallbackLocale = getFallbackLocale(locale);
-    const localizedUrls = getLocalizedImageUrls(image, locale);
-    const localPrimary = getOptimizedImageUrls(getLocalizedLocalAssetPath(image, locale));
-    const localFallback = getOptimizedImageUrls(getLocalizedLocalAssetPath(image, fallbackLocale));
-    const remoteBaseUrl = getAssetsBaseUrl();
-    const remotePrimaryRelative = toLocalizedCompressedRelativePath(image, locale);
-    const remoteFallbackRelative = toLocalizedCompressedRelativePath(image, fallbackLocale);
-    const remotePrimary = /^https?:\/\//i.test(remoteBaseUrl)
-        ? `${remoteBaseUrl}/${remotePrimaryRelative}`
-        : '';
-    const remoteFallback = /^https?:\/\//i.test(remoteBaseUrl)
-        ? `${remoteBaseUrl}/${remoteFallbackRelative}`
-        : '';
-    const publicPrimary = `${LOCAL_ASSET_PREFIX}${remotePrimaryRelative}`;
-    const publicFallback = `${LOCAL_ASSET_PREFIX}${remoteFallbackRelative}`;
-
-    return [
-        localizedUrls.primary.webp,
-        localizedUrls.fallback.webp,
-        localPrimary.webp,
-        localFallback.webp,
-        remotePrimary,
-        remoteFallback,
-        publicPrimary,
-        publicFallback,
-    ].filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index);
+    return getLocalizedImageCandidateUrls(image, locale);
 }
 
 export function CardPreview({
@@ -215,29 +303,27 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
     const { i18n } = useTranslation();
     const effectiveLocale = locale || i18n.language || 'zh-CN';
     const [sourceVersion, bumpSourceVersion] = useReducer((n: number) => n + 1, 0);
+    const [retryVersion, bumpRetryVersion] = useReducer((n: number) => n + 1, 0);
     const source = useMemo(
         () => {
             void sourceVersion;
+            void retryVersion;
             return getCardAtlasSource(atlasId, effectiveLocale);
         },
-        [atlasId, effectiveLocale, sourceVersion],
+        [atlasId, effectiveLocale, retryVersion, sourceVersion],
     );
     const checkUrls = useMemo(
         () => (source ? getCardAtlasCandidateUrls(source.image, effectiveLocale) : []),
         [effectiveLocale, source],
     );
 
-    // 使用统一的 isImagePreloaded 检查（与 CriticalImageGate 共享缓存）
     const checkKey = checkUrls.join('|');
-    const preloadedUrl = useMemo(
-        () => checkUrls.find(isUsableAtlasUrlLoaded) ?? '',
-        [checkUrls],
+    const loadedCandidateUrl = useMemo(
+        () => (source ? resolveLoadedAtlasCandidateUrl(checkUrls, source.image, effectiveLocale) : ''),
+        [checkUrls, effectiveLocale, source],
     );
-    const sourceImagePreloaded = source
-        ? hasUsableAtlasImage(getPreloadedImageElement(source.image, effectiveLocale))
-        : false;
-    const derivedActiveUrl = preloadedUrl || checkUrls[0] || '';
-    const derivedLoaded = sourceImagePreloaded || Boolean(preloadedUrl) || checkUrls.length === 0;
+    const derivedActiveUrl = loadedCandidateUrl || checkUrls[0] || '';
+    const derivedLoaded = Boolean(loadedCandidateUrl) || checkUrls.length === 0;
     const [loadState, setLoadState] = useState(() => ({
         checkKey,
         activeUrl: derivedActiveUrl,
@@ -251,12 +337,48 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
             loaded: derivedLoaded,
         };
     const loadAttemptRef = useRef(0);
+    const retryAttemptRef = useRef(0);
+    const retryTimerRef = useRef<number | null>(null);
+
+    const clearRetryTimer = () => {
+        if (retryTimerRef.current != null) {
+            window.clearTimeout(retryTimerRef.current);
+            retryTimerRef.current = null;
+        }
+    };
+
+    const scheduleAtlasRetry = useMemo(
+        () => (reason: string) => {
+            if (retryAttemptRef.current >= ATLAS_AUTO_RETRY_MAX) {
+                console.error(`[CardPreview] 图集加载失败且已达最大重试次数，停止自动重试: ${atlasId} (${reason})`);
+                return;
+            }
+            const attempt = retryAttemptRef.current;
+            retryAttemptRef.current = attempt + 1;
+            const delay = getAtlasRetryDelay(attempt);
+            clearRetryTimer();
+            retryTimerRef.current = window.setTimeout(() => {
+                retryTimerRef.current = null;
+                bumpRetryVersion();
+            }, delay);
+            console.warn(`[CardPreview] 图集候选已耗尽，${delay}ms 后自动重试（第 ${attempt + 1}/${ATLAS_AUTO_RETRY_MAX} 轮）: ${atlasId} (${reason})`);
+        },
+        [atlasId],
+    );
 
     // 只有真实加载完成（loaded）或预加载缓存已命中（preloaded）时，才允许移除 shimmer。
     // 不能仅因为 activeUrl 已解析出来就视为已加载：
     // activeUrl 只代表“选中了候选 URL”，不代表图片请求/解码已经完成。
     // 否则会出现 atlas 在真实像素尚未就绪时就提前暴露，导致“早截空、晚截有图”。
-    const effectiveLoaded = loaded || sourceImagePreloaded || Boolean(preloadedUrl);
+    const effectiveLoaded = loaded || Boolean(loadedCandidateUrl);
+
+    useEffect(() => {
+        retryAttemptRef.current = 0;
+        clearRetryTimer();
+        return () => {
+            clearRetryTimer();
+        };
+    }, [atlasId, checkKey, effectiveLocale]);
 
     // 订阅后台加载完成通知：CriticalImageGate 超时放行后，
     // 精灵图在后台继续加载，完成时触发重渲染消除 shimmer
@@ -280,12 +402,14 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
 
     useEffect(() => {
         // 如果已预加载，直接标记为已加载
-        if (preloadedUrl || sourceImagePreloaded || checkUrls.length === 0) return;
+        if (loadedCandidateUrl || checkUrls.length === 0) return;
         const currentAttempt = loadAttemptRef.current + 1;
         loadAttemptRef.current = currentAttempt;
         let cancelled = false;
         const markReady = (url?: string) => {
             if (!cancelled && loadAttemptRef.current === currentAttempt) {
+                retryAttemptRef.current = 0;
+                clearRetryTimer();
                 setLoadState((current) => {
                     if (current.checkKey !== checkKey) return current;
                     return {
@@ -296,36 +420,25 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
                 });
             }
         };
-
-        const tryLoad = (idx: number) => {
-            if (idx >= checkUrls.length) {
-                return;
-            }
-            const url = checkUrls[idx];
-            const img = new Image();
-            img.onload = () => {
-                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
-                if (!hasUsableAtlasImage(img)) {
-                    tryLoad(idx + 1);
-                    return;
-                }
-                // 注册到统一缓存，供其他组件复用
+        const stopLoading = loadAtlasCandidateUrls({
+            candidateUrls: checkUrls,
+            isCancelled: () => cancelled,
+            isStale: () => loadAttemptRef.current !== currentAttempt,
+            onSuccess: (url, img) => {
                 markImageLoaded(source.image, effectiveLocale, img);
                 markImageLoaded(url, undefined, img);
                 markReady(url);
-            };
-            img.onerror = () => {
-                if (cancelled || loadAttemptRef.current !== currentAttempt) return;
-                tryLoad(idx + 1);
-            };
-            img.src = url;
-        };
+            },
+            onExhausted: () => {
+                scheduleAtlasRetry(`atlas:${atlasId}`);
+            },
+        });
 
-        tryLoad(0);
         return () => {
             cancelled = true;
+            stopLoading();
         };
-    }, [checkKey, checkUrls, effectiveLocale, preloadedUrl, source, sourceImagePreloaded]);
+    }, [atlasId, checkKey, checkUrls, effectiveLocale, loadedCandidateUrl, retryVersion, scheduleAtlasRetry, source]);
 
     // Fallback：source 为 undefined 时（CriticalImageGate 预加载超时/失败），
     // 自行加载图片获取尺寸，触发懒解析提升
@@ -336,18 +449,13 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
 
         let cancelled = false;
         const candidates = getCardAtlasCandidateUrls(lazy.image, effectiveLocale);
-
-        const tryFallback = (idx: number) => {
-            if (idx >= candidates.length || cancelled) return;
-            const url = candidates[idx];
-            const img = new Image();
-            img.onload = () => {
-                if (cancelled) return;
-                if (!hasUsableAtlasImage(img)) {
-                    tryFallback(idx + 1);
-                    return;
-                }
-                // 注册到预加载缓存，使 getCardAtlasSource 下次能解析成功
+        const stopLoading = loadAtlasCandidateUrls({
+            candidateUrls: candidates,
+            isCancelled: () => cancelled,
+            isStale: () => false,
+            onSuccess: (url, img) => {
+                retryAttemptRef.current = 0;
+                clearRetryTimer();
                 markImageLoaded(lazy.image, effectiveLocale, img);
                 markImageLoaded(url, undefined, img);
                 if (!cancelled) {
@@ -358,14 +466,17 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
                     }));
                     bumpSourceVersion();
                 }
-            };
-            img.onerror = () => tryFallback(idx + 1);
-            img.src = url;
-        };
+            },
+            onExhausted: () => {
+                scheduleAtlasRetry(`lazy-atlas:${atlasId}`);
+            },
+        });
 
-        tryFallback(0);
-        return () => { cancelled = true; };
-    }, [source, atlasId, effectiveLocale]);
+        return () => {
+            cancelled = true;
+            stopLoading();
+        };
+    }, [source, atlasId, effectiveLocale, retryVersion, scheduleAtlasRetry]);
 
     if (!source) {
         // 显示 shimmer 占位而非 null，等待 fallback 加载完成

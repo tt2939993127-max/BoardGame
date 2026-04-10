@@ -44,7 +44,6 @@ export class TestHarness {
         this.dice = new DiceInjector(this.random);
         this.state = new StateInjector();
         this.command = new CommandProxy();
-        console.log('[TestHarness] 实例已创建');
     }
 
     /**
@@ -70,7 +69,6 @@ export class TestHarness {
 
         const harness = TestHarness.getInstance();
         (window as any).__BG_TEST_HARNESS__ = harness;
-        console.log('[TestHarness] 测试工具已挂载到 window.__BG_TEST_HARNESS__');
     }
 
     /**
@@ -79,7 +77,6 @@ export class TestHarness {
     reset() {
         this.random.clear();
         this.dice.clear();
-        console.log('[TestHarness] 所有测试工具已重置');
     }
 
     /**

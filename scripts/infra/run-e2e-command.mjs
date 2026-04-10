@@ -202,6 +202,19 @@ function createEnv(overrides = {}) {
     };
 }
 
+function mergeNodeOptions(preferredOption, existingValue = process.env.NODE_OPTIONS) {
+    const existing = String(existingValue ?? '').trim();
+    if (!existing) {
+        return preferredOption;
+    }
+
+    const filtered = existing
+        .split(/\s+/)
+        .filter(option => option && !option.startsWith('--max-old-space-size='));
+
+    return [...filtered, preferredOption].join(' ').trim();
+}
+
 function ensurePreflightCacheDir() {
     fs.mkdirSync(path.dirname(PREFLIGHT_CACHE_PATH), { recursive: true });
 }
@@ -287,7 +300,7 @@ function createModeEnv(mode) {
             });
         case 'ci':
             return createEnv({
-                NODE_OPTIONS: '--max-old-space-size=4096',
+                NODE_OPTIONS: mergeNodeOptions('--max-old-space-size=8192'),
                 PW_SERVER_WATCH: 'false',
             });
         case 'critical':

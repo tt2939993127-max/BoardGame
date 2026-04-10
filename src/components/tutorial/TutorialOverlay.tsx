@@ -11,6 +11,34 @@ const TUTORIAL_NEXT_SOUND_KEY = 'ui.general.khron_studio_rpg_interface_essential
 
 const clampNumber = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+const getRectIntersectionArea = (
+    a: { left: number; top: number; right: number; bottom: number },
+    b: { left: number; top: number; right: number; bottom: number },
+) => {
+    const overlapWidth = Math.max(0, Math.min(a.right, b.right) - Math.max(a.left, b.left));
+    const overlapHeight = Math.max(0, Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top));
+    return overlapWidth * overlapHeight;
+};
+
+const getPlacementAxisClearance = (
+    placement: 'top' | 'bottom' | 'left' | 'right',
+    candidateBounds: { left: number; top: number; right: number; bottom: number },
+    targetBounds: { left: number; top: number; right: number; bottom: number },
+) => {
+    switch (placement) {
+        case 'top':
+            return targetBounds.top - candidateBounds.bottom;
+        case 'bottom':
+            return candidateBounds.top - targetBounds.bottom;
+        case 'left':
+            return targetBounds.left - candidateBounds.right;
+        case 'right':
+            return candidateBounds.left - targetBounds.right;
+        default:
+            return 0;
+    }
+};
+
 const getCompactTutorialPanelMetrics = (
     viewportWidth: number,
     viewportHeight: number,
@@ -110,8 +138,9 @@ export const TutorialOverlay: React.FC = () => {
 
     const [tooltipStyles, setTooltipStyles] = useState<{
         style: React.CSSProperties,
-        arrowClass: string
-    }>({ style: {}, arrowClass: '' });
+        arrowClass: string,
+        placement: string,
+    }>({ style: {}, arrowClass: '', placement: 'hidden' });
     const isMobileViewport = viewport.width > 0 && viewport.width <= MOBILE_MAX_VIEWPORT_WIDTH;
     const isCompactTutorialLayout = isMobileViewport && viewport.width > viewport.height;
     const visibleTargetRect = positionedStepId === currentStep?.id ? targetRect : null;
@@ -162,27 +191,178 @@ export const TutorialOverlay: React.FC = () => {
             const isCenterPosition = position === 'center';
             if (isCompactTutorialLayout) {
                 const compactPanel = getCompactTutorialPanelMetrics(viewportWidth, viewportHeight, safeArea);
-                const styles: React.CSSProperties = {
-                    position: 'fixed',
-                    left: '50%',
-                    transform: `translateX(-50%) scale(${compactPanel.panelScale})`,
-                    width: compactPanel.panelWidth,
-                    maxWidth: compactPanel.panelWidth,
-                    zIndex: UI_Z_INDEX.tutorial,
-                    maxHeight: compactPanel.panelMaxHeight,
-                };
+                const scaledWidth = compactPanel.panelWidth * compactPanel.panelScale;
+                const estimatedHeight = compactPanel.panelMaxHeight * compactPanel.panelScale;
+                const lateralTop = rect
+                    ? (
+                        rect.bottom >= viewportHeight * 0.68
+                            ? safeArea.top + compactPanel.edgeInset
+                            : rect.top <= viewportHeight * 0.32
+                                ? viewportHeight - safeArea.bottom - compactPanel.edgeInset - estimatedHeight
+                                : clampNumber(
+                                    rect.top + rect.height / 2 - estimatedHeight / 2,
+                                    safeArea.top + compactPanel.edgeInset,
+                                    viewportHeight - safeArea.bottom - compactPanel.edgeInset - estimatedHeight,
+                                )
+                    )
+                    : (viewportHeight - estimatedHeight) / 2;
+                const preferredPlacement = position === 'left' || position === 'right' || position === 'top' || position === 'bottom'
+                    ? position
+                    : null;
+                const compactCandidates = [
+                    {
+                        placement: 'bottom',
+                        style: {
+                            position: 'fixed',
+                            left: '50%',
+                            bottom: safeArea.bottom + compactPanel.edgeInset,
+                            transform: `translateX(-50%) scale(${compactPanel.panelScale})`,
+                            transformOrigin: 'bottom center',
+                            width: compactPanel.panelWidth,
+                            maxWidth: compactPanel.panelWidth,
+                            zIndex: UI_Z_INDEX.tutorial,
+                            maxHeight: compactPanel.panelMaxHeight,
+                        } satisfies React.CSSProperties,
+                        bounds: {
+                            left: (viewportWidth - scaledWidth) / 2,
+                            top: viewportHeight - safeArea.bottom - compactPanel.edgeInset - estimatedHeight,
+                            right: (viewportWidth + scaledWidth) / 2,
+                            bottom: viewportHeight - safeArea.bottom - compactPanel.edgeInset,
+                        },
+                    },
+                    {
+                        placement: 'top',
+                        style: {
+                            position: 'fixed',
+                            left: '50%',
+                            top: safeArea.top + compactPanel.edgeInset,
+                            transform: `translateX(-50%) scale(${compactPanel.panelScale})`,
+                            transformOrigin: 'top center',
+                            width: compactPanel.panelWidth,
+                            maxWidth: compactPanel.panelWidth,
+                            zIndex: UI_Z_INDEX.tutorial,
+                            maxHeight: compactPanel.panelMaxHeight,
+                        } satisfies React.CSSProperties,
+                        bounds: {
+                            left: (viewportWidth - scaledWidth) / 2,
+                            top: safeArea.top + compactPanel.edgeInset,
+                            right: (viewportWidth + scaledWidth) / 2,
+                            bottom: safeArea.top + compactPanel.edgeInset + estimatedHeight,
+                        },
+                    },
+                    {
+                        placement: 'left',
+                        style: {
+                            position: 'fixed',
+                            left: safeArea.left + compactPanel.edgeInset,
+                            top: lateralTop,
+                            transform: `scale(${compactPanel.panelScale})`,
+                            transformOrigin: 'left top',
+                            width: compactPanel.panelWidth,
+                            maxWidth: compactPanel.panelWidth,
+                            zIndex: UI_Z_INDEX.tutorial,
+                            maxHeight: compactPanel.panelMaxHeight,
+                        } satisfies React.CSSProperties,
+                        bounds: {
+                            left: safeArea.left + compactPanel.edgeInset,
+                            top: lateralTop,
+                            right: safeArea.left + compactPanel.edgeInset + scaledWidth,
+                            bottom: lateralTop + estimatedHeight,
+                        },
+                    },
+                    {
+                        placement: 'right',
+                        style: {
+                            position: 'fixed',
+                            right: safeArea.right + compactPanel.edgeInset,
+                            top: lateralTop,
+                            transform: `scale(${compactPanel.panelScale})`,
+                            transformOrigin: 'right top',
+                            width: compactPanel.panelWidth,
+                            maxWidth: compactPanel.panelWidth,
+                            zIndex: UI_Z_INDEX.tutorial,
+                            maxHeight: compactPanel.panelMaxHeight,
+                        } satisfies React.CSSProperties,
+                        bounds: {
+                            left: viewportWidth - safeArea.right - compactPanel.edgeInset - scaledWidth,
+                            top: lateralTop,
+                            right: viewportWidth - safeArea.right - compactPanel.edgeInset,
+                            bottom: lateralTop + estimatedHeight,
+                        },
+                    },
+                ];
 
-                if (rect && rect.top > viewportHeight * 0.45) {
-                    styles.top = safeArea.top + compactPanel.edgeInset;
-                    styles.transformOrigin = 'top center';
-                } else {
-                    styles.bottom = safeArea.bottom + compactPanel.edgeInset;
-                    styles.transformOrigin = 'bottom center';
-                }
+                const compactTargetBounds = rect ? {
+                    left: rect.left,
+                    top: rect.top,
+                    right: rect.right,
+                    bottom: rect.bottom,
+                } : null;
+                const prefersLateralPlacement = compactTargetBounds
+                    ? (() => {
+                        const targetWidth = compactTargetBounds.right - compactTargetBounds.left;
+                        const targetHeight = compactTargetBounds.bottom - compactTargetBounds.top;
+                        const targetCenterX = (compactTargetBounds.left + compactTargetBounds.right) / 2;
+                        const isTopOrBottomBand = (
+                            compactTargetBounds.bottom >= viewportHeight * 0.68
+                            || compactTargetBounds.top <= viewportHeight * 0.32
+                        );
+                        const overlapsViewportCenterLane = (
+                            compactTargetBounds.left <= viewportWidth * 0.58
+                            && compactTargetBounds.right >= viewportWidth * 0.42
+                        );
+                        const isStripLikeTarget = (
+                            targetWidth >= viewportWidth * 0.18
+                            || Math.abs(targetCenterX - (viewportWidth / 2)) <= viewportWidth * 0.18
+                        );
+
+                        return isTopOrBottomBand
+                            && targetHeight <= viewportHeight * 0.36
+                            && isStripLikeTarget
+                            && overlapsViewportCenterLane;
+                    })()
+                    : false;
+                const rankedCompactCandidates = compactCandidates
+                    .map((candidate, index) => {
+                        const overlap = compactTargetBounds
+                            ? getRectIntersectionArea(candidate.bounds, compactTargetBounds)
+                            : 0;
+                        const lateralPenalty = prefersLateralPlacement
+                            && (candidate.placement === 'top' || candidate.placement === 'bottom')
+                            ? 1
+                            : 0;
+                        const axisClearance = compactTargetBounds
+                            ? getPlacementAxisClearance(candidate.placement as 'top' | 'bottom' | 'left' | 'right', candidate.bounds, compactTargetBounds)
+                            : 0;
+                        const isSoftVerticalPreference = compactTargetBounds && (preferredPlacement === 'top' || preferredPlacement === 'bottom');
+                        const preferencePenalty = preferredPlacement && candidate.placement !== preferredPlacement && !isSoftVerticalPreference ? 1 : 0;
+                        const centerDistancePenalty = rect
+                            ? Math.abs(((candidate.bounds.left + candidate.bounds.right) / 2) - ((rect.left + rect.right) / 2))
+                            : 0;
+                        return {
+                            candidate,
+                            overlap,
+                            lateralPenalty,
+                            axisClearance,
+                            preferencePenalty,
+                            centerDistancePenalty,
+                            index,
+                        };
+                    })
+                    .sort((a, b) => {
+                        if (a.overlap !== b.overlap) return a.overlap - b.overlap;
+                        if (a.lateralPenalty !== b.lateralPenalty) return a.lateralPenalty - b.lateralPenalty;
+                        if (a.axisClearance !== b.axisClearance) return b.axisClearance - a.axisClearance;
+                        if (a.preferencePenalty !== b.preferencePenalty) return a.preferencePenalty - b.preferencePenalty;
+                        if (a.centerDistancePenalty !== b.centerDistancePenalty) return b.centerDistancePenalty - a.centerDistancePenalty;
+                        return a.index - b.index;
+                    });
+                const chosenCompactCandidate = rankedCompactCandidates[0]?.candidate ?? compactCandidates[0];
 
                 setTooltipStyles({
-                    style: styles,
-                    arrowClass: 'hidden'
+                    style: chosenCompactCandidate.style,
+                    arrowClass: 'hidden',
+                    placement: chosenCompactCandidate.placement,
                 });
                 setPositionedStepId(stepId);
                 return;
@@ -198,7 +378,8 @@ export const TutorialOverlay: React.FC = () => {
                         zIndex: UI_Z_INDEX.tutorial,
                         maxWidth: Math.max(240, viewportWidth - safeArea.left - safeArea.right - 24),
                     },
-                    arrowClass: 'hidden'
+                    arrowClass: 'hidden',
+                    placement: isCenterPosition ? 'center' : 'floating',
                 });
                 setPositionedStepId(stepId);
                 return;
@@ -282,7 +463,11 @@ export const TutorialOverlay: React.FC = () => {
             const topValue = typeof styles.top === 'number' ? styles.top : minTop;
             styles.maxHeight = viewportHeight - topValue - safeArea.bottom - safeMargin;
 
-            setTooltipStyles({ style: styles, arrowClass: `${arrowBase} ${arrow}` });
+            setTooltipStyles({
+                style: styles,
+                arrowClass: `${arrowBase} ${arrow}`,
+                placement: pos,
+            });
             setPositionedStepId(stepId);
         };
 
@@ -404,6 +589,7 @@ export const TutorialOverlay: React.FC = () => {
                 {/* 内容卡片 */}
                 <div
                     data-testid="tutorial-overlay-card"
+                    data-tutorial-placement={tooltipStyles.placement}
                     className={`bg-[#fcfbf9] shadow-[0_8px_30px_rgba(67,52,34,0.12)] border border-[#e5e0d0] animate-in fade-in zoom-in-95 duration-200 relative font-serif flex flex-col ${isCompactTutorialLayout ? 'w-full max-w-full rounded-xl p-4' : 'max-w-sm w-72 rounded-sm p-5'}`}
                     style={{ maxHeight: 'inherit', width: '100%' }}
                 >

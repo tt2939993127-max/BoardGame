@@ -181,6 +181,14 @@ const AppContent = () => {
                     {/* 教程路由：使用 TutorialMatchRoom 包装组件（不同组件类型），
                         强制 React 在在线↔教程路由切换时完全卸载/重建，防止状态泄漏 */}
                     <Route
+                      path="/play/:gameId/tutorial/:tutorialId"
+                      element={(
+                        <React.Suspense fallback={playRouteFallback}>
+                          <TutorialMatchRoom />
+                        </React.Suspense>
+                      )}
+                    />
+                    <Route
                       path="/play/:gameId/tutorial"
                       element={(
                         <React.Suspense fallback={playRouteFallback}>

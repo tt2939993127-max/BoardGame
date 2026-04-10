@@ -35,6 +35,7 @@ import { SU_COMMANDS } from '../domain/types';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { RandomFn } from '../../../engine/types';
+import { defaultTestRandom, runCommand } from './testRunner';
 
 // ============================================================================
 // 测试辅助
@@ -106,6 +107,46 @@ describe('suppressed source triggers', () => {
         });
 
         expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+    });
+});
+
+describe('ancient_egyptians Lost Knowledge normal play regression', () => {
+    it('allows Lost Knowledge to be played during playCards and opens the same choice prompt', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        { uid: 'lost', defId: 'ancient_egyptians_lost_knowledge', type: 'action', owner: '0' },
+                        { uid: 'bury-target', defId: 'robot_warbot', type: 'minion', owner: '0' },
+                    ],
+                    factions: ['ancient_egyptians', 'robots'] as any,
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase({ defId: 'base_pyramids' }), makeBase({ defId: 'base_star_portal' })],
+        });
+
+        const matchState = {
+            core,
+            sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any,
+        };
+        const validation = validate(matchState as any, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'lost' },
+        } as any);
+        expect(validation.valid).toBe(true);
+
+        const played = runCommand(matchState as any, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'lost' },
+        } as any, defaultTestRandom);
+
+        expect(played.success).toBe(true);
+        expect(played.events.some(event => event.type === SU_EVENTS.ACTION_PLAYED)).toBe(true);
+        const prompt = played.finalState.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_lost_knowledge_bury');
     });
 });
 
@@ -1042,6 +1083,30 @@ describe('ancient_egyptians audit regressions', () => {
         expect(getEffectivePower(withOwnBuried, ownPriest, 0)).toBe(6);
     });
 
+    it('Priest of Anubis does not buff other minions on the base, and each Priest only gets its own +2', () => {
+        const priestA = makeMinion('priest-a', 'ancient_egyptians_priest_of_anubis', '0', 4, { powerModifier: 0 });
+        const priestB = makeMinion('priest-b', 'ancient_egyptians_priest_of_anubis', '0', 4, { powerModifier: 0 });
+        const ally = makeMinion('ally', 'ghost_apparition', '0', 3, { powerModifier: 0 });
+        const enemy = makeMinion('enemy', 'robot_warbot', '1', 5, { powerModifier: 0 });
+        const state = makeState({
+            bases: [makeBase({
+                minions: [priestA, priestB, ally, enemy],
+                buriedCards: [{
+                    uid: 'own-buried-shared',
+                    defId: 'robot_microbot_alpha',
+                    trueOwnerId: '0',
+                    controllerId: '0',
+                    buriedFrom: 'hand',
+                }],
+            })],
+        });
+
+        expect(getEffectivePower(state, priestA, 0)).toBe(6);
+        expect(getEffectivePower(state, priestB, 0)).toBe(6);
+        expect(getEffectivePower(state, ally, 0)).toBe(3);
+        expect(getEffectivePower(state, enemy, 0)).toBe(5);
+    });
+
     it('Priest of Anubis POD 也只在你有埋葬牌时获得 +2 力量', () => {
         const priest = makeMinion('priest-pod', 'ancient_egyptians_priest_of_anubis_pod', '0', 4, { powerModifier: 0 });
         const withOpponentBuried = makeState({
@@ -1571,7 +1636,7 @@ describe('samurai_pod audit regressions', () => {
         return { core, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } as any } as any;
     }
 
-    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的一个 +1 指示物交互', () => {
+    it('Ronin POD 在自己是该基地唯一己方随从时会提供可选的两个 +1 指示物交互', () => {
         const executor = resolveAbility('samurai_ronin_pod', 'onPlay');
         expect(executor).toBeDefined();
 
@@ -1591,17 +1656,18 @@ describe('samurai_pod audit regressions', () => {
             now: 101,
         });
         const prompt = prompted.matchState?.sys.interaction.current as any;
-        expect(prompt?.data?.sourceId).toBe('samurai_ronin');
+        expect(prompt?.data?.sourceId).toBe('samurai_ronin_pod');
 
         const yesOption = prompt.data.options.find((option: any) => option.value?.apply === true);
         expect(yesOption).toBeDefined();
 
-        const handler = getInteractionHandler('samurai_ronin');
+        const handler = getInteractionHandler('samurai_ronin_pod');
         expect(handler).toBeDefined();
         const resolved = handler!(prompted.matchState!, '0', yesOption.value, prompt.data, dummyRandom, 102);
         const counterEvents = resolved.events.filter(event => event.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
 
         expect(counterEvents).toHaveLength(1);
+        expect(counterEvents[0]?.payload?.amount).toBe(2);
         expect(counterEvents.every(event => event.payload.minionUid === 'ronin-pod')).toBe(true);
     });
 
@@ -1639,6 +1705,50 @@ describe('samurai_pod audit regressions', () => {
 });
 
 describe('werewolf beforeScoring - 多实例触发', () => {
+    it('loup_garou 在触发时即使战力被降到 0 也仍会正常结算', () => {
+        const wolf = makeMinion('wolf-zero', 'werewolf_loup_garou', '0', 4, { powerModifier: -4 });
+        const ally = makeMinion('ally-1', 'werewolf_howler', '0', 2, { powerModifier: 0 });
+        const state = makeState({
+            bases: [makeBase({ minions: [wolf, ally] })],
+        });
+
+        expect(getEffectivePower(state, wolf, 0)).toBe(0);
+
+        const queued = collectTriggers(state, 'beforeScoring', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 100,
+        });
+
+        expect(queued).toBeDefined();
+        const wolfTriggers = (queued as any).payload.triggers.filter((t: any) => t.sourceDefId === 'werewolf_loup_garou');
+        expect(wolfTriggers).toHaveLength(1);
+        expect(wolfTriggers[0]?.sourceCardUid).toBe('wolf-zero');
+
+        const { events } = fireTriggers(state, 'beforeScoring', {
+            state,
+            playerId: '0',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 100,
+        });
+
+        const buffEvent = events.find((event) =>
+            event.type === SU_EVENTS.TEMP_POWER_ADDED
+            && (event as TempPowerAddedEvent).payload.minionUid === 'wolf-zero'
+        ) as TempPowerAddedEvent | undefined;
+
+        expect(buffEvent).toBeDefined();
+        expect(buffEvent?.payload.amount).toBe(2);
+
+        const resolvedState = events.reduce((core, event) => reduce(core, event), state);
+        const resolvedWolf = resolvedState.bases[0].minions.find((minion) => minion.uid === 'wolf-zero');
+        expect(resolvedWolf).toBeDefined();
+        expect(getEffectivePower(resolvedState, resolvedWolf!, 0)).toBe(2);
+    });
+
     it('多个 loup_garou 会各自产生独立 beforeScoring trigger', () => {
         const wolf1 = makeMinion('wolf1', 'werewolf_loup_garou', '0', 4, { powerModifier: 0 });
         const wolf2 = makeMinion('wolf2', 'werewolf_loup_garou', '1', 4, { powerModifier: 0 });
@@ -2616,7 +2726,7 @@ describe('special_madness onPlay', () => {
         expect(drawEvt.payload.cardUids).toEqual(['d1', 'd2']);
     });
 
-    it('选择返回→返回疯狂牌并获得 1 个额外行动额度', () => {
+    it('选择返回→只消耗这张疯狂牌，不额外补行动额度', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0'),
@@ -2627,21 +2737,14 @@ describe('special_madness onPlay', () => {
         expect(handler).toBeDefined();
         const ms = { core: state, sys: { phase: 'playCards', interaction: { current: undefined, queue: [] } } } as any;
         const result = handler!(ms, '0', { action: 'return' }, { continuationContext: { cardUid: 'mad-1' } }, dummyRandom, 0);
-        expect(result.events.length).toBe(2);
+        expect(result.events.length).toBe(1);
         expect(result.events[0].type).toBe(SU_EVENTS.MADNESS_RETURNED);
         const retEvt = result.events[0] as MadnessReturnedEvent;
         expect(retEvt.payload.playerId).toBe('0');
         expect(retEvt.payload.cardUid).toBe('mad-1');
-        expect(result.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
-        expect((result.events[1] as LimitModifiedEvent).payload).toMatchObject({
-            playerId: '0',
-            limitType: 'action',
-            delta: 1,
-            reason: 'special_madness',
-        });
 
         const next = result.events.reduce((core, event) => reduce(core, event as any), state);
-        expect(next.players['0'].actionLimit).toBe(state.players['0'].actionLimit + 1);
+        expect(next.players['0'].actionLimit).toBe(state.players['0'].actionLimit);
     });
 });
 

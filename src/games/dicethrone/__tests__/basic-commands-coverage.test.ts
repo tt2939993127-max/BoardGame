@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
-import { buildAiDecisionContext, registerRemoteAiProvider, resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildAiDecisionContext, registerRemoteAiProvider, resolveNextLocalAiAction, withAiActionStrategyTags } from '../../../engine/ai';
 import { DiceThroneDomain } from '../domain';
 import { buildDiceThroneAiLegalActions, diceThroneAiRuntime } from '../ai';
 import { engineConfig } from '../game';
@@ -465,6 +465,9 @@ describe('AI legal actions', () => {
                 type: 'REMOVE_STATUS',
                 payload: { targetPlayerId: '1', statusId: 'poison' },
             }],
+            metadata: expect.objectContaining({
+                strategyTags: ['purify-control'],
+            }),
         }));
     });
 
@@ -496,6 +499,9 @@ describe('AI legal actions', () => {
                 type: 'TRANSFER_STATUS',
                 payload: { fromPlayerId: '1', toPlayerId: '0', statusId: 'poison' },
             }],
+            metadata: expect.objectContaining({
+                strategyTags: ['purify-control'],
+            }),
         }));
         expect(actions).toContainEqual(expect.objectContaining({
             kind: 'interaction-transfer-status',
@@ -503,7 +509,166 @@ describe('AI legal actions', () => {
                 type: 'TRANSFER_STATUS',
                 payload: { fromPlayerId: '1', toPlayerId: '2', statusId: 'poison' },
             }],
+            metadata: expect.objectContaining({
+                strategyTags: ['purify-control'],
+            }),
         }));
+    });
+
+
+    it('本地 AI 在 remove-status 交互里优先移除己方减益，而不是敌方减益', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.players['0'].statusEffects[STATUS_IDS.BURN] = 1;
+        state.core.players['1'].statusEffects[STATUS_IDS.POISON] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 12;
+        state.core.players['1'].resources[RESOURCE_IDS.HP] = 28;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-remove-own-debuff-first',
+            playerId: '0',
+            sourceCardId: 'remove-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToRemove',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-remove-status');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'REMOVE_STATUS',
+            payload: { targetPlayerId: '0', statusId: STATUS_IDS.BURN },
+        });
+    });
+
+    it('remove-status 交互会带 purify-control tag，并让通用 strategy profile scorer 参与评分', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.players['0'].statusEffects[STATUS_IDS.BURN] = 1;
+        state.core.players['1'].tokens[TOKEN_IDS.PROTECT] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 12;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-remove-status-strategy-tag',
+            playerId: '0',
+            sourceCardId: 'remove-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToRemove',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1'],
+        };
+        injectPendingInteraction(state, interaction);
+
+        const context = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId: 'dicethrone-remove-status-strategy-tag',
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'expert' },
+        });
+
+        const decision = await diceThroneAiRuntime.localPolicies.baseline.decide(context);
+        const ownCleanupAction = context.legalActions.find((action) => {
+            const command = action.commands[0];
+            if (action.kind !== 'interaction-remove-status' || command?.type !== 'REMOVE_STATUS') return false;
+            const payload = command.payload as { targetPlayerId?: string; statusId?: string } | undefined;
+            return payload?.targetPlayerId === '0' && payload?.statusId === STATUS_IDS.BURN;
+        });
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const ownCleanupEval = evaluations.find((item) => item.actionId === ownCleanupAction?.actionId);
+
+        expect(ownCleanupAction?.metadata?.strategyTags).toEqual(['purify-control']);
+        expect(ownCleanupEval?.contributions.some((item) => item.scorerId === 'strategy-profile-fit' && item.score > 0)).toBe(true);
+    });
+
+    it('本地 AI 在 transfer-status 交互里优先把己方减益转给低血量敌人', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['0'].statusEffects[STATUS_IDS.POISON] = 1;
+        state.core.players['1'].resources[RESOURCE_IDS.HP] = 8;
+        state.core.players['3'].resources[RESOURCE_IDS.HP] = 30;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-transfer-own-debuff-to-enemy',
+            playerId: '0',
+            sourceCardId: 'transfer-status-test',
+            type: 'selectStatus',
+            titleKey: 'interaction.selectStatusToTransfer',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '2', '3'],
+            transferConfig: {},
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-transfer-status');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'TRANSFER_STATUS',
+            payload: { fromPlayerId: '0', toPlayerId: '1', statusId: STATUS_IDS.POISON },
+        });
+    });
+
+
+    it('本地 AI 在 selectTargetStatus 交互里会把已选中的己方减益转给更脆弱的敌人', async () => {
+        const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
+        state.core.players['0'].statusEffects[STATUS_IDS.POISON] = 1;
+        state.core.players['1'].resources[RESOURCE_IDS.HP] = 7;
+        state.core.players['3'].resources[RESOURCE_IDS.HP] = 26;
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-transfer-selected-status-target',
+            playerId: '0',
+            sourceCardId: 'transfer-status-test',
+            type: 'selectTargetStatus',
+            titleKey: 'interaction.selectTransferTarget',
+            selectCount: 1,
+            selected: [],
+            targetPlayerIds: ['0', '1', '3'],
+            transferConfig: {
+                sourcePlayerId: '0',
+                statusId: STATUS_IDS.POISON,
+            },
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-transfer-status');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'TRANSFER_STATUS',
+            payload: { fromPlayerId: '0', toPlayerId: '1', statusId: STATUS_IDS.POISON },
+        });
     });
 
     it('selectDie 多骰交互应枚举 1..selectCount 的合法骰子组合，而不是只生成单骰动作', () => {
@@ -1039,6 +1204,145 @@ describe('AI legal actions', () => {
         });
     });
 
+    it('本地 AI 在多个防御 token 可用时，应优先选择保命收益更高的 token', async () => {
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].tokens[TOKEN_IDS.EVASIVE] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-token-tiebreak',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-token-tiebreak',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('token-response');
+        expect(resolution?.action.metadata).toMatchObject({
+            tokenId: TOKEN_IDS.EVASIVE,
+        });
+    });
+
+    it('本地 AI 在响应窗口同时拥有 token 与减伤牌时，应优先选择更稳妥的保命响应', async () => {
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].tokens[TOKEN_IDS.EVASIVE] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 1;
+        state.core.players['0'].hand = [getCardById('card-next-time')];
+        state.core.pendingDamage = {
+            id: 'dmg-ai-card-vs-token',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 6,
+            currentDamage: 6,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-ai-card-vs-token',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('response-play-card');
+        expect(resolution?.action.metadata).toMatchObject({
+            cardId: 'card-next-time',
+        });
+    });
+
+    it('pendingDamage 仍存在但 responseWindow 已空时，本地 AI 仍应生成 token 响应动作', () => {
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-token-no-window',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 4,
+            currentDamage: 4,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.phase = 'defensiveRoll';
+        state.sys.responseWindow = { current: undefined } as typeof state.sys.responseWindow;
+
+        const legalActions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        expect(legalActions.some((action) => action.kind === 'token-response')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'skip-token-response')).toBe(true);
+        expect(legalActions.some((action) => action.kind === 'advance-phase')).toBe(false);
+    });
+
+    it('pendingDamage 仍存在但 responseWindow 已空时，本地 AI 仍应优先走 skip-token-response 而不是普通阶段动作', async () => {
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 0;
+        state.core.pendingDamage = {
+            id: 'dmg-ai-skip-no-window',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 4,
+            currentDamage: 4,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.phase = 'defensiveRoll';
+        state.sys.responseWindow = { current: undefined } as typeof state.sys.responseWindow;
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('skip-token-response');
+    });
+
     it('本地 AI 不应在 main1 把下次不算当成主动出牌', async () => {
         const state = createHeroMatchup('gunslinger', 'monk')(['0', '1'], fixedRandom);
         state.core.players['0'].hand = [getCardById('card-next-time')];
@@ -1356,6 +1660,172 @@ describe('AI legal actions', () => {
         expect(easyEvaluations.some((item) => item.searched)).toBe(false);
         expect(expertEvaluations.some((item) => item.searched)).toBe(true);
         expect(expertEvaluations.every((item) => item.noiseScore === 0)).toBe(true);
+    });
+
+    it('响应窗口 legal action 会附带 survive-response strategy tags', () => {
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-strategy-tags',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-strategy-tags',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+        const tokenAction = actions.find((action) => action.kind === 'token-response');
+
+        expect(tokenAction?.metadata?.strategyTags).toContain('survive-response');
+        expect(tokenAction?.metadata?.cardStrategyTags).toBeUndefined();
+    });
+
+    it('withAiActionStrategyTags 默认只写 strategyTags，显式 opt-in 才镜像 legacy 字段', () => {
+        expect(withAiActionStrategyTags({ foo: 'bar' }, ['survive-response'])).toEqual({
+            foo: 'bar',
+            strategyTags: ['survive-response'],
+        });
+        expect(withAiActionStrategyTags({ foo: 'bar' }, ['survive-response'], {
+            mirrorLegacyCardStrategyTags: true,
+        })).toEqual({
+            foo: 'bar',
+            strategyTags: ['survive-response'],
+            cardStrategyTags: ['survive-response'],
+        });
+    });
+
+    it('strategy profile scorer 会在高压响应窗口继续抬高保命动作评分', async () => {
+        const state = createHeroMatchup('monk', 'paladin')(['0', '1'], fixedRandom);
+        state.core.players['0'].tokens[TOKEN_IDS.TAIJI] = 1;
+        state.core.players['0'].resources[RESOURCE_IDS.HP] = 2;
+        state.core.pendingDamage = {
+            id: 'dmg-strategy-priority',
+            sourcePlayerId: '1',
+            targetPlayerId: '0',
+            originalDamage: 5,
+            currentDamage: 5,
+            responseType: 'beforeDamageReceived',
+            responderId: '0',
+            isFullyEvaded: false,
+        };
+        state.sys.responseWindow = {
+            current: {
+                id: 'rw-strategy-priority',
+                windowType: 'afterAttackResolved',
+                responderQueue: ['0'],
+                currentResponderIndex: 0,
+                passedPlayers: [],
+            },
+        };
+
+        const context = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId: 'dicethrone-strategy-priority',
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'expert' },
+        });
+
+        const decision = await diceThroneAiRuntime.localPolicies.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            kind: string;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const tokenAction = context.legalActions.find((action) => action.kind === 'token-response');
+        const passAction = context.legalActions.find((action) => action.kind === 'response-pass');
+        const tokenEval = evaluations.find((item) => item.actionId === tokenAction?.actionId);
+        const passEval = evaluations.find((item) => item.actionId === passAction?.actionId);
+
+        expect(tokenAction?.metadata?.strategyTags).toContain('survive-response');
+        expect(tokenEval?.contributions.some((item) => item.scorerId === 'strategy-profile-fit' && item.score > 0)).toBe(true);
+        expect(passEval?.contributions.some((item) => item.scorerId === 'strategy-profile-fit' && item.score > 0)).toBe(false);
+        expect(decision?.actionId).toBe(tokenAction?.actionId);
+    });
+
+    it('专家难度 trace 会记录 strategy 驱动的 searchPriority，供通用搜索层复用', async () => {
+        const state = createSetupWithHand(['card-enlightenment', 'card-boss-generous'], { cp: 0 })(['0', '1'], fixedRandom);
+        const expertContext = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId: 'probe-strategy-priority',
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'expert' },
+        });
+
+        const expertDecision = await diceThroneAiRuntime.localPolicies.baseline.decide(expertContext);
+        const expertEvaluations = (expertDecision?.providerMetadata?.evaluations ?? []) as Array<{
+            kind: string;
+            searchPriority?: number;
+            shortlisted?: boolean;
+        }>;
+
+        expect(expertEvaluations.some((item) => (item.searchPriority ?? 0) > 0)).toBe(true);
+        expect(expertEvaluations.some((item) => item.shortlisted)).toBe(true);
+    });
+
+    it('专家难度不会把无 projection 模型的骰面微操作抬进 strategy shortlist', async () => {
+        const state = createHeroMatchup('paladin', 'monk')(['0', '1'], fixedRandom);
+        state.sys.phase = 'offensiveRoll';
+        state.core.rollCount = 1;
+        state.core.rollLimit = 2;
+        state.core.rollDiceCount = 5;
+        state.core.rollConfirmed = false;
+        state.core.players['0'].resources[RESOURCE_IDS.CP] = 2;
+        state.core.dice = [
+            { id: 0, value: 1, symbol: 'fist', isKept: false },
+            { id: 1, value: 2, symbol: 'sword', isKept: false },
+            { id: 2, value: 6, symbol: 'pray', isKept: false },
+            { id: 3, value: 2, symbol: 'sword', isKept: false },
+            { id: 4, value: 6, symbol: 'pray', isKept: false },
+        ];
+
+        const expertContext = buildAiDecisionContext({
+            gameId: 'dicethrone',
+            matchId: 'probe-micro-priority-guard',
+            playerId: '0',
+            visibleState: state,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'expert' },
+        });
+
+        const expertDecision = await diceThroneAiRuntime.localPolicies.baseline.decide(expertContext);
+        const expertEvaluations = (expertDecision?.providerMetadata?.evaluations ?? []) as Array<{
+            kind: string;
+            searchPriority?: number;
+        }>;
+
+        expect(expertEvaluations.some((item) => item.kind === 'toggle-die-lock')).toBe(true);
+        expect(expertEvaluations.some((item) => item.kind === 'roll-dice')).toBe(true);
+        expect(
+            expertEvaluations
+                .filter((item) => item.kind === 'toggle-die-lock' || item.kind === 'roll-dice' || item.kind === 'confirm-roll')
+                .every((item) => (item.searchPriority ?? 0) === 0),
+        ).toBe(true);
     });
 
     it('远程 AI 在可见大动作决策点应调用 provider', async () => {

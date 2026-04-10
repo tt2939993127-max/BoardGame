@@ -19,7 +19,7 @@ import type {
 import {
     buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower,
     getSetAsideTitansPlayableAs, grantExtraMinion, moveMinion, playTitan, shuffleBaseDeck,
-    resolveOrPrompt, buildAbilityFeedback,
+    resolveOrPrompt, buildAbilityFeedback, buildPlayerTargetOptions,
 } from '../domain/abilityHelpers';
 import { getBaseDef, getCardDef, getMinionDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -360,9 +360,17 @@ function alienProbe(ctx: AbilityContext): AbilityResult {
     if (opponents.length === 0) return { events: [] };
 
     // 数据驱动：强制效果，单对手自动执行
-    const opOptions = opponents.map((pid, i) => ({
-        id: `player-${i}`, label: getPlayerLabel(pid), value: { targetPlayerId: pid },
-    }));
+    const opOptions = buildPlayerTargetOptions(
+        opponents.map((pid, index) => ({
+            id: `player-${index}`,
+            label: getPlayerLabel(pid),
+            targetPlayerId: pid,
+        })),
+        {
+            sourcePlayerId: ctx.playerId,
+            effectIntent: 'inspect',
+        },
+    );
 
     return resolveOrPrompt(ctx, opOptions, {
         id: 'alien_probe_choose_target',

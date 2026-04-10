@@ -25,6 +25,7 @@ import {
 } from '../domain/baseAbilities';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
+import { createScoringSession, setScoringSession } from '../domain/scoringSession';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
@@ -129,7 +130,7 @@ describe('base_the_homeworld: 随从入场额外随从额度', () => {
         expect(payload.delta).toBe(1);
     });
 
-    it('每回合只触发一次：当回合第二次及之后不再给额外额度', () => {
+    it('同回合再次打出随从时，仍会继续给额外额度', () => {
         const { events } = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', makeCtx({
             state: makeState({
                 players: {
@@ -144,7 +145,8 @@ describe('base_the_homeworld: 随从入场额外随从额度', () => {
             minionPower: 2,
         }));
 
-        expect(events).toHaveLength(0);
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
     });
 
     it('POD 版本母星应复用同一能力', () => {
@@ -762,8 +764,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
         expect(option).toBeDefined();
         expect(handler).toBeDefined();
 
-        const resolved = handler!(
-            makeMatchState(makeState({
+        const scoredState = makeMatchState(makeState({
                 bases: [
                     makeBase('base_tortuga', {
                         minions: [
@@ -777,29 +778,35 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
                         ],
                     }),
                 ],
-            })),
+            }));
+        const resolved = handler!(
+            setScoringSession(scoredState, {
+                ...createScoringSession(scoredState.core, [0]),
+                currentBaseRef: { slotIndex: 0, baseDefId: 'base_tortuga' },
+                currentStep: 'awaiting-interactions',
+                deferredPostScoringEvents: [
+                    {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: 0, baseDefId: 'base_tortuga' },
+                        timestamp: 2000,
+                    },
+                    {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: 0,
+                            oldBaseDefId: 'base_tortuga',
+                            newBaseDefId: 'base_secret_garden',
+                        },
+                        timestamp: 2000,
+                    },
+                ],
+            }),
             '1',
             option.value,
             {
                 ...interaction.data,
                 continuationContext: {
                     ...(interaction.data as any).continuationContext,
-                    _deferredPostScoringEvents: [
-                        {
-                            type: SU_EVENTS.BASE_CLEARED,
-                            payload: { baseIndex: 0, baseDefId: 'base_tortuga' },
-                            timestamp: 2000,
-                        },
-                        {
-                            type: SU_EVENTS.BASE_REPLACED,
-                            payload: {
-                                baseIndex: 0,
-                                oldBaseDefId: 'base_tortuga',
-                                newBaseDefId: 'base_secret_garden',
-                            },
-                            timestamp: 2000,
-                        },
-                    ],
                 },
             } as any,
             dummyRandom,
@@ -807,7 +814,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
         );
 
         expect(resolved?.events ?? []).toHaveLength(0);
-        expect(resolved?.state.core.pendingPostScoringActions).toEqual([
+        expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([
             {
                 kind: 'moveMinionToReplacementBase',
                 minionUid: 'm3',

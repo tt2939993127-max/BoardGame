@@ -20,7 +20,7 @@ import { SU_EVENTS } from '../domain/types';
 import type {
     CardInstance,
     CardsDiscardedEvent,
-    DeckReshuffledEvent,
+    DeckReorderedEvent,
     OngoingDetachedEvent,
     SmashUpEvent,
     LimitModifiedEvent,
@@ -427,6 +427,7 @@ function registerTricksterPodAbilities(): void {
     registerAbility('trickster_enshrouding_mist_pod', 'talent', tricksterEnshroudingMistPodTalent);
     registerAbility('trickster_hideout_pod', 'talent', tricksterHideoutPodTalent);
     registerAbility('trickster_gnome_pod', 'onPlay', tricksterGnomePodOnPlay);
+    registerAbility('trickster_gnome_pod', 'special', tricksterGnomePodSpecial);
     registerAbility('trickster_gremlin_pod', 'onDestroy', () => ({ events: [] }));
     registerTricksterPodOngoingEffects();
     registerTrigger('trickster_gnome_pod', 'beforeScoring', tricksterGnomePodBeforeScoring);
@@ -819,10 +820,10 @@ export function registerTricksterInteractionHandlers(): void {
         const events: SmashUpEvent[] = [];
         if (zone === 'deck') {
             events.push({
-                type: SU_EVENTS.DECK_RESHUFFLED,
+                type: SU_EVENTS.DECK_REORDERED,
                 payload: { playerId, deckUids: nextDeck.map(card => card.uid) },
                 timestamp,
-            } as DeckReshuffledEvent);
+            } as DeckReorderedEvent);
         }
 
         // 4) 浜ゆ崲鍚庯細浣犲彲浠ユ秷鐏繖閲屼竴涓垬鏂楀姏鈮?鐨勯殢浠庯紙鍙€夛級

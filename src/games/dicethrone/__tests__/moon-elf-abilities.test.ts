@@ -15,6 +15,7 @@ import {
     MOON_ELF_ABILITIES,
     LONGBOW_2, LONGBOW_3,
     EXPLODING_ARROW_2, EXPLODING_ARROW_3,
+    COVERING_FIRE_2,
 } from '../heroes/moon_elf/abilities';
 import { MOON_ELF_TOKENS, MOON_ELF_INITIAL_TOKENS } from '../heroes/moon_elf/tokens';
 import { moonElfDiceDefinition } from '../heroes/moon_elf/diceConfig';
@@ -161,6 +162,15 @@ describe('Moon Elf 技能定义', () => {
 
     it('lunar-eclipse 有 ultimate 标签', () => {
         expect(MOON_ELF_ABILITIES.find(a => a.id === 'lunar-eclipse')?.tags).toContain('ultimate');
+    });
+
+    it('covering-fire 的 silencing-trace variant 应标记为 unblockable', () => {
+        const silencingTrace = COVERING_FIRE_2.variants?.find(v => v.id === 'silencing-trace');
+        expect(silencingTrace?.tags).toContain('unblockable');
+        expect(silencingTrace?.effects?.[1].action).toMatchObject({
+            type: 'damage',
+            value: 2,
+        });
     });
 });
 
