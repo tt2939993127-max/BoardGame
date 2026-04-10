@@ -1616,20 +1616,11 @@ describe('killer_plant_choking_vines 触发修复', () => {
 // ============================================================================
 
 describe('pirate_full_sail special', () => {
-    it('onPlay executor 已注册，正常打出时也会创建同一套交互', () => {
-        const m1 = makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 });
-        const base = makeBase({ minions: [m1] });
-        const state = makeState({ bases: [base, makeBase()] });
-
-        const executor = resolveAbility('pirate_full_sail', 'onPlay');
-        expect(executor).toBeDefined();
-        const ms = { core: state, sys: { phase: 'playCards', interaction: { queue: [] } } } as any;
-        const result = executor!({
-            state, matchState: ms, playerId: '0', cardUid: 'fs-1', defId: 'pirate_full_sail',
-            baseIndex: 0, random: dummyRandom, now: 0,
-        } as AbilityContext);
-        const current = (result.matchState?.sys as any)?.interaction?.current;
-        expect(current?.data?.sourceId).toBe('pirate_full_sail_choose_minion');
+    it('onPlay executor 已注册，并与 special 复用同一实现', () => {
+        const onPlayExecutor = resolveAbility('pirate_full_sail', 'onPlay');
+        const specialExecutor = resolveAbility('pirate_full_sail', 'special');
+        expect(onPlayExecutor).toBeDefined();
+        expect(onPlayExecutor).toBe(specialExecutor);
     });
 
     it('有己方随从→产生 Prompt（含完成选项）', () => {

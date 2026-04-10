@@ -50,3 +50,27 @@ npm run test:e2e:ci:file -- smashup-gameplay.e2e.ts "适者生存应先进入选
   - **不回退已修主问题**；
   - **状态继续保留 `in_progress`**；
   - 下一步集中排查这条提示噪音来自哪一次多余命令/重复点击链。
+
+## 2026-04-10 追加进展
+- 已补一轮更宽的 UI hint-only 静默：
+  - `src/games/smashup/Board.tsx`：Board 自己基于 `validate(...)` 的直接 toast 现在也会过滤 `请先完成当前选择`
+  - `src/pages/MatchRoom.tsx` / `src/pages/LocalMatchRoom.tsx`：命令拒绝 toast 改为按“原始错误 + 翻译后文案”双重过滤
+  - `src/components/system/EngineNotificationListener.tsx`：全局引擎提示同样过滤这类仅用于界面提示的错误
+  - `src/engine/transport/errorI18n.ts`：新增共享 `isUiHintOnlyError(...)`，避免各层各写一套判断
+- 但截至本次追加时，**还没有新的通过截图** 能证明提示噪音已彻底消失。
+
+## 本次追加验证阻塞
+- 我在 2026-04-10 再次尝试重跑定向 E2E 时，被当前工作区里与本反馈无关的构建错误阻塞，无法产出新的通过截图：
+  - `src/games/smashup/domain/baseAbilities.ts` 存在 `<<<<<<< HEAD` 冲突标记
+  - `src/games/smashup/domain/reduce.ts` 存在 `<<<<<<< HEAD` 冲突标记
+  - 另有 `dicethrone/ongoingEffects/UndoSystem` 的导出缺失，导致 game/API bundle 失败
+- 阻塞日志：
+  - `D:\gongzuo\webgame\BoardGame\.tmp\manual-sotf-dev\game.err.log`
+  - `D:\gongzuo\webgame\BoardGame\.tmp\playwright-bootstrap-manual-sotf-closeout-20260410z16-worker-0.log`
+
+## 当前收口判断
+- **状态仍应保持 `in_progress`**。
+- 原因不是主问题没修，而是：
+  1. 当前代码已补上更完整的静默链；
+  2. 但本轮没有拿到新的通过截图去证明噪音已消失；
+  3. 同时当前工作区存在无关构建错误，阻塞了这一步复验。

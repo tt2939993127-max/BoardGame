@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GameTransportServer, type GameEngineConfig } from '../server';
+import { createInteractionSystem, createSimpleChoice, INTERACTION_COMMANDS } from '../../systems/InteractionSystem';
+import { createSimpleChoiceSystem } from '../../systems/SimpleChoiceSystem';
 import type {
     CreateMatchData,
     FetchOpts,
@@ -190,6 +192,21 @@ const createEngineConfig = (): GameEngineConfig => ({
         reduce: (core) => core,
     },
     systems: [],
+});
+
+const createInteractiveEngineConfig = (): GameEngineConfig => ({
+    gameId: 'test-game',
+    domain: {
+        gameId: 'test-game',
+        setup: () => ({ currentPlayer: '0' }),
+        validate: () => ({ valid: true }),
+        execute: () => [],
+        reduce: (core) => core,
+    },
+    systems: [
+        createInteractionSystem(),
+        createSimpleChoiceSystem(),
+    ],
 });
 
 const createStoredState = (): StoredMatchState => ({
@@ -1192,6 +1209,101 @@ describe('GameTransportServer（离座与重连）', () => {
             disabledOptionIds: ['option-disabled'],
             enabledOptionIds: ['option-manual'],
         });
+    });
+
+    it('AI 走无解交互 emergency skip 时，服务端应立即自动反馈', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        const interaction = createSimpleChoice(
+            'unsat-choice',
+            '1',
+            '测试无解交互',
+            [{
+                id: 'only-disabled',
+                label: '唯一但不可选',
+                value: { targetId: 'm-1' },
+                disabled: true,
+                disabledReason: '目标已失效',
+            }],
+            { sourceId: 'test-unsat-choice' },
+        );
+
+        await storage.createMatch('match-unsat-auto-feedback', {
+            initialState: {
+                G: {
+                    core: {
+                        activePlayerId: '1',
+                        currentPlayerIndex: 1,
+                        turnOrder: ['0', '1'],
+                    },
+                    sys: {
+                        phase: 'main2',
+                        turnNumber: 4,
+                        eventStream: { nextId: 1 },
+                        interaction: {
+                            current: interaction,
+                            queue: [],
+                            isBlocked: false,
+                        },
+                        responseWindow: {
+                            current: undefined,
+                        },
+                    },
+                },
+                _stateID: 0,
+                randomSeed: 'seed',
+                randomCursor: 0,
+            },
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createInteractiveEngineConfig()],
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        const match = await serverInternal.loadMatch('match-unsat-auto-feedback');
+        const success = await serverInternal.executeCommandInternal(
+            match,
+            '1',
+            INTERACTION_COMMANDS.RESPOND,
+            { optionId: '__emergency_skip__' },
+        );
+
+        expect(success).toBe(true);
+        expect(feedbackReporter).toHaveBeenCalledTimes(1);
+        expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+            matchId: 'match-unsat-auto-feedback',
+            playerId: '1',
+            incidentKind: 'unsatisfiable-interaction-auto-skipped',
+            reason: 'all-options-disabled',
+        }));
+
+        const payload = feedbackReporter.mock.calls[0]?.[0] as { stateSnapshot?: string } | undefined;
+        const snapshot = JSON.parse(payload?.stateSnapshot ?? '{}');
+        expect(snapshot.interaction?.seatSelectability).toMatchObject({
+            totalOptions: 2,
+            enabledOptions: 1,
+            disabledOptions: 1,
+            selectionState: 'recoverable-option-available',
+        });
+        expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
+            id: '__emergency_skip__',
+        }));
     });
 });
 

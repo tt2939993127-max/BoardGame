@@ -1507,6 +1507,67 @@ const assertHandAreaVisible = async (page: Page, label: string) => {
   }
 };
 
+const getHandCardViewportMetrics = async (page: Page) => page.evaluate(() => {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const cards = Array.from(document.querySelectorAll('[data-testid="sw-hand-area"] [data-card-id]'))
+    .map((node) => {
+      if (!(node instanceof HTMLElement)) return null;
+      const rect = node.getBoundingClientRect();
+      const visibleLeft = Math.max(0, rect.left);
+      const visibleTop = Math.max(0, rect.top);
+      const visibleRight = Math.min(viewportWidth, rect.right);
+      const visibleBottom = Math.min(viewportHeight, rect.bottom);
+      const visibleWidth = Math.max(0, visibleRight - visibleLeft);
+      const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+      const area = Math.max(rect.width * rect.height, 1);
+      const visibleRatio = (visibleWidth * visibleHeight) / area;
+      return {
+        cardId: node.getAttribute('data-card-id'),
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+        visibleRatio,
+        fullyVisible: rect.left >= -1
+          && rect.top >= -1
+          && rect.right <= viewportWidth + 1
+          && rect.bottom <= viewportHeight + 1,
+        mostlyVisible: visibleRatio >= 0.72,
+      };
+    })
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+
+  return {
+    viewportWidth,
+    viewportHeight,
+    totalCards: cards.length,
+    fullyVisibleCount: cards.filter((card) => card.fullyVisible).length,
+    mostlyVisibleCount: cards.filter((card) => card.mostlyVisible).length,
+    cards,
+  };
+});
+
+const assertReachableHandCards = async (
+  page: Page,
+  label: string,
+  minMostlyVisibleCount: number,
+) => {
+  const metrics = await getHandCardViewportMetrics(page);
+  if (metrics.mostlyVisibleCount < minMostlyVisibleCount) {
+    throw new Error(
+      [
+        `[${label}] 手机横屏下可直接触达的手牌不足`,
+        `expected>=${minMostlyVisibleCount}`,
+        `actual=${metrics.mostlyVisibleCount}`,
+        `cards=${JSON.stringify(metrics.cards)}`,
+      ].join(' '),
+    );
+  }
+};
+
 const advancePhase = async (page: Page, fromPhase: string) => {
   const endPhaseButton = page.getByTestId('sw-end-phase');
   await waitForMyTurn(page);
@@ -2864,6 +2925,7 @@ test.describe('SummonerWars', () => {
     await waitForSummonerWarsHandStable(hostPage);
     await waitForSummonerWarsHandArtReady(hostPage);
     await assertHandAreaVisible(hostPage, 'mobile-basic-flow-start');
+    await assertReachableHandCards(hostPage, 'mobile-basic-flow-start', 4);
 
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-start', {
@@ -2881,6 +2943,7 @@ test.describe('SummonerWars', () => {
       timeout: 3000,
       message: '移动端单位牌点击后未进入选中态',
     }).toBeGreaterThan(0);
+    await assertReachableHandCards(hostPage, 'mobile-basic-flow-card-selected', 3);
 
     const summonCell = hostPage.locator('[data-valid-summon="true"]').first();
     await expect(summonCell).toBeVisible({ timeout: 8000 });
@@ -3025,6 +3088,7 @@ test.describe('SummonerWars', () => {
     await waitForSummonerWarsHandStable(hostPage);
     await waitForSummonerWarsHandArtReady(hostPage);
     await assertHandAreaVisible(hostPage, 'mobile-basic-flow-after-magic');
+    await assertReachableHandCards(hostPage, 'mobile-basic-flow-after-magic', 3);
 
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '41-mobile-basic-flow-after-magic', {
@@ -3165,6 +3229,7 @@ test.describe('SummonerWars', () => {
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 20000 });
 
     await assertHandAreaVisible(hostPage, 'phone-landscape');
+    await assertReachableHandCards(hostPage, 'phone-landscape', 4);
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 5000 });
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
 

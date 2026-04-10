@@ -31,6 +31,24 @@
 - **AND** 系统 MUST 在每次推进后重新读取权威状态，直到切回 human、出现新阻塞或命中安全步数上限
 - **AND** 若最新权威状态已切回 human 或出现新阻塞，系统 MUST 立即终止后续 follow-up
 
+### Requirement: 无解交互不得继续把 AI 困在阻塞态
+系统 SHALL 在交互层与 AI 决策层共同兜底“当前 interaction 无任何可解路径”的场景，而不是只能等 watchdog 超时救火。
+
+#### Scenario: simple-choice 选项为空、全 disabled 或最少选择数不可达时，系统应立即变为可解
+- **GIVEN** 当前 `simple-choice` interaction 在创建后或动态刷新后出现以下任一情况：
+  - 选项为空
+  - 所有选项都为 disabled
+  - `multi.min` 大于当前 enabled 选项数
+- **WHEN** 系统准备把该 interaction 交给玩家或 AI 消费
+- **THEN** 系统 MUST 注入或保留一条可执行的恢复路径（如 `__emergency_skip__`、空选择或显式 skip/cancel）
+- **AND** 不得继续保留“阻塞了 `ADVANCE_PHASE` 但又没有任何可执行动作”的死锁态
+
+#### Scenario: AI 缺少游戏专属交互动作时，仍应能走通用恢复动作
+- **GIVEN** 某个游戏自己的 AI `buildLegalActions` 没有为当前无解 interaction 生成动作
+- **WHEN** 引擎构建 AI 决策上下文
+- **THEN** 引擎 SHOULD 自动补一个通用 interaction fallback action
+- **AND** 该 fallback 至少应覆盖空选择或 `__emergency_skip__` 这类确定性恢复路径
+
 ### Requirement: 强制恢复 incident 必须自动反馈且可去重
 系统 SHALL 对在线 AI recovery incident 执行 best-effort 自动反馈，并对同一 incident 做去重与冷却。
 
@@ -46,6 +64,12 @@
 - **THEN** `stateSnapshot` SHOULD 包含共享视角或 seat 视角下的 interaction options 摘要
 - **AND** 若存在 disabled 选项，反馈 SHOULD 记录其 disabled 状态与可用的禁用原因字段
 - **AND** 系统 SHOULD 额外给出可选性诊断（如 `no-options`、`all-options-disabled`、`manual-selection-required`、`recoverable-option-available`）
+
+#### Scenario: AI 触发 emergency skip 时应立即自动反馈
+- **GIVEN** AI seat 没有等待 watchdog，而是在当前 interaction 中直接走了 `__emergency_skip__`
+- **WHEN** 服务端收到该交互取消事件
+- **THEN** 系统 SHOULD 立即提交一条自动反馈，而不是等 8 秒后的 watchdog incident
+- **AND** 反馈中 SHOULD 包含触发前的 interaction 快照与可选性诊断，供后续把该交互修回“有解”
 
 #### Scenario: 同一 incident 在冷却窗口内不得重复刷反馈
 - **GIVEN** 某条 AI recovery incident 已在当前去重键下成功或失败上报过一次

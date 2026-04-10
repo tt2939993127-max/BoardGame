@@ -331,6 +331,78 @@ describe('AI legal actions', () => {
         );
     });
 
+    it('本地 AI 在 simple-choice 多选最少数量不可达时，应走通用 emergency skip fallback 而不是卡死', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.activePlayerId = '0';
+        state.sys.phase = 'main2';
+        state.sys.interaction = {
+            current: {
+                id: 'unsat-multi-choice',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    title: 'interaction.unsatMulti',
+                    sourceId: 'test-unsat-multi',
+                    multi: { min: 2, max: 2 },
+                    options: [
+                        {
+                            id: 'disabled-only',
+                            label: '唯一但不可选',
+                            value: { targetId: 'm-1' },
+                            disabled: true,
+                        },
+                        {
+                            id: '__emergency_skip__',
+                            label: '跳过（当前无可执行选项）',
+                            value: {
+                                __emergency_skip__: true,
+                                __emergency_skip_reason__: 'min-selection-unreachable',
+                            },
+                        },
+                    ],
+                },
+            } as unknown as NonNullable<typeof state.sys.interaction.current>,
+            queue: [],
+            isBlocked: false,
+        };
+
+        const context = buildAiDecisionContext({
+            gameId: engineConfig.gameId,
+            matchId: 'local:test-unsat-multi',
+            playerId: '0',
+            visibleState: state as MatchState<unknown>,
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai' },
+        });
+
+        expect(context.legalActions).toEqual(expect.arrayContaining([
+            expect.objectContaining({
+                kind: 'interaction-choice',
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: { optionIds: ['__emergency_skip__'] },
+                }],
+            }),
+        ]));
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test-unsat-multi',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionIds: ['__emergency_skip__'] },
+        });
+    });
+
     it('本地 AI 在敌方单选交互中优先选择更低血量的目标', async () => {
         const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
         state.core.players['1'].resources[RESOURCE_IDS.HP] = 30;

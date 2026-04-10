@@ -32,6 +32,7 @@ import {
     buildValidatedMoveEvents,
     buildValidatedDestroyEvents,
     buildValidatedReturnEvents,
+    moveMinion,
 } from './abilityHelpers';
 import { getCardDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
@@ -39,6 +40,11 @@ import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { registerExpansionBaseAbilities, registerExpansionBaseInteractionHandlers } from './baseAbilities_expansion';
 import { isBaseAbilitySuppressed } from './ongoingEffects';
 import { registerBaseAbilityAsQueuedTrigger } from './baseAbilityQueue';
+import {
+    appendPendingPostScoringActions,
+    getDeferredReplacementBaseDefId,
+    mergeDeferredPostScoringCompatibility,
+} from './scoringSession';
 
 // ============================================================================
 // 类型定义
@@ -1665,17 +1671,40 @@ export function registerBaseInteractionHandlers(): void {
         const { baseIndex: targetBase } = value as { baseIndex: number };
         const ctx = getContinuationContext<{ minionUid: string; minionDefId: string; fromBaseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
-        return {
-            state,
-            events: buildValidatedMoveEvents(state, {
-                minionUid: ctx.minionUid,
-                minionDefId: ctx.minionDefId,
-                fromBaseIndex: ctx.fromBaseIndex,
-                toBaseIndex: targetBase,
-                reason: '海盗湾：移动随从到其他基地',
-                now: timestamp,
-            }),
-        };
+        const deferredEvents = getDeferredPostScoringEvents(iData);
+        const moveReason = '海盗湾：移动随从到其他基地';
+        let moveEvents = buildValidatedMoveEvents(state, {
+            minionUid: ctx.minionUid,
+            minionDefId: ctx.minionDefId,
+            fromBaseIndex: ctx.fromBaseIndex,
+            toBaseIndex: targetBase,
+            reason: moveReason,
+            now: timestamp,
+        });
+        if (moveEvents.length === 0 && deferredEvents && deferredEvents.length > 0) {
+            const targetBaseDefId = state.core.bases[targetBase]?.defId;
+            moveEvents = [
+                moveMinion(
+                    ctx.minionUid,
+                    ctx.minionDefId,
+                    ctx.fromBaseIndex,
+                    targetBase,
+                    moveReason,
+                    timestamp,
+                    targetBaseDefId,
+                ),
+            ];
+        }
+        if (deferredEvents && deferredEvents.length > 0) {
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryEvents: moveEvents,
+                primaryOrder: 'after',
+            });
+            if (compatibility) {
+                return compatibility;
+            }
+        }
+        return { state, events: moveEvents };
     });
 
     // 托尔图加：将其他基地上的随从移动到替换基地
@@ -1684,6 +1713,28 @@ export function registerBaseInteractionHandlers(): void {
         if (selected.skip) return { state, events: [] };
         const ctx = getContinuationContext<{ baseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
+        const deferredEvents = getDeferredPostScoringEvents(iData);
+        if (deferredEvents && deferredEvents.length > 0) {
+            const targetBaseDefId = getDeferredReplacementBaseDefId(state, iData)
+                ?? state.core.bases[ctx.baseIndex]?.defId;
+            if (!targetBaseDefId) return { state, events: [] };
+            const pendingAction: PendingPostScoringAction = {
+                kind: 'moveMinionToReplacementBase',
+                minionUid: selected.minionUid!,
+                minionDefId: selected.minionDefId!,
+                fromBaseIndex: selected.fromBaseIndex ?? -1,
+                toBaseIndex: ctx.baseIndex,
+                targetBaseDefId,
+                reason: '托尔图加：亚军移动随从到替换基地',
+            };
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                extraPendingActions: [pendingAction],
+            });
+            if (compatibility) {
+                return compatibility;
+            }
+            return { state: appendPendingPostScoringActions(state, [pendingAction]), events: [] };
+        }
         const moveEvents = buildValidatedMoveEvents(state, {
             minionUid: selected.minionUid!,
             minionDefId: selected.minionDefId!,
@@ -1694,30 +1745,6 @@ export function registerBaseInteractionHandlers(): void {
         });
         if (moveEvents.length === 0) {
             return { state, events: [] };
-        }
-        const deferredEvents = getDeferredPostScoringEvents(iData);
-        if (deferredEvents && deferredEvents.length > 0) {
-            const pendingAction: PendingPostScoringAction = {
-                kind: 'moveMinionToReplacementBase',
-                minionUid: selected.minionUid!,
-                minionDefId: selected.minionDefId!,
-                fromBaseIndex: selected.fromBaseIndex ?? -1,
-                toBaseIndex: ctx.baseIndex,
-                reason: '托尔图加：亚军移动随从到替换基地',
-            };
-            return {
-                state: {
-                    ...state,
-                    core: {
-                        ...state.core,
-                        pendingPostScoringActions: [
-                            ...(state.core.pendingPostScoringActions ?? []),
-                            pendingAction,
-                        ],
-                    },
-                },
-                events: [],
-            };
         }
         return {
             state,

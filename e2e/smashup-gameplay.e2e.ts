@@ -394,6 +394,7 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
 
         await expect(handCard, '点卡后应进入选基地态，不能直接弹“场上没有符合条件的目标”').toBeVisible();
         await expect(page.getByText('场上没有符合条件的目标')).toHaveCount(0);
+        await expect(page.getByText('请先完成当前选择')).toHaveCount(0);
         await game.screenshot('sotf-after-card-click-awaiting-base', testInfo);
 
         await base0.click();
@@ -416,6 +417,7 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
         });
 
         await expect(page.getByText('场上没有符合条件的目标')).toHaveCount(0);
+        await expect(page.getByText('请先完成当前选择')).toHaveCount(0);
         await expect(page.getByText('选择要消灭的最低力量随从')).toBeVisible();
         await game.screenshot('sotf-after-base-selection-awaiting-tiebreak', testInfo);
 

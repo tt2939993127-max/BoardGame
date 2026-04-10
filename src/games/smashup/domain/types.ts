@@ -710,6 +710,12 @@ export interface SmashUpCore {
      */
     beforeScoringTriggeredBases?: number[];
     /**
+     * 本次计分阶段中已触发过 whenScoring 的基地索引列表。
+     * 用于防止交互解决后重新进入 scoreBase 时重复触发 whenScoring。
+     * 在 scoreBases 阶段结束时清空。
+     */
+    whenScoringTriggeredBases?: number[];
+    /**
      * 本次计分阶段中已触发过 afterScoring 的基地索引列表。
      * 用于防止交互解决后重新进入 scoreBase 时重复触发 afterScoring。
      * 在 scoreBases 阶段结束时清空。

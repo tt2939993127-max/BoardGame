@@ -533,10 +533,11 @@ describe('InteractionSystem - 通用刷新', () => {
         // 调用 refreshInteractionOptions
         state = refreshInteractionOptions(state);
 
-        // 验证：应该保持原始选项（因为过滤后只剩 1 个，无法满足 min=2）
+        // 验证：现在应把“min 无法满足”正规化成“剩余有效选项 + emergency skip”
         const currentInteraction = state.sys.interaction.current;
         const options = (currentInteraction?.data as any).options || [];
-        expect(options).toHaveLength(3); // 保持原始的 3 个选项
+        expect(options).toHaveLength(2);
+        expect(options.map((option: any) => option.id)).toEqual(['opt-1', '__emergency_skip__']);
     });
 
     it('required 单选在动态刷新后变成空数组时，应自动注入紧急跳过选项', () => {
@@ -643,6 +644,62 @@ describe('InteractionSystem - 通用刷新', () => {
         expect(options).toHaveLength(1); // 只剩紧急跳过选项
         expect(options[0].id).toBe('__emergency_skip__');
         expect(options[0].value.__emergency_skip__).toBe(true);
+    });
+
+    it('createSimpleChoice 遇到全部选项 disabled 时，应自动追加 emergency skip', () => {
+        const interaction = createSimpleChoice(
+            'all-disabled-choice',
+            'p1',
+            '测试全部不可选',
+            [{
+                id: 'disabled-only',
+                label: '唯一目标',
+                value: { targetId: 'm-1' },
+                disabled: true,
+            }],
+            { sourceId: 'all-disabled-choice' },
+        );
+
+        const options = (interaction.data as any).options ?? [];
+        expect(options).toHaveLength(2);
+        expect(options.some((option: any) => option.id === '__emergency_skip__')).toBe(true);
+        const emergencyOption = options.find((option: any) => option.id === '__emergency_skip__');
+        expect(emergencyOption?.value?.__emergency_skip__).toBe(true);
+        expect(emergencyOption?.value?.__emergency_skip_reason__).toBe('all-options-disabled');
+    });
+
+    it('刷新后若 enabled 选项数量不足 multi.min，应自动追加 emergency skip', () => {
+        let state: MatchState<TestCore> = {
+            core: {
+                players: {
+                    p1: {
+                        hand: [{ uid: 'card-1', defId: 'test-card-1' }],
+                    },
+                },
+            },
+            sys: {
+                interaction: { queue: [] },
+            },
+        } as any;
+
+        const interaction = createSimpleChoice(
+            'min-unreachable-choice',
+            'p1',
+            '测试最少选择数不可达',
+            [
+                { id: 'card-1', label: '卡牌 1', value: { cardUid: 'card-1', defId: 'test-card-1' } },
+                { id: 'card-2', label: '卡牌 2', value: { cardUid: 'card-2', defId: 'test-card-2' } },
+            ],
+            { sourceId: 'min-unreachable-choice', autoRefresh: 'hand', multi: { min: 2, max: 2 } },
+        );
+
+        state = queueInteraction(state, interaction);
+        state = refreshInteractionOptions(state);
+
+        const options = (state.sys.interaction.current?.data as any)?.options ?? [];
+        expect(options.some((option: any) => option.id === '__emergency_skip__')).toBe(true);
+        const emergencyOption = options.find((option: any) => option.id === '__emergency_skip__');
+        expect(emergencyOption?.value?.__emergency_skip_reason__).toBe('min-selection-unreachable');
     });
 
     it('未声明 live 响应校验时保持原有快照响应行为', () => {

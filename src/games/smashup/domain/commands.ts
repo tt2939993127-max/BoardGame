@@ -13,7 +13,10 @@ import {
 } from './ongoingModifiers';
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
+import { validateActionPlaySemantics } from './playLegality';
 import {
+    actionLikeNeedsResponseWindowBase,
+    getActionLikeResponseWindowTiming,
     canUseBaseLimitedMinionQuota,
     canUseSameNameMinionQuota,
     getMaxRemainingGlobalPowerLimitedQuota,
@@ -288,30 +291,27 @@ export function validate(
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - card def not found');
                     return { valid: false, error: '卡牌定义不存在' };
                 }
-                const rSubtype = (rDef as any).type === 'fusion'
-                    ? (rDef as FusionCardDef).actionSubtype
-                    : (rDef as ActionCardDef).subtype;
-                if (rSubtype !== 'special') {
-                    console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - not special card', {
-                        subtype: rSubtype,
+                const responseTiming = getActionLikeResponseWindowTiming(rDef);
+                if (!responseTiming) {
+                    console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - not response-window card', {
+                        subtype: (rDef as any).type === 'fusion'
+                            ? (rDef as FusionCardDef).actionSubtype
+                            : (rDef as ActionCardDef).subtype,
                     });
-                    return { valid: false, error: '响应窗口只能打出特殊行动卡' };
+                    return { valid: false, error: '该行动卡不能在响应窗口中打出' };
                 }
                 
-                // 检查 specialTiming 是否匹配窗口类型
-                const cardTiming = (rDef as any).type === 'fusion'
-                    ? ((rDef as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
-                    : ((rDef as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
-                if (responseWindow.windowType === 'meFirst' && cardTiming !== 'beforeScoring') {
+                // 检查响应窗口时机是否匹配窗口类型
+                if (responseWindow.windowType === 'meFirst' && responseTiming !== 'beforeScoring') {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - wrong timing for meFirst window', {
-                        cardTiming,
+                        cardTiming: responseTiming,
                         windowType: responseWindow.windowType,
                     });
                     return { valid: false, error: '该卡牌只能在计分后打出' };
                 }
-                if (responseWindow.windowType === 'afterScoring' && cardTiming !== 'afterScoring') {
+                if (responseWindow.windowType === 'afterScoring' && responseTiming !== 'afterScoring') {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - wrong timing for afterScoring window', {
-                        cardTiming,
+                        cardTiming: responseTiming,
                         windowType: responseWindow.windowType,
                     });
                     return { valid: false, error: '该卡牌只能在计分前打出' };
@@ -319,19 +319,15 @@ export function validate(
 
                 const targetBase = command.payload.targetBaseIndex;
                 console.log('[DEBUG] PLAY_ACTION validation: checking base requirement', {
-                    specialNeedsBase: (rDef as any).type === 'fusion'
-                        ? (rDef as FusionCardDef).actionSpecialNeedsBase
-                        : (rDef as ActionCardDef).specialNeedsBase,
+                    responseWindowNeedsBase: actionLikeNeedsResponseWindowBase(rDef),
                     targetBase,
                 });
                 
-                const needsBase = (rDef as any).type === 'fusion'
-                    ? (rDef as FusionCardDef).actionSpecialNeedsBase
-                    : (rDef as ActionCardDef).specialNeedsBase;
+                const needsBase = actionLikeNeedsResponseWindowBase(rDef);
                 if (needsBase) {
                     if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
                         console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - needs base but no valid base provided');
-                        return { valid: false, error: '该特殊行动卡需要选择一个达标基地' };
+                        return { valid: false, error: '该行动卡需要选择一个达标基地' };
                     }
                     const targetBaseIndex = targetBase;
                     if (targetBaseIndex < 0 || targetBaseIndex >= core.bases.length) {
@@ -366,7 +362,7 @@ export function validate(
                     }
                 } else if (targetBase !== undefined) {
                     console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - base provided but not needed');
-                    return { valid: false, error: '该特殊行动卡不需要基地目标' };
+                    return { valid: false, error: '该行动卡不需要基地目标' };
                 }
 
                 console.log('[DEBUG] PLAY_ACTION validation: PASSED (Me First! mode)');
@@ -392,68 +388,12 @@ export function validate(
             if (!isCardActionLike(card)) return { valid: false, error: '该卡牌不是行动卡' };
             const def = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
             if (!def) return { valid: false, error: '卡牌定义不存在' };
-            const subtype = (def as any).type === 'fusion'
-                ? (def as FusionCardDef).actionSubtype
-                : (def as ActionCardDef).subtype;
-            // 特殊行动卡只能在响应窗口中打出，不能在正常出牌阶段使用
-            if (subtype === 'special') {
-                const cardTiming = (def as any).type === 'fusion'
-                    ? ((def as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
-                    : ((def as ActionCardDef).specialTiming ?? 'beforeScoring');
-                if (cardTiming === 'beforeScoring') {
-                    return { valid: false, error: '该特殊行动卡只能在基地计分前的响应窗口中打出' };
-                } else {
-                    return { valid: false, error: '该特殊行动卡只能在基地计分后的响应窗口中打出' };
-                }
-            }
-
-            // 持续行动卡：必须显式选择附着目标
-            const targetBase = command.payload.targetBaseIndex;
-            if (subtype === 'ongoing') {
-                if (typeof targetBase !== 'number' || !Number.isInteger(targetBase)) {
-                    return { valid: false, error: '持续行动卡需要选择目标基地' };
-                }
-                if (targetBase < 0 || targetBase >= core.bases.length) {
-                    return { valid: false, error: '无效的基地索引' };
-                }
-
-                const ongoingTarget = (def as any).type === 'fusion'
-                    ? ((def as FusionCardDef).actionOngoingTarget ?? 'base')
-                    : (((def as ActionCardDef).ongoingTarget ?? 'base'));
-                const targetMinionUid = command.payload.targetMinionUid;
-                if (ongoingTarget === 'minion') {
-                    if (!targetMinionUid) {
-                        return { valid: false, error: '该持续行动卡需要选择目标随从' };
-                    }
-                    const targetMinion = core.bases[targetBase].minions.find(m => m.uid === targetMinionUid);
-                    if (!targetMinion) {
-                        return { valid: false, error: '基地上没有该随从' };
-                    }
-                } else if (targetMinionUid !== undefined) {
-                    return { valid: false, error: '该持续行动卡不需要选择随从目标' };
-                }
-
-                // 打出约束检查（数据驱动）
-                const playConstraint = (def as any).type === 'fusion'
-                    ? (def as FusionCardDef).actionPlayConstraint
-                    : (def as ActionCardDef).playConstraint;
-                if (playConstraint) {
-                    const constraintError = checkPlayConstraint(playConstraint, core, targetBase, command.playerId);
-                    if (constraintError) return { valid: false, error: constraintError };
-                }
-            }
-
-            // ongoing 限制检查：是否禁止打出行动卡到目标基地
-            // 注意：ongoingTarget='minion' 的行动卡附着到随从上，不受基地 play_action 限制
-            if (typeof targetBase === 'number') {
-                const ongoingTarget = (def as any).type === 'fusion'
-                    ? ((def as FusionCardDef).actionOngoingTarget ?? 'base')
-                    : (((def as ActionCardDef).ongoingTarget ?? 'base'));
-                if (ongoingTarget === 'base' && isOperationRestricted(core, targetBase, command.playerId, 'play_action')) {
-                    return { valid: false, error: '该基地禁止打出行动卡' };
-                }
-            }
-            return { valid: true };
+            return validateActionPlaySemantics(core, command.playerId, {
+                defId: card.defId,
+                targetBaseIndex: command.payload.targetBaseIndex,
+                targetMinionUid: command.payload.targetMinionUid,
+                effectiveHandSize: player.hand.length,
+            });
         }
 
         case SU_COMMANDS.DISCARD_TO_LIMIT: {

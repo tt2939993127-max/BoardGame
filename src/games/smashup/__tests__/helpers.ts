@@ -254,7 +254,7 @@ import { triggerBaseAbility as _triggerBaseAbility } from '../domain/baseAbiliti
  */
 export function triggerBaseAbilityWithMS(
     baseDefId: string,
-    timing: 'onMinionPlayed' | 'onMinionDestroyed' | 'onTurnStart' | 'afterScoring' | 'onActionPlayed',
+    timing: 'onMinionPlayed' | 'onMinionDestroyed' | 'onTurnStart' | 'whenScoring' | 'afterScoring' | 'onActionPlayed',
     ctx: BaseAbilityContext,
 ): BaseAbilityResult {
     const ctxWithMS: BaseAbilityContext = {

@@ -17,6 +17,7 @@ import { registerTrigger, isMinionProtected } from '../domain/ongoingEffects';
 import type { TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { FACTION_DISPLAY_NAMES } from '../domain/ids';
 import { getOpponentLabel } from '../domain/utils';
+import { mergeDeferredPostScoringCompatibility } from '../domain/scoringSession';
 
 /** 注册海盗派系所有能力*/
 export function registerPirateAbilities(): void {
@@ -954,10 +955,24 @@ export function registerPirateInteractionHandlers(): void {
         const hasNextInteraction =
             !!state.sys.interaction?.current
             || (state.sys.interaction?.queue?.length ?? 0) > 0;
+        const legacyPendingActions = state.core.pendingPostScoringActions ?? [];
+        const shouldFlushDeferred = !!(deferredEvents && deferredEvents.length > 0 && !hasNextInteraction);
         
         if (selected.skip) {
             // 跳过时，如果这是最后一个交互，补发延迟事件
-            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
+            if (shouldFlushDeferred) {
+                const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                    extraPendingActions: legacyPendingActions.length > 0 ? legacyPendingActions : undefined,
+                });
+                if (compatibility) {
+                    const clearedState = legacyPendingActions.length > 0
+                        ? {
+                            ...compatibility.state,
+                            core: { ...compatibility.state.core, pendingPostScoringActions: undefined },
+                        }
+                        : compatibility.state;
+                    return { state: clearedState, events: compatibility.events };
+                }
                 return { state, events: deferredEvents as any[] };
             }
             return { state, events: [] };
@@ -969,7 +984,19 @@ export function registerPirateInteractionHandlers(): void {
         if (!ctx) return undefined;
         const resolvedDestBase = resolveLiveBaseIndex(state.core, destBase, selected.baseDefId);
         if (resolvedDestBase === undefined) {
-            if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
+            if (shouldFlushDeferred) {
+                const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                    extraPendingActions: legacyPendingActions.length > 0 ? legacyPendingActions : undefined,
+                });
+                if (compatibility) {
+                    const clearedState = legacyPendingActions.length > 0
+                        ? {
+                            ...compatibility.state,
+                            core: { ...compatibility.state.core, pendingPostScoringActions: undefined },
+                        }
+                        : compatibility.state;
+                    return { state: clearedState, events: compatibility.events };
+                }
                 return { state, events: deferredEvents as any[] };
             }
             return { state, events: [] };
@@ -984,7 +1011,21 @@ export function registerPirateInteractionHandlers(): void {
         )];
         
         // 【通用修复】如果这是最后一个交互，补发延迟事件
-        if (deferredEvents && deferredEvents.length > 0 && !hasNextInteraction) {
+        if (shouldFlushDeferred) {
+            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
+                primaryEvents: events,
+                primaryOrder: 'after',
+                extraPendingActions: legacyPendingActions.length > 0 ? legacyPendingActions : undefined,
+            });
+            if (compatibility) {
+                const clearedState = legacyPendingActions.length > 0
+                    ? {
+                        ...compatibility.state,
+                        core: { ...compatibility.state.core, pendingPostScoringActions: undefined },
+                    }
+                    : compatibility.state;
+                return { state: clearedState, events: compatibility.events };
+            }
             events.push(...deferredEvents as SmashUpEvent[]);
         }
         

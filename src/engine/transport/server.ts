@@ -32,7 +32,7 @@ import {
     createInitialSystemState,
     type PipelineConfig,
 } from '../pipeline';
-import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
+import { INTERACTION_COMMANDS, INTERACTION_EVENTS } from '../systems/InteractionSystem';
 import { setUndoAiSeatIds } from '../systems/UndoSystem';
 import { computeDiff } from './patch';
 import {
@@ -104,7 +104,7 @@ type OnlineAiRecoveryFeedbackPayload = {
     matchId: string;
     gameId: string;
     playerId: string;
-    incidentKind: 'force-end-turn-success' | 'force-end-turn-failed';
+    incidentKind: 'force-end-turn-success' | 'force-end-turn-failed' | 'unsatisfiable-interaction-auto-skipped';
     severity: 'medium' | 'high';
     reason: string;
     trackerKey: string;
@@ -112,6 +112,12 @@ type OnlineAiRecoveryFeedbackPayload = {
     stateSnapshot: string;
     actionLog?: string;
 };
+
+const UNSATISFIABLE_INTERACTION_REASONS = new Set([
+    'empty-options',
+    'all-options-disabled',
+    'min-selection-unreachable',
+]);
 
 type InteractionSelectabilityDiagnostic = {
     totalOptions: number;
@@ -997,6 +1003,36 @@ export class GameTransportServer {
         return JSON.stringify(tail);
     }
 
+    private buildUnsatisfiableInteractionStateSnapshot(args: {
+        match: ActiveMatch;
+        playerId: string;
+        reason: string;
+        commandType: string;
+        progressMarkerBefore: string;
+        preCommandSeatView: MatchState<unknown>;
+    }): string {
+        const { match, playerId, reason, commandType, progressMarkerBefore, preCommandSeatView } = args;
+        const interaction = extractAiInteractionSnapshot(preCommandSeatView);
+        const responseWindow = extractAiResponseWindowSnapshot(preCommandSeatView);
+
+        return JSON.stringify({
+            matchId: match.matchID,
+            gameId: match.gameId,
+            playerId,
+            reason,
+            commandType,
+            phase: preCommandSeatView.sys?.phase ?? match.state.sys?.phase ?? null,
+            turnNumber: preCommandSeatView.sys?.turnNumber ?? match.state.sys?.turnNumber ?? null,
+            currentPlayerId: resolveCurrentPlayerId(preCommandSeatView),
+            progressMarker: progressMarkerBefore,
+            interaction: {
+                seat: interaction,
+                seatSelectability: buildInteractionSelectabilityDiagnostic(interaction),
+            },
+            responseWindow,
+        });
+    }
+
     private async reportOnlineAiRecoveryFeedback(payload: OnlineAiRecoveryFeedbackPayload): Promise<void> {
         const dedupeKey = `${payload.matchId}:${payload.playerId}:${payload.incidentKind}:${payload.reason}:${payload.progressMarker}`;
         const now = Date.now();
@@ -1523,6 +1559,9 @@ export class GameTransportServer {
         const { engineConfig, state, random, playerIds } = match;
         const stateIdBefore = match.stateID;
         const preTrainingState = this.stripStateForTraining(this.applyPlayerView(match, playerID)) as MatchState<unknown>;
+        const progressMarkerBeforeCommand = buildAiProgressMarker(match.state);
+        const setupSeatControllers = extractSetupSeatControllers(match.metadata.setupData);
+        const seatControllerType = resolveSeatControllerTypeForTraining(setupSeatControllers, playerID);
 
         const command: Command = {
             type: commandType,
@@ -1588,6 +1627,7 @@ export class GameTransportServer {
         gameLogger.commandExecuted(match.matchID, commandType, playerID, duration);
 
         // 记录关键游戏事件（用于 bug 追溯）
+        let unsatisfiableInteractionFeedback: OnlineAiRecoveryFeedbackPayload | null = null;
         for (const event of result.events) {
             const eventType = (event as GameEvent).type;
             
@@ -1616,6 +1656,43 @@ export class GameTransportServer {
                     reason: payload.reason,
                     timestamp: (event as GameEvent).timestamp,
                 });
+            }
+
+            if (
+                seatControllerType !== 'human'
+                && commandType === INTERACTION_COMMANDS.RESPOND
+                && eventType === INTERACTION_EVENTS.CANCELLED
+            ) {
+                const payload = (event as GameEvent & {
+                    payload?: {
+                        reason?: unknown;
+                        interactionId?: unknown;
+                    };
+                }).payload;
+                const reason = typeof payload?.reason === 'string' ? payload.reason : null;
+                if (reason && UNSATISFIABLE_INTERACTION_REASONS.has(reason)) {
+                    const interaction = extractAiInteractionSnapshot(preTrainingState);
+                    const trackerKey = `${playerID}:unsatisfiable-interaction:${typeof payload?.interactionId === 'string' ? payload.interactionId : 'unknown'}:${reason}:${progressMarkerBeforeCommand}`;
+                    unsatisfiableInteractionFeedback = {
+                        matchId: match.matchID,
+                        gameId: engineConfig.gameId,
+                        playerId: playerID,
+                        incidentKind: 'unsatisfiable-interaction-auto-skipped',
+                        severity: 'medium',
+                        reason,
+                        trackerKey,
+                        progressMarker: progressMarkerBeforeCommand,
+                        stateSnapshot: this.buildUnsatisfiableInteractionStateSnapshot({
+                            match,
+                            playerId: playerID,
+                            reason,
+                            commandType,
+                            progressMarkerBefore: progressMarkerBeforeCommand,
+                            preCommandSeatView: preTrainingState,
+                        }),
+                        actionLog: interaction ? JSON.stringify(interaction.options.slice(0, 8)) : undefined,
+                    };
+                }
             }
         }
 
@@ -1677,6 +1754,10 @@ export class GameTransportServer {
             postState: postTrainingState,
             gameOver,
         });
+
+        if (unsatisfiableInteractionFeedback) {
+            await this.reportOnlineAiRecoveryFeedback(unsatisfiableInteractionFeedback);
+        }
 
         // 广播状态（批次执行期间抑制中间广播，仅在批次完成后统一广播）
         if (!options?.suppressBroadcast) {

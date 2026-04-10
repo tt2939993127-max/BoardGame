@@ -256,10 +256,18 @@ node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.
 5. `.tmp/e2e-preflight-cache.json` 一度被锁定（`EBUSY`）
 6. 最后一次 runtime manager 仍有提前退出现象，未能拿到“本轮三条目标 E2E 全绿”
 7. 使用独立 runtime scope 再跑时，进一步暴露出 **API 服务异常退出但 bootstrap log 无明确栈** 的基建问题；该问题与 Loaded 业务逻辑本身无直接证据关联
+8. 继续排查后确认：`scripts/infra/single-worker-runtime.js` 里 bundle 产物原先固定写到 `temp/dev-bundles/e2e-single/game|api/*`，**多个 isolated single E2E 并行时会共享同一输出目录**。这会导致不同端到端互相覆盖 bundle 产物，解释了“你同时跑多个 E2E 时，API/游戏服务偶发异常退出”的现象。
 
 这些阻塞说明：
 - 当前仓库的 E2E 基建存在独立稳定性问题
 - 但它们**不推翻已经拿到的截图证据和那次真实跑到 Loaded overlay 的事实**
+
+## 本轮新增基建修复
+
+- 已把 `scripts/infra/single-worker-runtime.js` 改成：**按 `runtimeScope` 生成独立 bundle 输出目录**
+  - 旧路径：`temp/dev-bundles/e2e-single/game|api/...`
+  - 新路径：`temp/dev-bundles/e2e-single/<runtimeScope>/game|api/...`
+- 这不是业务修复，而是测试基建隔离修复，目的是避免你同时跑多条 E2E 时互相覆盖同一个临时 bundle。
 
 ## 本轮残余风险
 

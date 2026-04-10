@@ -1705,6 +1705,12 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             return;
         }
         if (selectedCardUid) {
+            if (shouldLockNormalHandInteraction) {
+                playDeniedSound();
+                setSelectedCardUid(null);
+                setSelectedCardMode(null);
+                return;
+            }
             if (selectedCardMode === 'ongoing-minion' || selectedCardMode === 'action-minion') {
                 // 需要选择随从，点击基地无效
                 toast(t('ui.select_minion_hint', { defaultValue: '请选择一个随从' }));
@@ -1753,7 +1759,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             }
             dispatch(SU_COMMANDS.USE_BASE_ABILITY, { baseIndex: index });
         }
-    }, [selectedCardUid, selectedCardMode, activeSelectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed]);
+    }, [selectedCardUid, selectedCardMode, activeSelectedSetAsideTitanUid, selectedTitanDeployableBaseIndices, handlePlayMinion, handlePlayOngoingAction, t, isBaseSelectPrompt, selectableBaseIndices, currentPrompt, dispatch, meFirstPendingCard, deployableBaseIndices, deployBlockReason, discardStripSelectedUid, discardStripAllowedBases, isDiscardMinionPrompt, discardStripCards, meFirstEligibleBaseIndices, responseWindow, playerID, myPlayer, usableActiveBaseAbilityIndices, isTutorialCommandAllowed, shouldLockNormalHandInteraction]);
 
     const handleBuriedCardSelect = useCallback((cardUid: string) => {
         if (!isBuriedSelectPrompt || !currentPrompt) return;

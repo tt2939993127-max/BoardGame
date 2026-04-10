@@ -74,6 +74,11 @@ export interface PromptOption<T = unknown> {
     _ai?: AiHint;
 }
 
+type UnsatisfiableSimpleChoiceReason =
+    | 'empty-options'
+    | 'all-options-disabled'
+    | 'min-selection-unreachable';
+
 /**
  * 多选配置
  */
@@ -246,6 +251,66 @@ export interface InteractionState {
     isBlocked?: boolean;
 }
 
+function isControlChoiceValue(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as {
+        skip?: unknown;
+        done?: unknown;
+        cancel?: unknown;
+        __cancel__?: unknown;
+        __emergency_skip__?: unknown;
+    };
+    return Boolean(
+        candidate.skip
+        || candidate.done
+        || candidate.cancel
+        || candidate.__cancel__
+        || candidate.__emergency_skip__,
+    );
+}
+
+function isEnabledControlChoiceOption<T>(option: PromptOption<T>): boolean {
+    return option.disabled !== true && isControlChoiceValue(option.value);
+}
+
+function resolveUnsatisfiableSimpleChoiceReason<T>(
+    options: PromptOption<T>[],
+    data: Pick<SimpleChoiceData<T>, 'multi'>,
+): UnsatisfiableSimpleChoiceReason | null {
+    const minSelections = data.multi?.min ?? 1;
+    if (minSelections <= 0) {
+        return null;
+    }
+    if (options.length === 0) {
+        return 'empty-options';
+    }
+    const enabledOptions = options.filter((option) => option.disabled !== true);
+    if (enabledOptions.length === 0) {
+        return 'all-options-disabled';
+    }
+    if (enabledOptions.length < minSelections) {
+        return 'min-selection-unreachable';
+    }
+    return null;
+}
+
+function ensureResolvableSimpleChoiceOptions<T>(
+    options: PromptOption<T>[],
+    data: Pick<SimpleChoiceData<T>, 'multi'>,
+): PromptOption<T>[] {
+    const reason = resolveUnsatisfiableSimpleChoiceReason(options, data);
+    if (!reason) {
+        return options;
+    }
+    if (options.some((option) => isEnabledControlChoiceOption(option))) {
+        return options;
+    }
+    if (options.some((option) => option.id === '__emergency_skip__' && option.disabled !== true)) {
+        return options;
+    }
+    return [...options, buildEmergencySkipOption<T>(reason)];
+}
+
 // ============================================================================
 // 序列化安全工具
 // ============================================================================
@@ -383,15 +448,8 @@ export function createSimpleChoice<T>(
         console.error(`[InteractionSystem] 创建了空选项交互！id=${id}, sourceId=${config.sourceId}, title=${title}`);
         console.error('[InteractionSystem] 这会导致玩家无法选择任何选项而卡死。请在调用 createSimpleChoice 前检查选项列表不为空。');
         console.trace(); // 打印调用栈
-        
-        // 添加一个紧急保底选项，防止完全卡死
-        finalOptions = [{
-            id: '__emergency_skip__',
-            label: '跳过（无可用选项）',
-            value: { __emergency_skip__: true } as T,
-            displayMode: 'button' as const,
-        }];
     }
+    finalOptions = ensureResolvableSimpleChoiceOptions(finalOptions, { multi: config.multi });
     
     return {
         id,
@@ -757,7 +815,7 @@ function refreshOptionsGeneric<T>(
 
         // 跳过/完成/取消等操作选项：一律保留
         if (!val || typeof val !== 'object') return true;
-        if (val.skip || val.done || val.cancel || val.__cancel__ || val.__emergency_skip__) return true;
+        if (isControlChoiceValue(val)) return true;
 
         switch (autoRefresh) {
             case 'hand': {
@@ -826,11 +884,14 @@ function refreshOptionsGeneric<T>(
     });
 }
 
-function buildEmergencySkipOption<T>(): PromptOption<T> {
+function buildEmergencySkipOption<T>(reason: UnsatisfiableSimpleChoiceReason): PromptOption<T> {
     return {
         id: '__emergency_skip__',
-        label: '跳过（无可用选项）',
-        value: { __emergency_skip__: true } as T,
+        label: '跳过（当前无可执行选项）',
+        value: {
+            __emergency_skip__: true,
+            __emergency_skip_reason__: reason,
+        } as T,
         displayMode: 'button' as const,
     };
 }
@@ -902,27 +963,7 @@ function normalizeFreshSimpleChoiceOptions<T>(
     data: SimpleChoiceData<T>,
 ): PromptOption<T>[] {
     const hydratedOptions = mergeRenderableOptionMetadata(freshOptions, data.options);
-    if (hydratedOptions.length > 0) return hydratedOptions;
-
-    const minSelections = data.multi?.min ?? 1;
-    if (minSelections === 0) {
-        return hydratedOptions;
-    }
-
-    const fallbackOptions = (data.options ?? []).filter((option) => {
-        const value = option.value as Record<string, unknown> | undefined;
-        return Boolean(
-            value
-            && typeof value === 'object'
-            && (value.skip || value.cancel || value.__cancel__ || value.__emergency_skip__),
-        );
-    });
-
-    if (fallbackOptions.length > 0) {
-        return fallbackOptions;
-    }
-
-    return [buildEmergencySkipOption<T>()];
+    return ensureResolvableSimpleChoiceOptions(hydratedOptions, data);
 }
 
 export function getFreshSimpleChoiceOptions<TCore, T = unknown>(

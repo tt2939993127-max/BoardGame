@@ -78,9 +78,9 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
-const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.2;
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.08;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
-const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.07;
+const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.05;
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
@@ -125,7 +125,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardShellVars = isPhoneLandscapeViewport
     ? {
-      '--sw-hand-card-width-ratio': '0.115',
+      '--sw-hand-card-width-ratio': '0.105',
     } as React.CSSProperties
     : undefined;
 

@@ -47,6 +47,7 @@ function getReactionTimingLabelKey(timing: TriggerInstance['timing']): string {
     case 'onTurnEnd':
     case 'onTurnStart':
     case 'beforeScoring':
+    case 'whenScoring':
     case 'afterScoring':
       return `ui.reaction_timing.${timing}`;
     default:

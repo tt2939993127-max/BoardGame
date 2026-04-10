@@ -85,6 +85,35 @@ export const UNDO_COMMANDS = {
     CANCEL_UNDO: 'SYS_CANCEL_UNDO',
 } as const;
 
+export function setUndoAiSeatIds<TCore>(
+    state: MatchState<TCore>,
+    aiSeatIds: PlayerId[],
+): MatchState<TCore> {
+    const undoState = (state.sys.undo ?? {
+        snapshots: [],
+        maxSnapshots: 1,
+    }) as UndoState & { aiSeatIds?: PlayerId[] };
+    const normalizedSeatIds = [...aiSeatIds];
+    const previousSeatIds = Array.isArray(undoState.aiSeatIds) ? undoState.aiSeatIds : [];
+    if (
+        previousSeatIds.length === normalizedSeatIds.length
+        && previousSeatIds.every((playerId, index) => playerId === normalizedSeatIds[index])
+    ) {
+        return state;
+    }
+
+    return {
+        ...state,
+        sys: {
+            ...state.sys,
+            undo: {
+                ...undoState,
+                aiSeatIds: normalizedSeatIds,
+            },
+        },
+    };
+}
+
 const UNDO_COMMAND_SET = new Set<string>(Object.values(UNDO_COMMANDS));
 
 const IS_SERVER = typeof (typeof globalThis !== 'undefined' ? (globalThis as { window?: unknown }).window : undefined) === 'undefined';

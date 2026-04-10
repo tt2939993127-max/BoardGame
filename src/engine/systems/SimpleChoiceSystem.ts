@@ -24,6 +24,24 @@ function isSamePlayerId(a: unknown, b: unknown): boolean {
     return String(a) === String(b);
 }
 
+function isRecoveryChoiceValue(value: unknown): boolean {
+    if (!value || typeof value !== 'object') return false;
+    const candidate = value as {
+        skip?: unknown;
+        done?: unknown;
+        cancel?: unknown;
+        __cancel__?: unknown;
+        __emergency_skip__?: unknown;
+    };
+    return Boolean(
+        candidate.skip
+        || candidate.done
+        || candidate.cancel
+        || candidate.__cancel__
+        || candidate.__emergency_skip__,
+    );
+}
+
 export interface SimpleChoiceSystemConfig {
     defaultTimeout?: number;
 }
@@ -156,17 +174,19 @@ function handleSimpleChoiceRespond<TCore>(
             return { halt: true, error: '该选项不可用' };
         }
 
-        const minSelections = data.multi?.min ?? 1;
-        const maxSelections = data.multi?.max;
-        if (uniqueIds.length < minSelections) {
-            return { halt: true, error: `至少选择 ${minSelections} 项` };
-        }
-        if (maxSelections !== undefined && uniqueIds.length > maxSelections) {
-            return { halt: true, error: `最多选择 ${maxSelections} 项` };
-        }
-
         selectedOptionIds = uniqueIds;
         selectedOptions = uniqueIds.map((id) => optionsById.get(id)!);
+        const selectedSingleRecovery = selectedOptions.length === 1
+            && isRecoveryChoiceValue(selectedOptions[0]?.value);
+
+        const minSelections = data.multi?.min ?? 1;
+        const maxSelections = data.multi?.max;
+        if (!selectedSingleRecovery && uniqueIds.length < minSelections) {
+            return { halt: true, error: `至少选择 ${minSelections} 项` };
+        }
+        if (!selectedSingleRecovery && maxSelections !== undefined && uniqueIds.length > maxSelections) {
+            return { halt: true, error: `最多选择 ${maxSelections} 项` };
+        }
     } else {
         if (typeof payload.optionId !== 'string') {
             return { halt: true, error: '无效的选择' };
@@ -234,19 +254,29 @@ function handleSimpleChoiceRespond<TCore>(
             return { halt: true, error: '非法的选择值' };
         }
     } else {
-        resolvedValue = isMulti
-            ? selectedOptions.map((option) => option.value)
-            : selectedOptions[0]?.value;
+        const isSingleRecoveryChoice = isMulti
+            && selectedOptions.length === 1
+            && isRecoveryChoiceValue(selectedOptions[0]?.value);
+        resolvedValue = isSingleRecoveryChoice
+            ? selectedOptions[0]?.value
+            : isMulti
+                ? selectedOptions.map((option) => option.value)
+                : selectedOptions[0]?.value;
     }
 
     const newState = resolveInteraction(state);
     const interactionDataForEvent = responseValidationMode === 'live'
         ? { ...current.data, options: availableOptions }
         : current.data;
-    const isEmergencySkip = !isMulti
-        && resolvedValue
+    const isEmergencySkip = Boolean(
+        resolvedValue
         && typeof resolvedValue === 'object'
-        && (resolvedValue as { __emergency_skip__?: boolean }).__emergency_skip__ === true;
+        && (resolvedValue as { __emergency_skip__?: boolean }).__emergency_skip__ === true
+    );
+    const emergencySkipReason = resolvedValue
+        && typeof resolvedValue === 'object'
+        ? (resolvedValue as { __emergency_skip_reason__?: unknown }).__emergency_skip_reason__
+        : undefined;
 
     const event: GameEvent = {
         type: isEmergencySkip ? INTERACTION_EVENTS.CANCELLED : INTERACTION_EVENTS.RESOLVED,
@@ -258,7 +288,9 @@ function handleSimpleChoiceRespond<TCore>(
             value: resolvedValue,
             sourceId: data.sourceId,
             interactionData: stripNonSerializableFromData(interactionDataForEvent),
-            ...(isEmergencySkip ? { reason: 'empty-options' } : {}),
+            ...(isEmergencySkip ? {
+                reason: typeof emergencySkipReason === 'string' ? emergencySkipReason : 'empty-options',
+            } : {}),
         },
         timestamp,
     };

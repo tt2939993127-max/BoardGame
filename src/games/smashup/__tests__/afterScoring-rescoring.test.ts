@@ -455,6 +455,7 @@ describe('After Scoring 响应窗口 - 重新计分功能', () => {
         expect(runner.getState().sys.phase).toBe('scoreBases');
         expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
         expect((runner.getState().sys as any).afterScoringInitialPowers?.baseIndex).toBe(2);
+        expect((runner.getState().sys as any).smashupScoring?.currentBaseRef?.slotIndex).toBe(2);
         expect(runner.getState().sys.interaction?.current?.data?.sourceId).toBe('base_the_mothership');
 
         const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {

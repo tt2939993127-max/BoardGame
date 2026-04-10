@@ -997,7 +997,9 @@ describe('Property 18: Me First 窗口协议', () => {
                 '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
             },
             turnOrder: ['0', '1'], currentPlayerIndex: 0,
-            bases: [makeBase('base_central_brain')],
+            bases: [makeBase('base_central_brain', {
+                minions: [makeMinion('ally-1', 'test', '0', 3)],
+            })],
             baseDeck: [], turnNumber: 1, nextUid: 100,
         };
         const matchState: MatchState<SmashUpCore> = {
