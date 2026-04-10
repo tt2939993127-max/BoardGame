@@ -47,6 +47,8 @@ interface HandAreaProps {
   abilitySelectingCards?: boolean;
   /** 有交互模式激活时，阻止再打出新的事件牌。 */
   interactionBusy?: boolean;
+  /** 手机横屏等紧凑布局。 */
+  compactLayout?: boolean;
   className?: string;
 }
 
@@ -94,6 +96,7 @@ const HandCard: React.FC<{
   onPointerUp?: React.PointerEventHandler<HTMLDivElement>;
   onPointerCancel?: React.PointerEventHandler<HTMLDivElement>;
   suppressMagnifyButton?: boolean;
+  compactLayout?: boolean;
 }> = ({
   card,
   index,
@@ -108,6 +111,7 @@ const HandCard: React.FC<{
   onPointerUp,
   onPointerCancel,
   suppressMagnifyButton = false,
+  compactLayout = false,
 }) => {
   const [isHovered, setIsHovered] = useState(false);
   const spriteConfig = getCardSpriteConfig(card);
@@ -126,7 +130,13 @@ const HandCard: React.FC<{
     height: magnifyIconSize,
   };
 
-  const cardSpacingRatio = totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05;
+  const cardSpacingRatio = compactLayout
+    ? (totalCards > 6 ? -0.022 : totalCards > 4 ? -0.012 : 0.004)
+    : (totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05);
+  const selectedLift = compactLayout ? -18 : -30;
+  const hoverLift = compactLayout ? -8 : -20;
+  const hoverScale = compactLayout ? 1.03 : 1.08;
+  const cardWidthRatio = compactLayout ? '0.115' : CARD_WIDTH_RATIO;
 
   const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -150,15 +160,16 @@ const HandCard: React.FC<{
       data-selected={isSelected ? 'true' : 'false'}
       data-can-afford={canAfford ? 'true' : 'false'}
       data-can-play={canPlay ? 'true' : 'false'}
+      data-layout-mode={compactLayout ? 'compact' : 'default'}
       style={{
-        width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${CARD_WIDTH_RATIO})`,
+        width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${cardWidthRatio})`,
         marginLeft: index === 0 ? 0 : `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${cardSpacingRatio})`,
         zIndex: isSelected ? 100 : isHovered ? 50 : index,
       }}
       initial={false}
       animate={{
-        y: isSelected ? -30 : isHovered ? -20 : 0,
-        scale: isHovered ? 1.08 : 1,
+        y: isSelected ? selectedLift : isHovered ? hoverLift : 0,
+        scale: isHovered ? hoverScale : 1,
       }}
       transition={{ type: 'spring', stiffness: 400, damping: 30 }}
       onHoverStart={() => setIsHovered(true)}
@@ -231,6 +242,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
   bloodSummonSelectingCard = false,
   abilitySelectingCards = false,
   interactionBusy = false,
+  compactLayout = false,
   className = '',
 }) => {
   const { t } = useTranslation('game-summonerwars');
@@ -435,6 +447,7 @@ export const HandArea: React.FC<HandAreaProps> = ({
                   onPointerCancel={() => handleTouchLongPressEnd(card.id)}
                   // 触屏下统一走长按放大，不渲染显式按钮，避免遮挡再次点按手牌。
                   suppressMagnifyButton={isCoarsePointer}
+                  compactLayout={compactLayout}
                 />
               </motion.div>
             );

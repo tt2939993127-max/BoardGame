@@ -1,5 +1,5 @@
 /**
- * 验证基地计分事件在乐观引擎 wait-confirm 模式下能正确传递到客户端
+ * 验证基地计分事件在乐观引擎 optimistic 模式下能正确传递到客户端
  *
  * 模拟完整流程：
  * 1. 客户端 dispatch RESPONSE_PASS → 乐观引擎判定为非确定性 → 不预测
@@ -36,7 +36,7 @@ const rng: RandomFn = {
 beforeAll(() => { initAllAbilities(); });
 
 describe('BASE_SCORED 乐观引擎传递验证', () => {
-    it('wait-confirm 模式下 reconcile 后 EventStream 包含 BASE_SCORED', () => {
+    it('optimistic 模式下 reconcile 后 EventStream 包含 BASE_SCORED', () => {
         // ── 构造初始状态：基地已达临界点 ──
         const core: SmashUpCore = {
             players: {
@@ -106,23 +106,22 @@ describe('BASE_SCORED 乐观引擎传递验证', () => {
             animationMode: processResult.animationMode,
         });
 
-        // 在测试环境中，rng 是确定性的，所以 Random Probe 不会检测到随机调用
-        // 命令会被预测；当前实现下 RESPONSE_PASS 的动画模式是 wait-confirm
-        // 在真实游戏中，如果有触发器使用 random，则不会被预测
+        // 当前实现口径：RESPONSE_PASS 走 optimistic。
+        // 在测试环境中 rng 是确定性的，因此命令会被预测；
+        // 真实游戏若发生随机探测失败，仍可能退回 wait-confirm/null。
         console.log('预测状态是否为 null:', processResult.stateToRender === null);
         console.log('animationMode:', processResult.animationMode);
 
-        // 当前实现口径：RESPONSE_PASS 在这里返回 wait-confirm
-        expect(processResult.animationMode).toBe('wait-confirm');
+        expect(processResult.animationMode).toBe('optimistic');
 
-        // 如果被预测了，检查预测状态的 EventStream（wait-confirm 模式会剥离新事件）
+        // 如果被预测了，检查预测状态的 EventStream（optimistic 模式保留新事件）
         if (processResult.stateToRender) {
             const predictedEntries = getEventStreamEntries(processResult.stateToRender as MatchState<SmashUpCore>);
             const predictedScored = predictedEntries.filter(e => e.event.type === SU_EVENTS.BASE_SCORED);
             console.log('预测状态 EventStream entries:', predictedEntries.length);
             console.log('预测状态 BASE_SCORED 数量:', predictedScored.length);
-            // wait-confirm 模式下，预测状态的 EventStream 应该是 previousState 的（不含 BASE_SCORED）
-            console.log('预测状态 BASE_SCORED 应为 0（wait-confirm 剥离）:', predictedScored.length === 0);
+            console.log('预测状态 BASE_SCORED 是否保留（optimistic）:', predictedScored.length > 0);
+            expect(predictedScored.length).toBeGreaterThan(0);
         }
 
         // ── Step 4: 服务端执行 P1 RESPONSE_PASS → 产生 BASE_SCORED ──

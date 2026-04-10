@@ -84,11 +84,12 @@ export const PIRATE_POD_ACTIONS: ActionCardDef[] = [
     {
         id: 'pirate_full_sail_pod',
         type: 'action',
-        subtype: 'special',
+        subtype: 'standard',
         name: '全速航行',
         nameEn: 'Full Sail',
         faction: 'pirates_pod',
         abilityTags: ['special'],
+        responseWindowTiming: 'beforeScoring',
         count: 2,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS1, index: 7 },
     },

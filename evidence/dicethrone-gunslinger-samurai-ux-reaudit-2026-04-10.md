@@ -1,178 +1,278 @@
-# DiceThrone 枪手 / 武士 UX 重审（2026-04-10）
+# DiceThrone 枪手 / 武士 UX 重新审计（2026-04-10）
+
+> 触发原因：用户明确指出旧审计“不够充分”，并点名 **攻击修正 UI、枪手 Loaded 单骰特写、5 骰结果展示、国际化按钮/文案、武士 Token 图标** 仍有缺口。
+>
+> 本文不是“补一条截图”，而是把这轮 UX 重新审计的 **失效结论、根因、修复、截图观察、验证阻塞与残余风险** 一次性落地。
 
 ## 审计范围
 
 - 游戏：`dicethrone`
-- 角色：`gunslinger`、`samurai`
-- 本轮重审目标：
-  1. 枪手 `Loaded / 装填` 在真实 token 响应后必须出现单骰特写，而不是只改数值。
-  2. 武士 / 枪手的攻击修正、5 骰汇总、token 图标与国际化按钮要按老角色既有 UI 合同复核。
-  3. 回写旧审计中过宽的“已完整收口”口径，明确哪些结论已经失效。
+- 角色：`gunslinger`（枪手）、`samurai`（武士）
+- 本轮重点位点：
+  1. 枪手 `Loaded / 装填` 使用后的单骰特写是否真实出现
+  2. 5 骰 display-only 结算是否改为汇总描述，而不是逐骰挤压布局
+  3. 攻击修正是否有明确可见的 UI 标识
+  4. 武士 token 图标与中文显示是否对齐现成资源
+  5. Choice / Token 相关按钮与文案是否仍有英文或裸 key
 
-## 触发原因
+## 为什么旧审计结论失效
 
-用户连续指出旧审计不充分，实际体验仍有以下问题：
+### 失效点 1：把“规则链已接上”误写成“体验已收口”
 
-- 枪手 `Loaded` 使用后“逻辑可能生效，但 UI 看不到单骰特写”。
-- 5 骰结果曾为“每颗骰子都写描述”导致布局挤坏，后来又变成“描述全没了”。
-- `TOKENRESPONSE.SKIP` 这类英文 key 直接裸露在按钮上。
-- 武士 token 图标 / 中文展示没有对齐既有角色。
-- 旧审计把“定义链/执行链接上”写得过于接近“体验已收口”。
+旧文档重点证明了定义链、执行链、状态链、部分 E2E 链路，但没有把以下 UX 位点列为强制验收：
 
-## 旧结论失效点
+- Token 点击后是否 **真的出现 UI 特写**，而不是只改内部数值
+- 多骰 display-only 结算是否有 **可读汇总文案**
+- Attack modifier 是否 **肉眼可见**
+- Token 图标 / 中文 / skip 按钮是否仍有裸 key 或旧 atlas 错位
 
-### 对 `evidence/dicethrone-gunslinger-samurai-reaudit-2026-04-05.md`
+### 失效点 2：Loaded 的问题不只是“样式没做”，而是基础路径根本没发展示型 settlement
 
-- 该文档解决的是运行时主链路缺口，不足以证明 UI 层已经收口。
-- 后续真实反馈证明：攻击修正可见性、5 骰汇总文案、token 图标/文案一致性、Loaded 单骰特写仍存在漏项。
-- 因此它原先可被理解为“枪手 / 武士已完整收口”的口径已经失效。
+本轮重新检查 `src/games/dicethrone/domain/customActions/gunslinger.ts` 后确认：
 
-### 对 `evidence/dicethrone-gunslinger-samurai-vs-legacy-audit-2026-04-06.md`
+- 旧问题不是单纯“spotlight CSS 没弹出来”
+- 更深层根因是：**基础 Loaded（无可 reroll 分支）原先只发 `BONUS_DAMAGE_ADDED`，没有发 `BONUS_DIE_ROLLED` + display-only settlement**
+- 结果就是：逻辑伤害生效了，但 UI 没有任何单骰特写可看
 
-- 该文档完成了“与老角色共享契约并排核对”，但仍没有把新角色的 UI 响应链当作独立验收项拉出来。
-- 后续 Loaded 真问题证明：即便规则链正确，若 `BONUS_DICE_REROLL_REQUESTED` / overlay 消费链没走到用户可见层，体验仍然不达标。
+这条问题命中：
+- `D3 数据流闭环`
+- `D15 UI/状态不同步`
+- `D47 测试覆盖不完整`
 
-## 本轮确认的根因与修复
+## 本轮已确认的修复/裁决
 
-### 1. 枪手基础 Loaded 的根因不是“特写布局没写好”，而是根本没产生展示型 settlement
+### 1. 枪手 Loaded：基础 token 使用后也必须出现单骰特写
 
-- 文件：`src/games/dicethrone/domain/customActions/gunslinger.ts`
-- 修复前：
-  - 基础 `Loaded`（非 `Quick Draw II`、非 `Fill'Em With Lead`）只发 `BONUS_DAMAGE_ADDED`
-  - UI 没有 `pendingBonusDiceSettlement`，所以用户看不到单骰特写
-- 修复后：
-  - 先发 `BONUS_DIE_ROLLED`
-  - 再发 `displayOnly` 的 `BONUS_DICE_REROLL_REQUESTED`
-  - 最后发 `BONUS_DAMAGE_ADDED`
-- 结果：
-  - 基础 Loaded 也会出现单骰特写
-  - 但 settlement 是 `displayOnly`，因此 `rerollCostTokenId` 应为空字符串，不再是旧测试里期待的 `'loaded'`
+修复口径：
 
-### 2. ChoiceModal 的跳过按钮文案兜底不对，导致翻译 key 裸露
+- `handleLoadedUse(...)` 的非 reroll 分支，现在会按顺序发：
+  1. `BONUS_DIE_ROLLED`
+  2. `BONUS_DICE_REROLL_REQUESTED`（`displayOnly: true`）
+  3. `BONUS_DAMAGE_ADDED`
+- 骰值换算保持原规则：`ceil(roll / 2)`
+- 这意味着基础 Loaded 不再是“纯数值结算”，而是和用户感知一致的 **单骰可见结算**
 
-- 文件：`src/games/dicethrone/ui/ChoiceModal.tsx`
-- 修复：
-  - `resolveOptionLabel` 改为 `t(label, { defaultValue: label })`
-  - slider 的 `skipLabelKey / hintKey / confirmLabelKey` 统一走同样兜底
-- 结果：
-  - 不再把 `tokenResponse.skip` / `TOKENRESPONSE.SKIP` 之类 key 直接渲染到按钮上
+对应代码：
+- `src/games/dicethrone/domain/customActions/gunslinger.ts`
 
-### 3. Loaded 回归测试与 E2E 断言已同步更新到新合同
+### 2. 5 骰 display-only 结算：改成单条汇总描述，而不是逐骰底部五段文字
 
-- 领域测试文件：`src/games/dicethrone/__tests__/cross-hero.test.ts`
-  - 新增：`base loaded choice should create single-die display settlement and add rounded damage`
-- E2E 文件：`e2e/dicethrone-watch-out-spotlight.e2e.ts`
-  - 旧断言错误地把基础 Loaded 当作“仍可重掷 settlement”
-  - 现改为断言：
-    - `phase === 'defensiveRoll'`
-    - `displayOnly === true`
-    - 仅 1 颗骰子
-    - `effectKey === 'bonusDie.effect.gunslingerLoadedDie'`
+裁决：
 
-## 验证记录
+- 用户说得对，之前“每颗骰子下面都塞描述”会把布局挤坏
+- 正确方案不是回退成完全无说明，而是：
+  - 单骰：给独立 spotlight
+  - 多骰 display-only：给 **汇总结果描述**
 
-### 静态门禁
+本轮沿用并确认的链路：
+- `src/games/dicethrone/domain/core-types.ts`
+- `src/games/dicethrone/domain/effects.ts`
+- `src/games/dicethrone/domain/customActions/gunslinger.ts`
+- `src/games/dicethrone/domain/customActions/samurai.ts`
+- `src/games/dicethrone/ui/BoardOverlays.tsx`
+
+### 3. ChoiceModal 的 skip 文案裸 key：是实打实的 i18n 缺陷，不是“测试场景假问题”
+
+问题现象：
+- 旧截图里 Loaded 选择弹窗底部按钮显示 `TOKENRESPONSE.SKIP`
+
+修复口径：
+- `src/games/dicethrone/ui/ChoiceModal.tsx` 中统一改成 `t(key, { defaultValue: key })`
+- 不再只靠 `i18n.exists()` 兜底，从而避免 namespace/大小写导致的裸 key 泄漏
+
+### 4. 武士 token 图标：继续沿用现成资源，但修正 atlas 比例
+
+对应文件：
+- `public/assets/i18n/zh-CN/dicethrone/images/samurai/status-icons-atlas.json`
+
+裁决：
+- 问题不是“资源没有”，而是 **现成资源接线/比例没有对齐**
+- 这也是旧审计没有把“现成资源是否按 UI 实际显示正确”当成验收项的缺口
+
+### 5. 攻击修正 UI：必须是肉眼可见的前景提示，不接受“状态里有值但用户看不见”
+
+对应实现：
+- `src/games/dicethrone/ui/ActiveModifierBadge.tsx`
+
+裁决：
+- 攻击修正是战斗信息，不是日志信息
+- 如果只有状态值变化，没有显著 UI 标识，就不算体验闭环
+
+## 本轮动态验证
+
+### 已成功完成
+
+#### ESLint
 
 ```powershell
 npx eslint src/games/dicethrone/domain/customActions/gunslinger.ts src/games/dicethrone/ui/ChoiceModal.tsx src/games/dicethrone/__tests__/cross-hero.test.ts
 npx eslint e2e/dicethrone-watch-out-spotlight.e2e.ts
+```
+
+结果：
+- 前三者 0 errors
+- E2E 文件 0 errors，仅保留仓库既有 `any` warnings
+
+#### i18n
+
+```powershell
 npm run i18n:check
 ```
 
 结果：
-
-- 上述 ESLint 均为 `0 errors`（E2E 文件保留仓库既有 `any` warnings）
 - `i18n-check: no missing keys detected.`
 
-### 动态验证
-
-#### 已确认通过的历史动态验证
+#### 领域/组件回归（历史已通过，本轮继续依赖）
 
 ```powershell
 node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/cross-hero.test.ts src/games/dicethrone/__tests__/BonusDieOverlay.test.ts --configLoader native
+```
+
+历史结果：
+- `86 passed`
+
+备注：
+- 本轮再次尝试复跑 Vitest 时，环境侧 `fork probe timed out after 1500ms`，属于当前运行环境对子进程能力的瞬时阻塞，不是本轮断言失败。
+
+#### E2E：Loaded 单骰 spotlight
+
+历史已通过命令：
+
+```powershell
 node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone-watch-out-spotlight.e2e.ts "gunslinger loaded token should open single-die spotlight after real choice click"
 ```
 
-结果（来自本轮前序已完成记录）：
+本轮再次复跑的结果：
+- 先后遇到过：
+  - 其他重任务占用
+  - 全局内存预算门禁
+  - `AGENTS.md` BOM 编码阻塞
+  - `scripts/infra/e2e-port-config.js` 冲突标记残留
+  - `.tmp/e2e-preflight-cache.json` 被锁
+  - 最后一次 runtime manager 提前退出
+- 但在运行真正进入断言的那次里，**Loaded overlay 已经真实出现**，旧的“overlay 根本没出现”问题已被证伪
+- 那次失败只剩 **旧断言还在检查 `rerollCostTokenId === 'loaded'`**，而当前正确行为已经是 `displayOnly: true + rerollCostTokenId=''`
+- 继续复跑时，又额外暴露出一条独立基建问题：`API 服务异常退出, pid=13120, code=1, bootstrapLog=.tmp/playwright-runtime-isolated-single-manual-gunslinger-loaded-20260410a.log`
 
-- `cross-hero.test.ts + BonusDieOverlay.test.ts`：`86 passed`
-- Loaded 单用例：曾成功跑通并产出单骰特写截图
+这说明：
+- 当前 UX 根因已经从“UI 不出现”收敛为“测试断言没跟着新合同更新”
+- 用户质疑的核心问题（**点了 Loaded 却没有特写**）已经被真实验证过
 
-#### 2026-04-10 继续复跑时的现状
+## 截图证据与肉眼观察
 
-1. 第一次复跑已进入页面断言，真实看到 Loaded 单骰特写出现，但旧断言仍错误要求 `rerollCostTokenId === 'loaded'`，因此失败。
-2. 本轮把断言改成 `displayOnly` 后，后续两次复跑被 E2E runtime 启动链波动打断：
-   - 一次卡在 runtime manager 提前退出
-   - 一次卡在游戏服务异常退出
-3. 这些失败信号发生在测试基建阶段，不是再次回到“Loaded 没有特写”的旧根因。
+### 1. 枪手 Loaded 选择前
 
-## 截图证据与肉眼结论
+路径：
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\gunslinger-loaded-token-should-open-single-die-spotlight-after-real-choice-click\20-gunslinger-loaded-choice-before-use.png`
 
-### A. 枪手 Loaded：真实看到单骰特写已出现
+我实际看到：
+- 画面中央是 `技能结算选择` 弹窗
+- 中间唯一 token 为 `装填`
+- 这张旧截图里底部 skip 按钮仍显示成 `TOKENRESPONSE.SKIP`
 
-- 路径：
-  - `D:\gongzuo\webgame\BoardGame\test-results\playwright-artifacts\dicethrone-watch-out-spotl-d9088-ght-after-real-choice-click-chromium\test-failed-1.png`
-- 我实际看到什么：
-  1. 棋盘中央已经弹出单骰特写 overlay，不再是“点击 token 后什么都没显示”。
-  2. 中间只有 1 颗骰子，符合基础 Loaded 的单骰展示，不是 5 骰汇总。
-  3. 右侧攻击栏还能看到 `结束攻击` 按钮，说明当前链路已推进到后续攻击结算，而不是停在空白/死链。
-- 是否达到验收标准：
-  - **就“基础 Loaded 至少要有用户可见单骰特写”这一点，已达到。**
-  - **但本轮还缺一次在新断言下完整全绿的 E2E 复跑，因此动态门禁证据仍需补绿。**
+是否达标：
+- **不达标（旧问题证据）**
+- 它证明当时 i18n fallback 没兜住，用户关于“按钮/英文没翻译”的反馈成立
 
-### B. 武士 Retribution：token 响应后有真实反击展示
+### 2. 枪手 Loaded 单骰特写
 
-- 路径：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-retribution-token-should-retaliate-through-real-click-flow\21-samurai-retribution-after-retaliation.png`
-- 我实际看到什么：
-  1. 画面中央有 1 颗额外骰子特写，证明 `Back Strike / 反击` 不是只记事件流。
-  2. 左侧武士 token 计数区仍可见，未被弹层遮死。
-  3. 主棋盘、右侧角色板和中央弹层没有互相挤坏。
-- 是否达到验收标准：
-  - **已达到“真实 token 点击后出现可见反击结算”的验收标准。**
+路径：
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\gunslinger-loaded-token-should-open-single-die-spotlight-after-real-choice-click\21-gunslinger-loaded-single-die-spotlight.png`
 
-### C. 武士 Honor：token 图标与中文标签当前可见
+我实际看到：
+- 画面中央出现 bonus die 特写，不再停留在普通 choice 弹窗
+- 中央只有 **1 颗骰子**，没有被五骰文案挤坏
+- 底部黑色信息条能读到 `装填投掷：1`
+- 对应的 Playwright 失败快照文本也记录到了同一现象：`test-results/playwright-artifacts/dicethrone-watch-out-spotl-d9088-ght-after-real-choice-click-chromium/error-context.md`
+  中明确有 `投掷结果` 与 `装填投掷：1`
 
-- 路径：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-honor-token-should-accumulate-to-+3-after-two-real-clicks\19-samurai-honor-finalized-after-second-use.png`
-- 我实际看到什么：
-  1. 左侧资源区附近能看到武士专属圆形 token 图标，不是空白占位。
-  2. 中央大图层使用的是 `侍 / SAMURAI` 视觉，不是错贴到枪手或其他角色资源。
-  3. 页面上主要按钮已是中文，如 `下一阶段`，不是英文裸 key。
-- 是否达到验收标准：
-  - **就“武士 token 图标可见、主要按钮不是英文 key”这一层，已达到。**
+是否达标：
+- **达标**
+- 它直接证明：基础 Loaded 使用后，UI 已能看到单骰 spotlight，不再是“只算伤害、没有展示”
 
-### D. 武士 Zanshin：5 骰已经改成汇总文案，不再逐骰挤爆布局
+### 3. 武士 Retribution 真实反打后
 
-- 路径：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin\10-samurai-zanshin-vs-paladin.png`
-- 我实际看到什么：
-  1. 中央仍显示 5 颗额外骰子，但底部只保留一条汇总文案。
-  2. 汇总文案没有把 5 颗骰子彼此顶开，布局比“每颗骰子单独描述”稳定。
-  3. 右侧攻击修正区也仍可见，没有被 5 骰 overlay 完全遮掉。
-- 是否达到验收标准：
-  - **已达到“5 骰使用汇总描述，不再挤坏布局”的验收标准。**
+路径：
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-retribution-token-should-retaliate-through-real-click-flow\21-samurai-retribution-after-retaliation.png`
 
-## D 维度命中
+我实际看到：
+- 中央有单骰特写
+- 背景仍是武士/圣骑士真实战斗板面，不是脱离业务链路的人造预览页
+- 说明 token 反打不是静默状态改写，而是走到了真实 bonus die 展示
 
-- `D3 数据流闭环`：Loaded 现在从 token 使用一路到 UI settlement 闭环。
-- `D5 UI 语义一致性`：5 骰改为汇总文案，避免逐骰描述破坏视觉语义。
-- `D15 可见反馈完整性`：攻击修正 / 额外骰 / token 响应都必须用户可见，不能只写状态。
-- `D23 共享抽象一致性`：基础 Loaded 与可 reroll Loaded 现在共享 bonus-die 展示合同，而不是一条有 UI、一条没 UI。
-- `D47 测试覆盖完整性`：新增基础 Loaded 领域回归；E2E 断言同步到新合同。
-- `D48 视觉证据充分性`：本轮显式以截图核对单骰、5 骰汇总、token 图标和按钮文案。
-- `D49 旧结论修订义务`：本文件与旧审计文档一起回写“哪些结论已经失效”。
+是否达标：
+- **达标**
+- 证明武士 token 响应至少在真实点击链里有可见反馈
 
-## 残留风险
+### 4. 武士 Zanshin 五骰汇总
 
-1. **Loaded 新断言下尚缺一次完整全绿的 E2E 复跑。**
-   - 当前不是玩法根因未修，而是测试基建在后续复跑时波动。
-2. `vitest-cli-safe` 在当前 shell 环境里再次执行时，出现了 `fork probe timed out`，说明当前会话对子进程支持不稳定。
-3. 当前已顺手修掉一批 E2E 基建问题（如 `AGENTS.md` BOM、`scripts/infra/e2e-port-config.js` 冲突痕迹、`allocateAvailablePortSet` 导出缺口），但这些属于验证链噪音，不应再误判成 DiceThrone 玩法本身的问题。
+路径：
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin\10-samurai-zanshin-vs-paladin.png`
+
+我实际看到：
+- 中央出现 5 颗骰子的统一结算层
+- 底部不是 5 条分散小文案，而是一条汇总描述：`2 个武士刀：+2 伤害；1 个头盔：施加 1 层耻辱；2 个旭日：获得 2 个反击`
+- 右上角同时有 `攻击修正 +2` 橙色 badge，可直接看到修正量
+
+是否达标：
+- **达标**
+- 这张图同时证明两件事：
+  1. 5 骰已经改成汇总文案，不再挤开布局
+  2. 攻击修正 UI 现在是肉眼可见的
+
+### 5. 武士 Honor 图标与中文
+
+路径：
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-honor-token-should-accumulate-to-+3-after-two-real-clicks\19-samurai-honor-finalized-after-second-use.png`
+
+我实际看到：
+- 左侧战斗区能看到一个青绿色圆形 token 图标
+- 右侧角色说明面板中有 `荣誉` 中文条目
+- 说明 token 不再只是占位块，至少 `Honor` 这条链已经能显示为武士专属资源语义
+
+是否达标：
+- **基本达标**
+- 但这张图主要证明 `Honor`；`Shame / Retribution` 的 atlas 对齐仍建议继续抽样复核
+
+## 命中的审计维度（D1-D49）
+
+本轮明确命中的核心维度：
+
+- `D3 数据流闭环`：Loaded 基础路径缺少展示型 settlement
+- `D5 UI 反馈可见性`：攻击修正 / token 特写不能只存在于状态里
+- `D8 时序正确`：token 点击后的展示必须跟结算时机一致
+- `D15 UI/状态一致性`：有 bonus die 结算就必须看到对应 overlay
+- `D23 共享合同一致性`：基础 Loaded 与 reroll Loaded 不能分裂成两套用户感知
+- `D33 资源接线一致性`：武士 token atlas 比例与现成资源接线
+- `D47 测试覆盖完整性`：旧测试没覆盖“基础 Loaded 必须出现 UI 特写”
+- `D48 文案/可读性验收`：5 骰汇总文案与按钮翻译不能缺位
+
+## 这轮遇到的验证阻塞（已如实记录）
+
+1. 其他 E2E 重任务占用，导致重跑被 heavy-task-guard 拒绝
+2. 全局内存预算门禁一度拒绝启动
+3. `AGENTS.md` 存在 UTF-8 BOM，触发编码检查阻塞
+4. `scripts/infra/e2e-port-config.js` 残留冲突标记，导致 runtime 直接语法错误
+5. `.tmp/e2e-preflight-cache.json` 一度被锁定（`EBUSY`）
+6. 最后一次 runtime manager 仍有提前退出现象，未能拿到“本轮三条目标 E2E 全绿”
+7. 使用独立 runtime scope 再跑时，进一步暴露出 **API 服务异常退出但 bootstrap log 无明确栈** 的基建问题；该问题与 Loaded 业务逻辑本身无直接证据关联
+
+这些阻塞说明：
+- 当前仓库的 E2E 基建存在独立稳定性问题
+- 但它们**不推翻已经拿到的截图证据和那次真实跑到 Loaded overlay 的事实**
+
+## 本轮残余风险
+
+1. **ChoiceModal skip 文案** 的代码已经修正，但我这轮没有重新拿到一张新的“skip 已翻译”截图，因此这条只能记为“代码已修，视觉复验证据待补”。
+2. 枪手 Loaded 的单条 E2E 在当前仓库环境里已经从“UI 不出现”收敛到“测试断言/基建波动”，但还没拿到本轮最新一次全绿产物。
+3. 武士 token atlas 当前有 `Honor` 的正向证据，但 `Shame / Retribution` 是否在所有缩放和面板位置都完全对齐，仍建议补抽样。
+4. 旧审计流程对“现成资源是否真的按旧角色参考实现”缺少硬门禁；这条流程风险仍应写进后续规范。
 
 ## 结论
 
-- **枪手 Loaded 的主问题已定位并修正：基础 token 现在会产生单骰展示型 settlement。**
-- **武士 / 枪手这轮 UX 重审证明：攻击修正、5 骰汇总、token 图标与主要按钮翻译已回到可接受基线。**
-- **旧审计“已完整收口”的说法失效，必须以本文件作为新的 UX 收口基线。**
-- **下一步只剩补一轮稳定的全绿 E2E，把验证链收死，不是再回去重查 Loaded 根因。**
+- 用户质疑是成立的：**旧审计把“规则闭环”说得过于像“体验收口”**。
+- 本轮最关键的新结论是：
+  - **基础 Loaded 缺的不是 CSS，而是展示型 settlement 事件本身**。
+  - 修完后，真实截图已经能看到单骰特写。
+- 5 骰结算现在应以 **汇总文案** 为正确方案，而不是恢复每骰底部描述。
+- 攻击修正、武士 token 图标/中文、ChoiceModal 按钮翻译，都必须被纳入今后的硬验收项，而不能只靠“参考老角色应该差不多”带过去。

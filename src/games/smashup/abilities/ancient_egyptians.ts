@@ -39,6 +39,7 @@ export function registerAncientEgyptiansAbilities(): void {
     registerAbility('ancient_egyptians_you_can_take_it_with_you', 'onUncover', ancientEgyptiansYouCanTakeItWithYouOnUncover);
     registerAbility('ancient_egyptians_tomb_trap', 'onPlay', ancientEgyptiansBurySelfOnPlay);
     registerAbility('ancient_egyptians_tomb_trap', 'onUncover', ancientEgyptiansTombTrapOnUncover);
+    registerAbility('ancient_egyptians_plague_of_locusts', 'onPlay', ancientEgyptiansPlagueOfLocusts);
     registerAbility('ancient_egyptians_plague_of_locusts', 'special', ancientEgyptiansPlagueOfLocusts);
     registerAbility('ancient_egyptians_mummy_strength', 'onPlay', ancientEgyptiansMummyStrength);
     registerAbility('ancient_egyptians_ancient_curse', 'onPlay', ancientEgyptiansAncientCurse);

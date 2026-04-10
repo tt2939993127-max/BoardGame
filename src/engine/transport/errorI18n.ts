@@ -7,6 +7,8 @@
  */
 import type { i18n as I18nInstance } from 'i18next';
 
+export const UI_HINT_ONLY_ERRORS = new Set(['请先完成当前选择']);
+
 export function resolveCommandError(i18n: I18nInstance, error: string, gameId?: string): string {
     const key = `error.${error}`;
 
@@ -25,4 +27,10 @@ export function resolveCommandError(i18n: I18nInstance, error: string, gameId?: 
 
     // 3. 都没有，返回原始字符串
     return error;
+}
+
+export function isUiHintOnlyError(error: string, i18n?: I18nInstance, gameId?: string): boolean {
+    if (UI_HINT_ONLY_ERRORS.has(error)) return true;
+    if (!i18n) return false;
+    return UI_HINT_ONLY_ERRORS.has(resolveCommandError(i18n, error, gameId));
 }

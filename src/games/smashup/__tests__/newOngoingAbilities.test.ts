@@ -1616,6 +1616,22 @@ describe('killer_plant_choking_vines 触发修复', () => {
 // ============================================================================
 
 describe('pirate_full_sail special', () => {
+    it('onPlay executor 已注册，正常打出时也会创建同一套交互', () => {
+        const m1 = makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 });
+        const base = makeBase({ minions: [m1] });
+        const state = makeState({ bases: [base, makeBase()] });
+
+        const executor = resolveAbility('pirate_full_sail', 'onPlay');
+        expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { queue: [] } } } as any;
+        const result = executor!({
+            state, matchState: ms, playerId: '0', cardUid: 'fs-1', defId: 'pirate_full_sail',
+            baseIndex: 0, random: dummyRandom, now: 0,
+        } as AbilityContext);
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current?.data?.sourceId).toBe('pirate_full_sail_choose_minion');
+    });
+
     it('有己方随从→产生 Prompt（含完成选项）', () => {
         const m1 = makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 });
         const base = makeBase({ minions: [m1] });
@@ -1666,6 +1682,29 @@ describe('pirate_full_sail special', () => {
         const result = handler!(ms, '0', { done: true }, { continuationContext: { movedUids: [] } }, dummyRandom, 0);
         // 选择完成时不产生移动事件
         expect(result?.events.length).toBe(0);
+    });
+});
+
+describe('ancient_egyptians_plague_of_locusts onPlay', () => {
+    it('onPlay executor 已注册，正常打出时会创建选基地交互', () => {
+        const state = makeState({ bases: [makeBase(), makeBase()] });
+        const executor = resolveAbility('ancient_egyptians_plague_of_locusts', 'onPlay');
+        expect(executor).toBeDefined();
+        const ms = { core: state, sys: { phase: 'playCards', interaction: { queue: [] } } } as any;
+        const result = executor!({
+            state,
+            matchState: ms,
+            playerId: '0',
+            cardUid: 'plague-1',
+            defId: 'ancient_egyptians_plague_of_locusts',
+            baseIndex: 0,
+            random: dummyRandom,
+            now: 0,
+        } as AbilityContext);
+
+        const current = (result.matchState?.sys as any)?.interaction?.current;
+        expect(current?.data?.sourceId).toBe('ancient_egyptians_plague_of_locusts');
+        expect((current?.data as any)?.targetType).toBe('base');
     });
 });
 

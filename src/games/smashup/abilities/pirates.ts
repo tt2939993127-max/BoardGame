@@ -28,7 +28,8 @@ export function registerPirateAbilities(): void {
     registerAbility('pirate_powderkeg', 'onPlay', piratePowderkeg);
     // 小艇（行动卡）：移动至多两个己方随从到其他基地
     registerAbility('pirate_dinghy', 'onPlay', pirateDinghy);
-    // 全速航行（特殊行动卡）：移动己方任意数量随从到其他基地
+    // 全速航行（普通行动卡 + beforeScoring 响应窗口）：移动己方任意数量随从到其他基地
+    registerAbility('pirate_full_sail', 'onPlay', pirateFullSail);
     registerAbility('pirate_full_sail', 'special', pirateFullSail);
     // 上海（行动卡）：移动一个对手随从到另一个基地
     registerAbility('pirate_shanghai', 'onPlay', pirateShanghai);

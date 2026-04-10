@@ -14,6 +14,7 @@ import { createPortal } from 'react-dom';
 import type { GameBoardProps } from '../../engine/transport/protocol';
 import { toast } from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { isUiHintOnlyError } from '../../engine/transport/errorI18n';
 import type { MatchState } from '../../engine/types';
 import type { SmashUpCore, CardInstance, ActionCardDef, FusionCardDef, CardOrTitanChoiceValue } from './domain/types';
 import { SU_COMMANDS, HAND_LIMIT, getCurrentPlayerId } from './domain/types';
@@ -1585,6 +1586,12 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         });
     }, [G, rootPid]);
 
+    const toastCommandFeedback = useCallback((message?: string | null) => {
+        if (!message) return;
+        if (isUiHintOnlyError(message, i18n, 'smashup')) return;
+        toast(message);
+    }, [i18n]);
+
     const handlePlayActionWithoutTarget = useCallback((card: CardInstance) => {
         if (!isTutorialCommandAllowed(SU_COMMANDS.PLAY_ACTION) || !isTutorialTargetAllowed(card.uid)) {
             playDeniedSound();
@@ -1594,7 +1601,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const validation = validateImmediateActionPlay(card);
         if (!validation.valid) {
             playDeniedSound();
-            toast(validation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+            toastCommandFeedback(validation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
             setSelectedCardUid(null);
             setSelectedCardMode(null);
             return false;
@@ -1626,7 +1633,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             const { hasValidTargets, deployBlockReason } = getCardPlayTargetState(card, cardMode);
             if (!hasValidTargets) {
                 playDeniedSound();
-                toast(deployBlockReason || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+                toastCommandFeedback(deployBlockReason || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
                 setSelectedCardUid(null);
                 setSelectedCardMode(null);
                 return false;
@@ -1724,7 +1731,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
             
             // 被限制的基地不可部署
             if (!deployableBaseIndices.has(index)) {
-                toast(deployBlockReason || t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
+                toastCommandFeedback(deployBlockReason || t('ui.invalid_base_target', { defaultValue: '该基地不可选择' }));
                 return;
             }
             if (selectedCardMode === 'action') {
@@ -1790,7 +1797,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         if (!activation || activation.baseIndices.size === 0) {
             playDeniedSound();
             if (activation?.firstError) {
-                toast(activation.firstError);
+                toastCommandFeedback(activation.firstError);
             }
             return;
         }
@@ -1893,7 +1900,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 const actionValidation = validateImmediateActionPlay(card);
                 if (!actionValidation.valid) {
                     playDeniedSound();
-                    toast(actionValidation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+                    toastCommandFeedback(actionValidation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
                     setSelectedCardUid(null);
                     setSelectedCardMode(null);
                     return;
@@ -1979,7 +1986,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                 const actionValidation = validateImmediateActionPlay(card);
                 if (!actionValidation.valid) {
                     playDeniedSound();
-                    toast(actionValidation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
+                    toastCommandFeedback(actionValidation.error || t('ui.no_valid_targets', { defaultValue: '场上没有符合条件的目标' }));
                     setSelectedCardUid(null);
                     setSelectedCardMode(null);
                     return;
@@ -2178,7 +2185,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
         const { deployableBaseIndices: dragDeployableBaseIndices, deployBlockReason: dragDeployBlockReason } = getDeployableBaseStateForCard(card, cardMode);
         if (dropTarget.kind === 'board' || !dragDeployableBaseIndices.has(dropTarget.baseIndex)) {
             if (dragDeployBlockReason) {
-                toast(dragDeployBlockReason);
+                toastCommandFeedback(dragDeployBlockReason);
             } else {
                 playDeniedSound();
             }

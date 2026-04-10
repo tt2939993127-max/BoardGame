@@ -989,11 +989,11 @@ describe('Property 18: Me First 窗口协议', () => {
         expect(validBase.valid).toBe(true);
     });
 
-    test('无需基地目标的特殊行动卡不能携带 targetBaseIndex', () => {
-        const specialCard = makeCard('s-1', 'pirate_full_sail', 'action');
+    test('计分前响应窗口可打出的普通行动卡不能携带多余的 targetBaseIndex', () => {
+        const responseActionCard = makeCard('s-1', 'pirate_full_sail', 'action');
         const state: SmashUpCore = {
             players: {
-                '0': makePlayer('0', [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS], { hand: [specialCard] }),
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS], { hand: [responseActionCard] }),
                 '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
             },
             turnOrder: ['0', '1'], currentPlayerIndex: 0,
@@ -1029,6 +1029,65 @@ describe('Property 18: Me First 窗口协议', () => {
             payload: { cardUid: 's-1' },
         } as any);
         expect(withoutTarget.valid).toBe(true);
+    });
+
+    test('可在计分窗口打出的普通行动卡在正常出牌阶段仍可作为行动牌打出', () => {
+        const cases = [
+            {
+                defId: 'pirate_full_sail',
+                payload: {},
+                assertDef: () => {
+                    const def = getCardDef('pirate_full_sail');
+                    expect(def?.type).toBe('action');
+                    expect((def as any)?.subtype).toBe('standard');
+                    expect((def as any)?.responseWindowTiming).toBe('beforeScoring');
+                },
+            },
+            {
+                defId: 'ancient_egyptians_plague_of_locusts',
+                payload: { targetBaseIndex: 0 },
+                assertDef: () => {
+                    const def = getCardDef('ancient_egyptians_plague_of_locusts');
+                    expect(def?.type).toBe('action');
+                    expect((def as any)?.subtype).toBe('standard');
+                    expect((def as any)?.playNeedsBase).toBe(true);
+                    expect((def as any)?.responseWindowTiming).toBe('beforeScoring');
+                    expect((def as any)?.responseWindowNeedsBase).toBe(true);
+                },
+            },
+        ] as const;
+
+        for (const testCase of cases) {
+            testCase.assertDef();
+            const matchState: MatchState<SmashUpCore> = {
+                core: {
+                    players: {
+                        '0': makePlayer('0', [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS], {
+                            hand: [makeCard('a-1', testCase.defId, 'action')],
+                        }),
+                        '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
+                    },
+                    turnOrder: ['0', '1'],
+                    currentPlayerIndex: 0,
+                    bases: [makeBase('base_central_brain'), makeBase('base_factory436_1337')],
+                    baseDeck: [],
+                    turnNumber: 1,
+                    nextUid: 100,
+                },
+                sys: { phase: 'playCards' } as any,
+            };
+
+            const result = validate(matchState, {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: {
+                    cardUid: 'a-1',
+                    ...testCase.payload,
+                },
+            } as any);
+
+            expect(result.valid, testCase.defId).toBe(true);
+        }
     });
 });
 

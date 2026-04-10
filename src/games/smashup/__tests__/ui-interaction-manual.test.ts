@@ -115,7 +115,7 @@ function buildSystems(): EngineSystem<SmashUpCore>[] {
                 return player.hand.some(c => {
                     if (c.type !== 'action') return false;
                     const def = getCardDef(c.defId);
-                    return def && 'subtype' in def && def.subtype === 'special';
+                    return !!(def && 'subtype' in def && (def.subtype === 'special' || (def as any).responseWindowTiming === 'beforeScoring'));
                 });
             },
         }),

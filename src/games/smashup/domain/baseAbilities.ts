@@ -103,6 +103,13 @@ export type BaseAbilityRegistrationOptions = {
     mandatory?: boolean;
 };
 
+export type ActiveBaseAbilityRegistrationOptions = {
+    /** 主动基地能力是否限制为“每回合一次” */
+    oncePerTurn?: boolean;
+    /** 当前状态下是否允许发动；用于 UI 高亮与命令验证 */
+    canUse?: (ctx: BaseAbilityContext) => boolean;
+};
+
 type DeferredInteractionContext = { _deferredPostScoringEvents?: SmashUpEvent[] };
 type PirateCoveSysState = MatchState<SmashUpCore>['sys'] & { _pirateCoveTriggered?: Set<number> };
 type HandCardChoiceValue = { cardUid: string; defId: string };
@@ -132,9 +139,23 @@ function getTurnMinionsPlayedAtBase(state: SmashUpCore, baseIndex: number): numb
 // ============================================================================
 
 type BaseAbilityEntry = { executor: BaseAbilityExecutor; options: Required<BaseAbilityRegistrationOptions> };
+type ActiveBaseAbilityEntry = {
+    executor: BaseAbilityExecutor;
+    options: Required<Omit<ActiveBaseAbilityRegistrationOptions, 'canUse'>> & Pick<ActiveBaseAbilityRegistrationOptions, 'canUse'>;
+};
+const POD_SUFFIX = '_pod';
+
+function isPodDefId(defId: string): boolean {
+    return defId.endsWith(POD_SUFFIX);
+}
+
+function toPodDefId(defId: string): string {
+    return isPodDefId(defId) ? defId : `${defId}${POD_SUFFIX}`;
+}
 
 /** 内部存储：baseDefId 到 Map<BaseTriggerTiming, BaseAbilityEntry> */
 const baseAbilityRegistry = new Map<string, Map<BaseTriggerTiming, BaseAbilityEntry>>();
+const activeBaseAbilityRegistry = new Map<string, ActiveBaseAbilityEntry>();
 
 /** 注册一个基地能力 */
 export function registerBaseAbility(
@@ -153,6 +174,21 @@ export function registerBaseAbility(
     registerBaseAbilityAsQueuedTrigger(baseDefId, timing);
 }
 
+/** 注册一个“你的回合中主动使用”的基地能力 */
+export function registerActiveBaseAbility(
+    baseDefId: string,
+    executor: BaseAbilityExecutor,
+    options: ActiveBaseAbilityRegistrationOptions = {},
+): void {
+    activeBaseAbilityRegistry.set(baseDefId, {
+        executor,
+        options: {
+            oncePerTurn: options.oncePerTurn ?? false,
+            ...(options.canUse ? { canUse: options.canUse } : {}),
+        },
+    });
+}
+
 /** 触发指定基地在指定时机的能力 */
 export function triggerBaseAbility(
     baseDefId: string,
@@ -162,6 +198,17 @@ export function triggerBaseAbility(
     // 检查基地能力是否被压制（如 alien_jammed_signal）
     if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
     const entry = baseAbilityRegistry.get(baseDefId)?.get(timing);
+    if (!entry) return { events: [] };
+    return entry.executor(ctx);
+}
+
+/** 主动触发基地能力（如“During your turn, once each turn”） */
+export function triggerActiveBaseAbility(
+    baseDefId: string,
+    ctx: BaseAbilityContext,
+): BaseAbilityResult {
+    if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return { events: [] };
+    const entry = activeBaseAbilityRegistry.get(baseDefId);
     if (!entry) return { events: [] };
     return entry.executor(ctx);
 }
@@ -211,9 +258,25 @@ export function getBaseAbilityOptions(baseDefId: string, timing: BaseTriggerTimi
     return baseAbilityRegistry.get(baseDefId)?.get(timing)?.options;
 }
 
+export function hasActiveBaseAbility(baseDefId: string): boolean {
+    return activeBaseAbilityRegistry.has(baseDefId);
+}
+
+export function getActiveBaseAbilityOptions(baseDefId: string): ActiveBaseAbilityEntry['options'] | undefined {
+    return activeBaseAbilityRegistry.get(baseDefId)?.options;
+}
+
+export function canUseActiveBaseAbility(baseDefId: string, ctx: BaseAbilityContext): boolean {
+    if (isBaseAbilitySuppressed(ctx.state, ctx.baseIndex)) return false;
+    const entry = activeBaseAbilityRegistry.get(baseDefId);
+    if (!entry) return false;
+    return entry.options.canUse ? entry.options.canUse(ctx) : true;
+}
+
 /** 清空注册表（测试用） */
 export function clearBaseAbilityRegistry(): void {
     baseAbilityRegistry.clear();
+    activeBaseAbilityRegistry.clear();
     extendedRegistry.clear();
 }
 
@@ -223,6 +286,7 @@ export function getBaseAbilityRegistrySize(): number {
     for (const timingMap of baseAbilityRegistry.values()) {
         count += timingMap.size;
     }
+    count += activeBaseAbilityRegistry.size;
     for (const timingMap of extendedRegistry.values()) {
         count += timingMap.size;
     }
@@ -273,6 +337,58 @@ export function triggerExtendedBaseAbility(
 
 export function getExtendedBaseAbilityOptions(baseDefId: string, timing: string): Required<ExtendedBaseAbilityRegistrationOptions> | undefined {
     return extendedRegistry.get(baseDefId)?.get(timing)?.options;
+}
+
+/**
+ * 为尚未显式实现的 POD 基地建立别名。
+ *
+ * 规则：
+ * 1) 原版基地能力不存在 pod 版本时，自动复用到 `<baseDefId>_pod`
+ * 2) 普通基地能力需要同步注册 reaction queue executor，确保触发队列可执行
+ * 3) 扩展时机（extendedRegistry）只做映射，不在此处注册 queue executor
+ */
+export function registerPodBaseAbilityAliases(): void {
+    const baseEntries = Array.from(baseAbilityRegistry.entries());
+    for (const [baseDefId, timingMap] of baseEntries) {
+        if (isPodDefId(baseDefId)) continue;
+        const podDefId = toPodDefId(baseDefId);
+        const podTimingMap = baseAbilityRegistry.get(podDefId) ?? new Map<BaseTriggerTiming, BaseAbilityEntry>();
+
+        for (const [timing, entry] of timingMap.entries()) {
+            if (podTimingMap.has(timing)) continue;
+            podTimingMap.set(timing, entry);
+            registerBaseAbilityAsQueuedTrigger(podDefId, timing);
+        }
+
+        if (!baseAbilityRegistry.has(podDefId)) {
+            baseAbilityRegistry.set(podDefId, podTimingMap);
+        }
+    }
+
+    const extendedEntries = Array.from(extendedRegistry.entries());
+    for (const [baseDefId, timingMap] of extendedEntries) {
+        if (isPodDefId(baseDefId)) continue;
+        const podDefId = toPodDefId(baseDefId);
+        const podTimingMap = extendedRegistry.get(podDefId) ?? new Map<string, ExtendedBaseAbilityEntry>();
+
+        for (const [timing, entry] of timingMap.entries()) {
+            if (podTimingMap.has(timing)) continue;
+            podTimingMap.set(timing, entry);
+        }
+
+        if (!extendedRegistry.has(podDefId)) {
+            extendedRegistry.set(podDefId, podTimingMap);
+        }
+    }
+
+    const activeEntries = Array.from(activeBaseAbilityRegistry.entries());
+    for (const [baseDefId, entry] of activeEntries) {
+        if (isPodDefId(baseDefId)) continue;
+        const podDefId = toPodDefId(baseDefId);
+        if (!activeBaseAbilityRegistry.has(podDefId)) {
+            activeBaseAbilityRegistry.set(podDefId, entry);
+        }
+    }
 }
 
 // ============================================================================
@@ -1324,6 +1440,8 @@ export function registerBaseAbilities(): void {
     // === 限制类基地已通过 BaseCardDef.restrictions 数据驱动，isOperationRestricted 自动解析 ===
 
     // === 被动保护类已在 baseAbilities_expansion.ts 中通过 registerProtection 注册 ===
+
+    registerPodBaseAbilityAliases();
 
     // === 扩展包基地能力（克苏鲁/AL9000/Pretty Pretty） ===
     registerExpansionBaseAbilities();

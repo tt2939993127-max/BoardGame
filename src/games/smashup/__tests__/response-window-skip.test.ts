@@ -82,7 +82,6 @@ describe('响应窗口跳过逻辑', () => {
         runner.dispatch('su:play_action', {
             playerId: '0',
             cardUid: 'card-1',
-            targetBaseIndex: 0,
         });
         
         // 验证：窗口仍然打开，推进到玩家 1，但玩家 1 没有 special 卡，应该被跳过，重新回到玩家 0

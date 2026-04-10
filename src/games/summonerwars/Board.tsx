@@ -78,7 +78,9 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
-const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.32;
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.2;
+const DEFAULT_MAP_SIDE_RATIO = 0.1;
+const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.07;
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
@@ -97,9 +99,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 这里仅调整移动横屏的默认 framing，地图本身仍保持等比，且保留拖拽/双指缩放。
   const shouldUseMobileLandscapeMapFraming = isMobileViewport && isLandscapeRuntimeViewport;
   const mapInitialScale = shouldUseMobileLandscapeMapFraming ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
-  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
+  const mapSideRatio = shouldUseMobileLandscapeMapFraming
+    ? PHONE_LANDSCAPE_MAP_SIDE_RATIO
+    : DEFAULT_MAP_SIDE_RATIO;
+  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
   const mapContainerPaddingBlock = '0px';
-  const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.1)`;
+  const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
   const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
   const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
   const activeEventNameClass = 'text-[11px] py-0.5 px-1';
@@ -119,7 +124,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     ? 'absolute top-[35%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
     : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardShellVars = isPhoneLandscapeViewport
-    ? { '--sw-hand-card-width-ratio': '0.14' } as React.CSSProperties
+    ? {
+      '--sw-hand-card-width-ratio': '0.115',
+    } as React.CSSProperties
     : undefined;
 
   // 阵营选择状态
@@ -1054,6 +1061,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
+                    compactLayout={isPhoneLandscapeViewport}
                   />
                   </div>
                 </div>

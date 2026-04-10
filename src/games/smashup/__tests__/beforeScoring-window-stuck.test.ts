@@ -196,7 +196,7 @@ describe('beforeScoring 响应窗口 - 卡住问题', () => {
             const hasSpecialCard = p0Hand.some((c: any) => {
                 if (c.type !== 'action') return false;
                 const def = require('../data/cards').getCardDef(c.defId);
-                return def?.subtype === 'special';
+                return def?.subtype === 'special' || def?.responseWindowTiming === 'beforeScoring';
             });
             console.log('[TEST] P0 has special card:', hasSpecialCard);
             
