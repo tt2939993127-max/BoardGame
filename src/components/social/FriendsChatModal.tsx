@@ -6,6 +6,7 @@ import { X, ChevronLeft } from 'lucide-react';
 import { motion } from 'framer-motion';
 import clsx from 'clsx';
 import { useTranslation } from 'react-i18next';
+import { FRIENDS_CHAT_DETAIL_CONTENT_CLASS } from './layoutContracts';
 
 /** 系统通知的固定会话 ID */
 export const SYSTEM_NOTIFICATION_ID = '__system_notification__';
@@ -53,7 +54,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 onClick={(e) => e.stopPropagation()}
                 data-testid="friends-chat-modal-content"
-                className="relative bg-parchment-card-bg w-full max-w-4xl rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
+                className="relative bg-parchment-card-bg w-full max-w-4xl min-h-0 rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
                 style={{ height: 'min(600px, var(--runtime-modal-max-height))' }}
             >
                 {/* 关闭按钮 */}
@@ -66,7 +67,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
 
                 {/* 左侧区域：好友列表 */}
                 <div className={clsx(
-                    'w-full md:w-80 h-full border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative bg-parchment-card-bg',
+                    'w-full md:w-80 h-full min-h-0 overflow-hidden border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative bg-parchment-card-bg',
                     selectedFriendId
                         ? '-translate-x-full pointer-events-none z-0 md:translate-x-0 md:pointer-events-auto md:z-10'
                         : 'translate-x-0 pointer-events-auto z-10'
@@ -87,7 +88,7 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
 
                 {/* 右侧区域：聊天窗口 */}
                 <div className={clsx(
-                    'flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg',
+                    'flex-1 h-full min-h-0 overflow-hidden flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg',
                     selectedFriendId
                         ? 'translate-x-0 pointer-events-auto z-20'
                         : 'translate-x-full pointer-events-none z-0 md:translate-x-0 md:pointer-events-auto md:z-auto'
@@ -104,11 +105,13 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                                 </button>
                                 <span className="font-bold text-parchment-base-text ml-2">{t('common:back')}</span>
                             </div>
-                            {selectedFriendId === SYSTEM_NOTIFICATION_ID ? (
-                                <SystemNotificationView />
-                            ) : (
-                                <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
-                            )}
+                            <div className={FRIENDS_CHAT_DETAIL_CONTENT_CLASS}>
+                                {selectedFriendId === SYSTEM_NOTIFICATION_ID ? (
+                                    <SystemNotificationView />
+                                ) : (
+                                    <ChatWindow targetUserId={selectedFriendId} inviteData={inviteData} />
+                                )}
+                            </div>
                         </>
                     ) : (
                         <div className="hidden md:flex flex-col items-center justify-center h-full text-parchment-light-text opacity-50 space-y-4">

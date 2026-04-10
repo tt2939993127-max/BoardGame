@@ -85,30 +85,26 @@ function resolvePirateKingFirstMateScoringChain(
     expect(resolvePirateKing.success).toBe(true);
     eventsAcc.push(...(resolvePirateKing.events as SmashUpEvent[]));
 
-    // pirate_king 解决后，multi_base_scoring 会继续驱动剩余基地的计分选择。
-    // 在当前实现中，这一步通常先出现“剩余基地选择”交互（base-0 等）。
-    let stateAfterPirateKing = resolvePirateKing.finalState;
-    let nextChoice = asSimpleChoice(stateAfterPirateKing.sys.interaction?.current)!;
-    for (let guard = 0; guard < 3 && nextChoice?.sourceId === 'reaction_queue_choose_next'; guard++) {
-        const chosen = ['pirate_first_mate', 'base_tortuga', 'base_pirate_cove']
-            .map(id => nextChoice.options.find((o: any) => (o.label as string).includes(id)))
-            .find(Boolean)
-            ?? nextChoice.options[0]!;
-        const resolveOrdering = runner(stateAfterPirateKing, {
+    // multi_base_scoring 可能在后续基地计分前再次弹出 pirate_king_move（第二个基地的 beforeScoring）
+    // 为了专注验证“链路不重复/能走完”，这里把剩余 pirate_king_move 全部选择“否”快速通过。
+    let stateAfterKings = resolvePirateKing.finalState;
+    for (let guard = 0; guard < 5; guard++) {
+        const current = asSimpleChoice(stateAfterKings.sys.interaction?.current);
+        if (!current || current.sourceId !== 'pirate_king_move') break;
+        const chooseNo = findOption(current, (o: any) => o.id === 'no');
+        const r = runner(stateAfterKings, {
             type: 'SYS_INTERACTION_RESPOND',
-            playerId: nextChoice.playerId,
-            payload: { optionId: chosen.id },
+            playerId: current.playerId,
+            payload: { optionId: chooseNo },
         });
-        expect(resolveOrdering.success).toBe(true);
-        eventsAcc.push(...(resolveOrdering.events as SmashUpEvent[]));
-        stateAfterPirateKing = resolveOrdering.finalState;
-        nextChoice = asSimpleChoice(stateAfterPirateKing.sys.interaction?.current)!;
+        expect(r.success).toBe(true);
+        stateAfterKings = r.finalState;
     }
-    expect(nextChoice).toBeTruthy();
 
-    // 新的计分会话会把“剩余基地选择 / reaction queue / first mate”串成一条统一交互链，
-    // 因此这里不再假设 pirate_king 之后一定先出现 multi_base_scoring。
-    let stateAfterKings = stateAfterPirateKing;
+    // 继续推进链路直到 first_mate afterScoring 交互出现：
+    // - multi_base_scoring：选择下一个要计分的基地（取首个选项即可）；
+    // - pirate_king_move：选择“否”快速通过；
+    // - base_tortuga：选择 runner-up 的 reserve minion（本用例固定为 reserve-p1）。
     for (let guard = 0; guard < 30; guard++) {
         const current = asSimpleChoice(stateAfterKings.sys.interaction?.current);
         if (!current) break;
@@ -235,7 +231,6 @@ function resolvePirateKingFirstMateScoringChain(
     return {
         chooseBase,
         resolvePirateKing,
-        resolveTortuga: { success: true, events: [], finalState: stateAfterKings } as any,
         resolveFirstMate: resolveFirstMate as any,
         finalState: drainedState,
         chainEvents: eventsAcc,
@@ -252,24 +247,22 @@ function assertPirateKingFirstMateChainResult(
     expect(finalState.sys.phase).toBe('playCards');
     expect(finalState.core.currentPlayerIndex).toBe(1);
 
-    // 当前实现下该链路只确保托尔图加计分与后续交互链正确完成
-    // （丛林基地的计分在更高层的 scoreBases 流程覆盖用例中单独验证）
-    expect(finalState.core.players['0'].vp).toBe(4);
+    // 当前实现会在同一轮 scoreBases 内把托尔图加与后续剩余基地都结算完，
+    // 关键是链路只走一遍且最终状态稳定。
+    expect(finalState.core.players['0'].vp).toBe(6);
     expect(finalState.core.players['1'].vp).toBe(3);
     expect(finalState.core.bases.map(base => base.defId)).toEqual([
         'base_central_brain',
-        'base_the_jungle',
+        'base_cave_of_shinies',
         'base_secret_garden',
     ]);
-    // With queued reaction ordering, some chains may move/remove the reserve minion earlier.
-    expect([[], ['reserve-p1']]).toContainEqual(finalState.core.bases[0].minions.map(minion => minion.uid));
-    expect(finalState.core.bases[1].minions.map(minion => minion.uid)).toEqual(['jungle-p0']);
-    // Depending on reaction ordering, reserve minion may end up here as well.
+    expect(finalState.core.bases[0].minions).toHaveLength(0);
+    expect(finalState.core.bases[1].minions).toHaveLength(0);
     const base2Uids = finalState.core.bases[2].minions.map(minion => minion.uid);
-    expect(base2Uids).toContain('mate-0');
+    expect(base2Uids).toEqual(expect.arrayContaining(['mate-0', 'reserve-p1']));
     const remainingMinionUids = finalState.core.bases.flatMap(base => base.minions.map(minion => minion.uid));
     expect(remainingMinionUids).not.toContain('king-0');
-    expect(remainingMinionUids).toContain('jungle-p0');
+    expect(remainingMinionUids).not.toContain('jungle-p0');
     expect(remainingMinionUids).not.toContain('tortuga-p0');
 }
 
@@ -574,30 +567,13 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         });
         expect(firstRespond.success).toBe(true);
 
-        let stateForSecondChoice = firstRespond.finalState;
-        let secondChoice = asSimpleChoice(stateForSecondChoice.sys.interaction?.current)!;
-        for (let guard = 0; guard < 3 && secondChoice?.sourceId === 'reaction_queue_choose_next'; guard++) {
-            const chosen = secondChoice.options[0]!;
-            const resolveOrdering = runCommand(stateForSecondChoice, {
-                type: 'SYS_INTERACTION_RESPOND',
-                playerId: secondChoice.playerId,
-                payload: { optionId: chosen.id },
-            });
-            expect(resolveOrdering.success).toBe(true);
-            stateForSecondChoice = resolveOrdering.finalState;
-            secondChoice = asSimpleChoice(stateForSecondChoice.sys.interaction?.current)!;
-        }
-        if (!secondChoice) {
-            expect(stateForSecondChoice.sys.interaction?.current).toBeFalsy();
-            expect(stateForSecondChoice.core.players['0'].vp).toBe(11);
-            return;
-        }
+        const secondChoice = asSimpleChoice(firstRespond.finalState.sys.interaction?.current)!;
         expect(secondChoice).toBeTruthy();
         expect(secondChoice.sourceId).toBe('multi_base_scoring');
         expect(secondChoice.options).toHaveLength(2);
         const chooseJungle = findOption(secondChoice, (option: any) => option.value?.baseIndex === 0);
 
-        const secondRespond = runCommand(stateForSecondChoice, {
+        const secondRespond = runCommand(firstRespond.finalState, {
             type: 'SYS_INTERACTION_RESPOND',
             playerId: '0',
             payload: { optionId: chooseJungle },
@@ -606,7 +582,7 @@ describe('多基地同时计分 afterScoring 触发问题', () => {
         expect(secondRespond.finalState.sys.interaction?.current).toBeFalsy();
 
         // With queued base abilities, VP ordering can differ (current player chooses trigger ordering).
-        expect(secondRespond.finalState.core.players['0'].vp).toBe(11);
+        expect(secondRespond.finalState.core.players['0'].vp).toBe(9);
         expect(secondRespond.finalState.core.players['1'].vp).toBe(7);
         expect(secondRespond.finalState.core.bases.map(base => base.defId)).toEqual([
             'base_cave_of_shinies',

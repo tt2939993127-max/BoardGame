@@ -227,6 +227,14 @@ function resolveAdaptiveMemoryMinFreeGb() {
     return 1;
 }
 
+function resolveDefaultMemoryMinFreeGb(group) {
+    if (normalizeName(group, 'default') === 'e2e') {
+        return 1.5;
+    }
+
+    return resolveAdaptiveMemoryMinFreeGb();
+}
+
 function resolveMemoryMinFreeGb(group) {
     const normalizedGroup = normalizeName(group, 'default').toUpperCase().replace(/-/g, '_');
     const groupOverride = parseOptionalEnvNumber(`BG_HEAVY_${normalizedGroup}_MEMORY_MIN_FREE_GB`);
@@ -239,7 +247,7 @@ function resolveMemoryMinFreeGb(group) {
         return globalOverride;
     }
 
-    return resolveAdaptiveMemoryMinFreeGb();
+    return resolveDefaultMemoryMinFreeGb(group);
 }
 
 function readBudgetConfig(group) {

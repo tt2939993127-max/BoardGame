@@ -270,6 +270,11 @@
       "description": "Interactive node-edge diagram showing the platform's layered architecture and module dependencies.",
       "players": "Solo Tool"
     },
+    "airepoworkbench": {
+      "title": "AI Repo Workbench",
+      "description": "A repo-centric AI workbench centered on RepoSession, WorkflowRun, DecisionRequest, and ArtifactBundle.",
+      "players": "Solo Tool"
+    },
     "summonerwars": {
       "title": "Summoner Wars",
       "description": "A tactical card game where you command a faction of warriors on a battlefield grid. Summon units, cast spells, and destroy the enemy Summoner to win.",

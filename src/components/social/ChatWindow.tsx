@@ -145,7 +145,7 @@ export const ChatWindow = ({ targetUserId, inviteData }: ChatWindowProps) => {
     const isOnline = friend?.online || conversation?.online || false;
 
     return (
-        <div ref={containerRef} className="flex flex-col h-full bg-parchment-card-bg">
+        <div ref={containerRef} className="flex h-full min-h-0 flex-col overflow-hidden bg-parchment-card-bg">
             {/* 顶部栏：不要挤压消息区域，把“房间/用户名”信息独立出来并控制高度 */}
             <div className="shrink-0 border-b border-parchment-card-border/30 bg-parchment-base-bg shadow-sm z-10">
                 <div className="h-14 flex items-center px-4">

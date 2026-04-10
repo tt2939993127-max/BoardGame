@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { getAllGames, getGameById } from '../../config/games.config';
+import { MOBILE_REFERENCE_VIEWPORT } from '../../shared/referenceViewports';
 import {
     buildRuntimeBlockUnitValue,
     buildRuntimeInlineUnitValue,
@@ -238,7 +239,7 @@ describe('mobile support helpers', () => {
     it('keeps the last stable viewport when orientation switching reports zero height', () => {
         expect(
             resolveStableViewportSize(
-                { width: 375, height: 812 },
+                MOBILE_REFERENCE_VIEWPORT,
                 { width: 812, height: 0 },
                 { width: 0, height: 0 },
             ),
@@ -248,7 +249,7 @@ describe('mobile support helpers', () => {
     it('prefers the first usable viewport candidate and falls back per dimension', () => {
         expect(
             resolveStableViewportSize(
-                { width: 375, height: 812 },
+                MOBILE_REFERENCE_VIEWPORT,
                 { width: 844, height: 390 },
                 { width: 812, height: 375 },
                 { width: 0, height: 0 },
@@ -257,7 +258,7 @@ describe('mobile support helpers', () => {
 
         expect(
             resolveStableViewportSize(
-                { width: 375, height: 812 },
+                MOBILE_REFERENCE_VIEWPORT,
                 { width: undefined, height: 390 },
                 { width: 844, height: undefined },
             ),

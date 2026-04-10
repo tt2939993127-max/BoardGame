@@ -11,6 +11,7 @@ import { waitForState, waitForCoreState, waitForPhaseChange } from './helpers/wa
 import { cloneState, createSWRoomViaAPI } from './helpers/summonerwars';
 import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
+import { DESKTOP_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
 import {
   createSummonerWarsMobileEvidenceState,
   SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
@@ -2785,6 +2786,32 @@ test.describe('SummonerWars', () => {
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
+    const desktopContext = await browser.newContext({
+      baseURL,
+      viewport: DESKTOP_REFERENCE_VIEWPORT,
+    });
+    await desktopContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(desktopContext);
+    await mockSummonerWarsMapImage(desktopContext);
+    await setChineseLocale(desktopContext);
+    await disableAudio(desktopContext);
+    const desktopPage = await desktopContext.newPage();
+    await openSummonerWarsMobileEvidencePage(desktopPage);
+    await waitForSummonerWarsVisualStable(desktopPage);
+    await collapseFabMenuToMainButton(desktopPage);
+    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
+        filename: '00-pc-reference-board.png',
+      }),
+      fullPage: false,
+    });
+    await desktopContext.close();
     const hostContext = await browser.newContext({
       baseURL,
       viewport: SW_PHONE_LANDSCAPE_VIEWPORT,

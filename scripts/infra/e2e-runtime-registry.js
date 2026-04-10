@@ -169,14 +169,74 @@ export function getWorktreeRoot(cwd = process.cwd()) {
   return raw ? path.resolve(cwd, raw) : path.resolve(cwd);
 }
 
+function isGitWorktreeCheckout(cwd = process.cwd()) {
+  const gitPath = path.join(getWorktreeRoot(cwd), '.git');
+  try {
+    return fs.statSync(gitPath).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function resolveGitCommonDirCandidate(candidate) {
+  if (!candidate) {
+    return '';
+  }
+
+  try {
+    const stats = fs.statSync(candidate);
+    if (stats.isDirectory()) {
+      return candidate;
+    }
+
+    if (!stats.isFile()) {
+      return candidate;
+    }
+
+    const gitPointer = fs.readFileSync(candidate, 'utf-8').trim();
+    const match = gitPointer.match(/^gitdir:\s*(.+)$/i);
+    if (!match?.[1]) {
+      return candidate;
+    }
+
+    const worktreeGitDir = path.resolve(path.dirname(candidate), match[1].trim());
+    const commonDirFile = path.join(worktreeGitDir, 'commondir');
+    if (fs.existsSync(commonDirFile)) {
+      const commonDirRelative = fs.readFileSync(commonDirFile, 'utf-8').trim();
+      return path.resolve(worktreeGitDir, commonDirRelative);
+    }
+
+    return worktreeGitDir;
+  } catch {
+    return candidate;
+  }
+}
+
 export function getGitCommonDir(cwd = process.cwd()) {
   const worktreeRoot = getWorktreeRoot(cwd);
   const raw = runGit('git rev-parse --git-common-dir', cwd);
-  return raw ? path.resolve(worktreeRoot, raw) : path.join(worktreeRoot, '.git');
+  const candidate = raw ? path.resolve(worktreeRoot, raw) : path.join(worktreeRoot, '.git');
+  return resolveGitCommonDirCandidate(candidate);
 }
 
 function getSharedRuntimeDir(cwd = process.cwd()) {
-  return path.join(getGitCommonDir(cwd), SHARED_RUNTIME_DIR);
+  if (isGitWorktreeCheckout(cwd)) {
+    const worktreeFallback = path.join(getWorktreeRoot(cwd), '.tmp', SHARED_RUNTIME_DIR);
+    fs.mkdirSync(worktreeFallback, { recursive: true });
+    return worktreeFallback;
+  }
+
+  const commonDir = getGitCommonDir(cwd);
+  const sharedDir = path.join(commonDir, SHARED_RUNTIME_DIR);
+
+  try {
+    fs.mkdirSync(sharedDir, { recursive: true });
+    return sharedDir;
+  } catch {
+    const worktreeFallback = path.join(getWorktreeRoot(cwd), '.tmp', SHARED_RUNTIME_DIR);
+    fs.mkdirSync(worktreeFallback, { recursive: true });
+    return worktreeFallback;
+  }
 }
 
 export function getRegistryFilePath(cwd = process.cwd()) {

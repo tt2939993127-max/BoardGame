@@ -298,6 +298,7 @@ export const Home = () => {
     const { t, i18n } = useTranslation(['lobby', 'auth']);
     const getGuestId = () => getOrCreateGuestId();
     const getGuestName = () => resolveGuestName(t, guestId ?? undefined);
+
     const seoT = useMemo(() => {
         if (typeof i18n?.getFixedT === 'function') {
             return i18n.getFixedT('zh-CN', ['lobby', 'common']);
@@ -557,11 +558,9 @@ export const Home = () => {
             }
             return;
         }
-
         void loadGameDetailsModalModule().catch((error) => {
             console.warn('[Home] 预热 GameDetailsModal 失败，忽略并等待显式打开时重试', error);
         });
-
         if (activeGameModalId === id) {
             setGameModalReopenNonce((nonce) => nonce + 1);
             return;
