@@ -344,6 +344,15 @@ export async function allocateAvailablePorts(workerId, options = {}) {
   };
 }
 
+export async function allocateAvailablePortSet(preferredPorts, options = {}) {
+  const reservedPorts = getReservedPortSet(process.cwd(), options);
+  return {
+    frontend: await findAvailablePort(Number(preferredPorts.frontend), { reservedPorts }),
+    gameServer: await findAvailablePort(Number(preferredPorts.gameServer), { reservedPorts }),
+    apiServer: await findAvailablePort(Number(preferredPorts.apiServer), { reservedPorts }),
+  };
+}
+
 export async function reservePorts(workerId, ports, options = {}) {
   const cwd = options.cwd ?? process.cwd();
   const scope = getRuntimeScope(options.scope);
