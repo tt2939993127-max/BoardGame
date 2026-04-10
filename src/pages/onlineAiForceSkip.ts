@@ -20,14 +20,39 @@ function buildAiBatchId(playerId: string, attemptKey: string): string {
     return `ai-${playerId}-${normalizedAttemptKey}`;
 }
 
-export function submitOnlineAiResolution(args: {
+type SubmitOnlineAiResolutionArgs = {
     client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState'>;
     resolution: AiResolution;
     lastAiAttemptKeyRef: { current: string | null };
     scheduleRetry: () => void;
     onConfirmed?: (authoritativeState: MatchState<unknown> | unknown) => void;
     onRejected?: (reason: string) => void;
-}): void {
+};
+
+type SubmitOnlineAiResolutionSequenceArgs = {
+    client: Pick<GameTransportClient, 'sendBatch' | 'updateLatestState'>;
+    initialResolution: AiResolution;
+    lastAiAttemptKeyRef: { current: string | null };
+    scheduleRetry: () => void;
+    resolveNextResolution: (args: {
+        authoritativeState: MatchState<unknown> | unknown;
+        confirmedResolution: AiResolution;
+        stepIndex: number;
+    }) => AiResolution | null;
+    maxSteps?: number;
+    onStepConfirmed?: (args: {
+        authoritativeState: MatchState<unknown> | unknown;
+        confirmedResolution: AiResolution;
+        stepIndex: number;
+    }) => void;
+    onCompleted?: (authoritativeState: MatchState<unknown> | unknown) => void;
+    onRejected?: (reason: string, context: {
+        failedResolution: AiResolution;
+        stepIndex: number;
+    }) => void;
+};
+
+function submitSingleOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): void {
     const {
         client,
         resolution,
@@ -60,4 +85,67 @@ export function submitOnlineAiResolution(args: {
             onRejected?.(reason);
         },
     );
+}
+
+export function submitOnlineAiResolution(args: SubmitOnlineAiResolutionArgs): void {
+    submitSingleOnlineAiResolution(args);
+}
+
+/**
+ * AI 自动恢复专用：把潜在的“解卡住 → 再推进阶段”拆成服务端确认后的串行步骤，
+ * 避免重新把多个命令塞回同一个 batch，导致后一步失效时前一步一起回滚。
+ */
+export function submitOnlineAiResolutionSequence(args: SubmitOnlineAiResolutionSequenceArgs): void {
+    const {
+        client,
+        initialResolution,
+        lastAiAttemptKeyRef,
+        scheduleRetry,
+        resolveNextResolution,
+        maxSteps = 8,
+        onStepConfirmed,
+        onCompleted,
+        onRejected,
+    } = args;
+
+    const runStep = (resolution: AiResolution, stepIndex: number): void => {
+        if (stepIndex >= maxSteps) {
+            onCompleted?.(null);
+            return;
+        }
+
+        submitSingleOnlineAiResolution({
+            client,
+            resolution,
+            lastAiAttemptKeyRef,
+            scheduleRetry,
+            onConfirmed: (authoritativeState) => {
+                onStepConfirmed?.({
+                    authoritativeState,
+                    confirmedResolution: resolution,
+                    stepIndex,
+                });
+
+                const nextResolution = resolveNextResolution({
+                    authoritativeState,
+                    confirmedResolution: resolution,
+                    stepIndex,
+                });
+                if (!nextResolution) {
+                    onCompleted?.(authoritativeState);
+                    return;
+                }
+
+                runStep(nextResolution, stepIndex + 1);
+            },
+            onRejected: (reason) => {
+                onRejected?.(reason, {
+                    failedResolution: resolution,
+                    stepIndex,
+                });
+            },
+        });
+    };
+
+    runStep(initialResolution, 0);
 }

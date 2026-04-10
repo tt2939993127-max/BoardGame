@@ -66,6 +66,7 @@ import {
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
+    submitOnlineAiResolutionSequence,
     type ForceSkippableHiddenAiInteraction,
 } from './onlineAiForceSkip';
 import {
@@ -539,99 +540,32 @@ const OnlineAiSeatBridge = ({
         }
 
         currentTracker.autoSubmittedAt = now;
-        const submitForceEndTurnAdvanceLoop = (args: {
-            targetClient: GameTransportClient;
-            playerId: string;
-            trackerKey: string;
-            markerBefore: string;
-            authoritativeState: MatchState<unknown> | null | undefined;
-            remainingSteps: number;
-        }) => {
-            const { targetClient, playerId, trackerKey, markerBefore, authoritativeState, remainingSteps } = args;
-            if (remainingSteps <= 0) {
-                toast.warning(
-                    'AI 已强制结束回合。',
-                    'AI 强制结束回合',
-                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
-                );
-                return;
-            }
-
-            const followUpResolution = resolveForceAdvancePhaseAfterRecovery({
-                authoritativeState,
-                seatControllers,
-                playerId,
-            });
-            if (!followUpResolution) {
-                toast.warning(
-                    'AI 已强制结束回合。',
-                    'AI 强制结束回合',
-                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
-                );
-                return;
-            }
-
-            submitOnlineAiResolution({
-                client: targetClient,
-                resolution: followUpResolution,
-                lastAiAttemptKeyRef,
-                scheduleRetry: () => {
-                    setAiRetryVersion((version) => version + 1);
-                },
-                onConfirmed: (nextAuthoritativeState) => {
-                    submitForceEndTurnAdvanceLoop({
-                        targetClient,
-                        playerId,
-                        trackerKey,
-                        markerBefore,
-                        authoritativeState: nextAuthoritativeState as MatchState<unknown> | null | undefined,
-                        remainingSteps: remainingSteps - 1,
-                    });
-                },
-                onRejected: (reason) => {
-                    const tracker = forceEndTurnTrackerRef.current;
-                    let shouldNotify = true;
-                    if (tracker?.key === trackerKey) {
-                        const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
-                        forceEndTurnTrackerRef.current = rejection.nextTracker;
-                        shouldNotify = rejection.shouldNotify;
-                    }
-                    if (!shouldNotify) {
-                        return;
-                    }
-                    scheduleRecoveryFailureNotice({
-                        targetClient,
-                        markerBefore,
-                        onStillStalled: () => {
-                            toast.warning(
-                                `AI 强制结束失败（${reason}）`,
-                                undefined,
-                                { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.follow-up-advance.${reason}` },
-                            );
-                        },
-                    });
-                },
-            });
-        };
-
-        submitOnlineAiResolution({
+        submitOnlineAiResolutionSequence({
             client: targetClient,
-            resolution: candidate.resolution,
+            initialResolution: candidate.resolution,
             lastAiAttemptKeyRef,
             scheduleRetry: () => {
                 setAiRetryVersion((version) => version + 1);
             },
-            onConfirmed: (authoritativeState) => {
-                submitForceEndTurnAdvanceLoop({
-                    targetClient,
+            maxSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS + 1,
+            resolveNextResolution: ({ authoritativeState, stepIndex }) => {
+                if (stepIndex >= MAX_FORCE_END_TURN_FOLLOW_UP_STEPS) {
+                    return null;
+                }
+                return resolveForceAdvancePhaseAfterRecovery({
+                    authoritativeState,
+                    seatControllers,
                     playerId: candidate.playerId,
-                    trackerKey,
-                    markerBefore: progressMarker,
-                    authoritativeState: authoritativeState as MatchState<unknown> | null | undefined,
-                    remainingSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS,
                 });
             },
-            onRejected: (reason) => {
+            onCompleted: () => {
+                toast.warning(
+                    'AI 已强制结束回合。',
+                    'AI 强制结束回合',
+                    { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
+                );
+            },
+            onRejected: (reason, context) => {
                 const tracker = forceEndTurnTrackerRef.current;
                 let shouldNotify = true;
                 if (tracker?.key === trackerKey) {
@@ -642,6 +576,7 @@ const OnlineAiSeatBridge = ({
                 if (!shouldNotify) {
                     return;
                 }
+                const actionLabel = context.stepIndex === 0 ? 'recover-interaction' : 'follow-up-advance';
                 scheduleRecoveryFailureNotice({
                     targetClient,
                     markerBefore: progressMarker,
@@ -649,7 +584,7 @@ const OnlineAiSeatBridge = ({
                         toast.warning(
                             `AI 强制结束失败（${reason}）`,
                             undefined,
-                            { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.recover-interaction.${reason}` },
+                            { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.${actionLabel}.${reason}` },
                         );
                     },
                 });
