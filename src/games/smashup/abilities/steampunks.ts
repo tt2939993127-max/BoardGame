@@ -408,15 +408,17 @@ export function registerSteampunkInteractionHandlers(): void {
         const minion = base.minions.find(m => m.uid === minionUid);
         if (!minion) return undefined;
 
-        // 构建目标基地选项
+        // 齐柏林文本：只能“从其他基地移动到这里”或“从这里移动到其他基地”
         const destCandidates: { baseIndex: number; label: string }[] = [];
-        for (let i = 0; i < state.core.bases.length; i++) {
-            if (i === fromBase) continue; // 不能移动到当前基地
-            const baseDef = getBaseDef(state.core.bases[i].defId);
-            const name = baseDef?.name ?? `基地 ${i + 1}`;
-            // 标注是否为齐柏林所在基地
-            const suffix = i === ctx.zepBaseIndex ? ' (齐柏林所在基地)' : '';
-            destCandidates.push({ baseIndex: i, label: `${name}${suffix}` });
+        const allowedBaseIndices = fromBase === ctx.zepBaseIndex
+            ? state.core.bases.map((_, index) => index).filter((index) => index !== fromBase)
+            : [ctx.zepBaseIndex];
+
+        for (const baseIndex of allowedBaseIndices) {
+            const baseDef = getBaseDef(state.core.bases[baseIndex].defId);
+            const name = baseDef?.name ?? `基地 ${baseIndex + 1}`;
+            const suffix = baseIndex === ctx.zepBaseIndex ? ' (齐柏林所在基地)' : '';
+            destCandidates.push({ baseIndex, label: `${name}${suffix}` });
         }
 
         if (destCandidates.length === 0) return { state, events: [] };
@@ -425,7 +427,7 @@ export function registerSteampunkInteractionHandlers(): void {
             `steampunk_zeppelin_base_${timestamp}`, playerId,
             '齐柏林飞艇：点击目标基地',
             buildBaseTargetOptions(destCandidates, state.core),
-            { sourceId: 'steampunk_zeppelin_choose_base', targetType: 'base' }
+            { sourceId: 'steampunk_zeppelin_choose_base', targetType: 'base', autoResolveIfSingle: true }
         );
         (next.data as any).continuationContext = { minionUid, minionDefId: minion.defId, fromBase };
         return { state: queueInteraction(state, next), events: [] };

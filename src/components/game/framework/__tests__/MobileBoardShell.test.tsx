@@ -195,6 +195,174 @@ describe('MobileBoardShell', () => {
         expect(wrapper.style.getPropertyValue('--mobile-battlefield-target-translate-x')).not.toBe('');
     });
 
+    it('clamps centered content-target panning to the actual child bounds instead of exposing empty black margins', async () => {
+        render(
+            <MobileBattlefieldViewport
+                zoomMode="shell-pinch-pan"
+                transformTarget="content"
+                testId="battlefield"
+            >
+                <div
+                    data-testid="battlefield-scroll-wrapper"
+                    data-mobile-battlefield-zoom-target="true"
+                    style={{ overflowX: 'auto' }}
+                >
+                    <div data-testid="battlefield-inner-strip">board</div>
+                </div>
+            </MobileBattlefieldViewport>,
+        );
+
+        const viewport = screen.getByTestId('battlefield');
+        const wrapper = screen.getByTestId('battlefield-scroll-wrapper');
+        const inner = screen.getByTestId('battlefield-inner-strip');
+
+        await waitFor(() => {
+            expect(viewport.getAttribute('data-battlefield-zoom-target-mode')).toBe('content');
+        });
+
+        Object.defineProperty(viewport, 'clientWidth', {
+            configurable: true,
+            value: 600,
+        });
+        Object.defineProperty(viewport, 'clientHeight', {
+            configurable: true,
+            value: 400,
+        });
+        viewport.getBoundingClientRect = () => ({
+            x: 0,
+            y: 0,
+            left: 0,
+            top: 0,
+            right: 600,
+            bottom: 400,
+            width: 600,
+            height: 400,
+            toJSON: () => ({}),
+        });
+
+        for (const [property, value] of [
+            ['offsetWidth', 600],
+            ['clientWidth', 600],
+            ['scrollWidth', 600],
+            ['offsetHeight', 400],
+            ['clientHeight', 400],
+            ['scrollHeight', 400],
+            ['offsetLeft', 0],
+            ['offsetTop', 0],
+        ] as const) {
+            Object.defineProperty(wrapper, property, {
+                configurable: true,
+                value,
+            });
+        }
+        const readTransform = () => {
+            const scale = Number(wrapper.style.getPropertyValue('--mobile-battlefield-target-scale') || '1');
+            const translateX = Number((wrapper.style.getPropertyValue('--mobile-battlefield-target-translate-x') || '0px').replace('px', ''));
+            const translateY = Number((wrapper.style.getPropertyValue('--mobile-battlefield-target-translate-y') || '0px').replace('px', ''));
+            return { scale, translateX, translateY };
+        };
+        wrapper.getBoundingClientRect = () => {
+            const { scale, translateX, translateY } = readTransform();
+            return {
+                x: translateX,
+                y: translateY,
+                left: translateX,
+                top: translateY,
+                right: translateX + 600 * scale,
+                bottom: translateY + 400 * scale,
+                width: 600 * scale,
+                height: 400 * scale,
+                toJSON: () => ({}),
+            };
+        };
+
+        for (const [property, value] of [
+            ['offsetWidth', 320],
+            ['clientWidth', 320],
+            ['scrollWidth', 320],
+            ['offsetHeight', 220],
+            ['clientHeight', 220],
+            ['scrollHeight', 220],
+            ['offsetLeft', 0],
+            ['offsetTop', 0],
+        ] as const) {
+            Object.defineProperty(inner, property, {
+                configurable: true,
+                value,
+            });
+        }
+        inner.getBoundingClientRect = () => {
+            const { scale, translateX, translateY } = readTransform();
+            const left = translateX + 140 * scale;
+            const top = translateY + 90 * scale;
+            const width = 320 * scale;
+            const height = 220 * scale;
+            return {
+                x: left,
+                y: top,
+                left,
+                top,
+                right: left + width,
+                bottom: top + height,
+                width,
+                height,
+                toJSON: () => ({}),
+            };
+        };
+
+        act(() => {
+            fireEvent.pointerDown(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 180,
+                clientY: 180,
+            });
+            fireEvent.pointerDown(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 280,
+                clientY: 180,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 120,
+                clientY: 180,
+            });
+            fireEvent.pointerMove(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 360,
+                clientY: 180,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerUp(viewport, {
+                pointerId: 2,
+                pointerType: 'touch',
+                clientX: 360,
+                clientY: 180,
+            });
+        });
+
+        act(() => {
+            fireEvent.pointerMove(viewport, {
+                pointerId: 1,
+                pointerType: 'touch',
+                clientX: 380,
+                clientY: 180,
+            });
+        });
+
+        const translateX = Number(viewport.getAttribute('data-battlefield-translate-x') ?? '0');
+        expect(Number(viewport.getAttribute('data-battlefield-zoom-scale') ?? '1')).toBeGreaterThanOrEqual(1.5);
+        expect(translateX).toBeCloseTo(-80, 5);
+    });
+
     it('updates battlefield scale when a two-finger touch pointer gesture moves apart on mobile landscape', () => {
         render(
             <MobileBattlefieldViewport zoomMode="shell-pinch-pan" testId="battlefield">

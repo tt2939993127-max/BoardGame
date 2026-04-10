@@ -343,6 +343,7 @@ function executeUncoveredAction(params: ExecuteUncoveredActionParams): {
     const baseAbilityResult = triggerBaseAbility(base.defId, 'onActionPlayed', {
         state: currentState.core,
         matchState: currentState,
+        random,
         baseIndex,
         baseDefId: base.defId,
         playerId,

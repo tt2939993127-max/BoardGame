@@ -1692,7 +1692,7 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动�
 
         const forceSkipToast = hostPage.getByText('AI 响应超时').locator('..');
         await expect(forceSkipToast).toBeVisible({ timeout: 12000 });
-        await expect(hostPage.getByText('AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。')).toBeVisible({ timeout: 5000 });
+        await expect(hostPage.getByText('AI 自动跳过。')).toBeVisible({ timeout: 5000 });
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-toast');
 
         const patchStatusAfterAutoSkip = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
@@ -1806,7 +1806,7 @@ test('在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束�
 
         const forceEndTurnToast = hostPage.getByText('AI 强制结束回合').locator('..');
         await expect(forceEndTurnToast).toBeVisible({ timeout: 16000 });
-        await expect(hostPage.getByText('AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合。')).toBeVisible({ timeout: 5000 });
+        await expect(hostPage.getByText('AI 已强制结束回合。')).toBeVisible({ timeout: 5000 });
 
         await expect.poll(async () => {
             const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);

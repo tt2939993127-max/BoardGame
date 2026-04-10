@@ -149,6 +149,47 @@ const getOffsetWithinSurface = (
     };
 };
 
+const getLogicalBoundsWithinTarget = (target: HTMLElement, currentTransform: TransformState) => {
+    const directChildren = Array.from(target.children).filter((node): node is HTMLElement => node instanceof HTMLElement);
+    if (directChildren.length === 0) {
+        return null;
+    }
+
+    const safeScale = Math.max(currentTransform.scale, MIN_SCALE);
+    const targetRect = target.getBoundingClientRect();
+    let minLeft = Number.POSITIVE_INFINITY;
+    let minTop = Number.POSITIVE_INFINITY;
+    let maxRight = Number.NEGATIVE_INFINITY;
+    let maxBottom = Number.NEGATIVE_INFINITY;
+
+    for (const child of directChildren) {
+        const childRect = child.getBoundingClientRect();
+        const leftFromRenderedBounds = (childRect.left - targetRect.left) / safeScale;
+        const topFromRenderedBounds = (childRect.top - targetRect.top) / safeScale;
+        const offset = getOffsetWithinSurface(child, target);
+        const width = Math.max(child.scrollWidth, child.offsetWidth, child.clientWidth, childRect.width / safeScale, 1);
+        const height = Math.max(child.scrollHeight, child.offsetHeight, child.clientHeight, childRect.height / safeScale, 1);
+        const left = Number.isFinite(leftFromRenderedBounds) ? leftFromRenderedBounds : offset.left;
+        const top = Number.isFinite(topFromRenderedBounds) ? topFromRenderedBounds : offset.top;
+
+        minLeft = Math.min(minLeft, left);
+        minTop = Math.min(minTop, top);
+        maxRight = Math.max(maxRight, left + width);
+        maxBottom = Math.max(maxBottom, top + height);
+    }
+
+    if (!Number.isFinite(minLeft) || !Number.isFinite(minTop) || !Number.isFinite(maxRight) || !Number.isFinite(maxBottom)) {
+        return null;
+    }
+
+    return {
+        left: minLeft,
+        top: minTop,
+        width: Math.max(maxRight - minLeft, 1),
+        height: Math.max(maxBottom - minTop, 1),
+    };
+};
+
 const clampAxis = (min: number, max: number, nextValue: number) => {
     if (min > max) {
         return (min + max) / 2;
@@ -160,6 +201,7 @@ const clampAxis = (min: number, max: number, nextValue: number) => {
 const resolveTransformMetrics = (
     surface: HTMLElement | null,
     target: HTMLElement | null,
+    currentTransform: TransformState,
     insets?: Partial<ViewportInsets>,
 ): TransformMetrics | null => {
     if (!surface || !target) {
@@ -167,17 +209,20 @@ const resolveTransformMetrics = (
     }
 
     const normalizedInsets = normalizeInsets(insets);
-    const { left, top } = getOffsetWithinSurface(target, surface);
+    const offsetWithinSurface = getOffsetWithinSurface(target, surface);
+    const logicalBoundsWithinTarget = getLogicalBoundsWithinTarget(target, currentTransform);
     const logicalWidthAnchor = target.offsetParent instanceof HTMLElement ? target.offsetParent : surface;
-    const width = Math.max(
-        target.scrollWidth,
-        target.offsetWidth,
-        target.clientWidth,
-        logicalWidthAnchor.scrollWidth,
-        logicalWidthAnchor.clientWidth,
-        1,
-    );
-    const height = Math.max(target.scrollHeight, target.offsetHeight, target.clientHeight, 1);
+    const width = logicalBoundsWithinTarget?.width
+        ?? Math.max(
+            target.scrollWidth,
+            target.offsetWidth,
+            target.clientWidth,
+            logicalWidthAnchor.scrollWidth,
+            logicalWidthAnchor.clientWidth,
+            1,
+        );
+    const height = logicalBoundsWithinTarget?.height
+        ?? Math.max(target.scrollHeight, target.offsetHeight, target.clientHeight, 1);
     const visibleLeft = normalizedInsets.left;
     const visibleTop = normalizedInsets.top;
     const visibleRight = Math.max(visibleLeft + 1, surface.clientWidth - normalizedInsets.right);
@@ -186,8 +231,8 @@ const resolveTransformMetrics = (
     return {
         width,
         height,
-        left,
-        top,
+        left: offsetWithinSurface.left + (logicalBoundsWithinTarget?.left ?? 0),
+        top: offsetWithinSurface.top + (logicalBoundsWithinTarget?.top ?? 0),
         visibleLeft,
         visibleTop,
         visibleRight,
@@ -199,6 +244,7 @@ const clampTransform = (
     surface: HTMLElement | null,
     target: HTMLElement | null,
     next: TransformState,
+    currentTransform: TransformState,
     insets?: Partial<ViewportInsets>,
 ): TransformState => {
     const normalizedScale = next.scale <= 1.001 ? MIN_SCALE : next.scale;
@@ -206,7 +252,7 @@ const clampTransform = (
         return { scale: MIN_SCALE, x: 0, y: 0 };
     }
 
-    const metrics = resolveTransformMetrics(surface, target, insets);
+    const metrics = resolveTransformMetrics(surface, target, currentTransform, insets);
     if (!metrics) {
         return { scale: MIN_SCALE, x: 0, y: 0 };
     }
@@ -550,7 +596,7 @@ export const MobileBattlefieldViewport = ({
                     scale: nextScale,
                     x: pinch.startCenterSurfaceLocal.x - pinch.targetLeft - pinch.startCenterTargetLocal.x * nextScale,
                     y: pinch.startCenterSurfaceLocal.y - pinch.targetTop - pinch.startCenterTargetLocal.y * nextScale,
-                }, visibleInsetsRef.current);
+                }, transformRef.current, visibleInsetsRef.current);
                 logPinchDebug('apply', {
                     pointerId,
                     currentDistance: toDebugNumber(currentDistance),
@@ -590,7 +636,7 @@ export const MobileBattlefieldViewport = ({
                 scale: transformRef.current.scale,
                 x: pan.startX + deltaX,
                 y: pan.startY + deltaY,
-            }, visibleInsetsRef.current);
+            }, transformRef.current, visibleInsetsRef.current);
             transformRef.current = clamped;
             return clamped;
         });

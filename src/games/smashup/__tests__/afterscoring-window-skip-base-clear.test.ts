@@ -7,7 +7,7 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
+import { INTERACTION_COMMANDS, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { createFlowSystem, createBaseSystems } from '../../../engine/systems';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
@@ -18,7 +18,8 @@ import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { smashUpFlowHooks } from '../domain/index';
 import { reduce } from '../domain/reduce';
-import { createScoringSession, setScoringSession } from '../domain/scoringSession';
+import { maybeResolveReactionQueue } from '../domain/reactionQueue';
+import { setScoringSession } from '../domain/scoringSession';
 import type { SmashUpCore, SmashUpEvent, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
 import type { SmashUpCommand } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
@@ -834,5 +835,86 @@ describe('afterScoring 延迟清场回归', () => {
         expect(finalState.sys.phase).toBe('playCards');
         expect(finalState.core.turnOrder[finalState.core.currentPlayerIndex]).toBe('1');
         expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
+    });
+
+    it('大图书馆 afterScoring 通过反应队列结算时，弃牌堆洗回抽牌不应抛出命令异常', () => {
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems: smashUpSystemsForTest,
+            playerIds: ['0', '1'],
+        });
+
+        const baseState = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('p0-deck-1', 'alien_probe', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [],
+                    discard: [makeCard('p1-discard-1', 'robot_tech_center', 'action', '1')],
+                }),
+            },
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 1,
+            bases: [
+                makeBase('base_great_library', {
+                    minions: [
+                        makeMinion('scout-0', '0', 3, 'alien_scout'),
+                        makeMinion('mage-1', '1', 4, 'wizard_archmage'),
+                    ],
+                }),
+                makeBase('base_other'),
+                makeBase('base_other_2'),
+            ],
+            triggerQueue: [
+                {
+                    id: 'afterScoring:base_great_library:1000:0',
+                    timing: 'afterScoring',
+                    sourceDefId: 'base_great_library',
+                    sourceBaseIndex: 0,
+                    mandatory: true,
+                    ownerPlayerId: '1',
+                    witnessRequirement: 'inPlayAtTriggerTime',
+                    witnessed: true,
+                    baseIndex: 0,
+                    rankings: [
+                        { playerId: '1', power: 4, vp: 4 },
+                        { playerId: '0', power: 3, vp: 2 },
+                    ],
+                    lkiBase: { baseIndex: 0, defId: 'base_great_library' },
+                },
+                {
+                    id: 'afterScoring:alien_scout:1000:1',
+                    timing: 'afterScoring',
+                    sourceDefId: 'alien_scout',
+                    sourceCardUid: 'scout-0',
+                    sourceBaseIndex: 0,
+                    sourceControllerId: '0',
+                    mandatory: true,
+                    ownerPlayerId: '1',
+                    witnessRequirement: 'inPlayAtTriggerTime',
+                    witnessed: true,
+                    baseIndex: 0,
+                    rankings: [
+                        { playerId: '1', power: 4, vp: 4 },
+                        { playerId: '0', power: 3, vp: 2 },
+                    ],
+                },
+            ] as any,
+        }));
+
+        const prepared = maybeResolveReactionQueue(baseState, undefined as any, 1001)?.state ?? baseState;
+        expect(prepared.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+
+        runner.setState(prepared);
+        runner.executeCommand(INTERACTION_COMMANDS.RESPOND as any, {
+            playerId: '1',
+            optionId: 'afterScoring:base_great_library:1000:0',
+        });
+
+        const finalState = runner.getState();
+        expect(finalState.core.players['1'].hand.map(card => card.uid)).toContain('p1-discard-1');
+        expect(finalState.core.players['1'].discard).toHaveLength(0);
+        expect(finalState.sys.interaction.current?.data?.sourceId).toBe('alien_scout_return');
     });
 });

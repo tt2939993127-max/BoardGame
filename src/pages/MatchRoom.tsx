@@ -428,7 +428,7 @@ const OnlineAiSeatBridge = ({
             },
             onConfirmed: () => {
                 toast.warning(
-                    'AI 的隐藏交互已在 4 秒超时后自动跳过，对局继续。建议通过反馈入口提交问题。',
+                    'AI 自动跳过。',
                     'AI 响应超时',
                     { dedupeKey: `game.ai-force-skip.resolved.${candidateKey}` },
                 );
@@ -449,7 +449,7 @@ const OnlineAiSeatBridge = ({
                     markerBefore: progressMarker,
                     onStillStalled: () => {
                         toast.warning(
-                            `AI 自动跳过在 recover-interaction 阶段失败（${reason}），系统会继续观察并自动反馈。`,
+                            `AI 自动跳过失败（${reason}）`,
                             undefined,
                             { dedupeKey: `game.ai-force-skip.rejected.${candidateKey}.recover-interaction.${reason}` },
                         );
@@ -550,7 +550,7 @@ const OnlineAiSeatBridge = ({
             const { targetClient, playerId, trackerKey, markerBefore, authoritativeState, remainingSteps } = args;
             if (remainingSteps <= 0) {
                 toast.warning(
-                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合，并自动连跳剩余阶段直到安全收口。',
+                    'AI 已强制结束回合。',
                     'AI 强制结束回合',
                     { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
                 );
@@ -564,7 +564,7 @@ const OnlineAiSeatBridge = ({
             });
             if (!followUpResolution) {
                 toast.warning(
-                    'AI 连续 8 秒没有任何进展，系统已强制结束该 AI 的当前回合，并自动连跳剩余阶段直到安全收口。',
+                    'AI 已强制结束回合。',
                     'AI 强制结束回合',
                     { dedupeKey: `game.ai-force-end-turn.resolved.${trackerKey}` },
                 );
@@ -604,7 +604,7 @@ const OnlineAiSeatBridge = ({
                         markerBefore,
                         onStillStalled: () => {
                             toast.warning(
-                                `AI 强制结束在 follow-up-advance 阶段失败（${reason}），系统会继续观察并自动反馈。`,
+                                `AI 强制结束失败（${reason}）`,
                                 undefined,
                                 { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.follow-up-advance.${reason}` },
                             );
@@ -647,7 +647,7 @@ const OnlineAiSeatBridge = ({
                     markerBefore: progressMarker,
                     onStillStalled: () => {
                         toast.warning(
-                            `AI 强制结束在 recover-interaction 阶段失败（${reason}），系统会继续观察并自动反馈。`,
+                            `AI 强制结束失败（${reason}）`,
                             undefined,
                             { dedupeKey: `game.ai-force-end-turn.rejected.${trackerKey}.recover-interaction.${reason}` },
                         );

@@ -1285,7 +1285,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             const startTurnTriggeredEvents: SmashUpEvent[] = [];
 
             // 瑙﹀彂鍩哄湴 onTurnStart 鑳藉姏锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
-            const baseResult = triggerAllBaseAbilities('onTurnStart', startTurnCore, nextPlayerId, now, undefined, currentMatchState);
+            const baseResult = triggerAllBaseAbilities('onTurnStart', startTurnCore, nextPlayerId, now, undefined, currentMatchState, random);
             startTurnTriggeredEvents.push(...baseResult.events);
             if (baseResult.matchState) {
                 hasSysUpdate = hasSysUpdate || baseResult.matchState.sys !== currentMatchState.sys;

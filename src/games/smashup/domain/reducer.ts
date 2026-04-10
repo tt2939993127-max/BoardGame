@@ -378,6 +378,7 @@ function executeCommand(
                     const baseCtx = {
                         state: core,
                         matchState: currentActionMS,
+                        random,
                         baseIndex: targetBaseIdx,
                         baseDefId: base.defId,
                         playerId: command.playerId,
@@ -887,6 +888,7 @@ export function processDestroyTriggers(
                     const baseCtx = {
                         state: core,
                         matchState: ms ?? state,
+                        random,
                         baseIndex: fromBaseIndex,
                         baseDefId: base.defId,
                         playerId: ownerId,
@@ -905,6 +907,7 @@ export function processDestroyTriggers(
             const baseCtx = {
                 state: core,
                 matchState: ms ?? state,
+                random,
                 baseIndex: fromBaseIndex,
                 baseDefId: base.defId,
                 playerId: ownerId,
@@ -1309,6 +1312,7 @@ export function processMoveTriggers(
             const baseCtx = {
                 state: core,
                 matchState: ms ?? state,
+                random,
                 baseIndex: toBaseIndex,
                 baseDefId: targetBase.defId,
                 playerId,
