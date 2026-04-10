@@ -17,6 +17,7 @@ import {
     CompiledSceneRenderer,
     createNodeTemplate,
     EditorHeaderBar,
+    findCompiledNodeById,
     findNodeById,
     getAuthoringNodeName,
     HierarchyPanel,
@@ -25,6 +26,7 @@ import {
     isContainerNode,
     isFlowContainerNode,
     moveSceneNode,
+    removeSceneNodes,
     parseAuthoringMetaYaml,
     UISceneCompileError,
     appendChildNode,
@@ -60,8 +62,16 @@ const RIGHT_DRAWER_MIN_WIDTH = 320;
 const RIGHT_DRAWER_MAX_WIDTH = 560;
 const SOURCE_DRAWER_MIN_HEIGHT = 260;
 const SOURCE_DRAWER_MAX_HEIGHT = 560;
+const AUTHOR_HEADER_HEIGHT = 84;
+const AUTHOR_EDGE_GAP = 16;
+const AUTHOR_PANEL_GAP = 12;
 
 type DrawerResizeTarget = 'left' | 'right' | 'bottom';
+type AuthoringDrafts = {
+    assetRegistryYaml: string;
+    skinYaml: string;
+    sceneYaml: string;
+};
 
 type DrawerResizeSession = {
     target: DrawerResizeTarget;
@@ -132,6 +142,44 @@ function normalizeSelection(nodeIds: string[], primaryNodeId?: string | null) {
     ];
 }
 
+function areDraftsEqual(left: AuthoringDrafts, right: AuthoringDrafts) {
+    return left.assetRegistryYaml === right.assetRegistryYaml
+        && left.skinYaml === right.skinYaml
+        && left.sceneYaml === right.sceneYaml;
+}
+
+function buildRectEntriesFromSelection(
+    nodeIds: string[],
+    sceneDocument: UISceneAuthoringDocument['sceneDocument'],
+    compiledScene: UISceneCompiledArtifact,
+    previewRects: Record<string, UISceneRect>,
+) {
+    return nodeIds
+        .map((nodeId) => {
+            const sourceNode = findNodeById(sceneDocument.scene.root, nodeId);
+            const compiledNode = findCompiledNodeById(compiledScene.root, nodeId);
+            const rect = previewRects[nodeId] ?? sourceNode?.rect ?? compiledNode?.rect;
+            if (!rect) {
+                return null;
+            }
+            return [nodeId, rect] as const;
+        })
+        .filter((entry): entry is readonly [string, UISceneRect] => Boolean(entry));
+}
+
+type SelectionArrangeMode =
+    | 'left'
+    | 'horizontalCenter'
+    | 'right'
+    | 'top'
+    | 'verticalCenter'
+    | 'bottom'
+    | 'distributeHorizontal'
+    | 'distributeVertical'
+    | 'sameWidth'
+    | 'sameHeight'
+    | 'sameSize';
+
 export const HomeV2Draft = () => {
     const [searchParams] = useSearchParams();
     const { user } = useAuth();
@@ -148,6 +196,8 @@ export const HomeV2Draft = () => {
     const [assetRegistryYamlDraft, setAssetRegistryYamlDraft] = React.useState(assetRegistryYamlRaw);
     const [skinYamlDraft, setSkinYamlDraft] = React.useState(homeV2SkinYamlRaw);
     const [sceneYamlDraft, setSceneYamlDraft] = React.useState(homeV2SceneYamlRaw);
+    const [undoStack, setUndoStack] = React.useState<AuthoringDrafts[]>([]);
+    const [redoStack, setRedoStack] = React.useState<AuthoringDrafts[]>([]);
     const [authoringError, setAuthoringError] = React.useState<string | null>(null);
     const [selectedNodeIds, setSelectedNodeIds] = React.useState<string[]>(['overview_left_page']);
     const [overlayVisible, setOverlayVisible] = React.useState(true);
@@ -164,8 +214,19 @@ export const HomeV2Draft = () => {
     const [sourcePanelHeight, setSourcePanelHeight] = React.useState(320);
     const drawerResizeSessionRef = React.useRef<DrawerResizeSession | null>(null);
     const homeVisibilityReplayArmedRef = React.useRef(typeof document !== 'undefined' ? document.hidden : false);
+    const currentDraftsRef = React.useRef<AuthoringDrafts>({
+        assetRegistryYaml: assetRegistryYamlRaw,
+        skinYaml: homeV2SkinYamlRaw,
+        sceneYaml: homeV2SceneYamlRaw,
+    });
 
     const selectedNodeId = selectedNodeIds[0] ?? null;
+    const workspacePaddingTop = isAuthorMode ? AUTHOR_HEADER_HEIGHT + AUTHOR_EDGE_GAP : 0;
+    const workspacePaddingLeft = isAuthorMode && leftDrawerOpen ? leftDrawerWidth + AUTHOR_EDGE_GAP + AUTHOR_PANEL_GAP : 0;
+    const workspacePaddingRight = isAuthorMode && inspectorOpen ? inspectorWidth + AUTHOR_EDGE_GAP + AUTHOR_PANEL_GAP : 0;
+    const workspacePaddingBottom = isAuthorMode && sourcePanelOpen ? sourcePanelHeight + AUTHOR_EDGE_GAP + AUTHOR_PANEL_GAP : 0;
+    const sourceDrawerLeftInset = AUTHOR_EDGE_GAP + (leftDrawerOpen ? leftDrawerWidth + AUTHOR_PANEL_GAP : 0);
+    const sourceDrawerRightInset = AUTHOR_EDGE_GAP + (inspectorOpen ? inspectorWidth + AUTHOR_PANEL_GAP : 0);
 
     const overviewGames = React.useMemo(
         () => getAllGames().filter((game) => game.enabled && game.type === 'game'),
@@ -223,6 +284,15 @@ export const HomeV2Draft = () => {
             setInspectorOpen(true);
         }
     }, []);
+    const handlePromoteSelectionPrimary = React.useCallback((nodeId: string) => {
+        setSelectedNodeIds((current) => {
+            if (!current.includes(nodeId)) {
+                return current;
+            }
+            return normalizeSelection(current, nodeId);
+        });
+        setInspectorOpen(true);
+    }, []);
 
     const handleGameOpen = React.useCallback((gameId: string) => {
         if (sceneState !== 'overview' || isPageFlipping) {
@@ -277,11 +347,20 @@ export const HomeV2Draft = () => {
         sceneYaml: drafts.sceneYaml,
     }), []);
 
-    const applyAuthoringDrafts = React.useCallback((drafts: {
-        assetRegistryYaml: string;
-        skinYaml: string;
-        sceneYaml: string;
+    const applyAuthoringDrafts = React.useCallback((drafts: AuthoringDrafts, options?: {
+        recordHistory?: boolean;
+        clearRedo?: boolean;
     }) => {
+        const previousDrafts = currentDraftsRef.current;
+        const changed = !areDraftsEqual(previousDrafts, drafts);
+        if (changed && options?.recordHistory !== false) {
+            setUndoStack((current) => [...current.slice(-39), previousDrafts]);
+        }
+        if (changed && options?.clearRedo !== false) {
+            setRedoStack([]);
+        }
+
+        currentDraftsRef.current = drafts;
         setAssetRegistryYamlDraft(drafts.assetRegistryYaml);
         setSkinYamlDraft(drafts.skinYaml);
         setSceneYamlDraft(drafts.sceneYaml);
@@ -309,7 +388,11 @@ export const HomeV2Draft = () => {
             assetRegistryYaml: assetRegistryYamlRaw,
             skinYaml: homeV2SkinYamlRaw,
             sceneYaml: homeV2SceneYamlRaw,
+        }, {
+            recordHistory: false,
         });
+        setUndoStack([]);
+        setRedoStack([]);
     }, [applyAuthoringDrafts, isAuthorMode]);
 
     React.useEffect(() => {
@@ -743,6 +826,292 @@ export const HomeV2Draft = () => {
         });
     }, [applyAuthoringDrafts, assetRegistryYamlDraft, sceneYamlDraft, skinYamlDraft]);
 
+    const handleDeleteSelection = React.useCallback(() => {
+        if (!authoringDocument || selectedNodeIds.length === 0) {
+            return;
+        }
+
+        const nextSceneDocument = removeSceneNodes(authoringDocument.sceneDocument, selectedNodeIds);
+        if (nextSceneDocument === authoringDocument.sceneDocument) {
+            return;
+        }
+
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+        setSelectedNodeIds([]);
+        setPreviewRects({});
+        setInspectorOpen(false);
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, selectedNodeIds, skinYamlDraft]);
+
+    const handleNudgeSelection = React.useCallback((deltaX: number, deltaY: number) => {
+        if (!authoringDocument || selectedNodeIds.length === 0) {
+            return;
+        }
+
+        const rectEntries = buildRectEntriesFromSelection(
+            selectedNodeIds,
+            authoringDocument.sceneDocument,
+            compiledContentScene,
+            previewRects,
+        );
+        if (rectEntries.length === 0) {
+            return;
+        }
+
+        const selectionLeft = Math.min(...rectEntries.map(([, rect]) => rect.x));
+        const selectionTop = Math.min(...rectEntries.map(([, rect]) => rect.y));
+        const selectionRight = Math.max(...rectEntries.map(([, rect]) => rect.x + rect.width));
+        const selectionBottom = Math.max(...rectEntries.map(([, rect]) => rect.y + rect.height));
+        const clampedDeltaX = Math.min(
+            Math.max(deltaX, -selectionLeft),
+            compiledContentScene.artboard.width - selectionRight,
+        );
+        const clampedDeltaY = Math.min(
+            Math.max(deltaY, -selectionTop),
+            compiledContentScene.artboard.height - selectionBottom,
+        );
+
+        if (clampedDeltaX === 0 && clampedDeltaY === 0) {
+            return;
+        }
+
+        let nextSceneDocument = authoringDocument.sceneDocument;
+        rectEntries.forEach(([nodeId, rect]) => {
+            nextSceneDocument = updateSceneNodeRect(
+                nextSceneDocument,
+                compiledContentScene,
+                nodeId,
+                () => ({
+                    ...rect,
+                    x: rect.x + clampedDeltaX,
+                    y: rect.y + clampedDeltaY,
+                }),
+            );
+        });
+
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, compiledContentScene, previewRects, selectedNodeIds, skinYamlDraft]);
+
+    const handleAlignSelection = React.useCallback((mode: SelectionArrangeMode) => {
+        if (!authoringDocument || selectedNodeIds.length < 2) {
+            return;
+        }
+
+        const rectEntries = buildRectEntriesFromSelection(
+            selectedNodeIds,
+            authoringDocument.sceneDocument,
+            compiledContentScene,
+            previewRects,
+        );
+
+        if (rectEntries.length < 2) {
+            return;
+        }
+
+        const primaryRect = rectEntries[0]?.[1];
+        if (!primaryRect) {
+            return;
+        }
+        const selectionLeft = Math.min(...rectEntries.map(([, rect]) => rect.x));
+        const selectionTop = Math.min(...rectEntries.map(([, rect]) => rect.y));
+        const selectionRight = Math.max(...rectEntries.map(([, rect]) => rect.x + rect.width));
+        const selectionBottom = Math.max(...rectEntries.map(([, rect]) => rect.y + rect.height));
+        const selectionCenterX = (selectionLeft + selectionRight) / 2;
+        const selectionCenterY = (selectionTop + selectionBottom) / 2;
+        const horizontalOrder = [...rectEntries].sort((left, right) => left[1].x - right[1].x);
+        const verticalOrder = [...rectEntries].sort((left, right) => left[1].y - right[1].y);
+        const distributedHorizontalRects = (() => {
+            if (horizontalOrder.length < 3) {
+                return null;
+            }
+            const innerNodes = horizontalOrder.slice(1, -1);
+            const totalWidth = horizontalOrder.reduce((sum, [, rect]) => sum + rect.width, 0);
+            const gap = (selectionRight - selectionLeft - totalWidth) / (horizontalOrder.length - 1);
+            let cursorX = horizontalOrder[0]![1].x + horizontalOrder[0]![1].width + gap;
+            const nextMap = new Map<string, UISceneRect>();
+            innerNodes.forEach(([nodeId, rect]) => {
+                nextMap.set(nodeId, {
+                    ...rect,
+                    x: cursorX,
+                });
+                cursorX += rect.width + gap;
+            });
+            return nextMap;
+        })();
+        const distributedVerticalRects = (() => {
+            if (verticalOrder.length < 3) {
+                return null;
+            }
+            const innerNodes = verticalOrder.slice(1, -1);
+            const totalHeight = verticalOrder.reduce((sum, [, rect]) => sum + rect.height, 0);
+            const gap = (selectionBottom - selectionTop - totalHeight) / (verticalOrder.length - 1);
+            let cursorY = verticalOrder[0]![1].y + verticalOrder[0]![1].height + gap;
+            const nextMap = new Map<string, UISceneRect>();
+            innerNodes.forEach(([nodeId, rect]) => {
+                nextMap.set(nodeId, {
+                    ...rect,
+                    y: cursorY,
+                });
+                cursorY += rect.height + gap;
+            });
+            return nextMap;
+        })();
+
+        let nextSceneDocument = authoringDocument.sceneDocument;
+        rectEntries.forEach(([nodeId, rect]) => {
+            const nextRect = (() => {
+                switch (mode) {
+                    case 'left':
+                        return { ...rect, x: selectionLeft };
+                    case 'horizontalCenter':
+                        return { ...rect, x: selectionCenterX - rect.width / 2 };
+                    case 'right':
+                        return { ...rect, x: selectionRight - rect.width };
+                    case 'top':
+                        return { ...rect, y: selectionTop };
+                    case 'verticalCenter':
+                        return { ...rect, y: selectionCenterY - rect.height / 2 };
+                    case 'bottom':
+                        return { ...rect, y: selectionBottom - rect.height };
+                    case 'sameWidth':
+                        return { ...rect, width: primaryRect.width };
+                    case 'sameHeight':
+                        return { ...rect, height: primaryRect.height };
+                    case 'sameSize':
+                        return { ...rect, width: primaryRect.width, height: primaryRect.height };
+                    case 'distributeHorizontal':
+                        return distributedHorizontalRects?.get(nodeId) ?? rect;
+                    case 'distributeVertical':
+                        return distributedVerticalRects?.get(nodeId) ?? rect;
+                }
+            })();
+
+            nextSceneDocument = updateSceneNodeRect(
+                nextSceneDocument,
+                compiledContentScene,
+                nodeId,
+                () => clampNodeRect(compiledContentScene, nextRect),
+            );
+        });
+
+        applyAuthoringDrafts({
+            assetRegistryYaml: assetRegistryYamlDraft,
+            skinYaml: skinYamlDraft,
+            sceneYaml: serializeSceneYaml(nextSceneDocument),
+        });
+    }, [applyAuthoringDrafts, assetRegistryYamlDraft, authoringDocument, compiledContentScene, previewRects, selectedNodeIds, skinYamlDraft]);
+
+    const handleUndo = React.useCallback(() => {
+        const previousDrafts = undoStack[undoStack.length - 1];
+        if (!previousDrafts) {
+            return;
+        }
+
+        setUndoStack(undoStack.slice(0, -1));
+        setRedoStack([...redoStack, currentDraftsRef.current]);
+        applyAuthoringDrafts(previousDrafts, {
+            recordHistory: false,
+            clearRedo: false,
+        });
+        setPreviewRects({});
+    }, [applyAuthoringDrafts, redoStack, undoStack]);
+
+    const handleRedo = React.useCallback(() => {
+        const nextDrafts = redoStack[redoStack.length - 1];
+        if (!nextDrafts) {
+            return;
+        }
+
+        setRedoStack(redoStack.slice(0, -1));
+        setUndoStack([...undoStack, currentDraftsRef.current]);
+        applyAuthoringDrafts(nextDrafts, {
+            recordHistory: false,
+            clearRedo: false,
+        });
+        setPreviewRects({});
+    }, [applyAuthoringDrafts, redoStack, undoStack]);
+
+    React.useEffect(() => {
+        if (!isAuthorMode) {
+            return;
+        }
+
+        const handleKeyDown = (event: KeyboardEvent) => {
+            const target = event.target as HTMLElement | null;
+            const isEditableTarget = Boolean(
+                target
+                && (
+                    target instanceof HTMLInputElement
+                    || target instanceof HTMLTextAreaElement
+                    || target instanceof HTMLSelectElement
+                    || target.isContentEditable
+                ),
+            );
+
+            const isDeleteShortcut = event.key === 'Delete' || event.key === 'Backspace';
+            const isUndoShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'z' && !event.shiftKey;
+            const isRedoShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && (
+                (event.key.toLowerCase() === 'z' && event.shiftKey)
+                || event.key.toLowerCase() === 'y'
+            );
+            const nudgeMap: Record<string, { x: number; y: number }> = {
+                ArrowLeft: { x: -1, y: 0 },
+                ArrowRight: { x: 1, y: 0 },
+                ArrowUp: { x: 0, y: -1 },
+                ArrowDown: { x: 0, y: 1 },
+            };
+
+            if (event.key === 'Escape' && !isEditableTarget) {
+                event.preventDefault();
+                setSelectedNodeIds([]);
+                setPreviewRects({});
+                setInspectorOpen(false);
+                return;
+            }
+
+            if (isEditableTarget) {
+                return;
+            }
+
+            if (isDeleteShortcut && selectedNodeIds.length > 0) {
+                event.preventDefault();
+                handleDeleteSelection();
+                return;
+            }
+
+            if (isUndoShortcut) {
+                event.preventDefault();
+                handleUndo();
+                return;
+            }
+
+            if (isRedoShortcut) {
+                event.preventDefault();
+                handleRedo();
+                return;
+            }
+
+            if (!event.ctrlKey && !event.metaKey && !event.altKey && selectedNodeIds.length > 0 && nudgeMap[event.key]) {
+                event.preventDefault();
+                const step = event.shiftKey ? 10 : 1;
+                const direction = nudgeMap[event.key];
+                handleNudgeSelection(direction.x * step, direction.y * step);
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [handleDeleteSelection, handleNudgeSelection, handleRedo, handleUndo, isAuthorMode, selectedNodeIds.length]);
+
     const handleSave = React.useCallback(async () => {
         if (!isAuthorMode || authoringError) {
             return;
@@ -878,6 +1247,7 @@ export const HomeV2Draft = () => {
                                     visible={sceneState === 'overview' || sceneState === 'detail'}
                                     activeState={sceneState}
                                     meta={authoringMeta}
+                                    sceneDocument={authoringDocument.sceneDocument}
                                     selectedNodeId={selectedNodeId}
                                     selectedNodeIds={selectedNodeIds}
                                     rectOverrides={previewRects}
@@ -913,9 +1283,19 @@ export const HomeV2Draft = () => {
             data-bg-friendly-screen="true"
             className="h-screen overflow-hidden bg-[linear-gradient(180deg,_#1f130d_0%,_#120b07_100%)]"
         >
-            {stage}
+            <div
+                className="fixed inset-0 transition-[padding] duration-300 ease-out"
+                style={{
+                    paddingTop: workspacePaddingTop,
+                    paddingLeft: workspacePaddingLeft,
+                    paddingRight: workspacePaddingRight,
+                    paddingBottom: workspacePaddingBottom,
+                }}
+            >
+                {stage}
+            </div>
             <div className="pointer-events-none fixed inset-x-0 top-4 z-[2300] flex justify-center px-4">
-                <div className="pointer-events-auto w-full max-w-[1120px]">
+                <div className="pointer-events-auto w-full max-w-[980px]">
                     <EditorHeaderBar
                         sceneName={authoringMeta.scene?.名称 ?? '首页 V2 内容层'}
                         leftTab={leftTab}
@@ -923,12 +1303,18 @@ export const HomeV2Draft = () => {
                         inspectorOpen={inspectorOpen}
                         sourceOpen={sourcePanelOpen}
                         overlayVisible={overlayVisible}
+                        canUndo={undoStack.length > 0}
+                        canRedo={redoStack.length > 0}
+                        canDeleteSelection={selectedNodeIds.length > 0}
                         isSaving={isSaving}
                         saveDisabled={Boolean(authoringError)}
                         onToggleLeftTab={toggleLeftDrawer}
                         onToggleInspector={() => setInspectorOpen((current) => !current)}
                         onToggleOverlay={() => setOverlayVisible((current) => !current)}
                         onToggleSource={() => setSourcePanelOpen((current) => !current)}
+                        onUndo={handleUndo}
+                        onRedo={handleRedo}
+                        onDeleteSelection={handleDeleteSelection}
                         onSave={handleSave}
                     />
                 </div>
@@ -937,7 +1323,7 @@ export const HomeV2Draft = () => {
             <div
                 data-testid="home-v2-left-drawer"
                 data-state={leftDrawerOpen ? 'open' : 'closed'}
-                className="pointer-events-none fixed left-4 top-24 bottom-28 z-[2240] transition-transform duration-300"
+                className="pointer-events-none fixed left-4 top-24 bottom-4 z-[2240] transition-transform duration-300"
                 style={{
                     width: leftDrawerWidth,
                     transform: leftDrawerOpen ? 'translateX(0)' : 'translateX(calc(-100% - 1.5rem))',
@@ -974,7 +1360,7 @@ export const HomeV2Draft = () => {
                         type="button"
                         aria-label="调整左侧抽屉宽度"
                         data-testid="home-v2-left-drawer-resize"
-                        className="absolute right-1 top-2 bottom-2 z-10 w-4 cursor-ew-resize rounded-full border border-white/10 bg-amber-200/16"
+                        className="absolute -right-[3px] top-5 bottom-5 z-10 w-[6px] cursor-ew-resize rounded-full bg-amber-100/70 shadow-[0_0_0_1px_rgba(255,248,235,0.38)]"
                         onPointerDown={(event) => {
                             event.preventDefault();
                             drawerResizeSessionRef.current = {
@@ -1000,7 +1386,7 @@ export const HomeV2Draft = () => {
             <div
                 data-testid="home-v2-right-drawer"
                 data-state={inspectorOpen ? 'open' : 'closed'}
-                className="pointer-events-none fixed top-24 right-4 bottom-28 z-[2240] transition-transform duration-300"
+                className="pointer-events-none fixed top-24 right-4 bottom-4 z-[2240] transition-transform duration-300"
                 style={{
                     width: inspectorWidth,
                     transform: inspectorOpen ? 'translateX(0)' : 'translateX(calc(100% + 1.5rem))',
@@ -1016,6 +1402,8 @@ export const HomeV2Draft = () => {
                             meta={authoringMeta}
                             selectedNodeId={selectedNodeId}
                             selectedNodeIds={selectedNodeIds}
+                            onAlignSelection={handleAlignSelection}
+                            onPromoteSelectionPrimary={handlePromoteSelectionPrimary}
                             onSelectNode={handleSelectNode}
                             onChangeNodeRect={handleNodeRectChange}
                             onChangeNodeLayout={handleNodeLayoutChange}
@@ -1037,7 +1425,7 @@ export const HomeV2Draft = () => {
                         type="button"
                         aria-label="调整属性抽屉宽度"
                         data-testid="home-v2-right-drawer-resize"
-                        className="absolute left-1 top-2 bottom-2 z-10 w-4 cursor-ew-resize rounded-full border border-white/10 bg-amber-200/16"
+                        className="absolute -left-[3px] top-5 bottom-5 z-10 w-[6px] cursor-ew-resize rounded-full bg-amber-100/70 shadow-[0_0_0_1px_rgba(255,248,235,0.38)]"
                         onPointerDown={(event) => {
                             event.preventDefault();
                             drawerResizeSessionRef.current = {
@@ -1063,12 +1451,16 @@ export const HomeV2Draft = () => {
             <div
                 data-testid="home-v2-source-drawer"
                 data-state={sourcePanelOpen ? 'open' : 'closed'}
-                className="pointer-events-none fixed left-4 right-4 bottom-4 z-[2240] transition-transform duration-300"
-                style={{ transform: sourcePanelOpen ? 'translateY(0)' : 'translateY(calc(100% + 1.5rem))' }}
+                className="pointer-events-none fixed bottom-4 z-[2240] transition-transform duration-300"
+                style={{
+                    left: sourceDrawerLeftInset,
+                    right: sourceDrawerRightInset,
+                    transform: sourcePanelOpen ? 'translateY(0)' : 'translateY(calc(100% + 1.5rem))',
+                }}
             >
                 <div
                     data-testid="home-v2-source-drawer-body"
-                    className="pointer-events-auto relative mx-auto max-w-[1120px]"
+                    className="pointer-events-auto relative mx-auto max-w-[960px]"
                     style={{ height: sourcePanelHeight }}
                 >
                     <YamlSyncPanel
@@ -1092,7 +1484,7 @@ export const HomeV2Draft = () => {
                         type="button"
                         aria-label="调整源码抽屉高度"
                         data-testid="home-v2-source-drawer-resize"
-                        className="absolute left-1/2 top-2 z-10 h-4 w-36 -translate-x-1/2 cursor-ns-resize rounded-full border border-white/10 bg-amber-200/16"
+                        className="absolute left-1/2 top-2 z-10 h-[6px] w-28 -translate-x-1/2 cursor-ns-resize rounded-full bg-amber-100/72 shadow-[0_0_0_1px_rgba(255,248,235,0.38)]"
                         onPointerDown={(event) => {
                             event.preventDefault();
                             drawerResizeSessionRef.current = {

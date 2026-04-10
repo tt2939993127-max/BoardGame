@@ -45,8 +45,8 @@ export function YamlSyncPanel({
         <aside
             data-testid="home-v2-source-panel"
             className={`${embedded
-                ? 'pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-[20px] border border-white/12 bg-[#130d09]/94 shadow-[0_24px_80px_rgba(0,0,0,0.25)]'
-                : 'pointer-events-auto fixed right-4 top-4 z-[2100] flex max-h-[calc(100vh-2rem)] w-[min(520px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[20px] border border-white/12 bg-[#130d09]/94 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md'}`}
+                ? 'pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#17110e]/98 shadow-[0_18px_48px_rgba(0,0,0,0.24)]'
+                : 'pointer-events-auto fixed right-4 top-4 z-[2100] flex max-h-[calc(100vh-2rem)] w-[min(520px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#17110e]/98 shadow-[0_18px_48px_rgba(0,0,0,0.32)]'}`}
             style={{ display: open ? 'flex' : 'none' }}
         >
             <div className="border-b border-white/10 px-4 py-3">

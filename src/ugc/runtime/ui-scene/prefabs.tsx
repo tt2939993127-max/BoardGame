@@ -193,18 +193,13 @@ const bookTabPrefab: UIScenePrefabDefinition<UIBookTabPrefabProps> = {
 
         const props = node.props;
         const isActive = sceneContext?.activeTab === props.tabId;
-
-        // Note: Translation would typically be handled by passing the translated string via props or context
-        // For now we'll use a placeholder or assume it's passed in sceneContext
         const label = (sceneContext?.tabLabels as Record<string, string>)?.[props.tabId] ?? props.tabId;
 
         return (
             <button
                 key={node.id}
-                className={clsx(
-                    'absolute group flex items-center justify-center pointer-events-auto cursor-pointer transition-all duration-200',
-                    isActive ? 'opacity-100 translate-x-[-2px]' : 'opacity-80 hover:opacity-100 hover:translate-x-[-1px]',
-                )}
+                type="button"
+                className="absolute m-0 appearance-none border-0 bg-transparent p-0 shadow-none outline-none pointer-events-auto cursor-pointer"
                 style={buildAbsoluteStyle(targetRect)}
                 onClick={() => emit(props.eventId, { tabId: props.tabId })}
                 aria-label={label}
@@ -212,11 +207,11 @@ const bookTabPrefab: UIScenePrefabDefinition<UIBookTabPrefabProps> = {
             >
                 <div
                     className={clsx(
-                        'writing-vertical-rl text-[10px] md:text-xs font-bold tracking-widest',
-                        isActive ? 'text-[#4a3525]' : 'text-[#7a6555] group-hover:text-[#5a4535]',
+                        'absolute left-[38%] top-1/2 -translate-x-1/2 -translate-y-1/2 writing-vertical-rl text-[11px] font-bold leading-none tracking-[0.12em] select-none',
+                        isActive ? 'text-[#4b2f1b]' : 'text-[#6a442a]',
                     )}
                     style={{
-                        textShadow: isActive ? '0 1px 2px rgba(255,255,255,0.8)' : 'none',
+                        textShadow: isActive ? '0 1px 0 rgba(255,245,230,0.7)' : '0 1px 0 rgba(255,245,230,0.35)',
                     }}
                 >
                     {label}

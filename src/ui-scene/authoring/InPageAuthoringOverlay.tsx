@@ -1,8 +1,15 @@
 import React from 'react';
-import type { UISceneCompiledArtifact, UISceneCompiledNode, UISceneRect } from '../types';
+import type { UISceneCompiledArtifact, UISceneCompiledNode, UISceneRect, UISceneSourceDocument } from '../types';
 import type { UISceneAuthoringMeta } from './authoringMeta';
 import { getAuthoringNodeName } from './authoringMeta';
-import { findCompiledNodeById, isContainerNode, listEditableCompiledNodes } from './sceneGraph';
+import {
+    findCompiledNodeById,
+    findNodeById,
+    isContainerNode,
+    isFlowContainerNode,
+    listEditableCompiledNodes,
+    type UISceneNodeMovePosition,
+} from './sceneGraph';
 
 type DragMode = 'move' | 'resize';
 type ResizeHandle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -13,6 +20,9 @@ type GuideLine = {
 type CanvasDropTarget = {
     nodeId: string;
     rect: UISceneRect;
+    position: UISceneNodeMovePosition;
+    containerId: string;
+    indicatorRect?: UISceneRect;
 };
 type ResizeModifierState = {
     preserveAspectRatio: boolean;
@@ -41,6 +51,7 @@ export interface InPageAuthoringOverlayProps {
     visible: boolean;
     activeState?: string;
     meta?: UISceneAuthoringMeta;
+    sceneDocument?: UISceneSourceDocument;
     selectedNodeId?: string | null;
     selectedNodeIds?: string[];
     rectOverrides?: Record<string, UISceneRect>;
@@ -48,7 +59,7 @@ export interface InPageAuthoringOverlayProps {
     onSelectNodes?: (nodeIds: string[], options?: { additive?: boolean; primaryNodeId?: string | null }) => void;
     onPreviewRectsChange: (rects: Record<string, UISceneRect>) => void;
     onCommitRects: (rects: Record<string, UISceneRect>) => void;
-    onMoveNode?: (nodeId: string, targetId: string, position: 'inside') => void;
+    onMoveNode?: (nodeId: string, targetId: string, position: UISceneNodeMovePosition) => void;
 }
 
 type MovePointerSession = {
@@ -67,14 +78,18 @@ type MovePointerSession = {
 
 type ResizePointerSession = {
     mode: 'resize';
-    nodeId: string;
+    nodeId?: string;
+    nodeIds?: string[];
     handle?: ResizeHandle;
     startClientX: number;
     startClientY: number;
     currentClientX: number;
     currentClientY: number;
-    startRect: UISceneRect;
+    startRect?: UISceneRect;
+    startRectMap?: Record<string, UISceneRect>;
+    startGroupRect?: UISceneRect;
     lastRect: UISceneRect | null;
+    lastRectMap: Record<string, UISceneRect>;
     moved: boolean;
 };
 
@@ -147,8 +162,187 @@ function resolveNodeRect(node: UISceneCompiledNode, rectOverrides: Record<string
     return rectOverrides[node.id] ?? node.rect;
 }
 
+function findCompiledParentNodeById(
+    root: UISceneCompiledNode,
+    nodeId: string,
+    parent: UISceneCompiledNode | null = null,
+): UISceneCompiledNode | null {
+    if (root.id === nodeId) {
+        return parent;
+    }
+
+    for (const child of root.children) {
+        const found = findCompiledParentNodeById(child, nodeId, root);
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
+}
+
+function buildIndicatorRect(
+    containerRect: UISceneRect,
+    childRect: UISceneRect,
+    direction: 'horizontal' | 'vertical',
+    position: 'before' | 'after',
+): UISceneRect {
+    if (direction === 'horizontal') {
+        const x = position === 'before' ? childRect.x : childRect.x + childRect.width;
+        return {
+            x: Math.max(containerRect.x + 4, x - 1),
+            y: containerRect.y + 6,
+            width: 2,
+            height: Math.max(24, containerRect.height - 12),
+        };
+    }
+
+    const y = position === 'before' ? childRect.y : childRect.y + childRect.height;
+    return {
+        x: containerRect.x + 6,
+        y: Math.max(containerRect.y + 4, y - 1),
+        width: Math.max(24, containerRect.width - 12),
+        height: 2,
+    };
+}
+
+function buildSyntheticFlowChildren(
+    containerNode: UISceneCompiledNode,
+    containerRect: UISceneRect,
+    sceneDocument: UISceneSourceDocument | undefined,
+    blockedIds: Set<string>,
+    activeState?: string,
+) {
+    if (!sceneDocument || containerNode.type !== 'stack') {
+        return [];
+    }
+
+    const sourceContainer = findNodeById(sceneDocument.scene.root, containerNode.id);
+    if (!sourceContainer || sourceContainer.type !== 'stack' || sourceContainer.direction === 'absolute') {
+        return [];
+    }
+
+    const padding = sourceContainer.padding ?? { top: 0, right: 0, bottom: 0, left: 0 };
+    const gap = sourceContainer.gap ?? 0;
+    const innerWidth = Math.max(24, containerRect.width - padding.left - padding.right);
+    const innerHeight = Math.max(24, containerRect.height - padding.top - padding.bottom);
+    let cursorX = containerRect.x + padding.left;
+    let cursorY = containerRect.y + padding.top;
+
+    return sourceContainer.children
+        .filter((child) => !blockedIds.has(child.id))
+        .map((child) => ({
+            sourceChild: child,
+            compiledChild: containerNode.children.find((compiledChild) => compiledChild.id === child.id) ?? null,
+        }))
+        .filter((child) => child.compiledChild && isNodeVisible(child.compiledChild, activeState))
+        .map(({ sourceChild, compiledChild }) => {
+            const layout = sourceChild.layout ?? {};
+            const width = sourceContainer.direction === 'horizontal'
+                ? Math.max(24, layout.width ?? 72)
+                : Math.max(24, layout.width ?? innerWidth);
+            const height = sourceContainer.direction === 'vertical'
+                ? Math.max(24, layout.height ?? 72)
+                : Math.max(24, layout.height ?? innerHeight);
+            const rect = {
+                x: cursorX,
+                y: cursorY,
+                width: Math.min(width, innerWidth),
+                height: Math.min(height, innerHeight),
+            };
+
+            if (sourceContainer.direction === 'horizontal') {
+                cursorX += rect.width + gap;
+            } else {
+                cursorY += rect.height + gap;
+            }
+
+            return {
+                nodeId: compiledChild.id,
+                rect,
+            };
+        });
+}
+
+function findFlowInsertionTarget(
+    containerNode: UISceneCompiledNode,
+    sceneDocument: UISceneSourceDocument | undefined,
+    blockedIds: Set<string>,
+    centerX: number,
+    centerY: number,
+    rectOverrides: Record<string, UISceneRect>,
+    activeState?: string,
+): CanvasDropTarget | null {
+    const containerRect = resolveNodeRect(containerNode, rectOverrides);
+    if (!containerRect) {
+        return null;
+    }
+
+    const flowChildren = containerNode.children
+        .filter((child) => !blockedIds.has(child.id) && isNodeVisible(child, activeState))
+        .map((child) => ({
+            nodeId: child.id,
+            rect: resolveNodeRect(child, rectOverrides),
+        }))
+        .filter((child): child is { nodeId: string; rect: UISceneRect } => Boolean(child.rect));
+    const effectiveFlowChildren = flowChildren.length > 0
+        ? flowChildren
+        : buildSyntheticFlowChildren(containerNode, containerRect, sceneDocument, blockedIds, activeState);
+
+    if (!effectiveFlowChildren.length) {
+        return {
+            nodeId: containerNode.id,
+            rect: containerRect,
+            position: 'inside',
+            containerId: containerNode.id,
+        };
+    }
+
+    const direction = containerNode.type === 'stack' && containerNode.direction === 'horizontal'
+        ? 'horizontal'
+        : 'vertical';
+    const nearestChild = effectiveFlowChildren.reduce((best, child) => {
+        const childCenter = direction === 'horizontal'
+            ? child.rect.x + child.rect.width / 2
+            : child.rect.y + child.rect.height / 2;
+        const currentCenter = direction === 'horizontal' ? centerX : centerY;
+        const distance = Math.abs(currentCenter - childCenter);
+        if (!best || distance < best.distance) {
+            return {
+                ...child,
+                distance,
+            };
+        }
+        return best;
+    }, null as ({ nodeId: string; rect: UISceneRect; distance: number }) | null);
+
+    if (!nearestChild) {
+        return {
+            nodeId: containerNode.id,
+            rect: containerRect,
+            position: 'inside',
+            containerId: containerNode.id,
+        };
+    }
+
+    const childCenter = direction === 'horizontal'
+        ? nearestChild.rect.x + nearestChild.rect.width / 2
+        : nearestChild.rect.y + nearestChild.rect.height / 2;
+    const currentCenter = direction === 'horizontal' ? centerX : centerY;
+    const position: UISceneNodeMovePosition = currentCenter < childCenter ? 'before' : 'after';
+
+    return {
+        nodeId: nearestChild.nodeId,
+        rect: containerRect,
+        position,
+        containerId: containerNode.id,
+        indicatorRect: buildIndicatorRect(containerRect, nearestChild.rect, direction, position),
+    };
+}
+
 function findCanvasDropTarget(
     scene: UISceneCompiledArtifact,
+    sceneDocument: UISceneSourceDocument | undefined,
     currentNodeId: string,
     rect: UISceneRect,
     rectOverrides: Record<string, UISceneRect>,
@@ -159,13 +353,13 @@ function findCanvasDropTarget(
     const centerX = rect.x + rect.width / 2;
     const centerY = rect.y + rect.height / 2;
 
-    const candidates = listRectNodes(scene, activeState)
+    const containerCandidates = listRectNodes(scene, activeState)
         .filter((node) => isContainerNode(node) && !blockedIds.has(node.id))
         .map((node) => ({
-            nodeId: node.id,
+            node,
             rect: resolveNodeRect(node, rectOverrides),
         }))
-        .filter((node): node is CanvasDropTarget => Boolean(node.rect))
+        .filter((node): node is { node: UISceneCompiledNode; rect: UISceneRect } => Boolean(node.rect))
         .filter((node) => (
             centerX >= node.rect.x
             && centerX <= node.rect.x + node.rect.width
@@ -173,12 +367,26 @@ function findCanvasDropTarget(
             && centerY <= node.rect.y + node.rect.height
         ));
 
-    if (!candidates.length) {
+    if (!containerCandidates.length) {
         return null;
     }
 
-    candidates.sort((left, right) => (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height));
-    return candidates[0] ?? null;
+    containerCandidates.sort((left, right) => (left.rect.width * left.rect.height) - (right.rect.width * right.rect.height));
+    const targetContainer = containerCandidates[0]?.node;
+    if (!targetContainer) {
+        return null;
+    }
+
+    if (isFlowContainerNode(targetContainer)) {
+        return findFlowInsertionTarget(targetContainer, sceneDocument, blockedIds, centerX, centerY, rectOverrides, activeState);
+    }
+
+    return {
+        nodeId: targetContainer.id,
+        rect: containerCandidates[0]!.rect,
+        position: 'inside',
+        containerId: targetContainer.id,
+    };
 }
 
 function buildVerticalTargets(
@@ -357,6 +565,50 @@ function buildResizeRect(
     return buildFreeformResizeRect(startRect, handle, deltaX, deltaY, modifiers.fromCenter);
 }
 
+function normalizeResizedRect(rect: UISceneRect): UISceneRect {
+    const width = Math.abs(rect.width);
+    const height = Math.abs(rect.height);
+
+    return {
+        x: rect.width >= 0 ? rect.x : rect.x + rect.width,
+        y: rect.height >= 0 ? rect.y : rect.y + rect.height,
+        width,
+        height,
+    };
+}
+
+function buildResizedGroupRectMap(
+    scene: UISceneCompiledArtifact,
+    startRectMap: Record<string, UISceneRect>,
+    startGroupRect: UISceneRect,
+    targetGroupRect: UISceneRect,
+) {
+    const normalizedGroupRect = clampRect(normalizeResizedRect(targetGroupRect), scene);
+    const scaleX = normalizedGroupRect.width / Math.max(startGroupRect.width, 1);
+    const scaleY = normalizedGroupRect.height / Math.max(startGroupRect.height, 1);
+
+    const nextRectMap = Object.fromEntries(
+        Object.entries(startRectMap).map(([nodeId, rect]) => {
+            const relativeX = (rect.x - startGroupRect.x) / Math.max(startGroupRect.width, 1);
+            const relativeY = (rect.y - startGroupRect.y) / Math.max(startGroupRect.height, 1);
+            return [
+                nodeId,
+                {
+                    x: normalizedGroupRect.x + relativeX * normalizedGroupRect.width,
+                    y: normalizedGroupRect.y + relativeY * normalizedGroupRect.height,
+                    width: Math.max(24, rect.width * scaleX),
+                    height: Math.max(24, rect.height * scaleY),
+                },
+            ];
+        }),
+    ) as Record<string, UISceneRect>;
+
+    return {
+        rectMap: nextRectMap,
+        groupRect: buildGroupRect(nextRectMap),
+    };
+}
+
 function applySnapDelta(rect: UISceneRect, handle: ResizeHandle, verticalSnap: SnapMatch | null, horizontalSnap: SnapMatch | null) {
     let nextRect = { ...rect };
     const guides: GuideLine[] = [];
@@ -479,26 +731,10 @@ function getHandleSize(rect: UISceneRect) {
 }
 
 function getHandleShape(handle: ResizeHandle) {
-    if (handle === 'n' || handle === 's') {
-        return {
-            width: 20,
-            height: 8,
-            borderRadius: 999,
-        };
-    }
-
-    if (handle === 'e' || handle === 'w') {
-        return {
-            width: 8,
-            height: 20,
-            borderRadius: 999,
-        };
-    }
-
     return {
-        width: 12,
-        height: 12,
-        borderRadius: 4,
+        width: handle === 'n' || handle === 's' || handle === 'e' || handle === 'w' ? 10 : 12,
+        height: handle === 'n' || handle === 's' || handle === 'e' || handle === 'w' ? 10 : 12,
+        borderRadius: 999,
     };
 }
 
@@ -595,6 +831,7 @@ export function InPageAuthoringOverlay({
     visible,
     activeState,
     meta,
+    sceneDocument,
     selectedNodeId,
     selectedNodeIds = [],
     rectOverrides = {},
@@ -632,6 +869,33 @@ export function InPageAuthoringOverlay({
         () => new Set(resolvedSelectedNodeIds),
         [resolvedSelectedNodeIds],
     );
+    const multiSelectionRect = React.useMemo(() => {
+        if (resolvedSelectedNodeIds.length <= 1) {
+            return null;
+        }
+
+        const selectedRectEntries = resolvedSelectedNodeIds
+            .map((nodeId) => {
+                const node = editableNodes.find((editableNode) => editableNode.id === nodeId);
+                if (!node) {
+                    return null;
+                }
+
+                const rect = resolveNodeRect(node, rectOverrides);
+                if (!rect) {
+                    return null;
+                }
+
+                return [nodeId, rect] as const;
+            })
+            .filter((entry): entry is readonly [string, UISceneRect] => Boolean(entry));
+
+        if (!selectedRectEntries.length) {
+            return null;
+        }
+
+        return buildGroupRect(Object.fromEntries(selectedRectEntries));
+    }, [editableNodes, rectOverrides, resolvedSelectedNodeIds]);
 
     const startMove = React.useCallback((
         nodeId: string,
@@ -685,7 +949,10 @@ export function InPageAuthoringOverlay({
             currentClientX: clientX,
             currentClientY: clientY,
             startRect: { ...rect },
+            startRectMap: undefined,
+            startGroupRect: undefined,
             lastRect: null,
+            lastRectMap: {},
             moved: false,
         };
 
@@ -693,6 +960,43 @@ export function InPageAuthoringOverlay({
             onSelectNode(nodeId);
         }
     }, [onSelectNode, resolvedSelectedNodeIds.length, selectedIdSet]);
+
+    const startGroupResize = React.useCallback((
+        clientX: number,
+        clientY: number,
+        rect: UISceneRect,
+        handle: ResizeHandle,
+    ) => {
+        if (!selectedNodeId || resolvedSelectedNodeIds.length <= 1) {
+            return;
+        }
+
+        const nodeIds = resolvedSelectedNodeIds.filter((id) => editableNodes.some((node) => node.id === id));
+        const startRectMap = Object.fromEntries(
+            nodeIds.map((id) => {
+                const compiledNode = editableNodes.find((node) => node.id === id);
+                const nextRect = compiledNode ? resolveNodeRect(compiledNode, rectOverrides) : null;
+                return [id, nextRect ?? rect];
+            }),
+        ) as Record<string, UISceneRect>;
+
+        dragSessionRef.current = {
+            mode: 'resize',
+            nodeId: selectedNodeId,
+            nodeIds,
+            handle,
+            startClientX: clientX,
+            startClientY: clientY,
+            currentClientX: clientX,
+            currentClientY: clientY,
+            startRect: undefined,
+            startRectMap,
+            startGroupRect: rect,
+            lastRect: null,
+            lastRectMap: {},
+            moved: false,
+        };
+    }, [editableNodes, rectOverrides, resolvedSelectedNodeIds, selectedNodeId]);
 
     const startMarquee = React.useCallback((clientX: number, clientY: number, additive: boolean) => {
         dragSessionRef.current = {
@@ -816,6 +1120,7 @@ export function InPageAuthoringOverlay({
                 setGuides(snapped.guides);
                 const nextDropTarget = findCanvasDropTarget(
                     scene,
+                    sceneDocument,
                     session.primaryNodeId,
                     snapped.rect,
                     rectOverrides,
@@ -829,10 +1134,29 @@ export function InPageAuthoringOverlay({
                 return;
             }
 
-            const rawRect = buildResizeRect(session.startRect, session.handle ?? 'se', deltaX, deltaY, modifiers);
+            if (session.nodeIds?.length && session.startRectMap && session.startGroupRect) {
+                const rawGroupRect = buildResizeRect(session.startGroupRect, session.handle ?? 'se', deltaX, deltaY, modifiers);
+                const resizedGroup = buildResizedGroupRectMap(
+                    scene,
+                    session.startRectMap,
+                    session.startGroupRect,
+                    rawGroupRect,
+                );
+
+                session.lastRectMap = resizedGroup.rectMap;
+                setGuides([]);
+                dropTargetRef.current = null;
+                setDropTarget(null);
+                setResizeHint(modifiers.preserveAspectRatio || modifiers.fromCenter ? modifiers : null);
+                setMarqueeRect(null);
+                onPreviewRectsChange(resizedGroup.rectMap);
+                return;
+            }
+
+            const rawRect = buildResizeRect(session.startRect ?? { x: 0, y: 0, width: 0, height: 0 }, session.handle ?? 'se', deltaX, deltaY, modifiers);
             const snapped = applySnapping(
                 scene,
-                session.nodeId,
+                session.nodeId ?? selectedNodeId ?? '',
                 rawRect,
                 'resize',
                 session.handle,
@@ -843,13 +1167,14 @@ export function InPageAuthoringOverlay({
             );
 
             session.lastRect = snapped.rect;
+            session.lastRectMap = {};
             setGuides(snapped.guides);
             dropTargetRef.current = null;
             setDropTarget(null);
             setResizeHint(modifiers.preserveAspectRatio || modifiers.fromCenter ? modifiers : null);
             setMarqueeRect(null);
             onPreviewRectsChange({
-                [session.nodeId]: snapped.rect,
+                [session.nodeId ?? selectedNodeId ?? '']: snapped.rect,
             });
         };
 
@@ -959,7 +1284,7 @@ export function InPageAuthoringOverlay({
             if (session.mode === 'move') {
                 if (session.moved && Object.keys(session.lastRectMap).length > 0) {
                     if (session.nodeIds.length === 1 && activeDropTarget && onMoveNode) {
-                        onMoveNode(session.primaryNodeId, activeDropTarget.nodeId, 'inside');
+                        onMoveNode(session.primaryNodeId, activeDropTarget.nodeId, activeDropTarget.position);
                         return;
                     }
                     onCommitRects(session.lastRectMap);
@@ -967,7 +1292,12 @@ export function InPageAuthoringOverlay({
                 return;
             }
 
-            if (session.moved && session.lastRect) {
+            if (session.moved && session.nodeIds?.length && Object.keys(session.lastRectMap).length > 0) {
+                onCommitRects(session.lastRectMap);
+                return;
+            }
+
+            if (session.moved && session.lastRect && session.nodeId) {
                 onCommitRects({
                     [session.nodeId]: session.lastRect,
                 });
@@ -988,7 +1318,7 @@ export function InPageAuthoringOverlay({
             window.removeEventListener('keydown', handleKeyDown);
             window.removeEventListener('keyup', handleKeyUp);
         };
-    }, [activeState, editableNodes, onCommitRects, onMoveNode, onPreviewRectsChange, onSelectNode, onSelectNodes, rectOverrides, scene, visible]);
+    }, [activeState, editableNodes, onCommitRects, onMoveNode, onPreviewRectsChange, onSelectNode, onSelectNodes, rectOverrides, scene, sceneDocument, selectedNodeId, visible]);
 
     if (!visible) {
         return null;
@@ -1015,24 +1345,100 @@ export function InPageAuthoringOverlay({
             {resolvedSelectedNodeIds.length > 1 ? (
                 <div
                     data-testid="home-v2-overlay-selection-summary"
-                    className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-cyan-200/25 bg-[#140d08]/88 px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-cyan-50 shadow-[0_10px_30px_rgba(0,0,0,0.24)]"
+                    className="pointer-events-none absolute left-1/2 top-4 z-10 flex -translate-x-1/2 items-center gap-2 rounded-[10px] border border-[#0d99ff]/30 bg-[#0f1720]/90 px-3 py-1.5 text-[11px] font-semibold tracking-[0.04em] text-[#d6efff] shadow-[0_10px_24px_rgba(0,0,0,0.18)]"
                 >
                     已选 {resolvedSelectedNodeIds.length} 个节点
-                    <span className="rounded-full border border-cyan-200/25 bg-cyan-300/10 px-2 py-0.5 text-[10px]">拖动任一选中节点可群组移动</span>
+                    {selectedNodeId ? (
+                        <span className="rounded-[8px] border border-[#0d99ff]/24 bg-[#0d99ff]/10 px-2 py-0.5 text-[10px]">
+                            主参考：{getAuthoringNodeName(meta, selectedNodeId)}
+                        </span>
+                    ) : null}
+                    <span className="rounded-[8px] border border-[#0d99ff]/24 bg-[#0d99ff]/10 px-2 py-0.5 text-[10px]">拖动边界框或任一选中节点可群组移动</span>
+                </div>
+            ) : null}
+            {multiSelectionRect ? (
+                <div
+                    className="pointer-events-none absolute"
+                    style={{
+                        left: `${(multiSelectionRect.x / scene.artboard.width) * 100}%`,
+                        top: `${(multiSelectionRect.y / scene.artboard.height) * 100}%`,
+                        width: `${(multiSelectionRect.width / scene.artboard.width) * 100}%`,
+                        height: `${(multiSelectionRect.height / scene.artboard.height) * 100}%`,
+                    }}
+                >
+                    <button
+                        type="button"
+                        data-testid="home-v2-overlay-multi-selection-bounds"
+                        className="pointer-events-auto absolute inset-0 rounded-[12px] border border-[#0d99ff] shadow-[0_0_0_1px_rgba(13,153,255,0.18),0_0_20px_rgba(13,153,255,0.12)]"
+                        onPointerDown={(event) => {
+                            event.stopPropagation();
+                            if (event.button !== 0 || !selectedNodeId) {
+                                return;
+                            }
+                            const button = event.currentTarget;
+                            button.setPointerCapture(event.pointerId);
+                            startMove(selectedNodeId, event.clientX, event.clientY, multiSelectionRect);
+                        }}
+                        onMouseDown={(event) => {
+                            event.stopPropagation();
+                            if (event.button !== 0 || !selectedNodeId) {
+                                return;
+                            }
+                            startMove(selectedNodeId, event.clientX, event.clientY, multiSelectionRect);
+                        }}
+                    />
+                    <div className="pointer-events-none absolute inset-0 rounded-[12px] border border-dashed border-[#0d99ff]/70" />
+                    <div className="pointer-events-none absolute left-1/2 top-0 -translate-x-1/2 -translate-y-[calc(100%+8px)] rounded-[10px] border border-[#0d99ff]/30 bg-[#0f1720]/92 px-3 py-1 text-[11px] font-semibold tracking-[0.04em] text-[#d6efff] shadow-[0_8px_20px_rgba(0,0,0,0.18)]">
+                        多选边界框
+                    </div>
+                    {RESIZE_HANDLES.map((handle) => {
+                        const handleShape = getHandleShape(handle.id);
+                        const handleSize = getHandleSize(multiSelectionRect);
+                        return (
+                            <button
+                                key={handle.id}
+                                type="button"
+                                data-testid={`home-v2-overlay-group-handle-${handle.id}`}
+                                className={`pointer-events-auto absolute border border-[#0d99ff] bg-white shadow-[0_3px_10px_rgba(13,153,255,0.22)] ${handle.className}`}
+                                style={{
+                                    width: Math.max(handleShape.width, handleSize),
+                                    height: Math.max(handleShape.height, handleSize),
+                                    borderRadius: handleShape.borderRadius,
+                                    cursor: handle.cursor,
+                                }}
+                                onPointerDown={(event) => {
+                                    event.stopPropagation();
+                                    if (event.button !== 0) {
+                                        return;
+                                    }
+                                    const button = event.currentTarget;
+                                    button.setPointerCapture(event.pointerId);
+                                    startGroupResize(event.clientX, event.clientY, multiSelectionRect, handle.id);
+                                }}
+                                onMouseDown={(event) => {
+                                    event.stopPropagation();
+                                    if (event.button !== 0) {
+                                        return;
+                                    }
+                                    startGroupResize(event.clientX, event.clientY, multiSelectionRect, handle.id);
+                                }}
+                            />
+                        );
+                    })}
                 </div>
             ) : null}
             {resizeHint ? (
                 <div
                     data-testid="home-v2-overlay-modifier-hud"
-                    className={`absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-full border border-amber-200/25 bg-[#140d08]/88 px-3 py-1.5 text-[11px] font-semibold tracking-[0.08em] text-amber-50 shadow-[0_10px_30px_rgba(0,0,0,0.24)] ${
+                    className={`absolute left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 rounded-[10px] border border-[#0d99ff]/30 bg-[#0f1720]/90 px-3 py-1.5 text-[11px] font-semibold tracking-[0.04em] text-[#d6efff] shadow-[0_10px_24px_rgba(0,0,0,0.18)] ${
                         resolvedSelectedNodeIds.length > 1 ? 'top-14' : 'top-4'
                     }`}
                 >
                     {resizeHint.preserveAspectRatio ? (
-                        <span className="rounded-full border border-amber-200/25 bg-amber-200/10 px-2 py-0.5">锁比例</span>
+                        <span className="rounded-[8px] border border-[#0d99ff]/24 bg-[#0d99ff]/10 px-2 py-0.5">锁比例</span>
                     ) : null}
                     {resizeHint.fromCenter ? (
-                        <span className="rounded-full border border-cyan-200/25 bg-cyan-300/10 px-2 py-0.5 text-cyan-50">中心缩放</span>
+                        <span className="rounded-[8px] border border-[#0d99ff]/24 bg-[#0d99ff]/10 px-2 py-0.5 text-[#d6efff]">中心缩放</span>
                     ) : null}
                 </div>
             ) : null}
@@ -1051,7 +1457,8 @@ export function InPageAuthoringOverlay({
             {dropTarget ? (
                 <div
                     data-testid={`home-v2-overlay-drop-target-${dropTarget.nodeId}`}
-                    className="pointer-events-none absolute rounded-[18px] border-2 border-cyan-200 bg-cyan-300/10 shadow-[0_0_0_1px_rgba(125,211,252,0.28),0_0_26px_rgba(34,211,238,0.18)]"
+                    data-position={dropTarget.position}
+                    className="pointer-events-none absolute rounded-[12px] border-2 border-[#0d99ff] bg-[#0d99ff]/10 shadow-[0_0_0_1px_rgba(13,153,255,0.24),0_0_20px_rgba(13,153,255,0.12)]"
                     style={{
                         left: `${(dropTarget.rect.x / scene.artboard.width) * 100}%`,
                         top: `${(dropTarget.rect.y / scene.artboard.height) * 100}%`,
@@ -1059,9 +1466,54 @@ export function InPageAuthoringOverlay({
                         height: `${(dropTarget.rect.height / scene.artboard.height) * 100}%`,
                     }}
                 >
-                    <div className="absolute left-3 top-3 rounded-full border border-cyan-200/35 bg-[#07242a]/92 px-3 py-1 text-[11px] font-semibold tracking-[0.08em] text-cyan-50">
-                        放入容器：{getAuthoringNodeName(meta, dropTarget.nodeId)}
+                    <div className="absolute left-3 top-3 rounded-[10px] border border-[#0d99ff]/30 bg-[#0f1720]/92 px-3 py-1 text-[11px] font-semibold tracking-[0.04em] text-[#d6efff]">
+                        {dropTarget.position === 'inside'
+                            ? `放入容器：${getAuthoringNodeName(meta, dropTarget.containerId)}`
+                            : `插入到「${getAuthoringNodeName(meta, dropTarget.nodeId)}」${dropTarget.position === 'before' ? '前' : '后'}`}
                     </div>
+                    {dropTarget.position === 'inside' ? (
+                        <div
+                            data-testid={`home-v2-overlay-drop-inside-hint-${dropTarget.nodeId}`}
+                            className="absolute inset-3 flex items-center justify-center rounded-[10px] border border-dashed border-[#0d99ff]/60 bg-[#0d99ff]/8"
+                        >
+                            <div className="rounded-[10px] border border-[#0d99ff]/30 bg-[#0f1720]/92 px-3 py-2 text-center text-[11px] font-semibold tracking-[0.04em] text-[#d6efff] shadow-[0_8px_18px_rgba(0,0,0,0.18)]">
+                                松手后放入这个容器
+                            </div>
+                        </div>
+                    ) : null}
+                    {dropTarget.indicatorRect ? (
+                        <>
+                            <div
+                                data-testid={`home-v2-overlay-drop-slot-${dropTarget.nodeId}`}
+                                className="absolute rounded-[10px] bg-[#0d99ff]/10"
+                                style={{
+                                    left: `${Math.max(0, ((dropTarget.indicatorRect.x - dropTarget.rect.x) / dropTarget.rect.width) * 100 - 1)}%`,
+                                    top: `${Math.max(0, ((dropTarget.indicatorRect.y - dropTarget.rect.y) / dropTarget.rect.height) * 100 - 1)}%`,
+                                    width: `${Math.min(100, (dropTarget.indicatorRect.width / dropTarget.rect.width) * 100 + 2)}%`,
+                                    height: `${Math.min(100, (dropTarget.indicatorRect.height / dropTarget.rect.height) * 100 + 2)}%`,
+                                }}
+                            />
+                            <div
+                                data-testid={`home-v2-overlay-drop-indicator-${dropTarget.nodeId}`}
+                                className="absolute rounded-full bg-[#0d99ff] shadow-[0_0_0_1px_rgba(13,153,255,0.45),0_0_18px_rgba(13,153,255,0.24)]"
+                                style={{
+                                    left: `${((dropTarget.indicatorRect.x - dropTarget.rect.x) / dropTarget.rect.width) * 100}%`,
+                                    top: `${((dropTarget.indicatorRect.y - dropTarget.rect.y) / dropTarget.rect.height) * 100}%`,
+                                    width: `${(dropTarget.indicatorRect.width / dropTarget.rect.width) * 100}%`,
+                                    height: `${(dropTarget.indicatorRect.height / dropTarget.rect.height) * 100}%`,
+                                }}
+                            />
+                            <div
+                                className="absolute rounded-[8px] border border-[#0d99ff]/30 bg-[#0f1720]/92 px-2 py-1 text-[10px] font-semibold tracking-[0.04em] text-[#d6efff]"
+                                style={{
+                                    left: `${Math.min(70, Math.max(6, ((dropTarget.indicatorRect.x - dropTarget.rect.x) / dropTarget.rect.width) * 100))}%`,
+                                    top: `${Math.min(82, Math.max(10, ((dropTarget.indicatorRect.y - dropTarget.rect.y) / dropTarget.rect.height) * 100 - 8))}%`,
+                                }}
+                            >
+                                插入位置
+                            </div>
+                        </>
+                    ) : null}
                 </div>
             ) : null}
             {guides.map((guide, index) => (
@@ -1111,9 +1563,9 @@ export function InPageAuthoringOverlay({
                             className={`pointer-events-auto absolute inset-0 rounded-[12px] border text-left transition-colors ${
                                 isSelected
                                     ? isPrimarySelected
-                                        ? 'border-amber-300 bg-amber-200/8 shadow-[0_0_0_1px_rgba(253,224,71,0.32),0_0_24px_rgba(251,191,36,0.16)]'
-                                        : 'border-cyan-200 bg-cyan-300/10 shadow-[0_0_0_1px_rgba(125,211,252,0.24)]'
-                                    : 'border-cyan-300/65 bg-cyan-400/6 hover:bg-cyan-400/12'
+                                        ? 'border-[#0d99ff] bg-[#0d99ff]/8 shadow-[0_0_0_1px_rgba(13,153,255,0.24),0_0_18px_rgba(13,153,255,0.12)]'
+                                        : 'border-[#0d99ff]/80 bg-[#0d99ff]/8 shadow-[0_0_0_1px_rgba(13,153,255,0.16)]'
+                                    : 'border-[#0d99ff]/55 bg-[#0d99ff]/[0.04] hover:bg-[#0d99ff]/[0.08]'
                             }`}
                             onPointerDown={(event) => {
                                 event.stopPropagation();
@@ -1142,13 +1594,18 @@ export function InPageAuthoringOverlay({
                         >
                             <span className={`absolute left-2 top-2 rounded-full px-2 py-1 text-[10px] font-semibold tracking-[0.12em] ${
                                 isPrimarySelected
-                                    ? 'bg-[#22170d]/88 text-amber-50'
+                                    ? 'bg-[#0f1720]/90 text-[#d6efff]'
                                     : isSelected
-                                        ? 'bg-[#07242a]/88 text-cyan-50'
-                                    : 'bg-[#0d1117]/70 text-cyan-100'
+                                        ? 'bg-[#0f1720]/90 text-[#d6efff]'
+                                    : 'bg-[#0f1720]/72 text-[#d6efff]'
                             }`}>
                                 {getAuthoringNodeName(meta, node.id)}
                             </span>
+                            {isPrimarySelected && resolvedSelectedNodeIds.length > 1 ? (
+                                <span className="absolute right-2 top-2 rounded-[8px] border border-[#0d99ff]/30 bg-[#0f1720]/92 px-2 py-1 text-[10px] font-semibold text-[#d6efff]">
+                                    主参考
+                                </span>
+                            ) : null}
                         </button>
 
                         {isPrimarySelected && resolvedSelectedNodeIds.length === 1 ? (
@@ -1160,7 +1617,7 @@ export function InPageAuthoringOverlay({
                                             key={handle.id}
                                             type="button"
                                             data-testid={`home-v2-overlay-handle-${node.id}-${handle.id}`}
-                                            className={`pointer-events-auto absolute border border-amber-200 bg-[#1d130c] shadow-[0_4px_10px_rgba(0,0,0,0.24)] ${handle.className}`}
+                                            className={`pointer-events-auto absolute border border-[#0d99ff] bg-white shadow-[0_3px_10px_rgba(13,153,255,0.22)] ${handle.className}`}
                                             style={{
                                                 width: Math.max(handleShape.width, handleSize),
                                                 height: Math.max(handleShape.height, handleSize),
@@ -1186,7 +1643,7 @@ export function InPageAuthoringOverlay({
                                         />
                                     );
                                 })}
-                                <div className="pointer-events-none absolute inset-0 rounded-[12px] border border-amber-100/55" />
+                                <div className="pointer-events-none absolute inset-0 rounded-[12px] border border-[#0d99ff]/70" />
                             </>
                         ) : null}
                     </div>

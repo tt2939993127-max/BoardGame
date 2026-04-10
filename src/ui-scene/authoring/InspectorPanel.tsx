@@ -39,6 +39,21 @@ export interface InspectorPanelProps {
     meta?: UISceneAuthoringMeta;
     selectedNodeId?: string | null;
     selectedNodeIds?: string[];
+    onAlignSelection?: (
+        mode:
+        | 'left'
+        | 'horizontalCenter'
+        | 'right'
+        | 'top'
+        | 'verticalCenter'
+        | 'bottom'
+        | 'distributeHorizontal'
+        | 'distributeVertical'
+        | 'sameWidth'
+        | 'sameHeight'
+        | 'sameSize'
+    ) => void;
+    onPromoteSelectionPrimary?: (nodeId: string) => void;
     onSelectNode: (nodeId: string, options?: { additive?: boolean; toggle?: boolean }) => void;
     onChangeNodeRect: (nodeId: string, rect: UISceneRect) => void;
     onChangeNodeLayout: (nodeId: string, layout: {
@@ -62,6 +77,27 @@ export interface InspectorPanelProps {
     onChangeNineSliceContentPadding: (nodeId: string, padding: UISceneInsets) => void;
     onToggle: () => void;
     embedded?: boolean;
+}
+
+function ActionButton({
+    testId,
+    children,
+    onClick,
+}: {
+    testId: string;
+    children: React.ReactNode;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            data-testid={testId}
+            onClick={onClick}
+            className="rounded-[12px] border border-cyan-300/20 bg-cyan-300/10 px-3 py-2 text-[12px] font-semibold text-cyan-50 transition-colors hover:bg-cyan-300/16"
+        >
+            {children}
+        </button>
+    );
 }
 
 function NumberField({
@@ -216,6 +252,8 @@ export function InspectorPanel({
     meta,
     selectedNodeId,
     selectedNodeIds = [],
+    onAlignSelection,
+    onPromoteSelectionPrimary,
     onSelectNode,
     onChangeNodeRect,
     onChangeNodeLayout,
@@ -243,6 +281,7 @@ export function InspectorPanel({
     );
     const selectedCount = resolvedSelectedNodeIds.length;
     const isMultiSelected = selectedCount > 1;
+    const primarySelectedNodeId = resolvedSelectedNodeIds[0] ?? null;
     const selectedRect = buildRect(sourceNode, compiledNode?.rect);
     const nodeLabel = sourceNode ? getNodeKindLabel(sourceNode as UISceneNodeSource & { direction?: 'absolute' | 'horizontal' | 'vertical' }) : null;
     const nodeName = isMultiSelected
@@ -261,8 +300,8 @@ export function InspectorPanel({
             data-selected-node={selectedNodeId ?? ''}
             data-selected-count={String(selectedCount)}
             className={`${embedded
-                ? 'pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-[20px] border border-white/12 bg-[#130d09]/94 shadow-[0_24px_80px_rgba(0,0,0,0.25)]'
-                : 'pointer-events-auto fixed right-4 top-4 z-[2100] flex max-h-[calc(100vh-2rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[20px] border border-white/12 bg-[#130d09]/94 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur-md'}`}
+                ? 'pointer-events-auto flex h-full w-full flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#17110e]/98 shadow-[0_18px_48px_rgba(0,0,0,0.24)]'
+                : 'pointer-events-auto fixed right-4 top-4 z-[2100] flex max-h-[calc(100vh-2rem)] w-[min(360px,calc(100vw-2rem))] flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#17110e]/98 shadow-[0_18px_48px_rgba(0,0,0,0.32)]'}`}
             style={{ display: open ? 'flex' : 'none' }}
         >
             <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
@@ -282,21 +321,80 @@ export function InspectorPanel({
             </div>
             <div className="flex-1 space-y-3 overflow-y-auto px-4 py-4">
                 {isMultiSelected ? (
-                    <FieldGroup title="多选" description="当前是多选态，先支持群组移动；属性精编仍以单节点为主。">
-                        <div className="flex flex-wrap gap-2">
-                            {resolvedSelectedNodeIds.map((nodeId) => (
-                                <button
-                                    key={nodeId}
-                                    type="button"
-                                    onClick={() => onSelectNode(nodeId)}
-                                    className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-2 py-1 text-[11px] text-cyan-50"
-                                >
-                                    {getAuthoringNodeName(meta, nodeId)}
-                                </button>
-                            ))}
+                    <FieldGroup title="多选" description="以首个选中节点为主参考，可做对齐、分布和统一尺寸。">
+                        <div className="rounded-[12px] border border-[#0d99ff]/20 bg-[#0d99ff]/8 px-3 py-2 text-[12px] text-[#d6efff]">
+                            当前主参考：{primarySelectedNodeId ? getAuthoringNodeName(meta, primarySelectedNodeId) : '未设置'}
+                        </div>
+                        <div className="grid gap-2">
+                            {resolvedSelectedNodeIds.map((nodeId) => {
+                                const isPrimary = nodeId === primarySelectedNodeId;
+                                return (
+                                    <div
+                                        key={nodeId}
+                                        className={`flex items-center justify-between gap-3 rounded-[12px] border px-3 py-2 ${
+                                            isPrimary
+                                                ? 'border-[#0d99ff]/35 bg-[#0d99ff]/10'
+                                                : 'border-white/8 bg-white/4'
+                                        }`}
+                                    >
+                                        <button
+                                            type="button"
+                                            onClick={() => onSelectNode(nodeId)}
+                                            className="min-w-0 flex-1 truncate text-left text-[12px] text-white/78"
+                                        >
+                                            {getAuthoringNodeName(meta, nodeId)}
+                                        </button>
+                                        {isPrimary ? (
+                                            <span
+                                                data-testid={`home-v2-selection-primary-${nodeId}`}
+                                                className="rounded-[8px] border border-[#0d99ff]/30 bg-[#0d99ff]/12 px-2 py-1 text-[10px] font-semibold text-[#d6efff]"
+                                            >
+                                                主参考
+                                            </span>
+                                        ) : (
+                                            <button
+                                                type="button"
+                                                data-testid={`home-v2-promote-selection-${nodeId}`}
+                                                onClick={() => onPromoteSelectionPrimary?.(nodeId)}
+                                                className="rounded-[8px] border border-white/10 bg-white/6 px-2 py-1 text-[10px] font-semibold text-white/72 transition-colors hover:bg-white/10"
+                                            >
+                                                设为主参考
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                         <div className="text-[12px] leading-[1.7] text-white/55">
-                            在画布上拖动任一选中节点，可以整体移动这一组。按住 Shift 再点节点，能继续增减选择。
+                            在画布上拖动任一选中节点，可以整体移动这一组。按住 Shift 再点节点，能继续增减选择；对齐和统一尺寸默认跟随主参考。
+                        </div>
+                        <div className="grid gap-3">
+                            <div>
+                                <div className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-white/45">对齐</div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <ActionButton testId="home-v2-align-left" onClick={() => onAlignSelection?.('left')}>左对齐</ActionButton>
+                                    <ActionButton testId="home-v2-align-horizontal-center" onClick={() => onAlignSelection?.('horizontalCenter')}>水平居中</ActionButton>
+                                    <ActionButton testId="home-v2-align-right" onClick={() => onAlignSelection?.('right')}>右对齐</ActionButton>
+                                    <ActionButton testId="home-v2-align-top" onClick={() => onAlignSelection?.('top')}>顶对齐</ActionButton>
+                                    <ActionButton testId="home-v2-align-vertical-center" onClick={() => onAlignSelection?.('verticalCenter')}>垂直居中</ActionButton>
+                                    <ActionButton testId="home-v2-align-bottom" onClick={() => onAlignSelection?.('bottom')}>底对齐</ActionButton>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-white/45">分布</div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <ActionButton testId="home-v2-distribute-horizontal" onClick={() => onAlignSelection?.('distributeHorizontal')}>水平分布</ActionButton>
+                                    <ActionButton testId="home-v2-distribute-vertical" onClick={() => onAlignSelection?.('distributeVertical')}>垂直分布</ActionButton>
+                                </div>
+                            </div>
+                            <div>
+                                <div className="mb-2 text-[11px] font-semibold tracking-[0.08em] text-white/45">尺寸</div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <ActionButton testId="home-v2-same-width" onClick={() => onAlignSelection?.('sameWidth')}>同宽</ActionButton>
+                                    <ActionButton testId="home-v2-same-height" onClick={() => onAlignSelection?.('sameHeight')}>同高</ActionButton>
+                                    <ActionButton testId="home-v2-same-size" onClick={() => onAlignSelection?.('sameSize')}>同尺寸</ActionButton>
+                                </div>
+                            </div>
                         </div>
                     </FieldGroup>
                 ) : sourceNode && compiledNode ? (
@@ -334,7 +432,7 @@ export function InspectorPanel({
 
                         {selectedRect ? (
                             <FieldGroup title="位置与尺寸" description="绝对定位节点可以直接拖拽，也可以在这里精确输入。">
-                                <div className="grid grid-cols-2 gap-3">
+                                <div className="grid grid-cols-4 gap-3">
                                     <NumberField
                                         label="X"
                                         value={selectedRect.x}

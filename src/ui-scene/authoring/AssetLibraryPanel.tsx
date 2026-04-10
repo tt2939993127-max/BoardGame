@@ -28,7 +28,7 @@ export function AssetLibraryPanel({
     return (
         <div
             data-testid="home-v2-asset-panel"
-            className="flex h-full flex-col overflow-hidden rounded-[20px] border border-white/12 bg-[#130d09]/94 shadow-[0_24px_80px_rgba(0,0,0,0.25)]"
+            className="flex h-full flex-col overflow-hidden rounded-[18px] border border-white/10 bg-[#17110e]/98 shadow-[0_18px_48px_rgba(0,0,0,0.24)]"
         >
             <div className="border-b border-white/10 px-4 py-3">
                 <div className="text-[11px] font-semibold tracking-[0.22em] text-amber-200/70">资源</div>

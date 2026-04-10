@@ -460,6 +460,47 @@ export function moveSceneNode(
     };
 }
 
+function filterTopLevelNodeIds(root: UISceneNodeSource, nodeIds: string[]) {
+    return nodeIds.filter((nodeId) => {
+        const parentNode = findParentNodeById(root, nodeId);
+        return !parentNode || !nodeIds.includes(parentNode.id);
+    });
+}
+
+function removeNodesFromTree(root: UISceneNodeSource, nodeIds: Set<string>): UISceneNodeSource {
+    if (!root.children?.length) {
+        return root;
+    }
+
+    return {
+        ...root,
+        children: root.children
+            .filter((child) => !nodeIds.has(child.id))
+            .map((child) => removeNodesFromTree(child, nodeIds)),
+    };
+}
+
+export function removeSceneNodes(
+    source: UISceneSourceDocument,
+    nodeIds: string[],
+): UISceneSourceDocument {
+    const normalizedNodeIds = filterTopLevelNodeIds(
+        source.scene.root,
+        Array.from(new Set(nodeIds.filter((nodeId) => nodeId && nodeId !== source.scene.root.id))),
+    );
+
+    if (!normalizedNodeIds.length) {
+        return source;
+    }
+
+    return {
+        scene: {
+            ...source.scene,
+            root: removeNodesFromTree(source.scene.root, new Set(normalizedNodeIds)),
+        },
+    };
+}
+
 export function updateSceneImageAssetRef(
     source: UISceneSourceDocument,
     nodeId: string,

@@ -33,6 +33,7 @@ export {
     isFlowContainerNode,
     listEditableCompiledNodes,
     moveSceneNode,
+    removeSceneNodes,
     type UISceneNodeMovePosition,
     updateSceneImageAssetRef,
     updateSceneGridProps,
