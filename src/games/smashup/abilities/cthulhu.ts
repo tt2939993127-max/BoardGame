@@ -582,7 +582,7 @@ function cthulhuStarSpawn(ctx: AbilityContext): AbilityResult {
             effectIntent: 'debuff',
         },
     );
-    
+
     const interaction = createSimpleChoice<TargetPlayerChoiceValue>(
         `cthulhu_star_spawn_${ctx.now}`, ctx.playerId,
         '选择要给予疯狂卡的玩家', options,

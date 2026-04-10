@@ -128,6 +128,63 @@ describe('onlineAiSeats', () => {
         expect(state.seatCredentials).toEqual({});
     });
 
+    it('缺少 enableAi 标记时，即使残留了 seatControllers 也不得把真人房识别成 AI 房', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-stale-ai-config',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: '真人' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {},
+            claimMissingSeatCredential,
+        });
+
+        expect(state.seatControllers).toEqual({
+            '0': { type: 'human' },
+            '1': { type: 'human' },
+        });
+        expect(state.seatCredentials).toEqual({});
+        expect(claimMissingSeatCredential).not.toHaveBeenCalled();
+    });
+
+    it('显式 enableAi=false 时，应忽略残留的 AI seatControllers 与本地旧凭据', async () => {
+        const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
+
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-disabled',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: '真人' }],
+                setupData: {
+                    enableAi: false,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: { '1': 'stale-credential' },
+            claimMissingSeatCredential,
+        });
+
+        expect(state.seatControllers).toEqual({
+            '0': { type: 'human' },
+            '1': { type: 'human' },
+        });
+        expect(state.seatCredentials).toEqual({});
+        expect(claimMissingSeatCredential).not.toHaveBeenCalled();
+    });
+
     it('回归：房主重进在线房间时，本地缺失 AI 凭据也不能把 AI 座位降级成人类', async () => {
         const claimMissingSeatCredential = vi.fn(async (playerId: string) => `reclaimed-${playerId}`);
 
@@ -138,6 +195,7 @@ describe('onlineAiSeats', () => {
                 gameName: 'smashup',
                 players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
                 setupData: {
+                    enableAi: true,
                     seatControllers: {
                         '0': { type: 'human' },
                         '1': { type: 'local-ai', difficulty: 'normal' },
@@ -162,6 +220,7 @@ describe('onlineAiSeats', () => {
                 gameName: 'smashup',
                 players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
                 setupData: {
+                    enableAi: true,
                     seatControllers: {
                         '0': { type: 'human' },
                         '1': { type: 'local-ai', difficulty: 'normal' },
@@ -185,6 +244,7 @@ describe('onlineAiSeats', () => {
                 gameName: 'smashup',
                 players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }, { id: 2, name: 'P2' }],
                 setupData: {
+                    enableAi: true,
                     seatControllers: {
                         '0': { type: 'human' },
                         '1': { type: 'local-ai', difficulty: 'hard' },
@@ -203,6 +263,76 @@ describe('onlineAiSeats', () => {
             '1': 'existing-ai-1',
             '2': 'claimed-2',
         });
+    });
+
+    it('兼容旧房间：缺少 enableAi 标记但已有本地 AI 凭据时，仍保留显式 AI 座位定义', async () => {
+        const state = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-legacy',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+        });
+
+        expect(state.seatControllers['1']).toEqual({ type: 'local-ai', difficulty: 'normal' });
+        expect(state.seatCredentials).toEqual({ '1': 'existing-ai-1' });
+    });
+
+    it('enableAi=true 的真 AI 房，仍然允许 force-end-turn 收口卡死 AI', async () => {
+        const onlineAiState = await loadOnlineAiSeatState({
+            gameConfig: buildGameManifest(),
+            matchInfo: {
+                matchID: 'match-ai-force-end-turn',
+                gameName: 'smashup',
+                players: [{ id: 0, name: '房主' }, { id: 1, name: 'P1' }],
+                setupData: {
+                    enableAi: true,
+                    seatControllers: {
+                        '0': { type: 'human' },
+                        '1': { type: 'local-ai', difficulty: 'normal' },
+                    },
+                },
+            },
+            storedAiSeatCredentials: {
+                '1': 'existing-ai-1',
+            },
+        });
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                    turnNumber: 3,
+                    phase: 'playCards',
+                },
+            } as MatchState<unknown>,
+            seatControllers: onlineAiState.seatControllers,
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('active-turn');
+        expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
     });
 
     it('仅凭据有变化时才触发持久化', () => {

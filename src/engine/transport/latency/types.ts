@@ -151,6 +151,8 @@ export interface PendingCommand {
     seq: number;
     /** 命令类型 */
     type: string;
+    /** 客户端本地预测时使用的时间戳（重放时必须保留） */
+    timestamp?: number;
     /** 命令 payload */
     payload: unknown;
     /** 发送命令的玩家 ID（重放时使用，避免用 '0' 兜底导致校验失败） */
