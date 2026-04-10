@@ -167,7 +167,7 @@
 
 #### Scenario: 创建决策请求
 - **WHEN** `select-rule-source`、`inspect-assets` 或 `review-faction-definition` 需要用户输入
-- **THEN** 系统 MUST 创建一个包含 `id`、`runId`、`nodeId`、`kind`、`title`、`summary`、`blocking`、`evidenceRefs`、`resumeToken` 的 `DecisionRequest`
+- **THEN** 系统 MUST 创建一个包含 `id`、`runId`、`nodeId`、`kind`、`decisionMode`、`title`、`summary`、`blocking`、`evidenceRefs`、`resumeToken` 的 `DecisionRequest`
 - **AND** 如有推荐路径，系统 SHOULD 填充 `recommendedOptionId`
 
 #### Scenario: 决策请求被恢复
@@ -181,10 +181,40 @@
 - **THEN** 系统 MUST 记录操作者、决定时间、选择结果与可选备注
 - **AND** 这些信息 MUST 可被打包进后续 `ArtifactBundle`
 
+#### Scenario: 自动决策同样可审计
+- **WHEN** 系统自动完成任一简单决策
+- **THEN** 系统 MUST 将自动决策记录进决策日志与后续 `ArtifactBundle`
+- **AND** 不得因为未弹出人工卡片就丢失审计轨迹
+
 #### Scenario: 决策请求保持会话可读性
 - **WHEN** 前端展示某个 `DecisionRequest`
 - **THEN** 系统 MUST 让用户在会话中看到“为什么暂停、当前要选什么、选完会继续什么”
 - **AND** 不得只显示孤立的节点 ID 或后台结构字段
+
+### Requirement: 简单决策 SHALL 先按统一 rubric 自动处理
+
+系统 MUST 先判断某个决策是否属于“单解 / 低风险 / 可逆”的简单决策；命中时应自动处理，不得默认把这类问题抛给用户。
+
+#### Scenario: 单解低风险可逆时自动决策
+- **WHEN** 某个节点存在明确单解，且执行风险低、可在当前运行内最小化撤回
+- **THEN** 系统 MUST 不创建阻塞式人工 `DecisionRequest`
+- **AND** MUST 自动写入结构化 `resolution`
+- **AND** `resolution` MUST 标记为 `actorType = system` 与 `source = auto_rule`
+
+#### Scenario: 自动决策写入统一 rubric 结果
+- **WHEN** 系统自动处理了某个简单决策
+- **THEN** 系统 MUST 落盘该次判断的 rubric 结果，至少包含 `single-right-answer`、`low-risk`、`reversible`
+- **AND** MUST 记录自动选择的选项、原因与证据引用
+
+#### Scenario: 多解或高风险时禁止自动决策
+- **WHEN** 决策存在关键歧义、外部副作用、交付口径变化，或实际上有多个都可成立的方案
+- **THEN** 系统 MUST 创建人工 `DecisionRequest`
+- **AND** MUST 将运行切换到 `waiting_decision`
+
+#### Scenario: 定时巡检不是自动决策前置条件
+- **WHEN** 第一版只实现自动决策优先策略
+- **THEN** 系统 MUST 不得要求 watcher、cron、timer 或其他定时巡检先落地，才允许简单决策自动处理
+- **AND** 自动决策能力 MUST 可独立验收
 
 ### Requirement: `ArtifactBundle` SHALL 作为 MVP 阶段交付与证据容器
 

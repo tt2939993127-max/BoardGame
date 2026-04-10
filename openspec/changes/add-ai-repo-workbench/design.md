@@ -492,6 +492,7 @@ type DecisionRequest = {
   nodeId: string
   phase: 'rules' | 'assets' | 'definition' | 'delivery'
   kind: 'single_select' | 'multi_select' | 'form' | 'approval'
+  decisionMode: 'auto_resolvable' | 'human_required'
   title: string
   summary: string
   blocking: boolean
@@ -511,11 +512,19 @@ type DecisionRequest = {
     helpText?: string
   }>
   recommendedOptionId?: string
+  autoDecisionRubric?: {
+    singleRightAnswer: boolean
+    lowRisk: boolean
+    reversible: boolean
+    reason: string
+  }
   evidenceRefs: string[]
   createdAt: string
   resumeToken: string
   resolution?: {
+    actorType: 'human' | 'system'
     actorId: string
+    source: 'user_input' | 'auto_rule'
     chosenOptionIds?: string[]
     fieldValues?: Record<string, unknown>
     comment?: string
@@ -571,9 +580,9 @@ MVP 主链路如下：
 
 其中：
 
-- `select-rule-source` 一定会暂停等待人工决策。
-- `inspect-assets` 仅在缺素材或来源冲突时暂停。
-- `review-faction-definition` 一定是人工确认节点。
+- `select-rule-source` 默认先按自动决策 rubric 判断；只有存在多解、来源可信度冲突或外部交付口径分歧时才暂停等待人工决策。
+- `inspect-assets` 仅在缺素材、来源冲突或继续策略存在不可逆影响时暂停。
+- `review-faction-definition` 属于人工确认节点，不得被自动通过。
 - `publish-artifact-bundle` 负责生成 MVP 证据，并把 `e2eStatus` 标记为 `not_applicable`。
 
 ### Node Catalog
@@ -581,10 +590,10 @@ MVP 主链路如下：
 | 节点 | 类型 | 主要输入 | 主要输出 | 持久化状态 | 暂停条件 | 失败条件 |
 | --- | --- | --- | --- | --- | --- | --- |
 | `capture-faction-intent` | 自动 | 用户最小输入、仓库会话 | 规范化任务意图、派系名、目标游戏 | `intentSnapshot` | 无 | 缺少最小输入 |
-| `select-rule-source` | 决策 | 任务意图、可用来源建议 | 已选规则来源、上传/链接元数据 | `selectedSource` | 等待用户选择来源 | 无有效来源 |
+| `select-rule-source` | 决策/自动 | 任务意图、可用来源建议 | 已选规则来源、上传/链接元数据 | `selectedSource` | 多个有效来源都成立、来源可信度冲突，或需要改变交付口径时 | 无有效来源 |
 | `acquire-rule-material` | 自动 | 来源选择、上传文件、URL | 原始规则材料列表 | `rawSourceSet` | 来源不可访问且需替代时 | 下载/读取失败 |
 | `transcribe-or-normalize-rules` | 自动 | 原始规则材料 | 规范化规则文本、来源映射 | `normalizedRuleCorpus` | OCR 质量过低需人工介入时 | 转录失败且无法恢复 |
-| `inspect-assets` | 自动/决策 | 规则文本、已上传素材 | 素材清单、缺失项、继续策略 | `assetInspection` | 缺失关键素材或素材命名冲突 | 素材目录不可读 |
+| `inspect-assets` | 自动/决策 | 规则文本、已上传素材 | 素材清单、缺失项、继续策略 | `assetInspection` | 缺失关键素材、素材命名冲突，或继续策略存在不可逆影响 | 素材目录不可读 |
 | `draft-faction-definition` | 自动 | 规则文本、素材清单、约束模板 | JSON/Markdown 派系定义草案 | `definitionDraft` | 无 | 草案结构校验失败 |
 | `review-faction-definition` | 决策 | 草案、来源证据、素材结果 | 已确认定义或修订意见 | `definitionApproval` | 等待用户确认/修订 | 用户拒绝且未给修订信息 |
 | `publish-artifact-bundle` | 自动 | 全部节点产物 | `ArtifactBundle` | `bundleRef` | 无 | 证据文件缺失 |
@@ -612,10 +621,11 @@ MVP 主链路如下：
   - `intentSnapshot`
   - 预设来源候选：Wiki / PDF / 其他 URL / 本地文档
 - 输出：
-  - `DecisionRequest`
-  - `selectedSource.json`
+  - 需要人工时输出 `DecisionRequest`
+  - 自动决策或人工决策后的 `selectedSource.json`
 - 状态：
-  - `running -> waiting_decision -> completed`
+  - 若命中自动决策 rubric，则 `running -> completed`
+  - 否则 `running -> waiting_decision -> completed`
   - 用户提交回答后通过 `resumeToken` 恢复
 
 #### `acquire-rule-material`
@@ -652,7 +662,8 @@ MVP 主链路如下：
   - `continueMode`（补素材 / 纯规则继续）
 - 状态：
   - 素材完整时直接 `completed`
-  - 素材缺失时 `waiting_decision`
+  - 若缺失项只对应低风险、可逆的继续策略，可自动落盘后 `completed`
+  - 涉及关键素材缺失、命名冲突或不可逆继续策略时进入 `waiting_decision`
 
 #### `draft-faction-definition`
 
@@ -708,6 +719,38 @@ MVP 主链路如下：
 - 规则来源选择
 - 素材缺失后的继续策略
 - 派系定义确认 / 驳回并修订
+
+### Decision: 简单决策默认自动处理，真正需要拍板时才创建人工中断
+
+自动决策优先于定时巡检或监察式打断。第一版要先把“单解 / 低风险 / 可逆”的决策自动吞掉，而不是先靠 watcher、cron 或定时器频繁扫出人工确认。
+
+`LocalRuntime` / `WorkflowOrchestrator` 在创建人工 `DecisionRequest` 之前，必须先用同一套 rubric 判断该节点是否可自动解决：
+
+1. **single-right-answer**：当前上下文下存在明确单解，不需要主观偏好选择。
+2. **low-risk**：执行后不会带来高风险副作用，不会越过权限/交付边界。
+3. **reversible**：即使判断失误，也能在当前运行内通过最小变更撤回，而不是引发外部不可逆操作。
+
+只有三项同时成立时，系统才允许自动写入 `resolution`，并把 `resolution.actorType = system`、`resolution.source = auto_rule` 落盘；否则必须进入 `waiting_decision`。
+
+### Decision: 哪些情况必须上抛给人
+
+以下情形不得自动决策，必须创建人工 `DecisionRequest`：
+
+- 目标或验收口径存在关键歧义。
+- 决策会触发外部副作用，例如发信、部署、创建/更新 PR、merge、写入第三方系统。
+- 决策会改变交付上限、仓库权限边界或对外承诺。
+- 虽然表面是单选题，但底层存在多个都可成立的方案，只是偏好不同。
+
+### Decision: 自动决策也必须可审计
+
+自动吞掉的简单决策不能只藏在内部状态里，至少要记录：
+
+- 命中的 rubric 结果（single-right-answer / low-risk / reversible）
+- 自动选择的选项或字段值
+- 自动决策原因与所依据的证据引用
+- 该自动决策如何影响后续节点
+
+前端可不把这类记录表现成强打扰式卡片，但必须在 run detail、决策日志和最终 `ArtifactBundle` 中可追溯。
 
 ## ArtifactBundle Contract
 

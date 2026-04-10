@@ -32,7 +32,9 @@
 
 ## 3. Human-in-the-Loop
 - [x] 3.1 实现 `DecisionRequest` 领域对象及前后端传输结构，至少支持 `single_select`、`form`、`approval` 三类决策。
+- [x] 3.1a 把简单决策自动化 rubric 写成显式规则：`single-right-answer / low-risk / reversible` 命中时默认自动处理，并要求自动决策同样可审计。
 - [ ] 3.2 为规则来源选择、素材缺失继续策略、派系定义确认三个节点接入 `DecisionRequest`，并支持 `resumeToken` 幂等恢复。
+- [ ] 3.2a 在需要时才创建人工决策卡：先跑自动决策 rubric，再将多解/高风险/外部副作用场景升级为 `waiting_decision`。
 - [x] 3.3 在运行详情页渲染决策卡片，展示 `summary`、`rationale`、`evidenceRefs`、推荐选项与用户最终 resolution。
 - [x] 3.4 把 `DecisionRequest` 挂接到会话时间线，在同一会话里完成暂停、提交与恢复，而不是只在侧栏孤立渲染。
 
