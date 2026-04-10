@@ -441,6 +441,7 @@ const buildActivatedAbilitySemantics = (args: {
         abilityId: abilityDef.id,
         abilityEffectTypes: effectTypes,
         sourceUnitClass: unit.card.unitClass,
+        sourceOwner: playerId,
         sourceBoostsBefore: unit.boosts ?? 0,
         sourceAttackTargetCount: sourceAttackTargets.length,
         costsMoveAction: abilityDef.costsMoveAction === true,
@@ -1291,6 +1292,46 @@ const discardScorer: LocalAiActionScorer = {
     },
 };
 
+const activatedAbilityTargetScorer: LocalAiActionScorer = {
+    id: 'activated-ability-target',
+    score(_context, action) {
+        if (action.kind !== 'activate-ability') return null;
+        const targetOwner = typeof action.metadata?.targetOwner === 'string'
+            ? action.metadata.targetOwner
+            : null;
+        if (!targetOwner) return null;
+        const targetType = String(action.metadata?.targetType ?? action.metadata?.targetUnitClass ?? '');
+        const distanceToOwnSummoner = typeof action.metadata?.distanceToOwnSummoner === 'number'
+            ? action.metadata.distanceToOwnSummoner
+            : 99;
+        const distanceToEnemySummoner = typeof action.metadata?.distanceToEnemySummoner === 'number'
+            ? action.metadata.distanceToEnemySummoner
+            : 99;
+        const sourceOwner = typeof action.metadata?.sourceOwner === 'string'
+            ? action.metadata.sourceOwner
+            : null;
+        const isEnemy = sourceOwner ? targetOwner !== sourceOwner : false;
+
+        let score = 0;
+        if (isEnemy) {
+            score = 45;
+            if (targetType === 'summoner') score += 140;
+            else if (targetType === 'champion') score += 70;
+            else if (targetType === 'common') score += 40;
+            else if (targetType === 'structure') score += 25;
+            if (distanceToEnemySummoner <= 2) score += 18;
+            return { score, reason: '优先用指向技能压制敌方关键单位' };
+        }
+
+        score = 30;
+        if (targetType === 'summoner') score += 110;
+        else if (targetType === 'champion') score += 60;
+        else if (targetType === 'common') score += 30;
+        if (distanceToOwnSummoner <= 1) score += 24;
+        return { score, reason: '优先把增益给核心友军或召唤师' };
+    },
+};
+
 const abilityScorer: LocalAiActionScorer = {
     id: 'activated-ability',
     score(_context, action) {
@@ -1408,6 +1449,7 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
         summonerSafetyScorer,
         buildScorer,
         discardScorer,
+        activatedAbilityTargetScorer,
         abilityScorer,
         phaseTempoScorer,
     ],

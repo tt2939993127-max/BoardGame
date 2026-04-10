@@ -721,6 +721,7 @@ async function injectGunslingerLoadedChoiceScene(page: Page): Promise<void> {
             sys: {
                 ...state.sys,
                 phase: 'offensiveRoll',
+                flowHalted: true,
                 interaction: {
                     current: currentInteraction,
                     queue: [],
@@ -2178,6 +2179,8 @@ test('gunslinger loaded token should open single-die spotlight after real choice
     await game.screenshot('20-gunslinger-loaded-choice-before-use', testInfo);
 
     await loadedLabel.locator('..').click();
+    await page.waitForTimeout(800);
+    await game.screenshot('21-gunslinger-loaded-after-choice-click', testInfo);
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     const singleDieSpotlight = page.locator('[data-testid="bonus-die-single-reroll-spotlight"]');

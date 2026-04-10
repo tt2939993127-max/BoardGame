@@ -222,6 +222,99 @@ function createActivatedAbilityHeuristicCore(): SummonerWarsCore {
     return core;
 }
 
+function createTargetedAbilityCore(): SummonerWarsCore {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], aiTestRandom, {
+        faction0: 'barbaric',
+        faction1: 'paladin',
+    });
+    core.phase = 'move';
+    core.currentPlayer = '0';
+
+    for (let row = 0; row < BOARD_ROWS; row += 1) {
+        for (let col = 0; col < BOARD_COLS; col += 1) {
+            const unit = core.board[row][col].unit;
+            if (unit && unit.card.unitClass !== 'summoner') {
+                core.board[row][col].unit = undefined;
+            }
+        }
+    }
+
+    const ownSummoner = getSummoner(core, '0');
+    if (!ownSummoner) {
+        throw new Error('测试场景缺少召唤师');
+    }
+
+    const ancestralSourceCard: UnitCard = {
+        id: 'test-ancestral-source',
+        cardType: 'unit',
+        name: '测试祖灵法师',
+        unitClass: 'champion',
+        faction: 'barbaric',
+        strength: 2,
+        life: 4,
+        cost: 2,
+        attackType: 'melee',
+        attackRange: 1,
+        abilities: ['ancestral_bond'],
+        deckSymbols: [],
+    };
+    const allyChampionCard: UnitCard = {
+        id: 'test-ancestral-champion',
+        cardType: 'unit',
+        name: '测试祖灵冠军',
+        unitClass: 'champion',
+        faction: 'barbaric',
+        strength: 3,
+        life: 5,
+        cost: 3,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const allyCommonCard: UnitCard = {
+        id: 'test-ancestral-common',
+        cardType: 'unit',
+        name: '测试祖灵士兵',
+        unitClass: 'common',
+        faction: 'barbaric',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+
+    const sourcePos = {
+        row: ownSummoner.position.row - 1,
+        col: ownSummoner.position.col,
+    };
+    placeTestUnit(core, sourcePos, {
+        card: ancestralSourceCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: sourcePos.row - 1,
+        col: sourcePos.col,
+    }, {
+        card: allyChampionCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: sourcePos.row,
+        col: sourcePos.col - 1,
+    }, {
+        card: allyCommonCard,
+        owner: '0',
+        hasMoved: true,
+    });
+
+    return core;
+}
+
 // ============================================================================
 // 召唤师战争专用断言
 // ============================================================================
@@ -1183,6 +1276,34 @@ describe('召唤师战争本地 AI', () => {
         expect(inspireAbilityScore).toBeGreaterThan(prepareAbilityScore);
         expect(inspireEval?.totalScore ?? -Infinity).toBeGreaterThan(prepareEval?.totalScore ?? -Infinity);
         expect(decision?.actionId).toBe(inspireAction?.actionId);
+    });
+
+    it('带目标的 activated ability 会生成多条动作并优先强化冠军目标', async () => {
+        const core = createTargetedAbilityCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-targeted-ability',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const targetedActions = context.legalActions.filter((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'ancestral_bond';
+        });
+        const championAction = targetedActions.find((action) => action.metadata?.targetUnitClass === 'champion');
+        const commonAction = targetedActions.find((action) => action.metadata?.targetUnitClass === 'common');
+
+        expect(targetedActions.length).toBeGreaterThan(1);
+        expect(championAction).toBeTruthy();
+        expect(commonAction).toBeTruthy();
+        expect(championAction?.metadata?.strategyTags).toContain('board-control');
+        expect(decision?.actionId).toBe(championAction?.actionId);
     });
 
     it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {

@@ -356,7 +356,7 @@ test.describe('SmashUp - 核心流程与交互稳定性', () => {
                     minions: [
                         { uid: 'b0-strong', defId: 'dino_king_rex_pod', owner: '0', controller: '0', power: 7 },
                         { uid: 'b0-weak', defId: 'innsmouth_the_locals_pod', owner: '0', controller: '0', power: 2 },
-                        { uid: 'b0-enemy', defId: 'wizard_enchantress', owner: '1', controller: '1', power: 2 },
+                        { uid: 'b0-enemy', defId: 'robot_microbot_guard', owner: '1', controller: '1', power: 1 },
                     ],
                 },
                 {
