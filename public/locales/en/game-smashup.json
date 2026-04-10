@@ -120,6 +120,7 @@
       "onTurnEnd": "At turn end",
       "onTurnStart": "At turn start",
       "beforeScoring": "Before scoring",
+      "whenScoring": "When scoring",
       "afterScoring": "After scoring",
       "unknown": "Triggered"
     },
@@ -1402,7 +1403,8 @@
       "abilityText": "When this base scores, the winner gains 1 VP for every 5 power they have here."
     },
     "base_ninja_dojo_pod": {
-      "name": "Ninja Dojo"
+      "name": "Ninja Dojo",
+      "abilityText": "(18, VP 2-3-2) 无特殊能力。"
     },
     "base_temple_of_goju_pod": {
       "name": "Temple of Goju",
@@ -2720,22 +2722,28 @@
       "effectText": "Search your deck for any number of cards of the same name and put them into your discard pile. Shuffle your deck."
     },
     "miskatonic_book_of_iter_the_unseen_pod": {
-      "name": "Book of Iters"
+      "name": "Book of Iters",
+      "effectText": "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
     },
     "miskatonic_thing_on_the_doorstep_pod": {
-      "name": "Thing on the Doorstep"
+      "name": "Thing on the Doorstep",
+      "effectText": "特殊：在一个基地计分前，消灭一个在那里拥有最高战斗力的随从。"
     },
     "miskatonic_lost_knowledge_pod": {
-      "name": "Lost Knowledge"
+      "name": "Lost Knowledge",
+      "effectText": "打出到基地上。天赋：抽一张疯狂卡，你可以额外打出一个随从到这。"
     },
     "miskatonic_mandatory_reading_pod": {
-      "name": "Mandatory Reading"
+      "name": "Mandatory Reading",
+      "effectText": "特殊：在一个基地计分前，选择这里的一个随从。抽最多3张疯狂卡。每抽取一张疯狂卡，这个随从直到回合结束获得+2战斗力。"
     },
     "miskatonic_psychological_profiling_pod": {
-      "name": "Psychological Profiling"
+      "name": "Psychological Profiling",
+      "effectText": "抽一张疯狂卡。你的每个随从获得+1战斗力直到回合结束。本回合你可以打出一个额外的战术。"
     },
     "vampire_summon_wolves_pod": {
-      "name": "Summon Wolves"
+      "name": "Summon Wolves",
+      "effectText": "打出到基地上。持续：在你的回合开始时，在本卡上放置一个+1战斗力指示物。如果你有随从在这，指示物会被加进你的总战斗力中。"
     },
     "base_miskatonic_university_base_pod": {
       "name": "Miskatonic University",
@@ -2746,22 +2754,28 @@
       "abilityText": "After you play a minion here, you may put a card from your hand back in the box to place a +1 power counter on a minion."
     },
     "base_the_grey_opal_pod": {
-      "name": "The Grey Opal"
+      "name": "The Grey Opal",
+      "abilityText": "(17, VP 3-1-1) 在本基地计分后，除了获胜者外的所有玩家可以将这里的一个随从移动到另一个基地。"
     },
     "base_tortuga_pod": {
-      "name": "Tortuga"
+      "name": "Tortuga",
+      "abilityText": "(21, VP 4-3-2) 在本基地计分并被取代后，亚军可以将另一个基地上的一个随从移动到新替换的基地上。"
     },
     "base_factory_436_1337_pod": {
-      "name": "Factory 436-1337"
+      "name": "Factory 436-1337",
+      "abilityText": "(25, VP 2-2-1) 当该基地计分时，获胜者每拥有5点战斗力则获得1点VP。"
     },
     "base_the_central_brain_pod": {
-      "name": "The Central Brain"
+      "name": "The Central Brain",
+      "abilityText": "(19, VP 4-2-1) 这里的每个随从获得+1战斗力。"
     },
     "base_inventors_salon_pod": {
-      "name": "Inventor's Salon"
+      "name": "Inventor's Salon",
+      "abilityText": "(22, VP 4-2-1) 在该基地计分后，获胜者可以从弃牌堆拿回一张战术。"
     },
     "base_the_workshop_pod": {
-      "name": "The Workshop"
+      "name": "The Workshop",
+      "abilityText": "(20, VP 4-2-1) 每当有一名玩家将战术打出到该基地时，该玩家可以额外打出一个战术。"
     },
     "base_the_homeworld_pod": {
       "name": "The Homeworld"
@@ -3331,6 +3345,9 @@
     "pecos_bill": {
       "name": "Pecos Bill",
       "effectText": "Special: When you become the challenger in a duel, you may discard a card to play this titan there. Do not resolve any titan clashes until after the end of the duel. Ongoing: During duels here, other players may not move minions from here or return them to a player's hand. Ongoing: After you win a duel, draw a card."
+    },
+    "*": {
+      "type": "cards.*.type"
     }
   },
   "endgame": {

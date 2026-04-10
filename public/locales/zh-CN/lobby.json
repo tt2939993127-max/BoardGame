@@ -156,7 +156,9 @@
       "downloadHint": "正在下载当前游戏需要的资源文件。",
       "verifyTitle": "校验中",
       "verifyHint": "正在校验下载内容并激活本地资源。"
-    }
+    },
+    "packageUnpublished": "包体未发布",
+    "packageSyncing": "包体同步中"
   },
   "player": {
     "guest": "游客{{id}}"
@@ -183,6 +185,35 @@
       "progressPending": "准备中",
       "retryAction": "重新检查"
     }
+  },
+  "nativeUpdate": {
+    "title": {
+      "checking": "正在检查应用更新",
+      "downloading": "正在下载更新",
+      "verifying": "正在校验更新",
+      "permission": "需要允许安装",
+      "installing": "正在安装更新",
+      "error": "更新失败",
+      "default": "正在更新应用"
+    },
+    "description": {
+      "checking": "正在检查并准备新版本，请稍候。",
+      "downloading": "正在下载更新包，完成后会进入安装。",
+      "verifying": "正在校验下载内容，请稍候。",
+      "permission": "需要允许安装未知来源应用后才能继续。",
+      "installing": "正在拉起系统安装器，请稍候。",
+      "error": "安装包下载或校验失败，请重试。",
+      "default": "正在准备更新，请稍候。"
+    },
+    "eyebrow": "应用更新",
+    "bundleVersion": "目标版本",
+    "progressLabel": "下载进度",
+    "progressPercent": "{{percent}}%",
+    "progressPending": "准备中",
+    "progressHint": "等待原生返回下载进度。",
+    "openSettings": "打开安装权限设置",
+    "continueInstall": "继续安装",
+    "retryAction": "重新检查"
   },
   "gameDetails": {
     "description": "经典策略游戏。连成3个符号即可获胜。"
@@ -477,5 +508,10 @@
     "playerJoinedTitle": "玩家加入",
     "playerJoinedBody": "{{username}} 加入了房间",
     "playerJoinedBodyAnonymous": "一位玩家加入了房间"
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "正在准备教学场景..."
+    }
   }
 }

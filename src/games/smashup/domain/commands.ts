@@ -5,7 +5,7 @@
 import type { MatchState, ValidationResult } from '../../../engine/types';
 import type { SmashUpCommand, SmashUpCore, ActionCardDef, FusionCardDef, PlayConstraint } from './types';
 import { SU_COMMANDS, getCurrentPlayerId, HAND_LIMIT } from './types';
-import { getCardDef, getFusionDef, getMinionDef, getMinionLikePower } from '../data/cards';
+import { getCardDef, getFusionDef, getMinionDef, getMinionLikePower, getTitanDef } from '../data/cards';
 import { isOperationRestricted } from './ongoingEffects';
 import {
     getScoringEligibleBaseIndices,
@@ -14,6 +14,7 @@ import {
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
 import { validateActionPlaySemantics } from './playLegality';
+import { getTitanByUid } from './abilityHelpers';
 import {
     actionLikeNeedsResponseWindowBase,
     getActionLikeResponseWindowTiming,
@@ -24,6 +25,81 @@ import {
     mustUseGlobalPowerLimitedMinionQuota,
 } from './utils';
 import { isCardActionLike, isCardMinionLike } from './utils';
+import { resolveOngoingActivation, resolveSpecial, resolveTalent } from './abilityRegistry';
+import { validateTitanOngoingActivation, validateTitanSpecialActivation, validateTitanTalentUse } from './titanAbilityValidators';
+
+type TitanAbilityKind = 'special' | 'talent' | 'ongoing';
+function resolveTitanAbilityLabel(kind: TitanAbilityKind): string {
+    switch (kind) {
+        case 'special':
+            return '特殊能力';
+        case 'talent':
+            return '天赋能力';
+        case 'ongoing':
+            return '持续能力';
+        default:
+            return '能力';
+    }
+}
+
+function validateTitanAbility(
+    state: MatchState<SmashUpCore>,
+    command: { playerId: string; payload: { titanUid?: string; baseIndex: number } },
+    kind: TitanAbilityKind,
+): ValidationResult {
+    const core = state.core;
+    const { titanUid, baseIndex } = command.payload;
+    if (!titanUid) return { valid: false, error: '必须指定泰坦' };
+    if (baseIndex < 0 || baseIndex >= core.bases.length) {
+        return { valid: false, error: '无效的基地索引' };
+    }
+    const titan = getTitanByUid(core, titanUid);
+    if (!titan) return { valid: false, error: '该泰坦不存在' };
+    const titanDef = getTitanDef(titan.defId);
+    if (!titanDef) return { valid: false, error: '泰坦定义不存在' };
+
+    const abilityLabel = resolveTitanAbilityLabel(kind);
+    if (!titanDef.abilityTags?.includes(kind)) {
+        return { valid: false, error: `该泰坦没有${abilityLabel}` };
+    }
+    if (titanDef.activatableAbilityKinds && !titanDef.activatableAbilityKinds.includes(kind)) {
+        return { valid: false, error: `该泰坦的${abilityLabel}不能手动激活` };
+    }
+
+    if (kind === 'special') {
+        if (!resolveSpecial(titan.defId)) {
+            return { valid: false, error: '该泰坦的特殊能力不能手动激活' };
+        }
+        if (titan.location.zone !== 'setaside') {
+            return { valid: false, error: '该泰坦当前不在牌库旁' };
+        }
+        if (titan.ownerId !== command.playerId) {
+            return { valid: false, error: '只能激活自己拥有的泰坦特殊能力' };
+        }
+    } else {
+        if (titan.location.zone !== 'base') {
+            return { valid: false, error: '该泰坦当前不在场' };
+        }
+        if (titan.controllerId !== command.playerId) {
+            return { valid: false, error: `只能使用自己控制的泰坦${abilityLabel}` };
+        }
+    }
+
+    if (kind === 'talent' && !resolveTalent(titan.defId)) {
+        return { valid: false, error: '该泰坦的天赋不能手动激活' };
+    }
+    if (kind === 'ongoing' && !resolveOngoingActivation(titan.defId)) {
+        return { valid: false, error: '该泰坦的持续能力不能手动激活' };
+    }
+
+    const ctx = { state: core, playerId: command.playerId, titan, titanDef, baseIndex };
+    const error = kind === 'special'
+        ? validateTitanSpecialActivation(ctx)
+        : kind === 'talent'
+            ? validateTitanTalentUse(ctx)
+            : validateTitanOngoingActivation(ctx);
+    return error ? { valid: false, error } : { valid: true };
+}
 
 function hasActiveBearNecessitiesPodRestriction(core: SmashUpCore, playerId: string): boolean {
     for (const base of core.bases) {
@@ -78,7 +154,7 @@ export function validate(
 
     // 防御性检查：确保 command 和 type 存在
     if (!command || typeof command.type !== 'string') {
-        return { valid: false, error: 'Invalid command: missing type' };
+        return { valid: false, error: 'invalid_command_missing_type' };
     }
 
     // 系统命令（SYS_ 前缀）由引擎层处理，领域层直接放行
@@ -450,6 +526,9 @@ export function validate(
                 return { valid: false, error: 'player_mismatch' };
             }
             const { minionUid, ongoingCardUid, baseIndex } = command.payload;
+            if (command.payload.titanUid) {
+                return validateTitanAbility(state, command, 'talent');
+            }
             const targetBase = core.bases[baseIndex];
             if (!targetBase) return { valid: false, error: '无效的基地索引' };
 
@@ -510,6 +589,9 @@ export function validate(
             if (command.playerId !== currentPlayerId) {
                 return { valid: false, error: 'player_mismatch' };
             }
+            if (command.payload.titanUid) {
+                return validateTitanAbility(state, command, 'special');
+            }
             const { minionUid: spMinionUid, baseIndex: spBaseIndex } = command.payload;
             const spBase = core.bases[spBaseIndex];
             if (!spBase) return { valid: false, error: '无效的基地索引' };
@@ -521,6 +603,9 @@ export function validate(
             const spDef = getCardDef(spMinion.defId);
             if (!spDef || !('abilityTags' in spDef) || !spDef.abilityTags?.includes('special')) {
                 return { valid: false, error: '该随从没有特殊能力' };
+            }
+            if (!resolveSpecial(spMinion.defId)) {
+                return { valid: false, error: '该随从的特殊能力不能手动激活' };
             }
             // specialLimitGroup 检查
             if (isSpecialLimitBlocked(core, spMinion.defId, spBaseIndex)) {
@@ -538,6 +623,16 @@ export function validate(
                 }
             }
             return { valid: true };
+        }
+
+        case SU_COMMANDS.ACTIVATE_TITAN_ONGOING: {
+            if (phase !== 'playCards') {
+                return { valid: false, error: '只能在出牌阶段激活泰坦持续能力' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: 'player_mismatch' };
+            }
+            return validateTitanAbility(state, command, 'ongoing');
         }
 
         default:
