@@ -156,6 +156,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
         onViewTitan?.(titan.defId);
     }, [activatableTitanUids, onSelectTitan, onViewTitan]);
     const {
+        isCoarsePointer: isCoarseTitanPointer,
         showDesktopInspectButton: showDesktopTitanInspectButton,
         getTouchInspectProps: getTitanTouchInspectProps,
         shouldBlockInspectClick: shouldBlockTitanClick,
@@ -234,6 +235,7 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                 const titanName = titanDef ? resolveCardName(titanDef, t) || titan.defId : titan.defId;
                                 const isSelected = selectedTitanUid === titan.uid;
                                 const isActivatable = !!activatableTitanUids?.has(titan.uid) && isMyTurn;
+                                const showTitanInspectButton = showDesktopTitanInspectButton || isCoarseTitanPointer;
                                 return (
                                     <div key={titan.uid} className="group relative" style={{ width: titanWidth }}>
                                         <button
@@ -276,14 +278,16 @@ export const DeckDiscardZone: React.FC<Props> = ({
                                                 <div className="absolute inset-0 border-2 border-purple-400 pointer-events-none" />
                                             )}
                                         </button>
-                                        {showDesktopTitanInspectButton && (
+                                        {showTitanInspectButton && (
                                             <span
                                                 data-testid={`su-rail-titan-magnify-${titan.uid}`}
                                                 onClick={(event) => {
                                                     event.stopPropagation();
                                                     onViewTitan?.(titan.defId);
                                                 }}
-                                                className="absolute top-1 right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                                                className={isCoarseTitanPointer
+                                                    ? 'absolute top-1 right-1 z-20 flex h-6 w-6 items-center justify-center rounded-full bg-black/70 text-white opacity-100 pointer-events-auto shadow-lg hover:bg-amber-500/80 cursor-zoom-in'
+                                                    : 'absolute top-1 right-1 z-20 flex h-5 w-5 items-center justify-center rounded-full bg-black/65 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in'}
                                             >
                                                 <svg className="h-3 w-3 fill-current" viewBox="0 0 20 20">
                                                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />

@@ -334,11 +334,13 @@ export const BaseZone: React.FC<{
         const titanName = resolveCardName(titanDef, t) || titan.defId;
         const titanText = resolveCardText(titanDef, t);
         const titanTitle = titanText ? `${titanName}\n${titanText}` : titanName;
+        const showTitanInspectButton = showDesktopInspectButton || isCoarsePointer;
         const pConf = PLAYER_CONFIG[parseInt(titan.controllerId) % PLAYER_CONFIG.length];
         const canUseTitanTalent = !!usableTitanTalentUids?.has(titan.uid);
         const canUseTitanOngoing = !!usableTitanOngoingUids?.has(titan.uid);
         const hasMultipleTitanActivations = canUseTitanTalent && canUseTitanOngoing;
         const canActivateTitan = canUseTitanTalent || canUseTitanOngoing;
+
         const titanActivationKey = `titan-${titan.uid}`;
         const isTitanActivationArmed = isActivationArmed(titanActivationKey);
         const showUsedTitanState = titan.talentUsed && !canActivateTitan;
@@ -462,7 +464,7 @@ export const BaseZone: React.FC<{
                     </div>
                 )}
             </motion.div>
-            {showDesktopInspectButton && (
+            {showTitanInspectButton && (
                 <button
                     type="button"
                     data-testid={`su-base-titan-magnify-${titan.uid}`}
@@ -471,9 +473,14 @@ export const BaseZone: React.FC<{
                         clearArmedActivation();
                         onViewTitan(titan.defId);
                     }}
-                    className="absolute top-[0.15vw] right-[0.15vw] z-40 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in"
+                    className={isCoarsePointer
+                        ? 'absolute top-1 right-1 z-60 flex h-7 w-7 items-center justify-center rounded-full bg-black/70 text-white opacity-100 pointer-events-auto shadow-lg hover:bg-amber-500/80 cursor-zoom-in'
+                        : 'absolute top-[0.15vw] right-[0.15vw] z-60 flex h-[1.4vw] w-[1.4vw] items-center justify-center rounded-full bg-black/60 text-white opacity-0 shadow-lg transition-[opacity,background-color] duration-200 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto hover:bg-amber-500/80 cursor-zoom-in'}
                 >
-                    <svg className="h-[0.8vw] w-[0.8vw] fill-current" viewBox="0 0 20 20">
+                    <svg
+                        className={isCoarsePointer ? 'h-4 w-4 fill-current' : 'h-[0.8vw] w-[0.8vw] fill-current'}
+                        viewBox="0 0 20 20"
+                    >
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                     </svg>
                 </button>
@@ -1214,11 +1221,11 @@ const MinionCard: React.FC<{
                 )}
                 </div>
             </motion.div>
-            {/* 放大镜按钮 - hover 时显示在右上角，z-40 确保不被力量徽章遮挡 */}
+            {/* 放大镜按钮 - hover 时显示在右上角，z-[110] 确保不被 hover 容器盖住 */}
             {showDesktopInspectButton && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onView(); }}
-                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg z-40 cursor-zoom-in"
+                    className="absolute top-[0.15vw] right-[0.15vw] w-[1.4vw] h-[1.4vw] flex items-center justify-center bg-black/60 hover:bg-amber-500/80 text-white rounded-full opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto transition-[opacity,background-color] duration-200 shadow-lg z-[110] cursor-zoom-in"
                 >
                     <svg className="w-[0.8vw] h-[0.8vw] fill-current" viewBox="0 0 20 20">
                         <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
