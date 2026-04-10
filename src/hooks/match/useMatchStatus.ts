@@ -369,6 +369,8 @@ export function listStoredMatchCredentials(): StoredMatchCredentials[] {
     return results;
 }
 
+const RECENT_MATCH_CREDENTIALS_GRACE_MS = 10_000;
+
 export function validateStoredMatchSeat(
     stored: StoredMatchCredentials | null,
     matchPlayers: Array<{ id: number; name?: string | null }>,
@@ -383,12 +385,16 @@ export function validateStoredMatchSeat(
         return { shouldClear: false };
     }
 
+    const isRecentlyPersisted = typeof stored.updatedAt === 'number'
+        && Number.isFinite(stored.updatedAt)
+        && Date.now() - stored.updatedAt < RECENT_MATCH_CREDENTIALS_GRACE_MS;
+
     const seat = matchPlayers.find(player => String(player.id) === String(resolvedPlayerID));
     if (!seat) {
-        return { shouldClear: true, reason: 'missing_seat' };
+        return isRecentlyPersisted ? { shouldClear: false } : { shouldClear: true, reason: 'missing_seat' };
     }
     if (!seat.name) {
-        return { shouldClear: true, reason: 'seat_empty' };
+        return isRecentlyPersisted ? { shouldClear: false } : { shouldClear: true, reason: 'seat_empty' };
     }
     if (stored.playerName && seat.name !== stored.playerName) {
         // 用户名变更后 localStorage 中的 playerName 可能与 match metadata 中的 seat.name 不一致，

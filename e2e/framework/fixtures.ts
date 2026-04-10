@@ -88,6 +88,17 @@ export const test = base.extend<FrameworkFixtures>({
             (window as any).__E2E_WORKER_PORTS__ = ports;
         }, workerPorts);
 
+        await context.addInitScript((ports) => {
+            (window as Window & {
+                __FORCE_GAME_SERVER_URL__?: string;
+                __FORCE_API_SERVER_URL__?: string;
+            }).__FORCE_GAME_SERVER_URL__ = `http://127.0.0.1:${ports.gameServer}`;
+            (window as Window & {
+                __FORCE_GAME_SERVER_URL__?: string;
+                __FORCE_API_SERVER_URL__?: string;
+            }).__FORCE_API_SERVER_URL__ = `http://127.0.0.1:${ports.apiServer}`;
+        }, workerPorts);
+
         await context.addInitScript(() => {
             (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
         });

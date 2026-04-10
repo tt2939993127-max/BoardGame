@@ -6,7 +6,7 @@
 
 import { io, Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
-import { GAME_SERVER_URL } from '../config/server';
+import { getGameServerUrl } from '../config/server';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
 import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports, shouldTryAllSocketTransports } from '../lib/socketConnectionConfig';
@@ -204,7 +204,7 @@ class LobbySocketService {
         console.log('[LobbySocket]', tLobbySocket('connecting'));
         this.isConnecting = true;
 
-        this.socket = io(GAME_SERVER_URL, {
+        this.socket = io(getGameServerUrl(), {
             parser: msgpackParser,
             path: '/lobby-socket',
             transports: getSocketIoTransports(),

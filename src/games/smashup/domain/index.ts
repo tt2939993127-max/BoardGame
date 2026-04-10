@@ -1146,7 +1146,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 || currentSession.currentStep === 'awaiting-response-window'
             )) {
                 const finalized = finalizeCurrentScoringBase(currentState, now);
-                return { events: finalized.events, updatedState: finalized.updatedState } as PhaseExitResult;
+                return {
+                    events: finalized.events,
+                    halt: true,
+                    updatedState: finalized.updatedState,
+                } as PhaseExitResult;
             }
 
             if (!currentSession.currentBaseRef) {
@@ -1232,7 +1236,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 markScoringBaseCompleted(nextState, activeBaseRef),
                 (session) => session ? { ...session, currentStep: 'awaiting-post-reduce' } : session,
             );
-            return { events: result.events, updatedState: completedState } as PhaseExitResult;
+            return {
+                events: result.events,
+                halt: true,
+                updatedState: completedState,
+            } as PhaseExitResult;
         }
 
         return [];

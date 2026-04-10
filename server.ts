@@ -172,6 +172,11 @@ const CORS_ORIGINS = Array.from(new Set([
     ...(RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS),
     ...APP_CORS_ORIGINS,
 ]));
+const isDevLoopbackOrigin = (origin?: string) => !isProd && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/i.test(origin ?? '');
+const isAllowedCorsOrigin = (origin?: string) => {
+    if (!origin) return true;
+    return CORS_ORIGINS.includes(origin) || isDevLoopbackOrigin(origin);
+};
 const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
 const SOCKET_IO_ALLOW_POLLING = process.env.SOCKET_IO_ALLOW_POLLING;
@@ -320,7 +325,13 @@ const io = new IOServer(httpServer, {
     parser: msgpackParser,
     transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
-        origin: CORS_ORIGINS,
+        origin: (origin, callback) => {
+            if (isAllowedCorsOrigin(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error(`CORS: origin ${origin ?? 'unknown'} not allowed`));
+        },
         methods: ['GET', 'POST'],
         credentials: true,
     },
@@ -1610,7 +1621,13 @@ const lobbySocketIO = new IOServer(httpServer, {
     path: '/lobby-socket',
     transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
-        origin: CORS_ORIGINS,
+        origin: (origin, callback) => {
+            if (isAllowedCorsOrigin(origin)) {
+                callback(null, true);
+                return;
+            }
+            callback(new Error(`CORS: origin ${origin ?? 'unknown'} not allowed`));
+        },
         methods: ['GET', 'POST'],
         credentials: true,
     },
