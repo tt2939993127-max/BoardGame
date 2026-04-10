@@ -309,13 +309,12 @@ node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
 node scripts/mobile/release-android.mjs ota --channel stable
 ```
 
-当前 `stable` OTA 默认就会把旧壳挡回原生升级链路：
+当前 OTA 规则已改为统一全量更新：
 
-- 若未显式传兼容参数，发布脚本会自动补 `minNativeVersion=<package.json.version>`
-- 同时默认开启 `forceUpdate`
-- 也就是说，旧壳不会继续吃新的 `stable` OTA，而是直接要求安装新 App
-
-只有你明确要覆盖默认口径时，才再手动改这些参数。
+- OTA manifest 默认不再写 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion`
+- 所有 channel（包括 `stable`）默认都面向所有已安装版本
+- 如果需要客户端拿到更新后立即切换 bundle，可显式传 `--force-update`
+- 若误传任何原生版本兼容参数，发布脚本会直接失败，防止再次发出“只给某个原生版本”的错误 OTA
 
 如果你要自定义强更文案：
 
@@ -323,24 +322,12 @@ node scripts/mobile/release-android.mjs ota --channel stable
 node scripts/mobile/release-android.mjs ota --channel stable --force-update --force-update-title "正在更新" --force-update-message "正在下载必要更新，请稍候"
 ```
 
-如果这次 OTA 只允许某个原生壳版本区间接收：
-
-```bash
-node scripts/mobile/release-android.mjs ota --channel stable --min-native-version 0.5.0 --max-native-version 0.5.9
-```
-
-如果这次 OTA 既要求原生版本不兼容时阻断，又要求至少某个壳版本：
-
-```bash
-node scripts/mobile/release-android.mjs ota --channel stable --force-update --min-native-version 0.5.0 --force-update-title "需要更新" --force-update-message "正在下载必要更新"
-```
-
 如果走 GitHub Actions 自动化：
 
 - `main` 分支合入影响 H5 bundle 的改动后，会自动发布到非生产 channel，默认是 `edge`
 - `stable` / `gray` 通过 Actions `Android OTA Publish` 手动触发
 - `stable` 建议绑定 `android-ota-production` Environment 审批，避免误发
-- 手动触发时，workflow 现已支持直接填写 `force_update`、`force_update_title`、`force_update_message`、`target_native_version`、`min_native_version`、`max_native_version`，不需要再改脚本或手工上服务器
+- 手动触发时，workflow 只保留 `force_update`、`force_update_title`、`force_update_message`；原生版本门禁参数已移除
 
 推荐发布策略：
 
@@ -353,26 +340,20 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --mi
 - `--channel <name>`：发布 channel，例如 `stable`、`gray`
 - `--version <bundleVersion>`：手动指定 bundle 版本号
 - `--native-version <version>`：当前打包对应的原生版本，默认取 `package.json.version`
-- `--target-native-version <version[,version]>`：显式指定只有哪些原生版本能接收该 bundle
-- `--min-native-version <version>`：显式声明最低兼容原生版本
-- `--max-native-version <version>`：显式声明最高兼容原生版本
-- `--force-update`：把这次 OTA 标记为“原生版本不兼容时需先升级 App”
-- `--no-force-update`：显式关闭该阻断语义；仅在你明确不要旧壳强更时才使用
-- `--allow-legacy-shells`：显式放开 `stable` 对旧壳的默认拦截；没有这个参数时，`stable` 会默认把旧壳挡回原生升级链路
-- `--force-update-title <text>`：覆盖“需先升级 App”阻断页标题
-- `--force-update-message <text>`：覆盖“需先升级 App”阻断页正文
+- `--force-update`：这次 OTA 下载完成后立即切换 bundle
+- `--no-force-update`：关闭“下载完成后立即切换”的行为
+- `--force-update-title <text>`：覆盖 OTA 更新提示标题
+- `--force-update-message <text>`：覆盖 OTA 更新提示正文
 - `--notes <text>`：写入 manifest 备注
 - `--dry-run`：只打 zip、算 checksum、打印 manifest，不上传
 - `--skip-latest`：上传 zip 和版本 manifest，但不覆盖 `<channel>/latest.json`
 
 兼容字段生成规则：
 
-- `stable`：如果你没有显式传兼容参数，脚本默认写入 `minNativeVersion=<nativeVersion>`
-- `stable`：如果你没有显式传 `--no-force-update`，脚本默认也会打开 `forceUpdate`
-- `gray` / `edge`：仍然保持“显式传兼容参数才写 target/min/max”
-- 如果你传了 `--target-native-version`，则按精确版本列表生成 `targetNativeVersion`
-- 如果你传了 `--min-native-version` 或 `--max-native-version`，则按版本区间生成兼容门禁
-- 如确实要让 `stable` 放行旧壳，必须显式传 `--allow-legacy-shells`
+- OTA manifest 默认不再写 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion`
+- 所有 channel 默认都面向所有已安装版本
+- 如误传任何原生版本兼容参数，发布脚本会直接失败
+- `forceUpdate` 只表示客户端拿到更新后是否立即切换 bundle，不再承担“按原生版本阻断”的语义
 
 当前发布脚本会写入：
 
@@ -396,13 +377,11 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --mi
 }
 ```
 
-兼容性控制支持：
+Manifest 字段说明：
 
-- `stable` 默认至少带 `minNativeVersion=<nativeVersion>`
-- `targetNativeVersion`：只允许某个原生版本或某几个原生版本接收该 bundle
-- `minNativeVersion` / `maxNativeVersion`：允许一个原生版本区间
-- `forceUpdate`：声明这次 OTA 在原生版本不兼容时是否阻断并要求先升级 App
-- `forceUpdateTitle` / `forceUpdateMessage`：覆盖该阻断页默认文案
+- 默认不再包含 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion`
+- `forceUpdate`：声明客户端下载完成后是否立即切换到新 bundle
+- `forceUpdateTitle` / `forceUpdateMessage`：覆盖 OTA 更新提示文案
 
 示例：
 
@@ -412,10 +391,9 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --mi
   "url": "https://assets.easyboardgame.top/official/app-updates/android/stable/bundles/0.5.0-ota-2026-03-30T10-00-00-000Z.zip",
   "checksum": "sha256-hex",
   "channel": "stable",
-  "minNativeVersion": "0.5.0",
   "forceUpdate": true,
-  "forceUpdateTitle": "需要更新",
-  "forceUpdateMessage": "正在下载必要更新",
+  "forceUpdateTitle": "正在更新",
+  "forceUpdateMessage": "正在下载必要更新，请稍候",
   "publishedAt": "2026-03-30T10:00:00.000Z",
   "size": 1234567,
   "notes": "Android embedded OTA bundle"

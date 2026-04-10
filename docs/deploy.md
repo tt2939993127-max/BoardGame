@@ -241,8 +241,9 @@ GitHub Actions 自动化：
 
 - workflow：`.github/workflows/android-ota-publish.yml`
 - 自动触发：`main` 分支合入影响 H5 bundle 的改动后，自动发布到非生产 channel，默认 `edge`
-- 手动触发：可手动选择 `stable` / `gray` / `edge`，并支持 `dry_run`、`skip_latest`
+- 手动触发：可手动选择 `stable` / `gray` / `edge`，并支持 `dry_run`、`skip_latest`、`force_update`
 - 正式门禁：`stable` 发布应绑定 `android-ota-production` Environment 审批
+- 项目强制规则：OTA manifest 不得再写 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion`；所有已安装版本默认都必须收到 OTA。若误传这些参数，发布脚本必须直接失败。
 
 约束：
 
