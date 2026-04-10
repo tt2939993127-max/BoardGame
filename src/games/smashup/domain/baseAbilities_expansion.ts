@@ -18,6 +18,7 @@ import { SU_EVENTS, MADNESS_CARD_DEF_ID } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import {
     grantContextualExtraMinion,
+    returnMadnessCard,
     grantExtraMinion,
     grantExtraAction,
     drawMadnessCards,

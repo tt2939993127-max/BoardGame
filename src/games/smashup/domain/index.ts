@@ -62,6 +62,7 @@ import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import type { SpecialAfterScoringConsumedEvent } from './types';
+import { queueImmediateExtraPlayInteractions } from './extraPlay';
 import {
     buildPendingPostScoringActionEvents,
     clearScoringSession,
@@ -1991,6 +1992,13 @@ function postProcessSystemEvents(
                 _smashupStartTurnWindowActive: undefined,
             } as any,
         };
+    }
+
+    const immediateExtraEvents = finalEvents.filter((event): event is LimitModifiedEvent =>
+        event.type === SU_EVENTS.LIMIT_MODIFIED && event.payload.playTiming === 'immediate',
+    );
+    if (immediateExtraEvents.length > 0) {
+        ms = queueImmediateExtraPlayInteractions(ms, immediateExtraEvents);
     }
 
     return { events: finalEvents, matchState: ms };

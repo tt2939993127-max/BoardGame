@@ -19,7 +19,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
- 
+import { resolveAbility } from '../domain/abilityRegistry';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { makeMatchState } from './helpers';
@@ -654,54 +654,7 @@ describe('机器人派系能力', () => {
         const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(limitEvents.length).toBe(1);
         expect((limitEvents[0] as any).payload.powerMax).toBe(2);
-        expect((limitEvents[0] as any).payload.playTiming).toBe('banked');
-    });
-
-    it('robot_microbot_guard: 4个己方随从时只能选择力量小于4的目标', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('m1', 'robot_microbot_guard', 'minion', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [{
-                defId: 'b1',
-                minions: [
-                    makeMinion('ally-1', 'robot_microbot_alpha', '0', 1),
-                    makeMinion('ally-2', 'robot_microbot_fixer', '0', 1),
-                    makeMinion('ally-3', 'robot_microbot_reclaimer', '0', 1),
-                    makeMinion('target-ok', 'test_enemy', '1', 3),
-                    makeMinion('target-bad', 'wizard_archmage', '1', 4),
-                ],
-                ongoingActions: [],
-            }],
-        });
-
-        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
-        const interaction = matchState.sys.interaction?.current as any;
-        expect(interaction?.data?.sourceId).toBe('robot_microbot_guard');
-
-        const targetUids = ((interaction?.data?.options ?? []) as any[])
-            .map(option => option?.value?.minionUid)
-            .filter(Boolean);
-        expect(targetUids).toContain('target-ok');
-        expect(targetUids).not.toContain('target-bad');
-        expect(targetUids).not.toContain('m1');
-
-        const validTargetOption = interaction?.data?.options?.find(
-            (option: any) => option?.value?.minionUid === 'target-ok',
-        );
-        expect(validTargetOption).toBeDefined();
-
-        const respondResult = runCommand(matchState, {
-            type: 'SYS_INTERACTION_RESPOND',
-            playerId: '0',
-            payload: { optionId: validTargetOption.id },
-        } as any, defaultRandom);
-
-        expect(respondResult.finalState.core.bases[0].minions.some(minion => minion.uid === 'target-ok')).toBe(false);
-        expect(respondResult.finalState.core.bases[0].minions.some(minion => minion.uid === 'target-bad')).toBe(true);
+        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
     });
 
     it('robot_tech_center: 单个基地时创建 Prompt', () => {

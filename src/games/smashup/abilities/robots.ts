@@ -8,6 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     grantContextualExtraMinion,
+    grantExtraMinion,
     destroyMinion,
     getMinionPower,
     buildMinionTargetOptions,

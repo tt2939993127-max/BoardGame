@@ -985,9 +985,7 @@ export function grantExtraAction(
 }
 
 export function resolveExtraPlayTiming(matchState?: Pick<MatchState<SmashUpCore>, 'sys'>): 'banked' | 'immediate' {
-    const phase = matchState?.sys?.phase;
-    // startTurn 阶段产生的额外出牌应当视作“本回合可用额度”，避免打断计分/结算链路
-    return phase === 'playCards' || phase === 'startTurn' ? 'banked' : 'immediate';
+    return matchState?.sys?.phase === 'playCards' ? 'banked' : 'immediate';
 }
 
 export function grantContextualExtraMinion(

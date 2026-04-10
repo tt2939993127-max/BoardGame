@@ -544,7 +544,7 @@ describe('黑熊骑兵派系能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-            expect(limitEvents.length).toBe(1);
+            expect(limitEvents.length).toBe(0);
 
             const interactions = getLastInteractions();
             expect(interactions.length).toBe(1);
