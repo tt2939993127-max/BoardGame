@@ -27,6 +27,7 @@ const allowedValueArgs = new Set([
     'channel',
     'version',
     'native-version',
+    'expected-base-version',
     'force-update-title',
     'force-update-message',
     'notes',
@@ -55,6 +56,7 @@ Android OTA 发布脚本
 - --channel <name>
 - --version <bundleVersion>
 - --native-version <version>
+- --expected-base-version <package.json.version>
 - --force-update / --no-force-update
 - --force-update-title <text>
 - --force-update-message <text>
@@ -123,6 +125,7 @@ if (hasFlag('help') || args.includes('-h')) {
 
 const channel = readArgValue('channel', process.env.VITE_ANDROID_OTA_CHANNEL?.trim() || 'stable');
 const nativeVersion = readArgValue('native-version', packageJson.version);
+const expectedBaseVersion = readArgValue('expected-base-version', '').trim();
 const explicitBundleVersion = readArgValue('version', '');
 const notes = readArgValue('notes', 'Android embedded OTA bundle');
 const forbiddenCompatibilityArgs = [
@@ -170,6 +173,17 @@ const isNonReleaseAndroidAppId = (appId) => appId
 
 if (!validChannelPattern.test(channel)) {
     throw new Error(`非法 channel: ${channel}。仅允许字母、数字、点、下划线、短横线。`);
+}
+
+if (!expectedBaseVersion) {
+    throw new Error('Android OTA 发布已禁止隐式版本：必须显式传 --expected-base-version，并与 package.json.version 完全一致。');
+}
+
+if (expectedBaseVersion !== packageJson.version) {
+    throw new Error(
+        `Android OTA 基线版本不匹配：期望 ${expectedBaseVersion}，实际 package.json.version=${packageJson.version}。`
+        + ' 请先 bump 到正确版本，或改用正确 ref / 正确显式版本后再发布。',
+    );
 }
 
 if (!existsSync(distDir)) {
