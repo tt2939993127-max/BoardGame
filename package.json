@@ -138,6 +138,7 @@
     ]
   },
   "dependencies": {
+    "@alloc/quick-lru": "^5.2.0",
     "@aws-sdk/client-s3": "^3.975.0",
     "@babel/standalone": "^7.29.0",
     "@capacitor/app": "^8.1.0",
