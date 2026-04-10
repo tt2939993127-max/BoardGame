@@ -39,18 +39,6 @@ on:
         description: '强更页正文（可选）'
         required: false
         type: string
-      target_native_version:
-        description: '精确兼容的原生版本列表，逗号分隔（可选）'
-        required: false
-        type: string
-      min_native_version:
-        description: '最小兼容原生版本（可选）'
-        required: false
-        type: string
-      max_native_version:
-        description: '最大兼容原生版本（可选）'
-        required: false
-        type: string
 
 permissions:
   contents: read
@@ -77,9 +65,6 @@ jobs:
             force_update="${{ inputs.force_update }}"
             force_update_title="${{ inputs.force_update_title }}"
             force_update_message="${{ inputs.force_update_message }}"
-            target_native_version="${{ inputs.target_native_version }}"
-            min_native_version="${{ inputs.min_native_version }}"
-            max_native_version="${{ inputs.max_native_version }}"
             source_mode="manual"
           else
             channel="${{ vars.ANDROID_OTA_AUTO_CHANNEL || 'edge' }}"
@@ -89,9 +74,6 @@ jobs:
             force_update="true"
             force_update_title=""
             force_update_message=""
-            target_native_version=""
-            min_native_version=""
-            max_native_version=""
             source_mode="auto"
           fi
 
@@ -107,9 +89,6 @@ jobs:
             echo "force_update=${force_update}"
             echo "force_update_title=${force_update_title}"
             echo "force_update_message=${force_update_message}"
-            echo "target_native_version=${target_native_version}"
-            echo "min_native_version=${min_native_version}"
-            echo "max_native_version=${max_native_version}"
             echo "source_mode=${source_mode}"
           } >> "${GITHUB_OUTPUT}"
 
@@ -246,18 +225,6 @@ jobs:
             args+=(--force-update-message "${{ steps.params.outputs.force_update_message }}")
           fi
 
-          if [[ -n "${{ steps.params.outputs.target_native_version }}" ]]; then
-            args+=(--target-native-version "${{ steps.params.outputs.target_native_version }}")
-          fi
-
-          if [[ -n "${{ steps.params.outputs.min_native_version }}" ]]; then
-            args+=(--min-native-version "${{ steps.params.outputs.min_native_version }}")
-          fi
-
-          if [[ -n "${{ steps.params.outputs.max_native_version }}" ]]; then
-            args+=(--max-native-version "${{ steps.params.outputs.max_native_version }}")
-          fi
-
           npm run mobile:android:ota:publish -- "${args[@]}"
 
       - name: Write workflow summary
@@ -276,9 +243,7 @@ jobs:
             echo "| Dry Run | ${{ steps.params.outputs.dry_run }} |"
             echo "| Skip Latest | ${{ steps.params.outputs.skip_latest }} |"
             echo "| Force Update | ${{ steps.params.outputs.force_update || 'false' }} |"
-            echo "| Target Native Version | ${{ steps.params.outputs.target_native_version || '未指定' }} |"
-            echo "| Min Native Version | ${{ steps.params.outputs.min_native_version || '未指定' }} |"
-            echo "| Max Native Version | ${{ steps.params.outputs.max_native_version || '未指定' }} |"
+            echo "| Native Compatibility Gate | disabled（所有版本都必须更新） |"
             echo "| Manifest URL | ${{ steps.bundle.outputs.manifest_url || '未生成' }} |"
             echo "| 缺失配置 | ${{ steps.prereq.outputs.missing || '无' }} |"
           } >> "${GITHUB_STEP_SUMMARY}"

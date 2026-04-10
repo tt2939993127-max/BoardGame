@@ -95,6 +95,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/deploy.md` — 部署、构建产物、环境变量注入、线上/本地差异、CDN/R2 资源问题时必读。
   - **生产部署操作规范（强制）**：生产环境更新必须使用 `bash scripts/deploy/deploy-image.sh update`（基于 `docker-compose.prod.yml`）。**禁止在生产服务器上直接运行 `docker compose up -d`**（会使用默认的 `docker-compose.yml`，端口映射和环境变量与生产不同）。排查生产问题时，必须先读 `docs/deploy.md` 了解部署架构，禁止凭猜测给出服务器操作命令。
   - **Android OTA 包体规范（强制）**：Android OTA 只允许承载 H5 bundle 与轻量静态文件，**禁止**把 `public/assets/i18n/**`、大图集、大卡图或其他应走 R2 / 游戏包链路的资源打进 OTA zip。发布 Android OTA 时必须使用 `scripts/mobile/publish-android-ota.mjs` 这条受门禁保护的链路；若产物异常超过轻量包体阈值（当前脚本门禁 `20MB`）必须直接失败，禁止继续发布。
+  - **Android OTA 版本门禁规范（强制）**：当前项目规则是“所有已安装版本默认都必须更新 OTA”。禁止再通过 `targetNativeVersion`、`minNativeVersion`、`maxNativeVersion`、`allow-legacy-shells` 等方式把 OTA 只发给某个原生版本或版本区间；发布脚本与 GitHub Actions 都必须保持这一禁令，若误传相关参数必须直接失败，不能静默带着错误门禁发出去。
 
 ---
 
