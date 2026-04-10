@@ -1267,6 +1267,23 @@ export function countMadnessCards(player: { hand: { defId: string }[]; deck: { d
     return count;
 }
 
+/** 计算某位玩家整局持有的疯狂卡数量（含埋葬区） */
+export function countMadnessCardsForPlayer(state: SmashUpCore, playerId: PlayerId): number {
+    const player = state.players[playerId];
+    if (!player) return 0;
+
+    let count = countMadnessCards(player);
+    for (const base of state.bases) {
+        for (const buried of base.buriedCards ?? []) {
+            if (buried.controllerId === playerId && buried.defId === MADNESS_CARD_DEF_ID) {
+                count++;
+            }
+        }
+    }
+
+    return count;
+}
+
 /** 计算疯狂卡 VP 惩罚（每 2 张扣 1 VP） */
 export function madnessVpPenalty(madnessCount: number): number {
     return Math.floor(madnessCount / 2);

@@ -28,6 +28,7 @@ import {
     drawMadnessCards,
     returnMadnessCard,
     countMadnessCards,
+    countMadnessCardsForPlayer,
     madnessVpPenalty,
     hasCthulhuExpansionFaction,
 } from '../domain/abilityHelpers';
@@ -168,7 +169,7 @@ describe('Property 19: 疯狂牌库生命周期', () => {
             const cardUid = afterDraw.players['0'].hand[0].uid;
             const returnEvt = returnMadnessCard('0', cardUid, 'test', 2000);
             const afterReturn = reduce(afterDraw, returnEvt);
-            expect(afterReturn.madnessDeck!.length).toBe(29);
+            expect(afterReturn.madnessDeck!.length).toBe(30);
             expect(afterReturn.players['0'].hand.length).toBe(0);
         });
     });
@@ -187,6 +188,34 @@ describe('Property 19: 疯狂牌库生命周期', () => {
                 discard: [{ ...madnessCard, uid: 'mad3' }, normalCard],
             };
             expect(countMadnessCards(player)).toBe(3);
+        });
+
+        it('countMadnessCardsForPlayer 额外统计埋葬区中的疯狂卡', () => {
+            const core = makeCore({
+                players: {
+                    '0': {
+                        ...makePlayer('0', [SMASHUP_FACTION_IDS.MINIONS_OF_CTHULHU, SMASHUP_FACTION_IDS.ALIENS]),
+                        hand: [{ uid: 'mad1', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' }],
+                        deck: [{ uid: 'mad2', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' }],
+                        discard: [{ uid: 'mad3', defId: MADNESS_CARD_DEF_ID, type: 'action', owner: '0' }],
+                    },
+                    '1': makePlayer('1', [SMASHUP_FACTION_IDS.ELDER_THINGS, SMASHUP_FACTION_IDS.PIRATES]),
+                },
+                bases: [{
+                    defId: 'base_the_jungle',
+                    minions: [],
+                    ongoingActions: [],
+                    buriedCards: [{
+                        uid: 'buried-mad',
+                        defId: MADNESS_CARD_DEF_ID,
+                        trueOwnerId: '0',
+                        controllerId: '0',
+                        buriedFrom: 'hand',
+                    }],
+                }],
+            });
+
+            expect(countMadnessCardsForPlayer(core, '0')).toBe(4);
         });
 
         it('无疯狂卡时计数为 0', () => {
