@@ -7,6 +7,7 @@ import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
 import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
 import { buildSummonerWarsAiLegalActions, summonerWarsAiRuntime } from '../ai';
+import { abilityRegistry } from '../domain/abilities';
 
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -128,6 +129,10 @@ function createActivatedAbilityHeuristicCore(): SummonerWarsCore {
     }
     ownSummoner.hasMoved = true;
     enemySummoner.hasMoved = true;
+    ownSummoner.card = {
+        ...ownSummoner.card,
+        abilities: [],
+    };
 
     const inspireSourceCard: UnitCard = {
         id: 'test-inspire-source',
@@ -244,6 +249,10 @@ function createTargetedAbilityCore(): SummonerWarsCore {
     if (!ownSummoner) {
         throw new Error('测试场景缺少召唤师');
     }
+    ownSummoner.card = {
+        ...ownSummoner.card,
+        abilities: [],
+    };
 
     const ancestralSourceCard: UnitCard = {
         id: 'test-ancestral-source',
@@ -1304,6 +1313,87 @@ describe('召唤师战争本地 AI', () => {
         expect(commonAction).toBeTruthy();
         expect(championAction?.metadata?.strategyTags).toContain('board-control');
         expect(decision?.actionId).toBe(championAction?.actionId);
+    });
+
+    it('带目标的 activated ability 在 count 缺省时仍按单目标生成动作', () => {
+        const abilityDef = abilityRegistry.get('ancestral_bond');
+        expect(abilityDef?.targetSelection).toBeTruthy();
+
+        const originalTargetSelection = abilityDef?.targetSelection
+            ? { ...abilityDef.targetSelection }
+            : undefined;
+
+        if (!abilityDef?.targetSelection) {
+            throw new Error('测试缺少 ancestral_bond.targetSelection');
+        }
+
+        abilityDef.targetSelection = {
+            ...abilityDef.targetSelection,
+            count: undefined,
+        };
+
+        try {
+            const core = createTargetedAbilityCore();
+            const sys = createInitialSystemState(['0', '1'], []);
+            const actions = buildSummonerWarsAiLegalActions({
+                playerId: '0',
+                state: { core, sys },
+            });
+
+            const targetedActions = actions.filter((action) => {
+                return action.kind === 'activate-ability' && action.metadata?.abilityId === 'ancestral_bond';
+            });
+
+            expect(targetedActions.length).toBeGreaterThan(1);
+        } finally {
+            abilityDef.targetSelection = originalTargetSelection;
+        }
+    });
+
+    it('带目标的 activated ability 若 payloadContract 还要求额外字段，则不应生成直推目标动作', () => {
+        const abilityDef = abilityRegistry.get('ancestral_bond');
+        expect(abilityDef).toBeTruthy();
+
+        const originalInteractionChain = abilityDef?.interactionChain
+            ? {
+                ...abilityDef.interactionChain,
+                payloadContract: abilityDef.interactionChain.payloadContract
+                    ? {
+                        required: [...(abilityDef.interactionChain.payloadContract.required ?? [])],
+                        optional: [...(abilityDef.interactionChain.payloadContract.optional ?? [])],
+                    }
+                    : undefined,
+            }
+            : undefined;
+
+        if (!abilityDef) {
+            throw new Error('测试缺少 ancestral_bond');
+        }
+
+        abilityDef.interactionChain = {
+            ...(abilityDef.interactionChain ?? { steps: [] }),
+            payloadContract: {
+                required: ['targetPosition', 'newPosition'],
+                optional: [],
+            },
+        };
+
+        try {
+            const core = createTargetedAbilityCore();
+            const sys = createInitialSystemState(['0', '1'], []);
+            const actions = buildSummonerWarsAiLegalActions({
+                playerId: '0',
+                state: { core, sys },
+            });
+
+            const targetedActions = actions.filter((action) => {
+                return action.kind === 'activate-ability' && action.metadata?.abilityId === 'ancestral_bond';
+            });
+
+            expect(targetedActions).toHaveLength(0);
+        } finally {
+            abilityDef.interactionChain = originalInteractionChain;
+        }
     });
 
     it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {

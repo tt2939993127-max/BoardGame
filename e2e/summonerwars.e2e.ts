@@ -399,20 +399,55 @@ const injectSummonerWarsMobileEvidenceScene = async (page: Page) => {
 };
 
 const openSummonerWarsMobileEvidencePage = async (page: Page) => {
+  attachPageDiagnostics(page);
   // 该证据页场景依赖 TestHarness 注入状态，因此必须走 /play/:gameId 测试路由，
   // 不能切到 /tutorial 路由；教程路由当前不会注册 TestHarness。
   await page.goto('/play/summonerwars?skipInitialization=true&numPlayers=2', {
     waitUntil: 'domcontentloaded',
   });
   await page.waitForLoadState('domcontentloaded');
-  await page.waitForFunction(
-    () => Boolean(
-      document.querySelector('#root [data-game-page]')
-      || document.querySelector('#root [data-testid="debug-panel"]')
-      || (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
-    ),
-    { timeout: 15000 },
-  );
+  try {
+    await page.waitForFunction(
+      () => Boolean(
+        document.querySelector('#root [data-game-page]')
+        || document.querySelector('#root [data-testid="debug-panel"]')
+        || (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+      ),
+      { timeout: 15000 },
+    );
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => {
+      const root = document.querySelector('#root');
+      const rescueGate = document.querySelector('[data-testid="game-page-rescue-gate"]');
+      const viewport = document.querySelector('.game-page-viewport') as HTMLElement | null;
+      const rect = viewport?.getBoundingClientRect();
+      const lastError = (window as any).__BG_LAST_ERROR_CONTEXT__ as { message?: string; source?: string } | undefined;
+      return {
+        url: window.location.href,
+        readyState: document.readyState,
+        hasRescueGate: Boolean(rescueGate),
+        rescueGateText: rescueGate?.textContent?.slice(0, 280) || '',
+        rootHtml: root?.innerHTML?.slice(0, 400) || '',
+        viewport: rect ? { width: Math.round(rect.width), height: Math.round(rect.height) } : null,
+        lastErrorMessage: lastError?.message || '',
+        lastErrorSource: lastError?.source || '',
+      };
+    });
+    const errors = attachPageDiagnostics(page).errors.slice(-8).join(' | ') || 'EMPTY';
+    throw new Error(
+      [
+        'SummonerWars 证据页未进入可用状态',
+        `url=${diagnostics.url}`,
+        `readyState=${diagnostics.readyState}`,
+        `rescueGate=${diagnostics.hasRescueGate}`,
+        `rescueGateText=${diagnostics.rescueGateText || 'EMPTY'}`,
+        `viewport=${diagnostics.viewport ? `${diagnostics.viewport.width}x${diagnostics.viewport.height}` : 'EMPTY'}`,
+        `lastError=${diagnostics.lastErrorMessage || 'EMPTY'} source=${diagnostics.lastErrorSource || 'EMPTY'}`,
+        `rootHtml=${diagnostics.rootHtml || 'EMPTY'}`,
+        `errors=${errors}`,
+      ].join('\n'),
+    );
+  }
   await waitForSummonerWarsHarness(page);
   await injectSummonerWarsMobileEvidenceScene(page);
   await expect(page.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });

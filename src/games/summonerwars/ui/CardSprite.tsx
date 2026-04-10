@@ -89,6 +89,8 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
 
   return (
     <div
+      data-card-sprite="true"
+      data-image-loaded={loaded ? 'true' : 'false'}
       className={className}
       style={{
         aspectRatio: `${aspectRatio}`,

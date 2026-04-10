@@ -68,6 +68,8 @@ const FACTION_PRIORITY: FactionId[] = [
     'trickster',
 ];
 
+const SUPPORTED_DIRECT_TARGET_PAYLOAD_FIELDS = new Set(['targetPosition']);
+
 const createCommand = (playerId: PlayerId, type: string, payload: unknown = {}): Command => ({
     type,
     playerId,
@@ -167,6 +169,13 @@ const getAllBoardPositions = (): CellCoord[] => {
 };
 
 const getEnemyPlayerId = (playerId: PlayerId): PlayerId => (playerId === '0' ? '1' : '0');
+
+const supportsDirectTargetSelectionAiExpansion = (abilityDef: AbilityDef): boolean => {
+    const targetCount = abilityDef.targetSelection?.count ?? 1;
+    if (targetCount !== 1) return false;
+    const requiredFields = abilityDef.interactionChain?.payloadContract?.required ?? [];
+    return requiredFields.every((field) => SUPPORTED_DIRECT_TARGET_PAYLOAD_FIELDS.has(field));
+};
 
 const pushStrategyTag = (
     tags: SummonerWarsStrategyTag[],
@@ -753,13 +762,17 @@ const buildActivatedAbilityActions = (
             }
 
             const targetSelection = abilityDef.targetSelection;
-            if (!targetSelection || targetSelection.count !== 1) continue;
+            if (!targetSelection || !supportsDirectTargetSelectionAiExpansion(abilityDef)) continue;
+            const ownSummoner = getSummoner(state.core, playerId);
+            const enemySummoner = getSummoner(state.core, getEnemyPlayerId(playerId));
 
             if (targetSelection.type === 'unit') {
                 const targets = getAllBoardUnitTargets(state.core);
                 for (const target of targets) {
                     const targetUnit = target.unit;
                     const targetLifeRemaining = targetUnit.card.life - targetUnit.damage;
+                    const distanceToOwnSummoner = ownSummoner ? manhattanDistance(target.position, ownSummoner.position) : 99;
+                    const distanceToEnemySummoner = enemySummoner ? manhattanDistance(target.position, enemySummoner.position) : 99;
                     const strategyTags = [...semantics.strategyTags];
                     if (targetUnit.owner === playerId) {
                         pushStrategyTag(strategyTags, 'board-control');
@@ -797,6 +810,8 @@ const buildActivatedAbilityActions = (
                             targetType: targetUnit.card.unitClass,
                             targetUnitClass: targetUnit.card.unitClass,
                             targetLifeRemaining,
+                            distanceToOwnSummoner,
+                            distanceToEnemySummoner,
                         }, strategyTags),
                     });
                 }
@@ -819,6 +834,8 @@ const buildActivatedAbilityActions = (
                         : targetStructure
                             ? targetStructure.card.life - targetStructure.damage
                             : undefined;
+                    const distanceToOwnSummoner = ownSummoner ? manhattanDistance(targetPosition, ownSummoner.position) : 99;
+                    const distanceToEnemySummoner = enemySummoner ? manhattanDistance(targetPosition, enemySummoner.position) : 99;
                     const strategyTags = [...semantics.strategyTags];
                     if (targetOwner === playerId) {
                         pushStrategyTag(strategyTags, 'board-control');
@@ -853,6 +870,8 @@ const buildActivatedAbilityActions = (
                             targetType,
                             targetUnitClass: targetUnit?.card.unitClass,
                             targetLifeRemaining,
+                            distanceToOwnSummoner,
+                            distanceToEnemySummoner,
                         }, strategyTags),
                     });
                 }
@@ -1508,7 +1527,7 @@ const activatedAbilityTargetScorer: LocalAiActionScorer = {
                 ? (ownThreat.remainingLife > 0 && ownThreat.directThreatDamage >= ownThreat.remainingLife)
                     || ownThreat.nearbyEnemyPressure >= 8
                 : false;
-            score += underPressure ? 110 : 40;
+            score += underPressure ? 110 : 20;
         }
         else if (targetType === 'champion') score += 60;
         else if (targetType === 'common') score += 30;
