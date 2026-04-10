@@ -71,8 +71,13 @@ export type AiSeatController =
 export interface AiInteractionOptionSnapshot {
     id: string;
     label?: string;
+    labelKey?: string;
+    labelParams?: Record<string, string | number>;
     value?: unknown;
     disabled?: boolean;
+    disabledReason?: string;
+    disabledReasonKey?: string;
+    disabledReasonParams?: Record<string, string | number>;
     displayMode?: string;
     _ai?: AiHint;
 }

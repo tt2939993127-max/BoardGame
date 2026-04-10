@@ -1103,5 +1103,95 @@ describe('GameTransportServer（离座与重连）', () => {
             incidentKind: 'force-end-turn-failed',
         }));
     });
+
+    it('online AI watchdog 自动反馈应携带交互选项与可选性诊断信息', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+        const feedbackReporter = vi.fn(async () => undefined);
+
+        await storage.createMatch('match-watchdog-option-diagnostics', {
+            initialState: createOnlineAiRecoveryState({
+                interaction: {
+                    current: {
+                        id: 'visible-choice-1',
+                        kind: 'simple-choice',
+                        playerId: '1',
+                        data: {
+                            sourceId: 'dt-test-visible-choice',
+                            title: 'interaction.chooseTarget',
+                            multi: { min: 1 },
+                            options: [
+                                {
+                                    id: 'option-disabled',
+                                    label: '被禁用目标',
+                                    disabled: true,
+                                    disabledReason: '目标已失效',
+                                    value: { targetId: 'm-1' },
+                                },
+                                {
+                                    id: 'option-manual',
+                                    label: '只能人工决定',
+                                    value: { targetId: 'm-2' },
+                                },
+                            ],
+                        },
+                    },
+                    queue: [],
+                    isBlocked: false,
+                },
+            }),
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+            onlineAiRecoveryFailureReportThreshold: 1,
+            onlineAiFeedbackReporter: feedbackReporter,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        await serverInternal.loadMatch('match-watchdog-option-diagnostics');
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockResolvedValue(false);
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(feedbackReporter).toHaveBeenCalledTimes(1);
+        const payload = feedbackReporter.mock.calls[0]?.[0] as { stateSnapshot?: string } | undefined;
+        expect(typeof payload?.stateSnapshot).toBe('string');
+        const snapshot = JSON.parse(payload!.stateSnapshot!);
+
+        expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
+            id: 'option-disabled',
+            disabled: true,
+            disabledReason: '目标已失效',
+        }));
+        expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
+            id: 'option-manual',
+        }));
+        expect(snapshot.interaction?.seatSelectability).toMatchObject({
+            totalOptions: 2,
+            enabledOptions: 1,
+            disabledOptions: 1,
+            selectionState: 'manual-selection-required',
+            disabledOptionIds: ['option-disabled'],
+            enabledOptionIds: ['option-manual'],
+        });
+    });
 });
 

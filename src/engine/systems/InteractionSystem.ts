@@ -48,6 +48,20 @@ export interface PromptOption<T = unknown> {
     value: T;
     disabled?: boolean;
     /**
+     * 可选：禁用原因的原始文案。
+     * 仅用于诊断/反馈，不参与规则执行。
+     */
+    disabledReason?: string;
+    /**
+     * 可选：禁用原因 i18n key。
+     * UI/反馈层可据此还原“为什么不能选”。
+     */
+    disabledReasonKey?: string;
+    /**
+     * disabledReasonKey 对应的插值参数。
+     */
+    disabledReasonParams?: Record<string, string | number>;
+    /**
      * UI 渲染模式声明：
      * - 'card': 以卡牌预览图展示（UI 层从 value 中的 defId 查找预览图）
      * - 'button' | undefined: 普通按钮

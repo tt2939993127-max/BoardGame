@@ -24,6 +24,8 @@ import { buildTrainingDecisionSample } from './trainingData';
 import logger, { gameLogger } from '../../../server/logger.js';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
 import { applyPlayerViewToState, buildAiDecisionContext, getAiSeatIds } from '../ai';
+import { extractAiInteractionSnapshot, extractAiResponseWindowSnapshot } from '../ai/snapshots';
+import type { AiInteractionSnapshot, AiInteractionOptionSnapshot } from '../ai/types';
 import {
     executePipeline,
     createSeededRandom,
@@ -109,6 +111,75 @@ type OnlineAiRecoveryFeedbackPayload = {
     progressMarker: string;
     stateSnapshot: string;
     actionLog?: string;
+};
+
+type InteractionSelectabilityDiagnostic = {
+    totalOptions: number;
+    enabledOptions: number;
+    disabledOptions: number;
+    minSelectionCount: number;
+    enabledOptionIds: string[];
+    disabledOptionIds: string[];
+    recoverableOptionIds: string[];
+    selectionState:
+        | 'no-options'
+        | 'all-options-disabled'
+        | 'recoverable-option-available'
+        | 'manual-selection-required';
+};
+
+const isRecoverableInteractionOption = (option: AiInteractionOptionSnapshot): boolean => {
+    const value = option.value as {
+        skip?: unknown;
+        __cancel__?: unknown;
+        done?: unknown;
+        __emergency_skip__?: unknown;
+    } | undefined;
+
+    return option.id === 'skip'
+        || option.id === '__cancel__'
+        || option.id === 'done'
+        || option.id === '__emergency_skip__'
+        || value?.skip === true
+        || value?.__cancel__ === true
+        || value?.done === true
+        || value?.__emergency_skip__ === true;
+};
+
+const buildInteractionSelectabilityDiagnostic = (
+    snapshot: AiInteractionSnapshot | null | undefined,
+): InteractionSelectabilityDiagnostic | null => {
+    if (!snapshot) {
+        return null;
+    }
+
+    const options = Array.isArray(snapshot.options) ? snapshot.options : [];
+    const enabledOptions = options.filter((option) => option.disabled !== true);
+    const disabledOptions = options.filter((option) => option.disabled === true);
+    const multi = snapshot.multi as { min?: unknown } | undefined;
+    const minSelectionCount = typeof multi?.min === 'number' ? multi.min : 1;
+    const recoverableOptionIds = minSelectionCount === 0
+        ? ['__empty_selection__']
+        : enabledOptions.filter(isRecoverableInteractionOption).map((option) => option.id);
+
+    const selectionState: InteractionSelectabilityDiagnostic['selectionState'] = options.length === 0
+        ? 'no-options'
+        : enabledOptions.length === 0
+            ? 'all-options-disabled'
+            : recoverableOptionIds.length > 0
+                ? 'recoverable-option-available'
+                : 'manual-selection-required';
+
+    return {
+        totalOptions: options.length,
+        enabledOptions: enabledOptions.length,
+        disabledOptions: disabledOptions.length,
+        minSelectionCount,
+        enabledOptionIds: enabledOptions.map((option) => option.id),
+        disabledOptionIds: disabledOptions.map((option) => option.id),
+        recoverableOptionIds,
+        selectionState,
+    };
 };
 
 const resolveOnlineAiFeedbackEndpoint = (): string | null => {
@@ -888,16 +959,12 @@ export class GameTransportServer {
         candidate: ForceEndTurnStalledAiResolution,
         progressMarker: string,
     ): string {
-        const interaction = match.state.sys?.interaction as {
-            current?: { id?: unknown; kind?: unknown; playerId?: unknown; data?: { sourceId?: unknown; title?: unknown } };
-            isBlocked?: unknown;
-        } | undefined;
-        const responseWindow = match.state.sys?.responseWindow as {
-            current?: {
-                responderQueue?: unknown;
-                currentResponderIndex?: unknown;
-            };
-        } | undefined;
+        const interactionState = match.state.sys?.interaction as { isBlocked?: unknown } | undefined;
+        const sharedInteraction = extractAiInteractionSnapshot(match.state);
+        const seatView = this.applyPlayerView(match, candidate.playerId) as MatchState<unknown>;
+        const seatInteraction = extractAiInteractionSnapshot(seatView);
+        const responseWindow = extractAiResponseWindowSnapshot(match.state);
+
         return JSON.stringify({
             matchId: match.matchID,
             gameId: match.gameId,
@@ -907,20 +974,14 @@ export class GameTransportServer {
             turnNumber: match.state.sys?.turnNumber ?? null,
             currentPlayerId: resolveCurrentPlayerId(match.state),
             progressMarker,
-            interaction: interaction?.current ? {
-                id: interaction.current.id ?? null,
-                kind: interaction.current.kind ?? null,
-                playerId: interaction.current.playerId ?? null,
-                sourceId: interaction.current.data?.sourceId ?? null,
-                title: interaction.current.data?.title ?? null,
-                isBlocked: interaction.isBlocked ?? null,
-            } : {
-                isBlocked: interaction?.isBlocked ?? null,
+            interaction: {
+                isBlocked: interactionState?.isBlocked ?? null,
+                shared: sharedInteraction,
+                sharedSelectability: buildInteractionSelectabilityDiagnostic(sharedInteraction),
+                seat: seatInteraction,
+                seatSelectability: buildInteractionSelectabilityDiagnostic(seatInteraction),
             },
-            responseWindow: responseWindow?.current ? {
-                responderQueue: Array.isArray(responseWindow.current.responderQueue) ? responseWindow.current.responderQueue : [],
-                currentResponderIndex: responseWindow.current.currentResponderIndex ?? 0,
-            } : null,
+            responseWindow,
         });
     }
 

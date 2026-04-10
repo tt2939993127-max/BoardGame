@@ -40,6 +40,13 @@
 - **THEN** 系统 MUST 向现有 `/feedback` 管道提交一条结构化 bug 反馈
 - **AND** 反馈 MUST 包含至少 `gameId`、`matchId`、`playerId`、incident kind、reason 与精简 `stateSnapshot`
 
+#### Scenario: 交互类 incident 的反馈应尽量说明“为什么无法选择”
+- **GIVEN** 某条 AI recovery incident 与 interaction choice 有关
+- **WHEN** 系统生成自动反馈
+- **THEN** `stateSnapshot` SHOULD 包含共享视角或 seat 视角下的 interaction options 摘要
+- **AND** 若存在 disabled 选项，反馈 SHOULD 记录其 disabled 状态与可用的禁用原因字段
+- **AND** 系统 SHOULD 额外给出可选性诊断（如 `no-options`、`all-options-disabled`、`manual-selection-required`、`recoverable-option-available`）
+
 #### Scenario: 同一 incident 在冷却窗口内不得重复刷反馈
 - **GIVEN** 某条 AI recovery incident 已在当前去重键下成功或失败上报过一次
 - **WHEN** 冷却窗口内再次命中同一 incident key
