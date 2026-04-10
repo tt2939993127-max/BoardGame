@@ -311,9 +311,8 @@ export function resolveScoringBaseRefSlotIndex(
     if (slotBase?.defId === baseRef.baseDefId) {
         return baseRef.slotIndex;
     }
-    return state.core.bases.findIndex((candidate) => candidate?.defId === baseRef.baseDefId) >= 0
-        ? state.core.bases.findIndex((candidate) => candidate?.defId === baseRef.baseDefId)
-        : undefined;
+    const matchedIndex = state.core.bases.findIndex((candidate) => candidate?.defId === baseRef.baseDefId);
+    return matchedIndex >= 0 ? matchedIndex : undefined;
 }
 
 export function markScoringBaseCompleted(

@@ -98,6 +98,20 @@ function collectQualifiedPlayerPowers(
     return playerPowers;
 }
 
+function attachDeferredPostScoringEventsToFirstInteraction(
+    state: MatchState<SmashUpCore> | undefined,
+    deferredEvents: BaseClearedEvent[] | BaseReplacedEvent[] | SmashUpEvent[] | ReturnType<typeof serializePostScoringEvents>,
+): void {
+    const firstInteraction = state?.sys.interaction?.current ?? state?.sys.interaction?.queue?.[0];
+    if (!firstInteraction?.data) {
+        return;
+    }
+    const data = firstInteraction.data as Record<string, unknown>;
+    const continuationContext = (data.continuationContext ?? {}) as Record<string, unknown>;
+    continuationContext._deferredPostScoringEvents = deferredEvents;
+    data.continuationContext = continuationContext;
+}
+
 function hasPendingScoreBasesSpecialActivation(state: MatchState<SmashUpCore>): boolean {
     const playerId = getCurrentPlayerId(state.core);
     if (!playerId) return false;
@@ -581,7 +595,6 @@ export function scoreOneBase(
     // 妫€鏌ユ槸鍚﹀凡缁忚Е鍙戣繃 afterScoring锛堥槻姝氦浜掕В鍐冲悗閲嶅瑙﹀彂锛?
     const alreadyTriggeredAfterScoring = updatedCore.afterScoringTriggeredBases?.includes(baseIndex) ?? false;
 
-    let afterResult: BaseAbilityResult = { events: [] };
     if (!alreadyTriggeredAfterScoring) {
         // 统一 afterScoring special 已迁到 trigger 模型；这里只对漏注册条目做反馈并清理。
         const armedSpecials = (updatedCore.pendingAfterScoringSpecials ?? []).filter(
@@ -760,13 +773,7 @@ export function scoreOneBase(
                 }
                 : session,
             );
-            const firstInteraction = ms.sys.interaction?.current ?? ms.sys.interaction?.queue?.[0];
-            if (firstInteraction?.data) {
-                const data = firstInteraction.data as Record<string, unknown>;
-                const continuationContext = (data.continuationContext ?? {}) as Record<string, unknown>;
-                continuationContext._deferredPostScoringEvents = serializedDeferredEvents;
-                data.continuationContext = continuationContext;
-            }
+            attachDeferredPostScoringEventsToFirstInteraction(ms, serializedDeferredEvents);
         }
 
         const afterScoringWindowEvt = openAfterScoringWindow('scoreBases', pid, afterScoringCore.turnOrder, now);
@@ -786,13 +793,7 @@ export function scoreOneBase(
                 }
                 : session,
             );
-            const firstInteraction = ms.sys.interaction?.current ?? ms.sys.interaction?.queue?.[0];
-            if (firstInteraction?.data) {
-                const data = firstInteraction.data as Record<string, unknown>;
-                const continuationContext = (data.continuationContext ?? {}) as Record<string, unknown>;
-                continuationContext._deferredPostScoringEvents = serializedDeferredEvents;
-                data.continuationContext = continuationContext;
-            }
+            attachDeferredPostScoringEventsToFirstInteraction(ms, serializedDeferredEvents);
         }
         return { events, newBaseDeck, matchState: ms };
     }
