@@ -22,7 +22,7 @@ import { matchesDefId } from '../domain/utils';
 import {
     drawMadnessCards, grantExtraAction, destroyMinion,
     returnMadnessCard, getMinionPower, buildActionMinionTargetOptions,
-    addTempPower, revealAndPickFromDeck,
+    addTempPower, revealAndPickFromDeck, buildPlayerTargetOptions,
     buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { registerTrigger } from '../domain/ongoingEffects';
@@ -570,11 +570,18 @@ function cthulhuStarSpawn(ctx: AbilityContext): AbilityResult {
     const madnessCard = madnessInHand[0];
 
     // 使用 autoCancelOption 自动添加取消选项
-    const options = opponents.map((pid, i) => ({
-        id: `player-${i}`,
-        label: getPlayerLabel(pid),
-        value: { targetPlayerId: pid, madnessUid: madnessCard.uid },
-    }));
+    const options = buildPlayerTargetOptions<{ madnessUid: string }>(
+        opponents.map((pid, index) => ({
+            id: `player-${index}`,
+            label: getPlayerLabel(pid),
+            targetPlayerId: pid,
+            value: { madnessUid: madnessCard.uid },
+        })),
+        {
+            sourcePlayerId: ctx.playerId,
+            effectIntent: 'debuff',
+        },
+    );
     
     const interaction = createSimpleChoice<TargetPlayerChoiceValue>(
         `cthulhu_star_spawn_${ctx.now}`, ctx.playerId,
