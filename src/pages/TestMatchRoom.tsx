@@ -29,7 +29,7 @@ import { enableTestMode } from '../engine/testing/environment';
 import { getGamePageDataAttributes, syncGamePageDocumentAttributes } from '../games/mobileSupport';
 import { MobileBoardShell } from '../components/game/framework';
 import { useToast } from '../contexts/ToastContext';
-import { resolveCommandError } from '../engine/transport/errorI18n';
+import { isUiHintOnlyError, resolveCommandError } from '../engine/transport/errorI18n';
 import { playDeniedSound } from '../lib/audio/useGameAudio';
 import { useGameNamespaceReady } from '../hooks/useGameNamespaceReady';
 import { SmashUpOverlayProvider } from '../games/smashup/ui/SmashUpOverlayContext';
@@ -66,6 +66,7 @@ export const TestMatchRoom: React.FC = () => {
 
     const handleCommandRejected = useCallback((commandType: string, error: string) => {
         if (!gameId || TUTORIAL_SILENT_ERRORS.has(error)) return;
+        if (isUiHintOnlyError(error, i18n, gameId)) return;
 
         playDeniedSound();
         if (typeof window !== 'undefined') {
