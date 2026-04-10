@@ -1,30 +1,36 @@
-import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Flame } from 'lucide-react';
 import type { GameConfig } from '../../config/games.config';
+import { resolveToolRoute } from '../../config/toolRoutes';
+import { resolveGameDescription, resolveGameDisplayName } from './gameDetailsContent';
 
 interface GameListProps {
     games: GameConfig[];
     onGameClick: (id: string) => void;
+    onGameIntent?: (id: string) => void;
     mostPopularGameId?: string | null;
 }
 
-export const GameList = ({ games, onGameClick, mostPopularGameId }: GameListProps) => {
+export const GameList = ({ games, onGameClick, onGameIntent, mostPopularGameId }: GameListProps) => {
     const { t, i18n } = useTranslation(['lobby', 'common']);
     return (
         <div className="grid w-full max-w-full grid-cols-2 gap-3 mx-auto sm:grid-cols-[repeat(auto-fill,180px)] sm:justify-center sm:gap-5">
-            {games.map((game, index) => (
-                <motion.a
+            {games.map((game, index) => {
+                const href = game.type === 'tool'
+                    ? (resolveToolRoute(game.id) ?? `/?game=${game.id}`)
+                    : `/?game=${game.id}`;
+                return (
+                <a
                     key={game.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.1 }}
                     data-game-id={game.id}
-                    href={`/?game=${game.id}`}
+                    href={href}
                     onClick={(e) => {
                         e.preventDefault();
                         onGameClick(game.id);
                     }}
+                    onMouseEnter={() => onGameIntent?.(game.id)}
+                    onFocus={() => onGameIntent?.(game.id)}
+                    onPointerDown={() => onGameIntent?.(game.id)}
                     className="
                         group relative cursor-pointer 
                         flex flex-col 
@@ -37,6 +43,10 @@ export const GameList = ({ games, onGameClick, mostPopularGameId }: GameListProp
                         transition-[transform,box-shadow,background-color] duration-300 hover:-translate-y-1
                         no-underline
                     "
+                    style={{
+                        animation: 'game-card-fade-in 360ms ease-out both',
+                        animationDelay: `${Math.min(index, 8) * 45}ms`,
+                    }}
                 >
                     {/* 交互式角落边框 - 默认可见以突出结构 */}
                     <div className="absolute top-[4px] left-[4px] w-2 h-2 border-t-2 border-l-2 border-parchment-card-border opacity-30 group-hover:opacity-100 transition-opacity duration-300" />
@@ -68,10 +78,10 @@ export const GameList = ({ games, onGameClick, mostPopularGameId }: GameListProp
                     <div className="flex flex-col flex-1 justify-between">
                         <div>
                             <h3 className="text-sm font-serif font-bold text-parchment-base-text leading-tight mb-0.5">
-                                {t(game.titleKey)}
+                                {resolveGameDisplayName(game, t, game.id)}
                             </h3>
                             <p className="text-[11px] text-parchment-light-text leading-tight line-clamp-2 min-h-[2.1rem]">
-                                {t(game.descriptionKey)}
+                                {resolveGameDescription(game, t, '')}
                             </p>
                         </div>
 
@@ -103,8 +113,9 @@ export const GameList = ({ games, onGameClick, mostPopularGameId }: GameListProp
                             </span>
                         </div>
                     </div>
-                </motion.a>
-            ))}
+                </a>
+                );
+            })}
         </div>
     );
 };

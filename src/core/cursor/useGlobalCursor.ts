@@ -7,6 +7,7 @@
 
 import { useEffect } from 'react';
 import { useCursorPreference } from './CursorPreferenceContext';
+import { ensureCursorRegistryLoaded } from './ensureCursorRegistryLoaded';
 import { getCursorTheme, injectOutlineFilter, svgCursor } from './themes';
 import type { CursorTheme } from './types';
 
@@ -62,15 +63,24 @@ export function useGlobalCursor() {
 
         if (preference.cursorTheme === 'default') return;
 
-        const theme = getCursorTheme(preference.cursorTheme);
-        if (!theme) return;
+        let cancelled = false;
+        const applyCursorTheme = async () => {
+            await ensureCursorRegistryLoaded();
+            if (cancelled) return;
 
-        const style = document.createElement('style');
-        style.id = STYLE_ID;
-        style.textContent = buildGlobalCursorCSS(theme, preference.highContrast);
-        document.head.appendChild(style);
+            const theme = getCursorTheme(preference.cursorTheme);
+            if (!theme) return;
+
+            const style = document.createElement('style');
+            style.id = STYLE_ID;
+            style.textContent = buildGlobalCursorCSS(theme, preference.highContrast);
+            document.head.appendChild(style);
+        };
+
+        void applyCursorTheme();
 
         return () => {
+            cancelled = true;
             document.getElementById(STYLE_ID)?.remove();
             document.body.style.cursor = '';
         };

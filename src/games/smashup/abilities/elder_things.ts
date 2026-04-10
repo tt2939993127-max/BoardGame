@@ -13,17 +13,16 @@ import {
     grantExtraMinion,
     destroyMinion,
     getMinionPower,
+    buildBaseTargetOptions,
     buildMinionTargetOptions,
     addPowerCounter,
-    addTempPower,
-    addPermanentPower,
     revealHand,
     buildAbilityFeedback,
     buildValidatedCardToDeckBottomEvents,
-    recoverCardsFromDiscard,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type {
+    SmashUpCore,
     SmashUpEvent,
     CardsDrawnEvent,
     CardsDiscardedEvent,
@@ -33,17 +32,35 @@ import type {
 } from '../domain/types';
 import { drawCards, matchesDefId } from '../domain/utils';
 import { getFactionCards, getCardDef, getBaseDef } from '../data/cards';
-import { registerTrigger, registerProtection, isMinionProtected } from '../domain/ongoingEffects';
+import { registerTrigger, registerProtection } from '../domain/ongoingEffects';
 import type { TriggerContext, ProtectionCheckContext } from '../domain/ongoingEffects';
-import { getPlayerEffectivePowerOnBase } from '../domain/ongoingModifiers';
+import { getPlayerEffectivePowerOnBase, getScoringEligibleBaseIndices } from '../domain/ongoingModifiers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { isMinionProtectedNonConsumable } from '../domain/ongoingEffects';
 import { filterProtectedDestroyEvents } from '../domain/reducer';
 
 /** 注册远古之物派系所有能力*/
+function getOrderedOpponentIds(state: SmashUpCore, playerId: string): string[] {
+    const self = String(playerId);
+    const seen = new Set<string>();
+    const ordered: string[] = [];
+
+    for (const rawPid of state.turnOrder as unknown[]) {
+        const pid = String(rawPid);
+        if (pid === self) continue;
+        if (seen.has(pid)) continue;
+        if (!state.players[pid]) continue;
+        seen.add(pid);
+        ordered.push(pid);
+    }
+
+    if (ordered.length > 0) return ordered;
+    return Object.keys(state.players).filter(pid => pid !== self);
+}
+
 export function registerElderThingAbilities(): void {
-    // 拜亚基?onPlay：如果其他玩家有随从在本基地，抽一张疯狂卡
+    // 拜亚基 onPlay：每位在这里有随从的其他玩家各抽一张疯狂卡
     registerAbility('elder_thing_byakhee', 'onPlay', elderThingByakhee);
     // ??onPlay：每个对手可抽疯狂卡，不收回抽的让你抽一张牌（MVP：对手全部抽疯狂卡）
     registerAbility('elder_thing_mi_go', 'onPlay', elderThingMiGo);
@@ -72,15 +89,18 @@ export function registerElderThingAbilities(): void {
     registerAbility('elder_thing_byakhee_pod', 'onPlay', elderThingByakheePod);
 
     registerAbility('elder_thing_begin_the_summoning_pod', 'onPlay', elderThingBeginTheSummoningPod);
-    registerAbility('elder_thing_dunwich_horror_pod', 'onPlay', elderThingDunwichHorrorPodOnPlay);
+    registerAbility('elder_thing_the_price_of_power_pod', 'onPlay', elderThingPriceOfPowerPodOnPlay);
     registerAbility('elder_thing_insanity_pod', 'onPlay', elderThingInsanityPod);
     registerAbility('elder_thing_power_of_madness_pod', 'onPlay', elderThingPowerOfMadnessPod);
     registerAbility('elder_thing_spreading_horror_pod', 'onPlay', elderThingSpreadingHorrorPod);
+    registerAbility('elder_thing_the_price_of_power_pod', 'special', elderThingPriceOfPowerPodSpecial);
     registerAbility('elder_thing_unfathomable_goals_pod', 'onPlay', elderThingUnfathomableGoalsPod);
     registerAbility('elder_thing_touch_of_madness_pod', 'onPlay', elderThingTouchOfMadnessPod);
 
     // Dunwich Horror POD：before scoring trigger (mandatory)
     registerTrigger('elder_thing_dunwich_horror_pod', 'beforeScoring', elderThingDunwichHorrorPodBeforeScoring, { mandatory: true });
+    // POD 版不会“回合结束自动消灭”，这里显式注册 no-op，阻止 alias 继承原版 onTurnEnd 触发。
+    registerTrigger('elder_thing_dunwich_horror_pod', 'onTurnEnd', elderThingDunwichHorrorPodOnTurnEndNoop);
 
     // 远古之物 POD：不受对手卡牌影响
     registerProtection('elder_thing_elder_thing_pod', 'destroy', elderThingPodProtectionChecker);
@@ -98,18 +118,19 @@ export function registerElderThingAbilities(): void {
     registerProtection('elder_thing_elder_thing', 'affect', elderThingProtectionChecker);
 }
 
-/** 拜亚基?onPlay：如果其他玩家有随从在本基地，抽一张疯狂卡 */
+/** 拜亚基 onPlay：每位在这里有随从的其他玩家各抽一张疯狂卡 */
 function elderThingByakhee(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
 
-    const hasOpponentMinion = base.minions.some(
-        m => m.controller !== ctx.playerId && m.uid !== ctx.cardUid
-    );
-    if (!hasOpponentMinion) return { events: [] };
-
-    const evt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'elder_thing_byakhee', ctx.now);
-    return { events: evt ? [evt] : [] };
+    const events: SmashUpEvent[] = [];
+    for (const pid of ctx.state.turnOrder) {
+        if (pid === ctx.playerId) continue;
+        if (!base.minions.some(m => m.controller === pid)) continue;
+        const evt = drawMadnessCards(pid, 1, ctx.state, 'elder_thing_byakhee', ctx.now);
+        if (evt) events.push(evt);
+    }
+    return { events };
 }
 
 /**
@@ -117,7 +138,7 @@ function elderThingByakhee(ctx: AbilityContext): AbilityResult {
  * "可以" → 每个对手需要选择是否抽疯狂卡，链式处理
  */
 function elderThingMiGo(ctx: AbilityContext): AbilityResult {
-    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    const opponents = getOrderedOpponentIds(ctx.state, ctx.playerId);
     if (opponents.length === 0) return { events: [] };
 
     // 链式处理：第一个对手选择
@@ -283,7 +304,7 @@ function elderThingBeginTheSummoning(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `elder_thing_begin_the_summoning_${ctx.now}`, ctx.playerId,
         '选择要放到牌库顶的随从', options as any[],
-        { sourceId: 'elder_thing_begin_the_summoning', targetType: 'generic' },
+        { sourceId: 'elder_thing_begin_the_summoning', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
@@ -411,7 +432,7 @@ function elderThingByakheePod(ctx: AbilityContext): AbilityResult {
 type PodYesNoChoiceValue = { choice: 'yes' } | { choice: 'no' };
 
 function elderThingMiGoPod(ctx: AbilityContext): AbilityResult {
-    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    const opponents = getOrderedOpponentIds(ctx.state, ctx.playerId);
     if (opponents.length === 0) return { events: [] };
     const interaction = createSimpleChoice(
         `elder_thing_mi_go_pod_${opponents[0]}_${ctx.now}`,
@@ -435,7 +456,7 @@ function elderThingMiGoPod(ctx: AbilityContext): AbilityResult {
 }
 
 function elderThingShoggothPod(ctx: AbilityContext): AbilityResult {
-    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    const opponents = getOrderedOpponentIds(ctx.state, ctx.playerId);
     if (opponents.length === 0) return { events: [] };
     const interaction = createSimpleChoice(
         `elder_thing_shoggoth_pod_${opponents[0]}_${ctx.now}`,
@@ -497,23 +518,14 @@ function elderThingBeginTheSummoningPod(ctx: AbilityContext): AbilityResult {
         ctx.playerId,
         '选择要放到牌库顶的随从',
         options as any[],
-        { sourceId: 'elder_thing_begin_the_summoning_pod', targetType: 'generic' },
+        { sourceId: 'elder_thing_begin_the_summoning_pod', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 function elderThingDunwichHorrorPodOnPlay(ctx: AbilityContext): AbilityResult {
-    // +5 power handled by ongoing modifiers elsewhere via card text; engine needs a permanent/ongoing modifier hook.
-    // We implement as a permanent +5 while attached (removed when detached) by using addPermanentPower now.
-    // NOTE: This is a simplification; we’ll keep the existing pattern used in this repo.
-    if (ctx.targetMinionUid) {
-        return { events: [addPermanentPower(ctx.targetMinionUid, ctx.baseIndex, 5, 'elder_thing_dunwich_horror_pod', ctx.now)] };
-    }
-    return { events: [] };
-}
-
-function elderThingDunwichHorrorPodSpecial(_ctx: AbilityContext): AbilityResult {
-    // Implemented via interaction handler / trigger chain later.
+    // POD：+5 仅来自 ongoing 修正；onPlay 不应再额外叠加永久力量，避免与 ongoing 叠加成 +10。
+    void ctx;
     return { events: [] };
 }
 
@@ -610,6 +622,54 @@ function elderThingTouchOfMadnessPod(ctx: AbilityContext): AbilityResult {
     return { events };
 }
 
+function elderThingPriceOfPowerPodSpecial(ctx: AbilityContext): AbilityResult {
+    const events: SmashUpEvent[] = [];
+    const scoringBase = ctx.state.bases[ctx.baseIndex];
+    const inBeforeScoringWindow = ctx.matchState.sys.phase === 'scoreBases'
+        || ctx.matchState.sys.responseWindow?.current?.windowType === 'meFirst';
+
+    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId).filter(pid => {
+        if (!inBeforeScoringWindow) return true;
+        return !!scoringBase?.minions.some(m => m.controller === pid);
+    });
+
+    const allRevealCards: { uid: string; defId: string }[] = [];
+    const revealTargetIds: string[] = [];
+    let totalMadness = 0;
+    for (const pid of opponents) {
+        const p = ctx.state.players[pid];
+        if (p.hand.length > 0) {
+            revealTargetIds.push(pid);
+            for (const c of p.hand) allRevealCards.push({ uid: c.uid, defId: c.defId });
+        }
+        totalMadness += p.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length;
+    }
+
+    if (allRevealCards.length > 0) {
+        const targetIds = revealTargetIds.length === 1 ? revealTargetIds[0] : revealTargetIds;
+        events.push(revealHand(targetIds, 'all', allRevealCards, 'elder_thing_the_price_of_power_pod', ctx.now, ctx.playerId));
+    }
+
+    if (totalMadness === 0) return { events };
+
+    const myMinions: Array<{ uid: string; baseIndex: number }> = [];
+    for (let baseIndex = 0; baseIndex < ctx.state.bases.length; baseIndex++) {
+        for (const m of ctx.state.bases[baseIndex].minions) {
+            if (m.controller === ctx.playerId) {
+                myMinions.push({ uid: m.uid, baseIndex });
+            }
+        }
+    }
+    if (myMinions.length === 0) return { events };
+
+    // 目前沿用“自动分配”实现：按轮询分配每个 +1 指示物（后续可升级为逐次可选目标交互）。
+    for (let i = 0; i < totalMadness; i++) {
+        const target = myMinions[i % myMinions.length];
+        events.push(addPowerCounter(target.uid, target.baseIndex, 1, 'elder_thing_the_price_of_power_pod', ctx.now));
+    }
+    return { events };
+}
+
 function elderThingDunwichHorrorPodBeforeScoring(ctx: TriggerContext): SmashUpEvent[] | { events: SmashUpEvent[]; matchState?: any } {
     const { state, baseIndex, now } = ctx;
     if (baseIndex === undefined) return [];
@@ -640,6 +700,10 @@ function elderThingDunwichHorrorPodBeforeScoring(ctx: TriggerContext): SmashUpEv
     );
     (interaction.data as any).continuationContext = { baseIndex, ...t };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+}
+
+function elderThingDunwichHorrorPodOnTurnEndNoop(_ctx: TriggerContext): SmashUpEvent[] {
+    return [];
 }
 
 /** 远古之物 onPlay：消灭两个己方其他随从或将本随从放到牌库底 */
@@ -697,7 +761,7 @@ function elderThingShoggoth(ctx: AbilityContext): AbilityResult {
         if (playerPower < 6) return { events: [] };
     }
 
-    const opponents = ctx.state.turnOrder.filter(pid => pid !== ctx.playerId);
+    const opponents = getOrderedOpponentIds(ctx.state, ctx.playerId);
     if (opponents.length === 0) return { events: [] };
 
     const options = [
@@ -751,6 +815,40 @@ function shoggothContinueChain(
         return { state: queueInteraction(state, interaction), events };
     }
     return { state, events };
+}
+
+function queueSpreadingHorrorPodMayPlay(
+    state: any,
+    ctx: { casterPlayerId: string; remaining: number; usedBases: number[] },
+    timestamp: number,
+): { state: any; events: SmashUpEvent[] } {
+    if (ctx.remaining <= 0) return { state, events: [] };
+
+    const player = state.core.players[ctx.casterPlayerId];
+    const hasPlayableDiscardMinion = player.discard.some((c: any) => {
+        if (c.type !== 'minion') return false;
+        const def = getCardDef(c.defId) as any;
+        return def?.type === 'minion' && def.power <= 3;
+    });
+    const hasAvailableBase = state.core.bases.some((_b: any, i: number) => !ctx.usedBases.includes(i));
+
+    // 没有可打出的随从或没有可选基地：该次机会自动跳过，继续下一个“可选打出”机会。
+    if (!hasPlayableDiscardMinion || !hasAvailableBase) {
+        return queueSpreadingHorrorPodMayPlay(state, { ...ctx, remaining: ctx.remaining - 1 }, timestamp);
+    }
+
+    const interaction = createSimpleChoice(
+        `elder_thing_spreading_horror_pod_may_${timestamp}_${ctx.remaining}`,
+        ctx.casterPlayerId,
+        '散播恐怖：你可以从弃牌堆打出一个战斗力≤3的随从',
+        [
+            { id: 'yes', label: '打出一个随从', value: { choice: 'yes' }, displayMode: 'button' as const },
+            { id: 'no', label: '不打出', value: { choice: 'no' }, displayMode: 'button' as const },
+        ] as any[],
+        { sourceId: 'elder_thing_spreading_horror_pod_may_play', targetType: 'button' },
+    );
+    (interaction.data as any).continuationContext = ctx;
+    return { state: queueInteraction(state, interaction), events: [] };
 }
 
 /** 注册远古之物派系的交互解决处理函数 */
@@ -1381,6 +1479,34 @@ export function registerElderThingInteractionHandlers(): void {
         return { state, events: [destroyMinion(ctx.minionUid, ctx.minionDefId, ctx.baseIndex, ctx.ownerId, playerId, 'elder_thing_dunwich_horror_pod', timestamp)] };
     });
 
+    registerInteractionHandler('elder_thing_the_price_of_power_pod_choose_base', (state, playerId, value, iData, random, timestamp) => {
+        const { baseIndex } = value as { baseIndex?: number };
+        const continuation = (iData as any)?.continuationContext as {
+            sourceId?: string;
+            perMadnessCounterAmount?: number;
+        } | undefined;
+        if (baseIndex === undefined || !continuation?.sourceId || continuation.perMadnessCounterAmount === undefined) {
+            return { state, events: [] };
+        }
+
+        const result = applyPriceOfPower({
+            state: state.core,
+            matchState: state,
+            playerId,
+            cardUid: '',
+            defId: 'elder_thing_the_price_of_power_pod',
+            baseIndex,
+            random,
+            now: timestamp,
+        }, {
+            sourceId: continuation.sourceId,
+            perMadnessCounterAmount: continuation.perMadnessCounterAmount,
+            baseIndex,
+        });
+
+        return { state: result.matchState ?? state, events: result.events };
+    });
+
     registerInteractionHandler('elder_thing_spreading_horror_pod_opponent', (state, _playerId, value, iData, _random, timestamp) => {
         const { choice } = value as { choice?: 'yes' | 'no' };
         const ctx = (iData as any)?.continuationContext as any;
@@ -1412,18 +1538,45 @@ export function registerElderThingInteractionHandlers(): void {
         }
         // after all opponents, if decliners >0 start play-from-discard loop
         if (ctx.decliners.length > 0) {
-            const bases = state.core.bases.map((b: any, i: number) => ({ baseIndex: i, label: getBaseDef(b.defId)?.name ?? `基地 ${i + 1}` }));
-            const interaction = createSimpleChoice(
-                `elder_thing_spreading_horror_pod_play_${timestamp}`,
-                ctx.casterPlayerId,
-                '散播恐怖：选择要打出随从的基地（每次必须不同）',
-                buildBaseTargetOptions(bases, state.core),
-                { sourceId: 'elder_thing_spreading_horror_pod_choose_base', targetType: 'base' },
+            const next = queueSpreadingHorrorPodMayPlay(
+                state,
+                { casterPlayerId: ctx.casterPlayerId, remaining: ctx.decliners.length, usedBases: [] as number[] },
+                timestamp,
             );
-            (interaction.data as any).continuationContext = { casterPlayerId: ctx.casterPlayerId, remaining: ctx.decliners.length, usedBases: [] as number[] };
-            return { state: queueInteraction(state, interaction), events };
+            return { state: next.state, events: [...events, ...next.events] };
         }
         return { state, events };
+    });
+
+    registerInteractionHandler('elder_thing_spreading_horror_pod_may_play', (state, playerId, value, iData, _random, timestamp) => {
+        const ctx = (iData as any)?.continuationContext as { casterPlayerId: string; remaining: number; usedBases: number[] } | undefined;
+        const { choice } = value as { choice?: 'yes' | 'no' };
+        if (!ctx) return { state, events: [] };
+
+        if (choice !== 'yes') {
+            const nextCtx = { ...ctx, remaining: ctx.remaining - 1 };
+            if (nextCtx.remaining <= 0) return { state, events: [] };
+            return queueSpreadingHorrorPodMayPlay(state, nextCtx, timestamp);
+        }
+
+        const bases = state.core.bases
+            .map((b: any, i: number) => ({ baseIndex: i, label: getBaseDef(b.defId)?.name ?? `基地 ${i + 1}` }))
+            .filter((b: any) => !ctx.usedBases.includes(b.baseIndex));
+        if (bases.length === 0) {
+            const nextCtx = { ...ctx, remaining: ctx.remaining - 1 };
+            if (nextCtx.remaining <= 0) return { state, events: [] };
+            return queueSpreadingHorrorPodMayPlay(state, nextCtx, timestamp);
+        }
+
+        const interaction = createSimpleChoice(
+            `elder_thing_spreading_horror_pod_choose_base_${timestamp}_${ctx.remaining}`,
+            playerId,
+            '散播恐怖：选择要打出随从的基地（每次必须不同）',
+            buildBaseTargetOptions(bases, state.core),
+            { sourceId: 'elder_thing_spreading_horror_pod_choose_base', targetType: 'base' },
+        );
+        (interaction.data as any).continuationContext = ctx;
+        return { state: queueInteraction(state, interaction), events: [] };
     });
 
     registerInteractionHandler('elder_thing_spreading_horror_pod_choose_base', (state, playerId, value, iData, _random, timestamp) => {
@@ -1436,14 +1589,18 @@ export function registerElderThingInteractionHandlers(): void {
             const def = getCardDef(c.defId) as any;
             return def?.type === 'minion' && def.power <= 3;
         });
-        if (discardMinions.length === 0) return { state, events: [] };
+        if (discardMinions.length === 0) {
+            const nextCtx = { ...ctx, remaining: (ctx.remaining ?? 1) - 1 };
+            if (nextCtx.remaining <= 0) return { state, events: [] };
+            return queueSpreadingHorrorPodMayPlay(state, nextCtx, timestamp);
+        }
         const options = discardMinions.map((c: any, i: number) => ({ id: `m-${i}`, label: getCardDef(c.defId)?.name ?? c.defId, value: { cardUid: c.uid, defId: c.defId }, displayMode: 'card' as const, _source: 'discard' as const }));
         const interaction = createSimpleChoice(
             `elder_thing_spreading_horror_pod_choose_minion_${timestamp}`,
             playerId,
             '散播恐怖：选择要从弃牌堆打出的随从（战斗力≤3）',
             options as any[],
-            { sourceId: 'elder_thing_spreading_horror_pod_choose_minion', targetType: 'generic' },
+            { sourceId: 'elder_thing_spreading_horror_pod_choose_minion', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
         );
         (interaction.data as any).continuationContext = { ...ctx, chosenBaseIndex: baseIndex };
         return { state: queueInteraction(state, interaction), events: [] };
@@ -1463,18 +1620,12 @@ export function registerElderThingInteractionHandlers(): void {
         const remaining = (ctx.remaining ?? 1) - 1;
         const usedBases = [...ctx.usedBases, ctx.chosenBaseIndex];
         if (remaining > 0) {
-            const bases = state.core.bases.map((b: any, i: number) => ({ baseIndex: i, label: getBaseDef(b.defId)?.name ?? `基地 ${i + 1}` })).filter((b: any) => !usedBases.includes(b.baseIndex));
-            if (bases.length > 0) {
-                const interaction = createSimpleChoice(
-                    `elder_thing_spreading_horror_pod_play_${timestamp}_${remaining}`,
-                    playerId,
-                    '散播恐怖：选择要打出随从的基地（每次必须不同）',
-                    buildBaseTargetOptions(bases, state.core),
-                    { sourceId: 'elder_thing_spreading_horror_pod_choose_base', targetType: 'base' },
-                );
-                (interaction.data as any).continuationContext = { casterPlayerId: playerId, remaining, usedBases };
-                return { state: queueInteraction(state, interaction), events };
-            }
+            const next = queueSpreadingHorrorPodMayPlay(
+                state,
+                { casterPlayerId: playerId, remaining, usedBases },
+                timestamp,
+            );
+            return { state: next.state, events: [...events, ...next.events] };
         }
         return { state, events };
     });
@@ -1576,12 +1727,41 @@ export function registerElderThingInteractionHandlers(): void {
  * ctx.baseIndex 为计分基地索引（由 Me First! 窗口传入）
  */
 function elderThingPriceOfPowerSpecial(ctx: AbilityContext): AbilityResult {
+    return applyPriceOfPower(ctx, {
+        sourceId: 'elder_thing_the_price_of_power',
+        perMadnessCounterAmount: 2,
+    });
+}
+
+function elderThingPriceOfPowerPodOnPlay(ctx: AbilityContext): AbilityResult {
+    // POD：平时可正常打出；若在 Me First! 窗口中打出，则改为 +2 指示物版本。
+    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
+    const perMadnessCounterAmount = windowType === 'meFirst' ? 2 : 1;
+    const resolvedBaseIndex = resolvePriceOfPowerPodBaseIndex(ctx);
+    if (resolvedBaseIndex === undefined) {
+        return promptPriceOfPowerPodChooseBase(ctx, perMadnessCounterAmount);
+    }
+    return applyPriceOfPower(ctx, {
+        sourceId: 'elder_thing_the_price_of_power_pod',
+        perMadnessCounterAmount,
+        baseIndex: resolvedBaseIndex,
+    });
+}
+
+function applyPriceOfPower(
+    ctx: AbilityContext,
+    params: {
+        sourceId: string;
+        perMadnessCounterAmount: number;
+        baseIndex?: number;
+    },
+): AbilityResult {
     const events: SmashUpEvent[] = [];
-    const scoringBaseIndex = ctx.baseIndex;
-    const base = ctx.state.bases[scoringBaseIndex];
+    const baseIndex = params.baseIndex ?? ctx.baseIndex;
+    if (baseIndex === undefined) return { events };
+    const base = ctx.state.bases[baseIndex];
     if (!base) return { events };
 
-    // 收集所有对手手牌用于合并展示（规则："所有有随从在这里的其他玩家展示他们的手牌"）
     const allRevealCards: { uid: string; defId: string }[] = [];
     const revealTargetIds: string[] = [];
     let totalMadness = 0;
@@ -1598,22 +1778,69 @@ function elderThingPriceOfPowerSpecial(ctx: AbilityContext): AbilityResult {
         totalMadness += opponent.hand.filter(c => c.defId === MADNESS_CARD_DEF_ID).length;
     }
 
-    // 合并展示所有对手手牌（一个事件，避免多人覆盖）
     if (allRevealCards.length > 0) {
         const targetIds = revealTargetIds.length === 1 ? revealTargetIds[0] : revealTargetIds;
-        events.push(revealHand(targetIds, 'all', allRevealCards, 'elder_thing_the_price_of_power', ctx.now, ctx.playerId));
+        events.push(revealHand(targetIds, 'all', allRevealCards, params.sourceId, ctx.now, ctx.playerId));
     }
 
     if (totalMadness === 0) return { events };
 
-    // 给己方在该基地的随从轮流 +2 力量
     const myMinions = base.minions.filter(m => m.controller === ctx.playerId);
     if (myMinions.length === 0) return { events };
     for (let i = 0; i < totalMadness; i++) {
         const target = myMinions[i % myMinions.length];
-        events.push(addPowerCounter(target.uid, scoringBaseIndex, 2, 'elder_thing_the_price_of_power', ctx.now));
+        events.push(addPowerCounter(target.uid, baseIndex, params.perMadnessCounterAmount, params.sourceId, ctx.now));
     }
     return { events };
+}
+
+function resolvePriceOfPowerPodBaseIndex(ctx: AbilityContext): number | undefined {
+    if (ctx.baseIndex !== undefined) return ctx.baseIndex;
+    const candidates = getPriceOfPowerPodCandidateBases(ctx);
+    if (candidates.length === 1) {
+        return candidates[0].baseIndex;
+    }
+    return undefined;
+}
+
+function getPriceOfPowerPodCandidateBases(ctx: AbilityContext): Array<{ baseIndex: number; label: string }> {
+    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
+    const candidateIndices = windowType === 'meFirst'
+        ? getScoringEligibleBaseIndices(ctx.state)
+        : ctx.state.bases.map((_, index) => index);
+
+    return candidateIndices
+        .map(baseIndex => {
+            const base = ctx.state.bases[baseIndex];
+            if (!base) return null;
+            const baseDef = getBaseDef(base.defId);
+            return {
+                baseIndex,
+                label: baseDef?.name ?? `基地 ${baseIndex + 1}`,
+            };
+        })
+        .filter((candidate): candidate is { baseIndex: number; label: string } => candidate !== null);
+}
+
+function promptPriceOfPowerPodChooseBase(
+    ctx: AbilityContext,
+    perMadnessCounterAmount: number,
+): AbilityResult {
+    const candidates = getPriceOfPowerPodCandidateBases(ctx);
+    if (candidates.length === 0) return { events: [] };
+
+    const interaction = createSimpleChoice(
+        `elder_thing_the_price_of_power_pod_choose_base_${ctx.now}`,
+        ctx.playerId,
+        '力量的代价：选择一个基地',
+        buildBaseTargetOptions(candidates, ctx.state),
+        { sourceId: 'elder_thing_the_price_of_power_pod_choose_base', targetType: 'base' },
+    );
+    (interaction.data as any).continuationContext = {
+        sourceId: 'elder_thing_the_price_of_power_pod',
+        perMadnessCounterAmount,
+    };
+    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 

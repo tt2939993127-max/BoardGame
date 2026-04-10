@@ -1,16 +1,25 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo, useReducer } from 'react';
 import type { CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CardPreview, registerCardPreviewRenderer } from '../../../components/common/media/CardPreview';
 import type { CardPreviewRef } from '../../../core';
 import smashUpEnglishMap from '../data/englishAtlasMap.json';
-import { getCardDef, getBaseDef, resolveCardName, resolveCardText } from '../data/cards';
+import {
+    getCardDef,
+    getBaseDef,
+    getBasePodVariantId,
+    getTitanDef,
+    isBasePodVariantSelected,
+    resolveCardName,
+    resolveCardText,
+} from '../data/cards';
+import { SMASHUP_ATLAS_IDS } from '../domain/ids';
 import { useSmashUpOverlay } from './SmashUpOverlayContext';
+import { ensureSmashUpAtlasRegistered } from './cardAtlas';
 
 type EnglishMapConfig = { atlasId: string; index: number };
 
 const TTS_MAP = smashUpEnglishMap as Record<string, EnglishMapConfig>;
-
 interface SmashUpRendererArgs {
     previewRef: CardPreviewRef;
     locale?: string;
@@ -38,6 +47,7 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
     const defId = previewRef.type === 'renderer' ? (previewRef.payload?.defId as string | undefined) : undefined;
     const cardUid = previewRef.type === 'renderer' ? (previewRef.payload?.cardUid as string | undefined) : undefined;
     const disableHoverOverlay = previewRef.type === 'renderer' ? (previewRef.payload?.disableHoverOverlay as boolean | undefined) ?? false : false;
+    const [, forceAtlasRefresh] = useReducer((n: number) => n + 1, 0);
 
     // 默认回退为原始数据的图集坐标，如果没有配置过的话
     const { originalAtlasId, originalIndex } = useMemo(() => {
@@ -50,94 +60,104 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
         if (baseDef?.previewRef?.type === 'atlas') {
             return { originalAtlasId: baseDef.previewRef.atlasId, originalIndex: baseDef.previewRef.index };
         }
-        console.log('[SmashUpCardRenderer] No previewRef found:', { defId, cardDef: !!cardDef, baseDef: !!baseDef });
+        const titanDef = getTitanDef(defId);
+        if (titanDef?.previewRef?.type === 'atlas') {
+            return { originalAtlasId: titanDef.previewRef.atlasId, originalIndex: titanDef.previewRef.index };
+        }
         return { originalAtlasId: '', originalIndex: 0 };
     }, [defId]);
 
-    let finalAtlasId = originalAtlasId;
-    let finalIndex = originalIndex;
-    
-    // 基础牌默认使用高清英文图集（由于缺少低清中文资源），POD 版本也全都是高清英文图集
-    const isBase = defId ? !!getBaseDef(defId) : false;
-    
-    // 判断是否为 POD 版本：
-    // 1. 卡牌 ID 以 _pod 结尾（POD 派系的卡牌）
-    // 2. 基地卡：只有当玩家选择了该基地对应派系的 POD 版本时，才使用 POD 图集
-    //    例如：base_wizard_academy (faction: 'wizards') 只有在玩家选择了 'wizards_pod' 时才用 POD 图集
-    //    如果玩家选择的是基础版 'wizards' + 其他 POD 派系，巫师基地仍然用中文图集
-    const isPodVersion = defId ? (defId.endsWith('_pod') || (isBase && (() => {
-        const baseDef = getBaseDef(defId);
-        if (!baseDef?.faction) return false;
-        // 检查玩家是否选择了该派系的 POD 版本（而不是基础版）
-        const podFactionId = `${baseDef.faction}_pod`;
-        return selectedFactions.has(podFactionId);
-    })())) : false;
-    
-    // 判断基地卡是否应该使用英文图集：
-    // 只有当玩家选择了该派系的 POD 版本时，才使用英文 POD 图集
-    // 基础版派系的基地卡继续使用中文图集（smashup:base1 等）
-    const shouldUseEnglishAtlas = defId && isBase && (() => {
-        const baseDef = getBaseDef(defId);
-        if (!baseDef?.faction) return false;
-        // 只检查 POD 版本
-        const podFactionId = `${baseDef.faction}_pod`;
-        return selectedFactions.has(podFactionId);
-    })();
-
-    // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
-    // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
-    // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集（兜底逻辑）
     const isEnglishVariant = effectiveLocale === 'en' || effectiveLocale === 'en-US';
-    
-    if (isEnglishVariant || isPodVersion || shouldUseEnglishAtlas || !originalAtlasId) {
-        // 对于基地卡，根据是否为 POD 版本选择不同的映射 key
-        let lookupKey = defId || '';
-        if (isBase && isPodVersion && defId) {
-            // POD 版本基地：使用 base_xxx_pod 映射
-            lookupKey = `${defId}_pod`;
-        }
-        // 否则使用原始 defId（基础版基地用 base_xxx，POD 卡牌用 xxx_pod）
-        
-        if (lookupKey) {
-            const mapped = TTS_MAP[lookupKey];
-            if (mapped) {
-                finalAtlasId = mapped.atlasId;
-                finalIndex = mapped.index;
+    const {
+        finalAtlasId,
+        finalIndex,
+        baseDef,
+        isBase,
+        basePodVariantId,
+        isPodVersion,
+        shouldUseEnglishAtlas,
+    } = useMemo(() => {
+        const resolvedBaseDef = defId ? getBaseDef(defId) : undefined;
+        const resolvedIsBase = !!resolvedBaseDef;
+        const resolvedBasePodVariantId = resolvedBaseDef ? getBasePodVariantId(resolvedBaseDef, selectedFactions) : undefined;
+        const resolvedIsSelectedPodBase = resolvedBaseDef ? isBasePodVariantSelected(resolvedBaseDef, selectedFactions) : false;
+        const resolvedIsPodVersion = defId ? (defId.endsWith('_pod') || resolvedIsSelectedPodBase) : false;
+        const resolvedShouldUseEnglishAtlas = resolvedIsBase && resolvedIsSelectedPodBase;
+
+        let resolvedAtlasId = originalAtlasId;
+        let resolvedIndex = originalIndex;
+
+        // 只有在英文模式下，或者该卡牌是 POD 专属卡牌，或者基地卡被选中，才去查 TTS 高清英文图集。
+        // 否则在中文模式下，保留原版 originalAtlasId（会读取 cards1 等带有内嵌中文的低清图）
+        // 特殊情况：如果 originalAtlasId 为空，同样回退使用英文图集（兜底逻辑）
+        if (isEnglishVariant || resolvedIsPodVersion || resolvedShouldUseEnglishAtlas || !originalAtlasId) {
+            let lookupKey = defId || '';
+            if (resolvedIsBase && resolvedIsPodVersion && resolvedBasePodVariantId) {
+                lookupKey = resolvedBasePodVariantId;
+            }
+
+            if (lookupKey) {
+                const mapped = TTS_MAP[lookupKey];
+                if (mapped) {
+                    resolvedAtlasId = mapped.atlasId;
+                    resolvedIndex = mapped.index;
+                }
             }
         }
-    }
 
-    // Pixie POD：同一 defId 有两张不同卡图（tts_atlas_6 第二排第 4/5 张：index 8/9）
-    // 当渲染器拿到了 cardUid（来自手牌/弃牌/展示等真实实例）时，按 uid 稳定分配两张图。
-    if (defId === 'trickster_pixie_pod') {
-        finalAtlasId = 'tts_atlas_6';
-        if (cardUid) {
-            const sum = cardUid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-            finalIndex = 8 + (sum % 2); // 8 或 9
-        } else {
-            finalIndex = 8;
+        // Pixie POD：同一 defId 有两张不同卡图（tts_atlas_6 第二排第 4/5 张：index 8/9）
+        // 当渲染器拿到了 cardUid（来自手牌/弃牌/展示等真实实例）时，按 uid 稳定分配两张图。
+        if (defId === 'trickster_pixie_pod') {
+            resolvedAtlasId = 'tts_atlas_6';
+            if (cardUid) {
+                const sum = cardUid.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
+                resolvedIndex = 8 + (sum % 2); // 8 或 9
+            } else {
+                resolvedIndex = 8;
+            }
         }
-    }
+
+        return {
+            finalAtlasId: resolvedAtlasId,
+            finalIndex: resolvedIndex,
+            baseDef: resolvedBaseDef,
+            isBase: resolvedIsBase,
+            basePodVariantId: resolvedBasePodVariantId,
+            isSelectedPodBase: resolvedIsSelectedPodBase,
+            isPodVersion: resolvedIsPodVersion,
+            shouldUseEnglishAtlas: resolvedShouldUseEnglishAtlas,
+        };
+    }, [cardUid, defId, isEnglishVariant, originalAtlasId, originalIndex, selectedFactions]);
+
+    useEffect(() => {
+        if (!finalAtlasId) return;
+        if (ensureSmashUpAtlasRegistered(finalAtlasId)) {
+            forceAtlasRefresh();
+        }
+    }, [finalAtlasId, forceAtlasRefresh]);
 
     // 获取当前语言的翻译用于覆盖层显示
     const { name, text } = useMemo(() => {
         if (!defId) return { name: '', text: '' };
         const cDef = getCardDef(defId);
         if (cDef) return { name: resolveCardName(cDef, t), text: resolveCardText(cDef, t) };
-        const bDef = getBaseDef(defId);
-        if (bDef) return { name: resolveCardName(bDef, t), text: resolveCardText(bDef, t) };
+        const bDef = baseDef ?? getBaseDef(defId);
+        if (bDef) {
+            const localizedBaseDef = basePodVariantId && basePodVariantId !== bDef.id
+                ? { ...bDef, id: basePodVariantId }
+                : bDef;
+            return { name: resolveCardName(localizedBaseDef, t), text: resolveCardText(localizedBaseDef, t) };
+        }
         return { name: '', text: '' };
-    }, [defId, t]);
+    }, [baseDef, basePodVariantId, defId, t]);
     
     // Early returns after all hooks
     if (previewRef.type !== 'renderer' || !defId) {
-        console.log('[SmashUpCardRenderer] Early return:', { previewRefType: previewRef.type, defId });
         return null;
     }
 
     // 如果未配置任何图集，只渲染外框和名字
     if (!finalAtlasId) {
-        console.log('[SmashUpCardRenderer] No atlas, fallback render:', { defId, name });
         return (
             <div className={`relative bg-[#f3f0e8] flex flex-col items-center justify-center p-2 border-2 border-slate-300 rounded overflow-hidden ${className || ''}`} style={style}>
                 <div className="text-[1vw] font-black uppercase text-slate-800 mb-1">{name}</div>
@@ -162,8 +182,14 @@ export const SmashUpCardRenderer: React.FC<SmashUpRendererArgs> = ({
     // 1. POD 派系卡牌 → 使用英文 locale（图片在 en/smashup/pod-assets/）
     // 2. 基地卡且玩家选择了 POD 版派系 → 使用英文 locale（图片在 en/smashup/pod-assets/）
     // 3. 使用了 TTS 英文图集（图集 ID 以 tts_atlas_ 开头）→ 使用英文 locale
-    // 4. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
-    const imageLocale = (isPodVersion || shouldUseEnglishAtlas || usesTtsAtlas) ? 'en' : effectiveLocale;
+    // 4. 原生泰坦图集当前只有本地资源，需要强制回到 zh-CN 目录
+    // 5. 其他情况（基础派系） → 使用当前语言（图片在 zh-CN/smashup/）
+    const usesNativeTitanAtlas = finalAtlasId === SMASHUP_ATLAS_IDS.TITANS;
+    const imageLocale = usesNativeTitanAtlas
+        ? 'zh-CN'
+        : (isPodVersion || shouldUseEnglishAtlas || usesTtsAtlas)
+            ? 'en'
+            : effectiveLocale;
 
     // 直接返回完整的卡牌（图片 + 覆盖层）
     return (

@@ -9,6 +9,7 @@
 
 import { io, type Socket } from 'socket.io-client';
 import msgpackParser from 'socket.io-msgpack-parser';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports, shouldTryAllSocketTransports } from '../../lib/socketConnectionConfig';
 import type { MatchPlayerInfo, ServerToClientEvents, ClientToServerEvents } from './protocol';
 import { applyPatches } from './patch';
 
@@ -115,12 +116,14 @@ export class GameTransportClient {
             `${this.config.server}/game`,
             {
                 parser: msgpackParser,
-                transports: ['websocket', 'polling'], // 允许降级到轮询
+                transports: getSocketIoTransports(),
+                tryAllTransports: shouldTryAllSocketTransports(),
                 reconnection: true,
                 reconnectionAttempts: Infinity,
                 reconnectionDelay: 1000,
                 reconnectionDelayMax: 5000,
                 autoConnect: true,
+                timeout: SOCKET_CONNECT_TIMEOUT_MS,
             },
         );
 

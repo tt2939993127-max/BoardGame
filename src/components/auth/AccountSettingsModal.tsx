@@ -6,6 +6,7 @@ import { ModalBase } from '../common/overlays/ModalBase';
 import { AvatarUpdateModal } from './AvatarUpdateModal';
 import { EmailBindModal } from './EmailBindModal';
 import { User, Image, Mail, Lock, Pencil, Check, X } from 'lucide-react';
+import { PasswordField } from '../common/PasswordField';
 
 interface AccountSettingsModalProps {
     isOpen: boolean;
@@ -181,8 +182,21 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
     const dividerClass = 'h-px bg-parchment-card-border/30 mx-1';
 
     return (
-        <ModalBase onClose={onClose} closeOnBackdrop={closeOnBackdrop} containerClassName="p-4 sm:p-6">
-            <div className="bg-parchment-card-bg pointer-events-auto w-full max-w-[420px] shadow-parchment-card-hover border border-parchment-card-border/50 p-6 sm:p-8 relative rounded-sm font-serif">
+        <ModalBase
+            onClose={onClose}
+            closeOnBackdrop={closeOnBackdrop}
+            containerClassName="p-4 sm:p-6"
+            containerStyle={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
+        >
+            <div
+                className="bg-parchment-card-bg pointer-events-auto w-full max-w-[420px] max-h-[var(--runtime-modal-max-height)] overflow-y-auto shadow-parchment-card-hover border border-parchment-card-border/50 p-6 sm:p-8 relative rounded-sm font-serif"
+                data-testid="account-settings-modal"
+            >
                 {/* 标题 */}
                 <div className="text-center mb-5">
                     <div className="text-xs sm:text-sm text-parchment-light-text font-bold uppercase tracking-wider">
@@ -205,9 +219,9 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                                 <User size={14} className="text-parchment-light-text" />
                             </div>
                         )}
-                        <button onClick={handleOpenAvatar} className={actionBtnClass}>
-                            {t('account.nickname.edit')}
-                        </button>
+                            <button onClick={handleOpenAvatar} className={actionBtnClass}>
+                                {t('account.nickname.edit')}
+                            </button>
                     </div>
                 </div>
 
@@ -220,34 +234,36 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                         {t('account.section.nickname')}
                     </span>
                     {!isEditingName ? (
-                        <div className="flex items-center gap-3">
+                        <div className="flex w-full items-center gap-3 sm:w-auto">
                             <span className={valueClass}>{user.username}</span>
                             {nameSuccess && (
                                 <span className="text-xs text-green-600">
                                     <Check size={14} />
                                 </span>
                             )}
-                            <button onClick={handleStartEditName} className={actionBtnClass}>
+                            <button onClick={handleStartEditName} className={actionBtnClass} data-testid="account-settings-edit-nickname">
                                 {t('account.nickname.edit')}
                             </button>
                         </div>
                     ) : (
-                        <div className="flex items-center gap-2">
+                        <div className="flex w-full items-center gap-2 sm:w-auto">
                             <input
                                 type="text"
                                 value={newUsername}
                                 onChange={(e) => setNewUsername(e.target.value)}
                                 maxLength={20}
-                                className="w-32 px-2 py-1 text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
+                                className="auth-form-input min-w-0 flex-1 sm:w-32 px-2 py-1 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
                                 placeholder={t('account.nickname.placeholder')}
                                 autoFocus
                                 onKeyDown={(e) => { if (e.key === 'Enter') void handleSaveName(); if (e.key === 'Escape') handleCancelEditName(); }}
+                                data-testid="account-settings-nickname-input"
                             />
                             <button
                                 onClick={() => void handleSaveName()}
                                 disabled={nameSaving}
                                 className="p-1 text-green-600 hover:text-green-700 transition-colors cursor-pointer disabled:opacity-50"
                                 aria-label={t('account.nickname.save')}
+                                data-testid="account-settings-save-nickname"
                             >
                                 <Check size={16} />
                             </button>
@@ -286,7 +302,7 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                         ) : (
                             <span className="text-xs text-parchment-light-text italic">{t('account.email.unbound')}</span>
                         )}
-                        <button onClick={handleOpenEmail} className={actionBtnClass}>
+                        <button onClick={handleOpenEmail} className={actionBtnClass} data-testid="account-settings-open-email">
                             {user.email ? t('account.email.change') : t('account.email.bind')}
                         </button>
                     </div>
@@ -308,39 +324,48 @@ export const AccountSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Accou
                                     <Check size={14} />
                                 </span>
                             )}
-                            <button onClick={handleStartEditPassword} className={actionBtnClass}>
+                            <button onClick={handleStartEditPassword} className={actionBtnClass} data-testid="account-settings-edit-password">
                                 {t('account.password.change')}
                             </button>
                         </div>
                     ) : (
                         <div className="w-full mt-3 space-y-3">
-                            <input
-                                type="password"
+                            <PasswordField
                                 value={currentPassword}
                                 onChange={(e) => setCurrentPassword(e.target.value)}
-                                className="w-full px-2 py-1.5 text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
+                                className="auth-form-input w-full px-2 py-1.5 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
                                 placeholder={t('account.password.current')}
                                 autoFocus
+                                autoComplete="current-password"
+                                data-testid="account-settings-current-password-input"
+                                toggleButtonTestId="account-settings-current-password-toggle"
+                                toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                             />
-                            <input
-                                type="password"
+                            <PasswordField
                                 value={newPassword}
                                 onChange={(e) => setNewPassword(e.target.value)}
-                                className="w-full px-2 py-1.5 text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
+                                className="auth-form-input w-full px-2 py-1.5 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
                                 placeholder={t('account.password.new')}
+                                autoComplete="new-password"
+                                data-testid="account-settings-new-password-input"
+                                toggleButtonTestId="account-settings-new-password-toggle"
+                                toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                             />
-                            <input
-                                type="password"
+                            <PasswordField
                                 value={confirmPassword}
                                 onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full px-2 py-1.5 text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
+                                className="auth-form-input w-full px-2 py-1.5 text-base sm:text-sm bg-transparent border-b-2 border-parchment-card-border/30 text-parchment-base-text caret-parchment-base-text outline-none focus:border-parchment-base-text transition-colors"
                                 placeholder={t('account.password.confirm')}
                                 onKeyDown={(e) => { if (e.key === 'Enter') void handleSavePassword(); }}
+                                autoComplete="new-password"
+                                data-testid="account-settings-confirm-password-input"
+                                toggleButtonTestId="account-settings-confirm-password-toggle"
+                                toggleButtonClassName="text-parchment-light-text hover:text-parchment-base-text"
                             />
                             {passwordError && (
                                 <div className="text-xs text-red-500">{passwordError}</div>
                             )}
-                            <div className="flex items-center justify-end gap-3 pt-1">
+                            <div className="flex flex-wrap items-center justify-end gap-3 pt-1">
                                 <button
                                     onClick={handleCancelEditPassword}
                                     className="px-3 py-1.5 text-xs font-bold uppercase tracking-wider border border-parchment-card-border/50 text-parchment-base-text bg-parchment-card-bg hover:bg-parchment-base-bg transition-colors rounded-[4px] cursor-pointer"

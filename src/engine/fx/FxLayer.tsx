@@ -49,9 +49,12 @@ export const FxLayer: React.FC<FxLayerProps> = ({
 
   // 稳定化外部回调引用
   const onCompleteRef = useRef(onEffectComplete);
-  onCompleteRef.current = onEffectComplete;
   const onImpactRef = useRef(onEffectImpact);
-  onImpactRef.current = onEffectImpact;
+
+  React.useEffect(() => {
+    onCompleteRef.current = onEffectComplete;
+    onImpactRef.current = onEffectImpact;
+  }, [onEffectComplete, onEffectImpact]);
 
   const handleComplete = useCallback((id: string, cue: string) => {
     onCompleteRef.current?.(id, cue);

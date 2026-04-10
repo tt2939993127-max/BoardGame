@@ -12,7 +12,7 @@
  * ```
  */
 
-import { useMemo, useRef } from 'react';
+import { useCallback, useMemo, useRef } from 'react';
 import { resolveDevFlag } from '../env';
 
 const isDev = resolveDevFlag();
@@ -49,7 +49,7 @@ export function useSpectatorMoves<T extends Record<string, unknown>>(
     // 使用 ref 记录已阻止的操作，避免重复日志
     const blockedLogRef = useRef<Set<string>>(new Set());
     
-    const logBlocked = (action: string) => {
+    const logBlocked = useCallback((action: string) => {
         if (!enableDevLog || !isDev) return;
         if (blockedLogRef.current.has(action)) return;
         
@@ -60,7 +60,7 @@ export function useSpectatorMoves<T extends Record<string, unknown>>(
         } else {
             console.warn(`[${logPrefix}] blocked`, { action, playerID, isSpectator });
         }
-    };
+    }, [enableDevLog, isSpectator, logFn, logPrefix, playerID]);
     
     // 使用 useMemo 避免每次渲染都创建新的 Proxy 对象
     return useMemo(() => {
@@ -87,5 +87,5 @@ export function useSpectatorMoves<T extends Record<string, unknown>>(
                 };
             }
         }) as T;
-    }, [rawMoves, isSpectator, playerID, logFn, enableDevLog, logPrefix]);
+    }, [rawMoves, isSpectator, logBlocked]);
 }

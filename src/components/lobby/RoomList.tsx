@@ -5,7 +5,8 @@ import type { RoomItem, ActiveMatchInfo } from './roomActions';
 interface RoomListProps {
     roomItems: RoomItem[];
     activeMatch: ActiveMatchInfo | null;
-    isLoading: boolean;
+    isActionLoading: boolean;
+    isLobbyLoading: boolean;
     onJoinRoom: (matchID: string, gameName?: string) => void;
     onJoinRequest: (matchID: string, gameName?: string) => void;
     onAction: (matchID: string, playerID: string, credentials: string, isHost: boolean) => void;
@@ -17,7 +18,8 @@ interface RoomListProps {
 export const RoomList = ({
     roomItems,
     activeMatch,
-    isLoading,
+    isActionLoading,
+    isLobbyLoading,
     onJoinRoom,
     onJoinRequest,
     onAction,
@@ -34,11 +36,11 @@ export const RoomList = ({
                 {(() => {
                     if (activeMatch) {
                         return (
-                            <div className="w-full py-3 px-4 bg-parchment-base-bg/50 border border-parchment-card-border/50 rounded-[4px] flex flex-col items-center gap-2">
+                            <div className="w-full py-3 px-4 bg-parchment-base-bg/50 border border-parchment-card-border/50 rounded-[4px] flex flex-col items-center gap-3">
                                 <span className="text-xs text-parchment-light-text font-bold uppercase tracking-wider">
                                     {t('activeMatch.notice')}
                                 </span>
-                                <div className="flex gap-2">
+                                <div className="flex flex-wrap justify-center gap-2">
                                     <button
                                         onClick={() => onJoinRoom(activeMatch.matchID, activeMatch.gameName)}
                                         className="px-4 py-1.5 bg-parchment-card-border text-parchment-card-bg text-xs font-bold rounded hover:bg-parchment-brown transition-colors cursor-pointer uppercase tracking-wider"
@@ -71,6 +73,15 @@ export const RoomList = ({
                                         </button>
                                     )}
                                 </div>
+                                <button
+                                    type="button"
+                                    onClick={onOpenCreateRoom}
+                                    disabled={isActionLoading}
+                                    data-testid="game-details-open-create-room"
+                                    className="w-full py-2.5 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-xs uppercase tracking-widest"
+                                >
+                                    {isActionLoading ? t('button.processing') : t('actions.createRoom')}
+                                </button>
                             </div>
                         );
                     }
@@ -78,10 +89,11 @@ export const RoomList = ({
                     return (
                         <button
                             onClick={onOpenCreateRoom}
-                            disabled={isLoading}
+                            disabled={isActionLoading}
+                            data-testid="game-details-open-create-room"
                             className="w-full py-3 bg-parchment-base-text hover:bg-parchment-brown text-parchment-card-bg font-bold rounded-[4px] shadow-md hover:shadow-lg active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50 cursor-pointer text-sm uppercase tracking-widest"
                         >
-                            {isLoading ? t('button.processing') : t('actions.createRoom')}
+                            {isActionLoading ? t('button.processing') : t('actions.createRoom')}
                         </button>
                     );
                 })()}
@@ -89,7 +101,18 @@ export const RoomList = ({
 
             {/* 房间列表 */}
             <div className="flex-1 overflow-y-auto space-y-2 pr-2 custom-scrollbar">
-                {roomItems.length === 0 ? (
+                {isLobbyLoading ? (
+                    <div
+                        role="status"
+                        aria-live="polite"
+                        className="flex h-40 flex-col items-center justify-center gap-3 rounded-[6px] border border-dashed border-parchment-card-border/30 bg-parchment-base-bg/35"
+                    >
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-parchment-brown/20 border-t-parchment-brown" />
+                        <p className="text-xs italic tracking-wider text-parchment-light-text">
+                            {t('rooms.loading')}
+                        </p>
+                    </div>
+                ) : roomItems.length === 0 ? (
                     <div className="text-center text-parchment-light-text py-10 italic text-sm border border-dashed border-parchment-card-border/30 rounded-[4px]">
                         {t('rooms.empty')}
                     </div>
@@ -97,6 +120,7 @@ export const RoomList = ({
                     roomItems.map((room) => (
                         <div
                             key={room.matchID}
+                            data-testid={`room-list-item-${room.matchID}`}
                             className={clsx(
                                 "flex items-center justify-between p-3 rounded-[4px] border transition-colors",
                                 room.isMyRoom
@@ -134,7 +158,7 @@ export const RoomList = ({
                                                 )}
                                             </div>
                                             <div className="text-[10px] text-parchment-light-text mt-0.5">
-                                                {seatLabels.join(' vs ')}
+                                                {seatLabels.join(t('rooms.seatSeparator'))}
                                             </div>
                                         </>
                                     );
@@ -190,6 +214,7 @@ export const RoomList = ({
                                 )}
 
                                 <button
+                                    data-testid={`room-list-join-${room.matchID}`}
                                     onClick={() => onJoinRequest(room.matchID, room.gameName)}
                                     disabled={(room.isFull && !room.canReconnect) || (room.isEmptyRoom && !room.isOwnerRoom)}
                                     className={clsx(

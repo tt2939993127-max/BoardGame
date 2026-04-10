@@ -4,14 +4,127 @@ import { existsSync } from 'fs';
 import { join } from 'path';
 import type { IncomingMessage } from 'http';
 import type { Socket } from 'net';
+import os from 'node:os';
+import path from 'node:path';
 import express from 'express';
 import { createProxyMiddleware, fixRequestBody } from 'http-proxy-middleware';
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
+import mongoose from 'mongoose';
 import { AppModule } from './app.module';
 import { MsgpackIoAdapter } from './adapters/msgpack-io.adapter';
+import { createAdminTestLatencyMiddleware } from './modules/admin/admin-test-latency.middleware';
+import { AdminTestLatencyService } from './modules/admin/admin-test-latency.service';
 import { GlobalHttpExceptionFilter } from './shared/filters/http-exception.filter';
 import logger from '../../../server/logger';
+import { isNoCacheSpaEntryPath, shouldServeSpaFallback } from './spa-fallback';
+import { LONG_CACHE_MAX_AGE, NO_CACHE_HEADER, isNoCacheStaticFilePath } from './spa-fallback';
+
+type TestMongoServerHandle = {
+    stop(): Promise<void>;
+    getUri(): string;
+};
+
+const LOCAL_TEST_MONGO_URI = 'mongodb://127.0.0.1:27017';
+const TEST_MONGO_PROBE_TIMEOUT_MS = 1500;
+const TEST_MONGO_START_RETRIES = 3;
+
+let testMongoServer: TestMongoServerHandle | null = null;
+
+const shouldPrepareTestMongo = () => process.env.NODE_ENV === 'test';
+
+const configureMongoMemoryServerEnv = () => {
+    process.env.MONGOMS_PREFER_GLOBAL_PATH ??= 'true';
+    process.env.MONGOMS_DOWNLOAD_DIR ??= path.join(os.homedir(), '.cache', 'mongodb-binaries');
+    process.env.MONGOMS_EXP_NET0LISTEN ??= 'false';
+
+    if (process.env.TEST_MONGOD_PATH && !process.env.MONGOMS_SYSTEM_BINARY) {
+        process.env.MONGOMS_SYSTEM_BINARY = process.env.TEST_MONGOD_PATH;
+    }
+};
+
+const delay = async (ms: number) => {
+    await new Promise((resolve) => setTimeout(resolve, ms));
+};
+
+const createLoopbackMongoMemoryServer = async (): Promise<TestMongoServerHandle> => {
+    configureMongoMemoryServerEnv();
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= TEST_MONGO_START_RETRIES; attempt += 1) {
+        try {
+            return await MongoMemoryServer.create({
+                instance: {
+                    ip: '127.0.0.1',
+                    port: 0,
+                },
+            });
+        } catch (error) {
+            lastError = error;
+            const code = error instanceof Error && 'code' in error ? String(error.code) : '';
+            const isRetryable = code === 'EACCES' || code === 'EADDRINUSE' || code === 'EBUSY' || code === 'ETXTBSY';
+            if (!isRetryable || attempt === TEST_MONGO_START_RETRIES) {
+                throw error;
+            }
+            await delay(attempt * 1000);
+        }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('创建 MongoMemoryServer 失败');
+};
+
+const resolvePreferredTestMongoUri = async (): Promise<{ mongo: TestMongoServerHandle | null; mongoUri: string }> => {
+    const externalMongoUri = process.env.MONGO_URI?.trim();
+    if (externalMongoUri) {
+        return { mongo: null, mongoUri: externalMongoUri };
+    }
+
+    const probeConnection = mongoose.createConnection(LOCAL_TEST_MONGO_URI, {
+        dbName: 'admin',
+        serverSelectionTimeoutMS: TEST_MONGO_PROBE_TIMEOUT_MS,
+    });
+
+    try {
+        await probeConnection.asPromise();
+        await probeConnection.close();
+        return { mongo: null, mongoUri: LOCAL_TEST_MONGO_URI };
+    } catch {
+        try {
+            await probeConnection.close();
+        } catch {
+            // ignore probe cleanup failure
+        }
+    }
+
+    const mongo = await createLoopbackMongoMemoryServer();
+    return { mongo, mongoUri: mongo.getUri() };
+};
+
+const prepareTestMongoIfNeeded = async () => {
+    if (!shouldPrepareTestMongo() || process.env.MONGO_URI?.trim()) {
+        return;
+    }
+
+    const { mongo, mongoUri } = await resolvePreferredTestMongoUri();
+    process.env.MONGO_URI = mongoUri;
+    testMongoServer = mongo;
+
+    logger.info('[API] 测试模式 Mongo 已就绪', {
+        source: mongo ? 'memory-server' : 'external-or-local',
+        mongo_uri: mongo ? 'mongodb-memory-server' : mongoUri,
+    });
+};
+
+const stopTestMongoIfNeeded = async () => {
+    if (!testMongoServer) {
+        return;
+    }
+
+    const server = testMongoServer;
+    testMongoServer = null;
+    await server.stop();
+};
 
 const initSentryInBackground = async () => {
     const dsn = process.env.SENTRY_DSN?.trim();
@@ -36,10 +149,15 @@ const initSentryInBackground = async () => {
 
 async function bootstrap() {
     const bootstrapStartedAt = Date.now();
+    await prepareTestMongoIfNeeded();
 
     const webOrigins = process.env.WEB_ORIGINS
         ? process.env.WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
         : [];
+    const appWebOrigins = process.env.APP_WEB_ORIGINS
+        ? process.env.APP_WEB_ORIGINS.split(',').map(s => s.trim()).filter(Boolean)
+        : ['http://localhost', 'https://localhost', 'capacitor://localhost'];
+    const allowedOrigins = new Set([...webOrigins, ...appWebOrigins]);
     const isDev = !process.env.WEB_ORIGINS;
 
     const app = await NestFactory.create(AppModule, {
@@ -49,7 +167,7 @@ async function bootstrap() {
                 if (isDev && (origin.includes('localhost') || origin.includes('127.0.0.1'))) {
                     return callback(null, true);
                 }
-                if (webOrigins.includes(origin)) {
+                if (allowedOrigins.has(origin)) {
                     return callback(null, true);
                 }
                 callback(new Error(`CORS: origin ${origin} not allowed`));
@@ -64,6 +182,7 @@ async function bootstrap() {
     const expressApp = app.getHttpAdapter().getInstance();
     expressApp.use(express.json({ limit: '2mb' }));
     expressApp.use(express.urlencoded({ extended: true, limit: '2mb' }));
+    expressApp.use('/admin', createAdminTestLatencyMiddleware(app.get(AdminTestLatencyService)));
 
     const gameServerTarget =
         process.env.GAME_SERVER_PROXY_TARGET
@@ -91,27 +210,49 @@ async function bootstrap() {
     }
     if (existsSync(distPath)) {
         expressApp.use('/assets', express.static(join(distPath, 'assets'), {
-            maxAge: '1y',
+            maxAge: LONG_CACHE_MAX_AGE,
             immutable: true,
+        }));
+        expressApp.use('/fonts', express.static(join(distPath, 'fonts'), {
+            maxAge: LONG_CACHE_MAX_AGE,
+            immutable: true,
+            etag: true,
+            lastModified: true,
+        }));
+        expressApp.use('/logos', express.static(join(distPath, 'logos'), {
+            maxAge: LONG_CACHE_MAX_AGE,
+            immutable: true,
+            etag: true,
+            lastModified: true,
+        }));
+        expressApp.use('/game-data', express.static(join(distPath, 'game-data'), {
+            maxAge: LONG_CACHE_MAX_AGE,
+            immutable: true,
+            etag: true,
+            lastModified: true,
+            setHeaders: (res, filePath) => {
+                if (isNoCacheStaticFilePath(filePath)) {
+                    res.setHeader('Cache-Control', NO_CACHE_HEADER);
+                }
+            },
         }));
         expressApp.use(express.static(distPath, {
             etag: true,
             lastModified: true,
             setHeaders: (res, filePath) => {
-                if (filePath.endsWith('.html')) {
-                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                if (isNoCacheStaticFilePath(filePath)) {
+                    res.setHeader('Cache-Control', NO_CACHE_HEADER);
                 }
             },
         }));
 
-        const spaExclude = /^\/(auth|health|social-socket|games|default|lobby-socket|socket\.io|admin|ugc|layout|feedback|review|invite|message|friend|user-settings|sponsors|notifications|game-changelogs)(\/|$)/;
         expressApp.get('*', (req: express.Request, res: express.Response, next: express.NextFunction) => {
-            if (/^\/admin\/changelogs\/?$/.test(req.path)) {
-                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            if (isNoCacheSpaEntryPath(req.path)) {
+                res.setHeader('Cache-Control', NO_CACHE_HEADER);
                 return res.sendFile(join(distPath, 'index.html'));
             }
-            if (spaExclude.test(req.path)) return next();
-            res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+            if (!shouldServeSpaFallback(req.path)) return next();
+            res.setHeader('Cache-Control', NO_CACHE_HEADER);
             return res.sendFile(join(distPath, 'index.html'));
         });
     }
@@ -146,6 +287,25 @@ async function bootstrap() {
     });
 
     void initSentryInBackground();
+
+    const shutdown = async (signal: string) => {
+        try {
+            await app.close();
+            await stopTestMongoIfNeeded();
+        } catch (error) {
+            logger.error(`[API] ${signal} 优雅关闭失败:`, error);
+        } finally {
+            process.exit(0);
+        }
+    };
+
+    process.once('SIGTERM', () => {
+        void shutdown('SIGTERM');
+    });
+
+    process.once('SIGINT', () => {
+        void shutdown('SIGINT');
+    });
 }
 
 bootstrap().catch((error) => {

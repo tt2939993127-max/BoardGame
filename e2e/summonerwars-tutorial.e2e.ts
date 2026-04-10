@@ -11,14 +11,51 @@
  * - 教程完成
  */
 
-import { test, expect, type BrowserContext, type Page } from '@playwright/test';
-import { waitForState } from './helpers/waitForState';
+import { test, expect, type Page } from '@playwright/test';
 import {
   initContext,
-  setEnglishLocale,
+  setChineseLocale,
   disableAudio,
-  blockAudioRequests,
 } from './helpers/common';
+
+const MOBILE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
+
+const readTutorialHighlightMetrics = async (page: Page, _targetId: string) => page.evaluate((resolvedTargetId) => {
+  const target = document.querySelector(`[data-tutorial-id="${resolvedTargetId}"]`) as HTMLElement | null;
+  const highlight = document.querySelector('[data-tutorial-step] > div.absolute.pointer-events-none') as HTMLElement | null;
+  const root = document.documentElement;
+  const body = document.body;
+  const shell = document.querySelector('.mobile-board-shell') as HTMLElement | null;
+
+  if (!target || !highlight) {
+    return {
+      targetRect: null,
+      highlightRect: null,
+      shellRect: shell?.getBoundingClientRect() ?? null,
+      innerWidth: window.innerWidth,
+      innerHeight: window.innerHeight,
+      rootScrollWidth: root.scrollWidth,
+      bodyScrollWidth: body.scrollWidth,
+    };
+  }
+
+  const targetRect = target.getBoundingClientRect();
+  const highlightRect = highlight.getBoundingClientRect();
+
+  return {
+    targetRect,
+    highlightRect,
+    shellRect: shell?.getBoundingClientRect() ?? null,
+    innerWidth: window.innerWidth,
+    innerHeight: window.innerHeight,
+    rootScrollWidth: root.scrollWidth,
+    bodyScrollWidth: body.scrollWidth,
+    deltaLeft: Math.abs(targetRect.left - (highlightRect.left + 4)),
+    deltaTop: Math.abs(targetRect.top - (highlightRect.top + 4)),
+    deltaWidth: Math.abs(targetRect.width - (highlightRect.width - 8)),
+    deltaHeight: Math.abs(targetRect.height - (highlightRect.height - 8)),
+  };
+}, _targetId);
 
 /** 等待教程覆盖层出现并显示指定步骤 */
 const waitForTutorialStep = async (page: Page, stepId: string, timeout = 30000) => {
@@ -108,14 +145,14 @@ test.describe('Summoner Wars Tutorial E2E', () => {
 
   test('教程完整流程 - 从初始化到完成', async ({ page }) => {
     test.setTimeout(120000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
     await navigateToTutorial(page);
 
     // Step 0: setup（AI 自动执行）
     // Step 1: welcome — 高亮棋盘
     await waitForTutorialStep(page, 'welcome', 40000);
-    await expect(page.getByText(/Welcome to Summoner Wars/i)).toBeVisible();
+    await expect(page.getByText(/欢迎来到召唤师战争/i)).toBeVisible();
     await clickNext(page);
 
     // Step 2: summoner-intro — 高亮己方召唤师
@@ -368,7 +405,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
   });
 
   test('教程入口可达性 - 从首页进入教程', async ({ page }) => {
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/');
@@ -392,12 +429,12 @@ test.describe('Summoner Wars Tutorial E2E', () => {
     await page.waitForURL(/\/play\/summonerwars\/tutorial/, { timeout: 15000 });
 
     await waitForTutorialStep(page, 'welcome', 40000);
-    await expect(page.getByText(/Welcome to Summoner Wars|欢迎来到召唤师战争/i)).toBeVisible();
+    await expect(page.getByText(/欢迎来到召唤师战争/i)).toBeVisible();
   });
 
   test('教程概览步骤 - 非交互步骤可正常点击推进', async ({ page }) => {
     test.setTimeout(60000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/play/summonerwars/tutorial');
@@ -428,7 +465,7 @@ test.describe('Summoner Wars Tutorial E2E', () => {
 
   test('教程高亮目标 - 每个步骤都高亮对应 UI 元素', async ({ page }) => {
     test.setTimeout(60000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/play/summonerwars/tutorial');
@@ -474,9 +511,52 @@ test.describe('Summoner Wars Tutorial E2E', () => {
     await expect(page.locator('[data-tutorial-id="sw-phase-tracker"]')).toBeVisible();
   });
 
+  test('手机横屏下教程蓝框应与高亮目标对齐', async ({ page }) => {
+    test.setTimeout(60000);
+    await page.setViewportSize(MOBILE_LANDSCAPE_VIEWPORT);
+    await setChineseLocale(page);
+    await disableAudio(page);
+
+    await page.goto('/play/summonerwars/tutorial');
+    await page.waitForLoadState('domcontentloaded');
+
+    const steps: Array<{ stepId: string; targetId: string }> = [
+      { stepId: 'welcome', targetId: 'sw-map-area' },
+      { stepId: 'summoner-intro', targetId: 'sw-my-summoner' },
+      { stepId: 'enemy-summoner', targetId: 'sw-enemy-summoner' },
+      { stepId: 'gate-intro', targetId: 'sw-my-gate' },
+      { stepId: 'hand-intro', targetId: 'sw-hand-area' },
+      { stepId: 'card-anatomy', targetId: 'sw-first-hand-card' },
+      { stepId: 'magic-intro', targetId: 'sw-player-bar' },
+      { stepId: 'phase-intro', targetId: 'sw-phase-tracker' },
+    ];
+
+    for (const { stepId, targetId } of steps) {
+      await waitForTutorialStep(page, stepId, 40000);
+      await expect(page.locator(`[data-tutorial-id="${targetId}"]`)).toBeVisible({ timeout: 10000 });
+      await page.waitForTimeout(450);
+
+      const metrics = await readTutorialHighlightMetrics(page, targetId);
+      expect(metrics.rootScrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 1);
+      expect(metrics.bodyScrollWidth).toBeLessThanOrEqual(metrics.innerWidth + 1);
+      expect(metrics.shellRect?.left ?? -1).toBeGreaterThanOrEqual(-1);
+      expect(metrics.shellRect?.right ?? 99999).toBeLessThanOrEqual(metrics.innerWidth + 1);
+      expect(metrics.targetRect).not.toBeNull();
+      expect(metrics.highlightRect).not.toBeNull();
+      expect(metrics.deltaLeft ?? 99999).toBeLessThanOrEqual(4);
+      expect(metrics.deltaTop ?? 99999).toBeLessThanOrEqual(4);
+      expect(metrics.deltaWidth ?? 99999).toBeLessThanOrEqual(4);
+      expect(metrics.deltaHeight ?? 99999).toBeLessThanOrEqual(4);
+
+      if (stepId !== 'phase-intro') {
+        await clickNext(page);
+      }
+    }
+  });
+
   test('教程 UI 元素完整性 - 游戏界面关键组件可见', async ({ page }) => {
     test.setTimeout(60000);
-    await setEnglishLocale(page);
+    await setChineseLocale(page);
     await disableAudio(page);
 
     await page.goto('/play/summonerwars/tutorial');

@@ -12,6 +12,7 @@ import type {
     PendingDamage,
     PendingBonusDiceSettlement,
     BonusDieInfo,
+    PendingSeatSwapRequest,
 } from './core-types';
 import type { AbilityDef } from './combat';
 
@@ -64,7 +65,12 @@ export const DT_EVENTS = defineEvents({
   // ========== UI 交互（本地播放）==========
   CHARACTER_SELECTED: 'ui',      // 选择角色（UI 层播放）
   PLAYER_READY: 'ui',            // 玩家准备（UI 层播放）
+  PLAYER_UNREADY: 'ui',          // 玩家取消准备（UI 层播放）
   HOST_STARTED: 'ui',            // 房主开始（UI 层播放）
+  SEATING_MOVED: 'ui',           // 站位调整（UI 层播放）
+  SEAT_SWAP_REQUESTED: 'ui',     // 发起换位申请
+  SEAT_SWAP_REJECTED: 'ui',      // 换位申请被拒绝
+  SEAT_SWAP_CANCELLED: 'ui',     // 换位申请取消
 
   // ========== 即时反馈（EventStream）==========
   DICE_ROLLED: { audio: 'immediate', sound: DICE_ROLL_SINGLE_KEY },
@@ -88,6 +94,7 @@ export const DT_EVENTS = defineEvents({
   
   CHOICE_REQUESTED: { audio: 'immediate', sound: CHOICE_REQUEST_KEY },
   CHOICE_RESOLVED: { audio: 'immediate', sound: CHOICE_RESOLVE_KEY },
+  COMPARE_ROLL_REQUESTED: { audio: 'immediate', sound: CHOICE_REQUEST_KEY },
   
   RESPONSE_WINDOW_OPENED: { audio: 'immediate', sound: RESPONSE_WINDOW_OPEN_KEY },
   RESPONSE_WINDOW_CLOSED: { audio: 'immediate', sound: RESPONSE_WINDOW_CLOSE_KEY },
@@ -97,6 +104,7 @@ export const DT_EVENTS = defineEvents({
   ATTACK_INITIATED: { audio: 'immediate', sound: ATTACK_INITIATE_KEY },
   BONUS_DAMAGE_ADDED: 'silent',
   ATTACK_PRE_DEFENSE_RESOLVED: { audio: 'immediate', sound: ATTACK_PRE_DEFENSE_KEY },
+  ATTACK_DEFENSE_RESOLVED: { audio: 'immediate', sound: ATTACK_PRE_DEFENSE_KEY },
   ATTACK_MADE_UNDEFENDABLE: { audio: 'immediate', sound: ATTACK_UNDEFENDABLE_KEY },
   
   DAMAGE_SHIELD_GRANTED: { audio: 'immediate', sound: SHIELD_GRANT_KEY },
@@ -197,8 +205,37 @@ export interface HostStartedEvent extends GameEvent<'HOST_STARTED'> {
     };
 }
 
+/** 2v2 站位移动事件 */
+export interface SeatingMovedEvent extends GameEvent<'SEATING_MOVED'> {
+    payload: {
+        playerId: PlayerId;
+        sourceSeatIndex: number;
+        targetSeatIndex: number;
+        seatingOrder: PlayerId[];
+    };
+}
+
+export interface SeatSwapRequestedEvent extends GameEvent<'SEAT_SWAP_REQUESTED'> {
+    payload: PendingSeatSwapRequest;
+}
+
+export interface SeatSwapRejectedEvent extends GameEvent<'SEAT_SWAP_REJECTED'> {
+    payload: PendingSeatSwapRequest;
+}
+
+export interface SeatSwapCancelledEvent extends GameEvent<'SEAT_SWAP_CANCELLED'> {
+    payload: PendingSeatSwapRequest;
+}
+
 /** 玩家准备事件 */
 export interface PlayerReadyEvent extends GameEvent<'PLAYER_READY'> {
+    payload: {
+        playerId: PlayerId;
+    };
+}
+
+/** 玩家取消准备事件 */
+export interface PlayerUnreadyEvent extends GameEvent<'PLAYER_UNREADY'> {
     payload: {
         playerId: PlayerId;
     };
@@ -270,6 +307,8 @@ export interface DamageDealtEvent extends GameEvent<'DAMAGE_DEALT'> {
         modifiers?: DamageModifier[];
         /** 伤害计算明细（新管线格式，优先使用）*/
         breakdown?: DamageBreakdown;
+        /** 是否为不可防御伤害（custom action 后处理据此跳过 Token 响应） */
+        unblockable?: boolean;
         /** 跳过护盾消耗（用于 HP 重置类效果，如神圣祝福将 HP 设为 1） */
         bypassShields?: boolean;
         /** 护盾消耗记录（reducer 回填，用于 ActionLog 展示护盾减伤信息） */
@@ -472,7 +511,7 @@ export interface DeckShuffledEvent extends GameEvent<'DECK_SHUFFLED'> {
 export interface AttackInitiatedEvent extends GameEvent<'ATTACK_INITIATED'> {
     payload: {
         attackerId: PlayerId;
-        defenderId: PlayerId;
+        defenderId?: PlayerId;
         sourceAbilityId: string;
         isDefendable: boolean;
         /** 是否为终极技能（不可被干扰） */
@@ -493,8 +532,17 @@ export interface BonusDamageAddedEvent extends GameEvent<'BONUS_DAMAGE_ADDED'> {
 export interface AttackPreDefenseResolvedEvent extends GameEvent<'ATTACK_PRE_DEFENSE_RESOLVED'> {
     payload: {
         attackerId: PlayerId;
-        defenderId: PlayerId;
+        defenderId?: PlayerId;
         sourceAbilityId?: string;
+    };
+}
+
+/** 防御方效果结算事件 */
+export interface AttackDefenseResolvedEvent extends GameEvent<'ATTACK_DEFENSE_RESOLVED'> {
+    payload: {
+        attackerId: PlayerId;
+        defenderId: PlayerId;
+        defenseAbilityId?: string;
     };
 }
 
@@ -502,7 +550,7 @@ export interface AttackPreDefenseResolvedEvent extends GameEvent<'ATTACK_PRE_DEF
 export interface AttackResolvedEvent extends GameEvent<'ATTACK_RESOLVED'> {
     payload: {
         attackerId: PlayerId;
-        defenderId: PlayerId;
+        defenderId?: PlayerId;
         sourceAbilityId?: string;
         defenseAbilityId?: string;
         totalDamage: number;
@@ -546,6 +594,8 @@ export interface ChoiceRequestedEvent extends GameEvent<'CHOICE_REQUESTED'> {
             customId?: string;
             /** 选项显示文案 key（i18n）。若不提供，将根据 statusId/tokenId 自动推导 */
             labelKey?: string;
+            /** true 时仅展示，不允许点击 */
+            disabled?: boolean;
         }>;
     };
 }
@@ -563,6 +613,38 @@ export interface ChoiceResolvedEvent extends GameEvent<'CHOICE_RESOLVED'> {
         /** 自定义选择 ID（用于非 status/token 的选择，或区分不同语义） */
         customId?: string;
         sourceAbilityId?: string;
+    };
+}
+
+export interface CompareRollRequestedEvent extends GameEvent<'COMPARE_ROLL_REQUESTED'> {
+    payload: {
+        playerId: PlayerId;
+        sourceAbilityId: string;
+        titleKey: string;
+        contestants: Array<{
+            playerId?: PlayerId;
+            labelKey?: string;
+            labelParams?: Record<string, string | number>;
+            roll: number;
+            face?: DieFace;
+            characterId?: string;
+            effectKey?: string;
+            effectParams?: Record<string, string | number>;
+        }>;
+        resultKey?: string;
+        resultParams?: Record<string, string | number>;
+        resultTone?: 'neutral' | 'success' | 'warning' | 'danger';
+        options?: Array<{
+            value: number;
+            customId?: string;
+            labelKey?: string;
+            disabled?: boolean;
+        }>;
+        confirmValue?: {
+            value: number;
+            customId?: string;
+        };
+        autoConfirmDelayMs?: number;
     };
 }
 
@@ -793,7 +875,12 @@ export type DiceThroneEvent =
     | CharacterSelectedEvent
     | HeroInitializedEvent
     | HostStartedEvent
+    | SeatingMovedEvent
+    | SeatSwapRequestedEvent
+    | SeatSwapRejectedEvent
+    | SeatSwapCancelledEvent
     | PlayerReadyEvent
+    | PlayerUnreadyEvent
     | AbilityActivatedEvent
     | DamageDealtEvent
     | HealAppliedEvent
@@ -816,10 +903,12 @@ export type DiceThroneEvent =
     | AttackInitiatedEvent
     | BonusDamageAddedEvent
     | AttackPreDefenseResolvedEvent
+    | AttackDefenseResolvedEvent
     | AttackResolvedEvent
     | AttackMadeUndefendableEvent
     | ChoiceRequestedEvent
     | ChoiceResolvedEvent
+    | CompareRollRequestedEvent
     | TurnChangedEvent
     | AbilityReplacedEvent
     | ResponseWindowOpenedEvent

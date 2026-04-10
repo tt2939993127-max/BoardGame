@@ -129,7 +129,7 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
         const focusPlayerId = getFocusPlayerId(G);
         
         // 实时计算可用技能（派生状态，不再存储在 core 中）
-        const isRollPhase = turnPhase === 'offensiveRoll' || turnPhase === 'defensiveRoll';
+        const isAbilityRollPhase = turnPhase === 'offensiveRoll' || turnPhase === 'defensiveRoll';
         const rollerId = turnPhase === 'defensiveRoll' && core.pendingAttack
             ? core.pendingAttack.defenderId
             : core.activePlayerId;
@@ -141,7 +141,7 @@ export function useDiceThroneState(G: EngineState): DiceThroneStateAccess {
             && core.pendingAttack;
         const availableAbilityIds = isPreRollDefenseSelection
             ? getDefensiveAbilityIds(core, rollerId)
-            : isRollPhase
+            : isAbilityRollPhase
                 ? getAvailableAbilityIds(core, rollerId, turnPhase)
                 : [];
         
@@ -197,20 +197,22 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
     hasChoice: boolean;
     playerId: PlayerId | undefined;
     title: string | undefined;
-    options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string; value?: number }>;
+    options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string; value?: number; disabled?: boolean }>;
     sourceAbilityId?: string;
     /** slider 模式配置（存在时渲染滑动条） */
     slider?: SliderConfig;
 } {
+    const prompt = access.prompt;
+
     return useMemo(() => {
-        if (access.prompt) {
-            const promptData = access.prompt as typeof access.prompt & { slider?: SliderConfig };
+        if (prompt) {
+            const promptData = prompt as typeof prompt & { slider?: SliderConfig };
             return {
                 hasChoice: true,
-                playerId: access.prompt.playerId,
-                title: access.prompt.title,
-                options: access.prompt.options.map(opt => {
-                    const rawValue = opt.value as { statusId?: string; tokenId?: string; customId?: string; value?: number } | undefined;
+                playerId: prompt.playerId,
+                title: prompt.title,
+                options: prompt.options.map(opt => {
+                    const rawValue = opt.value as { statusId?: string; tokenId?: string; customId?: string; value?: number; disabled?: boolean } | undefined;
                     return {
                         id: opt.id,
                         label: opt.label,
@@ -218,9 +220,10 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
                         tokenId: rawValue?.tokenId,
                         customId: rawValue?.customId,
                         value: rawValue?.value,
+                        disabled: opt.disabled ?? rawValue?.disabled,
                     };
                 }),
-                sourceAbilityId: access.prompt.sourceId,
+                sourceAbilityId: prompt.sourceId,
                 slider: promptData.slider,
             };
         }
@@ -232,7 +235,7 @@ export function useCurrentChoice(access: DiceThroneStateAccess): {
             options: [],
             sourceAbilityId: undefined,
         };
-    }, [access.prompt]);
+    }, [prompt]);
 }
 
 /**

@@ -3,6 +3,9 @@
     "title": "Yi Board Game",
     "subtitle": "Platform for Tutorials, Online Play, and Prototyping",
     "logoAlt": "Board Game Platform Logo",
+    "gameDetailsLoadingEyebrow": "Preparing",
+    "gameDetailsLoadingTitle": "Game Details",
+    "gameDetailsLoadingDescription": "Content will appear shortly. Please wait.",
     "audio": {
       "mute": "Mute",
       "unmute": "Unmute"
@@ -30,6 +33,11 @@
     "exitActiveMatch": {
       "title": "Leave Current Match",
       "description": "You are in a match. Leave it and join the new room?"
+    },
+    "forceReplaceOwnerRoom": {
+      "title": "Replace Existing Room",
+      "description": "An active room (#{{id}}) already exists for you. Continuing will delete that room before creating a new one.",
+      "confirm": "Replace and Create"
     }
   },
   "actions": {
@@ -41,8 +49,10 @@
     "reconnect": "Reconnect",
     "reconnectEnter": "Rejoin",
     "join": "Join",
-    "localPlay": "👥 Local",
-    "tutorial": "🎓 Tutorial",
+    "localPlay": "Single Device",
+    "singleDevice": "Single Device",
+    "playAi": "Play AI",
+    "tutorial": "Tutorial",
     "createRoom": "Create Room",
     "confirm": "Confirm",
     "cancel": "Cancel"
@@ -53,14 +63,21 @@
   "button": {
     "processing": "Processing..."
   },
+  "tutorial": {
+    "steps": {
+      "setup": "Preparing room"
+    }
+  },
   "activeMatch": {
     "notice": "You are currently in a match",
     "return": "Return to match (#{{id}})"
   },
   "rooms": {
+    "loading": "Loading rooms...",
     "empty": "No active rooms",
     "matchTitle": "Match #{{id}}",
     "mine": "Mine",
+    "seatSeparator": " / ",
     "emptySlot": "Empty",
     "ownerMustReconnect": "This is your room. Please reconnect.",
     "ownerRejoinOnly": "Only the room owner can rejoin an empty room (guests must use the original browser/device; clearing storage requires creating a new room)",
@@ -96,8 +113,113 @@
     "hint": "This entry currently shows the credited digital edition author. More detailed creator info can expand here later.",
     "close": "Close"
   },
+  "packageManager": {
+    "cardLabel": "{{game}} mobile package management",
+    "eyebrow": "Mobile Package",
+    "mode": "On-demand",
+    "notInstalled": "Not installed",
+    "notInstalledHint": "Before entering {{game}} on mobile, download its local game resource pack first.",
+    "installedTitle": "Ready to play",
+    "installedHint": "{{game}} mobile package is ready. You can enter the match directly.",
+    "installedCompletedBadge": "Completed",
+    "installedVersionBadge": "Completed · {{version}}",
+    "installAction": "Install Pack",
+    "confirmEyebrow": "Install Confirm",
+    "confirmTitle": "Download {{game}} packages",
+    "confirmDescription": "This download prepares a dedicated local resource pack for the current game only.",
+    "confirmHint": "Final size and progress come directly from the published manifest and live device download result.",
+    "modalHint": "After the download completes, the app verifies the package and switches to local installed resources.",
+    "confirmAction": "Confirm Download",
+    "totalSize": "Estimated Download",
+    "modulePack": "Code Pack",
+    "assetPack": "Asset Pack",
+    "packIdUnknown": "Pack ID pending",
+    "sizeUnknown": "Pending manifest",
+    "packageSyncing": "Syncing",
+    "packageUnpublished": "Package not published",
+    "runtimeUnsupported": "This runtime does not support downloading game packages yet. Please retry inside the Android app.",
+    "failedTitle": "Download Failed",
+    "failedHint": "Downloading, verifying, or activating the game package failed. Please try again later.",
+    "notificationSettingsAction": "Open notification settings",
+    "retryAction": "Retry",
+    "cancelAction": "Cancel Download",
+    "pending": "Mobile package management for this game is still being wired in. The entry point and status shell are now reserved.",
+    "updateRequiredEyebrow": "App Update Required",
+    "updateRequiredBadge": "Update Needed",
+    "updateRequiredTitle": "This version is not supported yet",
+    "updateRequiredHint": "{{game}} requires a newer app build before it can be played. The entry stays hidden on the current build.",
+    "updateRequiredHintWithVersion": "{{game}} requires app version {{version}} or newer before it can be played. The entry stays hidden on the current build.",
+    "progress": {
+      "label": "Progress",
+      "percent": "{{percent}}%",
+      "pendingPercent": "Pending",
+      "queuedTitle": "Queued",
+      "queuedHint": "Only one game package download runs at a time on the device. This one starts automatically when its turn arrives.",
+      "manifestTitle": "Reading Manifest",
+      "manifestHint": "Loading the published manifest for this game.",
+      "downloadTitle": "Downloading",
+      "downloadHint": "Downloading the files required for this game.",
+      "verifyTitle": "Verifying",
+      "verifyHint": "Verifying the downloaded content and activating local resources."
+    }
+  },
   "player": {
     "guest": "Guest{{id}}"
+  },
+  "ota": {
+    "forceUpdate": {
+      "eyebrow": "Updating",
+      "checkingTitle": "Preparing update",
+      "checkingDescription": "Checking and preparing the next version. Please wait.",
+      "downloadingTitle": "Downloading update",
+      "downloadingDescription": "Downloading the required update now. The app will switch automatically when it is ready.",
+      "applyingTitle": "Switching version",
+      "applyingDescription": "The update is ready. Restarting and switching to the new version now.",
+      "requiredTitle": "App update required",
+      "requiredDescription": "This app build is too old. Install a newer app version to continue.",
+      "requiredDescriptionWithVersion": "This app build is too old. Update to app version {{version}} or newer to continue.",
+      "errorTitle": "Update failed",
+      "errorDescription": "Downloading or switching to the new version failed. Please retry.",
+      "bundleVersion": "Target bundle version",
+      "currentAppVersion": "Current app version",
+      "requiredAppVersion": "Required app version",
+      "progressLabel": "Download progress",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "Preparing",
+      "retryAction": "Check again"
+    }
+  },
+  "nativeUpdate": {
+    "gate": {
+      "eyebrow": "Install New App",
+      "checkingTitle": "Preparing installer",
+      "checkingDescription": "Checking and preparing the new app package. Please wait.",
+      "downloadingTitle": "Downloading installer",
+      "downloadingDescription": "Downloading the new app package. The system installer will open automatically when ready.",
+      "verifyingTitle": "Verifying package",
+      "verifyingDescription": "The app package has been downloaded. Verifying integrity now.",
+      "permissionTitle": "Install permission required",
+      "permissionDescription": "Allow this app to install unknown apps first, then return and continue installation.",
+      "installingTitle": "Opening system installer",
+      "installingDescription": "The system installer is ready. Follow the system prompt to complete the update.",
+      "errorTitle": "App update failed",
+      "errorDescription": "Downloading the app package or starting the installer failed. Please retry.",
+      "targetVersion": "Target app version",
+      "progressLabel": "Download progress",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "Preparing",
+      "openSettingsAction": "Open settings",
+      "continueInstallAction": "Continue install",
+      "retryAction": "Retry download"
+    },
+    "toast": {
+      "disabled": "Native app update is not enabled in the current Android shell build.",
+      "upToDate": "This app is already up to date.",
+      "available": "A newer app version {{version}} is available and ready to install.",
+      "installerOpened": "The system installer has opened. Follow the prompt to finish the update.",
+      "openSettingsFailed": "Failed to open the install permission page. Please try again.",
+      "missingPreparedUpdate": "No downloaded update package is ready to continue. Please download it again."
+    }
   },
   "gameDetails": {
     "description": "Classic strategy play. Connect three symbols to win."
@@ -182,11 +304,24 @@
     "tutorialTitle": "Learning {{game}}",
     "matchTitle": "Playing {{game}}",
     "loadingResources": "Loading match resources...",
+    "creatingRoom": "Creating room and entering match...",
     "namespaceLoadFailed": "Failed to load game translations",
     "namespaceLoadFailedDesc": "The current game's i18n resources could not be loaded. Please retry, and send feedback if the problem persists.",
+    "clientLoadFailed": "Failed to load game client",
+    "clientLoadFailedDesc": "The current game's client code or resources could not be loaded. Please retry, and send feedback if the problem persists.",
     "joiningRoom": "Joining room...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}",
+      "preparingRoom": "Preparing room...",
+      "joiningRoom": "Verifying seat assignment...",
+      "loadingGameModule": "Loading game module...",
+      "connecting": "Connecting to server...",
+      "syncing": "Syncing game state...",
+      "loadingAssets": "Loading assets {{loaded}}/{{total}}"
+    },
     "title": {
       "joining": "Joining",
+      "creating": "Creating",
       "connecting": "Connecting",
       "tutorial": "Tutorial",
       "local": "Local Match",
@@ -200,6 +335,34 @@
       "description": "Unable to connect to the game server. Please check your network or server status.",
       "retry": "Retry",
       "backToLobby": "Back to Lobby"
+    },
+    "rescue": {
+      "eyebrow": "Game Page Guard",
+      "title": "The page did not render correctly",
+      "description": "The current game page did not render normally. To avoid staying on a black screen, the app switched to this recovery prompt first.",
+      "reload": "Reload",
+      "backToLobby": "Back to Lobby",
+      "copyDiagnostics": "Copy Diagnostics",
+      "copied": "Copied",
+      "reason": {
+        "game-viewport-missing": "The game viewport container never appeared, so the page is likely stuck during startup.",
+        "game-shell-collapsed": "The game canvas size is abnormal and the main content area has collapsed.",
+        "game-content-missing": "The game container exists, but no visible main content was rendered for too long."
+      }
+    },
+    "routeLoadingTimeout": {
+      "eyebrow": "Load Timeout",
+      "title": "Game page loading timed out",
+      "description": "This device took too long to finish loading the game page. Instead of keeping a black screen, the app switched to an actionable prompt first.",
+      "reason": "This usually means the game module, WebView compatibility, or startup-time resource initialization got stuck. Try reloading first, then return to the lobby if it keeps happening."
+    },
+    "connectionError": {
+      "unauthorizedTitle": "Failed to enter room",
+      "unauthorizedDescription": "The room credential is invalid or expired. Return to the lobby and join again.",
+      "matchNotFoundTitle": "Room not found",
+      "matchNotFoundDescription": "The target room may have been destroyed or expired. Return to the lobby and try again.",
+      "syncTimeoutTitle": "Failed to sync room state",
+      "syncTimeoutDescription": "Connected to the server, but the match state never arrived. Retry first; if this keeps happening, the server sync pipeline is abnormal."
     },
     "ugc": {
       "loading": "Loading UGC runtime…",
@@ -230,6 +393,8 @@
     "createRoomForbidden": "You do not have permission to create a room.",
     "createRoomNotFound": "Game service could not find the game. Please refresh and try again.",
     "createRoomRequestSize": "Request payload error. Please refresh and try again.",
+    "createRoomErrorCodeOnly": "(Error code: {{code}})",
+    "createRoomErrorCodeWithStatus": "(Error code: {{code}} / HTTP status: {{status}})",
     "activeMatchStale": "Your previous room no longer exists. It has been cleared so you can create a new one.",
     "destroyForbidden": "Unable to destroy the room: invalid or expired credentials. Please re-enter the match and try again.",
     "destroyNetwork": "Failed to destroy the room due to network or service issues. Please try again later.",
@@ -242,12 +407,45 @@
     "roomFull": "Room is full",
     "ownerClaimFailed": "Unable to reconnect: guest identity may be lost or credentials expired after server restart. Please retry with the original browser or create a new room.",
     "roomCreatedButClaimFailed": "Room was created but failed to claim seat. Please go back to the lobby and try again.",
+    "roomCreatedButEnterFailed": "Room was created, but automatic entry failed. Please go back to the lobby and enter it again.",
+    "aiSeatClaimFailed": "Some AI seats failed to initialize. You have entered the room, but please verify the seat state.",
     "joinRoomFailed": "Failed to join room",
     "actionFailed": "Action failed, please try again later.",
     "serviceUnavailable": {
       "title": "Service Unavailable",
       "desc": "Unable to connect to backend services. Please check your connection and ensure the backend containers (MongoDB/Server) are running."
     }
+  },
+  "ai": {
+    "supportTitle": "AI Support",
+    "unsupported": "No AI support",
+    "capture": "Data Capture",
+    "local": "Local AI",
+    "remote": "Remote AI",
+    "configureTitle": "Local Match Setup",
+    "configureHint": "Choose how many players join this device and which seats should be controlled by AI.",
+    "playerCount": "Local Players",
+    "seat": "Seat {{seat}}",
+    "primarySeat": "Primary",
+    "secondarySeat": "Secondary",
+    "controllers": {
+      "human": "Human",
+      "local": "Local AI",
+      "remote": "Remote AI"
+    },
+    "difficulty": "Difficulty",
+    "difficulties": {
+      "easy": "Easy",
+      "normal": "Normal",
+      "hard": "Hard",
+      "expert": "Expert"
+    },
+    "policyId": "Policy ID",
+    "policyPlaceholder": "Leave blank for default policy",
+    "providerId": "Provider ID",
+    "providerPlaceholder": "Leave blank to use astrbot",
+    "quickStart": "Default quick start: the first seat stays human, and the second seat will use the game's local AI when available.",
+    "startLocal": "Start Local Match"
   },
   "createRoom": {
     "title": "Create Room",
@@ -266,7 +464,25 @@
       "3days": "3 days",
       "7days": "7 days"
     },
-    "retentionHint": "Reconnect within retention period; auto-cleanup after expiry"
+    "retentionHint": "Reconnect within retention period; auto-cleanup after expiry",
+    "multiSelectPlaceholder": "Select expansions",
+    "multiSelectButton": "{{count}} selected",
+    "multiSelectSelected": "{{count}} enabled",
+    "multiSelectNone": "Disabled",
+    "enableOption": "Enable {{label}}",
+    "disableOption": "Disable {{label}}",
+    "removeSelectedOption": "Remove {{label}}",
+    "enableRoomAi": "Add AI",
+    "enableRoomAiHint": "Enable AI seats for this room. The section collapses automatically when disabled.",
+    "enableRoomAiSummary": "Enabled · {{players}}P · {{aiCount}} AI",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "occupiedSeats": "AI Seats",
+    "occupiedSeatsHint": "Click the seats that AI should occupy. Seat 1 is always reserved for the host.",
+    "ownerSeatUnit": "Seat {{seat}} (Host)",
+    "occupiedSeatUnit": "Seat {{seat}}",
+    "aiPlayerName": "AI Seat {{seat}}",
+    "confirm": "Create Room"
   },
   "socket": {
     "invalidGameId": "Invalid gameId, subscription ignored: {{value}}",

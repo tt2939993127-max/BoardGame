@@ -21,17 +21,42 @@ export const SMASHUP_ATLAS_DEFINITIONS: readonly SmashUpAtlasDefinition[] = [
     { id: SMASHUP_ATLAS_IDS.CARDS3, kind: 'card', image: 'smashup/cards/cards3', grid: { rows: 6, cols: 8 } },
     { id: SMASHUP_ATLAS_IDS.CARDS4, kind: 'card', image: 'smashup/cards/cards4', grid: { rows: 6, cols: 8 } },
     { id: SMASHUP_ATLAS_IDS.CARDS5, kind: 'card', image: 'smashup/cards/cards5', grid: { rows: 6, cols: 8 } },
+    { id: SMASHUP_ATLAS_IDS.CARDS6, kind: 'card', image: 'smashup/cards/aiji', grid: { rows: 7, cols: 7 } },
+    { id: SMASHUP_ATLAS_IDS.TITANS, kind: 'card', image: 'smashup/taitan/taitan1', grid: { rows: 7, cols: 3 } },
 
     { id: SMASHUP_ATLAS_IDS.BASE1, kind: 'base', image: 'smashup/base/base1', grid: { rows: 4, cols: 4 } },
     { id: SMASHUP_ATLAS_IDS.BASE2, kind: 'base', image: 'smashup/base/base2', grid: { rows: 2, cols: 4 } },
     { id: SMASHUP_ATLAS_IDS.BASE3, kind: 'base', image: 'smashup/base/base3', grid: { rows: 2, cols: 4 } },
     { id: SMASHUP_ATLAS_IDS.BASE4, kind: 'base', image: 'smashup/base/base4', grid: { rows: 3, cols: 4 } },
+    { id: SMASHUP_ATLAS_IDS.BASE5, kind: 'base', image: 'smashup/base/aiji_base', grid: { rows: 2, cols: 4 } },
 ];
 
 const atlasById = new Map(SMASHUP_ATLAS_DEFINITIONS.map((atlas) => [atlas.id, atlas] as const));
 
+const LOCAL_POD_ATLAS_IMAGE_OVERRIDES: Record<string, string> = {
+    tts_atlas_1: 'smashup/cards/tts_atlas_1',
+    tts_atlas_0a564692f2: 'smashup/cards/tts_atlas_0a564692f2',
+    tts_atlas_0b888d02fd: 'smashup/cards/tts_atlas_0b888d02fd',
+    tts_atlas_54: 'smashup/cards/tts_atlas_54',
+    tts_atlas_55: 'smashup/cards/tts_atlas_55',
+    tts_atlas_56: 'smashup/cards/tts_atlas_56',
+    tts_atlas_78: 'smashup/cards/tts_atlas_78',
+    tts_atlas_79: 'smashup/cards/tts_atlas_79',
+    tts_atlas_9aed5872d2: 'smashup/cards/tts_atlas_9aed5872d2',
+    tts_atlas_8789f47742: 'smashup/cards/tts_atlas_8789f47742',
+};
+
+export function getSmashUpPodAtlasImagePath(atlasId: string): string {
+    return LOCAL_POD_ATLAS_IMAGE_OVERRIDES[atlasId] ?? `smashup/pod-assets/${atlasId}`;
+}
+
 export function getSmashUpAtlasImageById(atlasId: string): string | undefined {
-    return atlasById.get(atlasId)?.image;
+    const builtIn = atlasById.get(atlasId)?.image;
+    if (builtIn) return builtIn;
+    if (atlasId.startsWith('tts_atlas_')) {
+        return getSmashUpPodAtlasImagePath(atlasId);
+    }
+    return undefined;
 }
 
 export function getSmashUpAtlasImagesByKind(kind: SmashUpAtlasKind): string[] {

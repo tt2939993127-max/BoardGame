@@ -4,6 +4,7 @@
 
 export * from './types';
 export * from './ui';
+export * from './WarmPreloadScheduler';
 export {
     // 注册表 API
     registerGameAssets,
@@ -14,9 +15,16 @@ export {
     clearGameAssetsCache,
     setAssetsBaseUrl,
     getAssetsBaseUrl,
+    setAudioAssetsBaseUrl,
+    getAudioAssetsBaseUrl,
+    setCommonAudioAssetBaseOverride,
+    getCommonAudioAssetBaseOverride,
+    setGameAssetBaseOverride,
+    clearGameAssetBaseOverrides,
     // 两阶段预加载 API
     preloadCriticalImages,
     preloadWarmImages,
+    cancelWarmPreload,
     areAllCriticalImagesCached,
     isImagePreloaded,
     getPreloadedImageElement,
@@ -31,6 +39,7 @@ export {
     getOptimizedImageUrls,
     getOptimizedAudioUrl,
     getLocalizedAssetPath,
+    getLocalizedImageCandidateUrls,
     getLocalizedImageUrls,
     buildLocalizedImageSet,
     buildOptimizedImageSet,
@@ -40,5 +49,6 @@ export {
 } from './AssetLoader';
 export {
     registerCriticalImageResolver,
+    getCriticalImageResolver,
     resolveCriticalImages,
 } from './CriticalImageResolverRegistry';

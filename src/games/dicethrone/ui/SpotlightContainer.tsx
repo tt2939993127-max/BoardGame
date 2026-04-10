@@ -36,6 +36,9 @@ interface SpotlightContainerProps {
     disableAutoClose?: boolean;
     /** 禁用点击背景关闭（用于交互模式） */
     disableBackdropClose?: boolean;
+    blockPointerEvents?: boolean;
+    /** 非交互展示态下允许内容区域点击穿透 */
+    allowContentPointerEvents?: boolean;
     /** 首次挂载后的点击关闭保护时长，避免触发它的同一次点击立刻把特写关掉 */
     closeClickGuardMs?: number;
 }
@@ -63,9 +66,17 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     closeOnContentClick = true,
     disableAutoClose = false,
     disableBackdropClose = false,
+    blockPointerEvents = false,
+    allowContentPointerEvents = true,
     closeClickGuardMs = 180,
 }) => {
     const visibleSinceRef = React.useRef<number>(0);
+    const onCloseRef = React.useRef(onClose);
+    const shouldCaptureBackdropClick = !disableBackdropClose;
+
+    React.useEffect(() => {
+        onCloseRef.current = onClose;
+    }, [onClose]);
 
     React.useEffect(() => {
         if (isVisible) {
@@ -97,14 +108,14 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
         if (!isVisible || disableAutoClose) return;
 
         const closeTimer = setTimeout(() => {
-            onClose();
+            onCloseRef.current();
         }, autoCloseDelay);
 
 
         return () => {
             clearTimeout(closeTimer);
         };
-    }, [id, isVisible, autoCloseDelay, onClose, disableAutoClose]);
+    }, [id, isVisible, autoCloseDelay, disableAutoClose]);
 
     if (!isVisible) {
         return null;
@@ -116,13 +127,13 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
         <AnimatePresence mode="wait">
             <motion.div
                 key={id}
-                className="fixed inset-0 flex items-center justify-center"
+                className={`fixed inset-0 flex items-center justify-center ${(blockPointerEvents || shouldCaptureBackdropClick) ? 'pointer-events-auto' : 'pointer-events-none'}`}
                 style={{ zIndex }}
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: 0.3 }}
-                onClick={disableBackdropClose
+                onClick={!shouldCaptureBackdropClick
                     ? undefined
                     : () => {
                         const guardActive = isCloseClickGuardActive();
@@ -140,7 +151,7 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
             >
                 {/* 内容容器 */}
                 <motion.div
-                    className="relative pointer-events-auto"
+                    className={`relative ${allowContentPointerEvents ? 'pointer-events-auto' : 'pointer-events-none'}`}
                     initial={m.initial}
                     animate={m.animate}
                     exit={m.exit}

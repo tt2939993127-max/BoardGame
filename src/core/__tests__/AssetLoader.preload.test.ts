@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
+    clearGameAssetBaseOverrides,
+    getLocalizedImageUrls,
+    getPreloadedImageElement,
+    isImagePreloaded,
     registerGameAssets,
     preloadCriticalImages,
+    setAssetHashesForTesting,
     setAssetsBaseUrl,
+    setGameAssetBaseOverride,
 } from '../AssetLoader';
 import { registerCriticalImageResolver } from '../CriticalImageResolverRegistry';
 
@@ -10,6 +16,8 @@ import { registerCriticalImageResolver } from '../CriticalImageResolverRegistry'
 class MockImage {
     onload: (() => void) | null = null;
     onerror: (() => void) | null = null;
+    naturalWidth = 300;
+    naturalHeight = 600;
     private _src = '';
     get src() { return this._src; }
     set src(value: string) {
@@ -21,6 +29,8 @@ class MockImage {
 
 beforeEach(() => {
     setAssetsBaseUrl('/assets');
+    setAssetHashesForTesting({});
+    clearGameAssetBaseOverrides();
     vi.stubGlobal('Image', MockImage);
 });
 
@@ -127,5 +137,25 @@ describe('preloadCriticalImages', () => {
         expect(warm).toEqual([]);
 
         vi.useRealTimers();
+    });
+
+    it('关键图预加载命中带版本参数的 native URL 后，图集查询也能拿到缓存元素', async () => {
+        setAssetsBaseUrl('https://assets.easyboardgame.top/official');
+        setGameAssetBaseOverride('smashup', '/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/smashup/current/assets');
+        setAssetHashesForTesting({
+            'i18n/en/smashup/cards/compressed/cards1.webp': 'hash1234',
+        });
+
+        registerGameAssets('smashup', {
+            criticalImages: ['smashup/cards/cards1'],
+        });
+
+        await preloadCriticalImages('smashup', undefined, 'en');
+
+        const hashedUrl = getLocalizedImageUrls('smashup/cards/cards1', 'en').primary.webp;
+        expect(hashedUrl).toContain('/_capacitor_file_/data/user/0/top.easyboardgame.app/files/game-packages/smashup/current/assets/i18n/en/smashup/cards/compressed/cards1.webp?v=hash1234');
+        expect(isImagePreloaded(hashedUrl)).toBe(true);
+        expect(getPreloadedImageElement(hashedUrl)).not.toBeNull();
+        expect(getPreloadedImageElement('smashup/cards/cards1', 'en')).not.toBeNull();
     });
 });

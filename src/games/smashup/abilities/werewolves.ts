@@ -8,7 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     addTempPower, destroyMinion,
-    grantExtraAction, buildMinionTargetOptions,
+    grantExtraAction, buildActionMinionTargetOptions, buildMinionTargetOptions,
     resolveOrPrompt, findMinionOnBases, findMinionByAttachedCard, buildAbilityFeedback,
     modifyBreakpoint,
     buildValidatedDestroyEvents,
@@ -132,7 +132,7 @@ function createChewToyTargetInteraction(ctx: AbilityContext, minionUid: string, 
         }
     }
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
-    const options = buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
+    const options = buildActionMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId, sourceDefId: ctx.defId, effectType: 'destroy' });
     if (options.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.all_protected', ctx.now)] };
 
     return resolveOrPrompt(ctx, options, {
@@ -187,7 +187,7 @@ function buildLetTheDogOutTargetInteraction(
     state: SmashUpCore, playerId: string, now: number, matchState: any,
     budget: number, sourceUid: string,
 ): AbilityResult {
-    const targets = buildMinionTargetOptions(
+    const targets = buildActionMinionTargetOptions(
         collectLetTheDogOutTargets(state, budget, sourceUid),
         { state, sourcePlayerId: playerId, effectType: 'destroy' },
     ).map(o => ({
@@ -250,7 +250,7 @@ const handleChewToyChooseMinion: IH = (state, playerId, value, _data, _random, n
         }
     }
     if (targets.length === 0) return { state, events: [] };
-    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
+    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
     if (options.length === 0) return { state, events: [] };
 
     const interaction = createSimpleChoice(
@@ -284,7 +284,7 @@ const handleLetTheDogOutChooseMinion: IH = (state, playerId, value, _data, _rand
     const myPower = getEffectivePower(state.core, minion, v.baseIndex);
     const targets = collectLetTheDogOutTargets(state.core, myPower, v.minionUid);
     if (targets.length === 0) return { state, events: [] };
-    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
+    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
         .map(o => ({
             ...o,
             value: { ...o.value, budget: myPower, sourceUid: v.minionUid },
@@ -323,7 +323,7 @@ const handleLetTheDogOutChooseTarget: IH = (state, playerId, value, _data, _rand
     const remaining = collectLetTheDogOutTargets(state.core, newBudget, v.sourceUid)
         .filter(t => t.uid !== v.minionUid);
     if (remaining.length === 0) return { state, events };
-    const options = buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
+    const options = buildActionMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
         .map(o => ({
             ...o,
             value: { ...o.value, budget: newBudget, sourceUid: v.sourceUid },
@@ -346,32 +346,37 @@ const handleLetTheDogOutChooseTarget: IH = (state, playerId, value, _data, _rand
 function registerWerewolfOngoingEffects(): void {
     // 狼人 异能（Special）：基地计分前自身+2力量直到回合结束
     registerTrigger('werewolf_loup_garou', 'beforeScoring', (ctx: TriggerContext) => {
-        const { state, baseIndex, now } = ctx;
+        const { state, baseIndex, sourceCardUid, now } = ctx;
         if (baseIndex === undefined) return [];
-        const events: SmashUpEvent[] = [];
-        for (const m of state.bases[baseIndex].minions) {
-            if (matchesDefId(m.defId, 'werewolf_loup_garou')) {
-                events.push(addTempPower(m.uid, baseIndex, 2, 'werewolf_loup_garou', now));
-            }
-        }
-        return events;
+        const source = sourceCardUid
+            ? state.bases[baseIndex].minions.find(m => m.uid === sourceCardUid)
+            : state.bases[baseIndex].minions.find(m => matchesDefId(m.defId, 'werewolf_loup_garou'));
+        if (!source || !matchesDefId(source.defId, 'werewolf_loup_garou')) return [];
+        return [addTempPower(source.uid, baseIndex, 2, 'werewolf_loup_garou', now)];
+    }, {
+        perInstance: true,
+        sourceScope: 'triggerBase',
     });
 
     // 阿尔法狼群 异能（Special）：基地计分前同基地己方所有随从+1力量直到回合结束
     registerTrigger('werewolf_pack_alpha', 'beforeScoring', (ctx: TriggerContext) => {
-        const { state, baseIndex, now } = ctx;
+        const { state, baseIndex, sourceCardUid, now } = ctx;
         if (baseIndex === undefined) return [];
+        const source = sourceCardUid
+            ? state.bases[baseIndex].minions.find(m => m.uid === sourceCardUid)
+            : state.bases[baseIndex].minions.find(m => matchesDefId(m.defId, 'werewolf_pack_alpha'));
+        if (!source || !matchesDefId(source.defId, 'werewolf_pack_alpha')) return [];
+        const controller = source.controller;
         const events: SmashUpEvent[] = [];
-        for (const m of state.bases[baseIndex].minions) {
-            if (!matchesDefId(m.defId, 'werewolf_pack_alpha')) continue;
-            const controller = m.controller;
-            for (const ally of state.bases[baseIndex].minions) {
-                if (ally.controller === controller) {
-                    events.push(addTempPower(ally.uid, baseIndex, 1, 'werewolf_pack_alpha', now));
-                }
+        for (const ally of state.bases[baseIndex].minions) {
+            if (ally.controller === controller) {
+                events.push(addTempPower(ally.uid, baseIndex, 1, 'werewolf_pack_alpha', now));
             }
         }
         return events;
+    }, {
+        perInstance: true,
+        sourceScope: 'triggerBase',
     });
 
     // 制造恐慌 ongoing：回合开始时若你力量最高，爆破点降到0

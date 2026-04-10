@@ -6,6 +6,12 @@ import { OptionalJwtAuthGuard } from '../../shared/guards/optional-jwt-auth.guar
 import { Roles } from '../admin/guards/roles.decorator';
 import { AdminGuard } from '../admin/guards/admin.guard';
 
+type FeedbackAdminRequest = {
+    user: {
+        userId: string;
+    };
+};
+
 @Controller('feedback')
 export class FeedbackController {
     constructor(@Inject(FeedbackService) private readonly feedbackService: FeedbackService) { }
@@ -22,46 +28,73 @@ export class FeedbackController {
      */
     @UseGuards(OptionalJwtAuthGuard)
     @Post()
-    async create(@Request() req: any, @Body() dto: CreateFeedbackDto) {
+    async create(@Request() req: FeedbackAdminRequest, @Body() dto: CreateFeedbackDto) {
         // 如果用户已登录，使用用户 ID；否则使用 null（匿名反馈）
         const userId = req.user?.userId || null;
         return this.feedbackService.create(userId, dto);
     }
+
+    @Get('open')
+    async findAllOpen(@Query() query: QueryFeedbackDto) {
+        return this.feedbackService.findAllOpen(query);
+    }
+
+    @Get('open/:id')
+    async findOneOpen(@Param('id') id: string) {
+        const item = await this.feedbackService.findByIdOpen(id);
+        if (!item) {
+            throw new NotFoundException('feedback not found');
+        }
+        return item;
+    }
+
+    @Patch('open/:id/status')
+    async updateStatusOpen(@Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
+        const updated = await this.feedbackService.updateStatusOpen(id, dto.status);
+        if (!updated) {
+            throw new NotFoundException('feedback not found');
+        }
+        return updated;
+    }
 }
 
 @UseGuards(JwtAuthGuard, AdminGuard)
-@Roles('admin')
+@Roles('admin', 'developer')
 @Controller('admin/feedback')
 export class FeedbackAdminController {
     constructor(@Inject(FeedbackService) private readonly feedbackService: FeedbackService) { }
 
     @Get()
-    async findAll(@Query() query: QueryFeedbackDto) {
-        return this.feedbackService.findAll(query);
+    async findAll(@Request() req: FeedbackAdminRequest, @Query() query: QueryFeedbackDto) {
+        return this.feedbackService.findAll(req.user.userId, query);
     }
 
+    @Roles('admin', 'developer')
     @Patch(':id/status')
-    async updateStatus(@Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
-        const updated = await this.feedbackService.updateStatus(id, dto.status);
+    async updateStatus(@Request() req: FeedbackAdminRequest, @Param('id') id: string, @Body() dto: UpdateFeedbackStatusDto) {
+        const updated = await this.feedbackService.updateStatus(req.user.userId, id, dto.status);
         if (!updated) {
             throw new NotFoundException('feedback not found');
         }
         return updated;
     }
 
+    @Roles('admin', 'developer')
     @Delete(':id')
-    async deleteOne(@Param('id') id: string) {
-        const ok = await this.feedbackService.deleteOne(id);
+    async deleteOne(@Request() req: FeedbackAdminRequest, @Param('id') id: string) {
+        const ok = await this.feedbackService.deleteOne(req.user.userId, id);
         return { ok };
     }
 
+    @Roles('admin', 'developer')
     @Post('bulk-delete')
-    async bulkDelete(@Body() body: BulkFeedbackIdsDto) {
-        return this.feedbackService.bulkDeleteByIds(body.ids || []);
+    async bulkDelete(@Request() req: FeedbackAdminRequest, @Body() body: BulkFeedbackIdsDto) {
+        return this.feedbackService.bulkDeleteByIds(req.user.userId, body.ids || []);
     }
 
+    @Roles('admin', 'developer')
     @Post('bulk-delete-by-filter')
-    async bulkDeleteByFilter(@Body() body: FeedbackFilterDto) {
-        return this.feedbackService.bulkDeleteByFilter(body);
+    async bulkDeleteByFilter(@Request() req: FeedbackAdminRequest, @Body() body: FeedbackFilterDto) {
+        return this.feedbackService.bulkDeleteByFilter(req.user.userId, body);
     }
 }

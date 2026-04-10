@@ -20,6 +20,11 @@ const entry: GameManifestEntry = {
     playerOptions: [2],
     tags: ['card_driven', 'tactical'],
     bestPlayers: [2],
+    ai: {
+        capture: true,
+        localAi: false,
+        remoteAi: false,
+    },
     cursorTheme: 'cardia',
     setupOptions: {
         deckVariant: {
@@ -49,7 +54,13 @@ const entry: GameManifestEntry = {
     mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
     mobileLayoutPreset: 'board-shell',
-    shellTargets: ['pwa'],
+    shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'cardia',
+        assetPackId: 'cardia',
+    },
 };
 
 export const CARDIA_MANIFEST: GameManifestEntry = entry;

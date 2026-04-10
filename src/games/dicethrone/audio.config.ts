@@ -215,7 +215,7 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
         {
             when: (context) => {
                 const { currentPhase } = context.ctx as { currentPhase?: TurnPhase };
-                return currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
+                return currentPhase === 'offensiveRoll' || currentPhase === 'targetingRoll' || currentPhase === 'defensiveRoll';
             },
             key: BGM_DRAGON_DANCE_KEY,
             group: 'battle',
@@ -294,7 +294,8 @@ export const DICETHRONE_AUDIO_CONFIG: GameAudioConfig = {
 
 const findCardById = (state: DiceThroneCore, cardId?: string) => {
     if (!cardId) return undefined;
-    for (const player of Object.values(state.players)) {
+    const players = state.players ?? {};
+    for (const player of Object.values(players)) {
         const card = player.hand.find(c => c.id === cardId)
             ?? player.deck.find(c => c.id === cardId)
             ?? player.discard.find(c => c.id === cardId);

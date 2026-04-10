@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check } from 'lucide-react';
-import { buildLocalizedImageSet, getLocalizedLocalAssetPath, UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, getLocalizedAssetPath, getLocalizedLocalAssetPath, UI_Z_INDEX } from '../../../core';
 import { InfoTooltip } from '../../../components/common/overlays/InfoTooltip';
 import { resolveI18nList } from './utils';
 
@@ -54,15 +54,50 @@ const isStatusIconAtlasResponse = (value: unknown): value is StatusIconAtlasResp
 // Map of Atlas ID -> Config
 export type StatusAtlases = Record<string, StatusIconAtlasConfig>;
 
+const getAtlasFallbackLocale = (locale: string) => {
+    if (locale === 'zh-CN') return 'en';
+    if (locale === 'en') return 'zh-CN';
+    return 'en';
+};
+
+const dedupeUrls = (urls: Array<string | undefined>) => (
+    urls.filter((url, index, list): url is string => Boolean(url) && list.indexOf(url) === index)
+);
+
+const getStatusAtlasJsonCandidates = (path: string, locale?: string) => {
+    const effectiveLocale = locale || 'zh-CN';
+    const fallbackLocale = getAtlasFallbackLocale(effectiveLocale);
+
+    return dedupeUrls([
+        getLocalizedAssetPath(path, effectiveLocale),
+        getLocalizedAssetPath(path, fallbackLocale),
+        getLocalizedLocalAssetPath(path, effectiveLocale),
+        getLocalizedLocalAssetPath(path, fallbackLocale),
+    ]);
+};
+
+const fetchStatusAtlasJson = async (path: string, locale?: string): Promise<StatusIconAtlasResponse | null> => {
+    for (const url of getStatusAtlasJsonCandidates(path, locale)) {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) continue;
+            const data: unknown = await response.json();
+            if (isStatusIconAtlasResponse(data)) {
+                return data;
+            }
+        } catch {
+            continue;
+        }
+    }
+
+    return null;
+};
+
 export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases> => {
     const promises = Object.entries(STATUS_ATLAS_PATHS).map(async ([id, path]) => {
         try {
-            // JSON 配置文件始终从本地 /assets/ 加载，不走 R2 CDN
-            const url = getLocalizedLocalAssetPath(path, locale);
-            const response = await fetch(url);
-            if (!response.ok) return null;
-            const data: unknown = await response.json();
-            if (!isStatusIconAtlasResponse(data)) return null;
+            const data = await fetchStatusAtlasJson(path, locale);
+            if (!data) return null;
 
             // 图片路径也需要经过 getLocalizedAssetPath 处理（去掉 .json 后缀，加上图片文件名）
             const baseDir = path.substring(0, path.lastIndexOf('/') + 1);
@@ -85,7 +120,7 @@ export const loadStatusAtlases = async (locale?: string): Promise<StatusAtlases>
     }, {} as StatusAtlases);
 };
 
-import { STATUS_EFFECT_META, TOKEN_META, type StatusEffectMeta } from '../domain/statusEffects';
+import { STATUS_EFFECT_META, TOKEN_META, getVisualMetaById, type StatusEffectMeta } from '../domain/statusEffects';
 
 // Re-export for consumers that import from ui/statusEffects
 export { STATUS_EFFECT_META, TOKEN_META, type StatusEffectMeta };
@@ -100,6 +135,18 @@ const getStatusIconFrameStyle = (atlas: StatusIconAtlasConfig, frame: StatusIcon
         backgroundPosition: `${xPos}% ${yPos}%`,
     } as CSSProperties;
 };
+
+const hasAtlasFrame = (meta: StatusEffectMeta, atlas?: StatusAtlases | null) => {
+    if (!atlas || !meta.frameId) return false;
+    if (meta.atlasId && atlas[meta.atlasId]) {
+        return Boolean(atlas[meta.atlasId].frames[meta.frameId]);
+    }
+    return Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
+};
+
+const hasVisualIcon = (meta: StatusEffectMeta, atlas?: StatusAtlases | null) => (
+    hasAtlasFrame(meta, atlas) || Boolean(meta.iconPath)
+);
 
 export const getStatusEffectIconNode = (
     meta: StatusEffectMeta,
@@ -127,6 +174,17 @@ export const getStatusEffectIconNode = (
     }
 
     if (!frame || !targetAtlas) {
+        if (meta.iconPath) {
+            return (
+                <span
+                    className="block w-full h-full bg-center bg-no-repeat"
+                    style={{
+                        backgroundImage: buildLocalizedImageSet(meta.iconPath, locale),
+                        backgroundSize: 'contain',
+                    }}
+                />
+            );
+        }
         // 无精灵图时不显示内容，外层渐变背景已提供视觉标识
         return <span className="block w-full h-full" />;
     }
@@ -165,19 +223,11 @@ export const StatusEffectBadge = ({
     onClick?: () => void;
     clickable?: boolean;
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || { color: 'from-gray-500 to-gray-600' };
 
     // Check if sprite exists in the resolved atlas
-    let hasSprite = false;
-    if (atlas && meta.frameId) {
-        if (meta.atlasId && atlas[meta.atlasId]) {
-            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
-        } else {
-            // Fallback check
-            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
-        }
-    }
+    const hasSprite = hasVisualIcon(meta, atlas);
     const description = resolveI18nList(
         t(`statusEffects.${effectId}.description`, { returnObjects: true })
     );
@@ -304,16 +354,9 @@ export const TokenBadge = ({
     clickable?: boolean;
 }) => {
     const { t } = useTranslation('game-dicethrone');
-    const meta = TOKEN_META[tokenId] || { color: 'from-gray-500 to-gray-600' };
+    const meta = getVisualMetaById(tokenId) || { color: 'from-gray-500 to-gray-600' };
 
-    let hasSprite = false;
-    if (atlas && meta.frameId) {
-        if (meta.atlasId && atlas[meta.atlasId]) {
-            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
-        } else {
-            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
-        }
-    }
+    const hasSprite = hasVisualIcon(meta, atlas);
     const description = resolveI18nList(
         t(`tokens.${tokenId}.description`, { returnObjects: true })
     );
@@ -448,6 +491,7 @@ export const SelectableStatusBadge = ({
     isSelected,
     isHighlighted,
     onSelect,
+    dataTestId,
     size = 'normal',
     locale,
     atlas,
@@ -458,31 +502,34 @@ export const SelectableStatusBadge = ({
     isSelected?: boolean;
     isHighlighted?: boolean;
     onSelect?: () => void;
+    dataTestId?: string;
     size?: 'normal' | 'small';
     locale?: string;
     atlas?: StatusAtlases | null;
     /** 在弹窗内使用时传 true，确保 tooltip 层级高于弹窗 */
     inModal?: boolean;
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     const meta = STATUS_EFFECT_META[effectId] || TOKEN_META[effectId] || { color: 'from-gray-500 to-gray-600' };
     const isToken = !STATUS_EFFECT_META[effectId] && Boolean(TOKEN_META[effectId]);
     const i18nPrefix = isToken ? 'tokens' : 'statusEffects';
+    const hasI18nKey = (key: string) => (
+        typeof i18n?.exists === 'function' ? i18n.exists(key, { ns: 'game-dicethrone' }) : false
+    );
 
-    let hasSprite = false;
-    if (atlas && meta.frameId) {
-        if (meta.atlasId && atlas[meta.atlasId]) {
-            hasSprite = Boolean(atlas[meta.atlasId].frames[meta.frameId]);
-        } else {
-            hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
-        }
-    }
+    const hasSprite = hasVisualIcon(meta, atlas);
+    const descriptionKey = `${i18nPrefix}.${effectId}.description`;
+    const nameKey = `${i18nPrefix}.${effectId}.name`;
     const description = resolveI18nList(
-        t(`${i18nPrefix}.${effectId}.description`, { returnObjects: true })
+        hasI18nKey(descriptionKey)
+            ? t(descriptionKey, { returnObjects: true, defaultValue: [] })
+            : []
     );
     const info = {
         ...meta,
-        name: t(`${i18nPrefix}.${effectId}.name`) as string,
+        name: (hasI18nKey(nameKey)
+            ? t(nameKey, { defaultValue: effectId })
+            : effectId) as string,
         description,
     };
     const [isHovered, setIsHovered] = React.useState(false);
@@ -493,6 +540,7 @@ export const SelectableStatusBadge = ({
 
     return (
         <div
+            data-testid={dataTestId}
             className={`relative group ${clickable ? 'cursor-pointer' : ''
                 }`}
             onMouseEnter={() => setIsHovered(true)}
@@ -541,6 +589,7 @@ export const SelectableEffectsContainer = ({
     selectedId,
     highlightAll,
     onSelectEffect,
+    getItemTestId,
     maxPerRow = 3,
     size = 'normal',
     className = '',
@@ -552,6 +601,7 @@ export const SelectableEffectsContainer = ({
     selectedId?: string;
     highlightAll?: boolean;
     onSelectEffect?: (effectId: string) => void;
+    getItemTestId?: (effectId: string) => string | undefined;
     maxPerRow?: number;
     size?: 'normal' | 'small';
     className?: string;
@@ -574,6 +624,7 @@ export const SelectableEffectsContainer = ({
                     isSelected={selectedId === id}
                     isHighlighted={highlightAll}
                     onSelect={() => onSelectEffect?.(id)}
+                    dataTestId={getItemTestId?.(id)}
                     size={size}
                     locale={locale}
                     atlas={atlas}

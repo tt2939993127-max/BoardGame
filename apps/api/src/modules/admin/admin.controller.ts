@@ -12,9 +12,11 @@ import { QueryRoomsDto } from './dtos/query-rooms.dto';
 import { QueryStatsDto } from './dtos/query-stats.dto';
 import { QueryUsersDto } from './dtos/query-users.dto';
 import { QueryUgcPackagesDto } from './dtos/query-ugc-packages.dto';
+import { UpdateAdminTestLatencyDto } from './dtos/update-admin-test-latency.dto';
 import { UpdateUserRoleDto } from './dtos/update-user-role.dto';
 import { AdminGuard } from './guards/admin.guard';
 import { Roles } from './guards/roles.decorator';
+import { AdminTestLatencyService } from './admin-test-latency.service';
 import { AdminService } from './admin.service';
 
 @UseGuards(JwtAuthGuard, AdminGuard)
@@ -23,8 +25,20 @@ import { AdminService } from './admin.service';
 export class AdminController {
     constructor(
         @Inject(AdminService) private readonly adminService: AdminService,
+        @Inject(AdminTestLatencyService) private readonly adminTestLatencyService: AdminTestLatencyService,
         @Inject(AdminUserRoleService) private readonly adminUserRoleService: AdminUserRoleService,
     ) {}
+
+    @Get('test-latency')
+    getTestLatency(@Res() res: Response) {
+        return res.json(this.adminTestLatencyService.getState());
+    }
+
+    @Patch('test-latency')
+    updateTestLatency(@Body() body: UpdateAdminTestLatencyDto, @Res() res: Response) {
+        const state = this.adminTestLatencyService.update(body);
+        return res.json(state);
+    }
 
     @Get('stats')
     async getStats(@Req() req: Request, @Res() res: Response) {

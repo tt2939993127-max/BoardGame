@@ -5,7 +5,9 @@
  * 运行后会在控制台输出交互状态，可以手动检查。
  */
 
-import { describe, it, expect } from 'vitest';
+import React from 'react';
+import { render, screen, cleanup, act } from '@testing-library/react';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing';
 import { SmashUpDomain } from '../domain';
 import { smashUpFlowHooks } from '../domain/index';
@@ -16,7 +18,7 @@ import {
 } from '../../../engine';
 import type { EngineSystem } from '../../../engine/systems/types';
 import { createSmashUpEventSystem } from '../domain/systems';
-import { asSimpleChoice } from '../../../engine/systems/InteractionSystem';
+import { asSimpleChoice, createSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import type { SmashUpCore, CardInstance, MinionOnBase, BaseInPlay } from '../domain/types';
 import type { MatchState } from '../../../engine/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
@@ -28,8 +30,32 @@ import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
 import { getCardDef } from '../data/cards';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { SU_COMMANDS } from '../domain/types';
+import { ToastProvider } from '../../../contexts/ToastContext';
+import { PromptOverlay } from '../ui/PromptOverlay';
+import { SmashUpCardRenderer } from '../ui/SmashUpCardRenderer';
+import {
+    buildMinionUidSnapshotByController,
+    resolveEnteringMinionUidsByController,
+} from '../ui/baseZoneEntryAnimation';
+
+vi.mock('../../../components/common/media/CardPreview', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../../../components/common/media/CardPreview')>();
+    return {
+        ...actual,
+        CardPreview: ({ previewRef }: { previewRef?: unknown }) => (
+            React.createElement('div', {
+                'data-testid': 'mock-card-preview',
+                'data-preview-ref': JSON.stringify(previewRef ?? null),
+            })
+        ),
+    };
+});
 
 const PLAYER_IDS = ['0', '1'];
+
+afterEach(() => {
+    cleanup();
+});
 
 function makeCard(uid: string, defId: string, owner: string, type: 'minion' | 'action' = 'action'): CardInstance {
     return { uid, defId, owner, type };
@@ -126,6 +152,133 @@ beforeAll(() => {
 });
 
 describe('SmashUp UI 交互验证', () => {
+    it('BaseZone 初次挂载时不应把现有随从误判成新入场', () => {
+        const turnOrder = ['0', '1'];
+        const minionsByController = {
+            '0': [makeMinion('ally-1', 'robot_microbot_alpha', '0', 2)],
+            '1': [makeMinion('enemy-1', 'pirate_first_mate', '1', 3)],
+        };
+
+        const initialSnapshot = buildMinionUidSnapshotByController(turnOrder, minionsByController);
+        const entering = resolveEnteringMinionUidsByController(turnOrder, initialSnapshot, initialSnapshot);
+
+        expect(Array.from(entering['0'] ?? [])).toEqual([]);
+        expect(Array.from(entering['1'] ?? [])).toEqual([]);
+    });
+
+    it('BaseZone 仅应给新 UID 随从播放入场动画，旧 UID 重渲染不应重复入场', () => {
+        const turnOrder = ['0', '1'];
+        const previousSnapshot = buildMinionUidSnapshotByController(turnOrder, {
+            '0': [makeMinion('ally-1', 'robot_microbot_alpha', '0', 2)],
+            '1': [makeMinion('enemy-1', 'pirate_first_mate', '1', 3)],
+        });
+        const currentSnapshot = buildMinionUidSnapshotByController(turnOrder, {
+            '0': [
+                makeMinion('ally-1', 'robot_microbot_alpha', '0', 2),
+                makeMinion('ally-2', 'robot_microbot_fixer', '0', 1),
+            ],
+            '1': [makeMinion('enemy-1', 'pirate_first_mate', '1', 3)],
+        });
+
+        const entering = resolveEnteringMinionUidsByController(turnOrder, currentSnapshot, previousSnapshot);
+
+        expect(Array.from(entering['0'] ?? [])).toEqual(['ally-2']);
+        expect(Array.from(entering['1'] ?? [])).toEqual([]);
+    });
+
+    it('原生泰坦图集预览应透传正确的 atlas index', () => {
+        render(
+            React.createElement(SmashUpCardRenderer, {
+                previewRef: {
+                    type: 'renderer',
+                    rendererId: 'smashup-card-renderer',
+                    payload: { defId: 'pirates_the_kraken' },
+                },
+            }),
+        );
+
+        const preview = screen.getByTestId('mock-card-preview');
+        expect(JSON.parse(preview.getAttribute('data-preview-ref') ?? 'null')).toEqual({
+            type: 'atlas',
+            atlasId: 'smashup:titans',
+            index: 14,
+        });
+    });
+
+    it('PromptOverlay 的卡牌选择模式应始终走 smashup-card-renderer（POD 卡也一样）', () => {
+        const interaction = createSimpleChoice(
+            'pod-preview-check',
+            '0',
+            '选择要取回的卡牌',
+            [
+                {
+                    id: 'card-0',
+                    label: '僵尸领主',
+                    value: { cardUid: 'discard-1', defId: 'zombie_lord_pod' },
+                    displayMode: 'card' as const,
+                },
+            ],
+            { sourceId: 'zombie_grave_robbing', targetType: 'generic' },
+        );
+
+        render(
+            React.createElement(
+                ToastProvider,
+                null,
+                React.createElement(PromptOverlay, {
+                    interaction,
+                    dispatch: () => undefined,
+                    playerID: '0',
+                }),
+            ),
+        );
+
+        const preview = screen.getByTestId('mock-card-preview');
+        expect(JSON.parse(preview.getAttribute('data-preview-ref') ?? 'null')).toEqual({
+            type: 'renderer',
+            rendererId: 'smashup-card-renderer',
+            payload: { defId: 'zombie_lord_pod' },
+        });
+    });
+
+    it('PromptOverlay 的排序卡牌选项只要带 defId，就应显示对应卡面而不是占位块', async () => {
+        const interaction = createSimpleChoice(
+            'deck-order-preview-check',
+            '0',
+            '选择放回牌库顶的顺序',
+            [
+                {
+                    id: 'card-0',
+                    label: '召唤',
+                    value: { topCardUid: 'top-b', cardUid: 'top-b', defId: 'wizard_summon' },
+                    displayMode: 'card' as const,
+                },
+            ],
+            { sourceId: 'vikings_cast_the_runes_order', targetType: 'generic' },
+        );
+
+        await act(async () => {
+            render(
+                React.createElement(
+                    ToastProvider,
+                    null,
+                    React.createElement(PromptOverlay, {
+                        interaction,
+                        dispatch: () => undefined,
+                        playerID: '0',
+                    }),
+                ),
+            );
+        });
+
+        const preview = screen.getByTestId('mock-card-preview');
+        expect(JSON.parse(preview.getAttribute('data-preview-ref') ?? 'null')).toEqual({
+            type: 'renderer',
+            rendererId: 'smashup-card-renderer',
+            payload: { defId: 'wizard_summon' },
+        });
+    });
+
     it('zombie_mall_crawl: 验证选项结构', () => {
         // 准备状态：手牌有 mall_crawl，牌库有多种卡牌
         const core = makeState({

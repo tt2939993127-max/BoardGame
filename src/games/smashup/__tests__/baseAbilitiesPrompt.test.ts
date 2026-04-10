@@ -25,11 +25,13 @@ import {
 } from '../domain/baseAbilities';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
+import { createScoringSession, setScoringSession } from '../domain/scoringSession';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { triggerBaseAbilityWithMS, getInteractionsFromResult, makeMatchState } from './helpers';
 import type { RandomFn } from '../../../engine/types';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 
 // ============================================================================
 // 初始化
@@ -127,6 +129,44 @@ describe('base_the_homeworld: 随从入场额外随从额度', () => {
         expect(payload.limitType).toBe('minion');
         expect(payload.delta).toBe(1);
     });
+
+    it('同回合再次打出随从时，仍会继续给额外额度', () => {
+        const { events } = triggerBaseAbility('base_the_homeworld', 'onMinionPlayed', makeCtx({
+            state: makeState({
+                players: {
+                    '0': makePlayer('0', { minionsPlayedPerBase: { 0: 2 } }),
+                    '1': makePlayer('1'),
+                },
+                bases: [makeBase('base_the_homeworld')],
+            }),
+            baseDefId: 'base_the_homeworld',
+            minionUid: 'm1',
+            minionDefId: 'alien_collector',
+            minionPower: 2,
+        }));
+
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+    });
+
+    it('POD 版本母星应复用同一能力', () => {
+        const { events } = triggerBaseAbility('base_the_homeworld_pod', 'onMinionPlayed', makeCtx({
+            state: makeState({
+                players: {
+                    '0': makePlayer('0', { minionsPlayedPerBase: { 0: 1 } }),
+                    '1': makePlayer('1'),
+                },
+                bases: [makeBase('base_the_homeworld_pod')],
+            }),
+            baseDefId: 'base_the_homeworld_pod',
+            minionUid: 'm1',
+            minionDefId: 'alien_collector_pod',
+            minionPower: 2,
+        }));
+
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+    });
 });
 
 // ============================================================================
@@ -184,6 +224,22 @@ describe('base_the_mothership: 计分后冠军收回随从', () => {
         }));
 
         expect(events).toHaveLength(0);
+    });
+
+    it('POD 版本母舰也应生成收回交互', () => {
+        const result = triggerBaseAbilityWithMS('base_the_mothership_pod', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_the_mothership_pod', {
+                    minions: [makeMinion('m1', '0', 2)],
+                })],
+            }),
+            baseDefId: 'base_the_mothership_pod',
+            rankings: [{ playerId: '0', power: 2, vp: 4 }],
+        }));
+
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(1);
+        expect(interactions[0].playerId).toBe('0');
     });
 });
 
@@ -437,6 +493,30 @@ describe('base_ninja_dojo: 计分后冠军消灭随从', () => {
 
         expect(events).toHaveLength(0);
     });
+
+    it('并列冠军时应为每位冠军各生成一个 Prompt', () => {
+        const result = triggerBaseAbilityWithMS('base_ninja_dojo', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_ninja_dojo', {
+                    minions: [
+                        makeMinion('m1', '0', 4),
+                        makeMinion('m2', '1', 4),
+                    ],
+                })],
+            }),
+            baseDefId: 'base_ninja_dojo',
+            rankings: [
+                { playerId: '0', power: 8, vp: 2 },
+                { playerId: '1', power: 8, vp: 2 },
+            ],
+        }));
+
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(2);
+        expect(interactions.map(interaction => interaction.playerId)).toEqual(['0', '1']);
+        expect(interactions.every(interaction => interaction.data.sourceId === 'base_ninja_dojo')).toBe(true);
+        expect(interactions.every(interaction => interaction.data.options.length === 3)).toBe(true);
+    });
 });
 
 describe('stale return/destroy regression: 基础基地 Prompt', () => {
@@ -684,8 +764,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
         expect(option).toBeDefined();
         expect(handler).toBeDefined();
 
-        const resolved = handler!(
-            makeMatchState(makeState({
+        const scoredState = makeMatchState(makeState({
                 bases: [
                     makeBase('base_tortuga', {
                         minions: [
@@ -699,29 +778,35 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
                         ],
                     }),
                 ],
-            })),
+            }));
+        const resolved = handler!(
+            setScoringSession(scoredState, {
+                ...createScoringSession(scoredState.core, [0]),
+                currentBaseRef: { slotIndex: 0, baseDefId: 'base_tortuga' },
+                currentStep: 'awaiting-interactions',
+                deferredPostScoringEvents: [
+                    {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: 0, baseDefId: 'base_tortuga' },
+                        timestamp: 2000,
+                    },
+                    {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: 0,
+                            oldBaseDefId: 'base_tortuga',
+                            newBaseDefId: 'base_secret_garden',
+                        },
+                        timestamp: 2000,
+                    },
+                ],
+            }),
             '1',
             option.value,
             {
                 ...interaction.data,
                 continuationContext: {
                     ...(interaction.data as any).continuationContext,
-                    _deferredPostScoringEvents: [
-                        {
-                            type: SU_EVENTS.BASE_CLEARED,
-                            payload: { baseIndex: 0, baseDefId: 'base_tortuga' },
-                            timestamp: 2000,
-                        },
-                        {
-                            type: SU_EVENTS.BASE_REPLACED,
-                            payload: {
-                                baseIndex: 0,
-                                oldBaseDefId: 'base_tortuga',
-                                newBaseDefId: 'base_secret_garden',
-                            },
-                            timestamp: 2000,
-                        },
-                    ],
                 },
             } as any,
             dummyRandom,
@@ -729,13 +814,14 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
         );
 
         expect(resolved?.events ?? []).toHaveLength(0);
-        expect(resolved?.state.core.pendingPostScoringActions).toEqual([
+        expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([
             {
                 kind: 'moveMinionToReplacementBase',
                 minionUid: 'm3',
                 minionDefId: 'd1',
                 fromBaseIndex: 1,
                 toBaseIndex: 0,
+                targetBaseDefId: 'base_secret_garden',
                 reason: '托尔图加：亚军移动随从到替换基地',
             },
         ]);
@@ -794,6 +880,32 @@ describe('base_wizard_academy: 计分后冠军重排基地牌库', () => {
         }));
 
         expect(events).toHaveLength(0);
+    });
+
+    it('基地牌库顶变化后不应继续保留旧的重排候选', () => {
+        const result = triggerBaseAbilityWithMS('base_wizard_academy', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_wizard_academy')],
+                baseDeck: ['base_a', 'base_b', 'base_c', 'base_d'],
+            }),
+            baseDefId: 'base_wizard_academy',
+            rankings: [{ playerId: '0', power: 5, vp: 3 }],
+        }));
+
+        const refreshedState = refreshInteractionOptions({
+            ...result.matchState!,
+            core: {
+                ...result.matchState!.core,
+                baseDeck: ['intrude_base', ...result.matchState!.core.baseDeck],
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('base_wizard_academy');
+        const optionDefIds = (current?.data?.options ?? []).map((option: any) => option.value?.defId).filter(Boolean);
+        expect(optionDefIds).not.toContain('base_a');
+        expect(optionDefIds).not.toContain('base_b');
+        expect(optionDefIds).not.toContain('base_c');
     });
 });
 

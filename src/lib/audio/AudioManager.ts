@@ -5,7 +5,14 @@
 import { Howl, Howler } from 'howler';
 import type { SoundDefinition, SoundKey, GameAudioConfig, BgmDefinition } from './types';
 import type { AudioRegistryEntry } from './commonRegistry';
-import { assetsPath, getOptimizedAudioUrl, waitForCriticalImages, isCriticalImagesReady } from '../../core/AssetLoader';
+import {
+    audioAssetsPath,
+    getCommonAudioAssetBaseOverride,
+    getOptimizedAudioUrl,
+    waitForCriticalImages,
+    isCriticalImagesReady,
+    resolveAssetsBaseUrlFromEnv,
+} from '../../core/AssetLoader';
 
 const isPassthroughSource = (src: string) => (
     src.startsWith('data:')
@@ -21,7 +28,7 @@ const normalizeBasePath = (basePath: string) => {
     if (isPassthroughSource(basePath)) {
         return ensureTrailingSlash(basePath);
     }
-    return ensureTrailingSlash(assetsPath(basePath));
+    return ensureTrailingSlash(audioAssetsPath(basePath));
 };
 
 const buildAudioSrc = (basePath: string, src: string) => {
@@ -35,7 +42,67 @@ const formatSrcForLog = (src: string | string[]) => (
     Array.isArray(src) ? src.join('|') : src
 );
 
+const OFFICIAL_REMOTE_ASSETS_BASE_URL = resolveAssetsBaseUrlFromEnv({
+    DEV: false,
+    VITE_ASSET_SOURCE: 'remote',
+});
+
 const MAX_CONCURRENT_LOADS = 4;
+
+const splitUrlSuffix = (value: string) => {
+    const hashIndex = value.indexOf('#');
+    const withoutHash = hashIndex >= 0 ? value.slice(0, hashIndex) : value;
+    const hash = hashIndex >= 0 ? value.slice(hashIndex) : '';
+    const queryIndex = withoutHash.indexOf('?');
+    return {
+        path: queryIndex >= 0 ? withoutHash.slice(0, queryIndex) : withoutHash,
+        suffix: queryIndex >= 0 ? `${withoutHash.slice(queryIndex)}${hash}` : hash,
+    };
+};
+
+const dedupeAudioSrcList = (list: string[]) => {
+    const unique: string[] = [];
+    const seen = new Set<string>();
+    for (const item of list) {
+        if (!item || seen.has(item)) continue;
+        seen.add(item);
+        unique.push(item);
+    }
+    return unique;
+};
+
+const toOfficialRemoteAssetUrl = (src: string) => {
+    const { path, suffix } = splitUrlSuffix(src);
+    const commonAudioAssetBaseOverride = getCommonAudioAssetBaseOverride();
+    let relativePath = '';
+
+    if (path.startsWith('/assets/')) {
+        relativePath = path.replace(/^\/+assets\/+/, '');
+    } else if (commonAudioAssetBaseOverride && path.startsWith(`${commonAudioAssetBaseOverride}/`)) {
+        relativePath = path.slice(commonAudioAssetBaseOverride.length + 1);
+    } else {
+        return null;
+    }
+
+    if (!relativePath) return null;
+    return `${OFFICIAL_REMOTE_ASSETS_BASE_URL}/${relativePath}${suffix}`;
+};
+
+const buildAudioFallbackSrcs = (src: string | string[]) => {
+    const sourceList = Array.isArray(src) ? src : [src];
+    const candidates: string[] = [];
+
+    for (const item of sourceList) {
+        if (!item) continue;
+        candidates.push(item);
+        const remoteFallback = toOfficialRemoteAssetUrl(item);
+        if (remoteFallback) {
+            candidates.push(remoteFallback);
+        }
+    }
+
+    return dedupeAudioSrcList(candidates);
+};
 
 const extractNameFromSrc = (src: string): string => {
     const fileName = src.split('/').pop() ?? src;
@@ -65,6 +132,73 @@ class AudioManagerClass {
     private _unlockListenerAttached: boolean = false;
     private _pendingBgmKey: string | null = null;
     private _loadingCount: number = 0;
+
+    private createHowlWithFallback(
+        src: string | string[],
+        options: Omit<ConstructorParameters<typeof Howl>[0], 'src' | 'onloaderror'> & {
+            onloaderror?: (id: number, error: unknown) => void;
+            onReplace?: (howl: Howl) => void;
+        }
+    ): Howl {
+        const candidates = buildAudioFallbackSrcs(src);
+
+        const createAt = (index: number): Howl => {
+            const candidateSrc = candidates[index];
+            const howl = new Howl({
+                ...options,
+                src: [candidateSrc],
+                onloaderror: (id, error) => {
+                    if (index + 1 < candidates.length) {
+                        const nextHowl = createAt(index + 1);
+                        options.onReplace?.(nextHowl);
+                        howl.unload();
+                        return;
+                    }
+                    options.onloaderror?.(id, error);
+                },
+            });
+            return howl;
+        };
+
+        return createAt(0);
+    }
+
+    private isAudioDisabled(): boolean {
+        if (typeof window === 'undefined') return false;
+        const holder = window as Window & {
+            __BG_DISABLE_AUDIO__?: boolean;
+            __E2E_TEST_MODE__?: boolean;
+        };
+        if (holder.__BG_DISABLE_AUDIO__) return true;
+        if (!holder.__E2E_TEST_MODE__) return false;
+        try {
+            return window.localStorage.getItem('audio_muted') === 'true';
+        } catch {
+            return false;
+        }
+    }
+
+    private syncStoredSettings(): void {
+        const savedMuted = localStorage.getItem('audio_muted');
+        const savedMasterVolume = localStorage.getItem('audio_master_volume');
+        const savedSfxVolume = localStorage.getItem('audio_sfx_volume');
+        const savedBgmVolume = localStorage.getItem('audio_bgm_volume');
+
+        if (savedMuted !== null) {
+            this._muted = savedMuted === 'true';
+            Howler.mute(this._muted);
+        }
+        if (savedMasterVolume !== null) {
+            this._masterVolume = parseFloat(savedMasterVolume);
+            Howler.volume(this._masterVolume);
+        }
+        if (savedSfxVolume !== null) {
+            this._sfxVolume = parseFloat(savedSfxVolume);
+        }
+        if (savedBgmVolume !== null) {
+            this._bgmVolume = parseFloat(savedBgmVolume);
+        }
+    }
 
     private getAudioContext(): AudioContext | null {
         return (Howler as unknown as { ctx?: AudioContext }).ctx ?? null;
@@ -204,27 +338,12 @@ class AudioManagerClass {
      */
     initialize(): void {
         if (this._initialized) return;
-        // 尝试恢复用户设置
-        const savedMuted = localStorage.getItem('audio_muted');
-        const savedMasterVolume = localStorage.getItem('audio_master_volume');
-        const savedSfxVolume = localStorage.getItem('audio_sfx_volume');
-        const savedBgmVolume = localStorage.getItem('audio_bgm_volume');
-
-        if (savedMuted !== null) {
-            this._muted = savedMuted === 'true';
-            Howler.mute(this._muted);
-        }
-        if (savedMasterVolume !== null) {
-            this._masterVolume = parseFloat(savedMasterVolume);
-            Howler.volume(this._masterVolume);
-        }
-        if (savedSfxVolume !== null) {
-            this._sfxVolume = parseFloat(savedSfxVolume);
-        }
-        if (savedBgmVolume !== null) {
-            this._bgmVolume = parseFloat(savedBgmVolume);
-        }
+        this.syncStoredSettings();
         this._initialized = true;
+        if (this.isAudioDisabled()) {
+            this._pendingBgmKey = null;
+            return;
+        }
 
         // 尽早注册用户手势监听，确保首次交互即可解锁 AudioContext
         this.registerUnlockHandler();
@@ -235,23 +354,17 @@ class AudioManagerClass {
      * 用于登出时还原游客本地偏好（因为远程同步 apply 只改内存，不写 localStorage）。
      */
     restoreLocalSettings(): void {
-        const savedMuted = localStorage.getItem('audio_muted');
-        const savedMasterVolume = localStorage.getItem('audio_master_volume');
-        const savedSfxVolume = localStorage.getItem('audio_sfx_volume');
-        const savedBgmVolume = localStorage.getItem('audio_bgm_volume');
-
-        this._muted = savedMuted === 'true';
-        Howler.mute(this._muted);
-
-        if (savedMasterVolume !== null) {
-            this._masterVolume = parseFloat(savedMasterVolume);
-        } else {
+        this.syncStoredSettings();
+        if (localStorage.getItem('audio_master_volume') === null) {
             this._masterVolume = 1.0;
+            Howler.volume(this._masterVolume);
         }
-        Howler.volume(this._masterVolume);
-
-        this._sfxVolume = savedSfxVolume !== null ? parseFloat(savedSfxVolume) : 1.0;
-        this._bgmVolume = savedBgmVolume !== null ? parseFloat(savedBgmVolume) : 0.6;
+        if (localStorage.getItem('audio_sfx_volume') === null) {
+            this._sfxVolume = 1.0;
+        }
+        if (localStorage.getItem('audio_bgm_volume') === null) {
+            this._bgmVolume = 0.6;
+        }
 
         if (this._currentBgm) {
             this.bgms.get(this._currentBgm)?.volume(this._bgmVolume);
@@ -274,10 +387,7 @@ class AudioManagerClass {
      * 批量注册音频（仅登记定义，按需加载）
      */
     registerAll(config: GameAudioConfig, basePath: string = ''): void {
-        if (typeof window !== 'undefined') {
-            const holder = window as Window & { __BG_DISABLE_AUDIO__?: boolean };
-            if (holder.__BG_DISABLE_AUDIO__) return;
-        }
+        if (this.isAudioDisabled()) return;
         const normalizedBasePath = normalizeBasePath(basePath);
 
         // 登记音效定义
@@ -315,6 +425,7 @@ class AudioManagerClass {
      * 播放音效
      */
     play(key: SoundKey, spriteKey?: string, onEnd?: () => void): number | null {
+        if (this.isAudioDisabled()) return null;
         if (this.failedKeys.has(key)) return null;
         let howl = this.sounds.get(key);
         if (!howl) {
@@ -329,12 +440,14 @@ class AudioManagerClass {
             }
             this.soundDefinitions.set(key, definition);
             this._loadingCount++;
-            howl = new Howl({
-                src: Array.isArray(definition.src) ? definition.src : [definition.src],
+            howl = this.createHowlWithFallback(definition.src, {
                 volume: (definition.volume ?? 1.0) * this._sfxVolume,
                 loop: definition.loop ?? false,
                 sprite: definition.sprite,
                 preload: true,
+                onReplace: (nextHowl) => {
+                    this.sounds.set(key, nextHowl);
+                },
                 onload: () => {
                     this._loadingCount = Math.max(0, this._loadingCount - 1);
                 },
@@ -372,6 +485,10 @@ class AudioManagerClass {
      * 播放 BGM
      */
     playBgm(key: string): void {
+        if (this.isAudioDisabled()) {
+            this.stopBgm();
+            return;
+        }
         let howl = this.bgms.get(key);
         if (!howl) {
             const definition = this.bgmDefinitions.get(key);
@@ -388,12 +505,14 @@ class AudioManagerClass {
             this._bgmReadyPromise = new Promise<void>(resolve => {
                 this._bgmReadyResolve = resolve;
             });
-            howl = new Howl({
-                src: Array.isArray(mergedDef.src) ? mergedDef.src : [mergedDef.src],
+            howl = this.createHowlWithFallback(mergedDef.src, {
                 volume: (mergedDef.volume ?? 1.0) * this._bgmVolume,
                 loop: true,
                 html5: true,
                 preload: false,
+                onReplace: (nextHowl) => {
+                    this.bgms.set(key, nextHowl);
+                },
                 onload: () => {},
                 onplay: () => {
                     // BGM 开始播放（流式，不需要完全下载），通知音效预加载可以开始
@@ -538,6 +657,7 @@ class AudioManagerClass {
      * 3. 每批最多 PRELOAD_BATCH_SIZE 个，通过 requestIdleCallback 空闲调度
      */
     preloadKeys(keys: SoundKey[]): void {
+        if (this.isAudioDisabled()) return;
         // 过滤出需要加载的 key
         const pending = keys.filter(key =>
             !this.sounds.has(key) && !this.failedKeys.has(key)
@@ -560,12 +680,14 @@ class AudioManagerClass {
                 const definition = this.soundDefinitions.get(key) ?? this.resolveRegistrySoundDefinition(key);
                 if (!definition) continue;
                 this.soundDefinitions.set(key, definition);
-                const howl = new Howl({
-                    src: Array.isArray(definition.src) ? definition.src : [definition.src],
+                const howl = this.createHowlWithFallback(definition.src, {
                     volume: (definition.volume ?? 1.0) * this._sfxVolume,
                     loop: definition.loop ?? false,
                     sprite: definition.sprite,
                     preload: true,
+                    onReplace: (nextHowl) => {
+                        this.sounds.set(key, nextHowl);
+                    },
                     onloaderror: (_id, error) => {
                         console.error(`[Audio] preload_failed key=${key} src=${formatSrcForLog(definition.src)} error=${String(error)}`);
                         this.failedKeys.add(key);

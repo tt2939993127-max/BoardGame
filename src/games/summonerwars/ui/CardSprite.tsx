@@ -3,10 +3,10 @@
  * 使用 CardAtlas 配置精确裁切精灵图
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { CSSProperties } from 'react';
 import { getSpriteAtlasSource, getSpriteAtlasStyle, getFrameAspectRatio } from './cardAtlas';
-import { isImagePreloaded } from '../../../core/AssetLoader';
+import { isImagePreloaded, onImageReady } from '../../../core/AssetLoader';
 
 export interface CardSpriteProps {
   /** 精灵图源 ID */
@@ -35,42 +35,59 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
   style,
 }) => {
   const source = getSpriteAtlasSource(atlasId);
-  const [loaded, setLoaded] = useState(() => !!source && isImagePreloaded(source.image));
-  const imageUrlRef = useRef<string>('');
+  const imageUrl = source?.image ?? '';
+  const preloaded = !source || isImagePreloaded(imageUrl);
+  const [loadedImageUrl, setLoadedImageUrl] = useState(preloaded ? imageUrl : '');
+  const loaded = !source || preloaded || loadedImageUrl === imageUrl;
 
   // 预加载图片并监听加载状态
   useEffect(() => {
     if (!source) {
-      setLoaded(true);
       return;
     }
-
-    const imageUrl = source.image;
-
-    // 如果图片 URL 没变，不重新加载
-    if (imageUrlRef.current === imageUrl && loaded) {
-      return;
-    }
-
-    imageUrlRef.current = imageUrl;
-
-    // 已预加载，直接标记完成
     if (isImagePreloaded(imageUrl)) {
-      setLoaded(true);
       return;
     }
-
-    setLoaded(false);
+    let cancelled = false;
 
     const img = new Image();
-    img.onload = () => setLoaded(true);
-    img.onerror = () => setLoaded(true);
+    img.onload = () => {
+      if (!cancelled) {
+        setLoadedImageUrl(imageUrl);
+      }
+    };
+    img.onerror = () => {
+      if (!cancelled) {
+        setLoadedImageUrl(imageUrl);
+      }
+    };
     img.src = imageUrl;
 
     if (img.complete) {
-      setLoaded(true);
+      queueMicrotask(() => {
+        if (!cancelled) {
+          setLoadedImageUrl(imageUrl);
+        }
+      });
     }
-  }, [source, loaded]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [imageUrl, source]);
+
+  useEffect(() => {
+    if (!source) {
+      return;
+    }
+
+    return onImageReady((url) => {
+      if (url !== imageUrl || !isImagePreloaded(url)) {
+        return;
+      }
+      setLoadedImageUrl(url);
+    });
+  }, [imageUrl, source]);
 
   if (!source) {
     return <div className={`bg-slate-700 ${className}`} style={style} />;
@@ -81,6 +98,10 @@ export const CardSprite: React.FC<CardSpriteProps> = ({
 
   return (
     <div
+      data-card-sprite="true"
+      data-image-loaded={loaded ? 'true' : 'false'}
+      data-atlas-id={atlasId}
+      data-frame-index={frameIndex}
       className={className}
       style={{
         aspectRatio: `${aspectRatio}`,

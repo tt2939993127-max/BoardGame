@@ -80,20 +80,30 @@ export interface TutorialStep {
 3. **智能定位逻辑**：
    气泡定位优先级为：**右侧 > 左侧 > 下方 > 上方**。系统会自动检测边缘空间并进行约束（Clamping，防止超出屏幕）。
 
-4. **Hooks 限制**：
+4. **移动端横屏适配**：
+   当视口进入移动端横屏范围时，`TutorialOverlay` 会自动改用贴边的紧凑面板布局，优先避开刘海和手势安全区，并优先选择**不遮挡当前关键目标**的位置。编写教程步骤时，不要假设文案卡片一定出现在高亮目标的同侧；如果某一步的核心目标位于棋盘中央或基地/战区附近，优先验证左侧 / 右侧贴边布局是否更安全。
+   - 如果高亮目标本身是**底部/顶部条带式操作区**（例如手牌区、顶部 HUD、底部工具栏），移动端横屏下默认应优先把教程卡放到**左侧或右侧贴边**，避免把棋盘中央或下一步操作区盖住。
+
+5. **新增/修改教程后的 UI 遮挡验收（强制）**：
+   - 必须在真实 E2E 中检查教程卡片与本步关键目标之间的**遮挡关系**，不能只验证“教程出现了”。
+   - 移动端横屏至少保留 1 张关键截图，截图里要同时看到：教程卡片、被引导目标、两者相对位置。
+   - 如果教程步骤要求用户继续点击基地/战区/手牌/按钮，E2E 中禁止用 `force: true` 掩盖遮挡或点击失败；测试必须证明真实点击链路可继续完成。
+   - 若发现遮挡，应优先调整教程位置策略或步骤布局，而不是靠提高 `z-index` 硬压过去。
+
+6. **Hooks 限制**：
    修改 `TutorialOverlay` 时，严格遵守 React Hooks 规则：所有 Hooks 必须在任何 `return null` 之前调用。
 
-5. **`overflow: hidden` 容器与 `scrollIntoView`**：
+7. **`overflow: hidden` 容器与 `scrollIntoView`**：
    当高亮目标在 `overflow: hidden` 容器（如基于 CSS transform 平移的地图组件）内时，`TutorialOverlay` 会自动跳过 `scrollIntoView` 调用。这类容器通过 transform 自行管理可见性，`scrollIntoView` 会产生意外的 `scrollTop` 偏移，与 transform 定位冲突。如果你的游戏使用了类似的 transform 容器，无需额外处理——该逻辑已在 `TutorialOverlay` 中通用解决。
 
-6. **命令限制优先级**：
+8. **命令限制优先级**：
    教程系统按以下优先级检查命令限制：
    - `allowedCommands`：白名单模式，只允许列表中的命令
    - `infoStep: true`：纯说明步骤，阻止所有非系统命令
    
    **注意**：系统命令（`SYS_` 前缀）始终不受限制，包括 CHEAT 命令和教程控制命令。
 
-8. **目标级门控（`allowedTargets`）**：
+9. **目标级门控（`allowedTargets`）**：
    `allowedTargets` 可以在交互步骤中限制只有特定卡牌/单位可交互，其他置灰显示。
    - 这是 **UI 层** 的门控，引擎不感知此字段，逻辑在 Board 组件中实现。
    - 各游戏自行定义"目标"含义：SmashUp = cardUid，TTT = cellId，DT = cardId 等。
@@ -107,7 +117,7 @@ export interface TutorialStep {
    }
    ```
 
-7. **动画等待**：
+10. **动画等待**：
    对于有视觉效果的操作步骤（如召唤、攻击），设置 `waitForAnimation: true` 可以让教程等待动画播放完毕后才推进到下一步。
    
    游戏层需要在动画完成时调用 `tutorialAnimationComplete()`（从 `useTutorial()` 获取）。

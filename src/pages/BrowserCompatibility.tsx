@@ -98,9 +98,8 @@ const ghostButtonStyle: CSSProperties = {
 };
 
 const reasonKeyMap: Record<BrowserCompatibilityReason, string> = {
-    'css-oklch': 'compatibility.reasonOklch',
-    'css-translate': 'compatibility.reasonTranslate',
-    'css-register-property': 'compatibility.reasonRegisterProperty',
+    'runtime-core': 'compatibility.reasonRuntimeCore',
+    'game-resize-observer': 'compatibility.reasonResizeObserver',
 };
 
 export const BrowserCompatibilityPage = ({
@@ -120,10 +119,11 @@ export const BrowserCompatibilityPage = ({
         : report.browserName;
 
     return (
-        <div style={pageStyle}>
+        <div data-bg-friendly-screen="true" style={pageStyle}>
             <SEO
                 title={t('compatibility.seoTitle')}
                 description={t('compatibility.seoDescription')}
+                noIndex
             />
 
             <div

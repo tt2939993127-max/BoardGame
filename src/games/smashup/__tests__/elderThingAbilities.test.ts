@@ -2,7 +2,7 @@
  * 大杀四方 - 远古之物派系能力测试
  *
  * 覆盖：
- * - elder_thing_byakhee（拜亚基）：有对手随从时抽疯狂卡
+ * - elder_thing_byakhee（拜亚基）：每位在这里有随从的对手抽疯狂卡
  * - elder_thing_mi_go（米-格）：对手抽疯狂卡或你抽牌
  * - elder_thing_insanity（精神错乱）：对手各抽两张疯狂卡
  * - elder_thing_touch_of_madness（疯狂接触）：对手抽疯狂卡 + 你抽牌 + 额外行动
@@ -30,6 +30,7 @@ import { clearInteractionHandlers, getInteractionHandler } from '../domain/abili
 import { applyEvents, makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
 beforeAll(() => {
     clearRegistry();
@@ -128,8 +129,8 @@ function applyEvents(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCore {
 // ============================================================================
 
 describe('远古之物派系能力', () => {
-    describe('elder_thing_byakhee（拜亚基：有对手随从时抽疯狂卡）', () => {
-        it('基地有对手随从时抽一张疯狂卡', () => {
+    describe('elder_thing_byakhee（拜亚基：每位在这里有随从的对手抽疯狂卡）', () => {
+        it('基地有一位对手随从时，该对手抽一张疯狂卡', () => {
             const state = makeState({
                 players: {
                     '0': makePlayer('0', {
@@ -147,8 +148,56 @@ describe('远古之物派系能力', () => {
             const events = execPlayMinion(state, '0', 'm1', 0);
             const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
             expect(madnessEvents.length).toBe(1);
-            expect((madnessEvents[0] as any).payload.playerId).toBe('0');
+            expect((madnessEvents[0] as any).payload.playerId).toBe('1');
             expect((madnessEvents[0] as any).payload.count).toBe(1);
+        });
+
+        it('三人局中只有 P2 在该基地有随从时，P2 抽一张疯狂卡', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_byakhee', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                    '2': makePlayer('2'),
+                },
+                turnOrder: ['0', '1', '2'],
+                bases: [{
+                    defId: 'b1',
+                    minions: [makeMinion('opp2', 'test', '2', 3)],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(1);
+            expect((madnessEvents[0] as any).payload.playerId).toBe('2');
+            expect((madnessEvents[0] as any).payload.count).toBe(1);
+        });
+
+        it('三人局中两位对手都在该基地有随从时，两位对手各抽一张疯狂卡', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('m1', 'elder_thing_byakhee', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                    '2': makePlayer('2'),
+                },
+                turnOrder: ['0', '1', '2'],
+                bases: [{
+                    defId: 'b1',
+                    minions: [makeMinion('opp1', 'test', '1', 3), makeMinion('opp2', 'test', '2', 2)],
+                    ongoingActions: [],
+                }],
+            });
+
+            const events = execPlayMinion(state, '0', 'm1', 0);
+            const madnessEvents = events.filter(e => e.type === SU_EVENTS.MADNESS_DRAWN);
+            expect(madnessEvents.length).toBe(2);
+            expect(madnessEvents.map(e => (e as any).payload.playerId)).toEqual(['1', '2']);
+            expect(madnessEvents.map(e => (e as any).payload.count)).toEqual([1, 1]);
         });
 
         it('基地无对手随从时不抽疯狂卡', () => {
@@ -471,6 +520,70 @@ describe('远古之物派系能力', () => {
 
             expect(reshuffleEvents.length).toBe(0);
             expect(limitEvents.length).toBe(1);
+        });
+
+        it('授予的额外战术额度会被后续打出的疯狂卡正常消耗', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [
+                            makeCard('begin', 'elder_thing_begin_the_summoning', 'action', '0'),
+                            makeCard('mad-1', MADNESS_CARD_DEF_ID, 'action', '0'),
+                            makeCard('mad-2', MADNESS_CARD_DEF_ID, 'action', '0'),
+                        ],
+                        discard: [makeCard('disc-minion', 'test_minion', 'minion', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            });
+
+            const playBegin = runCommand(makeMatchState(state), {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'begin' },
+            } as any, defaultRandom);
+            expect(playBegin.success).toBe(true);
+
+            const beginPrompt = (playBegin.finalState.sys as any)?.interaction?.current;
+            expect(beginPrompt?.data?.sourceId).toBe('elder_thing_begin_the_summoning');
+
+            const resolveBegin = runCommand(playBegin.finalState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: '0',
+                payload: { optionId: beginPrompt.data.options[0].id },
+            } as any, defaultRandom);
+            expect(resolveBegin.success).toBe(true);
+            expect(resolveBegin.finalState.core.players['0'].actionsPlayed).toBe(1);
+            expect(resolveBegin.finalState.core.players['0'].actionLimit).toBe(2);
+
+            const playMadness = runCommand(resolveBegin.finalState, {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'mad-1' },
+            } as any, defaultRandom);
+            expect(playMadness.success).toBe(true);
+
+            const madnessPrompt = (playMadness.finalState.sys as any)?.interaction?.current;
+            expect(madnessPrompt?.data?.sourceId).toBe('special_madness');
+
+            const consumeMadness = runCommand(playMadness.finalState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: '0',
+                payload: {
+                    optionId: madnessPrompt.data.options.find((option: any) => option.value?.action === 'return')?.id,
+                },
+            } as any, defaultRandom);
+            expect(consumeMadness.success).toBe(true);
+            expect(consumeMadness.finalState.core.players['0'].actionsPlayed).toBe(2);
+            expect(consumeMadness.finalState.core.players['0'].actionLimit).toBe(2);
+
+            const playSecondMadness = runCommand(consumeMadness.finalState, {
+                type: SU_COMMANDS.PLAY_ACTION,
+                playerId: '0',
+                payload: { cardUid: 'mad-2' },
+            } as any, defaultRandom);
+            expect(playSecondMadness.success).toBe(false);
+            expect(playSecondMadness.error).toContain('本回合行动额度已用完');
         });
     });
 

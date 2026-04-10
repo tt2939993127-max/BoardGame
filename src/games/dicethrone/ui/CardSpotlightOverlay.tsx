@@ -16,6 +16,7 @@ import SpotlightContainer from './SpotlightContainer';
 import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
+import { resolveBonusDieText } from './bonusDieTranslation';
 
 /** 汇总文本组件（显示伤害加成等信息） */
 const SummaryText: React.FC<{
@@ -23,8 +24,8 @@ const SummaryText: React.FC<{
     effectParams: Record<string, string | number>;
     locale?: string;
 }> = ({ effectKey, effectParams }) => {
-    const { t } = useTranslation('game-dicethrone');
-    const text = t(effectKey, effectParams);
+    const { t, i18n } = useTranslation('game-dicethrone');
+    const text = resolveBonusDieText(effectKey, { t, i18n, params: effectParams }) ?? effectKey;
     
     return (
         <motion.div

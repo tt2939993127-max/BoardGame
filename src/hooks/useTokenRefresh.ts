@@ -7,6 +7,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { AUTH_API_URL } from '../config/server';
+import { onAppVisible } from '../lib/mobile/appVisibility';
 
 // 提前刷新时间（提前1天刷新）
 const REFRESH_BEFORE_MS = 24 * 60 * 60 * 1000;
@@ -22,14 +23,30 @@ interface TokenPayload {
     exp: number; // expires at (秒)
 }
 
+function decodeBase64Url(value: string): string | null {
+    try {
+        const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+        const padding = normalized.length % 4 === 0
+            ? ''
+            : '='.repeat(4 - (normalized.length % 4));
+        const binary = atob(normalized + padding);
+        const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
+        return new TextDecoder().decode(bytes);
+    } catch {
+        return null;
+    }
+}
+
 /**
  * 解析 JWT token 获取过期时间
  */
-function parseToken(token: string): TokenPayload | null {
+export function parseToken(token: string): TokenPayload | null {
     try {
         const parts = token.split('.');
         if (parts.length !== 3) return null;
-        const payload = JSON.parse(atob(parts[1]));
+        const payloadText = decodeBase64Url(parts[1]);
+        if (!payloadText) return null;
+        const payload = JSON.parse(payloadText);
         return payload;
     } catch {
         return null;
@@ -39,7 +56,7 @@ function parseToken(token: string): TokenPayload | null {
 /**
  * 计算距离过期还有多久（毫秒）
  */
-function getTimeUntilExpiry(token: string): number | null {
+export function getTimeUntilExpiry(token: string): number | null {
     const payload = parseToken(token);
     if (!payload?.exp) return null;
     const expiryMs = payload.exp * 1000;
@@ -160,10 +177,8 @@ export function useTokenRefresh() {
 
         scheduleRefresh();
 
-        // 监听 visibilitychange，页面恢复可见时检查 token 是否需要刷新
-        const handleVisibilityChange = () => {
-            if (document.hidden) return;
-            
+        // 监听 App 恢复到前台，检查 token 是否需要刷新
+        const handleAppVisible = () => {
             // 读最新 token，避免闭包捕获旧值
             const currentToken = getCurrentToken();
             if (!currentToken) return;
@@ -200,11 +215,11 @@ export function useTokenRefresh() {
             }
         };
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        const cleanupAppVisible = onAppVisible(handleAppVisible);
 
         return () => {
             clearTimer();
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            cleanupAppVisible();
         };
     }, [token, logout, clearTimer, handleRefreshSuccess]);
 }

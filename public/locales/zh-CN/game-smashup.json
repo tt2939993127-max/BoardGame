@@ -2,6 +2,12 @@
   "title": "大杀四方",
   "description": "这是一款适合2-4人进行的卡牌类互车游戏！玩家控制两个不同种族抢夺基地的控制权，通过争夺基地来获取胜利分数，最快获得15点胜利分数的玩家获胜！不同种族的配合造就玩家不一样的策略，基础版提供8个各具特色的种族，有专门控制部队外星人、狂野的机甲暴龙、灵活的忍者、群龙见首不见尾的海盗、群体攻击力强大的战争机器，控制对方手牌的戏谑妖精，行动能力强大的大魔法师、不停复活的墓地僵尸，多种配合打法让游戏变化多变，谁能更好掌握种族之间微妙的配合，打出优势，谁才能控制更多的基地，从而获得胜利！还在等什么，赶紧来认领自己喜爱的种族，一起大杀四方！（发行年份：2012；类型：竞争/卡牌；评分：7.2）",
   "players": "2-4人",
+  "setup": {
+    "expansions": {
+      "label": "扩展规则",
+      "titans": "泰坦"
+    }
+  },
   "phases": {
     "factionSelect": "选人阶段",
     "startTurn": "回合开始",
@@ -11,6 +17,8 @@
     "endTurn": "回合结束"
   },
   "error": {
+    "invalid_command_missing_type": "命令无效：缺少类型",
+    "me_first_response_window_active": "Me First! 响应窗口仍在进行中",
     "tutorial_manifest_invalid": "教程配置无效",
     "tutorial_command_blocked": "教程中禁止该操作",
     "tutorial_step_locked": "当前步骤不能跳过"
@@ -23,6 +31,7 @@
     "finish_turn": "结束回合",
     "deck": "牌库",
     "discard": "弃牌",
+    "titan": "泰坦",
     "viewing": "查看中",
     "discard_pile": "弃牌堆",
     "empty_pile": "空无一物",
@@ -56,11 +65,19 @@
     "minion_count": "{{count}} 随从",
     "action_count": "{{count}} 战术",
     "selected": "已选择",
+    "click_to_cancel_selection": "点击取消选择",
+    "faction_selected_hint": "已选，可点开取消",
+    "faction_selected_label": "已选",
     "taken_by_other": "已被其他玩家选择",
     "faction_full": "已选满 2 个派系",
     "confirm_selection": "确认选择",
+    "cancel_selection": "取消选择",
     "wait_turn": "等待你的回合",
     "preview_cards": "包含卡牌预览",
+    "faction_titan_preview": "泰坦预览",
+    "faction_titan_missing": "该种族泰坦暂未接入",
+    "faction_variant_base": "原版",
+    "faction_variant_pod": "POD版",
     "minion": "随从",
     "action": "战术",
     "discard_badge": "丢弃",
@@ -76,6 +93,36 @@
     "card_placeholder": "卡牌",
     "me_first_title": "⚡ 先手响应！",
     "after_scoring_title": "计分后响应",
+    "duel_in_progress": "决斗进行中：依次处理平克顿加指示物、从手牌打出决斗牌、弃副警长加力量，最后再结算胜负",
+    "duel_prompt_pinkerton_title": "平克顿：选择这场决斗前要放置的 +1 力量指示物数量",
+    "duel_prompt_card_title": "决斗牌：从手牌选择 1 张要用于这场决斗的牌，或跳过",
+    "duel_prompt_deputy_title": "副警长：你可以弃掉 1 张副警长，使 1 个随从直到回合结束获得 +2 力量",
+    "duel_prompt_deputy_target_title": "副警长：选择 1 个随从，使其直到回合结束获得 +2 力量",
+    "duel_prompt_ongoing_base_title": "决斗牌：选择此持续行动的目标基地",
+    "duel_prompt_ongoing_minion_title": "决斗牌：选择此持续行动的目标随从",
+    "duel_prompt_run_em_off_title": "赶走他们：选择失败者要移动到的基地",
+    "duel_prompt_run_em_off_tie_title": "赶走他们：选择对方随从要移动到的基地",
+    "duel_prompt_resolve_title": "决斗结算",
+    "duel_option_no_counters": "不放置指示物",
+    "duel_option_add_counters": "放置 {{count}} 个指示物",
+    "duel_option_skip_duel_card": "跳过（不从手牌打出决斗牌）",
+    "duel_option_skip_deputy": "跳过（不弃副警长）",
+    "reaction_timing": {
+      "onMinionPlayed": "随从打出后",
+      "onActionPlayed": "行动打出后",
+      "onCardBuried": "埋葬后",
+      "onBuriedCardUncovered": "翻开埋葬牌后",
+      "onBaseRevealed": "基地翻开后",
+      "onMinionDestroyed": "随从被消灭后",
+      "onMinionMoved": "随从移动后",
+      "onMinionAffected": "随从受影响后",
+      "onMinionDiscardedFromBase": "随从因基地结算弃置后",
+      "onTurnEnd": "回合结束时",
+      "onTurnStart": "回合开始时",
+      "beforeScoring": "计分前",
+      "afterScoring": "计分后",
+      "unknown": "触发"
+    },
     "thinking": "思考中...",
     "loading": "加载中...",
     "reveal_hand_title": "P{{player}} 的手牌",
@@ -95,7 +142,11 @@
     "action_short": "战术",
     "action_global_quota": "通用额度",
     "action_extra_hint": "含额外战术额度 +{{extra}}",
+    "show_end_turn_controls": "显示结束回合按钮和额度提示",
+    "hide_end_turn_controls": "隐藏结束回合按钮和额度提示",
     "close": "关闭",
+    "close_faction_details": "关闭派系详情",
+    "mechanic_tutorial": "机制教程",
     "reveal_your_hand_shown": "你的手牌正在被展示",
     "reveal_confirmed": "已确认",
     "reveal_queue_hint": "{{count}} 条展示待查看 · 点击继续",
@@ -106,10 +157,18 @@
     "power_counter": "力量指示物",
     "skip": "跳过",
     "wait_for_your_turn": "等待你的响应回合",
+    "drag_release_to_base": "松手打到这个基地",
+    "drag_release_to_minion": "松手附着到这个随从",
+    "drag_release_to_board": "松手打出该卡",
+    "drag_no_target": "拖到发光目标上",
     "fusion_choose_playas": "选择打出方式",
     "fusion_choose_playas_desc": "融合卡可以作为随从或战术打出。请选择本次打出的类型。",
     "play_as_minion": "作为随从",
-    "play_as_action": "作为战术"
+    "play_as_action": "作为战术",
+    "tap_again_to_activate": "再次点击发动",
+    "titan_ability": "泰坦能力",
+    "titan_play_available": "可打出",
+    "no_valid_targets": "没有可选目标"
   },
   "feedback": {
     "deck_search_no_match": "牌库中未找到符合条件的卡牌，已重洗牌库",
@@ -180,7 +239,7 @@
     "cardRecovered": "{{playerId}} 从弃牌堆取回{{count}}张卡",
     "handShuffledIntoDeck": "将{{playerId}}手牌洗入牌库",
     "madnessDrawn": "{{playerId}} 抽取{{count}}张疯狂卡",
-    "madnessReturned": "{{playerId}} 归还疯狂卡",
+    "madnessReturned": "{{playerId}} 消耗疯狂卡",
     "baseDeckReordered": "基地牌库重排",
     "onBase": " → {{base}}",
     "revealHand": "{{playerId}} 展示手牌（{{count}}张）",
@@ -356,12 +415,61 @@
     "giant_ants_pod": {
       "name": "巨蚁 (POD版)",
       "description": "灵活分配和转移力量指示物，团队协作。"
+    },
+    "ancient_egyptians": {
+      "name": "古埃及人",
+      "description": "埋葬与回收并进，把隐藏资源转成场面与得分。"
+    },
+    "ancient_egyptians_pod": {
+      "name": "古埃及人",
+      "description": "埋葬与回收并进，把隐藏资源转成场面与得分。"
+    },
+    "cowboys": {
+      "name": "牛仔",
+      "description": "决斗、空手收益与埋葬联动并用。"
+    },
+    "samurai": {
+      "name": "武士",
+      "description": "荣誉决斗与牺牲反击，围绕消灭构筑节奏。"
+    },
+    "samurai_pod": {
+      "name": "武士",
+      "description": "荣誉决斗与牺牲反击，围绕消灭构筑节奏。"
+    },
+    "vikings": {
+      "name": "维京人",
+      "description": "逼迫弃牌与埋葬，再把它们转成额外收益。"
+    },
+    "cowboys_pod": {
+      "name": "牛仔",
+      "description": "决斗、空手收益与埋葬联动并用。"
+    },
+    "vikings_pod": {
+      "name": "维京人",
+      "description": "逼迫弃牌与埋葬，再把它们转成额外收益。"
     }
   },
   "tutorial": {
     "title": "大杀四方教学",
     "welcome": "欢迎来到大杀四方！组合两个种族争夺基地，率先获得15点胜利分数即可获胜。",
     "finish": "教学完成，准备好开始对战吧！",
+    "subTutorials": {
+      "cowboysDuel": {
+        "title": "牛仔：决斗教学",
+        "description": "通过一条固定链路，演示牛仔决斗中的平克顿、决斗牌与副警长结算。",
+        "steps": {
+          "setup": "正在布置牛仔决斗教学场景……",
+          "duelIntro": "这条教学只聚焦牛仔的决斗机制。你将依次看到挑战发起、平克顿加力量、双方决斗牌与副警长加成，最后再结算胜负。",
+          "playGunfighter": "先打出枪手，并指定酒馆里的敌方微型机器人发起决斗。",
+          "pecosBillWindow": "决斗刚开始时，牛仔泰坦 Pecos Bill 会先询问是否弃 1 张牌并加入这场决斗。本教学先跳过它，继续看基础决斗链路。",
+          "pinkertonCounter": "你的平克顿会在决斗牌结算前触发。为参战的己方随从放置 1 个 +1 力量指示物。",
+          "duelCard": "接下来处理你的决斗牌窗口。本教学先跳过，直接看牛仔的基础链路如何继续推进。",
+          "opponentDuelCard": "对手没有额外响应，系统会自动让过对方的决斗牌窗口。",
+          "deputyBoost": "现在弃掉手里的副警长，让枪手直到回合结束获得 +2 力量，确保赢下这场决斗。",
+          "finish": "决斗结算完成：敌方随从已被消灭，副警长进入弃牌堆，当前没有未结算的决斗。你已经走完牛仔决斗的核心链路。"
+        }
+      }
+    },
     "steps": {
       "setup": "正在准备教学场景...",
       "aiPlayMinion": "看！我们的「星之眷族」已经出现在基地上了。\n\n这张力量 5 的随从拥有天赋能力，稍后你可以激活它。",
@@ -371,8 +479,8 @@
       "turnTracker": "这里显示当前回合数和游戏阶段。\n\n每回合依次经过：出牌 → 记分 → 抽牌。",
       "endTurnBtn": "这是结束按钮。每个阶段操作完成后，点击它推进到下一阶段。",
       "playCardsExplain": "现在是出牌阶段！\n\n每回合你可以打出 1 张随从和 1 张战术卡（各一张）。\n\n随从放在基地上贡献力量，战术卡执行特殊效果。",
-      "playMinion": "试试打出一张随从吧！\n\n点击手牌中的「图书管理员」，然后选择一个基地放置。\n\n这张力量 4 的随从拥有天赋能力，打出后你可以激活它！",
-      "playAction": "很好！现在打出一张战术卡。\n\n战术卡「嚎叫」会让你场上所有随从力量+1，点击手牌中的战术卡即可使用。",
+      "playMinion": "试试打出一张随从吧！\n\n先点击手牌中的「图书管理员」将其选中，再选择一个基地放置。\n\n这张力量 4 的随从拥有天赋能力，打出后你可以激活它！",
+      "playAction": "很好！现在打出一张战术卡。\n\n战术卡「嚎叫」会让你场上所有随从力量+1，先点击手牌中的战术卡将其选中，再点击一次确认使用。",
       "useTalent": "注意基地上金色发光的「图书管理员」！\n\n某些随从拥有天赋能力，每回合可以主动激活一次。\n\n点击基地上发光的「图书管理员」来使用它的天赋——弃掉疯狂卡，抽1张牌！",
       "endPlayCards": "出牌完成！点击结束按钮进入下一阶段。",
       "baseScoring": "基地记分：当一个基地上所有随从的力量总和达到或超过临界点时，该基地就会记分。\n\n记分后基地上的随从会被弃置，然后翻出一个新基地。",
@@ -598,7 +706,7 @@
     },
     "elder_thing_byakhee": {
       "name": "拜亚基",
-      "abilityText": "如果其他玩家有随从在这个基地抽一张疯狂卡。"
+      "abilityText": "每位在这里有随从的其他玩家抽一张疯狂卡。"
     },
     "elder_thing_power_of_madness": {
       "name": "疯狂之力",
@@ -766,7 +874,7 @@
     },
     "special_madness": {
       "name": "疯狂",
-      "effectText": "抽两张卡或将本卡返回疯狂牌堆。"
+      "effectText": "抽两张卡或消耗本卡。"
     },
     "miskatonic_professor": {
       "name": "教授",
@@ -778,7 +886,7 @@
     },
     "miskatonic_psychologist": {
       "name": "心理学家",
-      "abilityText": "你可以将手牌或弃牌堆中的一张疯狂卡返回疯狂牌库。"
+      "abilityText": "你可以消耗你手牌或弃牌堆中的一张疯狂卡。"
     },
     "miskatonic_researcher": {
       "name": "研究员",
@@ -786,7 +894,7 @@
     },
     "miskatonic_book_of_iter_the_unseen": {
       "name": "金克丝!",
-      "effectText": "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
+      "effectText": "消耗你手牌和弃牌堆中的至多两张疯狂卡。"
     },
     "miskatonic_mandatory_reading": {
       "name": "最好不知道的事",
@@ -1144,6 +1252,94 @@
       "name": "进发商场",
       "effectText": "从你的牌库搜寻任意数量的同名的卡牌并将它们置入你的弃牌堆。之后重洗牌库。"
     },
+    "changerbots_mergacon": {
+      "name": "合体机器人",
+      "effectText": "特殊：你的回合开始时，若你有2个或更多随从在一个基地中，可以打出此泰坦至该处。持续：你在此+3战力。天赋：移动此泰坦至另一个基地。其失去持续能力直至回合结束。"
+    },
+    "explorers_very_large_boulder": {
+      "name": "硕大圆石",
+      "effectText": "特殊：你可以打出此泰坦至没有玩家随从的基地中，以代替打出通常随从。持续：每回合1次，在有随从移动离开本基地后，你可以移动此泰坦至相同基地。然后消灭该处一个战力值低于此泰坦+1战力标记数量的随从。持续：你的回合结束时，若此泰坦未移动过，为其放置+1战力标记。"
+    },
+    "fairies_spirit_of_the_forest": {
+      "name": "丛林之灵",
+      "effectText": "特殊：你可以打出此泰坦以代替打出通常随从以及通常战术。持续：每回合1次，当你使用有或者的效果时，可以按任意顺序将2项全部使用。持续：若此泰坦由于泰坦交锋失败即将被移除，你可以改为将其移动至另一个基地。"
+    },
+    "ignobles_the_hill_that_strolls": {
+      "name": "漫游山岭巨人",
+      "effectText": "特殊：在你的回合中，若你拥有的至少2个随从正被其他玩家控制，你可以打出此泰坦。持续：在你将你的一个随从的控制权交给另一位玩家后，你可以为该随从放置1枚+1战力标记。天赋：将你的一个随从的控制权交给另一位玩家来抽1张牌，或者夺回你拥有的一个这里的随从的控制权。"
+    },
+    "itty_critters_rainboroc": {
+      "name": "彩虹鸟",
+      "effectText": "特殊：当你在此泰坦不在场时赢得一个基地后，你可以将它打出到替换该基地的新基地上。持续：每回合第一次你在这里打出战力2或更低的随从后，为此泰坦放置1枚+1战力标记。天赋：将你弃牌堆中的一个战力2或更低的随从洗回你的牌库。若你如此做，你可以将此泰坦移动至另一个基地。"
+    },
+    "kaiju_gorgodzolla": {
+      "name": "哥佐拉",
+      "effectText": "特殊：你可以在有你两个或更多战术的基地中，以代替打出通常随从来打出此泰坦。持续：在你于本基地打出一个战术或随从后，为此泰坦放置1枚+1战力标记。持续：在你于本基地打出一个战术后，你可以抽1张牌。"
+    },
+    "magical_girls_walking_castle": {
+      "name": "移动城堡",
+      "effectText": "特殊：你可以打出此卡到一个你至少拥有2个随从的基地上，而非打出基本随从。持续：你在此基地的随从不能被其他玩家卡牌效果所消灭。天赋：移动此泰坦和此基地至多3个你的随从到另一个基地。"
+    },
+    "mega_troopers_megabot": {
+      "name": "超级佐德",
+      "effectText": "特殊：将此泰坦打出到你至少拥有3张随从的基地上，而非打出基本随从。持续：每有一个你的随从在此基地，你拥有+1力量在此基地。特殊：在另一个基地计分前，你可以移动此卡到那个基地。"
+    },
+    "penguins_emperor_penguin": {
+      "name": "企鹅帝皇",
+      "effectText": "特殊：你的回合开始时，你可以打出此泰坦至有你3个或更多随从的基地中。持续：你可以从牌库顶打出随从至本基地中以代替打出通常随从。天赋：展示你手牌或弃牌堆中一个战力3或更低的随从并将其洗回你的牌库，来为此牌放置+1战力标记。"
+    },
+    "super_spies_moon_zero_three": {
+      "name": "三号空间站",
+      "effectText": "特殊：可以不打出基本随从，将此泰坦打出到没有其他玩家随从的基地上。持续：每回合第一次因效果而展示、查看、检索一位玩家牌库中的一张或更多的卡时，放置一个+1力量标记到这个泰坦上。天赋：查看任一牌库的第一张牌。将其放回该牌库顶或牌库底。"
+    },
+    "time_travelers_time_box": {
+      "name": "时间盒子",
+      "effectText": "特殊：若此泰坦不在场，你的回合开始时，或有牌从场上或弃牌堆进入你的手牌时，为其放置1枚标记。在放置第5枚或更多标记后，可以移除所有标记来打出此泰坦。天赋：额外打出一个战力2或更低的随从至此基地和/或额外打出一个战术。"
+    },
+    "sphinx": {
+      "name": "狮身人面像",
+      "effectText": "特殊：在你的回合开始时，你可以将你的一张埋葬牌移回手牌，然后把此泰坦放到该牌所在基地。特殊：当此泰坦在场时其所在基地计分后，你可以将你在该处的一张埋葬牌移回手牌。天赋：将一张手牌埋葬在这里。"
+    },
+    "bear_cavalry_major_ursa": {
+      "name": "大熊座",
+      "effectText": "特殊：你可以打出此泰坦至有你随从的基地中，以代替打出通常随从。持续：此泰坦移动至一个基地后，你可以移动该处一个其他玩家的战力3或更低的随从至其他基地。天赋：为此泰坦放置+1战力标记，然后将其移动至另一个基地。"
+    },
+    "ghosts_creampuff_man": {
+      "name": "奶油泡芙美人",
+      "effectText": "特殊：你的回合中，若你没有手牌，可以打出此泰坦。持续：你在本基地战力+5，再减去你的手牌数（最低为+0）。天赋：弃置一张牌来从你的弃牌堆额外打出一张战术。将该战术置于你的牌库底而不是弃牌堆。"
+    },
+    "giant_ants_death_on_six_legs": {
+      "name": "六足死神",
+      "effectText": "特殊：你的回合内，若你的随从上有7枚或更多的+1战力标记，可以打出此泰坦。持续：当有随从进入弃牌堆时，将其上1枚+1战力标记转移给此泰坦。天赋：打出一张额外战术。"
+    },
+    "innsmouth_dagon": {
+      "name": "大衮",
+      "effectText": "特殊：你的回合中，你可以打出此泰坦至有你2个或更多同名随从的基地中。持续：本基地中若有同名随从，每个该名称的随从使你在此处+1战力。天赋：额外打出一个随从。"
+    },
+    "cthulhu_cthulhu_titan": {
+      "name": "克苏鲁",
+      "effectText": "特殊：你可以抓2张疯魔牌来打出此泰坦至有你随从的基地中，以代替打出通常战术。持续：在你打出或抓疯魔牌后，为此泰坦放置+1战力标记。天赋：抓一张疯魔牌，或者将你手中的一张疯魔牌置于另一位玩家的手牌。"
+    },
+    "pirates_the_kraken": {
+      "name": "海怪克拉肯",
+      "effectText": "特殊：若此泰坦不在场，有你随从的基地计分后，你可以说出“海妖出发！”来将其打出至替换的基地中。天赋：移动此泰坦至另一个基地。该处其他玩家的随从各-1战力直到回合结束。特殊：本基地计分后，移动此处你的一个随从至另一个基地而不进入弃牌堆。"
+    },
+    "tricksters_big_funny_giant": {
+      "name": "滑稽巨人",
+      "effectText": "特殊：你可以打出此泰坦至没有玩家随从的基地中，以代替打出通常随从。持续：其他玩家必须弃置一张牌才能打出随从至本基地。你的回合结束时，若此处没有其他玩家的随从，为此泰坦放置+1战力标记。天赋：消灭本基地一个战力2或更低的随从来移动此泰坦至另一个基地。"
+    },
+    "vampires_ancient_lord": {
+      "name": "鲜血领主",
+      "effectText": "特殊：当你于一回合内为随从放置2枚或更多+1战力标记后，可以打出此泰坦。持续：在你为你的没有+1战力标记的卡牌放置+1战力标记后，额外放置1枚。天赋：为本基地中你的一个已有+1战力标记的随从放置+1战力标记。"
+    },
+    "werewolves_great_wolf_spirit": {
+      "name": "巨狼之灵",
+      "effectText": "特殊：你的回合中，若你在2个或更多的基地中拥有最高战力，可以打出此泰坦至其中一个基地。持续：你的回合中，你的卡牌可以额外使用一次天赋。天赋：你的一个随从战力+1直至回合结束。"
+    },
+    "wizards_arcane_protector": {
+      "name": "奥术守护者",
+      "effectText": "特殊：当你于一回合中打出5张或更多牌，你可以打出此泰坦。持续：每有3张手牌你在此基地获得+1战力。天赋：抽一张牌。"
+    },
     "base_the_homeworld": {
       "name": "家园",
       "abilityText": "每当有一个随从打出到这里后，它的拥有者可以额外打出一个力量为2或以下的随从。"
@@ -1206,6 +1402,46 @@
     "base_wizard_academy": {
       "name": "巫师学院",
       "abilityText": "在这个基地计分后，冠军查看基地牌库顶的3张牌。选择一张替换这个基地，然后以任意顺序将其余的放回。"
+    },
+    "base_central_brain_pod": {
+      "name": "中央大脑",
+      "abilityText": "这里的每个随从都获得+1力量。"
+    },
+    "base_the_factory_pod": {
+      "name": "436-1337工厂",
+      "abilityText": "当该基地计分时，冠军在此每有5点力量便获得1VP。"
+    },
+    "base_ninja_dojo_pod": {
+      "name": "忍者道场",
+      "abilityText": "(18, VP 2-3-2) 无特殊能力。"
+    },
+    "base_temple_of_goju_pod": {
+      "name": "刚柔流寺庙",
+      "abilityText": "(16, VP 4-3-2) 每当这里有一个随从被消灭时，将其置于其持有者的牌库底。"
+    },
+    "base_cave_of_shinies_pod": {
+      "name": "闪光洞穴",
+      "abilityText": "每回合一次：当一张你拥有的、在这里的随从被消灭后，获得1VP。"
+    },
+    "base_mushroom_kingdom_pod": {
+      "name": "蘑菇王国",
+      "abilityText": "在你的回合开始时，若你手牌数严格多于任意其他玩家，你可以将一个随从移入或移出该基地。"
+    },
+    "base_wizard_academy_pod": {
+      "name": "巫术学院",
+      "abilityText": "当该基地计分后，冠军查看基地牌库顶三张，选择一张替换该基地，其余按任意顺序放回。"
+    },
+    "base_great_library_pod": {
+      "name": "大图书馆",
+      "abilityText": "当该基地计分后，所有在此有随从的玩家各摸1张牌。"
+    },
+    "base_haunted_house_pod": {
+      "name": "伊万斯城公墓",
+      "abilityText": "当该基地计分后，冠军弃掉其手牌并摸五张牌。"
+    },
+    "base_rhodes_plaza_pod": {
+      "name": "罗德百货商场",
+      "abilityText": "当该基地计分时，每位玩家在此每有一个随从便获得1VP。"
     },
     "base_dread_lookout": {
       "name": "恐怖眺望台",
@@ -1337,7 +1573,7 @@
     },
     "base_standing_stones": {
       "name": "巨石阵",
-      "abilityText": "你的回合中，你在这的一个随从可以使用其才能两次。"
+      "abilityText": "你的回合中，你在这的一个随从可以使用其天赋两次。"
     },
     "base_egg_chamber": {
       "name": "卵室",
@@ -1972,7 +2208,7 @@
     },
     "killer_plant_weed_eater_pod": {
       "name": "野生食人花",
-      "abilityText": "本随从在你打出它的回合中-2战斗力。"
+      "abilityText": "持续：在你的回合开始时，本随从获得+2力量，直到你的下个回合开始。"
     },
     "killer_plant_water_lily_pod": {
       "name": "浇花睡莲",
@@ -2020,19 +2256,19 @@
     },
     "miskatonic_librarian_pod": {
       "name": "图书馆管理员",
-      "abilityText": "天赋：抓一张疯狂卡，或从你的手牌中打出一张疯狂卡作为额外战术。"
+      "abilityText": "天赋：抽一张疯狂卡，或从你的手牌中打出一张疯狂卡作为额外战术。"
     },
     "miskatonic_psychologist_pod": {
       "name": "心理学家",
-      "abilityText": "将你手牌或弃牌堆中的一张疯狂卡返回疯狂牌库，或者从你的弃牌堆中抓一张疯狂卡。"
+      "abilityText": "消耗你手牌或弃牌堆中的一张疯狂卡，或者从你的弃牌堆中抽一张疯狂卡。"
     },
     "miskatonic_researcher_pod": {
       "name": "研究员",
-      "abilityText": "你可以抓一张疯狂卡。"
+      "abilityText": "你可以抽一张疯狂卡来在一个随从上放置一个+1战斗力指示物。"
     },
     "miskatonic_book_of_iter_the_unseen_pod": {
       "name": "金克丝!",
-      "effectText": "从你的手牌和弃牌堆返回至多两张疯狂卡到疯狂卡牌堆。"
+      "effectText": "消耗你手牌和弃牌堆中的至多两张疯狂卡。"
     },
     "miskatonic_it_just_might_work_pod": {
       "name": "...没准能行",
@@ -2048,7 +2284,7 @@
     },
     "miskatonic_mandatory_reading_pod": {
       "name": "最好不知道的事",
-      "effectText": "特殊：在一个基地计分前，选择这里的一个随从。抽最多3张疯狂卡。每抽取一张疯狂卡这个随从都获得+2战斗力。"
+      "effectText": "特殊：在一个基地计分前，选择这里的一个随从。抽最多3张疯狂卡。每抽取一张疯狂卡，这个随从直到回合结束获得+2战斗力。"
     },
     "miskatonic_psychological_profiling_pod": {
       "name": "这太疯狂了...",
@@ -2056,11 +2292,11 @@
     },
     "miskatonic_those_meddling_kids_pod": {
       "name": "那些爱管闲事的孩子",
-      "effectText": "消灭一个基地上任意数量的战术，或者抓一张疯狂卡并额外打出一张战术。"
+      "effectText": "消灭一个基地上任意数量的战术，或者抽一张疯狂卡并额外打出一张战术。"
     },
     "miskatonic_field_trip_pod": {
       "name": "实地考察",
-      "effectText": "将你手牌中任意数量的卡牌放到你牌库底，并抓取相同数量加一的牌。"
+      "effectText": "将你手牌中任意数量的卡牌放到你牌库底，然后抽取该数量加一张牌。"
     },
     "ninja_master_pod": {
       "name": "忍者大师",
@@ -2507,19 +2743,19 @@
     },
     "miskatonic_eldritch_gate_pod": {
       "name": "怪异传送门",
-      "effectText": "打出到基地上。天赋：抓一张疯狂卡。你可以额外打出一个随从到这里。"
+      "effectText": "打出到基地上。天赋：抽一张疯狂卡。你可以额外打出一个随从到这里。"
     },
     "miskatonic_jinkies_pod": {
       "name": "金奇斯",
-      "effectText": "将你手牌或弃牌堆中至多两张疯狂卡返回疯狂牌库。"
+      "effectText": "消耗你手牌或弃牌堆中的至多两张疯狂卡。"
     },
     "miskatonic_thats_so_crazy_pod": {
       "name": "太疯狂了...",
-      "effectText": "抓一张疯狂卡。直到回合结束前，你的每个随从获得+1战斗力。你可以额外打出一张战术。"
+      "effectText": "抽一张疯狂卡。直到回合结束前，你的每个随从获得+1战斗力。你可以额外打出一张战术。"
     },
     "miskatonic_things_best_not_known_pod": {
       "name": "未知之事",
-      "effectText": "特殊：在基地计分前，抓至多三张疯狂卡。每抓一张疯狂卡，选择这里的一个随从，使其获得+2战斗力直到回合结束。"
+      "effectText": "特殊：在基地计分前，抽至多三张疯狂卡。选择这里的一个随从，每抽一张疯狂卡，该随从直到回合结束获得+2战斗力。"
     },
     "base_miskatonic_university_base_pod": {
       "name": "米斯卡塔尼克大学",
@@ -2528,14 +2764,6 @@
     "base_the_asylum_pod": {
       "name": "庇护所",
       "abilityText": "(16, VP 3-1-1) 在你在这里打出一个随从后，你可以将一张手牌移出游戏（放入盒子），在一个随从上放置一个+1战斗力标记。"
-    },
-    "base_ninja_dojo_pod": {
-      "name": "忍者道场",
-      "abilityText": "(18, VP 2-3-2) 无特殊能力。"
-    },
-    "base_temple_of_goju_pod": {
-      "name": "刚柔流寺庙",
-      "abilityText": "(16, VP 4-3-2) 每当这里有一个随从被消灭时，将其置于其持有者的牌库底。"
     },
     "base_the_grey_opal_pod": {
       "name": "灰色猫眼石",
@@ -2560,6 +2788,572 @@
     "base_the_workshop_pod": {
       "name": "工坊",
       "abilityText": "(20, VP 4-2-1) 每当有一名玩家将战术打出到该基地时，该玩家可以额外打出一个战术。"
+    },
+    "base_the_homeworld_pod": {
+      "name": "家园"
+    },
+    "base_the_mothership_pod": {
+      "name": "母舰"
+    },
+    "base_the_jungle_pod": {
+      "name": "绿洲丛林"
+    },
+    "base_tar_pits_pod": {
+      "name": "焦油坑"
+    },
+    "base_pirate_cove_pod": {
+      "name": "灰色猫眼石"
+    },
+    "base_dread_lookout_pod": {
+      "name": "恐怖眺望台"
+    },
+    "base_haunted_house_al9000_pod": {
+      "name": "鬼屋"
+    },
+    "base_the_field_of_honor_pod": {
+      "name": "荣誉之地"
+    },
+    "base_tsars_palace_pod": {
+      "name": "沙皇宫殿"
+    },
+    "base_greenhouse_pod": {
+      "name": "温室"
+    },
+    "base_secret_garden_pod": {
+      "name": "神秘花园"
+    },
+    "base_cat_fanciers_alley_pod": {
+      "name": "诡猫巷"
+    },
+    "base_house_of_nine_lives_pod": {
+      "name": "九命之家"
+    },
+    "base_enchanted_glade_pod": {
+      "name": "迷人峡谷"
+    },
+    "base_fairy_ring_pod": {
+      "name": "仙灵圈"
+    },
+    "base_beautiful_castle_pod": {
+      "name": "美丽城堡"
+    },
+    "base_castle_of_ice_pod": {
+      "name": "冰之城堡"
+    },
+    "base_land_of_balance_pod": {
+      "name": "平衡之地"
+    },
+    "base_pony_paradise_pod": {
+      "name": "小马乐园"
+    },
+    "base_north_pole_pod": {
+      "name": "北极基地"
+    },
+    "base_antarctic_base_pod": {
+      "name": "南极基地",
+      "abilityText": "玩家每回合在这个基地只能打出一个随从。"
+    },
+    "base_ritual_site_pod": {
+      "name": "仪式场所",
+      "abilityText": "在这个基地计分后。在它上面的所有随从洗回他们的拥有者牌库，而不是进入弃牌堆。"
+    },
+    "base_rlyeh_pod": {
+      "name": "拉莱耶",
+      "abilityText": "在每位玩家回合开始时，该玩家可以消灭他在本地的一个随从，如果他这样做，获得1VP。"
+    },
+    "base_innsmouth_base_pod": {
+      "name": "印斯茅斯",
+      "abilityText": "每当有一个随从被打出到这后，它的拥有者可以将任意玩家弃牌堆中的一张卡置入他们牌库底。"
+    },
+    "base_mountains_of_madness_pod": {
+      "name": "疯狂山脉",
+      "abilityText": "每当一个随从被打出到这后，它的拥有者抽取一张疯狂卡。"
+    },
+    "base_plateau_of_leng_pod": {
+      "name": "伦格高原",
+      "abilityText": "每回合玩家第一次打出一个随从从手牌到这以后，他们可以额外打出一张与其同名的随从到这里。"
+    },
+    "base_the_pasture_pod": {
+      "name": "牧场"
+    },
+    "base_sheep_shrine_pod": {
+      "name": "绵羊神社"
+    },
+    "base_castle_blood_pod": {
+      "name": "血堡"
+    },
+    "base_crypt_pod": {
+      "name": "地窖"
+    },
+    "base_laboratorium_pod": {
+      "name": "实验工坊"
+    },
+    "base_golem_schloss_pod": {
+      "name": "魔像城堡"
+    },
+    "base_moot_site_pod": {
+      "name": "集会场"
+    },
+    "base_standing_stones_pod": {
+      "name": "巨石阵"
+    },
+    "base_egg_chamber_pod": {
+      "name": "卵室"
+    },
+    "base_the_hill_pod": {
+      "name": "蚁丘"
+    },
+    "ancient_egyptians_mummy": {
+      "name": "木乃伊",
+      "abilityText": "特殊：在这个基地计分后，将此牌埋葬到另一个基地，而不是进入弃牌堆。"
+    },
+    "ancient_egyptians_pyramid_engineer": {
+      "name": "金字塔工程师",
+      "abilityText": "你可以翻开这里的一张埋葬牌。天赋：将一张手牌埋葬在这里。"
+    },
+    "ancient_egyptians_priest_of_anubis": {
+      "name": "阿努比斯祭司",
+      "abilityText": "持续：如果这里有埋葬牌，本随从获得+2力量。"
+    },
+    "ancient_egyptians_pharaoh": {
+      "name": "法老",
+      "abilityText": "持续：在另一张埋葬牌被翻开后，抽一张牌。特殊：在这个基地计分前，你可以翻开这里一张你的埋葬牌。"
+    },
+    "ancient_egyptians_you_can_take_it_with_you": {
+      "name": "随身带走",
+      "effectText": "埋葬此牌。特殊：当此牌被翻开时，抽三张牌。"
+    },
+    "ancient_egyptians_tomb_trap": {
+      "name": "墓穴陷阱",
+      "effectText": "埋葬此牌。特殊：当此牌被翻开时，你可以消灭这里一张力量4或以下的随从。"
+    },
+    "ancient_egyptians_seal_the_tomb": {
+      "name": "封印墓穴",
+      "effectText": "将至多两张手牌埋葬在同一个基地，或者翻开同一个基地上至多两张你的埋葬牌。"
+    },
+    "ancient_egyptians_plague_of_locusts": {
+      "name": "蝗灾",
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。选择一个基地。直到回合结束，其他玩家在那里的随从-1力量。"
+    },
+    "ancient_egyptians_mummy_strength": {
+      "name": "木乃伊之力",
+      "effectText": "选择你一个位于有埋葬牌基地上的随从，使其直到回合结束获得+4力量。或者选择你一个随从，使其直到回合结束获得+2力量。"
+    },
+    "ancient_egyptians_lost_knowledge": {
+      "name": "失落知识",
+      "effectText": "特殊：在一个基地计分前打出。埋葬一张手牌，或者翻开你的一张埋葬牌。"
+    },
+    "ancient_egyptians_blessing_of_anubis": {
+      "name": "阿努比斯的祝福",
+      "effectText": "埋葬此牌。特殊：当此牌被翻开时，直到回合结束，你在这里的随从获得+2力量。"
+    },
+    "ancient_egyptians_ancient_curse": {
+      "name": "远古诅咒",
+      "effectText": "打出到一个随从上。你可以移除它一个+1力量指示物。持续：此随从-2力量。"
+    },
+    "ancient_egyptians_mummy_pod": {
+      "name": "木乃伊",
+      "abilityText": "特殊：在这个基地计分后，你可以将此随从埋葬到另一个基地。"
+    },
+    "ancient_egyptians_pyramid_engineer_pod": {
+      "name": "金字塔工程师",
+      "abilityText": "你可以翻开这里一张你的埋葬牌。天赋：将一张手牌埋葬在这里。"
+    },
+    "ancient_egyptians_priest_of_anubis_pod": {
+      "name": "阿努比斯祭司",
+      "abilityText": "持续：若你在这里有埋葬牌，此随从获得+2战力。"
+    },
+    "ancient_egyptians_pharaoh_pod": {
+      "name": "法老",
+      "abilityText": "持续：在另一张埋葬牌被翻开后，抽一张牌。特殊：在这个基地计分前，你可以翻开这里一张你的埋葬牌。"
+    },
+    "ancient_egyptians_lost_knowledge_pod": {
+      "name": "失落知识",
+      "effectText": "埋葬一张手牌，或翻开你的一张埋葬牌。特殊：你可以在基地计分前打出此牌。"
+    },
+    "ancient_egyptians_you_can_take_it_with_you_pod": {
+      "name": "随身带走",
+      "effectText": "埋葬此牌。特殊：当此牌被翻开时，抽三张牌。"
+    },
+    "ancient_egyptians_plague_of_locusts_pod": {
+      "name": "蝗灾",
+      "effectText": "选择一个基地。该处其他玩家的随从直到回合结束-1战力。特殊：你可以在基地计分前打出此牌。"
+    },
+    "ancient_egyptians_mummy_strength_pod": {
+      "name": "木乃伊之力",
+      "effectText": "选择你的一个随从。若其所在基地有埋葬牌，它直到回合结束获得+4战力；否则它直到回合结束获得+2战力。"
+    },
+    "ancient_egyptians_tomb_trap_pod": {
+      "name": "墓穴陷阱",
+      "effectText": "埋葬此牌。特殊：当此牌被翻开时，你可以消灭这里一个战力4或以下的随从。"
+    },
+    "ancient_egyptians_ancient_curse_pod": {
+      "name": "远古诅咒",
+      "effectText": "打出到一个随从上。你可以移除它一枚+1战力指示物。持续：此随从-2战力。"
+    },
+    "ancient_egyptians_blessing_of_anubis_pod": {
+      "name": "阿努比斯的祝福",
+      "effectText": "埋葬此牌。特殊：当此牌被翻开时，你在这里的随从各直到回合结束获得+2战力。"
+    },
+    "ancient_egyptians_seal_the_tomb_pod": {
+      "name": "封印墓穴",
+      "effectText": "在同一个基地埋葬至多两张手牌，或在同一个基地翻开至多两张你的埋葬牌。"
+    },
+    "cowboys_deputy": {
+      "name": "副警长",
+      "abilityText": "特殊：在你的回合中，或在涉及你随从的一场决斗中，你可以从手牌弃掉此牌，使一个随从直到回合结束获得+2力量。"
+    },
+    "cowboys_gunfighter": {
+      "name": "枪手",
+      "abilityText": "你可以令此随从与这里另一位玩家的一个随从决斗。消灭失败者的随从。"
+    },
+    "cowboys_pinkerton": {
+      "name": "平克顿",
+      "abilityText": "持续：每场决斗一次，当你的一个随从参与决斗时，你可以在放置决斗牌前在其上放置一个+1力量指示物。"
+    },
+    "cowboys_sheriff": {
+      "name": "警长",
+      "abilityText": "特殊：在一个基地计分前，你可以令此随从与这里另一位玩家的一个随从决斗。消灭失败者的随从。"
+    },
+    "cowboys_stagecoach": {
+      "name": "驿站马车",
+      "effectText": "将同一基地上至多两张你的牌移动或转移到另一个基地。"
+    },
+    "cowboys_run_em_off": {
+      "name": "赶走他们",
+      "effectText": "你的一个随从与同一基地上另一位玩家的一个随从决斗。获胜的随从在回合结束前获得+3力量，其控制者将失败者的随从移动到另一个基地。"
+    },
+    "cowboys_quick_draw": {
+      "name": "拔枪术",
+      "effectText": "选择你的一个随从。若其正在决斗，则它直到回合结束获得+4力量。否则，它直到回合结束获得+2力量。"
+    },
+    "cowboys_high_noon": {
+      "name": "正午决斗",
+      "effectText": "你的一个随从与同一基地上另一位玩家的一个随从决斗。消灭失败者的随从。若你的随从获胜，你可以额外打出一个随从到那里。"
+    },
+    "cowboys_gold_strike": {
+      "name": "淘到金了",
+      "effectText": "打出到一个基地上。持续：在你打出一个随从到这里后，抽一张牌。"
+    },
+    "cowboys_gold_in_them_thar_hills": {
+      "name": "那山里有金子",
+      "effectText": "查看你牌库顶的3张牌。展示并抽取其中1张；你可以将它作为额外牌打出。将其余牌以任意顺序放回。"
+    },
+    "cowboys_form_a_posse": {
+      "name": "召集帮手",
+      "effectText": "你的每个随从直到回合结束获得+1力量，且不能被消灭、移动或移回手牌。"
+    },
+    "cowboys_dynamite_surprise": {
+      "name": "炸药惊喜",
+      "effectText": "特殊：在一个你有随从且并未领先的基地计分前，消灭那里一个力量4或以下的随从。特殊：若另一位玩家的牌展示或查看你手牌或牌库中的牌，消灭该玩家一个力量4或以下的随从。"
+    },
+    "samurai_samurai_chan": {
+      "name": "武士酱",
+      "abilityText": "在此随从从场上进入弃牌堆后，抓一张牌。"
+    },
+    "samurai_ronin": {
+      "name": "浪人",
+      "abilityText": "若这是你在此基地唯一的随从，你可以在它上面放置两个 +1 力量指示物。"
+    },
+    "samurai_bushi": {
+      "name": "武士",
+      "abilityText": "在此随从从场上进入弃牌堆后，若它的力量为 5 或以上，获得 1 VP。"
+    },
+    "samurai_shogun": {
+      "name": "将军",
+      "abilityText": "在你另一个随从从场上进入弃牌堆后，在此随从上放置一个 +1 力量指示物。"
+    },
+    "samurai_yokai_attack": {
+      "name": "妖怪来袭！",
+      "effectText": "消灭你的一个随从，以额外打出一个随从和一个行动。"
+    },
+    "samurai_way_of_the_warrior": {
+      "name": "武者之道",
+      "effectText": "直到回合结束，你的一个随从获得 +3 力量；若它从场上进入弃牌堆，则抓一张牌。"
+    },
+    "samurai_honorable_combat": {
+      "name": "荣誉决斗",
+      "effectText": "选择一个有另一位玩家力量高于你的基地。你在那里一个随从与该玩家在那里一个随从决斗。获胜随从的控制者获得 1 VP。"
+    },
+    "samurai_honor_the_fallen": {
+      "name": "致敬阵亡者",
+      "effectText": "打出到一个基地上。持续：在你此处一个随从进入弃牌堆后，抓一张牌。"
+    },
+    "samurai_honor_the_ancestors": {
+      "name": "致敬先祖",
+      "effectText": "在你的一个随从上放置一个 +1 力量指示物。对游戏中的每位其他玩家，你都可以将一张随从牌从你的弃牌堆洗回牌库。"
+    },
+    "samurai_heart_of_the_battle": {
+      "name": "战斗之心",
+      "effectText": "特殊：在一个基地计分前打出。你在那里一个随从与另一位玩家在那里一个随从决斗。消灭失败的随从。"
+    },
+    "samurai_final_haiku": {
+      "name": "终曲俳句",
+      "effectText": "打出到你的一个随从上。持续：在此随从从场上进入弃牌堆后，你的随从各自直到回合结束获得 +2 力量。"
+    },
+    "samurai_code_of_bushido": {
+      "name": "武士道",
+      "effectText": "在你的随从之间总共放置三个 +1 力量指示物。"
+    },
+    "samurai_samurai_chan_pod": {
+      "name": "武士酱",
+      "abilityText": "在此随从从场上进入弃牌堆后，抓一张牌。"
+    },
+    "samurai_ronin_pod": {
+      "name": "浪人",
+      "abilityText": "若这是你在此基地唯一的随从，你可以在它上面放置两个 +1 力量指示物。"
+    },
+    "samurai_bushi_pod": {
+      "name": "武士",
+      "abilityText": "在此随从从场上进入弃牌堆后，若它的力量为 5 或以上，获得 1 VP。"
+    },
+    "samurai_shogun_pod": {
+      "name": "将军",
+      "abilityText": "在你另一随从从场上进入弃牌堆后，在此随从上放置一个 +1 力量指示物。"
+    },
+    "samurai_yokai_attack_pod": {
+      "name": "妖怪来袭！",
+      "effectText": "消灭你的一个随从，以额外打出一个随从和一个行动。"
+    },
+    "samurai_way_of_the_warrior_pod": {
+      "name": "武者之道",
+      "effectText": "直到回合结束，你的一个随从获得 +3 力量；若它从场上进入弃牌堆，则抓一张牌。"
+    },
+    "samurai_honorable_combat_pod": {
+      "name": "荣耀决斗",
+      "effectText": "选择一个有另一位玩家力量高于你的基地。你在那里一个随从与该玩家在那里一个随从决斗。获胜随从的控制者获得 1 VP。"
+    },
+    "samurai_honor_the_fallen_pod": {
+      "name": "致敬阵亡者",
+      "effectText": "打出到一个基地上。持续：在你此处一个随从进入弃牌堆后，抓一张牌。"
+    },
+    "samurai_honor_the_ancestors_pod": {
+      "name": "致敬先祖",
+      "effectText": "在你的一个随从上放置一个 +1 力量指示物。对游戏中的每位其他玩家，你都可以将一张随从牌从你的弃牌堆洗回牌库。"
+    },
+    "samurai_heart_of_the_battle_pod": {
+      "name": "战斗之心",
+      "effectText": "特殊：在一个基地计分前打出。你在那里一个随从与另一位玩家在那里一个随从决斗。消灭失败的随从。"
+    },
+    "samurai_final_haiku_pod": {
+      "name": "终曲俳句",
+      "effectText": "打出到你的一个随从上。持续：在此随从从场上进入弃牌堆后，你的随从各自直到回合结束获得 +2 力量。"
+    },
+    "samurai_code_of_bushido_pod": {
+      "name": "武士道",
+      "effectText": "在你的随从之间总共放置三个 +1 力量指示物。"
+    },
+    "vikings_huscarl": {
+      "name": "侍卫",
+      "abilityText": "天赋：将一张手牌置于你的牌库顶，使此随从在回合结束前获得+2力量。"
+    },
+    "vikings_shield_maiden": {
+      "name": "盾女",
+      "abilityText": "展示另一位玩家牌库顶的一张牌。若其为行动牌，或力量3或以下的随从牌，将其置入你的手牌。否则，将其放回。"
+    },
+    "vikings_raider": {
+      "name": "袭击者",
+      "abilityText": "天赋：将至多3张手牌置于你的牌库顶。本随从在回合结束前每置入一张便获得+1力量。"
+    },
+    "vikings_valkyrie": {
+      "name": "女武神",
+      "abilityText": "将另一位玩家弃牌堆中的一个随从置入你的手牌。"
+    },
+    "vikings_viking_funeral": {
+      "name": "维京葬礼",
+      "effectText": "打出到一个力量5或以上的随从上。持续：在该随从进入弃牌堆后，获得1 VP。若你拥有它，则将其放回盒中。"
+    },
+    "vikings_tribute": {
+      "name": "贡品",
+      "effectText": "抓3张牌。"
+    },
+    "vikings_ransack": {
+      "name": "洗劫",
+      "effectText": "将一张打在随从上的行动牌、一张打在基地上的行动牌，或一张埋葬牌置入你的手牌。"
+    },
+    "vikings_raiding_party": {
+      "name": "突袭队",
+      "effectText": "展示另一位玩家牌库顶的3张牌。你可以从中额外打出1张行动牌，或1张力量4或以下的随从牌。将其余牌以任意顺序放回该牌库顶。"
+    },
+    "vikings_pillage": {
+      "name": "掠夺",
+      "effectText": "随机拿取另一位玩家手牌中的1张牌，并将其置入你的手牌。"
+    },
+    "vikings_combat_training": {
+      "name": "战斗训练",
+      "effectText": "你的随从在回合结束前获得+1力量。"
+    },
+    "vikings_cast_the_runes": {
+      "name": "掷卢恩符文",
+      "effectText": "查看另一位玩家的手牌。查看其牌库顶的2张牌，并以任意顺序放回。额外打出一个行动。"
+    },
+    "vikings_berserk": {
+      "name": "狂战",
+      "effectText": "将一张手牌置于你的牌库顶，使你的一个随从在回合结束前获得+4力量。"
+    },
+    "base_saloon": {
+      "name": "酒馆",
+      "abilityText": "当此处有随从被消灭后，每位在此处有随从的玩家抓一张牌。"
+    },
+    "base_so_so_corral": {
+      "name": "小镇",
+      "abilityText": "在你打出一个随从到这里后，它可以与此处另一位玩家的一个随从决斗。消灭失败者的随从。"
+    },
+    "base_pyramids": {
+      "name": "金字塔",
+      "abilityText": "在你的回合内，你可以将一张手牌埋葬在这里。"
+    },
+    "base_star_portal": {
+      "name": "星界之门",
+      "abilityText": "当一张牌在这里被埋葬，或有一张行动牌被打到这个基地时，其控制者抓一张牌。"
+    },
+    "base_pyramids_pod": {
+      "name": "金字塔",
+      "abilityText": "在你的回合内，你可以将一张手牌埋葬在这里。"
+    },
+    "base_star_portal_pod": {
+      "name": "星界之门",
+      "abilityText": "当一张牌在这里被埋葬，或有一张行动牌被打到这个基地时，其控制者抓一张牌。"
+    },
+    "base_shoguns_palace": {
+      "name": "天守阁",
+      "abilityText": "每回合一次，在你打出一个随从到这里后，它可以与此处另一位玩家的一个随从决斗。获胜随从的控制者抓两张牌。"
+    },
+    "base_sakura_garden": {
+      "name": "樱花花园",
+      "abilityText": "每回合第一次有你的随从在这里进入弃牌堆时，抓一张牌。"
+    },
+    "base_shoguns_palace_pod": {
+      "name": "天守阁",
+      "abilityText": "每回合一次，在你打出一个随从到这里后，它可以与此处另一位玩家的一个随从决斗。获胜随从的控制者抓两张牌。"
+    },
+    "base_sakura_garden_pod": {
+      "name": "樱花花园",
+      "abilityText": "每回合第一次有你的随从在这里进入弃牌堆时，抓一张牌。"
+    },
+    "base_drakkar": {
+      "name": "德拉卡尔号",
+      "abilityText": "每回合第一次你打出随从到这里后，你可以展示另一位玩家牌库顶的一张牌。若它是行动牌，或是力量3或以下的随从，你可以将其抽到手里。否则，将其放回。"
+    },
+    "base_longhouse": {
+      "name": "长屋",
+      "abilityText": "在你的回合内，你可以将一张手牌置于牌库顶，使你在此处的一个随从在回合结束前具有+2战力。"
+    },
+    "cowboys_deputy_pod": {
+      "name": "副警长",
+      "abilityText": "特殊：在你的回合中，或在涉及你随从的一场决斗中，你可以从手牌弃掉此牌，使一个随从直到回合结束获得+2力量。"
+    },
+    "cowboys_gunfighter_pod": {
+      "name": "枪手",
+      "abilityText": "你可以令此随从与这里另一位玩家的一个随从决斗。消灭失败者的随从。"
+    },
+    "cowboys_pinkerton_pod": {
+      "name": "平克顿",
+      "abilityText": "持续：每场决斗一次，当你的一个随从参与决斗时，你可以在放置决斗牌前在其上放置一个+1力量指示物。"
+    },
+    "cowboys_sheriff_pod": {
+      "name": "警长",
+      "abilityText": "特殊：在一个基地计分前，你可以令此随从与这里另一位玩家的一个随从决斗。消灭失败者的随从。"
+    },
+    "cowboys_form_a_posse_pod": {
+      "name": "召集帮手",
+      "effectText": "你的每个随从直到回合结束获得+1力量，且不能被消灭、移动或移回手牌。"
+    },
+    "cowboys_quick_draw_pod": {
+      "name": "拔枪术",
+      "effectText": "选择你的一个随从。若其正在决斗，则它直到回合结束获得+4力量。否则，它直到回合结束获得+2力量。"
+    },
+    "cowboys_gold_in_them_thar_hills_pod": {
+      "name": "那山里有金子",
+      "effectText": "查看你牌库顶的3张牌。展示并抽取其中1张；你可以将它作为额外牌打出。将其余牌以任意顺序放回。"
+    },
+    "cowboys_stagecoach_pod": {
+      "name": "驿站马车",
+      "effectText": "将同一基地上至多两张你的牌移动或转移到另一个基地。"
+    },
+    "cowboys_run_em_off_pod": {
+      "name": "赶走他们",
+      "effectText": "你的一个随从与同一基地上另一位玩家的一个随从决斗。获胜的随从在回合结束前获得+3力量，其控制者将失败者的随从移动到另一个基地。"
+    },
+    "cowboys_high_noon_pod": {
+      "name": "正午决斗",
+      "effectText": "你的一个随从与同一基地上另一位玩家的一个随从决斗。消灭失败者的随从。若你的随从获胜，你可以额外打出一个随从到那里。"
+    },
+    "cowboys_dynamite_surprise_pod": {
+      "name": "炸药惊喜",
+      "effectText": "特殊：在一个你有随从且并未领先的基地计分前，消灭那里一个力量4或以下的随从。特殊：若另一位玩家的牌展示或查看你手牌或牌库中的牌，消灭该玩家一个力量4或以下的随从。"
+    },
+    "cowboys_gold_strike_pod": {
+      "name": "淘到金了",
+      "effectText": "打出到一个基地上。持续：在你打出一个随从到这里后，抽一张牌。"
+    },
+    "base_saloon_pod": {
+      "name": "酒馆",
+      "abilityText": "当此处有随从被消灭后，每位在此处有随从的玩家抓一张牌。"
+    },
+    "base_so_so_corral_pod": {
+      "name": "小镇",
+      "abilityText": "在你打出一个随从到这里后，它可以与此处另一位玩家的一个随从决斗。消灭失败者的随从。"
+    },
+    "vikings_huscarl_pod": {
+      "name": "侍卫",
+      "abilityText": "天赋：将一张手牌置于你的牌库顶，使此随从在回合结束前获得+2力量。"
+    },
+    "vikings_shield_maiden_pod": {
+      "name": "盾女",
+      "abilityText": "展示另一位玩家牌库顶的一张牌。若其为行动牌，或力量3或以下的随从牌，将其置入你的手牌。否则，将其放回。"
+    },
+    "vikings_raider_pod": {
+      "name": "袭击者",
+      "abilityText": "天赋：将至多3张手牌置于你的牌库顶。本随从在回合结束前每置入一张便获得+1力量。"
+    },
+    "vikings_valkyrie_pod": {
+      "name": "女武神",
+      "abilityText": "将另一位玩家弃牌堆中的一个随从置入你的手牌。"
+    },
+    "vikings_berserk_pod": {
+      "name": "狂战",
+      "effectText": "将一张手牌置于你的牌库顶，使你的一个随从在回合结束前获得+4力量。"
+    },
+    "vikings_cast_the_runes_pod": {
+      "name": "掷卢恩符文",
+      "effectText": "查看另一位玩家的手牌。查看其牌库顶的2张牌，并以任意顺序放回。额外打出一个行动。"
+    },
+    "vikings_combat_training_pod": {
+      "name": "战斗训练",
+      "effectText": "你的随从在回合结束前获得+1力量。"
+    },
+    "vikings_pillage_pod": {
+      "name": "掠夺",
+      "effectText": "随机拿取另一位玩家手牌中的1张牌，并将其置入你的手牌。"
+    },
+    "vikings_raiding_party_pod": {
+      "name": "突袭队",
+      "effectText": "展示另一位玩家牌库顶的3张牌。你可以从中额外打出1张行动牌，或1张力量4或以下的随从牌。将其余牌以任意顺序放回该牌库顶。"
+    },
+    "vikings_ransack_pod": {
+      "name": "洗劫",
+      "effectText": "将一张打在随从上的行动牌、一张打在基地上的行动牌，或一张埋葬牌置入你的手牌。"
+    },
+    "vikings_tribute_pod": {
+      "name": "贡品",
+      "effectText": "抓3张牌。"
+    },
+    "vikings_viking_funeral_pod": {
+      "name": "维京葬礼",
+      "effectText": "打出到一个力量5或以上的随从上。持续：在该随从进入弃牌堆后，获得1 VP。若你拥有它，则将其放回盒中。"
+    },
+    "base_drakkar_pod": {
+      "name": "德拉卡尔号",
+      "abilityText": "每回合第一次你打出随从到这里后，你可以展示另一位玩家牌库顶的一张牌。若它是行动牌，或是力量3或以下的随从，你可以将其抽到手里。否则，将其放回。"
+    },
+    "base_longhouse_pod": {
+      "name": "长屋",
+      "abilityText": "在你的回合内，你可以将一张手牌置于牌库顶，使你在此处的一个随从在回合结束前具有+2战力。"
+    },
+    "pecos_bill": {
+      "name": "佩科斯·比尔",
+      "effectText": "特殊：当你在一场决斗中成为挑战者时，你可以弃1张牌，将此泰坦打到那里。直到该决斗结束后才结算任何泰坦冲突。持续：在这里进行决斗期间，其他玩家不能将这里的随从移走或移回任何玩家手牌。持续：在你赢得一场决斗后，抓1张牌。"
     }
   },
   "endgame": {

@@ -120,6 +120,64 @@ describe('暗影刺客 - 角色注册与初始化', () => {
     });
 });
 
+describe('潜行 Token - 防御后出牌回归', () => {
+    it('防御骰结束后打出遁入阴影时：本次攻击也应被潜行免除', () => {
+        const queuedRandom = createQueuedRandom([1, 1, 1, 1, 1, 1, 1, 1, 1]);
+
+        const runner = new GameTestRunner({
+            domain: DiceThroneDomain,
+            systems: testSystems,
+            playerIds: ['0', '1'],
+            random: queuedRandom,
+            setup: createShadowThiefSetup({
+                mutate: (core) => {
+                    const intoTheShadows = SHADOW_THIEF_CARDS.find(card => card.id === 'action-into-the-shadows');
+                    if (!intoTheShadows) {
+                        throw new Error('未找到 action-into-the-shadows');
+                    }
+
+                    core.players['1'].hand = [{ ...intoTheShadows }];
+                    core.players['1'].resources[RESOURCE_IDS.CP] = 4;
+                    core.players['1'].abilities = core.players['1'].abilities.filter(a => a.id !== 'fearless-riposte');
+                },
+            }),
+            assertFn: assertState,
+            silent: true,
+        });
+
+        const result = runner.run({
+            name: '防御骰后遁入阴影仍免伤',
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'dagger-strike-5' }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '1'),
+                cmd('CONFIRM_ROLL', '1'),
+                cmd('PLAY_CARD', '1', { cardId: 'action-into-the-shadows' }),
+                cmd('ADVANCE_PHASE', '1'),
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        tokens: {
+                            [TOKEN_IDS.SNEAK]: 1,
+                        },
+                        resources: {
+                            [RESOURCE_IDS.HP]: 50,
+                            [RESOURCE_IDS.CP]: 0,
+                        },
+                    },
+                },
+            },
+        });
+
+        expect(result.assertionErrors).toHaveLength(0);
+    });
+});
+
 // ============================================================================
 // 2. 定义完整性
 // ============================================================================

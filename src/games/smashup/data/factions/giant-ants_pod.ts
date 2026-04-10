@@ -19,7 +19,7 @@ export const GIANT_ANT_MINIONS: MinionCardDef[] = [
         name: '兵蚁',
         nameEn: 'Soldier',
         faction: 'giant_ants_pod',
-        power: 3,
+        power: 1,
         abilityTags: ['onPlay', 'talent'],
         count: 3,
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.CARDS5, index: 43 },

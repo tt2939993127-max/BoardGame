@@ -8,10 +8,11 @@
  * - 高对比 / 覆盖范围 → 即时保存
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, MousePointer2, RefreshCw, X } from 'lucide-react';
 import { ModalBase } from '../common/overlays/ModalBase';
+import { ensureCursorRegistryLoaded, isCursorRegistryLoaded } from '../../core/cursor/ensureCursorRegistryLoaded';
 import {
     getCursorTheme,
     getDefaultThemePerGame,
@@ -86,13 +87,16 @@ function VariantPickerModal({
     onSelect: (themeId: string) => void | Promise<void>;
     onClose: () => void;
 }) {
-    const { t } = useTranslation('auth');
+    const { t, i18n } = useTranslation('auth');
     const variants = useMemo(() => getThemesByGameId(gameId), [gameId]);
     const gameLabel = variants[0]?.label ?? gameId;
 
     const stateLabels = CURSOR_STATE_KEYS.map((key) => {
         const i18nKey = CURSOR_STATE_I18N[key];
-        return { key, label: i18nKey ? t(i18nKey) : '' };
+        return {
+            key,
+            label: i18nKey && i18n.exists(i18nKey, { ns: 'auth' }) ? t(i18nKey) : '',
+        };
     });
 
     return (
@@ -169,6 +173,7 @@ function VariantPickerModal({
 export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: CursorSettingsModalProps) => {
     const { t } = useTranslation('auth');
     const { preference, updatePreference } = useCursorPreference();
+    const [isRegistryReady, setIsRegistryReady] = useState(() => isCursorRegistryLoaded());
     const manifests = useMemo(() => getAllGames().map(g => ({ id: g.id, cursorTheme: g.cursorTheme })), []);
     const defaultPerGame = useMemo(() => getDefaultThemePerGame(manifests), [manifests]);
 
@@ -240,6 +245,33 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
         await updatePreference({ ...preference, highContrast: !preference.highContrast });
     };
 
+    useEffect(() => {
+        if (!isOpen) return;
+        if (isCursorRegistryLoaded()) {
+            queueMicrotask(() => {
+                setIsRegistryReady(true);
+            });
+            return;
+        }
+
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (!cancelled) {
+                setIsRegistryReady(false);
+            }
+        });
+
+        void ensureCursorRegistryLoaded().then(() => {
+            if (!cancelled) {
+                setIsRegistryReady(true);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
@@ -271,42 +303,48 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
 
                     {/* 光标网格：5列 */}
                     <div className="px-5 py-4 overflow-y-auto flex-1">
-                        <div className="grid grid-cols-5 gap-3">
-                            {/* 系统默认 */}
-                            <CursorCard
-                                label={t('cursor.default')}
-                                previewSvg={defaultPreviewSvgs.default}
-                                isPending={pendingThemeId === 'default'}
-                                isSaved={savedThemeId === 'default'}
-                                onSelect={() => setPendingThemeId('default')}
-                            />
-                            {/* 各游戏 */}
-                            {defaultPerGame.map((theme) => {
-                                // 显示该游戏记住的变体（gameVariants），回退到注册表第一个
-                                const rememberedId = preference.gameVariants[theme.gameId];
-                                const rememberedTheme = rememberedId ? getCursorTheme(rememberedId) : null;
-                                // pending 选中时优先显示 pending 变体
-                                const displayTheme = (pendingTheme?.gameId === theme.gameId)
-                                    ? pendingTheme
-                                    : (rememberedTheme ?? theme);
-                                const isPending = pendingTheme?.gameId === theme.gameId;
-                                const isSaved = (() => {
-                                    const saved = getCursorTheme(savedThemeId);
-                                    return saved?.gameId === theme.gameId;
-                                })();
-                                return (
-                                    <CursorCard
-                                        key={theme.gameId}
-                                        label={theme.label}
-                                        subtitle={displayTheme.variantLabel}
-                                        previewSvg={displayTheme.previewSvgs.default}
-                                        isPending={isPending}
-                                        isSaved={isSaved}
-                                        onSelect={() => handleSelectGame(theme.gameId, theme.id)}
-                                    />
-                                );
-                            })}
-                        </div>
+                        {isRegistryReady ? (
+                            <div className="grid grid-cols-5 gap-3">
+                                {/* 系统默认 */}
+                                <CursorCard
+                                    label={t('cursor.default')}
+                                    previewSvg={defaultPreviewSvgs.default}
+                                    isPending={pendingThemeId === 'default'}
+                                    isSaved={savedThemeId === 'default'}
+                                    onSelect={() => setPendingThemeId('default')}
+                                />
+                                {/* 各游戏 */}
+                                {defaultPerGame.map((theme) => {
+                                    // 显示该游戏记住的变体（gameVariants），回退到注册表第一个
+                                    const rememberedId = preference.gameVariants[theme.gameId];
+                                    const rememberedTheme = rememberedId ? getCursorTheme(rememberedId) : null;
+                                    // pending 选中时优先显示 pending 变体
+                                    const displayTheme = (pendingTheme?.gameId === theme.gameId)
+                                        ? pendingTheme
+                                        : (rememberedTheme ?? theme);
+                                    const isPending = pendingTheme?.gameId === theme.gameId;
+                                    const isSaved = (() => {
+                                        const saved = getCursorTheme(savedThemeId);
+                                        return saved?.gameId === theme.gameId;
+                                    })();
+                                    return (
+                                        <CursorCard
+                                            key={theme.gameId}
+                                            label={theme.label}
+                                            subtitle={displayTheme.variantLabel}
+                                            previewSvg={displayTheme.previewSvgs.default}
+                                            isPending={isPending}
+                                            isSaved={isSaved}
+                                            onSelect={() => handleSelectGame(theme.gameId, theme.id)}
+                                        />
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="flex h-full min-h-40 items-center justify-center text-xs font-bold text-parchment-light-text">
+                                {t('common:loading', { defaultValue: '加载中...' })}
+                            </div>
+                        )}
                     </div>
 
                     {/* 底部：高对比 + 覆盖范围 + 设为当前 */}
@@ -334,10 +372,10 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
                         {/* 右侧：设为当前 */}
                         <button
                             onClick={handleApply}
-                            disabled={!isDirty}
+                            disabled={!isDirty || !isRegistryReady}
                             className={`
                                 px-3 py-1.5 rounded-md text-xs font-bold transition-all
-                                ${isDirty
+                                ${isDirty && isRegistryReady
                                     ? 'bg-parchment-brown text-white hover:bg-parchment-brown/90 cursor-pointer'
                                     : 'bg-parchment-base-bg text-parchment-light-text/40 cursor-default'
                                 }
@@ -349,7 +387,7 @@ export const CursorSettingsModal = ({ isOpen, onClose, closeOnBackdrop }: Cursor
                 </div>
             </ModalBase>
 
-            {variantGameId && (
+            {variantGameId && isRegistryReady && (
                 <VariantPickerModal
                     gameId={variantGameId}
                     activeThemeId={getGameDefaultTheme(variantGameId)}

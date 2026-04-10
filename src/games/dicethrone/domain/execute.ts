@@ -20,17 +20,29 @@ import type {
     StatusRemovedEvent,
     CharacterSelectedEvent,
     HostStartedEvent,
+    SeatingMovedEvent,
+    SeatSwapRequestedEvent,
+    SeatSwapRejectedEvent,
+    SeatSwapCancelledEvent,
     PlayerReadyEvent,
+    PlayerUnreadyEvent,
 } from './types';
 import {
     getRollerId,
+    getCombatOpponentId,
+    getDefaultOpponentId,
+    getContextualOpponentId,
     getNextPlayerId,
     getResponderQueue,
+    hasOpponentTargetEffect,
     getTokenStackLimit,
+    getSeatingOrder,
+    isTeamMode,
 } from './rules';
 import { findPlayerAbility, playerAbilityHasDamage } from './abilityLookup';
 import { applyEvents } from './utils';
 import { reduce } from './reducer';
+import type { InteractionDescriptor as PendingInteraction } from './core-types';
 
 import { DICETHRONE_COMMANDS } from './ids';
 import { CHARACTER_DATA_MAP } from './characters';
@@ -39,7 +51,9 @@ import { executeTokenCommand } from './executeTokens';
 import { getPlayerPassiveAbilities } from './passiveAbility';
 import { buildDrawEvents } from './deckEvents';
 import { RESOURCE_IDS } from './resources';
+import { getCustomActionHandler } from './effects';
 import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
+import { findHeroCard } from '../heroes';
 
 // ============================================================================
 // 辅助函数
@@ -47,6 +61,42 @@ import { getAutoResponseEnabled } from '../ui/AutoResponseToggle';
 
 const resolveTimestamp = (command?: DiceThroneCommand): number => {
     return typeof command?.timestamp === 'number' ? command.timestamp : 0;
+};
+
+const resolveStatusNewTotal = (
+    state: DiceThroneCore,
+    targetPlayerId: PlayerId,
+    statusId: string,
+    amount: number,
+): number => {
+    const currentStacks = state.players[targetPlayerId]?.statusEffects[statusId] ?? 0;
+    const def = state.tokenDefinitions.find(entry => entry.id === statusId);
+    const maxStacks = def?.stackLimit || 99;
+    return Math.min(currentStacks + amount, maxStacks);
+};
+
+const buildSwappedSeatingOrder = (
+    seatingOrder: PlayerId[],
+    requesterId: PlayerId,
+    targetPlayerId: PlayerId,
+) => {
+    const sourceSeatIndex = seatingOrder.indexOf(requesterId);
+    const targetSeatIndex = seatingOrder.indexOf(targetPlayerId);
+    if (sourceSeatIndex === -1 || targetSeatIndex === -1 || sourceSeatIndex === targetSeatIndex) {
+        return null;
+    }
+
+    const nextSeatingOrder = [...seatingOrder];
+    [nextSeatingOrder[sourceSeatIndex], nextSeatingOrder[targetSeatIndex]] = [
+        nextSeatingOrder[targetSeatIndex],
+        nextSeatingOrder[sourceSeatIndex],
+    ];
+
+    return {
+        sourceSeatIndex,
+        targetSeatIndex,
+        nextSeatingOrder,
+    };
 };
 
 /**
@@ -165,6 +215,135 @@ export function execute(
             break;
         }
 
+        case 'MOVE_SEAT': {
+            const movingPlayerId = command.payload.playerId;
+            const seatingOrder = getSeatingOrder(state);
+            const sourceSeatIndex = seatingOrder.indexOf(movingPlayerId);
+            if (sourceSeatIndex === -1) {
+                break;
+            }
+
+            const remainingPlayers = seatingOrder.filter((pid) => pid !== movingPlayerId);
+            const nextSeatingOrder = [
+                ...remainingPlayers.slice(0, command.payload.targetSeatIndex),
+                movingPlayerId,
+                ...remainingPlayers.slice(command.payload.targetSeatIndex),
+            ];
+
+            const seatingMovedEvent: SeatingMovedEvent = {
+                type: 'SEATING_MOVED',
+                payload: {
+                    playerId: movingPlayerId,
+                    sourceSeatIndex,
+                    targetSeatIndex: command.payload.targetSeatIndex,
+                    seatingOrder: nextSeatingOrder,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatingMovedEvent);
+            break;
+        }
+
+        case 'REQUEST_SEAT_SWAP': {
+            const requesterId = command.playerId;
+            const { targetPlayerId } = command.payload as { targetPlayerId: PlayerId };
+            const seatingOrder = getSeatingOrder(state);
+            const controller = state.seatControllers?.[targetPlayerId] ?? 'human';
+
+            if (controller === 'ai') {
+                const swapResult = buildSwappedSeatingOrder(seatingOrder, requesterId, targetPlayerId);
+                if (!swapResult) {
+                    break;
+                }
+
+                const seatingMovedEvent: SeatingMovedEvent = {
+                    type: 'SEATING_MOVED',
+                    payload: {
+                        playerId: requesterId,
+                        sourceSeatIndex: swapResult.sourceSeatIndex,
+                        targetSeatIndex: swapResult.targetSeatIndex,
+                        seatingOrder: swapResult.nextSeatingOrder,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp,
+                };
+                events.push(seatingMovedEvent);
+                break;
+            }
+
+            const seatSwapRequestedEvent: SeatSwapRequestedEvent = {
+                type: 'SEAT_SWAP_REQUESTED',
+                payload: {
+                    requesterId,
+                    targetPlayerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatSwapRequestedEvent);
+            break;
+        }
+
+        case 'RESPOND_SEAT_SWAP': {
+            const pendingRequest = state.seatSwapRequest;
+            if (!pendingRequest) {
+                break;
+            }
+
+            const { approve } = command.payload as { approve: boolean };
+            if (!approve) {
+                const seatSwapRejectedEvent: SeatSwapRejectedEvent = {
+                    type: 'SEAT_SWAP_REJECTED',
+                    payload: pendingRequest,
+                    sourceCommandType: command.type,
+                    timestamp,
+                };
+                events.push(seatSwapRejectedEvent);
+                break;
+            }
+
+            const seatingOrder = getSeatingOrder(state);
+            const swapResult = buildSwappedSeatingOrder(
+                seatingOrder,
+                pendingRequest.requesterId,
+                pendingRequest.targetPlayerId,
+            );
+            if (!swapResult) {
+                break;
+            }
+
+            const seatingMovedEvent: SeatingMovedEvent = {
+                type: 'SEATING_MOVED',
+                payload: {
+                    playerId: pendingRequest.requesterId,
+                    sourceSeatIndex: swapResult.sourceSeatIndex,
+                    targetSeatIndex: swapResult.targetSeatIndex,
+                    seatingOrder: swapResult.nextSeatingOrder,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatingMovedEvent);
+            break;
+        }
+
+        case 'CANCEL_SEAT_SWAP': {
+            const pendingRequest = state.seatSwapRequest;
+            if (!pendingRequest) {
+                break;
+            }
+
+            const seatSwapCancelledEvent: SeatSwapCancelledEvent = {
+                type: 'SEAT_SWAP_CANCELLED',
+                payload: pendingRequest,
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(seatSwapCancelledEvent);
+            break;
+        }
+
         case 'PLAYER_READY': {
             const readyEvent: PlayerReadyEvent = {
                 type: 'PLAYER_READY',
@@ -175,6 +354,19 @@ export function execute(
                 timestamp,
             };
             events.push(readyEvent);
+            break;
+        }
+
+        case 'PLAYER_UNREADY': {
+            const unreadyEvent: PlayerUnreadyEvent = {
+                type: 'PLAYER_UNREADY',
+                payload: {
+                    playerId: command.playerId,
+                },
+                sourceCommandType: command.type,
+                timestamp,
+            };
+            events.push(unreadyEvent);
             break;
         }
 
@@ -212,9 +404,15 @@ export function execute(
             // 关键：必须用 ROLL_CONFIRMED 事件应用后的状态来检查响应窗口
             // 否则 rollConfirmed 仍为 false，requireRollConfirmed 的卡牌（如抬一手）会被过滤掉
             const stateAfterConfirm = applyEvents(state, [event] as DiceThroneEvent[], reduce);
-            const playerIds = Object.keys(state.players);
-            const opponentId = playerIds.find(pid => pid !== rollerId) || rollerId;
-            const responderQueue = getResponderQueue(stateAfterConfirm, 'afterRollConfirmed', opponentId, undefined, rollerId, phase);
+            const responseTriggerId = getCombatOpponentId(stateAfterConfirm, rollerId) ?? rollerId;
+            const responderQueue = getResponderQueue(
+                stateAfterConfirm,
+                'afterRollConfirmed',
+                responseTriggerId,
+                undefined,
+                rollerId,
+                phase,
+            );
             if (responderQueue.length > 0 && getAutoResponseEnabled()) {
                 const windowId = `afterRollConfirmed-${timestamp}`;
                 const responseWindowEvent: ResponseWindowOpenedEvent = {
@@ -265,7 +463,9 @@ export function execute(
                 events.push(abilityActivatedEvent);
                 
                 // 2. 再发起放击事件
-                const defenderId = getNextPlayerId(state);
+                const defenderId = isTeamMode(state)
+                    ? undefined
+                    : (getDefaultOpponentId(state, state.activePlayerId) ?? getNextPlayerId(state));
                 const isDefendable = isDefendableAttack(state, state.activePlayerId, abilityId);
                 
                 // 检查是否为终极技能
@@ -505,9 +705,10 @@ export function execute(
                     } as DiceThroneEvent);
                     // 给目标玩家添加 token
                     const toTokens = toPlayer.tokens[statusId] ?? 0;
+                    const newTotal = toTokens + fromTokens;
                     events.push({
                         type: 'TOKEN_GRANTED',
-                        payload: { targetId: toPlayerId, tokenId: statusId, amount: fromTokens, newTotal: toTokens + fromTokens },
+                        payload: { targetId: toPlayerId, tokenId: statusId, amount: Math.max(0, newTotal - toTokens), newTotal },
                         sourceCommandType: command.type,
                         timestamp,
                     } as DiceThroneEvent);
@@ -531,12 +732,176 @@ export function execute(
                     const currentAmount = targetPlayer.tokens[tokenId] ?? 0;
                     const maxStacks = getTokenStackLimit(state, targetPlayerId, tokenId);
                     const newTotal = Math.min(currentAmount + amount, maxStacks);
+                    const grantedAmount = Math.max(0, newTotal - currentAmount);
                     events.push({
                         type: 'TOKEN_GRANTED',
-                        payload: { targetId: targetPlayerId, tokenId, amount, newTotal },
+                        payload: { targetId: targetPlayerId, tokenId, amount: grantedAmount, newTotal },
                         sourceCommandType: command.type,
                         timestamp,
                     } as DiceThroneEvent);
+                }
+            }
+            break;
+        }
+
+        case 'RESOLVE_INTERACTION': {
+            const currentInteraction = matchState.sys?.interaction?.current;
+            if (currentInteraction?.kind !== 'dt:card-interaction') {
+                break;
+            }
+
+            const interaction = currentInteraction.data as PendingInteraction;
+            if (interaction.type !== 'selectPlayer') {
+                break;
+            }
+
+            const { selectedPlayerIds = [] } = command.payload as { selectedPlayerIds?: PlayerId[] };
+            const targetPlayerIds = interaction.targetPlayerIds ?? Object.keys(state.players);
+            const resolvedPlayerIds = Array.from(new Set(
+                selectedPlayerIds.filter(playerId => targetPlayerIds.includes(playerId))
+            ));
+
+            if (resolvedPlayerIds.length === 0) {
+                break;
+            }
+
+            const tokenConfigs = interaction.tokenGrantConfigs ?? (
+                interaction.tokenGrantConfig ? [interaction.tokenGrantConfig] : []
+            );
+            const statusConfigs = interaction.statusGrantConfigs ?? (
+                interaction.statusGrantConfig ? [interaction.statusGrantConfig] : []
+            );
+            const resolveCustomActionId = interaction.resolveCustomActionId;
+
+            for (const [playerIndex, targetPlayerId] of resolvedPlayerIds.entries()) {
+                if (!state.players[targetPlayerId]) continue;
+
+                if (resolveCustomActionId) {
+                    const handler = getCustomActionHandler(resolveCustomActionId);
+                    if (!handler) {
+                        continue;
+                    }
+
+                    const customTimestamp = timestamp + playerIndex * 10;
+                    events.push(...handler({
+                        ctx: {
+                            attackerId: interaction.playerId,
+                            defenderId: targetPlayerId,
+                            sourceAbilityId: interaction.sourceCardId,
+                            state,
+                            damageDealt: 0,
+                            timestamp: customTimestamp,
+                        },
+                        targetId: targetPlayerId,
+                        attackerId: interaction.playerId,
+                        sourceAbilityId: interaction.sourceCardId,
+                        state,
+                        timestamp: customTimestamp,
+                        random,
+                        action: {
+                            type: 'custom',
+                            target: 'self',
+                            customActionId: resolveCustomActionId,
+                        },
+                    }).filter(event => event !== undefined));
+                    continue;
+                }
+
+                if (tokenConfigs.length > 0 || statusConfigs.length > 0) {
+                    for (const [configIndex, tokenConfig] of tokenConfigs.entries()) {
+                        const currentAmount = state.players[targetPlayerId]?.tokens[tokenConfig.tokenId] ?? 0;
+                        const maxStacks = getTokenStackLimit(state, targetPlayerId, tokenConfig.tokenId);
+                        const newTotal = Math.min(currentAmount + tokenConfig.amount, maxStacks);
+                        const grantedAmount = Math.max(0, newTotal - currentAmount);
+                        events.push({
+                            type: 'TOKEN_GRANTED',
+                            payload: {
+                                targetId: targetPlayerId,
+                                tokenId: tokenConfig.tokenId,
+                                amount: grantedAmount,
+                                newTotal,
+                                sourceAbilityId: interaction.sourceCardId,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp: timestamp + playerIndex * 10 + configIndex,
+                        } as DiceThroneEvent);
+                    }
+
+                    for (const [configIndex, statusConfig] of statusConfigs.entries()) {
+                        events.push({
+                            type: 'STATUS_APPLIED',
+                            payload: {
+                                targetId: targetPlayerId,
+                                statusId: statusConfig.statusId,
+                                stacks: statusConfig.amount,
+                                newTotal: resolveStatusNewTotal(state, targetPlayerId, statusConfig.statusId, statusConfig.amount),
+                                sourceAbilityId: interaction.sourceCardId,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp: timestamp + playerIndex * 10 + tokenConfigs.length + configIndex,
+                        } as DiceThroneEvent);
+                    }
+                    continue;
+                }
+
+                const targetPlayer = state.players[targetPlayerId];
+                Object.entries(targetPlayer.statusEffects).forEach(([statusId, stacks], statusIndex) => {
+                    if (stacks <= 0) return;
+                    events.push({
+                        type: 'STATUS_REMOVED',
+                        payload: { targetId: targetPlayerId, statusId, stacks },
+                        sourceCommandType: command.type,
+                        timestamp: timestamp + playerIndex * 100 + statusIndex,
+                    } as StatusRemovedEvent);
+                });
+
+                Object.entries(targetPlayer.tokens).forEach(([tokenId, amount], tokenIndex) => {
+                    if (amount <= 0) return;
+                    events.push({
+                        type: 'TOKEN_CONSUMED',
+                        payload: { playerId: targetPlayerId, tokenId, amount, newTotal: 0 },
+                        sourceCommandType: command.type,
+                        timestamp: timestamp + playerIndex * 100 + 50 + tokenIndex,
+                    } as DiceThroneEvent);
+                });
+            }
+
+            if (
+                resolveCustomActionId === 'resolve-card-effects-on-selected-opponent'
+                && !matchState.sys?.responseWindow?.current
+                && resolvedPlayerIds.length === 1
+                && interaction.sourceCardId
+            ) {
+                const playerCharacterId = state.players[interaction.playerId]?.characterId;
+                const card = findHeroCard(
+                    interaction.sourceCardId,
+                    playerCharacterId && playerCharacterId !== 'unselected' ? playerCharacterId : undefined,
+                );
+                const selectedTargetId = resolvedPlayerIds[0];
+                if (card && hasOpponentTargetEffect(card)) {
+                    const stateAfterCardResolution = applyEvents(state, events, reduce);
+                    const responderQueue = getResponderQueue(
+                        stateAfterCardResolution,
+                        'afterCardPlayed',
+                        selectedTargetId,
+                        card.id,
+                        interaction.playerId,
+                        phase,
+                    );
+                    if (responderQueue.length > 0 && getAutoResponseEnabled()) {
+                        const responseWindowEvent: ResponseWindowOpenedEvent = {
+                            type: 'RESPONSE_WINDOW_OPENED',
+                            payload: {
+                                windowId: `afterCard-${card.id}-${timestamp}`,
+                                responderQueue,
+                                windowType: 'afterCardPlayed',
+                                sourceId: card.id,
+                            },
+                            sourceCommandType: command.type,
+                            timestamp,
+                        };
+                        events.push(responseWindowEvent);
+                    }
                 }
             }
             break;

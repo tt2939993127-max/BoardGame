@@ -28,7 +28,15 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div
+            className="modal-base-container fixed inset-0 z-50 flex items-center justify-center p-4"
+            style={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
+        >
             {/* 遮罩层 */}
             <motion.div
                 initial={{ opacity: 0 }}
@@ -44,7 +52,9 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.95, y: 10 }}
                 onClick={(e) => e.stopPropagation()}
-                className="relative bg-parchment-card-bg w-full max-w-4xl h-[600px] max-h-[90vh] rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
+                data-testid="friends-chat-modal-content"
+                className="relative bg-parchment-card-bg w-full max-w-4xl rounded-lg shadow-2xl overflow-hidden flex flex-col md:flex-row border border-parchment-card-border/30"
+                style={{ height: 'min(600px, var(--runtime-modal-max-height))' }}
             >
                 {/* 关闭按钮 */}
                 <button
@@ -56,8 +66,10 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
 
                 {/* 左侧区域：好友列表 */}
                 <div className={clsx(
-                    "w-full md:w-80 h-full border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative z-10 bg-parchment-card-bg",
-                    selectedFriendId ? "-translate-x-full md:translate-x-0" : "translate-x-0"
+                    'w-full md:w-80 h-full border-r border-parchment-card-border/30 flex flex-col transition-all duration-300 absolute md:relative bg-parchment-card-bg',
+                    selectedFriendId
+                        ? '-translate-x-full pointer-events-none z-0 md:translate-x-0 md:pointer-events-auto md:z-10'
+                        : 'translate-x-0 pointer-events-auto z-10'
                 )}>
                     <div className="p-4 border-b border-parchment-card-border/30 bg-parchment-base-bg">
                         <h2 className="font-bold text-lg text-parchment-base-text">{t('social:modal.title')}</h2>
@@ -75,8 +87,10 @@ export const FriendsChatModal = ({ isOpen, onClose, inviteData, initialFriendId 
 
                 {/* 右侧区域：聊天窗口 */}
                 <div className={clsx(
-                    "flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg",
-                    selectedFriendId ? "translate-x-0" : "translate-x-full md:translate-x-0"
+                    'flex-1 h-full flex flex-col transition-all duration-300 absolute md:relative w-full md:w-auto bg-parchment-card-bg',
+                    selectedFriendId
+                        ? 'translate-x-0 pointer-events-auto z-20'
+                        : 'translate-x-full pointer-events-none z-0 md:translate-x-0 md:pointer-events-auto md:z-auto'
                 )}>
                     {selectedFriendId ? (
                         <>

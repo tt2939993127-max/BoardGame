@@ -15,6 +15,7 @@ import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { createScopedLogger } from '../../../lib/logger';
+import { resolveBonusDieText } from './bonusDieTranslation';
 
 const bonusDieOverlayLogger = createScopedLogger('DT_BONUS_DIE_OVERLAY');
 
@@ -82,9 +83,10 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     summaryEffectKey,
     summaryEffectParams,
 }) => {
-    const { t } = useTranslation('game-dicethrone');
+    const { t, i18n } = useTranslation('game-dicethrone');
     // 只要有 bonusDice 就进入多骰模式，不依赖 onReroll 或 displayOnly
     const isRerollMode = Boolean(bonusDice && bonusDice.length > 0);
+    const isSingleDieRerollSpotlight = Boolean(bonusDice && bonusDice.length === 1);
     const costAmount = rerollCostAmount ?? 1;
     const tokenName = rerollCostTokenId ? t(`tokens.${rerollCostTokenId}.name`) : t('tokens.taiji.name');
 
@@ -109,9 +111,20 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     // 重掷交互模式：显示多颗骰子
     if (isRerollMode && bonusDice) {
         const total = bonusDice.reduce((sum, d) => sum + d.value, 0);
+        const multiDieSize = isSingleDieRerollSpotlight
+            ? '8vw'
+            : bonusDice.length >= 5
+                ? '5.2vw'
+                : bonusDice.length >= 4
+                    ? '5.8vw'
+                    : '6.4vw';
+        const multiDieGap = isSingleDieRerollSpotlight
+            ? '0'
+            : bonusDice.length >= 5
+                ? '0.8vw'
+                : '1.2vw';
         // 只有真正可重掷时才保持交互态；展示模式或无资源时都自动关闭/允许点背景关闭
         const isInteractive = !displayOnly && canReroll === true;
-
         bonusDieOverlayLogger.info('render-reroll', {
             total,
             bonusDiceCount: bonusDice.length,
@@ -119,6 +132,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             canReroll: !!canReroll,
             showTotal,
             characterId,
+            isSingleDieRerollSpotlight,
         });
 
         return (
@@ -128,7 +142,8 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 onClose={onClose}
                 disableAutoClose={isInteractive}
                 disableBackdropClose={isInteractive}
-                autoCloseDelay={displayOnly ? 5000 : 3000}
+                blockPointerEvents={isInteractive}
+                autoCloseDelay={autoCloseDelay}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
             >
@@ -149,7 +164,11 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                     </motion.div>
 
                     {/* 骰子列表 */}
-                    <div className="flex gap-[2vw]">
+                    <div
+                        className={`flex justify-center ${isSingleDieRerollSpotlight ? 'items-center' : 'items-start'}`}
+                        style={{ gap: multiDieGap }}
+                        data-testid={isSingleDieRerollSpotlight ? 'bonus-die-single-reroll-spotlight' : 'bonus-die-multi-reroll-spotlight'}
+                    >
                         {bonusDice.map((die) => (
                             <motion.div
                                 key={die.index}
@@ -167,11 +186,13 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                                     value={die.value}
                                     face={die.face}
                                     effectKey={die.effectKey}
+                                    effectParams={die.effectParams}
                                     locale={locale}
-                                    size="7vw"
+                                    size={multiDieSize}
                                     rollingDurationMs={600 + die.index * 100}
                                     characterId={characterId}
-                                    compact={true}
+                                    compact={!isSingleDieRerollSpotlight}
+                                    hideEffectText={!isSingleDieRerollSpotlight && bonusDice.length > 1}
                                 />
                                 {canReroll && (
                                     <div className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity">
@@ -212,7 +233,11 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                             className="text-white text-[1.4vw] font-black italic tracking-wider whitespace-nowrap bg-black/60 px-[1.5vw] py-[0.4vw] rounded-full border border-white/20 shadow-lg"
                             style={{ textShadow: '0 0 1vw rgba(251, 191, 36, 0.5)' }}
                         >
-                            {t(summaryEffectKey, summaryEffectParams)}
+                            {resolveBonusDieText(summaryEffectKey, {
+                                t,
+                                i18n,
+                                params: summaryEffectParams,
+                            }) ?? summaryEffectKey}
                         </motion.div>
                     )}
 

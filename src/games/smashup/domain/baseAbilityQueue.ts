@@ -22,6 +22,7 @@ export function registerBaseAbilityAsQueuedTrigger(
     const baseCtx: BaseAbilityContext = {
       state: ctx.state,
       matchState: ctx.matchState,
+      random: ctx.random,
       baseIndex,
       baseDefId: baseDefId,
       playerId: ctx.playerId,
@@ -115,6 +116,7 @@ export function registerExtendedBaseAbilityAsQueuedTrigger(
     const baseCtx: BaseAbilityContext = {
       state: ctx.state,
       matchState: ctx.matchState,
+      random: ctx.random,
       baseIndex,
       baseDefId,
       playerId: ctx.playerId,

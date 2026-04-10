@@ -10,7 +10,7 @@ import type { EffectAction, RollDieConditionalEffect, RollDieDefaultEffect } fro
 export type { RollDieConditionalEffect, RollDieDefaultEffect };
 import type { AbilityEffect, EffectTiming, EffectResolutionContext } from './combat';
 import { combatAbilityManager } from './combatAbility';
-import { getActiveDice, getFaceCounts, getPlayerDieFace, getTokenStackLimit } from './rules';
+import { getActiveDice, getFaceCounts, getOpponents, getPlayerDieFace, getTokenStackLimit } from './rules';
 import { RESOURCE_IDS } from './resources';
 import type {
     DiceThroneCore,
@@ -115,6 +115,8 @@ export interface CustomActionMeta {
     categories: CustomActionCategory[];
     /** 是否需要玩家交互 */
     requiresInteraction?: boolean;
+    /** 是否依赖当前已选中的单一 defender（常见于 2v2 攻击修正/主阶段对手卡） */
+    requiresSelectedDefender?: boolean;
     /** 可用阶段（不指定则不限制） */
     phases?: string[];
     /**
@@ -206,6 +208,10 @@ export function createDisplayOnlySettlement(
     targetId: PlayerId,
     dice: BonusDieInfo[],
     timestamp: number,
+    options?: {
+        summaryEffectKey?: string;
+        summaryEffectParams?: Record<string, string | number>;
+    },
 ): BonusDiceRerollRequestedEvent {
     return {
         type: 'BONUS_DICE_REROLL_REQUESTED',
@@ -222,6 +228,8 @@ export function createDisplayOnlySettlement(
                 maxRerollCount: 0,
                 readyToSettle: false,
                 displayOnly: true,
+                summaryEffectKey: options?.summaryEffectKey,
+                summaryEffectParams: options?.summaryEffectParams,
             },
         },
         sourceCommandType: 'ABILITY_EFFECT',
@@ -258,6 +266,10 @@ export interface BonusDiceRollConfig {
     showTotal?: boolean;
     /** 覆盖伤害/状态目标（默认使用 ctx.targetId） */
     damageTargetId?: PlayerId;
+    /** 奖励骰结算去向：直接伤害，或加入当前攻击伤害 */
+    resolutionMode?: 'damage' | 'attackBonus' | 'none';
+    /** attackBonus 模式下的换算规则 */
+    attackBonusScale?: 'raw' | 'halfUp';
 }
 
 /**
@@ -322,6 +334,8 @@ export function createBonusDiceWithReroll(
             threshold: config.threshold,
             thresholdEffect: config.thresholdEffect,
             readyToSettle: false,
+            resolutionMode: config.resolutionMode ?? 'damage',
+            attackBonusScale: config.attackBonusScale ?? 'raw',
         };
         events.push({
             type: 'BONUS_DICE_REROLL_REQUESTED',
@@ -444,11 +458,11 @@ function resolveEffectAction(
 
     switch (action.type) {
         case 'damage': {
-            // target: 'all' → 对所有玩家（含自己）; 'allOpponents' → 除自己外所有玩家
+            // target: 'all' → 对所有玩家（含自己）; 'allOpponents' → 当前玩家的真实敌方集合
             const damageTargets = action.target === 'all'
                 ? Object.keys(state.players)
                 : action.target === 'allOpponents'
-                    ? Object.keys(state.players).filter(id => id !== attackerId)
+                    ? getOpponents(state, attackerId)
                     : [targetId];
 
             for (const dmgTargetId of damageTargets) {
@@ -496,8 +510,9 @@ function resolveEffectAction(
                     sourceName: m.sourceName,
                 }));
 
-                // target: 'all'/'allOpponents' 的全体伤害不触发 Token 响应窗口
-                if (action.target !== 'all' && action.target !== 'allOpponents') {
+                // target: 'all'/'allOpponents' 的全体伤害不触发 Token 响应窗口；
+                // 明确标记为 unblockable 的动作伤害也不允许任何减伤/回避类 Token 响应。
+                if (!action.unblockable && action.target !== 'all' && action.target !== 'allOpponents') {
                     // 检查是否需要打开 Token 响应窗口
                     const tokenResponseType = shouldOpenTokenResponse(
                         state,
@@ -556,6 +571,7 @@ function resolveEffectAction(
                         sourceAbilityId,
                         ...(passiveModifiers.length > 0 ? { modifiers: passiveModifiers } : {}),
                         breakdown: result.breakdown,
+                        ...(action.unblockable ? { unblockable: true } : {}),
                     },
                     sourceCommandType: 'ABILITY_EFFECT',
                     timestamp,
@@ -634,13 +650,14 @@ function resolveEffectAction(
             const maxStacks = getTokenStackLimit(state, targetId, tokenId);
             const amountToAdd = action.value ?? 1;
             const newTotal = Math.min(currentAmount + amountToAdd, maxStacks);
+            const grantedAmount = Math.max(0, newTotal - currentAmount);
 
             const tokenEvent: TokenGrantedEvent = {
                 type: 'TOKEN_GRANTED',
                 payload: {
                     targetId,
                     tokenId,
-                    amount: amountToAdd,
+                    amount: grantedAmount,
                     newTotal,
                     sourceAbilityId,
                 },
@@ -769,9 +786,10 @@ function resolveEffectAction(
                         const dmgPayload = (handledEvent as DamageDealtEvent).payload;
                         const dmgAmount = dmgPayload.amount ?? 0;
                         const dmgTargetId = dmgPayload.targetId;
+                        const isUnblockable = dmgPayload.unblockable === true;
 
                         // 检查是否需要打开 Token 响应窗口
-                        if (shouldCheckTokenResponse && dmgAmount > 0) {
+                        if (shouldCheckTokenResponse && dmgAmount > 0 && !isUnblockable) {
                             const tokenResponseType = shouldOpenTokenResponse(
                                 state,
                                 attackerId,
@@ -951,13 +969,14 @@ function resolveConditionalEffect(
         const currentAmount = targetPlayer?.tokens[tokenId] ?? 0;
         const maxStacks = getTokenStackLimit(state, actualTargetId, tokenId);
         const newTotal = Math.min(currentAmount + value, maxStacks);
+        const grantedAmount = Math.max(0, newTotal - currentAmount);
 
         const tokenEvent: TokenGrantedEvent = {
             type: 'TOKEN_GRANTED',
             payload: {
                 targetId: actualTargetId,
                 tokenId,
-                amount: value,
+                amount: grantedAmount,
                 newTotal,
                 sourceAbilityId,
             },
@@ -978,9 +997,10 @@ function resolveConditionalEffect(
             const cur = tp?.tokens[tokenGrant.tokenId] ?? 0;
             const max = getTokenStackLimit(state, actualTarget, tokenGrant.tokenId);
             const nt = Math.min(cur + tokenGrant.value, max);
+            const grantedAmount = Math.max(0, nt - cur);
             events.push({
                 type: 'TOKEN_GRANTED',
-                payload: { targetId: actualTarget, tokenId: tokenGrant.tokenId, amount: tokenGrant.value, newTotal: nt, sourceAbilityId },
+                payload: { targetId: actualTarget, tokenId: tokenGrant.tokenId, amount: grantedAmount, newTotal: nt, sourceAbilityId },
                 sourceCommandType: 'ABILITY_EFFECT',
                 timestamp,
                 sfxKey,
@@ -1217,10 +1237,10 @@ export function resolveEffectsToEvents(
             break;
         }
 
-        // CHOICE_REQUESTED 同样需要中断：用户选择完成前不应执行后续效果
+        // CHOICE_REQUESTED / COMPARE_ROLL_REQUESTED 同样需要中断：用户确认比较或分支前不应执行后续效果
         // 例如：taiji-combo 的 rollDie=莲花 产生选择，后续的 damage(6) 应等待选择完成后再执行
         // 否则会导致伤害在选择前就被应用，破坏游戏流程
-        if (effectEvents.some(e => e.type === 'CHOICE_REQUESTED')) {
+        if (effectEvents.some(e => e.type === 'CHOICE_REQUESTED' || e.type === 'COMPARE_ROLL_REQUESTED')) {
             break;
         }
 

@@ -66,6 +66,7 @@ export interface TokenUseEffect {
     type: TokenUseEffectType;
     /** 数值（伤害修改量等） */
     value?: number;
+    valueByAmount?: Partial<Record<number, number>>;
     /** 掷骰成功条件（用于 rollToNegate） */
     rollSuccess?: {
         /** 成功的骰面范围 [min, max] */
@@ -267,6 +268,9 @@ export interface ActiveUseConfig {
     timing: ActiveTiming[];
     /** 使用时消耗的数量（默认 1） */
     consumeAmount: number;
+    allowedConsumeAmounts?: number[];
+    /** 主动使用时需要额外触发的 custom action */
+    customActionId?: string;
     /** 使用效果 */
     effect: TokenUseEffect;
 }
@@ -279,6 +283,32 @@ export interface ActiveUseConfig {
  * 统一的 Token 定义
  * 支持三种类型：buff、debuff、consumable
  */
+export function getTokenUseOptions(tokenDef: TokenDef, availableAmount: number): number[] {
+    const configured = tokenDef.activeUse?.allowedConsumeAmounts ?? [tokenDef.activeUse?.consumeAmount ?? 1];
+    const unique = Array.from(new Set(configured));
+    return unique
+        .filter(amount => Number.isInteger(amount) && amount > 0 && amount <= availableAmount)
+        .sort((left, right) => left - right);
+}
+
+export function getMaxTokenUseAmount(tokenDef: TokenDef): number {
+    const configured = tokenDef.activeUse?.allowedConsumeAmounts ?? [tokenDef.activeUse?.consumeAmount ?? 1];
+    const valid = configured.filter(amount => Number.isInteger(amount) && amount > 0);
+    return valid.length > 0 ? Math.max(...valid) : 1;
+}
+
+export function getTokenEffectValue(
+    effect: TokenUseEffect | undefined,
+    amount: number,
+    fallbackValue = 0,
+): number {
+    const mappedValue = effect?.valueByAmount?.[amount];
+    if (typeof mappedValue === 'number') {
+        return mappedValue;
+    }
+    return (effect?.value ?? fallbackValue) * amount;
+}
+
 export interface TokenDef {
     /** 唯一标识 */
     id: string;
@@ -286,6 +316,8 @@ export interface TokenDef {
     name: string;
     /** 图标（已废弃，精灵图优先） */
     icon?: string;
+    /** 单图图标路径（可选；未制作 atlas 时的显示回退） */
+    iconPath?: string;
     /** 颜色主题（Tailwind gradient class） */
     colorTheme: string;
     /** 描述文本（供 UI 展示） */

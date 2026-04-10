@@ -1,21 +1,75 @@
-import { useEffect, useState } from 'react';
+import { startTransition, useCallback, useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { Capacitor } from '@capacitor/core';
-import { ScreenOrientation } from '@capacitor/screen-orientation';
-import { getGameById, subscribeGameRegistry } from '../../config/games.config';
+import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
+import type { GameManifestEntry } from '../../games/manifest';
+import { onAppVisible } from '../../lib/mobile/appVisibility';
+import { isTextEntryElement, scrollTextEntryIntoView } from '../../lib/textEntry';
 import {
     extractGameIdFromPlayPath,
     getGameMobileBannerKind,
     resolveGameMobileSupport,
     type GameMobileBannerKind,
 } from '../../games/mobileSupport';
+import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 
-const getViewport = () => ({
-    width: typeof window === 'undefined' ? 0 : window.innerWidth,
-    height: typeof window === 'undefined' ? 0 : window.innerHeight,
-});
+type GameMobileEntry = Pick<
+    GameManifestEntry,
+    'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+>;
 
-const isNativeAppShell = () => Capacitor.isNativePlatform();
+const hasCapacitorRuntime = () => {
+    if (typeof window === 'undefined') return false;
+    const runtime = (window as typeof window & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor;
+    return typeof runtime?.isNativePlatform === 'function';
+};
+
+type CapacitorCoreModule = {
+    Capacitor: {
+        isNativePlatform(): boolean;
+    };
+};
+
+type ScreenOrientationModule = {
+    ScreenOrientation: {
+        lock(options: { orientation: 'landscape' | 'portrait' }): Promise<void>;
+    };
+};
+
+let capacitorCoreLoader: Promise<CapacitorCoreModule | null> | null = null;
+let screenOrientationLoader: Promise<ScreenOrientationModule | null> | null = null;
+
+const runtimeImport = async <TModule,>(specifier: string): Promise<TModule> => {
+    const importer = new Function('s', 'return import(s)') as (value: string) => Promise<TModule>;
+    return importer(specifier);
+};
+
+const loadCapacitorCore = async (): Promise<CapacitorCoreModule | null> => {
+    if (!capacitorCoreLoader) {
+        capacitorCoreLoader = runtimeImport<CapacitorCoreModule>('@capacitor/core')
+            .then(module => module as CapacitorCoreModule)
+            .catch(() => null);
+    }
+
+    return capacitorCoreLoader;
+};
+
+const loadScreenOrientation = async (): Promise<ScreenOrientationModule | null> => {
+    if (!screenOrientationLoader) {
+        screenOrientationLoader = runtimeImport<ScreenOrientationModule>('@capacitor/screen-orientation')
+            .then(module => module as ScreenOrientationModule)
+            .catch(() => null);
+    }
+
+    return screenOrientationLoader;
+};
+
+const isNativeAppShell = async () => {
+    if (!hasCapacitorRuntime()) {
+        return false;
+    }
+    const capacitorCore = await loadCapacitorCore();
+    return capacitorCore?.Capacitor.isNativePlatform() ?? false;
+};
 
 const lockScreenOrientationFallback = async (orientation: 'landscape' | 'portrait'): Promise<boolean> => {
     if (typeof window === 'undefined') return false;
@@ -31,11 +85,16 @@ const lockScreenOrientationFallback = async (orientation: 'landscape' | 'portrai
 
 const lockScreenByRoute = async (targetOrientation: 'landscape' | 'portrait'): Promise<boolean> => {
     try {
-        await ScreenOrientation.lock({ orientation: targetOrientation });
-        return true;
+        const screenOrientation = await loadScreenOrientation();
+        if (screenOrientation) {
+            await screenOrientation.ScreenOrientation.lock({ orientation: targetOrientation });
+            return true;
+        }
     } catch {
-        return lockScreenOrientationFallback(targetOrientation);
+        // ignore and fallback below
     }
+
+    return lockScreenOrientationFallback(targetOrientation);
 };
 
 const renderBannerVisual = (bannerKind: GameMobileBannerKind) => {
@@ -97,13 +156,14 @@ const getBannerMessage = (bannerKind: GameMobileBannerKind) => {
 
 export function MobileOrientationGuard({ children }: { children: React.ReactNode }) {
     const location = useLocation();
-    const [viewport, setViewport] = useState(getViewport);
+    const viewport = useRuntimeViewport({ syncCssVars: true });
     const [dismissedBannerKey, setDismissedBannerKey] = useState<string | null>(null);
-    const [, forceRegistryVersion] = useState(0);
-    const nativeAppShell = isNativeAppShell();
+    const [nativeAppShell, setNativeAppShell] = useState(false);
+    const [dynamicGameConfig, setDynamicGameConfig] = useState<GameMobileEntry | undefined>(undefined);
 
     const gameId = extractGameIdFromPlayPath(location.pathname);
-    const gameConfig = gameId ? getGameById(gameId) : undefined;
+    const builtInGameConfig = gameId ? GAME_MANIFEST_BY_ID[gameId] : undefined;
+    const gameConfig = builtInGameConfig ?? dynamicGameConfig;
     const preferredOrientation = gameId
         ? resolveGameMobileSupport(gameConfig).preferredOrientation
         : undefined;
@@ -116,26 +176,74 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
     const activeBannerKind = !shouldSuppressBannerInAppShell && bannerKey && dismissedBannerKey !== bannerKey
         ? bannerKind
         : null;
+    const isMobileViewport = viewport.width > 0 && viewport.width <= 1023;
 
-    useEffect(() => {
-        const updateViewport = () => {
-            setViewport(getViewport());
-        };
+    const scheduleScrollActiveTextEntryIntoView = useCallback((behavior: ScrollBehavior = 'smooth') => {
+        const activeElement = document.activeElement;
+        if (!isTextEntryElement(activeElement)) {
+            return undefined;
+        }
 
-        updateViewport();
-        window.addEventListener('resize', updateViewport);
-        window.addEventListener('orientationchange', updateViewport);
+        const frameId = window.requestAnimationFrame(() => {
+            scrollTextEntryIntoView(activeElement, behavior);
+        });
 
         return () => {
-            window.removeEventListener('resize', updateViewport);
-            window.removeEventListener('orientationchange', updateViewport);
+            window.cancelAnimationFrame(frameId);
         };
     }, []);
 
     useEffect(() => {
-        return subscribeGameRegistry(() => {
-            forceRegistryVersion((version) => version + 1);
+        if (!gameId || builtInGameConfig) {
+            setDynamicGameConfig(undefined);
+            return;
+        }
+
+        let disposed = false;
+        let unsubscribe: (() => void) | undefined;
+
+        const syncRegistryGameConfig = (getGameById: (id: string) => GameMobileEntry | undefined) => {
+            const nextGameConfig = getGameById(gameId);
+            startTransition(() => {
+                setDynamicGameConfig(nextGameConfig);
+            });
+        };
+
+        void import('../../config/games.config')
+            .then(({ getGameById, subscribeGameRegistry }) => {
+                if (disposed) {
+                    return;
+                }
+
+                syncRegistryGameConfig(getGameById);
+                unsubscribe = subscribeGameRegistry(() => {
+                    syncRegistryGameConfig(getGameById);
+                });
+            })
+            .catch(() => {
+                if (!disposed) {
+                    setDynamicGameConfig(undefined);
+                }
+            });
+
+        return () => {
+            disposed = true;
+            unsubscribe?.();
+        };
+    }, [builtInGameConfig, gameId]);
+
+    useEffect(() => {
+        let disposed = false;
+
+        void isNativeAppShell().then((value) => {
+            if (!disposed) {
+                setNativeAppShell(value);
+            }
         });
+
+        return () => {
+            disposed = true;
+        };
     }, []);
 
     useEffect(() => {
@@ -143,6 +251,57 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             setDismissedBannerKey(null);
         }
     }, [bannerKey]);
+
+    useEffect(() => {
+        if (viewport.keyboardInsetBottom <= 0) {
+            return undefined;
+        }
+
+        return scheduleScrollActiveTextEntryIntoView('smooth');
+    }, [scheduleScrollActiveTextEntryIntoView, viewport.keyboardInsetBottom]);
+
+    useEffect(() => {
+        if (!isMobileViewport) {
+            return undefined;
+        }
+
+        const frameIds = new Set<number>();
+        const timeoutIds = new Set<number>();
+
+        const cleanupScheduled = () => {
+            frameIds.forEach((frameId) => window.cancelAnimationFrame(frameId));
+            timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
+            frameIds.clear();
+            timeoutIds.clear();
+        };
+
+        const handleFocusIn = (event: FocusEvent) => {
+            const target = event.target as Element | null;
+            if (!isTextEntryElement(target)) {
+                return;
+            }
+
+            const behavior: ScrollBehavior = viewport.keyboardInsetBottom > 0 ? 'smooth' : 'auto';
+            const frameId = window.requestAnimationFrame(() => {
+                frameIds.delete(frameId);
+                scrollTextEntryIntoView(target, behavior);
+            });
+            frameIds.add(frameId);
+
+            const timeoutId = window.setTimeout(() => {
+                timeoutIds.delete(timeoutId);
+                scrollTextEntryIntoView(target, 'smooth');
+            }, 180);
+            timeoutIds.add(timeoutId);
+        };
+
+        window.addEventListener('focusin', handleFocusIn);
+
+        return () => {
+            window.removeEventListener('focusin', handleFocusIn);
+            cleanupScheduled();
+        };
+    }, [isMobileViewport, viewport.keyboardInsetBottom]);
 
     useEffect(() => {
         if (!nativeAppShell) return;
@@ -163,11 +322,6 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             timeoutIds.push(id);
         }
 
-        const handleVisibilityChange = () => {
-            if (document.hidden) return;
-            lockNow();
-        };
-
         const handleFocus = () => {
             lockNow();
         };
@@ -176,7 +330,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             lockNow();
         };
 
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        const cleanupAppVisible = onAppVisible(lockNow);
         window.addEventListener('focus', handleFocus);
         window.addEventListener('orientationchange', handleOrientationChange);
 
@@ -185,7 +339,7 @@ export function MobileOrientationGuard({ children }: { children: React.ReactNode
             for (const timeoutId of timeoutIds) {
                 window.clearTimeout(timeoutId);
             }
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            cleanupAppVisible();
             window.removeEventListener('focus', handleFocus);
             window.removeEventListener('orientationchange', handleOrientationChange);
         };

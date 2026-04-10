@@ -456,6 +456,25 @@ describe('Property 9: 持续行动卡附着', () => {
         expect(result.valid).toBe(false);
     });
 
+    test('普通行动卡声明 playNeedsBase 时缺少 targetBaseIndex 应校验失败', () => {
+        const card = makeCard('bury-1', 'ancient_egyptians_you_can_take_it_with_you', 'action');
+        const state: SmashUpCore = {
+            players: {
+                '0': makePlayer('0', [SMASHUP_FACTION_IDS.ANCIENT_EGYPTIANS, SMASHUP_FACTION_IDS.ROBOTS], { hand: [card] }),
+                '1': makePlayer('1', [SMASHUP_FACTION_IDS.NINJAS, SMASHUP_FACTION_IDS.ALIENS]),
+            },
+            turnOrder: ['0', '1'], currentPlayerIndex: 0,
+            bases: [makeBase('test_base')],
+            baseDeck: [], turnNumber: 1, nextUid: 100,
+        };
+        const result = validate(
+            { core: state, sys: { phase: 'playCards' } as any },
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'bury-1' } } as any,
+        );
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('需要选择目标基地');
+    });
+
     test('ongoing（随从目标）缺少 targetMinionUid 时应校验失败', () => {
         const card = makeCard('og-4', 'dino_upgrade', 'action');
         const minion = makeMinion('m-1', 'test', '0', 3, { powerModifier: 0 });
@@ -878,7 +897,7 @@ describe('Property 18: Me First 窗口协议', () => {
             payload: { cardUid: 'a-1' },
         } as any);
         expect(r.valid).toBe(false);
-        expect(r.error).toContain('特殊');
+        expect(r.error).toBe('该行动卡不能在响应窗口中打出');
     });
 
     test('非当前响应者不能在 Me First 窗口中打牌', () => {
@@ -970,15 +989,16 @@ describe('Property 18: Me First 窗口协议', () => {
         expect(validBase.valid).toBe(true);
     });
 
-    test('无需基地目标的特殊行动卡不能携带 targetBaseIndex', () => {
+    test('无需基地目标的特殊行动卡在存在有效隐式目标时不能携带 targetBaseIndex', () => {
         const specialCard = makeCard('s-1', 'pirate_full_sail', 'action');
+        const movableMinion = makeMinion('m-1', 'pirate_buccaneer', '0', 4);
         const state: SmashUpCore = {
             players: {
                 '0': makePlayer('0', [SMASHUP_FACTION_IDS.PIRATES, SMASHUP_FACTION_IDS.NINJAS], { hand: [specialCard] }),
                 '1': makePlayer('1', [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.ALIENS]),
             },
             turnOrder: ['0', '1'], currentPlayerIndex: 0,
-            bases: [makeBase('base_central_brain')],
+            bases: [makeBase('base_central_brain', { minions: [movableMinion] }), makeBase('base_jungle_oasis')],
             baseDeck: [], turnNumber: 1, nextUid: 100,
         };
         const matchState: MatchState<SmashUpCore> = {

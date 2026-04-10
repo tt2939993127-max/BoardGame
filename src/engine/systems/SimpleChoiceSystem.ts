@@ -1,40 +1,36 @@
 /**
- * SimpleChoiceSystem — simple-choice 交互的响应处理
+ * SimpleChoiceSystem：处理 simple-choice 交互。
  *
- * 从 InteractionSystem 拆出，专门处理 simple-choice kind 的：
- * - 响应校验（选项合法性、多选数量）
- * - 超时处理
- * - 阻塞逻辑（该玩家的非系统命令被阻塞）
- *
- * InteractionSystem 只管队列/通用阻塞/playerView，不处理任何具体 kind。
+ * InteractionSystem 只负责队列、通用阻塞和 playerView，
+ * 这里负责 simple-choice 的具体响应与超时逻辑。
  */
 
-import type { MatchState, PlayerId, GameEvent } from '../types';
+import type { GameEvent, MatchState, PlayerId } from '../types';
 import { resolveCommandTimestamp } from '../utils';
-import type { EngineSystem, HookResult } from './types';
 import {
-    INTERACTION_COMMANDS,
-    INTERACTION_EVENTS,
     getFreshSimpleChoiceOptions,
     getSimpleChoiceResponseValidationMode,
+    INTERACTION_COMMANDS,
+    INTERACTION_EVENTS,
     resolveInteraction,
     stripNonSerializableFromData,
-    type SimpleChoiceData,
     type PromptOption,
+    type SimpleChoiceData,
 } from './InteractionSystem';
+import type { EngineSystem, HookResult } from './types';
 
-// ============================================================================
-// 系统配置
-// ============================================================================
-
-export interface SimpleChoiceSystemConfig {
-    /** 默认超时时间（毫秒） */
-    defaultTimeout?: number;
+function isSamePlayerId(a: unknown, b: unknown): boolean {
+    if (a === undefined || a === null || b === undefined || b === null) return false;
+    return String(a) === String(b);
 }
 
-// ============================================================================
-// 创建 SimpleChoiceSystem
-// ============================================================================
+function isObjectLike(value: unknown): value is Record<string, unknown> {
+    return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+export interface SimpleChoiceSystemConfig {
+    defaultTimeout?: number;
+}
 
 export function createSimpleChoiceSystem<TCore>(
     _config: SimpleChoiceSystemConfig = {},
@@ -42,33 +38,39 @@ export function createSimpleChoiceSystem<TCore>(
     return {
         id: 'simple-choice',
         name: 'SimpleChoice 响应处理',
-        priority: 21, // 在 InteractionSystem(20) 之后
+        priority: 21,
 
         beforeCommand: ({ state, command }): HookResult<TCore> | void => {
             const current = state.sys.interaction.current;
 
-            // ---- simple-choice 响应 ----
             if (command.type === INTERACTION_COMMANDS.RESPOND) {
                 if (!current) {
                     return { halt: true, error: '没有待处理的选择' };
                 }
-                // 只处理 simple-choice，其他 kind 放行到游戏层
                 if (current.kind !== 'simple-choice') return;
 
-                const ts = resolveCommandTimestamp(command);
-                return handleSimpleChoiceRespond(state, command.playerId, command.payload as any, ts);
+                const timestamp = resolveCommandTimestamp(command);
+                return handleSimpleChoiceRespond(
+                    state,
+                    command.playerId,
+                    command.payload as { optionId?: string; optionIds?: string[]; mergedValue?: unknown },
+                    timestamp,
+                );
             }
 
-            // ---- simple-choice 超时 ----
             if (command.type === INTERACTION_COMMANDS.TIMEOUT) {
                 if (!current || current.kind !== 'simple-choice') return;
-                const ts = resolveCommandTimestamp(command);
-                return handleSimpleChoiceTimeout(state, ts);
+                const timestamp = resolveCommandTimestamp(command);
+                return handleSimpleChoiceTimeout(state, timestamp);
             }
 
-            // ---- simple-choice 阻塞：该玩家的非系统命令被阻塞 ----
             if (current?.kind === 'simple-choice') {
-                if (current.playerId === command.playerId && !command.type.startsWith('SYS_')) {
+                const hasActiveResponseWindow = !!state.sys.responseWindow?.current;
+                if (
+                    isSamePlayerId(current.playerId, command.playerId)
+                    && !command.type.startsWith('SYS_')
+                    && !hasActiveResponseWindow
+                ) {
                     return { halt: true, error: '请先完成当前选择' };
                 }
             }
@@ -99,7 +101,10 @@ export function createSimpleChoiceSystem<TCore>(
                     optionIds: undefined,
                     value: onlyOption.value,
                     sourceId: data.sourceId,
-                    interactionData: stripNonSerializableFromData({ ...current.data, options: availableOptions }),
+                    interactionData: stripNonSerializableFromData({
+                        ...current.data,
+                        options: availableOptions,
+                    }),
                 },
                 timestamp,
             };
@@ -108,11 +113,6 @@ export function createSimpleChoiceSystem<TCore>(
         },
     };
 }
-
-
-// ============================================================================
-// simple-choice 处理函数（从 InteractionSystem 搬过来）
-// ============================================================================
 
 function handleSimpleChoiceRespond<TCore>(
     state: MatchState<TCore>,
@@ -125,7 +125,7 @@ function handleSimpleChoiceRespond<TCore>(
     if (!current) {
         return { halt: true, error: '没有待处理的选择' };
     }
-    if (current.playerId !== playerId) {
+    if (!isSamePlayerId(current.playerId, playerId)) {
         return { halt: true, error: '不是你的选择回合' };
     }
     if (current.kind !== 'simple-choice') {
@@ -138,31 +138,28 @@ function handleSimpleChoiceRespond<TCore>(
     const availableOptions = responseValidationMode === 'live'
         ? getFreshSimpleChoiceOptions(state, current as any)
         : data.options;
+
     let selectedOptions: PromptOption[] = [];
     let selectedOptionIds: string[] = [];
-
-    console.log('[SimpleChoiceSystem] handleSimpleChoiceRespond', {
-        isMulti,
-        payload,
-        availableOptions: data.options.map(o => o.id),
-    });
 
     if (isMulti) {
         const optionIds = Array.isArray(payload.optionIds)
             ? payload.optionIds
             : typeof payload.optionId === 'string'
-              ? [payload.optionId]
-              : [];
+                ? [payload.optionId]
+                : [];
         const uniqueIds = Array.from(new Set(optionIds)).filter(
-            (id) => typeof id === 'string',
+            (id): id is string => typeof id === 'string',
         );
-        const optionsById = new Map(availableOptions.map((o) => [o.id, o]));
-        if (uniqueIds.find((id) => !optionsById.has(id))) {
+        const optionsById = new Map(availableOptions.map((option) => [option.id, option]));
+
+        if (uniqueIds.some((id) => !optionsById.has(id))) {
             return { halt: true, error: '无效的选择' };
         }
-        if (uniqueIds.find((id) => optionsById.get(id)?.disabled)) {
+        if (uniqueIds.some((id) => optionsById.get(id)?.disabled)) {
             return { halt: true, error: '该选项不可用' };
         }
+
         const minSelections = data.multi?.min ?? 1;
         const maxSelections = data.multi?.max;
         if (uniqueIds.length < minSelections) {
@@ -171,59 +168,110 @@ function handleSimpleChoiceRespond<TCore>(
         if (maxSelections !== undefined && uniqueIds.length > maxSelections) {
             return { halt: true, error: `最多选择 ${maxSelections} 项` };
         }
+
         selectedOptionIds = uniqueIds;
         selectedOptions = uniqueIds.map((id) => optionsById.get(id)!);
     } else {
         if (typeof payload.optionId !== 'string') {
             return { halt: true, error: '无效的选择' };
         }
-        const selectedOption = availableOptions.find(
-            (o) => o.id === payload.optionId,
-        );
+
+        const selectedOption = availableOptions.find((option) => option.id === payload.optionId);
         if (!selectedOption) {
             return { halt: true, error: '无效的选择' };
         }
         if (selectedOption.disabled) {
             return { halt: true, error: '该选项不可用' };
         }
+
         selectedOptionIds = [selectedOption.id];
         selectedOptions = [selectedOption];
     }
 
-    const newState = resolveInteraction(state);
-    
+    let resolvedValue: unknown;
+    if (payload.mergedValue !== undefined) {
+        const mergedValue = payload.mergedValue;
 
-    const resolvedValue = payload.mergedValue !== undefined
-        ? payload.mergedValue
-        : isMulti
-            ? selectedOptions.map((o) => o.value)
+        if (data.slider) {
+            if (isMulti) {
+                return { halt: true, error: '非法的选择值' };
+            }
+
+            const selectedOptionValue = selectedOptions[0]?.value;
+            if (!isObjectLike(selectedOptionValue) || !isObjectLike(mergedValue)) {
+                return { halt: true, error: '非法的选择值' };
+            }
+
+            const selectedNumericValue = selectedOptionValue.value;
+            const mergedNumericValue = mergedValue.value;
+            if (
+                typeof selectedNumericValue !== 'number'
+                || !Number.isFinite(selectedNumericValue)
+                || typeof mergedNumericValue !== 'number'
+                || !Number.isFinite(mergedNumericValue)
+                || !Number.isInteger(mergedNumericValue)
+                || mergedNumericValue < 1
+                || mergedNumericValue > selectedNumericValue
+            ) {
+                return { halt: true, error: '非法的选择值' };
+            }
+
+            const resolvedSliderValue: Record<string, unknown> = {
+                ...selectedOptionValue,
+                value: mergedNumericValue,
+            };
+            if (typeof selectedOptionValue.amount === 'number' && Number.isFinite(selectedOptionValue.amount)) {
+                resolvedSliderValue.amount = mergedNumericValue;
+            }
+            resolvedValue = resolvedSliderValue;
+        } else if (isMulti) {
+            resolvedValue = mergedValue;
+        } else {
+            const selectedOptionValue = selectedOptions[0]?.value;
+            if (!isObjectLike(selectedOptionValue) || !isObjectLike(mergedValue)) {
+                return { halt: true, error: '非法的选择值' };
+            }
+
+            for (const [key, nextValue] of Object.entries(mergedValue)) {
+                if (key in selectedOptionValue && !Object.is(selectedOptionValue[key], nextValue)) {
+                    return { halt: true, error: '非法的选择值' };
+                }
+            }
+
+            resolvedValue = {
+                ...selectedOptionValue,
+                ...mergedValue,
+            };
+        }
+    } else {
+        resolvedValue = isMulti
+            ? selectedOptions.map((option) => option.value)
             : selectedOptions[0]?.value;
+    }
+
+    const newState = resolveInteraction(state);
     const interactionDataForEvent = responseValidationMode === 'live'
         ? { ...current.data, options: availableOptions }
         : current.data;
+    const isEmergencySkip = !isMulti
+        && resolvedValue
+        && typeof resolvedValue === 'object'
+        && (resolvedValue as { __emergency_skip__?: boolean }).__emergency_skip__ === true;
 
     const event: GameEvent = {
-        type: INTERACTION_EVENTS.RESOLVED,
+        type: isEmergencySkip ? INTERACTION_EVENTS.CANCELLED : INTERACTION_EVENTS.RESOLVED,
         payload: {
             interactionId: current.id,
             playerId,
-            optionId:
-                selectedOptionIds.length > 0 ? selectedOptionIds[0] : null,
+            optionId: selectedOptionIds.length > 0 ? selectedOptionIds[0] : null,
             optionIds: isMulti ? selectedOptionIds : undefined,
             value: resolvedValue,
             sourceId: data.sourceId,
             interactionData: stripNonSerializableFromData(interactionDataForEvent),
+            ...(isEmergencySkip ? { reason: 'empty-options' } : {}),
         },
         timestamp,
     };
-
-    console.info('[SimpleChoiceSystem] Producing INTERACTION_RESOLVED event', {
-        type: event.type,
-        sourceId: data.sourceId,
-        playerId,
-        optionId: selectedOptionIds[0],
-        value: resolvedValue,
-    });
 
     return { halt: false, state: newState, events: [event] };
 }

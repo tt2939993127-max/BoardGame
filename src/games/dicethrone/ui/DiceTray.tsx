@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
 import { Check } from 'lucide-react';
 import { GameButton } from './components/GameButton';
-import type { Die, TurnPhase } from '../types';
+import type { Die, PlayerId, TurnPhase } from '../types';
 import type { InteractionDescriptor } from '../../../engine/systems/InteractionSystem';
 import type { MultistepInteractionState } from '../../../engine/systems/useMultistepInteraction';
 import type { DiceModifyResult, DiceModifyStep, DiceSelectResult, DiceSelectStep } from '../domain/systems';
@@ -21,12 +21,14 @@ interface DtDiceModifyMeta {
         adjustRange?: { min: number; max: number };
     };
     selectCount: number;
+    diceOwnerId?: PlayerId;
     targetOpponentDice: boolean;
 }
 
 interface DtDiceSelectMeta {
     dtType: 'selectDie';
     selectCount: number;
+    diceOwnerId?: PlayerId;
     targetOpponentDice: boolean;
 }
 
@@ -71,6 +73,7 @@ export function getDtMeta(interaction?: InteractionDescriptor): DtDiceMeta | und
 
 export const DiceTray = ({
     dice,
+    rollCount,
     onToggleLock,
     currentPhase: _currentPhase,
     canInteract,
@@ -82,6 +85,7 @@ export const DiceTray = ({
     isPassiveRerollMode,
 }: {
     dice: Die[];
+    rollCount: number;
     onToggleLock: (id: number) => void;
     currentPhase: TurnPhase;
     canInteract: boolean;
@@ -139,9 +143,11 @@ export const DiceTray = ({
         ? (selectResult?.selectedDiceIds.length ?? 0)
         : (modifyResult?.modCount ?? 0);
     const canSelectMore = currentSelectCount < maxSelectCount;
+    const isLockableRollPhase = _currentPhase === 'offensiveRoll';
+    const canToggleDieLock = canInteract && isLockableRollPhase && rollCount > 0;
 
     const handleDieClick = (dieId: number) => {
-        if (isRolling) return;
+        if (isRolling && !isInteractionMode) return;
 
         if (isInteractionMode && !isAnyMode && multistepInteraction) {
             // set / copy / selectDie 模式：点击骰子 = step(select/toggle)
@@ -158,7 +164,7 @@ export const DiceTray = ({
                     multistepInteraction.step({ action: 'select', dieId, dieValue: die.value } as DiceModifyStep);
                 }
             }
-        } else if (canInteract) {
+        } else if (canToggleDieLock) {
             onToggleLock(dieId);
         }
     };
@@ -213,7 +219,7 @@ export const DiceTray = ({
                     const isInactiveDie = isInteractionMode && !canModifyDie;
                     const clickable = isInteractionMode
                         ? (isAnyMode ? false : (!isInactiveDie && (canSelectMore || selected)))
-                        : canInteract;
+                        : canToggleDieLock;
                     // any/adjust 模式下使用本地预览值
                     const displayValue = (isAnyMode || isAdjustMode)
                         ? (modifyResult?.modifications[d.id] ?? d.value)
@@ -332,7 +338,7 @@ export const DiceActions = ({
 }) => {
     const { t } = useTranslation('game-dicethrone');
     const actionTokens = DESKTOP_DICE_ACTION_TOKENS;
-    const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'defensiveRoll';
+    const isRollPhase = currentPhase === 'offensiveRoll' || currentPhase === 'targetingRoll' || currentPhase === 'defensiveRoll';
     const dtMeta = getDtMeta(interaction);
     const isInteractionMode = Boolean(dtMeta);
 
@@ -435,14 +441,14 @@ export const DiceActions = ({
 
     const leftDisabled = isInteractionMode
         ? false
-        : (!canInteract || rollConfirmed || rollCount >= rollLimit);
+        : (!isRollPhase || !canInteract || rollConfirmed || rollCount >= rollLimit);
     const leftVariant = isInteractionMode
         ? 'secondary' as const
         : (isRollPhase && canInteract && !rollConfirmed && rollCount < rollLimit ? 'primary' as const : 'secondary' as const);
 
     const rightDisabled = isInteractionMode
         ? !(multistepInteraction?.canConfirm ?? false)
-        : (rollConfirmed || rollCount === 0 || !canInteract || isRolling);
+        : (!isRollPhase || rollConfirmed || rollCount === 0 || !canInteract || isRolling);
     const rightVariant = isInteractionMode
         ? 'primary' as const
         : (rollConfirmed ? 'glass' as const : 'secondary' as const);

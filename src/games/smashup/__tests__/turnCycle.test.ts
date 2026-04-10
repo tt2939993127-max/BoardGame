@@ -76,6 +76,58 @@ describe('完整回合循环', () => {
         expect(p0.hand.length).toBe(7);
     });
 
+    it('draw phase reshuffles after drawing the last card in deck', () => {
+        const runner = createRunner();
+        const draftResult = runner.run({
+            name: 'draft',
+            commands: DRAFT_COMMANDS,
+        });
+
+        const p0 = draftResult.finalState.core.players['0'];
+        const deckCard = p0.deck[0];
+        const discardCards = p0.deck.slice(1, 3);
+
+        expect(deckCard).toBeDefined();
+        expect(discardCards).toHaveLength(2);
+        if (!deckCard) {
+            throw new Error('expected one card left in deck for reshuffle test');
+        }
+
+        const modifiedState: MatchState<SmashUpCore> = {
+            ...draftResult.finalState,
+            core: {
+                ...draftResult.finalState.core,
+                players: {
+                    ...draftResult.finalState.core.players,
+                    ['0']: {
+                        ...p0,
+                        hand: [],
+                        deck: [deckCard],
+                        discard: discardCards,
+                    },
+                },
+            },
+        };
+
+        const runner2 = createRunner(() => modifiedState);
+        const result = runner2.run({
+            name: 'draw 1 then reshuffle then draw 1',
+            commands: [
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+            ] as any[],
+        });
+
+        const p0After = result.finalState.core.players['0'];
+        const handUids = p0After.hand.map(card => card.uid);
+        const discardUids = new Set(discardCards.map(card => card.uid));
+
+        expect(p0After.hand).toHaveLength(2);
+        expect(handUids).toContain(deckCard.uid);
+        expect(handUids.some(uid => discardUids.has(uid))).toBe(true);
+        expect(p0After.deck).toHaveLength(1);
+        expect(p0After.discard).toHaveLength(0);
+    });
+
     it('两个完整回合后回到 P0', () => {
         const runner = createRunner();
         const result = runner.run({
@@ -401,6 +453,62 @@ describe('手牌超限弃牌', () => {
         // 最后一步应该失败
         const lastStep = result.steps[result.steps.length - 1];
         expect(lastStep?.success).toBe(false);
+    });
+
+    it('回合结束时额外抽牌超过上限不会停在弃牌，直接进入下一回合', () => {
+        const runner1 = createRunner();
+        const draftResult = runner1.run({
+            name: '选秀',
+            commands: DRAFT_COMMANDS,
+        });
+
+        const handAtEightState = injectExtraHandCards(draftResult.finalState, 3);
+        const base0 = handAtEightState.core.bases[0];
+        const differenceEngineBase = {
+            ...base0,
+            minions: [
+                ...base0.minions,
+                {
+                    uid: 'de-minion',
+                    defId: 'steampunk_steam_man',
+                    controller: '0',
+                    owner: '0',
+                    power: 2,
+                    powerCounters: 0,
+                    powerModifier: 0,
+                    tempPowerModifier: 0,
+                    attachedActions: [],
+                },
+            ],
+            ongoingActions: [
+                ...base0.ongoingActions,
+                { uid: 'de-ongoing', defId: 'steampunk_difference_engine', ownerId: '0', metadata: {} },
+            ],
+        };
+
+        const modifiedState: MatchState<SmashUpCore> = {
+            ...handAtEightState,
+            core: {
+                ...handAtEightState.core,
+                bases: [
+                    differenceEngineBase,
+                    ...handAtEightState.core.bases.slice(1),
+                ],
+            },
+        };
+
+        const runner2 = createRunner(() => modifiedState);
+        const result = runner2.run({
+            name: '差分机在回合结束额外抽牌后不弃牌',
+            commands: [
+                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
+            ] as any[],
+        });
+
+        const p0 = result.finalState.core.players['0'];
+        expect(p0.hand.length).toBe(HAND_LIMIT + 1);
+        expect(result.finalState.sys.phase).toBe('playCards');
+        expect(result.finalState.core.currentPlayerIndex).toBe(1);
     });
 });
 

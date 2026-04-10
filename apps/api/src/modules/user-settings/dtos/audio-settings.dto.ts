@@ -1,5 +1,5 @@
 import { Type } from 'class-transformer';
-import { IsBoolean, IsNumber, IsObject, IsOptional, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsNumber, IsObject, IsOptional, Max, Min } from 'class-validator';
 
 export type AudioSettingsPayload = {
     muted: boolean;
@@ -7,6 +7,11 @@ export type AudioSettingsPayload = {
     sfxVolume: number;
     bgmVolume: number;
     bgmSelections?: Record<string, Record<string, string>>;
+};
+
+export type SmashUpPreferencePayload = {
+    overlayEnabled: boolean;
+    interactionMode: 'click' | 'drag';
 };
 
 export class UpdateAudioSettingsDto {
@@ -34,4 +39,12 @@ export class UpdateAudioSettingsDto {
     @IsOptional()
     @IsObject()
     bgmSelections?: Record<string, Record<string, string>>;
+}
+
+export class UpdateSmashUpPreferenceDto {
+    @IsBoolean()
+    overlayEnabled!: boolean;
+
+    @IsIn(['click', 'drag'])
+    interactionMode!: 'click' | 'drag';
 }

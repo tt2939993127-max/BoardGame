@@ -91,6 +91,74 @@ export class UserSettingsService {
             { upsert: true }
         );
     }
+    async getLocalAiMatchPreference(userId: string, gameId: string): Promise<{
+        numPlayers: number;
+        seatControllers?: Record<string, unknown>;
+        setupSelections?: Record<string, string | string[]>;
+    } | null> {
+        const doc = await this.uiSettingsModel.findOne({ userId });
+        const preferences = doc?.localAiMatchPreferences;
+        if (!preferences || typeof preferences !== 'object') {
+            return null;
+        }
+        const record = preferences[gameId];
+        if (!record || typeof record !== 'object') {
+            return null;
+        }
+        return normalizeLocalAiMatchPreferenceRecord(record);
+    }
+
+    async upsertLocalAiMatchPreference(
+        userId: string,
+        gameId: string,
+        settings: {
+            numPlayers: number;
+            seatControllers?: Record<string, unknown>;
+            setupSelections?: Record<string, string | string[]>;
+        },
+    ): Promise<void> {
+        await this.uiSettingsModel.findOneAndUpdate(
+            { userId },
+            {
+                $set: {
+                    [`localAiMatchPreferences.${gameId}`]: normalizeLocalAiMatchPreferenceRecord(settings),
+                },
+                $setOnInsert: { userId },
+            },
+            { upsert: true },
+        );
+    }
+
+    async getSmashUpPreference(userId: string): Promise<{
+        overlayEnabled: boolean;
+        interactionMode: 'click' | 'drag';
+    } | null> {
+        const doc = await this.uiSettingsModel.findOne({ userId });
+        if (!doc || doc.smashupPreferenceInitialized !== true) return null;
+        return {
+            overlayEnabled: doc.smashupOverlayEnabled !== false,
+            interactionMode: doc.smashupInteractionMode === 'drag' ? 'drag' : 'click',
+        };
+    }
+
+    async upsertSmashUpPreference(
+        userId: string,
+        overlayEnabled: boolean,
+        interactionMode: 'click' | 'drag',
+    ): Promise<void> {
+        await this.uiSettingsModel.findOneAndUpdate(
+            { userId },
+            {
+                $set: {
+                    smashupPreferenceInitialized: true,
+                    smashupOverlayEnabled: overlayEnabled,
+                    smashupInteractionMode: interactionMode,
+                },
+                $setOnInsert: { userId },
+            },
+            { upsert: true }
+        );
+    }
 }
 
 function normalizeBgmSelections(
@@ -111,4 +179,54 @@ function normalizeBgmSelections(
         }
     }
     return result;
+}
+
+function normalizeLocalAiMatchPreferenceRecord(input: {
+    numPlayers?: unknown;
+    seatControllers?: Record<string, unknown>;
+    setupSelections?: Record<string, string | string[]>;
+}): {
+    numPlayers: number;
+    seatControllers?: Record<string, unknown>;
+    setupSelections?: Record<string, string | string[]>;
+} {
+    const numPlayersRaw = typeof input.numPlayers === 'number' ? input.numPlayers : Number(input.numPlayers);
+    const numPlayers = Number.isInteger(numPlayersRaw) && numPlayersRaw > 0 ? numPlayersRaw : 2;
+
+    const seatControllers = normalizePlainRecord(input.seatControllers);
+    const setupSelections = normalizeSetupSelectionsRecord(input.setupSelections);
+
+    return {
+        numPlayers,
+        ...(seatControllers ? { seatControllers } : {}),
+        ...(setupSelections ? { setupSelections } : {}),
+    };
+}
+
+function normalizePlainRecord(input?: Record<string, unknown>): Record<string, unknown> | undefined {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (typeof key === 'string' && value && typeof value === 'object' && !Array.isArray(value)) {
+            result[key] = value;
+        }
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
+}
+
+function normalizeSetupSelectionsRecord(
+    input?: Record<string, string | string[]>,
+): Record<string, string | string[]> | undefined {
+    if (!input || typeof input !== 'object' || Array.isArray(input)) return undefined;
+    const result: Record<string, string | string[]> = {};
+    for (const [key, value] of Object.entries(input)) {
+        if (typeof value === 'string') {
+            result[key] = value;
+            continue;
+        }
+        if (Array.isArray(value)) {
+            result[key] = value.filter((item): item is string => typeof item === 'string');
+        }
+    }
+    return Object.keys(result).length > 0 ? result : undefined;
 }

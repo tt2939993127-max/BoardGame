@@ -1,0 +1,36 @@
+{
+  "meta": {
+    "image": "status-icons-atlas.png",
+    "size": {
+      "w": 1200,
+      "h": 400
+    },
+    "comment": "Samurai 状态图标图集，由荣誉 / 耻辱 / 反击三张独立 icon 派生生成"
+  },
+  "frames": {
+    "honor": {
+      "frame": {
+        "x": 20,
+        "y": 20,
+        "w": 360,
+        "h": 360
+      }
+    },
+    "shame": {
+      "frame": {
+        "x": 475,
+        "y": 75,
+        "w": 250,
+        "h": 250
+      }
+    },
+    "retribution": {
+      "frame": {
+        "x": 900,
+        "y": 100,
+        "w": 200,
+        "h": 200
+      }
+    }
+  }
+}

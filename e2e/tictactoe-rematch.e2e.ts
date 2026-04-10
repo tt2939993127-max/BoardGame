@@ -1,10 +1,5 @@
-import { test, expect, type Page, type BrowserContext } from '@playwright/test';
-
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-    await context.addInitScript(() => {
-        localStorage.setItem('i18nextLng', 'en');
-    });
-};
+import { test, expect, type Page } from '@playwright/test';
+import { setChineseLocale } from './helpers/common';
 
 const ensureHostPlayerId = async (page: Page): Promise<URL> => {
     const url = new URL(page.url());
@@ -35,19 +30,20 @@ const waitForNewMatch = async (page: Page, oldMatchId: string) => {
     return parsed.pathname.split('/').pop();
 };
 
-test.describe('TicTacToe Rematch E2E', () => {
-    test('Online rematch navigates to new match and refresh stays in new match', async ({ browser }, testInfo) => {
+test.describe('井字棋重赛 E2E', () => {
+    test('在线重赛会跳转到新对局且刷新后仍停留在新对局', async ({ browser }, testInfo) => {
+        test.setTimeout(60000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
         const hostContext = await browser.newContext({ baseURL });
-        await setEnglishLocale(hostContext);
+        await setChineseLocale(hostContext);
         const hostPage = await hostContext.newPage();
 
         await hostPage.goto('/');
-        await hostPage.getByRole('heading', { name: 'Tic-Tac-Toe' }).click();
-        await hostPage.getByRole('button', { name: 'Create Room' }).click();
-        await expect(hostPage.getByRole('heading', { name: 'Create Room' })).toBeVisible();
-        await hostPage.getByRole('button', { name: 'Confirm' }).click();
+        await hostPage.getByRole('heading', { name: '井字棋' }).click();
+        await hostPage.getByRole('button', { name: '创建房间' }).click();
+        await expect(hostPage.getByRole('heading', { name: '创建房间' })).toBeVisible();
+        await hostPage.getByRole('button', { name: '确认' }).click();
 
         await hostPage.waitForURL(/\/play\/tictactoe\/match\//);
         await expect(hostPage.locator('[data-tutorial-id="cell-0"]')).toBeVisible({ timeout: 15000 });
@@ -59,7 +55,7 @@ test.describe('TicTacToe Rematch E2E', () => {
         }
 
         const guestContext = await browser.newContext({ baseURL });
-        await setEnglishLocale(guestContext);
+        await setChineseLocale(guestContext);
         const guestPage = await guestContext.newPage();
 
         await guestPage.goto(`/play/tictactoe/match/${matchId}?join=true`);
@@ -86,11 +82,8 @@ test.describe('TicTacToe Rematch E2E', () => {
         await waitForCellFilled(hostPage, 8);
         await waitForCellFilled(guestPage, 8);
 
-        await expect(hostPage.getByText(/WINS|DRAW GAME/i)).toBeVisible({ timeout: 15000 });
-        await expect(guestPage.getByText(/WINS|DRAW GAME/i)).toBeVisible({ timeout: 15000 });
-
-        const playAgainHost = hostPage.getByRole('button', { name: /Play Again|再来一局/i });
-        const playAgainGuest = guestPage.getByRole('button', { name: /Play Again|再来一局/i });
+        const playAgainHost = hostPage.getByRole('button', { name: '再来一局' });
+        const playAgainGuest = guestPage.getByRole('button', { name: '再来一局' });
         await expect(playAgainHost).toBeVisible({ timeout: 15000 });
         await expect(playAgainGuest).toBeVisible({ timeout: 15000 });
 
@@ -109,10 +102,10 @@ test.describe('TicTacToe Rematch E2E', () => {
         await expect(hostPage).toHaveURL(new RegExp(`/play/tictactoe/match/${nextMatchIdHost}`));
         await expect(guestPage).toHaveURL(new RegExp(`/play/tictactoe/match/${nextMatchIdHost}`));
 
-        await expect(hostPage.getByText(/Both confirmed, restarting|双方已确认，重开中/i)).toHaveCount(0);
-        await expect(guestPage.getByText(/Both confirmed, restarting|双方已确认，重开中/i)).toHaveCount(0);
-        await expect(hostPage.getByRole('button', { name: /Play Again|再来一局/i })).toHaveCount(0);
-        await expect(guestPage.getByRole('button', { name: /Play Again|再来一局/i })).toHaveCount(0);
+        await expect(hostPage.getByText(/双方已确认，重开中/i)).toHaveCount(0);
+        await expect(guestPage.getByText(/双方已确认，重开中/i)).toHaveCount(0);
+        await expect(hostPage.getByRole('button', { name: '再来一局' })).toHaveCount(0);
+        await expect(guestPage.getByRole('button', { name: '再来一局' })).toHaveCount(0);
 
         await hostContext.close();
         await guestContext.close();

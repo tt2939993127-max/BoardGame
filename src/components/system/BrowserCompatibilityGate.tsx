@@ -9,7 +9,7 @@ import {
 
 export const BrowserCompatibilityGate = ({ children }: PropsWithChildren) => {
     const location = useLocation();
-    const report = useMemo(() => detectBrowserCompatibility(), []);
+    const report = useMemo(() => detectBrowserCompatibility(location.pathname), [location.pathname]);
     const [isBypassed, setIsBypassed] = useState(() => readBrowserCompatibilityBypass());
     const isQueryBypassed = useMemo(
         () => new URLSearchParams(location.search).get('compat') === 'ignore',

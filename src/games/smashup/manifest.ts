@@ -14,13 +14,35 @@ const entry: GameManifestEntry = {
     /** 最佳游玩人数：3 人 */
     bestPlayers: [3],
     tags: ['card_driven', 'casual'],
-    allowLocalMode: false,
+    allowLocalMode: true,
+    setupOptions: {
+        expansions: {
+            type: 'multi-select',
+            labelKey: 'games.smashup.setup.expansions.label',
+            options: [
+                { value: 'titans', labelKey: 'games.smashup.setup.expansions.titans' },
+            ],
+            default: ['titans'],
+        },
+    },
+    ai: {
+        capture: true,
+        localAi: true,
+        remoteAi: false,
+    },
     cursorTheme: 'smashup-popart',
     fontFamily: { display: 'Bangers' },
     mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
     mobileLayoutPreset: 'board-shell',
-    shellTargets: ['pwa'],
+    mobileBattlefieldZoom: 'shell-pinch-pan',
+    shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'smashup',
+        assetPackId: 'smashup',
+    },
 };
 
 export const SMASH_UP_MANIFEST: GameManifestEntry = entry;

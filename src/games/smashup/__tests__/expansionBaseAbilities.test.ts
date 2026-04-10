@@ -4,10 +4,10 @@
  * 覆盖 triggerBaseAbility 层面的扩展基地事件生成。
  *
  * 克苏鲁扩展：
- * - base_the_asylum: onMinionPlayed → Prompt（返回疯狂卡）
+ * - base_the_asylum: onMinionPlayed → Prompt（手牌放入盒子 → 选择随从加指示物）
  * - base_innsmouth_base: onMinionPlayed → Prompt（弃牌堆卡入牌库底）
  * - base_mountains_of_madness: onMinionPlayed → 抽疯狂卡
- * - base_miskatonic_university_base: afterScoring → Prompt（返回疯狂卡）
+ * - base_miskatonic_university_base: onMinionPlayed → Prompt（抓疯狂 / 弃疯狂换额外行动）
  * - base_plateau_of_leng: onMinionPlayed → Prompt（打同名随从）
  *
  * AL9000：
@@ -30,10 +30,12 @@ import { clearBaseAbilityRegistry, triggerBaseAbility, triggerExtendedBaseAbilit
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { BaseAbilityContext } from '../domain/baseAbilities';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
+import { createScoringSession, setScoringSession } from '../domain/scoringSession';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase, CardInstance } from '../domain/types';
-import { SU_EVENTS, MADNESS_CARD_DEF_ID, MADNESS_DECK_SIZE } from '../domain/types';
+import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
-import { triggerBaseAbilityWithMS, getInteractionsFromResult, makeMatchState } from './helpers';
+import { refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
+import { applyEvents, triggerBaseAbilityWithMS, getInteractionsFromResult, getInteractionsFromMS, makeMatchState } from './helpers';
 import type { RandomFn } from '../../../engine/types';
 
 // ============================================================================
@@ -118,88 +120,123 @@ function triggerExtendedBaseAbilityWithMS(baseDefId: string, timing: string, ctx
     });
 }
 
-/** 检查 MatchState 是否包含指定 sourceId 的交互 */
-function hasInteraction(matchState: any, sourceId: string): boolean {
-    const queue = matchState?.sys?.interaction?.queue ?? [];
-    const current = matchState?.sys?.interaction?.current;
-    
-    // 检查队列中的交互
-    const inQueue = queue.some((i: any) => i.data?.sourceId === sourceId);
-    // 检查当前交互
-    const isCurrent = current?.data?.sourceId === sourceId;
-    
-    return inQueue || isCurrent;
-}
-
 // ============================================================================
 // 克苏鲁扩展
 // ============================================================================
 
-describe('base_the_asylum: 疯人院 - 返回疯狂卡', () => {
-    it('有疯狂卡时生成 Prompt', () => {
+describe('base_the_asylum: 疯人院 - 放入盒子并加指示物', () => {
+    it('有手牌时生成手牌选择 Prompt', () => {
         const result = triggerBaseAbilityWithMS('base_the_asylum', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_the_asylum', {
-                    minions: [{
-                        uid: 'm1',
-                        defId: 'test_minion',
-                        controller: '0',
-                        owner: '1', // Trade 场景：出牌者=0，拥有者=1
-                        basePower: 3,
-                        powerCounters: 0,
-                        powerModifier: 0,
-                        tempPowerModifier: 0,
-                        talentUsed: false,
-                        attachedActions: [],
-                    } as any],
+                    minions: [makeMinion('m1', '0', 3)],
                 })],
-                madnessDeck: Array(MADNESS_DECK_SIZE).fill(MADNESS_CARD_DEF_ID),
                 players: {
                     '0': makePlayer('0', {
-                        hand: [makeCard('h1', MADNESS_CARD_DEF_ID, 'action')],
+                        hand: [makeCard('h1', 'normal_action', 'action')],
                     }),
-                    '1': makePlayer('1', {
-                        hand: [makeCard('h2', MADNESS_CARD_DEF_ID, 'action')],
-                    }),
-                },
-            }),
-            baseDefId: 'base_the_asylum',
-            minionUid: 'm1',
-        }));
-
-        expect(result.events).toHaveLength(0);
-            const interactions = getInteractionsFromResult(result);
-            expect(interactions).toHaveLength(1);
-        expect(interactions[0].data.sourceId).toBe('base_the_asylum');
-        expect(interactions[0].data.targetType).toBe('button');
-        // 拥有者（1）获得选择权
-        expect(interactions[0].playerId).toBe('1');
-    });
-
-    it('无疯狂卡时不触发', () => {
-        const { events } = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
-            state: makeState({
-                bases: [makeBase('base_the_asylum')],
-                madnessDeck: Array(10).fill(MADNESS_CARD_DEF_ID),
-                players: {
-                    '0': makePlayer('0', { hand: [makeCard('h1', 'normal_card', 'action')] }),
                     '1': makePlayer('1'),
                 },
             }),
             baseDefId: 'base_the_asylum',
+            baseIndex: 0,
             minionUid: 'm1',
         }));
 
-        expect(events).toHaveLength(0);
+        expect(result.events).toHaveLength(0);
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(1);
+        expect(interactions[0].data.sourceId).toBe('base_the_asylum');
+        expect(interactions[0].data.targetType).toBe('hand');
+        expect(interactions[0].data.options.some((entry: any) => entry.value?.cardUid === 'h1')).toBe(true);
     });
 
-    it('无疯狂牌库时不触发', () => {
-        const { events } = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
+    it('选择手牌后会进入选择随从的第二步，并产生 boxed 与加指示物事件', () => {
+        const result = triggerBaseAbilityWithMS('base_the_asylum', 'onMinionPlayed', makeCtx({
             state: makeState({
-                bases: [makeBase('base_the_asylum')],
-                // 无 madnessDeck
+                bases: [
+                    makeBase('base_the_asylum', {
+                        minions: [makeMinion('m1', '0', 3)],
+                    }),
+                    makeBase('other_base', {
+                        minions: [makeMinion('m2', '0', 4)],
+                    }),
+                ],
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('h1', 'normal_action', 'action')],
+                    }),
+                    '1': makePlayer('1'),
+                },
             }),
             baseDefId: 'base_the_asylum',
+            baseIndex: 0,
+            minionUid: 'm1',
+        }));
+        const firstInteraction = getInteractionsFromResult(result)[0];
+        const handOption = firstInteraction.data.options.find((entry: any) => entry.value?.cardUid === 'h1');
+        const chooseCardHandler = getInteractionHandler('base_the_asylum');
+        const chooseMinionHandler = getInteractionHandler('base_the_asylum_choose_minion');
+
+        expect(handOption).toBeDefined();
+        expect(chooseCardHandler).toBeDefined();
+        expect(chooseMinionHandler).toBeDefined();
+
+        const step1 = chooseCardHandler!(
+            result.matchState!,
+            '0',
+            handOption.value,
+            firstInteraction.data,
+            dummyRandom,
+            1001,
+        );
+        const secondInteraction = getInteractionsFromMS(step1.state)
+            .find((interaction: any) => interaction.data?.sourceId === 'base_the_asylum_choose_minion')!;
+
+        expect(secondInteraction).toBeDefined();
+        expect(secondInteraction.data.sourceId).toBe('base_the_asylum_choose_minion');
+        expect(secondInteraction.data.targetType).toBe('minion');
+        const minionOption = secondInteraction.data.options.find((entry: any) => entry.value?.minionUid === 'm2');
+        expect(minionOption).toBeDefined();
+
+        const step2 = chooseMinionHandler!(
+            step1.state,
+            '0',
+            minionOption.value,
+            secondInteraction.data,
+            dummyRandom,
+            1002,
+        );
+
+        expect(step2.events).toHaveLength(2);
+        expect(step2.events[0].type).toBe(SU_EVENTS.CARD_BOXED);
+        expect((step2.events[0] as any).payload).toMatchObject({
+            playerId: '0',
+            cardUid: 'h1',
+            defId: 'normal_action',
+            from: 'hand',
+        });
+        expect(step2.events[1].type).toBe(SU_EVENTS.POWER_COUNTER_ADDED);
+        expect((step2.events[1] as any).payload).toMatchObject({
+            minionUid: 'm2',
+            baseIndex: 1,
+            amount: 1,
+        });
+
+        const reduced = applyEvents(step1.state.core, step2.events as any);
+        expect(reduced.players['0'].hand.some(card => card.uid === 'h1')).toBe(false);
+        expect((reduced.players['0'].removedFromGame ?? []).some(card => card.uid === 'h1')).toBe(true);
+    });
+
+    it('无手牌时不触发', () => {
+        const { events } = triggerBaseAbility('base_the_asylum', 'onMinionPlayed', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_the_asylum', {
+                    minions: [makeMinion('m1', '0', 3)],
+                })],
+            }),
+            baseDefId: 'base_the_asylum',
+            baseIndex: 0,
             minionUid: 'm1',
         }));
 
@@ -351,6 +388,51 @@ describe('stale move regression: 扩展基地 Prompt 移动', () => {
             1800,
         );
         expect(resolved?.events ?? []).toHaveLength(0);
+    });
+
+    it('base_inventors_salon: 弃牌堆变空后应只保留 skip，避免 AI 持续拿旧行动卡', () => {
+        const result = triggerBaseAbilityWithMS('base_inventors_salon', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_inventors_salon')],
+                players: {
+                    '0': makePlayer('0', {
+                        discard: [makeCard('d1', 'pirate_full_sail', 'action')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            }),
+            baseDefId: 'base_inventors_salon',
+            rankings: [{ playerId: '0', power: 5, vp: 4 }],
+        }));
+
+        const interaction = getInteractionsFromResult(result)[0];
+        expect(interaction?.data?.sourceId).toBe('base_inventors_salon');
+        expect(interaction?.data?.autoRefresh).toBe('discard');
+        expect(interaction?.data?.responseValidationMode).toBe('live');
+
+        const staleCore = makeState({
+            bases: [makeBase('base_inventors_salon')],
+            players: {
+                '0': makePlayer('0', {
+                    discard: [],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const staleMs = makeMatchState(staleCore);
+        const refreshedState = refreshInteractionOptions({
+            ...staleMs,
+            sys: {
+                ...staleMs.sys,
+                interaction: {
+                    current: interaction,
+                    queue: [],
+                },
+            },
+        });
+
+        const current = refreshedState.sys.interaction?.current as { data?: { options?: Array<{ id: string }> } } | undefined;
+        expect(current?.data?.options?.map((option) => option.id)).toEqual(['skip']);
     });
 });
 
@@ -541,8 +623,29 @@ describe('stale destroy/deck-bottom regression: 扩展基地 Prompt', () => {
             },
         });
 
+        const scoredState = makeMatchState(staleCore);
         const resolved = handler!(
-            makeMatchState(staleCore),
+            setScoringSession(scoredState, {
+                ...createScoringSession(scoredState.core, [0]),
+                currentBaseRef: { slotIndex: 0, baseDefId: 'base_greenhouse' },
+                currentStep: 'awaiting-interactions',
+                deferredPostScoringEvents: [
+                    {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: 0, baseDefId: 'base_greenhouse' },
+                        timestamp: 1852,
+                    },
+                    {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: 0,
+                            oldBaseDefId: 'base_greenhouse',
+                            newBaseDefId: 'base_secret_garden',
+                        },
+                        timestamp: 1852,
+                    },
+                ],
+            }),
             '0',
             option.value,
             interaction.data,
@@ -550,7 +653,80 @@ describe('stale destroy/deck-bottom regression: 扩展基地 Prompt', () => {
             1853,
         );
         expect(resolved?.events ?? []).toHaveLength(0);
-        expect(resolved?.state.core.pendingPostScoringActions).toBeUndefined();
+        expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([]);
+    });
+
+    it('base_greenhouse: replacement follow-up 应写入 scoring session，不写 core', () => {
+        const result = triggerBaseAbilityWithMS('base_greenhouse', 'afterScoring', makeCtx({
+            state: makeState({
+                bases: [makeBase('base_greenhouse')],
+                players: {
+                    '0': makePlayer('0', {
+                        deck: [makeCard('dk1', 'alien_collector', 'minion')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            }),
+            baseDefId: 'base_greenhouse',
+            rankings: [{ playerId: '0', power: 5, vp: 4 }],
+        }));
+        const interaction = getInteractionsFromResult(result)[0];
+        const option = interaction.data.options.find((entry: any) => entry.value?.cardUid === 'dk1');
+        const handler = getInteractionHandler('base_greenhouse');
+        expect(option).toBeDefined();
+        expect(handler).toBeDefined();
+
+        const scoredState = makeMatchState(makeState({
+            bases: [makeBase('base_greenhouse')],
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('dk1', 'alien_collector', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        }));
+
+        const resolved = handler!(
+            setScoringSession(scoredState, {
+                ...createScoringSession(scoredState.core, [0]),
+                currentBaseRef: { slotIndex: 0, baseDefId: 'base_greenhouse' },
+                currentStep: 'awaiting-interactions',
+                deferredPostScoringEvents: [
+                    {
+                        type: SU_EVENTS.BASE_CLEARED,
+                        payload: { baseIndex: 0, baseDefId: 'base_greenhouse' },
+                        timestamp: 1852,
+                    },
+                    {
+                        type: SU_EVENTS.BASE_REPLACED,
+                        payload: {
+                            baseIndex: 0,
+                            oldBaseDefId: 'base_greenhouse',
+                            newBaseDefId: 'base_secret_garden',
+                        },
+                        timestamp: 1852,
+                    },
+                ],
+            }),
+            '0',
+            option.value,
+            interaction.data,
+            dummyRandom,
+            1853,
+        );
+
+        expect(resolved?.events ?? []).toHaveLength(0);
+        expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([
+            {
+                kind: 'playMinionOnReplacementBase',
+                playerId: '0',
+                cardUid: 'dk1',
+                defId: 'alien_collector',
+                baseIndex: 0,
+                targetBaseDefId: 'base_secret_garden',
+                power: 2,
+            },
+        ]);
     });
 
     it('base_inventors_salon: 若所选行动已不在弃牌堆则不再取回', () => {
@@ -642,9 +818,9 @@ describe('base_mountains_of_madness: 疯狂山脉 - 抽疯狂卡', () => {
     });
 });
 
-describe('base_miskatonic_university_base: 密大基地 - 计分后返回疯狂卡', () => {
-    it('有随从且有疯狂卡的玩家生成 Prompt', () => {
-        const result = triggerBaseAbilityWithMS('base_miskatonic_university_base', 'afterScoring', makeCtx({
+describe('base_miskatonic_university_base: 密大基地 - POD 版首次打出随从后效果', () => {
+    it('第一次打出随从到这里时生成分支选择 Prompt', () => {
+        const result = triggerBaseAbilityWithMS('base_miskatonic_university_base', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_miskatonic_university_base', {
                     minions: [makeMinion('m1', '0', 3)],
@@ -653,34 +829,109 @@ describe('base_miskatonic_university_base: 密大基地 - 计分后返回疯狂�
                 players: {
                     '0': makePlayer('0', {
                         hand: [makeCard('h1', MADNESS_CARD_DEF_ID, 'action')],
+                        minionsPlayedPerBase: { 0: 1 },
                     }),
                     '1': makePlayer('1'),
                 },
             }),
             baseDefId: 'base_miskatonic_university_base',
-            rankings: [{ playerId: '0', power: 3, vp: 4 }],
+            baseIndex: 0,
+            minionUid: 'm1',
         }));
 
         expect(result.events).toHaveLength(0);
-            const interactions = getInteractionsFromResult(result);
-            expect(interactions).toHaveLength(1);
+        const interactions = getInteractionsFromResult(result);
+        expect(interactions).toHaveLength(1);
         expect(interactions[0].data.sourceId).toBe('base_miskatonic_university_base');
         expect(interactions[0].data.targetType).toBe('button');
         expect(interactions[0].playerId).toBe('0');
+        expect(interactions[0].data.options.some((entry: any) => entry.value?.choice === 'draw')).toBe(true);
+        expect(interactions[0].data.options.some((entry: any) => entry.value?.choice === 'discard_for_action')).toBe(true);
     });
 
-    it('无疯狂牌库时不触发', () => {
-        const { events } = triggerBaseAbility('base_miskatonic_university_base', 'afterScoring', makeCtx({
+    it('不是本回合第一次打出到这里时不触发', () => {
+        const result = triggerBaseAbilityWithMS('base_miskatonic_university_base', 'onMinionPlayed', makeCtx({
             state: makeState({
                 bases: [makeBase('base_miskatonic_university_base', {
                     minions: [makeMinion('m1', '0', 3)],
                 })],
+                madnessDeck: Array(10).fill(MADNESS_CARD_DEF_ID),
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('h1', MADNESS_CARD_DEF_ID, 'action')],
+                        minionsPlayedPerBase: { 0: 2 },
+                    }),
+                    '1': makePlayer('1'),
+                },
             }),
             baseDefId: 'base_miskatonic_university_base',
-            rankings: [{ playerId: '0', power: 3, vp: 4 }],
+            baseIndex: 0,
+            minionUid: 'm1',
         }));
 
-        expect(events).toHaveLength(0);
+        expect(result.events).toHaveLength(0);
+        expect(getInteractionsFromResult(result)).toHaveLength(0);
+    });
+
+    it('选择抓疯狂时产生 MADNESS_DRAWN 事件', () => {
+        const handler = getInteractionHandler('base_miskatonic_university_base');
+        expect(handler).toBeDefined();
+
+        const resolved = handler!(
+            makeMatchState(makeState({
+                madnessDeck: Array(10).fill(MADNESS_CARD_DEF_ID),
+                players: {
+                    '0': makePlayer('0'),
+                    '1': makePlayer('1'),
+                },
+            })),
+            '0',
+            { choice: 'draw' },
+            undefined,
+            dummyRandom,
+            1200,
+        );
+
+        expect(resolved.events).toHaveLength(1);
+        expect(resolved.events[0].type).toBe(SU_EVENTS.MADNESS_DRAWN);
+        expect((resolved.events[0] as any).payload).toMatchObject({
+            playerId: '0',
+            count: 2,
+        });
+    });
+
+    it('选择弃疯狂换行动时产生弃牌和额外行动事件', () => {
+        const handler = getInteractionHandler('base_miskatonic_university_base');
+        expect(handler).toBeDefined();
+
+        const resolved = handler!(
+            makeMatchState(makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('mad1', MADNESS_CARD_DEF_ID, 'action')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+            })),
+            '0',
+            { choice: 'discard_for_action' },
+            undefined,
+            dummyRandom,
+            1201,
+        );
+
+        expect(resolved.events).toHaveLength(2);
+        expect(resolved.events[0].type).toBe(SU_EVENTS.CARDS_DISCARDED);
+        expect((resolved.events[0] as any).payload).toMatchObject({
+            playerId: '0',
+            cardUids: ['mad1'],
+        });
+        expect(resolved.events[1].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+        expect((resolved.events[1] as any).payload).toMatchObject({
+            playerId: '0',
+            limitType: 'action',
+            delta: 1,
+        });
     });
 });
 

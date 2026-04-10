@@ -10,9 +10,9 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { PlayerId, EventStreamEntry } from '../../../engine/types';
 import type { DieFace, CharacterId, BonusDieInfo } from '../domain/types';
 import type { CardSpotlightItem } from '../ui/CardSpotlightOverlay';
-import { findHeroCard } from '../heroes';
 import { useEventStreamCursor } from '../../../engine/hooks';
 import { createScopedLogger } from '../../../lib/logger';
+import { getDiceThroneCardPreviewRef } from '../ui/cardPreviewHelper';
 
 /**
  * 鍗＄墝鐗瑰啓閰嶇疆
@@ -36,6 +36,10 @@ const normalizePlayerId = (value: PlayerId | string | number | null | undefined)
     const match = raw.match(/(\d+)$/);
     return match ? match[1] : raw;
 };
+
+const resolveSelectableCharacterId = (characterId?: CharacterId) => (
+    characterId && characterId !== 'unselected' ? characterId : undefined
+);
 
 /**
  * 鍗＄墝鐗瑰啓鐘舵€?
@@ -75,6 +79,28 @@ const BONUS_DIE_EVENT_TYPES = new Set(['BONUS_DIE_ROLLED', 'BONUS_DIE_REROLLED']
 const CARD_BONUS_BIND_THRESHOLD_MS = 1500;
 const spotlightLogger = createScopedLogger('DT_SPOTLIGHT');
 type SpotlightBonusDie = NonNullable<CardSpotlightItem['bonusDice']>[number];
+
+function findExistingCardSpotlightIndex(
+    queue: CardSpotlightItem[],
+    cardId: string,
+    playerId: PlayerId,
+    eventTimestamp: number,
+): number {
+    const normalizedPlayerId = normalizePlayerId(playerId);
+
+    for (let index = queue.length - 1; index >= 0; index -= 1) {
+        const item = queue[index];
+        const timeDiff = Math.abs(item.timestamp - eventTimestamp);
+        const playerMatch = normalizePlayerId(item.playerId) === normalizedPlayerId;
+        const cardMatch = item.id.startsWith(`${cardId}-`);
+
+        if (playerMatch && cardMatch && timeDiff <= CARD_BONUS_BIND_THRESHOLD_MS) {
+            return index;
+        }
+    }
+
+    return -1;
+}
 
 function countRelatedBonusDiceEvents(
     entries: EventStreamEntry[],
@@ -214,13 +240,31 @@ export function useCardSpotlight(config: CardSpotlightConfig): CardSpotlightStat
                 // 自己打出的卡牌默认不显示特写；自方多骰改走独立多骰面板聚合
                 if (skipSelfCardSpotlight) continue;
 
-                // 閫氳繃闈欐€佽〃瑙ｆ瀽 previewRef锛堟浛浠ｅ師 reducer 涓殑 findHeroCard 璋冪敤锛?
-                const heroCard = findHeroCard(p.cardId);
+                const existingIndex = findExistingCardSpotlightIndex(
+                    nextCardSpotlightQueue,
+                    p.cardId,
+                    p.playerId,
+                    eventTimestamp,
+                );
+                if (existingIndex >= 0) {
+                    spotlightLogger.info('card-event-deduped', {
+                        eventType: type,
+                        cardId: p.cardId,
+                        playerId: p.playerId,
+                        existingIndex,
+                    });
+                    continue;
+                }
+
+                const previewRef = getDiceThroneCardPreviewRef(
+                    p.cardId,
+                    resolveSelectableCharacterId(selectedCharacters?.[p.playerId]),
+                );
 
                 const newItem: CardSpotlightItem = {
                     id: `${p.cardId}-${eventTimestamp}`,
                     timestamp: eventTimestamp,
-                    previewRef: heroCard?.previewRef,
+                    previewRef: previewRef ?? undefined,
                     playerId: p.playerId,
                     playerName: opponentName,
                 };

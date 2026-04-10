@@ -9,7 +9,6 @@ import {
     getGameServerBaseURL,
     ensureGameServerAvailable,
     seedMatchCredentials,
-    waitForTestHarness,
 } from './common';
 
 // Re-export commonly used functions
@@ -34,6 +33,29 @@ export interface SetupOnlineMatchOptions {
     player2Deck?: string;
 }
 
+function resolveCardiaFrontendBaseURL(page?: Page): string {
+    const contextBaseURL = page?.context()._options?.baseURL;
+    if (contextBaseURL) {
+        return contextBaseURL;
+    }
+
+    if (process.env.VITE_FRONTEND_URL) {
+        return process.env.VITE_FRONTEND_URL;
+    }
+
+    const frontendPort = process.env.PW_PORT || process.env.E2E_PORT || '6174';
+    return `http://127.0.0.1:${frontendPort}`;
+}
+
+async function warmCardiaMatchRoute(page: Page, baseURL: string) {
+    const matchRoomModuleUrl = new URL('/src/pages/MatchRoom.tsx', baseURL).toString();
+    const response = await page.request.get(matchRoomModuleUrl);
+
+    if (!response.ok()) {
+        throw new Error(`Failed to warm MatchRoom module: ${response.status()} ${matchRoomModuleUrl}`);
+    }
+}
+
 /**
  * 设置 Cardia 在线对局
  */
@@ -46,7 +68,7 @@ export const setupOnlineMatch = async (
     
     // 从 page 的 context 获取 baseURL，如果没有则使用默认值
     // 优先使用 context 的 baseURL，否则使用环境变量或默认值
-    const baseURL = page.context()._options?.baseURL || process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL(page);
     
     // 创建 player1 context
     const player1Context = await browser.newContext({ baseURL });
@@ -54,10 +76,21 @@ export const setupOnlineMatch = async (
     const player1Page = await player1Context.newPage();
     
     await player1Page.goto('/', { waitUntil: 'domcontentloaded' }).catch(() => {});
-    
-    if (!(await ensureGameServerAvailable(player1Page))) {
+
+    let gameServerReady = false;
+    for (let attempt = 0; attempt < 20; attempt += 1) {
+        if (await ensureGameServerAvailable(player1Page)) {
+            gameServerReady = true;
+            break;
+        }
+        await player1Page.waitForTimeout(500);
+    }
+
+    if (!gameServerReady) {
         throw new Error('Game server not available');
     }
+
+    await warmCardiaMatchRoute(player1Page, baseURL);
     
     // 创建房间
     const player1GuestId = `e2e_player1_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -84,6 +117,7 @@ export const setupOnlineMatch = async (
     
     await player2Page.goto('/', { waitUntil: 'domcontentloaded' }).catch(() => {});
     await player2Page.waitForTimeout(500);
+    await warmCardiaMatchRoute(player2Page, baseURL);
     
     // Player2 加入房间
     const player2GuestId = `e2e_player2_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
@@ -332,15 +366,26 @@ export const playCard = async (page: Page, index: number) => {
  * @param timeout - 超时时间（毫秒）
  */
 export const waitForPhase = async (page: Page, phase: string, timeout = 10000) => {
-    const phaseMap: Record<string, string> = {
-        play: 'Play Card',
-        ability: 'Ability',
-        end: 'End',
+    const phaseMap: Record<string, string[]> = {
+        play: ['Play Card', '打出卡牌'],
+        ability: ['Ability', '能力'],
+        end: ['End', '结束'],
     };
     
-    const phaseText = phaseMap[phase] || phase;
+    const phaseTexts = phaseMap[phase] || [phase];
     const indicator = page.locator('[data-testid="cardia-phase-indicator"]');
-    await expect(indicator).toContainText(phaseText, { timeout });
+    
+    // 等待任意一个匹配的文本出现
+    await page.waitForFunction(
+        ({ texts, timeout: timeoutMs }) => {
+            const indicator = document.querySelector('[data-testid="cardia-phase-indicator"]');
+            if (!indicator) return false;
+            const text = indicator.textContent || '';
+            return texts.some((t: string) => text.includes(t));
+        },
+        { texts: phaseTexts, timeout },
+        { timeout }
+    );
 };
 
 // ============================================================================
@@ -359,6 +404,9 @@ export interface CardiaTestScenario {
     
     /** 游戏阶段（默认 'play'） */
     phase?: 'play' | 'ability' | 'end';
+
+    /** 可选：期望的当前/下一遭遇索引；未指定时由 helper 自动推导 */
+    turnNumber?: number;
     
     /** 修正标记（可选） */
     modifierTokens?: ModifierToken[];
@@ -374,6 +422,8 @@ export interface CardiaTestScenario {
         player1Influence: number;
         player2Influence: number;
         winnerId?: string;
+        /** 可选：当前遭遇索引；多回合场景下建议显式传入 */
+        encounterIndex?: number;
     };
 }
 
@@ -478,7 +528,7 @@ export const setupCardiaTestScenario = async (
     scenario: CardiaTestScenario
 ): Promise<CardiaMatchSetup> => {
     // 1. 创建基础对局
-    const baseURL = process.env.VITE_FRONTEND_URL || 'http://localhost:5173';
+    const baseURL = resolveCardiaFrontendBaseURL();
     const tempContext = await browser.newContext({ baseURL });
     const tempPage = await tempContext.newPage();
     
@@ -486,37 +536,12 @@ export const setupCardiaTestScenario = async (
         const setup = await setupOnlineMatch(tempPage);
         await tempPage.close();
         
-        // 2. 构建完整状态
         const currentState = await readCoreState(setup.player1Page);
-        const newState = await buildStateFromScenario(
-            setup.player1Page,
-            currentState,
-            scenario
-        );
-        
-        // 3. 注入状态到两个玩家页面
-        await applyCoreStateDirect(setup.player1Page, newState);
-        await applyCoreStateDirect(setup.player2Page, newState);
-        
-        // 4. 如果场景指定了阶段，需要同步设置 sys.phase
-        if (scenario.phase) {
-            await setup.player1Page.evaluate((phase) => {
-                const state = (window as any).__BG_STATE__;
-                if (state && state.sys) {
-                    state.sys.phase = phase;
-                }
-            }, scenario.phase);
-            await setup.player2Page.evaluate((phase) => {
-                const state = (window as any).__BG_STATE__;
-                if (state && state.sys) {
-                    state.sys.phase = phase;
-                }
-            }, scenario.phase);
-        }
-        
-        // 5. 等待UI更新
-        await setup.player1Page.waitForTimeout(500);
-        await setup.player2Page.waitForTimeout(500);
+        const newState = await buildStateFromScenario(setup.player1Page, currentState, scenario);
+
+        // 2. 注入状态到两个玩家页面
+        await applyCardiaScenarioToPage(setup.player1Page, scenario, newState);
+        await applyCardiaScenarioToPage(setup.player2Page, scenario, newState);
         
         return setup;
     } catch (error) {
@@ -524,6 +549,39 @@ export const setupCardiaTestScenario = async (
         await tempContext.close();
         throw error;
     }
+};
+
+/**
+ * 将 Cardia 场景注入到当前页面（适用于 `/play/cardia` TestHarness 页面）
+ */
+export const applyCardiaScenarioToPage = async (
+    page: Page,
+    scenario: CardiaTestScenario,
+    prebuiltCoreState?: Record<string, unknown>,
+) => {
+    const currentState = prebuiltCoreState ?? await readCoreState(page);
+    const nextCoreState = prebuiltCoreState ?? await buildStateFromScenario(page, currentState, scenario);
+
+    await applyCoreStateDirect(page, nextCoreState);
+
+    if (scenario.phase) {
+        await page.evaluate((phase) => {
+            const harness = (window as any).__BG_TEST_HARNESS__;
+            harness?.state?.patch?.({
+                sys: {
+                    phase,
+                },
+            });
+
+            const liveState = (window as any).__BG_STATE__;
+            if (liveState?.sys) {
+                liveState.sys.phase = phase;
+            }
+        }, scenario.phase);
+    }
+
+    await page.waitForTimeout(500);
+    await ensureDebugPanelClosed(page);
 };
 
 /**
@@ -648,9 +706,34 @@ async function buildStateFromScenario(
         // 从 playedCards 中查找对应的卡牌实例
         const p1Cards = player1State.playedCards as Array<Record<string, unknown>>;
         const p2Cards = player2State.playedCards as Array<Record<string, unknown>>;
-        
-        const player1Card = p1Cards && p1Cards.length > 0 ? p1Cards[0] : null;
-        const player2Card = p2Cards && p2Cards.length > 0 ? p2Cards[0] : null;
+
+        const requestedEncounterIndex =
+            typeof scenario.currentEncounter.encounterIndex === 'number'
+                ? scenario.currentEncounter.encounterIndex
+                : typeof scenario.turnNumber === 'number'
+                  ? scenario.turnNumber
+                  : undefined;
+
+        const resolveCurrentEncounterIndex = () => {
+            if (typeof requestedEncounterIndex === 'number') {
+                const hasRequestedEncounter =
+                    p1Cards.some(card => card.encounterIndex === requestedEncounterIndex) ||
+                    p2Cards.some(card => card.encounterIndex === requestedEncounterIndex);
+                if (hasRequestedEncounter) {
+                    return requestedEncounterIndex;
+                }
+            }
+            return Math.max(
+                ...[
+                    ...p1Cards.map(card => Number(card.encounterIndex ?? -1)),
+                    ...p2Cards.map(card => Number(card.encounterIndex ?? -1)),
+                ]
+            );
+        };
+
+        const resolvedEncounterIndex = resolveCurrentEncounterIndex();
+        const player1Card = p1Cards.find(card => card.encounterIndex === resolvedEncounterIndex) ?? null;
+        const player2Card = p2Cards.find(card => card.encounterIndex === resolvedEncounterIndex) ?? null;
         
         if (player1Card && player2Card) {
             const winnerId = scenario.currentEncounter.winnerId;
@@ -667,7 +750,11 @@ async function buildStateFromScenario(
         }
     }
     
-    // 8. 自动计算 turnNumber（基于已打出牌的最大 encounterIndex）
+    // 8. 自动计算 turnNumber
+    // 规则：
+    // - play 阶段：turnNumber 指向“下一次遭遇”的索引，因此取 maxEncounterIndex + 1
+    // - ability / end 阶段：turnNumber 仍指向“当前遭遇”的索引，必须与 currentEncounter 对应卡牌的 encounterIndex 一致
+    //   否则 Board 无法从 playedCards 中定位当前失败方卡牌，能力按钮不会显示
     const allPlayedCards = [
         ...(player1State.playedCards as Array<Record<string, unknown>>),
         ...(player2State.playedCards as Array<Record<string, unknown>>),
@@ -676,10 +763,23 @@ async function buildStateFromScenario(
         const encounterIndex = card.encounterIndex as number;
         return encounterIndex > max ? encounterIndex : max;
     }, -1);
-    
-    // turnNumber 应该是下一个遭遇的序号（maxEncounterIndex + 1）
-    // 但如果没有已打出的牌，turnNumber 应该是 0
-    state.turnNumber = maxEncounterIndex >= 0 ? maxEncounterIndex + 1 : 0;
+
+    const currentEncounterRecord = state.currentEncounter as Record<string, unknown> | undefined;
+    const currentEncounterPlayer1Card = currentEncounterRecord?.player1Card as Record<string, unknown> | undefined;
+    const currentEncounterPlayer2Card = currentEncounterRecord?.player2Card as Record<string, unknown> | undefined;
+    const currentEncounterIndex =
+        typeof currentEncounterPlayer1Card?.encounterIndex === 'number'
+            ? currentEncounterPlayer1Card.encounterIndex
+            : typeof currentEncounterPlayer2Card?.encounterIndex === 'number'
+              ? currentEncounterPlayer2Card.encounterIndex
+              : undefined;
+
+    if ((scenario.phase === 'ability' || scenario.phase === 'end') && typeof currentEncounterIndex === 'number') {
+        state.turnNumber = currentEncounterIndex;
+    } else {
+        // play 阶段默认指向“下一次遭遇”的序号；如果没有已打出的牌，则从 0 开始
+        state.turnNumber = maxEncounterIndex >= 0 ? maxEncounterIndex + 1 : 0;
+    }
     
     return state;
 }
@@ -738,9 +838,9 @@ async function createCardInstances(
     page: Page,
     defIds: string[],
     ownerId: string,
-    startIndex: number
+    _startIndex: number
 ): Promise<Array<Record<string, unknown>>> {
-    return await page.evaluate(({ defIds, ownerId, startIndex }) => {
+    return await page.evaluate(({ defIds, ownerId }) => {
         // 访问游戏的 cardRegistry
         const cardRegistry = (window as unknown as { __BG_CARD_REGISTRY__?: Map<string, unknown> }).__BG_CARD_REGISTRY__;
         if (!cardRegistry) {
@@ -776,7 +876,7 @@ async function createCardInstances(
                 encounterIndex: -1,
             };
         });
-    }, { defIds, ownerId, startIndex });
+    }, { defIds, ownerId });
 }
 
 // ============================================================================

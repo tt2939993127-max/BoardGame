@@ -12,6 +12,7 @@
  */
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { ensureCursorRegistryLoaded } from './ensureCursorRegistryLoaded';
 import { getCursorTheme, injectOutlineFilter, svgCursor } from './themes';
 import { useCursorPreference } from './CursorPreferenceContext';
 import type { CursorTheme } from './types';
@@ -112,6 +113,7 @@ export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, ch
     const containerId = 'game-cursor-scope';
     const { preference } = useCursorPreference();
     const [dynamicPlayerID, setDynamicPlayerIDState] = useState<string | null>(null);
+    const [cssText, setCssText] = useState<string | null>(null);
 
     const setDynamicPlayerID = useCallback((id: string | null) => {
         // 只有 prop playerID 为空时，动态更新才生效
@@ -139,21 +141,44 @@ export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, ch
         return themeId;
     }, [preference, themeId, gameId]);
 
-    const cssText = useMemo(() => {
-        if (!effectiveThemeId) return null;
-        const theme = getCursorTheme(effectiveThemeId);
-        if (!theme) return null;
+    useEffect(() => {
+        if (!effectiveThemeId) {
+            queueMicrotask(() => {
+                setCssText(null);
+            });
+            return;
+        }
 
-        // 阵营子主题：若主题声明了 playerThemes 且当前 playerID 有匹配，则合并覆盖
-        const playerOverride = playerID != null ? theme.playerThemes?.[playerID] : undefined;
-        const mergedTheme: CursorTheme = playerOverride
-            ? { ...theme, ...playerOverride }
-            : theme;
+        let cancelled = false;
+        const applyCursorTheme = async () => {
+            await ensureCursorRegistryLoaded();
+            if (cancelled) return;
 
-        const effectiveTheme = preference.highContrast
-            ? applyHighContrast(mergedTheme, mergedTheme.previewSvgs)
-            : mergedTheme;
-        return buildCursorCSS(containerId, effectiveTheme);
+            const theme = getCursorTheme(effectiveThemeId);
+            if (!theme) {
+                queueMicrotask(() => {
+                    setCssText(null);
+                });
+                return;
+            }
+
+            // 阵营子主题：若主题声明了 playerThemes 且当前 playerID 有匹配，则合并覆盖
+            const playerOverride = playerID != null ? theme.playerThemes?.[playerID] : undefined;
+            const mergedTheme: CursorTheme = playerOverride
+                ? { ...theme, ...playerOverride }
+                : theme;
+
+            const effectiveTheme = preference.highContrast
+                ? applyHighContrast(mergedTheme, mergedTheme.previewSvgs)
+                : mergedTheme;
+            setCssText(buildCursorCSS(containerId, effectiveTheme));
+        };
+
+        void applyCursorTheme();
+
+        return () => {
+            cancelled = true;
+        };
     }, [effectiveThemeId, playerID, preference.highContrast]);
 
     const contextValue = useMemo(
@@ -161,7 +186,7 @@ export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, ch
         [playerID, setDynamicPlayerID],
     );
 
-    if (!cssText) {
+    if (!effectiveThemeId) {
         return (
             <CursorPlayerIDContext.Provider value={contextValue}>
                 {children}
@@ -172,7 +197,7 @@ export function GameCursorProvider({ themeId, gameId, playerID: propPlayerID, ch
     return (
         <CursorPlayerIDContext.Provider value={contextValue}>
             <div id={containerId} className="w-full h-full">
-                <style>{cssText}</style>
+                {cssText ? <style>{cssText}</style> : null}
                 {children}
             </div>
         </CursorPlayerIDContext.Provider>

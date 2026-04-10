@@ -1,7 +1,7 @@
-import type { PlayerId, RandomFn } from '../../../engine/types';
-import type { CardInstance, PlayerState, SmashUpCore, MinionOnBase } from './types';
-import { getBaseDef, getCardDef, getFactionCards } from '../data/cards';
-import type { FusionCardDef } from './types';
+import type { PlayerId, RandomFn, ResponseWindowType } from '../../../engine/types';
+import type { ActionCardDef, CardInstance, FusionCardDef, PlayerState, SmashUpCore, MinionOnBase, SpecialTiming } from './types';
+import { getBaseDef, getCardDef, getFactionCards, getFusionDef, getMinionDef } from '../data/cards';
+import { getScoringEligibleBaseIndices } from './ongoingModifiers';
 
 // ============================================================================
 // 玩家显示名
@@ -31,6 +31,47 @@ export function matchesDefId(defId: string | undefined | null, baseDefId: string
     return defId === baseDefId || defId === `${baseDefId}_pod`;
 }
 
+/**
+ * 获取随从天赋当前不可发动的原因。
+ *
+ * 这里只放“卡牌自身规则前置条件”，供命令校验、UI 高亮和 execute 兜底共用，
+ * 避免出现前端显示可点、点了却没有实际效果的分层不一致问题。
+ */
+export function getMinionTalentActivationError(
+    state: SmashUpCore,
+    minion: MinionOnBase,
+    baseIndex: number,
+): string | null {
+    void state;
+    void baseIndex;
+
+    if (matchesDefId(minion.defId, 'frankenstein_the_monster') && (minion.powerCounters ?? 0) < 1) {
+        return '该随从当前无法发动天赋：没有+1力量指示物';
+    }
+
+    return null;
+}
+
+export function resolveLiveBaseIndex(
+    state: { bases: Array<{ defId: string }> },
+    baseIndex: number | undefined,
+    baseDefId?: string,
+): number | undefined {
+    if (baseIndex !== undefined && state.bases[baseIndex]) {
+        if (!baseDefId || state.bases[baseIndex].defId === baseDefId) {
+            return baseIndex;
+        }
+    }
+    if (baseDefId) {
+        const liveIndex = state.bases.findIndex(base => base.defId === baseDefId);
+        if (liveIndex >= 0) return liveIndex;
+    }
+    if (baseIndex !== undefined && state.bases[baseIndex]) {
+        return baseIndex;
+    }
+    return undefined;
+}
+
 function isFusionDef(defId: string): boolean {
     const def = getCardDef(defId) as FusionCardDef | undefined;
     return def?.type === 'fusion';
@@ -48,6 +89,121 @@ export function isCardMinionLike(card: CardInstance): boolean {
 
 export function isCardActionLike(card: CardInstance): boolean {
     return card.type === 'action' || (card.type === 'fusion' && isFusionDef(card.defId));
+}
+
+type ActionLikeDef = ActionCardDef | FusionCardDef;
+
+function isFusionActionDef(def: ActionLikeDef): def is FusionCardDef {
+    return def.type === 'fusion';
+}
+
+export function getActionLikeResponseWindowTiming(def: ActionLikeDef): SpecialTiming | undefined {
+    if (isFusionActionDef(def)) {
+        if (def.actionSubtype === 'special') {
+            return def.actionSpecialTiming ?? 'beforeScoring';
+        }
+        return def.actionResponseWindowTiming;
+    }
+
+    if (def.subtype === 'special') {
+        return def.specialTiming ?? 'beforeScoring';
+    }
+    return def.responseWindowTiming;
+}
+
+export function actionLikeNeedsResponseWindowBase(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        if (def.actionSubtype === 'special') {
+            return def.actionSpecialNeedsBase === true;
+        }
+        return def.actionResponseWindowNeedsBase === true;
+    }
+
+    if (def.subtype === 'special') {
+        return def.specialNeedsBase === true;
+    }
+    return def.responseWindowNeedsBase === true;
+}
+
+export function actionLikeNeedsPlayBase(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        return def.actionPlayNeedsBase === true || def.actionPlayNeedsMinion === true;
+    }
+    return def.playNeedsBase === true || def.playNeedsMinion === true;
+}
+
+export function actionLikeNeedsPlayMinion(def: ActionLikeDef): boolean {
+    if (isFusionActionDef(def)) {
+        return def.actionPlayNeedsMinion === true;
+    }
+    return def.playNeedsMinion === true;
+}
+
+export function isActionLikeRespondableInWindow(
+    def: ActionLikeDef,
+    windowType: ResponseWindowType,
+): boolean {
+    const timing = getActionLikeResponseWindowTiming(def);
+    if (!timing) return false;
+    if (windowType === 'meFirst') return timing === 'beforeScoring';
+    if (windowType === 'afterScoring') return timing === 'afterScoring';
+    return false;
+}
+
+function isSpecialLimitBlockedByGroup(
+    state: SmashUpCore,
+    limitGroup: string | undefined,
+    baseIndex: number,
+): boolean {
+    if (!limitGroup) return false;
+    return state.specialLimitUsed?.[limitGroup]?.includes(baseIndex) ?? false;
+}
+
+/**
+ * 计算某张牌在 Me First! 窗口中可响应的基地索引。
+ *
+ * 仅处理两类需要“锁定到即将计分基地”的牌：
+ * - beforeScoringPlayable 随从（如影舞者）
+ * - 在 Me First! 窗口中需要选基地的行动卡（如便衣忍者）
+ */
+export function getMeFirstPlayableBaseIndicesForCard(
+    state: SmashUpCore,
+    cardDefId: string,
+): number[] {
+    const eligibleBaseIndices = getScoringEligibleBaseIndices(state);
+    if (eligibleBaseIndices.length === 0) return [];
+
+    const minionDef = getMinionDef(cardDefId);
+    if (minionDef?.beforeScoringPlayable) {
+        return eligibleBaseIndices.filter(baseIndex =>
+            !isSpecialLimitBlockedByGroup(state, minionDef.specialLimitGroup, baseIndex),
+        );
+    }
+
+    const fusionDef = getFusionDef(cardDefId);
+    if (fusionDef?.minionBeforeScoringPlayable) {
+        return eligibleBaseIndices.filter(baseIndex =>
+            !isSpecialLimitBlockedByGroup(state, fusionDef.minionSpecialLimitGroup, baseIndex),
+        );
+    }
+
+    const actionDef = getCardDef(cardDefId) as ActionCardDef | FusionCardDef | undefined;
+    if (!actionDef || !isActionLikeRespondableInWindow(actionDef, 'meFirst')) {
+        return [];
+    }
+    if (!actionLikeNeedsResponseWindowBase(actionDef)) {
+        return [];
+    }
+
+    if (isFusionActionDef(actionDef)) {
+        return eligibleBaseIndices.filter(baseIndex =>
+            !isSpecialLimitBlockedByGroup(state, actionDef.actionSpecialLimitGroup, baseIndex),
+        );
+    }
+
+    return eligibleBaseIndices.filter(baseIndex =>
+        !isSpecialLimitBlockedByGroup(state, actionDef.specialLimitGroup, baseIndex),
+    );
 }
 
 /**
@@ -99,6 +255,14 @@ export function canUseBaseLimitedMinionQuota(
     if (basePowerLimit !== undefined && basePower !== undefined && basePower > basePowerLimit) {
         return false;
     }
+    const restrictedCaps = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex);
+    if (restrictedCaps.length > 0) {
+        const unrestrictedQuotaRemaining = Math.max(0, quota - restrictedCaps.length);
+        if (unrestrictedQuotaRemaining <= 0) {
+            if (basePower === undefined) return false;
+            return restrictedCaps.some(powerCap => basePower <= powerCap);
+        }
+    }
     return true;
 }
 
@@ -124,6 +288,37 @@ export function mustUseBaseLimitedMinionQuota(
     if (canUseSameNameMinionQuota(player, cardDefId)) return false;
     const quota = player.baseLimitedMinionQuota?.[baseIndex] ?? 0;
     return quota > 0;
+}
+
+/** 获取当前剩余的基地限定受限额外随从额度列表。 */
+export function getRemainingBaseLimitedPowerLimitedMinionQuotas(
+    player: PlayerState | undefined,
+    baseIndex: number,
+): number[] {
+    if (!player) return [];
+    return [...(player.baseLimitedMinionPowerCaps?.[baseIndex] ?? [])];
+}
+
+/** 获取当前卡可用的最严格基地限定受限额度（用于优先消耗受限额度）。 */
+export function getBestMatchingBaseLimitedPowerQuota(
+    player: PlayerState | undefined,
+    baseIndex: number,
+    basePower: number,
+): number | undefined {
+    const candidates = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex)
+        .filter(powerCap => basePower <= powerCap)
+        .sort((a, b) => a - b);
+    return candidates[0];
+}
+
+/** 获取当前剩余基地限定受限额度中最宽松的力量上限（用于错误提示）。 */
+export function getMaxRemainingBaseLimitedPowerQuota(
+    player: PlayerState | undefined,
+    baseIndex: number,
+): number | undefined {
+    const quotas = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex);
+    if (quotas.length === 0) return undefined;
+    return Math.max(...quotas);
 }
 
 /** 获取当前剩余的全局受限额外随从额度列表。 */

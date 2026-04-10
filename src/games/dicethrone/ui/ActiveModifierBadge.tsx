@@ -14,13 +14,19 @@ import type { ActiveModifier } from '../hooks/useActiveModifiers';
 
 interface ActiveModifierBadgeProps {
     modifiers: ActiveModifier[];
+    bonusDamage?: number;
 }
 
-export const ActiveModifierBadge: React.FC<ActiveModifierBadgeProps> = ({ modifiers }) => {
+export const ActiveModifierBadge: React.FC<ActiveModifierBadgeProps> = ({ modifiers, bonusDamage = 0 }) => {
     const { t } = useTranslation('game-dicethrone');
     const [isHovered, setIsHovered] = useState(false);
 
     if (modifiers.length === 0) return null;
+    const hasBonusDamage = bonusDamage > 0;
+    const badgeLabel = hasBonusDamage ? t('modifierActive.label') : t('modifierActive.shortLabel');
+    const badgeValue = hasBonusDamage
+        ? `+${bonusDamage}`
+        : modifiers.length > 1 ? `×${modifiers.length}` : '';
 
     const tooltipContent = modifiers.map((mod) => {
         const name = t(mod.nameKey);
@@ -41,17 +47,23 @@ export const ActiveModifierBadge: React.FC<ActiveModifierBadgeProps> = ({ modifi
                 exit={{ opacity: 0, y: -8, scale: 0.9 }}
                 transition={{ duration: 0.3, ease: 'easeOut' }}
                 className="pointer-events-auto relative"
+                data-testid="active-modifier-badge"
+                data-bonus-damage={bonusDamage}
                 onMouseEnter={() => setIsHovered(true)}
                 onMouseLeave={() => setIsHovered(false)}
             >
-                <div className="flex items-center justify-center gap-[0.4vw] px-[0.8vw] py-[0.3vw] rounded-full bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-500/50 shadow-[0_0_1vw_rgba(245,158,11,0.3)] backdrop-blur-sm cursor-default">
-                    <Zap className="w-[0.9vw] h-[0.9vw] text-amber-400 fill-amber-400" />
-                    <span className="text-amber-200 text-[0.7vw] font-bold tracking-wide whitespace-nowrap">
-                        {t('modifierActive.label')}
-                        {modifiers.length > 1 && (
-                            <span className="text-amber-400 ml-[0.2vw]">×{modifiers.length}</span>
+                <div className="flex h-[1.9vw] items-center justify-center gap-[0.4vw] px-[0.78vw] rounded-full bg-gradient-to-r from-amber-900/90 to-orange-900/90 border border-amber-500/50 shadow-[0_0_1vw_rgba(245,158,11,0.3)] backdrop-blur-sm cursor-default">
+                    <Zap className="w-[0.82vw] h-[0.82vw] text-amber-400 fill-amber-400" />
+                    <div className="flex items-center gap-[0.28vw] whitespace-nowrap leading-none">
+                        <span className="text-amber-100/90 text-[0.62vw] font-semibold tracking-[0.08em] uppercase">
+                            {badgeLabel}
+                        </span>
+                        {badgeValue && (
+                            <span className="text-amber-200 text-[0.78vw] font-black tracking-wide">
+                                {badgeValue}
+                            </span>
                         )}
-                    </span>
+                    </div>
                 </div>
                 <InfoTooltip
                     title={t('modifierActive.tooltip')}

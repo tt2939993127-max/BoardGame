@@ -169,9 +169,9 @@ function handleLongbowBonusCheck4(context: CustomActionContext): DiceThroneEvent
         console.warn('[moon_elf] handleLongbowBonusCheck4: No defenderId in context');
         return [];
     }
-    const faceCounts = state.pendingAttack?.attackDiceFaceCounts;
-    if (!faceCounts) return [];
-    const hasMatch = Object.values(faceCounts).some(count => count >= 4);
+    const valueCounts = state.pendingAttack?.attackDiceValueCounts;
+    if (!valueCounts) return [];
+    const hasMatch = Object.values(valueCounts).some(count => count >= 4);
     if (!hasMatch) return [];
     return [applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp)];
 }
@@ -187,9 +187,9 @@ function handleLongbowBonusCheck3(context: CustomActionContext): DiceThroneEvent
         console.warn('[moon_elf] handleLongbowBonusCheck3: No defenderId in context');
         return [];
     }
-    const faceCounts = state.pendingAttack?.attackDiceFaceCounts;
-    if (!faceCounts) return [];
-    const hasMatch = Object.values(faceCounts).some(count => count >= 3);
+    const valueCounts = state.pendingAttack?.attackDiceValueCounts;
+    if (!valueCounts) return [];
+    const hasMatch = Object.values(valueCounts).some(count => count >= 3);
     if (!hasMatch) return [];
     return [applyStatus(opponentId, STATUS_IDS.ENTANGLE, 1, sourceAbilityId, state, timestamp)];
 }
@@ -698,12 +698,15 @@ export function registerMoonElfCustomActions(): void {
     // 琛屽姩鍗?
     registerCustomActionHandler('moon_elf-action-moon-shadow-strike', handleMoonShadowStrike, {
         categories: ['dice', 'status', 'resource'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('moon_elf-action-volley', handleVolley, {
         categories: ['dice', 'status'],
+        requiresSelectedDefender: true,
     });
     registerCustomActionHandler('moon_elf-action-watch-out', handleWatchOut, {
         categories: ['dice', 'status'],
+        requiresSelectedDefender: true,
     });
 
     // 鐘舵€佹晥鏋滈挬瀛?

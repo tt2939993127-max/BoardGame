@@ -1,22 +1,24 @@
-/**
- * DiceThrone 攻击结算（事件驱动）
- * 仅生成事件，不直接修改状态
- */
-
 import type { RandomFn } from '../../../engine/types';
 import type {
     DiceThroneCore,
     DiceThroneEvent,
     AttackResolvedEvent,
     AttackPreDefenseResolvedEvent,
+    AttackDefenseResolvedEvent,
     TokenGrantedEvent,
 } from './types';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { getPlayerAbilityEffects } from './abilityLookup';
+import { getPendingAttackExpectedDamage } from './utils';
+
+const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
+    event.type === 'CHOICE_REQUESTED'
+    || event.type === 'COMPARE_ROLL_REQUESTED'
+    || event.type === 'INTERACTION_REQUESTED';
 
 const createPreDefenseResolvedEvent = (
     attackerId: string,
-    defenderId: string,
+    defenderId: string | undefined,
     sourceAbilityId: string | undefined,
     timestamp: number
 ): AttackPreDefenseResolvedEvent => ({
@@ -30,14 +32,32 @@ const createPreDefenseResolvedEvent = (
     timestamp,
 });
 
+const createDefenseResolvedEvent = (
+    attackerId: string,
+    defenderId: string,
+    defenseAbilityId: string | undefined,
+    timestamp: number
+): AttackDefenseResolvedEvent => ({
+    type: 'ATTACK_DEFENSE_RESOLVED',
+    payload: {
+        attackerId,
+        defenderId,
+        defenseAbilityId,
+    },
+    sourceCommandType: 'ABILITY_EFFECT',
+    timestamp,
+});
+
 export const resolveOffensivePreDefenseEffects = (
     state: DiceThroneCore,
-    timestamp: number = 0
+    timestamp: number = 0,
+    random?: RandomFn,
 ): DiceThroneEvent[] => {
     const pending = state.pendingAttack;
     if (!pending || pending.preDefenseResolved) return [];
 
     const { attackerId, defenderId, sourceAbilityId } = pending;
+    const effectDefenderId = defenderId ?? attackerId;
     if (!sourceAbilityId) {
         return [createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp)];
     }
@@ -45,7 +65,9 @@ export const resolveOffensivePreDefenseEffects = (
     const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
     const ctx: EffectContext = {
         attackerId,
-        defenderId,
+        // 4 人 / 2v2 下存在“无伤害、无默认 defender”的进攻技能；
+        // 这类技能的 self-target preDefense 效果仍必须执行，不能因为 defenderId 缺失被整段跳过。
+        defenderId: effectDefenderId,
         sourceAbilityId,
         state,
         damageDealt: 0,
@@ -53,11 +75,62 @@ export const resolveOffensivePreDefenseEffects = (
     };
 
     const events: DiceThroneEvent[] = [];
-    // preDefense 效果现在统一通过效果系统处理（包括 choice 效果）
-    events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx));
-
+    events.push(...resolveEffectsToEvents(effects, 'preDefense', ctx, { random }));
     events.push(createPreDefenseResolvedEvent(attackerId, defenderId, sourceAbilityId, timestamp));
     return events;
+};
+
+const resolveDefenseEffects = (
+    state: DiceThroneCore,
+    random: RandomFn,
+    timestamp: number
+): { defenseEvents: DiceThroneEvent[]; stateAfterDefense: DiceThroneCore } => {
+    const pending = state.pendingAttack;
+    if (!pending?.defenseAbilityId || !pending.defenderId || pending.defenseResolved) {
+        return { defenseEvents: [], stateAfterDefense: state };
+    }
+
+    const { attackerId, defenderId, defenseAbilityId } = pending;
+    const defenseEffects = getPlayerAbilityEffects(state, defenderId, defenseAbilityId);
+    const defenseCtx: EffectContext = {
+        attackerId: defenderId,
+        defenderId: attackerId,
+        sourceAbilityId: defenseAbilityId,
+        state,
+        damageDealt: 0,
+        timestamp,
+        isDefensiveContext: true,
+    };
+
+    const defenseEvents: DiceThroneEvent[] = [];
+    defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
+    defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
+    defenseEvents.push(createDefenseResolvedEvent(attackerId, defenderId, defenseAbilityId, timestamp));
+
+    const tokenGrantedEvents = defenseEvents.filter((e): e is TokenGrantedEvent => e.type === 'TOKEN_GRANTED');
+    if (tokenGrantedEvents.length === 0) {
+        return { defenseEvents, stateAfterDefense: state };
+    }
+
+    let players = { ...state.players };
+    for (const evt of tokenGrantedEvents) {
+        const { targetId, tokenId, newTotal } = evt.payload;
+        const player = players[targetId];
+        if (!player) continue;
+
+        players = {
+            ...players,
+            [targetId]: {
+                ...player,
+                tokens: { ...player.tokens, [tokenId]: newTotal },
+            },
+        };
+    }
+
+    return {
+        defenseEvents,
+        stateAfterDefense: { ...state, players },
+    };
 };
 
 export const resolveAttack = (
@@ -71,64 +144,67 @@ export const resolveAttack = (
         return [];
     }
 
+    if (!pending.defenderId) {
+        const { attackerId, sourceAbilityId, defenseAbilityId } = pending;
+        const events: DiceThroneEvent[] = [];
+
+        if (sourceAbilityId) {
+            const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
+            const attackCtx: EffectContext = {
+                attackerId,
+                defenderId: attackerId,
+                sourceAbilityId,
+                state,
+                damageDealt: 0,
+                timestamp,
+            };
+            events.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
+                bonusDamage: pending.bonusDamage ?? 0,
+                bonusDamageOnce: true,
+                random,
+                skipDamage: true,
+            }));
+            events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
+        }
+
+        events.push({
+            type: 'ATTACK_RESOLVED',
+            payload: {
+                attackerId,
+                defenderId: undefined,
+                sourceAbilityId,
+                defenseAbilityId,
+                totalDamage: 0,
+            },
+            sourceCommandType: 'ABILITY_EFFECT',
+            timestamp,
+        } as AttackResolvedEvent);
+        return events;
+    }
+
     const events: DiceThroneEvent[] = [];
     if (options?.includePreDefense) {
-        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, timestamp);
+        const preDefenseEvents = resolveOffensivePreDefenseEffects(state, timestamp, random);
         events.push(...preDefenseEvents);
 
-        const hasChoice = preDefenseEvents.some((event) => event.type === 'CHOICE_REQUESTED');
+        const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
         if (hasChoice) return events;
     }
 
     const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
     const bonusDamage = pending.bonusDamage ?? 0;
-
-    // 收集防御方事件（用于后续同时结算）
-    const defenseEvents: DiceThroneEvent[] = [];
-    if (defenseAbilityId) {
-        const defenseEffects = getPlayerAbilityEffects(state, defenderId, defenseAbilityId);
-        // 防御技能的上下文：防御者是 "attacker"，原攻击者是 "defender"
-        // isDefensiveContext=true：防御反击伤害不是"攻击"（规则 §7.2），不触发 Token 响应窗口
-        const defenseCtx: EffectContext = {
-            attackerId: defenderId,  // 防御者（使用防御技能的人）
-            defenderId: attackerId,  // 原攻击者（被防御技能影响的人）
-            sourceAbilityId: defenseAbilityId,
-            state,
-            damageDealt: 0,
-            timestamp,
-            isDefensiveContext: true,
-        };
-
-        defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'withDamage', defenseCtx, { random }));
-        defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
-    }
+    const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(state, random, timestamp);
     events.push(...defenseEvents);
-
-    // 防御技能效果可能产生 TOKEN_GRANTED 事件（如冥想获得太极），
-    // 攻击方伤害结算时需要检查防御方是否有可用 Token（shouldOpenTokenResponse），
-    // 因此只提取 TOKEN_GRANTED 事件更新 token 数量，避免 apply 全部防御事件的副作用
-    // （如 PREVENT_DAMAGE 创建 damageShield 导致 createDamageCalculation 双重扣减）。
-    let stateAfterDefense = state;
-    const tokenGrantedEvents = defenseEvents.filter((e): e is TokenGrantedEvent => e.type === 'TOKEN_GRANTED');
-    if (tokenGrantedEvents.length > 0) {
-        let players = { ...state.players };
-        for (const evt of tokenGrantedEvents) {
-            const { targetId, tokenId, newTotal } = evt.payload;
-            const player = players[targetId];
-            if (player) {
-                players = {
-                    ...players,
-                    [targetId]: {
-                        ...player,
-                        tokens: { ...player.tokens, [tokenId]: newTotal },
-                    },
-                };
-            }
-        }
-        stateAfterDefense = { ...state, players };
+    const hasDefenseChoice = defenseEvents.some(isBlockingInteractionEvent);
+    const hasDefenseTokenResponse = defenseEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
+    const hasDefenseInteractiveBonusDiceReroll = defenseEvents.some(e =>
+        e.type === 'BONUS_DICE_REROLL_REQUESTED'
+        && !(e as any).payload?.settlement?.displayOnly
+    );
+    if (hasDefenseChoice || hasDefenseTokenResponse || hasDefenseInteractiveBonusDiceReroll) {
+        return events;
     }
 
-    // 收集攻击方事件
     const attackEvents: DiceThroneEvent[] = [];
     let totalDamage = 0;
     if (sourceAbilityId) {
@@ -142,35 +218,29 @@ export const resolveAttack = (
             timestamp,
         };
 
-        // withDamage 时机的效果（包括 rollDie 和 damage）统一通过效果系统处理
-        // 注意：resolveEffectsToEvents 遇到 TOKEN_RESPONSE_REQUESTED 会自动 break，
-        // 不会执行后续的 rollDie 等效果（避免消耗 random 值）
         const withDamageEvents = resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
             bonusDamage,
             bonusDamageOnce: true,
             random,
         });
-        
-        // 如果有 Token 响应请求、需要用户交互的奖励骰重掷请求、或用户选择请求，提前返回（不生成 ATTACK_RESOLVED）
+
         const hasTokenResponse = withDamageEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
         const hasInteractiveBonusDiceReroll = withDamageEvents.some(e =>
             e.type === 'BONUS_DICE_REROLL_REQUESTED'
             && !(e as any).payload?.settlement?.displayOnly
         );
-        const hasChoiceInWithDamage = withDamageEvents.some(e => e.type === 'CHOICE_REQUESTED');
+        const hasChoiceInWithDamage = withDamageEvents.some(isBlockingInteractionEvent);
         if (hasTokenResponse || hasInteractiveBonusDiceReroll || hasChoiceInWithDamage) {
             attackEvents.push(...withDamageEvents);
             events.push(...attackEvents);
             return events;
         }
-        
-        // 没有挂起的响应/结算，正常推入所有事件
+
         attackEvents.push(...withDamageEvents);
         attackEvents.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
-        
-        // 检查 postDamage 阶段是否有需要用户交互的事件
+
         const postDamageEvents = attackEvents.slice(withDamageEvents.length);
-        const hasChoiceInPostDamage = postDamageEvents.some(e => e.type === 'CHOICE_REQUESTED');
+        const hasChoiceInPostDamage = postDamageEvents.some(isBlockingInteractionEvent);
         const hasTokenResponseInPostDamage = postDamageEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');
         const hasBonusDiceRerollInPostDamage = postDamageEvents.some(e =>
             e.type === 'BONUS_DICE_REROLL_REQUESTED'
@@ -180,11 +250,8 @@ export const resolveAttack = (
             events.push(...attackEvents);
             return events;
         }
-        
-        totalDamage = attackCtx.damageDealt;
 
-        // 技能专属音效由 FX 系统在伤害动画 onImpact 时播放（useAnimationEffects.findAbilitySfxKey），
-        // 不再注入到 event.sfxKey（会被 useGameAudio 的 resolveFeedback 优先级链捕获导致双重播放）
+        totalDamage = attackCtx.damageDealt;
     }
     events.push(...attackEvents);
 
@@ -205,13 +272,61 @@ export const resolveAttack = (
     return events;
 };
 
-/**
- * Token 响应后的攻击结算：执行 withDamage 中被截断的非伤害效果 + postDamage 效果
- * 
- * 背景：resolveEffectsToEvents 遇到 TOKEN_RESPONSE_REQUESTED 会自动 break，
- * 不执行后续效果（如 rollDie），避免消耗 random 值。
- * 此函数在 Token 响应完成后重新执行 withDamage（跳过已结算的 damage）+ postDamage。
- */
+export const resolveAttackWithSneakImmunityAfterDefense = (
+    state: DiceThroneCore,
+    random: RandomFn,
+    timestamp: number = 0
+): DiceThroneEvent[] => {
+    const pending = state.pendingAttack;
+    if (!pending || !pending.defenderId) {
+        return [];
+    }
+
+    const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
+    const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(state, random, timestamp);
+    const events: DiceThroneEvent[] = [...defenseEvents];
+    const totalDamage = getPendingAttackExpectedDamage(stateAfterDefense, pending, 1);
+
+    if (sourceAbilityId) {
+        const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
+        const attackCtx: EffectContext = {
+            attackerId,
+            defenderId,
+            sourceAbilityId,
+            state: stateAfterDefense,
+            damageDealt: totalDamage,
+            timestamp,
+        };
+
+        const withDamageEvents = resolveEffectsToEvents(effects, 'withDamage', attackCtx, {
+            bonusDamage: pending.bonusDamage ?? 0,
+            bonusDamageOnce: true,
+            random,
+            skipDamage: true,
+        });
+        const postDamageEvents = resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random });
+        events.push(...[...withDamageEvents, ...postDamageEvents].filter((event) => (
+            event.type !== 'DAMAGE_DEALT' || event.payload.targetId !== defenderId
+        )));
+    }
+
+    const resolvedEvent: AttackResolvedEvent = {
+        type: 'ATTACK_RESOLVED',
+        payload: {
+            attackerId,
+            defenderId,
+            sourceAbilityId,
+            defenseAbilityId,
+            totalDamage,
+        },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    };
+    events.push(resolvedEvent);
+
+    return events;
+};
+
 export const resolvePostDamageEffects = (
     state: DiceThroneCore,
     random: RandomFn,
@@ -224,29 +339,23 @@ export const resolvePostDamageEffects = (
 
     const events: DiceThroneEvent[] = [];
     const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
-    
-    // 使用 Token 响应后记录的最终伤害值（用于 onHit 条件判断）
     const damageDealt = pending.resolvedDamage ?? pending.damage ?? 0;
 
-    // 执行攻击技能的 withDamage 剩余效果（跳过 damage）+ postDamage 效果
     if (sourceAbilityId) {
         const effects = getPlayerAbilityEffects(state, attackerId, sourceAbilityId);
         const attackCtx: EffectContext = {
             attackerId,
-            defenderId,
+            defenderId: defenderId ?? attackerId,
             sourceAbilityId,
             state,
-            damageDealt, // 使用实际造成的伤害值
+            damageDealt,
             timestamp,
         };
 
-        // 重新执行 withDamage 效果，但跳过 damage 类型（伤害已通过 Token 响应结算）
-        // 这样 rollDie、grantToken 等被截断的效果能正确执行
         events.push(...resolveEffectsToEvents(effects, 'withDamage', attackCtx, { random, skipDamage: true }));
         events.push(...resolveEffectsToEvents(effects, 'postDamage', attackCtx, { random }));
     }
 
-    // 生成 ATTACK_RESOLVED 事件
     const resolvedEvent: AttackResolvedEvent = {
         type: 'ATTACK_RESOLVED',
         payload: {

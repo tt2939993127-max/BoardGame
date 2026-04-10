@@ -208,6 +208,27 @@ function handleBarbarianThickSkin2({ targetId, sourceAbilityId, state, timestamp
     return events;
 }
 
+function getAttackMaxDuplicateValueCount(state: CustomActionContext['state']): number {
+    const valueCounts = state.pendingAttack?.attackDiceValueCounts;
+    if (!valueCounts) return 0;
+    return Math.max(0, ...Object.values(valueCounts));
+}
+
+/**
+ * 重击 II / III：若攻击骰中有 4 个相同数字，则本次攻击不可防御。
+ */
+function handleBarbarianSlapMatching4Unblockable({ attackerId, state, timestamp }: CustomActionContext): DiceThroneEvent[] {
+    if (!state.pendingAttack) return [];
+    if (getAttackMaxDuplicateValueCount(state) < 4) return [];
+
+    return [{
+        type: 'ATTACK_MADE_UNDEFENDABLE',
+        payload: { attackerId },
+        sourceCommandType: 'ABILITY_EFFECT',
+        timestamp,
+    }];
+}
+
 /**
  * 大吉大利 (Lucky)：投掷3骰，治疗 1 + 2×心面数
  */
@@ -360,6 +381,10 @@ export function registerBarbarianCustomActions(): void {
     });
     registerCustomActionHandler('more-please-roll-damage', handleMorePleaseRollDamage, {
         categories: ['dice', 'damage', 'status'],
+        requiresSelectedDefender: true,
+    });
+    registerCustomActionHandler('barbarian-slap-matching-4-unblockable', handleBarbarianSlapMatching4Unblockable, {
+        categories: ['other'],
     });
 }
 

@@ -3,15 +3,25 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { LoadingScreen } from './LoadingScreen';
 import { UI_Z_INDEX } from '../../core';
+import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
+import { useCoarsePointer } from '../../hooks/ui/useCoarsePointer';
 
-/** 连接超时阈值（毫秒） */
+/** 桌面端连接超时阈值（毫秒） */
 const CONNECTION_TIMEOUT_MS = 15_000;
+/** 移动端/粗指针设备更容易遇到资源慢加载，延后显示“重试” */
+const SLOW_DEVICE_CONNECTION_TIMEOUT_MS = 45_000;
 
 interface ConnectionLoadingScreenProps {
     title?: string;
     description?: string;
+    progressText?: string;
     gameId?: string;
     onRetry?: () => void;
+    anchor?: 'viewport' | 'container';
+    /** 真实进度/阶段变化时传入变化 key，用于重置超时 */
+    activityKey?: string;
+    /** 已知仍在下载/安装/校验等活跃阶段时，禁止显示“重试” */
+    suppressTimeout?: boolean;
 }
 
 /**
@@ -24,19 +34,38 @@ interface ConnectionLoadingScreenProps {
 export const ConnectionLoadingScreen = ({
     title,
     description,
+    progressText,
     gameId,
     onRetry,
+    anchor = 'viewport',
+    activityKey,
+    suppressTimeout = false,
 }: ConnectionLoadingScreenProps) => {
     const { t } = useTranslation('lobby');
     const navigate = useNavigate();
+    const isMobileViewport = useMobileViewport();
+    const isCoarsePointer = useCoarsePointer();
     const [timedOut, setTimedOut] = useState(false);
+    const timeoutMs = (isMobileViewport || isCoarsePointer)
+        ? SLOW_DEVICE_CONNECTION_TIMEOUT_MS
+        : CONNECTION_TIMEOUT_MS;
 
     useEffect(() => {
+        if (suppressTimeout) {
+            queueMicrotask(() => {
+                setTimedOut(false);
+            });
+            return undefined;
+        }
+
+        queueMicrotask(() => {
+            setTimedOut(false);
+        });
         const timer = window.setTimeout(() => {
             setTimedOut(true);
-        }, CONNECTION_TIMEOUT_MS);
+        }, timeoutMs);
         return () => window.clearTimeout(timer);
-    }, []);
+    }, [activityKey, suppressTimeout, timeoutMs]);
 
     const handleRetry = useCallback(() => {
         if (onRetry) {
@@ -59,10 +88,16 @@ export const ConnectionLoadingScreen = ({
             <LoadingScreen
                 title={timedOut ? t('matchRoom.connectionTimeout.title') : title}
                 description={timedOut ? t('matchRoom.connectionTimeout.description') : description}
+                progressText={timedOut ? undefined : progressText}
+                anchor={anchor}
             />
             {timedOut && (
                 <div
-                    className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+11rem)] flex items-center justify-center gap-4"
+                    className={
+                        anchor === 'viewport'
+                            ? 'fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+11rem)] flex items-center justify-center gap-4'
+                            : 'absolute inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+11rem)] flex items-center justify-center gap-4'
+                    }
                     style={{ zIndex: UI_Z_INDEX.loading + 1 }}
                 >
                     <button

@@ -5,6 +5,7 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../core';
+import type { CharacterBadgeDef } from '../../../core/ui';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
@@ -23,6 +24,7 @@ export type TurnPhase =
     | 'income'
     | 'main1'
     | 'offensiveRoll'
+    | 'targetingRoll'
     | 'defensiveRoll'
     | 'main2'
     | 'discard';
@@ -32,10 +34,12 @@ export type DieFace =
     | 'palm'
     | 'taiji'
     | 'lotus'
+    | 'katana'
     | 'sword'
     | 'helm'
     | 'heart'
     | 'pray'
+    | 'rising_sun'
     | 'strength'
     | 'fire'
     | 'fiery_soul'
@@ -47,7 +51,10 @@ export type DieFace =
     | 'dagger'
     | 'bag'
     | 'card'
-    | 'shadow';
+    | 'shadow'
+    | 'bullet'
+    | 'dash'
+    | 'bullseye';
 
 // ============================================================================
 // 角色编目
@@ -60,14 +67,18 @@ export const IMPLEMENTED_DICETHRONE_CHARACTER_IDS = [
     'shadow_thief',
     'moon_elf',
     'paladin',
+    'gunslinger',
+    'samurai',
 ] as const;
 
 export type SelectableCharacterId = (typeof IMPLEMENTED_DICETHRONE_CHARACTER_IDS)[number];
 export type CharacterId = 'unselected' | SelectableCharacterId;
+export type TeamId = 'A' | 'B';
 
 export interface CharacterDefinition {
     id: SelectableCharacterId;
     nameKey: string;
+    badges?: CharacterBadgeDef[];
 }
 
 export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
@@ -77,6 +88,26 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
+    {
+        id: 'gunslinger',
+        nameKey: 'characters.gunslinger',
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
+    },
+    {
+        id: 'samurai',
+        nameKey: 'characters.samurai',
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
+    },
 ];
 
 /**
@@ -103,7 +134,7 @@ export interface Die {
  */
 export interface CardPlayCondition {
     /** 必须在指定阶段（更细粒度，区分进攻/防御） */
-    phase?: 'offensiveRoll' | 'defensiveRoll';
+    phase?: 'offensiveRoll' | 'targetingRoll' | 'defensiveRoll';
     /** 必须是自己的回合（activePlayer） */
     requireOwnTurn?: boolean;
     /** 必须是对手的回合（非 activePlayer） */
@@ -128,6 +159,11 @@ export interface CardPlayCondition {
     requireMinDamageDealt?: number;
     /** 场上任意玩家必须有至少 1 个状态效果或 token（用于状态移除/转移类卡牌） */
     requireAnyStatusOnBoard?: boolean;
+    /** 必须存在待结算伤害，并满足指定的伤害响应角色/时机 */
+    pendingDamage?: {
+        role?: 'source' | 'target' | 'responder';
+        responseType?: 'beforeDamageDealt' | 'beforeDamageReceived';
+    };
 }
 
 /** 卡牌多语言文案 */
@@ -148,6 +184,8 @@ export interface AbilityCard {
     /** @deprecated 使用 i18n 字段代替，此字段由构建脚本自动生成 */
     description: string;
     previewRef?: CardPreviewRef;
+    /** 源图中的 slot/index，仅用于调试、审计和作弊发牌；不等于正式运行时预览资源。 */
+    sourceAtlasIndex?: number;
     /** 卡牌效果列表（行动卡的即时效果，或升级卡的 replaceAbility 效果） */
     effects?: AbilityEffect[];
     /** 卡牌打出的额外条件 */
@@ -160,13 +198,17 @@ export interface AbilityCard {
 
 export interface PendingAttack {
     attackerId: PlayerId;
-    defenderId: PlayerId;
+    defenderId?: PlayerId;
+    /** 2v2 目标掷骰 5/6 分支等待玩家确认目标时为 true */
+    targetingSelectionPending?: boolean;
+    targetingSelectionResolved?: boolean;
     isDefendable: boolean;
     damage?: number;
     sourceAbilityId?: string;
     defenseAbilityId?: string;
     isUltimate?: boolean;
     preDefenseResolved?: boolean;
+    defenseResolved?: boolean;
     bonusDamage?: number;
     /** 仅来自攻击修正卡的额外伤害，用于右上角攻击修正 UI，避免混入暴击等其他来源 */
     attackModifierBonusDamage?: number;
@@ -180,6 +222,8 @@ export interface PendingAttack {
     resolvedDamage?: number;
     /** 攻击方骰面计数快照（用于 postDamage 阶段的连击判定，因为防御阶段会重置骰子） */
     attackDiceFaceCounts?: Record<string, number>;
+    /** 攻击方原始点数计数快照（用于“4个相同数字 / 3个相同数字”判定） */
+    attackDiceValueCounts?: Record<number, number>;
     /** 攻击掷骰阶段结束时的 Token 选择是否已完成（暴击/精准） */
     offensiveRollEndTokenResolved?: boolean;
     /** 奖励骰是否已通过 BONUS_DICE_SETTLED 结算（避免 autoContinue 重入时重复执行 resolveAttack） */
@@ -227,6 +271,18 @@ export interface InteractionDescriptor {
         tokenId: string;
         amount: number;
     }>;
+    statusGrantConfig?: {
+        statusId: string;
+        amount: number;
+    };
+    statusGrantConfigs?: Array<{
+        statusId: string;
+        amount: number;
+    }>;
+    /** 选定玩家后继续执行的 custom action（用于 2v2 下的定向卡牌效果） */
+    resolveCustomActionId?: string;
+    /** 当前被操作的骰池归属玩家 */
+    diceOwnerId?: PlayerId;
     targetOpponentDice?: boolean;
     /** 为 true 时，UI 只允许选择已有状态效果/token 的玩家（如"移除所有状态"） */
     requiresTargetWithStatus?: boolean;
@@ -287,6 +343,8 @@ export interface PendingDamage {
         sourceId?: string;
         sourceName?: string;
     }>;
+    /** 当前响应窗口内各 token 已累计消耗的数量 */
+    tokenUsageTotals?: Record<string, number>;
 }
 
 /**
@@ -312,6 +370,8 @@ export interface BonusDieInfo {
     face: DieFace;
     /** 效果描述 i18n key（用于 displayOnly 展示） */
     effectKey?: string;
+    /** 效果描述参数（例如 {{value}}） */
+    effectParams?: Record<string, string | number>;
 }
 
 /**
@@ -349,6 +409,14 @@ export interface PendingBonusDiceSettlement {
     displayOnly?: boolean;
     /** 是否显示总伤害（默认重投模式下为 true，displayOnly 下为 false） */
     showTotal?: boolean;
+    /** displayOnly 多骰时的汇总说明 key */
+    summaryEffectKey?: string;
+    /** displayOnly 多骰时的汇总说明参数 */
+    summaryEffectParams?: Record<string, string | number>;
+    /** 结算模式：默认直接造成伤害；attackBonus 表示把结果加入当前攻击的 bonusDamage */
+    resolutionMode?: 'damage' | 'attackBonus' | 'none';
+    /** attackBonus 模式下的换算规则 */
+    attackBonusScale?: 'raw' | 'halfUp';
 }
 
 export interface HeroState {
@@ -384,6 +452,13 @@ export interface HeroState {
     pendingBonusDamage?: number;
 }
 
+export type SeatControllerKind = 'human' | 'ai';
+
+export interface PendingSeatSwapRequest {
+    requesterId: PlayerId;
+    targetPlayerId: PlayerId;
+}
+
 // ============================================================================
 // 核心状态
 // ============================================================================
@@ -393,6 +468,16 @@ export interface HeroState {
  */
 export interface DiceThroneCore {
     players: Record<PlayerId, HeroState>;
+    /** 2v2 模式下的环桌座位顺序，用于分队与回合顺序推导 */
+    seatingOrder?: PlayerId[];
+    /** 座位控制信息：仅区分真人 / AI，用于准备阶段换位流程 */
+    seatControllers?: Record<PlayerId, SeatControllerKind>;
+    /** 待处理的换位申请（仅真人目标需要审批） */
+    seatSwapRequest?: PendingSeatSwapRequest;
+    /** 2v2 模式下按座位推导后的队伍归属 */
+    teamIdByPlayerId?: Record<PlayerId, TeamId>;
+    /** 2v2 模式下的共享体力；同队成员 HP 需要与该值保持同步 */
+    teamHealth?: Record<TeamId, number>;
     /** 玩家选角状态（未选时为 unselected） */
     selectedCharacters: Record<PlayerId, CharacterId>;
     /** 玩家准备状态（选角后点击准备） */
@@ -450,6 +535,13 @@ export interface DiceThroneCore {
      * TOKEN_GRANTED 时累加（仅 TAIJI），TURN_CHANGED 时清除
      */
     taijiGainedThisTurn?: Record<PlayerId, number>;
+    /**
+     * 本回合进攻掷骰尝试次数
+     * key: playerId, value: 当前回合进入 offensiveRoll 后执行过多少次 ROLL_DICE
+     * 仅在真正的进攻掷骰（pendingAttack 仍为空）时累加，TURN_CHANGED 时清除
+     * 供 Bushido 等“按本回合攻击掷骰次数结算”的规则复用
+     */
+    offensiveRollCountThisTurn?: Record<PlayerId, number>;
 }
 
 // ============================================================================
@@ -468,6 +560,7 @@ export const PHASE_ORDER: TurnPhase[] = [
     'income',
     'main1',
     'offensiveRoll',
+    'targetingRoll',
     'defensiveRoll',
     'main2',
     'discard',

@@ -27,7 +27,7 @@ export const ASSETS = {
     AVATAR: 'dicethrone/images/Common/character-portraits',
 };
 
-const DIRECT_SPRITE_ASSET_RE = /^(?:https?:|data:|blob:)/i;
+const DIRECT_SPRITE_ASSET_RE = /^(?:https?:|data:|blob:|\/game-data\/)/i;
 const GAME_DATA_DICE_SPRITE_RE = /^\/game-data\/dicethrone\/([^/]+)\/dice-sprite\.png$/i;
 const LOGICAL_DICE_SPRITE_RE =
     /^(?:\/assets\/|https?:\/\/[^/]+\/official\/)?(?:i18n\/[^/]+\/)?dicethrone\/images\/([^/]+)\/(?:compressed\/)?(dice(?:-sprite)?)(?:\.(?:png|webp|avif))?$/i;
@@ -37,8 +37,9 @@ const normalizeDiceSpriteAssetPath = (assetPath?: string | null) => {
 
     const trimmed = assetPath.trim();
     if (!trimmed) return undefined;
+    const sanitized = trimmed.split('#', 1)[0].split('?', 1)[0];
 
-    const gameDataMatch = trimmed.match(GAME_DATA_DICE_SPRITE_RE);
+    const gameDataMatch = sanitized.match(GAME_DATA_DICE_SPRITE_RE);
     if (gameDataMatch?.[1]) {
         const normalized = `dicethrone/images/${gameDataMatch[1]}/dice`;
         diceAssetsLogger.info('normalize-from-game-data', {
@@ -48,7 +49,7 @@ const normalizeDiceSpriteAssetPath = (assetPath?: string | null) => {
         return normalized;
     }
 
-    const logicalMatch = trimmed
+    const logicalMatch = sanitized
         .replace(/^\/+/, '')
         .match(LOGICAL_DICE_SPRITE_RE);
     if (logicalMatch?.[1]) {
@@ -80,28 +81,30 @@ const dedupeStringList = (list: Array<string | undefined>) => {
 
 const getSpriteAssetPathCandidates = (assetPath?: string | null) => {
     const normalized = normalizeDiceSpriteAssetPath(assetPath);
-    if (!normalized) return [];
-    if (isDirectSpriteAsset(normalized)) return [normalized];
-    return [normalized];
+    const directInput = isDirectSpriteAsset(assetPath) ? assetPath.trim() : undefined;
+    return dedupeStringList([
+        normalized,
+        directInput,
+    ]);
 };
 
 const getLogicalSpriteUrlCandidates = (assetPath: string, locale?: string) => {
     const localized = getLocalizedImageUrls(assetPath, locale);
-    const unlocalized = getLocalizedImageUrls(assetPath);
     const urls = dedupeStringList([
         localized.primary.webp,
         localized.fallback.webp,
-        unlocalized.primary.webp,
     ]);
-    // DiceThrone 骰图强制不走本地 /assets 回退，统一转成 R2 绝对域名
+    // DiceThrone 骰图优先走语言化压缩资源；
+    // 但如果定义里给的是 /game-data 直链，resolveSpriteAssetUrls 仍会把原始 PNG 保留为最后回退，
+    // 避免某些角色的压缩资源链路缺失时整块骰面空白。
+    // 这里依然不追加未语言化的本地 /assets 回退，避免 dev server 把 SPA HTML 误探测成图片。
     const base = getAssetsBaseUrl().replace(/\/+$/, '');
     const toR2AbsoluteUrl = (url: string) => {
         if (url.startsWith('/assets/')) {
             if (base.startsWith('http://') || base.startsWith('https://')) {
                 return `${base}/${url.replace(/^\/+assets\/+/, '')}`;
             }
-            // base 若不是绝对域名（极端配置），至少保留非 /assets 的同源绝对路径
-            return `/${url.replace(/^\/+assets\/+/, '')}`;
+            return url;
         }
         if (url.startsWith('/')) {
             if (base.startsWith('http://') || base.startsWith('https://')) {
@@ -550,11 +553,11 @@ const CHARACTER_PORTRAIT_INDEX: Record<string, number> = {
     moon_elf: 4,
     paladin: 5,
     pyromancer: 6,
-    vampire_lord: 7,
+    vampire_lord: 11,
     cursed_pirate: 8,
     shadow_thief: 9,
     ninja: 10,
-    samurai: 11,
+    samurai: 7,
     barbarian: 13,
     seraph: 14,
 };

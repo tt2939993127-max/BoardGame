@@ -78,13 +78,32 @@ public/assets/
 - `OptimizedImage` 默认 `locale="zh-CN"`，自动转换路径为 `i18n/zh-CN/dicethrone/images/foo.png`
 - 符号链接使浏览器能正确加载该路径（实际指向 `../../dicethrone/images/foo.png`）
 - 未来英文版上线时，传入 `locale="en"` 即可切换到英文资源
+- 生产构建会为 `public/assets` 中的资源 URL 自动追加 `?v=<content-hash>`，因此不要手动拼接版本参数；内容变更后缓存会自动失效
+
+### 统一加载链路（强制）
+
+- **禁止在组件内部自建第二套图片加载系统**：自定义图片组件、精灵图组件、3D 骰子组件、状态图标组件、CSS background 精灵图组件，禁止自己再写一套 `fetch`、`Image.onload`、URL probe、同源特判、语言特判或“先判 ready 再渲染”的加载状态机。
+- **必须优先复用统一资源工具**：运行时图片路径解析、语言回退、压缩路径选择、缓存与版本参数，统一走 `AssetLoader`、`OptimizedImage`、`CardPreview`、`getLocalizedImageUrls`、`getOptimizedImageUrls`、`buildLocalizedImageSet`。
+- **特殊渲染只能包裹统一链路，不能绕开统一链路**：例如 3D 骰子、Canvas 纹理、Sprite Atlas、CSS background-position 裁切，如果最终仍然要展示同一张运行时图片，那么只能在统一链路产出的 URL 或图片对象之上做渲染，不能自己重新决定资源候选、回退顺序或本地/远端判断。
+- **同模块已有正确实现时，禁止重发明**：如果同一游戏中已有图片显示稳定的实现（如 `HandArea`/`CardPreview`），其他图片组件必须先对照并沿用该用法；不能因为当前组件表现异常，就在旁边新增一套“只对这个组件生效”的 workaround。
+- **素材位置异常先修统一布局，不准用局部位移补素材**：当移动端/窄屏出现“棋盘、提示板、角色板、atlas 卡面整体右漂/左漂/不居中”时，先检查 `mobileLayoutPreset`、`board-shell`、runtime viewport、容器 bounds 与统一缩放链路；禁止在具体素材组件上追加 `translateX/translateY`、magic number `margin`、局部 `scale` 去“把素材摆正”。素材链路正确时，位置问题默认属于布局问题，不属于素材接线问题。
+- **修回归先查接线是否偏离统一链路**：当图片出现“之前正常、后来空白/错图/偶发失败”时，优先检查是否绕过了 `AssetLoader`、是否引入组件内特判、是否手动拼接了与统一规则不一致的路径；禁止直接继续堆特例。
+- **如确实需要补充共享能力，应下沉到公共层**：如果统一链路不能满足某类图片展示需求，应补到 `AssetLoader` 或通用媒体组件，而不是在单个游戏/单个组件里偷偷复制一份资源加载逻辑。
 
 ### 路径规则（强制）
 
 - `src` 传相对路径（如 `dicethrone/images/foo.png`），**不带** `/assets/` 前缀
 - 内部自动补全 `/assets/` 并转换为 `compressed/foo.webp`
 - **禁止在路径中硬编码 `compressed/` 子目录**（如 `'dicethrone/images/compressed/foo.png'`）
+- **禁止手动拼 `?v=` / 时间戳参数**，统一交给 `AssetLoader` 的内容 hash 机制处理
 - **原因**：`getOptimizedImageUrls()` 会自动插入 `compressed/`，硬编码会导致路径重复（`compressed/compressed/`）
+
+### 图集语义判定门禁（强制）
+
+- 素材外观不等于运行时语义。看到空白格、黑边、角落装饰、额外立绘、复合排版时，禁止直接推断它“不是卡”“要裁掉”“要拆成两张”或“必须改单元格配置”。
+- 修改 atlas 用法、`previewRef` 指向、rows/cols、frame 映射、split/topCrop 之类资源接线前，必须先对照同游戏旧实现、现有资源配置和专项规范。
+- 如果旧实现和现有文档仍不能唯一说明这张图该怎么接，必须先问用户，不能靠肉眼猜图。
+- 允许存在“一张正式图对应多个运行时对象”的复用模式；这种关系必须体现在配置或专项文档里，不能在代码里临时脑补。
 
 ### 精灵图路径处理规范（强制）
 
@@ -165,6 +184,16 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 6. ✅ **确认路径中不含 `compressed/` 子目录**
 7. ❌ **禁止**直接写 `<img src="/assets/xxx.png" />`
 8. ❌ **禁止**硬编码 `compressed/` 路径
+
+## R2 / CDN 上传收口规则（强制）
+
+适用于任意游戏的图片、音频、atlas、裁图、图标、提示板切片等运行时资源。
+
+1. **录入或资源改动完成后，AI 必须主动上传**：只要本轮改动涉及运行时资源新增、替换、移动或裁图派生，就必须主动执行 manifest 重建、`assets:check` / `assets:upload` 或等价上传流程，不等待用户额外提醒。
+2. **没有远端回查不算完成**：上传后至少抽查 1 个主资源 URL 和 1-3 个代表性裁图 / 子资源 URL，确认远端返回 `200`。
+3. **本地存在不代表交付完成**：即使本地文件、manifest、代码引用都已齐全，只要默认资源基址仍指向 R2 / CDN，就必须把远端状态作为最终完成判据。
+4. **上传失败必须显式告知用户**：如果因为 `.env` / `.env.example` 缺失、权限不足、脚本报错、网络失败或用户明确要求暂不上传而没有完成上传，最终汇报必须明确写出“未上传资源列表 + 原因 + 当前运行态风险”，禁止省略。
+5. **该规则不分游戏**：`dicethrone`、`smashup`、`summonerwars` 以及后续新游戏都按同一口径执行。
 
 ---
 

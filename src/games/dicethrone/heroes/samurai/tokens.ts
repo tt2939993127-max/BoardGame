@@ -1,33 +1,83 @@
-/**
- * Samurai (武士) Token 定义
- */
-
 import type { TokenDef } from '../../domain/tokenTypes';
-import { STATUS_IDS } from '../../domain/ids';
+import { DICETHRONE_STATUS_ATLAS_IDS, TOKEN_IDS } from '../../domain/ids';
 
-// TODO: 添加武士特有的 Token ID
-export const SAMURAI_TOKEN_IDS = {
-    // 待补充
-} as const;
+const tokenText = (id: string, field: 'name' | 'description') => `tokens.${id}.${field}`;
+
+export const SAMURAI_TOKEN_SFX_HONOR = 'magic.general.simple_magic_sound_fx_pack_vol.light.heavenly_flame';
+export const SAMURAI_TOKEN_SFX_SHAME = 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.pot_explosion';
+export const SAMURAI_TOKEN_SFX_RETRIBUTION = 'fantasy.medieval_fantasy_sound_fx_pack_vol.weapons.weapon_power_up_lightning';
 
 export const SAMURAI_TOKENS: TokenDef[] = [
-    // ============================================
-    // 共享 token（从 sharedTokens 导入）
-    // ============================================
-    // 通用状态：击倒
     {
-        id: STATUS_IDS.KNOCKDOWN,
-        category: 'debuff',
-        stackLimit: 1,
-        onPhaseEnter: {
-            phase: 'main1',
-            effect: { type: 'skipPhase', phases: ['main1', 'main2'] },
+        id: TOKEN_IDS.HONOR,
+        name: tokenText(TOKEN_IDS.HONOR, 'name'),
+        colorTheme: 'from-emerald-500 to-lime-500',
+        description: tokenText(TOKEN_IDS.HONOR, 'description') as unknown as string[],
+        sfxKey: SAMURAI_TOKEN_SFX_HONOR,
+        stackLimit: 0,
+        category: 'buff',
+        iconPath: 'dicethrone/images/samurai/icons/荣誉',
+        activeUse: {
+            timing: ['beforeDamageDealt'],
+            consumeAmount: 1,
+            allowedConsumeAmounts: [1, 2],
+            effect: {
+                type: 'modifyDamageDealt',
+                value: 1,
+                valueByAmount: {
+                    1: 1,
+                    2: 3,
+                },
+            },
         },
+        frameId: 'honor',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.SAMURAI,
     },
-    // TODO: 添加武士特有的 Token 定义
+    {
+        id: TOKEN_IDS.SHAME,
+        name: tokenText(TOKEN_IDS.SHAME, 'name'),
+        colorTheme: 'from-rose-500 to-red-600',
+        description: tokenText(TOKEN_IDS.SHAME, 'description') as unknown as string[],
+        sfxKey: SAMURAI_TOKEN_SFX_SHAME,
+        stackLimit: 0,
+        category: 'debuff',
+        iconPath: 'dicethrone/images/samurai/icons/耻辱',
+        activeUse: {
+            timing: ['beforeDamageDealt'],
+            consumeAmount: 1,
+            effect: {
+                type: 'modifyDamageDealt',
+                value: -1,
+            },
+        },
+        frameId: 'shame',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.SAMURAI,
+    },
+    {
+        id: TOKEN_IDS.SAMURAI_RETRIBUTION,
+        name: tokenText(TOKEN_IDS.SAMURAI_RETRIBUTION, 'name'),
+        colorTheme: 'from-violet-500 to-fuchsia-600',
+        description: tokenText(TOKEN_IDS.SAMURAI_RETRIBUTION, 'description') as unknown as string[],
+        sfxKey: SAMURAI_TOKEN_SFX_RETRIBUTION,
+        stackLimit: 0,
+        category: 'buff',
+        iconPath: 'dicethrone/images/samurai/icons/反击',
+        activeUse: {
+            timing: ['beforeDamageReceived'],
+            consumeAmount: 1,
+            customActionId: 'samurai-back-strike-use',
+            effect: {
+                type: 'modifyDamageReceived',
+                value: 0,
+            },
+        },
+        frameId: 'retribution',
+        atlasId: DICETHRONE_STATUS_ATLAS_IDS.SAMURAI,
+    },
 ];
 
 export const SAMURAI_INITIAL_TOKENS: Record<string, number> = {
-    [STATUS_IDS.KNOCKDOWN]: 0,
-    // TODO: 添加武士特有的初始 Token 值
+    [TOKEN_IDS.HONOR]: 0,
+    [TOKEN_IDS.SHAME]: 0,
+    [TOKEN_IDS.SAMURAI_RETRIBUTION]: 0,
 };

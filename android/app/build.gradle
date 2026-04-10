@@ -2,6 +2,32 @@ import java.util.Properties
 import groovy.json.JsonSlurper
 
 apply plugin: 'com.android.application'
+def archiveBaseNameOverride = (
+    project.findProperty('androidArchiveBaseName')
+        ?: System.getenv('ANDROID_ARCHIVE_BASE_NAME')
+        ?: 'easyboardgame'
+).toString().trim()
+archivesBaseName = archiveBaseNameOverride ?: 'easyboardgame'
+
+def packageJsonFile = rootProject.file('../package.json')
+def packageJson = packageJsonFile.exists() ? new JsonSlurper().parse(packageJsonFile) : [:]
+def packageVersionName = (packageJson.version ?: '1.0.0').toString()
+def parseAndroidVersionCode = { versionName ->
+    def segments = versionName
+        .split('\\.')
+        .collect { segment ->
+            def numeric = (segment =~ /\d+/)
+            numeric.find() ? Integer.parseInt(numeric.group(0)) : 0
+        }
+
+    while (segments.size() < 3) {
+        segments << 0
+    }
+
+    return (segments[0] * 10000) + (segments[1] * 100) + segments[2]
+}
+// 保持原生版本与 package.json 单一真实来源一致，避免 OTA targetNativeVersion 对不齐。
+def packageVersionCode = parseAndroidVersionCode(packageVersionName)
 
 def keystorePropertiesFile = rootProject.file('keystore.properties')
 def keystoreProperties = new Properties()
@@ -31,8 +57,8 @@ android {
         applicationId "top.easyboardgame.app"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        versionCode packageVersionCode
+        versionName packageVersionName
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -49,6 +75,12 @@ android {
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
+    }
+}
+
+android.applicationVariants.configureEach { variant ->
+    variant.outputs.configureEach { output ->
+        outputFileName = "${archivesBaseName}-${variant.buildType.name}.apk"
     }
 }
 
@@ -91,6 +123,9 @@ def androidServerConfig = capacitorConfig.server instanceof Map ? capacitorConfi
 def androidWebviewMode = androidServerConfig.url ? 'remote' : 'embedded'
 def distAndroidBuildMetaFile = rootProject.file('../dist/android-build-meta.json')
 def syncedAndroidBuildMetaFile = file('src/main/assets/public/android-build-meta.json')
+def capacitorPluginsJsonFile = file('src/main/assets/capacitor.plugins.json')
+def capacitorSettingsGradleFile = rootProject.file('capacitor.settings.gradle')
+def capacitorBuildGradleFile = file('capacitor.build.gradle')
 def requiresSyncedWebAssets = androidWebviewMode == 'embedded' && gradle.startParameter.taskNames.any { taskName ->
     def lowerTaskName = taskName.toLowerCase()
     lowerTaskName.contains('assemble') || lowerTaskName.contains('bundle') || lowerTaskName.contains('install')
@@ -105,4 +140,32 @@ if (requiresSyncedWebAssets) {
     if (distAndroidBuildMetaFile.getText('UTF-8') != syncedAndroidBuildMetaFile.getText('UTF-8')) {
         throw new GradleException('Android web assets are out of sync with dist. Run npm run mobile:android:sync or npm run mobile:android:build:release.')
     }
+}
+if (!capacitorPluginsJsonFile.exists()) {
+    throw new GradleException('Missing android/app/src/main/assets/capacitor.plugins.json. Run npm run mobile:android:sync before building Android.')
+}
+if (!capacitorSettingsGradleFile.exists() || !capacitorBuildGradleFile.exists()) {
+    throw new GradleException('Missing generated Capacitor Gradle files. Run npm run mobile:android:sync before building Android.')
+}
+def capacitorPlugins = new JsonSlurper().parse(capacitorPluginsJsonFile)
+if (!(capacitorPlugins instanceof List)) {
+    throw new GradleException('android/app/src/main/assets/capacitor.plugins.json has invalid shape. Run npm run mobile:android:sync before building Android.')
+}
+def capacitorSettingsText = capacitorSettingsGradleFile.getText('UTF-8')
+def capacitorBuildText = capacitorBuildGradleFile.getText('UTF-8')
+def missingCapacitorPluginWiring = []
+capacitorPlugins.each { plugin ->
+    def pkg = plugin instanceof Map ? (plugin.pkg ?: '').toString().trim() : ''
+    if (!pkg) {
+        return
+    }
+    def projectName = pkg.replaceFirst('^@', '').replace('/', '-')
+    def includeLine = "include ':${projectName}'"
+    def implementationLine = "implementation project(':${projectName}')"
+    if (!capacitorSettingsText.contains(includeLine) || !capacitorBuildText.contains(implementationLine)) {
+        missingCapacitorPluginWiring << pkg
+    }
+}
+if (!missingCapacitorPluginWiring.isEmpty()) {
+    throw new GradleException("Capacitor plugin wiring is stale for: ${missingCapacitorPluginWiring.join(', ')}. Run npm run mobile:android:sync before building Android.")
 }

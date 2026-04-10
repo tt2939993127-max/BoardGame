@@ -294,95 +294,39 @@ function resolveEncounter(
             },
         });
         
-        // 5.2 检查财务官和顾问（extraSignet）- 额外印戒（一次性）
+        // 5.2 检查顾问（extraSignet）- 额外印戒（一次性）
         const extraSignetAbilities = core.ongoingAbilities.filter(
-            a => a.abilityId === ABILITY_IDS.ADVISOR || a.abilityId === ABILITY_IDS.TREASURER
+            a => a.abilityId === ABILITY_IDS.ADVISOR
         );
         
         for (const ability of extraSignetAbilities) {
-            if (ability.abilityId === ABILITY_IDS.TREASURER) {
-                // 财务官：给上一个遭遇获胜的牌额外印戒
-                // 只对放置标记的玩家生效
-                if (ability.playerId === winner) {
-                    console.log('[Cardia] Treasurer ability check:', {
-                        abilityPlayerId: ability.playerId,
-                        currentWinner: winner,
-                        previousEncounter: core.previousEncounter ? {
-                            winnerId: core.previousEncounter.winnerId,
-                            player1CardUid: core.previousEncounter.player1Card?.uid,
-                            player2CardUid: core.previousEncounter.player2Card?.uid,
-                        } : null,
-                    });
-                    
-                    // 查找上一个遭遇的获胜卡牌
-                    const previousEncounter = core.previousEncounter;
-                    if (previousEncounter && previousEncounter.winnerId === ability.playerId) {
-                        const previousWinnerCard = previousEncounter.winnerId === previousEncounter.player1Card?.ownerId
-                            ? previousEncounter.player1Card
-                            : previousEncounter.player2Card;
-                        
-                        if (previousWinnerCard) {
-                            // 给上一个遭遇的获胜卡牌额外印戒
-                            events.push({
-                                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
-                                timestamp: Date.now(),
-                                payload: {
-                                    cardId: previousWinnerCard.uid,
-                                    playerId: ability.playerId,
-                                },
-                            });
-                            
-                            console.log('[Cardia] Treasurer ability triggered: extra signet to previous encounter winner', {
-                                previousWinnerCardId: previousWinnerCard.uid,
-                                playerId: ability.playerId,
-                            });
-                        }
-                    } else {
-                        console.log('[Cardia] Treasurer ability NOT triggered:', {
-                            hasPreviousEncounter: !!previousEncounter,
-                            previousWinnerId: previousEncounter?.winnerId,
-                            abilityPlayerId: ability.playerId,
-                            match: previousEncounter?.winnerId === ability.playerId,
-                        });
-                    }
-                    
-                    // 财务官是一次性效果，触发后移除
-                    events.push({
-                        type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
-                        timestamp: Date.now(),
-                        payload: {
-                            abilityId: ability.abilityId,
-                            cardId: ability.cardId,
-                            playerId: ability.playerId,
-                        },
-                    });
-                }
-            } else if (ability.abilityId === ABILITY_IDS.ADVISOR) {
-                // 顾问：只对放置标记的玩家生效
-                if (ability.playerId === winner) {
-                    // 给当前遭遇获胜的牌额外印戒
-                    events.push({
-                        type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
-                        timestamp: Date.now(),
-                        payload: {
-                            cardId: winnerCard.uid,
-                            playerId: winner,
-                        },
-                    });
-                    
-                    // 顾问是一次性效果，触发后移除
-                    events.push({
-                        type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
-                        timestamp: Date.now(),
-                        payload: {
-                            abilityId: ability.abilityId,
-                            cardId: ability.cardId,
-                            playerId: ability.playerId,
-                        },
-                    });
-                }
+            // 顾问：只对放置标记的玩家生效
+            if (ability.playerId === winner) {
+                // 给当前遭遇获胜的牌额外印戒
+                events.push({
+                    type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
+                    timestamp: Date.now(),
+                    payload: {
+                        cardId: winnerCard.uid,
+                        playerId: winner,
+                    },
+                });
+                
+                // 顾问是一次性效果，触发后移除
+                events.push({
+                    type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                    timestamp: Date.now(),
+                    payload: {
+                        abilityId: ability.abilityId,
+                        cardId: ability.cardId,
+                        playerId: ability.playerId,
+                    },
+                });
             }
         }
+        
+        // 注意：财务官的持续标记不在这里移除
+        // 财务官的效果在激活时立即生效，持续标记保持到游戏结束（或被虚空法师移除）
         
         // 5.3 检查机械精灵（conditionalVictory）- 条件胜利（一次性）
         const mechanicalSpiritAbility = core.ongoingAbilities.find(

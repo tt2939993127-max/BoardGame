@@ -29,6 +29,7 @@ export const SHADOW_THIEF_TOKENS: TokenDef[] = [
         activeUse: {
             timing: ['beforeDamageDealt'],
             consumeAmount: 1,
+            customActionId: 'shadow_thief-sneak-attack-use',
             effect: {
                 type: 'modifyDamageDealt',
                 value: 0, // 实际逻辑在 shadow_thief-sneak-attack-use custom action 中

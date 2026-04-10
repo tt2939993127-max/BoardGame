@@ -167,6 +167,32 @@ describe('base_the_homeworld: 母星力量限制（全局）', () => {
         expect(r2.valid).toBe(true);
     });
 
+    it('validate：兵蚁 Soldier POD 作为额外随从时应按印刷战斗力1通过', () => {
+        const state = makeState({
+            bases: [makeBase('base_the_homeworld'), makeBase('base_rhodes_plaza')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayed: 1,
+                    minionLimit: 2,
+                    extraMinionPowerMax: 2,
+                    hand: [makeCard('h1', 'giant_ant_soldier_pod', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: { phase: 'playCards' } as any,
+        };
+
+        const result = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'h1', baseIndex: 1 },
+        } as any);
+        expect(result.valid).toBe(true);
+    });
+
     it('validate：首次打随从不受 extraMinionPowerMax 限制', () => {
         const state = makeState({
             bases: [makeBase('base_the_homeworld')],
@@ -277,7 +303,7 @@ describe('base_secret_garden: 神秘花园力量限制', () => {
         expect(restricted).toBe(false);
     });
 
-    it('还有其他可用随从额度时，power>2 不应被神秘花园误拦截', () => {
+    it('还有其他可用普通额度时，power>2 不应被神秘花园误拦截', () => {
         const state = makeState({
             bases: [makeBase('base_secret_garden')],
             players: {
@@ -297,13 +323,33 @@ describe('base_secret_garden: 神秘花园力量限制', () => {
         expect(restricted).toBe(false);
     });
 
-    it('validate：消费过神秘花园≤2额度后，仍可用其他额度打出3战力随从到这里', () => {
+    it('使用全局额外随从额度时，power>2 也应被神秘花园拦截', () => {
         const state = makeState({
             bases: [makeBase('base_secret_garden')],
             players: {
                 '0': makePlayer('0', {
                     minionsPlayed: 1,
                     minionLimit: 2,
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const restricted = isOperationRestricted(state, 0, '0', 'play_minion', {
+            minionDefId: 'alien_invader',
+            basePower: 4,
+            isExtraMinionPlayAttempt: true,
+        });
+        expect(restricted).toBe(true);
+    });
+
+    it('validate：使用普通随从额度打到神秘花园时，3战力仍可通过', () => {
+        const state = makeState({
+            bases: [makeBase('base_secret_garden')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayed: 0,
+                    minionLimit: 1,
                     baseLimitedMinionQuota: { 0: 0 },
                     hand: [makeCard('m1', 'killer_plant_water_lily', 'minion')],
                 }),
@@ -321,6 +367,32 @@ describe('base_secret_garden: 神秘花园力量限制', () => {
             payload: { cardUid: 'm1', baseIndex: 0 },
         } as any);
         expect(result.valid).toBe(true);
+    });
+
+    it('validate：机器人额外随从打到神秘花园时，3战力应被拒绝', () => {
+        const state = makeState({
+            bases: [makeBase('base_secret_garden')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayed: 1,
+                    minionLimit: 2,
+                    hand: [makeCard('m1', 'alien_invader', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const matchState: MatchState<SmashUpCore> = {
+            core: state,
+            sys: { phase: 'playCards' } as any,
+        };
+
+        const result = validate(matchState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'm1', baseIndex: 0 },
+        } as any);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('该基地禁止打出该随从');
     });
 });
 

@@ -8,7 +8,15 @@
     "filters": {
       "status": "Status",
       "type": "Type",
+      "severity": "Severity",
+      "sort": "Sort",
+      "newest": "Newest first",
+      "oldest": "Oldest first",
       "all": "All"
+    },
+    "pagination": {
+      "prev": "Previous page",
+      "next": "Next page"
     },
     "status": {
       "open": "Open",
@@ -65,8 +73,20 @@
       "empty": "(No content)",
       "screenshotAlt": "Screenshot"
     },
+    "detail": {
+      "title": "Details",
+      "emptyTitle": "Select feedback to view details",
+      "emptyDescription": "Use the dense list on the left for scanning and the right panel for full content, logs, and snapshots.",
+      "game": "Game",
+      "contact": "Contact",
+      "expand": "Expand",
+      "collapse": "Collapse"
+    },
     "actionLog": {
-      "title": "📋 Action Log"
+      "title": "Action Log"
+    },
+    "aiSummary": {
+      "title": "AI Diagnostic Packet"
     },
     "stateSnapshot": {
       "title": "State Snapshot (JSON)",

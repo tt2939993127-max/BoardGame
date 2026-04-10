@@ -19,8 +19,8 @@ import {
 import { createGameEngine } from '../../engine/adapter';
 import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type SmashUpEvent } from './domain';
 import type { ActionCardDef, FusionCardDef } from './domain/types';
-import { getCardDef, getFusionDef, getMinionDef } from './data/cards';
-import { isCardActionLike, isCardMinionLike } from './domain/utils';
+import { getCardDef } from './data/cards';
+import { actionLikeNeedsResponseWindowBase, getMeFirstPlayableBaseIndicesForCard, isActionLikeRespondableInWindow, isCardActionLike, isCardMinionLike } from './domain/utils';
 import { smashUpFlowHooks } from './domain/index';
 import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
@@ -29,7 +29,9 @@ import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatSmashUpActionEntry } from './ac
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { getSmashUpCardPreviewRef } from './ui/cardPreviewHelper';
 import { registerCriticalImageResolver } from '../../core';
-import { smashUpCriticalImageResolver } from './criticalImageResolver';
+import { smashUpRuntimeCriticalImageResolver } from './runtimeCriticalImageResolver';
+import { registerGameAiRuntime } from '../../engine/ai';
+import { smashUpAiRuntime } from './ai';
 import './ui/SmashUpCardRenderer'; // 注册卡牌渲染器
 
 // 注册所有派系能力
@@ -72,65 +74,38 @@ const systems: EngineSystem<SmashUpCore>[] = [
             const player = core.players[playerId];
             if (!player) return false;
             
-            // 检查 special 行动卡
-            const hasSpecialAction = player.hand.some(c => {
+            // 检查响应窗口可打出的行动卡（special 或显式标记了 responseWindowTiming 的普通行动卡）
+            const hasRespondableAction = player.hand.some(c => {
                 if (!isCardActionLike(c)) return false;
                 const def = getCardDef(c.defId) as ActionCardDef | FusionCardDef | undefined;
                 if (!def) return false;
-                const subtype = (def as any).type === 'fusion'
-                    ? (def as FusionCardDef).actionSubtype
-                    : (def as ActionCardDef).subtype;
-                if (subtype !== 'special') return false;
-                
-                // 检查 specialTiming 是否匹配窗口类型
-                const cardTiming = (def as any).type === 'fusion'
-                    ? ((def as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
-                    : ((def as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
-                if (windowType === 'meFirst' && cardTiming !== 'beforeScoring') return false;
-                if (windowType === 'afterScoring' && cardTiming !== 'afterScoring') return false;
-                
-                // 特殊检查：便衣忍者需要手牌中有随从才能使用
-                if (c.defId === 'ninja_hidden_ninja') {
-                    return player.hand.some(isCardMinionLike);
+                if (!isActionLikeRespondableInWindow(def, windowType)) return false;
+
+                if (windowType === 'meFirst'
+                    && actionLikeNeedsResponseWindowBase(def)
+                    && getMeFirstPlayableBaseIndicesForCard(core, c.defId).length === 0) {
+                    return false;
+                }
+
+                // 便衣忍者还需要手牌里存在可打出的随从。
+                if (c.defId === 'ninja_hidden_ninja' && !player.hand.some(isCardMinionLike)) {
+                    return false;
                 }
                 
-                // 其他 special 卡默认可用
-                console.log('[hasRespondableContent] Found special card:', {
-                    playerId,
-                    windowType,
-                    cardDefId: c.defId,
-                    cardTiming,
-                });
+                // 其他响应牌默认可用
                 return true;
             });
             
             // 检查 beforeScoringPlayable 随从（如影舞者）- 只在 meFirst 窗口可用
             const hasBeforeScoringMinion = windowType === 'meFirst' && player.hand.some(c => {
                 if (!isCardMinionLike(c)) return false;
-                const def = getMinionDef(c.defId);
-                const fusionDef = getFusionDef(c.defId);
-                if (def?.beforeScoringPlayable === true || fusionDef?.minionBeforeScoringPlayable === true) {
-                    console.log('[hasRespondableContent] Found beforeScoringPlayable minion:', {
-                        playerId,
-                        windowType,
-                        minionDefId: c.defId,
-                    });
+                if (getMeFirstPlayableBaseIndicesForCard(core, c.defId).length > 0) {
                     return true;
                 }
                 return false;
             });
             
-            const result = hasSpecialAction || hasBeforeScoringMinion;
-            console.log('[hasRespondableContent] Result:', {
-                playerId,
-                windowType,
-                hasSpecialAction,
-                hasBeforeScoringMinion,
-                result,
-                handSize: player.hand.length,
-            });
-            
-            return result;
+            return hasRespondableAction || hasBeforeScoringMinion;
         },
     }),
     createTutorialSystem(),
@@ -150,6 +125,7 @@ const adapterConfig = {
 
 // 引擎配置
 export const engineConfig = createGameEngine<SmashUpCore, SmashUpCommand, SmashUpEvent>(adapterConfig);
+registerGameAiRuntime(smashUpAiRuntime);
 
 export default engineConfig;
 
@@ -163,4 +139,4 @@ export { SmashUpDomain, smashUpFlowHooks };
 // 卡牌预览注册（放文件末尾，避免 Vite SSR 函数提升陷阱）
 // ============================================================================
 registerCardPreviewGetter('smashup', getSmashUpCardPreviewRef, { maxDim: 220 });
-registerCriticalImageResolver('smashup', smashUpCriticalImageResolver);
+registerCriticalImageResolver('smashup', smashUpRuntimeCriticalImageResolver);

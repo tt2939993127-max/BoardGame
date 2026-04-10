@@ -9,71 +9,21 @@
 import type { GameEvent } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { INTERACTION_EVENTS, resolveInteraction } from '../../../engine/systems/InteractionSystem';
-import type { SmashUpCore, SmashUpEvent, MinionPlayedEvent, PendingPostScoringAction } from './types';
+import type { SmashUpCore, SmashUpEvent } from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
-import { buildValidatedMoveEvents } from './abilityHelpers';
-import { interceptEvent } from './ongoingEffects';
 import { SU_EVENT_TYPES } from './events';
+import { maybeResolveReactionQueue } from './reactionQueue';
+import {
+    getDeferredPostScoringEvents,
+    getScoringSession,
+    mergeDeferredPostScoringCompatibility,
+    mirrorDeferredPostScoringToFirstInteraction,
+    updateScoringSession,
+} from './scoringSession';
 
 // ============================================================================
 // SmashUp 事件处理系统
 // ============================================================================
-
-function buildPendingPostScoringActionEvents(
-    state: { core: SmashUpCore },
-    actions: PendingPostScoringAction[],
-    timestamp: number,
-): SmashUpEvent[] {
-    const events: SmashUpEvent[] = [];
-    for (const action of actions) {
-        if (action.kind === 'playMinionOnReplacementBase') {
-            const player = state.core.players[action.playerId];
-            const cardStillInDeck = player?.deck.some(card =>
-                card.uid === action.cardUid
-                && card.defId === action.defId
-                && card.type === 'minion',
-            );
-            if (!player || !cardStillInDeck) {
-                continue;
-            }
-            events.push({
-                type: SU_EVENT_TYPES.MINION_PLAYED,
-                payload: {
-                    playerId: action.playerId,
-                    cardUid: action.cardUid,
-                    defId: action.defId,
-                    baseIndex: action.baseIndex,
-                    baseDefId: action.targetBaseDefId,
-                    power: action.power,
-                    fromDeck: true,
-                    consumesNormalLimit: false,
-                },
-                timestamp,
-            } as MinionPlayedEvent);
-            continue;
-        }
-
-        events.push(...buildValidatedMoveEvents(state as any, {
-            minionUid: action.minionUid,
-            minionDefId: action.minionDefId,
-            fromBaseIndex: action.fromBaseIndex,
-            toBaseIndex: action.toBaseIndex,
-            reason: action.reason,
-            now: timestamp,
-        }));
-    }
-    return events;
-}
-
-function isSameDeferredEvent(
-    emittedEvent: SmashUpEvent,
-    deferredEvent: { type: string; payload: unknown; timestamp: number },
-): boolean {
-    if (emittedEvent.type !== deferredEvent.type) return false;
-    const emittedPayload = (emittedEvent as GameEvent).payload;
-    return JSON.stringify(emittedPayload) === JSON.stringify(deferredEvent.payload)
-        && (typeof emittedEvent.timestamp === 'number' ? emittedEvent.timestamp : 0) === deferredEvent.timestamp;
-}
 
 /**
  * 创建 SmashUp 事件处理系统
@@ -90,17 +40,23 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
         afterEvents: ({ state, events, random }): HookResult<SmashUpCore> | void => {
             let newState = state;
             const nextEvents: GameEvent[] = [];
-            const pendingReduceFlag = '_waitForPostScoringReduce';
+            const pendingStartTurnInteractionReduceFlag = '_waitForStartTurnInteractionReduce';
+            let latestTimestamp = 0;
 
-            // 同一轮 afterEvents 中，后续系统看不到本轮新发出事件的 reduce 结果。
-            // 上一轮如果刚补发了 BASE_CLEARED / BASE_REPLACED，需要先等 pipeline 在轮末完成 reduce，
-            // 本轮开始时再清掉阻塞标记，允许 FlowSystem 继续自动推进。
-            if ((newState.sys as any)[pendingReduceFlag]) {
+            const scoringSession = getScoringSession(newState);
+            if (scoringSession?.currentStep === 'awaiting-post-reduce') {
+                newState = updateScoringSession(newState, (session) => session ? {
+                    ...session,
+                    currentStep: 'idle',
+                } : session);
+            }
+
+            if ((newState.sys as any)[pendingStartTurnInteractionReduceFlag]) {
                 newState = {
                     ...newState,
                     sys: {
                         ...newState.sys,
-                        [pendingReduceFlag]: undefined,
+                        [pendingStartTurnInteractionReduceFlag]: undefined,
                     } as typeof newState.sys,
                 };
             }
@@ -117,11 +73,16 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         interactionData?: Record<string, unknown>;
                     };
                     const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+                    latestTimestamp = eventTimestamp;
 
 
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);
                         if (handler) {
+                            const startTurnWindowActive =
+                                newState.sys.phase === 'startTurn'
+                                || Boolean((newState.sys as any)._smashupStartTurnWindowActive);
+
                             const result = handler(
                                 newState,
                                 payload.playerId,
@@ -130,96 +91,71 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                 random,
                                 eventTimestamp
                             );
-                            
+
                             if (result) {
                                 // 【关键修复】检查交互处理器是否创建了新交互
                                 // 如果没有创建新交互（如返回 ABILITY_FEEDBACK），则解决当前交互
                                 const hadInteractionBefore = !!newState.sys.interaction?.current;
                                 const hasInteractionAfter = !!result.state.sys.interaction?.current || (result.state.sys.interaction?.queue?.length ?? 0) > (newState.sys.interaction?.queue?.length ?? 0);
-                                
+
+                                let emittedEvents = [...result.events] as SmashUpEvent[];
+
                                 newState = result.state;
+                                newState = mirrorDeferredPostScoringToFirstInteraction(
+                                    newState,
+                                    getDeferredPostScoringEvents(newState, payload.interactionData),
+                                );
                                 
                                 // 如果 handler 没有创建新交互，则解决当前交互
                                 if (hadInteractionBefore && !hasInteractionAfter) {
                                     newState = resolveInteraction(newState);
                                 }
-                                
-                                // 【关键修复】交互处理函数返回的事件必须经过拦截器过滤
-                                // 原因：pipeline.reduceEventsToCore 只处理 execute() 返回的事件，
-                                // 而 SmashUpEventSystem.afterEvents 返回的事件走的是系统事件路径，
-                                // 不会自动经过 domain.interceptEvent。
-                                // 必须在这里手动调用拦截器，确保 tooth_and_claw 等保护机制生效。
-                                const rawEvents = result.events as SmashUpEvent[];
-                                const interceptedEvents: SmashUpEvent[] = [];
-                                for (const evt of rawEvents) {
-                                    const interceptResult = interceptEvent(newState.core, evt);
-                                    if (interceptResult === null) {
-                                        // 事件被吞噬，跳过
-                                        continue;
-                                    } else if (interceptResult === undefined) {
-                                        // 无拦截器匹配，保持原事件
-                                        interceptedEvents.push(evt);
-                                    } else {
-                                        // 事件被替换（如 MINION_RETURNED → ONGOING_DETACHED）
-                                        const batch = Array.isArray(interceptResult) ? interceptResult : [interceptResult];
-                                        interceptedEvents.push(...batch as SmashUpEvent[]);
+
+                                if (
+                                    emittedEvents.length === 0
+                                    && !getScoringSession(newState)
+                                    && !newState.sys.interaction?.current
+                                    && (newState.sys.interaction?.queue?.length ?? 0) === 0
+                                ) {
+                                    const compatibility = mergeDeferredPostScoringCompatibility(
+                                        newState,
+                                        payload.interactionData,
+                                        eventTimestamp,
+                                    );
+                                    if (compatibility) {
+                                        newState = compatibility.state;
+                                        emittedEvents = compatibility.events;
                                     }
                                 }
-                                nextEvents.push(...interceptedEvents);
+                                
+                                // 交互处理器返回的领域事件统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
+                                // 这里如果手动先调用 interceptEvent，会让同一批事件在轮末 reduce 时再次被拦截，
+                                // 导致像 Cthulhu 这类“交互返回 MADNESS_DRAWN，再由拦截器补标记”的链路被重复处理。
+                                nextEvents.push(...emittedEvents);
 
-                                // 补发延迟的 BASE_CLEARED/BASE_REPLACED 事件
-                                // afterScoring 基地能力创建交互时，清除事件被延迟到交互解决后发出，
-                                // 确保 targetType: 'minion' 的场上点选交互能看到随从
-                                const ctx = payload.interactionData?.continuationContext as Record<string, unknown> | undefined;
-                                const deferred = ctx?._deferredPostScoringEvents as { type: string; payload: unknown; timestamp: number }[] | undefined;
-                                if (deferred && deferred.length > 0) {
-                                    // 【关键修复】无论是否有后续交互，都立即设置 flowHalted=true
-                                    // 防止 FlowSystem.afterEvents 在交互解决后重新进入 onPhaseExit('scoreBases')
-                                    // 导致同一个基地被重复计分（因为 BASE_CLEARED 还没有从 scoringEligibleBaseIndices 中移除基地）
-                                    newState.sys.flowHalted = true;
-                                    
-                                    // 仅在没有后续交互时补发（链式交互需要等最后一个解决后再清除）
-                                    if (!newState.sys.interaction?.current && (!newState.sys.interaction?.queue || newState.sys.interaction.queue.length === 0)) {
-                                        const handlerAlreadyEmittedDeferred = deferred.every(d =>
-                                            nextEvents.some(event => isSameDeferredEvent(event, d))
-                                        );
-                                        if (!handlerAlreadyEmittedDeferred) {
-                                            for (const d of deferred) {
-                                                nextEvents.push({ type: d.type, payload: d.payload, timestamp: d.timestamp } as GameEvent);
-                                            }
-                                        }
-                                        const pendingActions = newState.core.pendingPostScoringActions ?? [];
-                                        if (pendingActions.length > 0) {
-                                            nextEvents.push(...buildPendingPostScoringActionEvents(newState, pendingActions, eventTimestamp));
-                                            newState = {
-                                                ...newState,
-                                                core: {
-                                                    ...newState.core,
-                                                    pendingPostScoringActions: undefined,
-                                                },
-                                            };
-                                        }
-                                        newState = {
-                                            ...newState,
-                                            sys: {
-                                                ...newState.sys,
-                                                [pendingReduceFlag]: true,
-                                            } as typeof newState.sys,
-                                        };
-                                    } else {
-                                        // 还有后续交互：把 deferred events 传递到下一个交互的 continuationContext
-                                        const nextInteraction = newState.sys.interaction.current ?? newState.sys.interaction.queue?.[0];
-                                        if (nextInteraction?.data) {
-                                            const nextData = nextInteraction.data as Record<string, unknown>;
-                                            const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
-                                            nextCtx._deferredPostScoringEvents = deferred;
-                                            nextData.continuationContext = nextCtx;
-                                        }
-                                    }
+                                const producedMinionPlayed = emittedEvents.some(
+                                    (resultEvent) => resultEvent.type === SU_EVENT_TYPES.MINION_PLAYED,
+                                );
+                                if (startTurnWindowActive && producedMinionPlayed) {
+                                    newState = {
+                                        ...newState,
+                                        sys: {
+                                            ...newState.sys,
+                                            [pendingStartTurnInteractionReduceFlag]: true,
+                                        } as typeof newState.sys,
+                                    };
                                 }
                             }
                         }
                     }
+                }
+            }
+
+            if (!newState.sys.interaction?.current) {
+                const reactionQueueResult = maybeResolveReactionQueue(newState as { core: SmashUpCore; sys: any }, random, latestTimestamp);
+                if (reactionQueueResult) {
+                    newState = reactionQueueResult.state;
+                    nextEvents.push(...reactionQueueResult.events as GameEvent[]);
                 }
             }
 

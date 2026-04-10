@@ -23,7 +23,7 @@ import type {
 } from '../types';
 import { registerCustomActionHandler, type CustomActionContext } from '../effects';
 import { createDamageCalculation } from '../../../../engine/primitives/damageCalculation';
-import { resolveTargetOpponentDice } from './common';
+import { resolveDiceOwnerId, resolveTargetOpponentDice } from './common';
 
 const FACE = SHADOW_THIEF_DICE_FACE_IDS;
 
@@ -179,6 +179,7 @@ function handleShadowManipulation({ attackerId, sourceAbilityId, state, timestam
         selectCount,
         selected: [],
         dieModifyConfig: { mode: 'any' },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{
@@ -197,7 +198,7 @@ function handleDamageFullCp({ attackerId, targetId, sourceAbilityId, state, time
     // 实际伤害计算时 gainCp 已经执行，直接使用当前 CP
     // 读取 bonusCp 参数以满足审计要求（虽然实际不使用）
     const params = action.params as Record<string, unknown> | undefined;
-    const bonusCp = (params?.bonusCp as number) || 0; // 仅用于审计，实际伤害已包含在 currentCp 中
+    const _bonusCp = (params?.bonusCp as number) || 0; // 仅用于审计，实际伤害已包含在 currentCp 中
     
     if (currentCp <= 0) return [];
 
@@ -304,6 +305,9 @@ function handleCornucopiaDiscard({ ctx, state, timestamp, random }: CustomAction
 function handleShadowShankDamage({ attackerId, targetId, sourceAbilityId, state, timestamp, ctx, action }: CustomActionContext): DiceThroneEvent[] {
     const currentCp = state.players[attackerId]?.resources[RESOURCE_IDS.CP] ?? 0;
     // bonusCp 参数已废弃：gainCp(3) 在 preDefense 阶段已执行，currentCp 已包含增益
+    // 这里只保留显式读取，确保审计能看见该参数已被有意识地消费。
+    const params = action.params as Record<string, unknown> | undefined;
+    const _bonusCp = (params?.bonusCp as number) || 0;
     // 伤害计算：CP + 5
     const damageAmt = currentCp + 5;
 
@@ -776,9 +780,15 @@ export function registerShadowThiefCustomActions(): void {
     });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll', handleShadowDanceRoll, { categories: ['dice', 'damage'] });
     registerCustomActionHandler('shadow_thief-shadow-dance-roll-2', handleShadowDanceRoll2, { categories: ['dice', 'damage', 'resource', 'card'] });
-    registerCustomActionHandler('shadow_thief-cornucopia', handleCornucopia, { categories: ['card', 'other'] });
+    registerCustomActionHandler('shadow_thief-cornucopia', handleCornucopia, {
+        categories: ['card', 'other'],
+        requiresSelectedDefender: true,
+    });
     registerCustomActionHandler('shadow_thief-cornucopia-discard', handleCornucopiaDiscard, { categories: ['other'] });
-    registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, { categories: ['card', 'resource', 'other'] });
+    registerCustomActionHandler('shadow_thief-cornucopia-2', handleCornucopia2, {
+        categories: ['card', 'resource', 'other'],
+        requiresSelectedDefender: true,
+    });
     registerCustomActionHandler('shadow_thief-shadow-shank-damage', handleShadowShankDamage, {
         categories: ['damage'],
         estimateDamage: estimateCpPlus5Damage,

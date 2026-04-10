@@ -37,6 +37,10 @@
 - 测试报告（`*-report.json`、`*-results.json`）
 - 差异文件（`*-diff.txt`）
 - HTML 测试页面（`test-*.html`）
+- 数据录入中间产物：
+  - OCR 中间图、裁图合同图、标注图
+  - 临时拆分 sheet、临时 hand preview、临时 atlas
+  - 仅用于核对的 slot 单图、拼图、人工审查导出
 
 ### 7. 应删除的文件
 - Git 临时文件（`temp_*.txt`、`tmp_*.txt`）
@@ -81,6 +85,20 @@ _vitest_*.log
 ```
 
 ## 开发规范
+
+### 数据录入 / 资源录入专用规则
+
+1. 录入中间产物默认放 `temp/`、`test-results/` 或已忽略目录，不放 `public/assets/` 正式资源树
+2. 中间产物目录命名要明确体现“临时/核对”用途，不能伪装成正式运行时素材目录
+3. 只要某张图经过了**后处理**以便人工看清文字或判断布局，就一律视为中间产物，必须放 `temp/`
+   - 典型例子：上下拆分图、放大图、锐化图、拼接图、normalized hand preview、临时 atlas、人工标注图
+   - 这些文件即使名称像 `slot-24.webp`、`deadeye-2.webp`，也不能放进 `public/assets/.../crops/**` 伪装成正式资源
+3. 如果最终运行时需要新的派生图，必须另外生成正式资源：
+   - 正式图片放 `public/assets/i18n/<locale>/<gameId>/<分类>/compressed/`
+   - atlas 配置放 `public/assets/atlas-configs/<gameId>/`
+4. 生成正式资源过程中产生的裁图、拼图、临时 atlas，不得顺手提交到正式资源目录
+5. `public/assets/.../crops/**` 不能再作为“后处理核对图”的默认落点；该目录若历史遗留存在，只能视为待清理技术债，不自动升级成正式合同
+6. 交付前必须说明哪些文件是正式资源，哪些只是录入中间产物；不能把“以后也许有用”的临时文件留在资源树里
 
 ### 创建临时文件时
 1. **Bug 分析**：直接在 `docs/bugs/` 创建，命名格式 `BUG-<issue-name>.md`

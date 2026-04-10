@@ -9,6 +9,7 @@ import msgpackParser from 'socket.io-msgpack-parser';
 import { GAME_SERVER_URL } from '../config/server';
 import { onPageVisible } from './visibilityResync';
 import { socketHealthChecker } from './socketHealthCheck';
+import { SOCKET_CONNECT_TIMEOUT_MS, getSocketIoTransports, shouldTryAllSocketTransports } from '../lib/socketConnectionConfig';
 import i18n from '../lib/i18n';
 
 const normalizeGameName = (name?: unknown) => {
@@ -33,6 +34,7 @@ export const LOBBY_EVENTS = {
 } as const;
 
 const LOBBY_ALL = 'all';
+const LOBBY_DISCONNECT_GRACE_MS = 800;
 
 const tLobbySocket = (key: string, params?: Record<string, string | number>) => (
     i18n.t(`lobby:socket.${key}`, params)
@@ -97,12 +99,33 @@ type LobbyState = {
 
 class LobbySocketService {
     private socket: Socket | null = null;
+    private connectionOwners: Set<string> = new Set();
     private statusSubscribers: Set<(status: { connected: boolean; lastError?: string }) => void> = new Set();
     private isConnected = false;
+    private isConnecting = false;
     private reconnectAttempts = 0;
     private lobbyStateByGame: Map<LobbyGameId, LobbyState> = new Map();
     private _cleanupVisibility: (() => void) | null = null;
     private _cleanupHealthCheck: (() => void) | null = null;
+    private pendingDisconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
+    private clearPendingDisconnect(): void {
+        if (this.pendingDisconnectTimer) {
+            clearTimeout(this.pendingDisconnectTimer);
+            this.pendingDisconnectTimer = null;
+        }
+    }
+
+    private scheduleDisconnect(): void {
+        this.clearPendingDisconnect();
+        this.pendingDisconnectTimer = setTimeout(() => {
+            this.pendingDisconnectTimer = null;
+            if (this.connectionOwners.size > 0 || this.hasAnyLobbySubscribers()) {
+                return;
+            }
+            this.disconnect();
+        }, LOBBY_DISCONNECT_GRACE_MS);
+    }
 
     private ensureState(gameId: LobbyGameId): LobbyState {
         const existing = this.lobbyStateByGame.get(gameId);
@@ -150,30 +173,68 @@ class LobbySocketService {
         }
     }
 
+    private hasAnyLobbySubscribers(): boolean {
+        for (const state of this.lobbyStateByGame.values()) {
+            if (state.callbacks.size > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * 供 MatchSocket 复用的共享连接入口。
+     * Lobby/Match 服务端本来就在同一条 /lobby-socket 通道上，前端不应重复建连。
+     */
+    acquireConnection(owner: string): Socket | null {
+        this.clearPendingDisconnect();
+        this.connectionOwners.add(owner);
+        this.connect();
+        return this.socket;
+    }
+
+    releaseConnection(owner: string): void {
+        this.connectionOwners.delete(owner);
+        if (this.connectionOwners.size === 0) {
+            this.scheduleDisconnect();
+        }
+    }
+
+    getSharedSocket(): Socket | null {
+        return this.socket;
+    }
+
     /**
      * 连接到大厅 Socket 服务
      * E2E 测试环境下（window.__E2E_BLOCK_LOBBY_SOCKET__）跳过连接，
      * 防止 lobby presence 检测导致页面跳转回首页。
      */
     connect(): void {
+        this.clearPendingDisconnect();
         if ((window as Window & { __E2E_BLOCK_LOBBY_SOCKET__?: boolean }).__E2E_BLOCK_LOBBY_SOCKET__) {
             return;
         }
-        if (this.socket?.connected) {
-            console.log('[LobbySocket]', tLobbySocket('alreadyConnected'));
+        if (this.socket) {
+            if (this.socket.connected || this.socket.active || this.isConnecting) {
+                return;
+            }
+            this.isConnecting = true;
+            this.socket.connect();
             return;
         }
 
         console.log('[LobbySocket]', tLobbySocket('connecting'));
+        this.isConnecting = true;
 
         this.socket = io(GAME_SERVER_URL, {
             parser: msgpackParser,
             path: '/lobby-socket',
-            transports: ['websocket', 'polling'],
+            transports: getSocketIoTransports(),
+            tryAllTransports: shouldTryAllSocketTransports(),
             reconnection: true,
             reconnectionAttempts: Infinity, // 后台标签页冻结后需要无限重连
             reconnectionDelay: 1000,
-            timeout: 10000,
+            timeout: SOCKET_CONNECT_TIMEOUT_MS,
         });
 
         this.setupEventHandlers();
@@ -190,6 +251,7 @@ class LobbySocketService {
         this.socket.on('connect', () => {
             console.log('[LobbySocket]', tLobbySocket('connected'));
             this.isConnected = true;
+            this.isConnecting = false;
             this.reconnectAttempts = 0;
             this.notifyStatusSubscribers({ connected: true });
 
@@ -204,11 +266,14 @@ class LobbySocketService {
         this.socket.on('disconnect', (reason) => {
             console.log('[LobbySocket]', tLobbySocket('disconnected', { reason }));
             this.isConnected = false;
+            this.isConnecting = false;
             this.notifyStatusSubscribers({ connected: false });
         });
 
         this.socket.on('connect_error', (error) => {
             console.error('[LobbySocket]', tLobbySocket('connectError', { message: error.message }));
+            this.isConnected = false;
+            this.isConnecting = false;
             this.reconnectAttempts++;
             this.notifyStatusSubscribers({ connected: false, lastError: error.message });
         });
@@ -367,9 +432,8 @@ class LobbySocketService {
         }
 
         // 确保已连接；仅在首个订阅者时向服务端发送订阅请求
-        if (!this.socket?.connected) {
-            this.connect();
-        } else if (!alreadySubscribed) {
+        this.acquireConnection('lobby');
+        if (this.socket?.connected && !alreadySubscribed) {
             this.socket.emit(LOBBY_EVENTS.SUBSCRIBE_LOBBY, { gameId: resolvedGameId });
         }
 
@@ -380,6 +444,9 @@ class LobbySocketService {
             if (state.callbacks.size === 0) {
                 if (this.socket?.connected) {
                     this.socket.emit(LOBBY_EVENTS.UNSUBSCRIBE_LOBBY, { gameId: resolvedGameId });
+                }
+                if (!this.hasAnyLobbySubscribers()) {
+                    this.releaseConnection('lobby');
                 }
                 // ✅ 修复：清空房间列表但保留版本号，避免重新订阅时版本号不匹配
                 state.matches = [];
@@ -415,10 +482,28 @@ class LobbySocketService {
         });
     }
 
+    reconnectWithCurrentSettings(): void {
+        const owners = [...this.connectionOwners];
+        const shouldReconnect = owners.length > 0 || this.hasAnyLobbySubscribers();
+
+        this.disconnect(false);
+
+        if (!shouldReconnect) {
+            return;
+        }
+
+        owners.forEach((owner) => this.connectionOwners.add(owner));
+        this.connect();
+    }
+
     /**
      * 断开连接
      */
-    disconnect(): void {
+    disconnect(clearOwners = true): void {
+        this.clearPendingDisconnect();
+        if (clearOwners) {
+            this.connectionOwners.clear();
+        }
         if (this._cleanupVisibility) {
             this._cleanupVisibility();
             this._cleanupVisibility = null;
@@ -432,6 +517,7 @@ class LobbySocketService {
             this.socket.disconnect();
             this.socket = null;
             this.isConnected = false;
+            this.isConnecting = false;
             this.lobbyStateByGame.forEach((state) => {
                 state.matches = [];
                 state.version = -1;

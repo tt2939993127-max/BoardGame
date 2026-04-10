@@ -44,6 +44,8 @@ describe('Reaction queue: optional base triggers resolve clockwise', () => {
     // Optional: decider should be first clockwise owner among pending: '1'
     expect(current.playerId).toBe('1');
     expect(current.data.sourceId).toBe('reaction_queue_choose_next');
+    expect(current.data.options).toHaveLength(1);
+    expect(current.data.options[0].label).toContain('base_a');
   });
 });
 

@@ -5,6 +5,7 @@ import { ADMIN_API_URL } from '../../config/server';
 import { useToast } from '../../contexts/ToastContext';
 import { Filter, Calendar, Gamepad2, X, ScrollText } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import Skeleton from '../../components/common/feedback/Skeleton';
 import CustomSelect, { type Option } from './components/ui/CustomSelect';
 import SearchInput from './components/ui/SearchInput';
 
@@ -464,7 +465,38 @@ function MatchDetailModal({
                 </div>
 
                 {loading ? (
-                    <div className="flex-1 flex items-center justify-center py-12 text-zinc-400">加载中...</div>
+                    <div className="flex-1 space-y-6 overflow-y-auto p-6">
+                        <div className="grid grid-cols-3 gap-4">
+                            {Array.from({ length: 3 }, (_, index) => (
+                                <div key={`match-detail-meta-${index}`} className="space-y-2">
+                                    <Skeleton className="h-3 w-14 rounded-lg" />
+                                    <Skeleton className="h-5 w-full rounded-lg" />
+                                </div>
+                            ))}
+                        </div>
+                        <div className="space-y-3">
+                            <Skeleton className="h-4 w-16 rounded-lg" />
+                            <div className="grid grid-cols-2 gap-3">
+                                {Array.from({ length: 2 }, (_, index) => (
+                                    <div key={`match-detail-player-${index}`} className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 space-y-2">
+                                        <Skeleton className="h-4 w-24 rounded-lg" />
+                                        <Skeleton className="h-3 w-20 rounded-lg" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-3">
+                            <Skeleton className="h-4 w-20 rounded-lg" />
+                            <div className="space-y-2">
+                                {Array.from({ length: 4 }, (_, index) => (
+                                    <div key={`match-detail-log-${index}`} className="grid grid-cols-[88px_minmax(0,1fr)] gap-3">
+                                        <Skeleton className="h-4 w-20 rounded-lg" />
+                                        <Skeleton className="h-4 w-full rounded-lg" />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
                 ) : (
                     <div className="flex-1 overflow-y-auto p-6 space-y-6">
                         {/* 基础信息 */}

@@ -7,9 +7,10 @@ export * from './types';
 
 // 系统实现
 export { createFlowSystem, getCurrentPhase, setPhase, FLOW_COMMANDS, FLOW_EVENTS, type FlowHooks, type FlowSystemConfig, type PhaseChangedEvent, type PhaseExitResult, type PhaseEnterResult, type CanAdvanceResult } from './FlowSystem';
-export { createUndoSystem, getUndoSnapshotCount, UNDO_COMMANDS, type UndoSystemConfig } from './UndoSystem';
-export { createInteractionSystem, createSimpleChoice, createMultistepChoice, queueInteraction, resolveInteraction, asSimpleChoice, asMultistepChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type MultistepChoiceData, type InteractionSystemConfig, type SimpleChoiceResponseValidationMode } from './InteractionSystem';
+export { createUndoSystem, getUndoSnapshotCount, setUndoAiSeatIds, UNDO_COMMANDS, type UndoSystemConfig } from './UndoSystem';
+export { createInteractionSystem, createSimpleChoice, createCompareRollChoice, createMultistepChoice, queueInteraction, resolveInteraction, asSimpleChoice, asCompareRollChoice, asMultistepChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type CompareRollChoiceData, type CompareRollChoiceParticipant, type MultistepChoiceData, type InteractionSystemConfig, type SimpleChoiceResponseValidationMode } from './InteractionSystem';
 export { createSimpleChoiceSystem, type SimpleChoiceSystemConfig } from './SimpleChoiceSystem';
+export { createCompareRollChoiceSystem, type CompareRollChoiceSystemConfig } from './CompareRollChoiceSystem';
 export { createMultistepChoiceSystem, type MultistepChoiceSystemConfig } from './MultistepChoiceSystem';
 export { useMultistepInteraction, type MultistepInteractionState } from './useMultistepInteraction';
 export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs } from './LogSystem';
@@ -18,6 +19,7 @@ export { createEventStreamSystem, getEventStreamEntries } from './EventStreamSys
 export { createActionLogSystem, type ActionLogSystemConfig } from './ActionLogSystem';
 export { createRematchSystem, resetRematchState, getPlayerVote, isRematchReady, getVotedPlayers, REMATCH_COMMANDS } from './RematchSystem';
 export { createResponseWindowSystem, createResponseWindow, openResponseWindow, closeResponseWindow, hasActiveResponseWindow, getResponseWindowResponderId, RESPONSE_WINDOW_COMMANDS, RESPONSE_WINDOW_EVENTS } from './ResponseWindowSystem';
+export { getResolutionState, getActiveResolutionFrame, upsertActiveResolutionFrame, updateActiveResolutionFrame, clearResolutionFrame, setActiveResolutionBlock, clearActiveResolutionBlock, syncActiveResolutionWithInteraction, syncActiveResolutionWithResponseWindow, hasBlockingResolutionFrame } from './resolutionStack';
 export { createCheatSystem, CHEAT_COMMANDS, type CheatResourceModifier, type AddResourcePayload, type SetResourcePayload, type SetPhasePayload, type SetDicePayload } from './CheatSystem';
 export { createTutorialSystem, TUTORIAL_COMMANDS, TUTORIAL_EVENTS, TUTORIAL_ERRORS } from './TutorialSystem';
 export { CharacterSelectionSystem, CHARACTER_SELECTION_COMMANDS, type CharacterSelectionSystemConfig, type SelectCharacterCommand, type PlayerReadyCommand, type PlayerUnreadyCommand, type HostStartGameCommand, type CharacterSelectedEvent, type PlayerReadyEvent, type PlayerUnreadyEvent, type HostStartedEvent } from './CharacterSelectionSystem';
@@ -26,6 +28,7 @@ export { CharacterSelectionSystem, CHARACTER_SELECTION_COMMANDS, type CharacterS
 import { createUndoSystem } from './UndoSystem';
 import { createInteractionSystem } from './InteractionSystem';
 import { createSimpleChoiceSystem } from './SimpleChoiceSystem';
+import { createCompareRollChoiceSystem } from './CompareRollChoiceSystem';
 import { createEventStreamSystem } from './EventStreamSystem';
 import { createRematchSystem } from './RematchSystem';
 import { createActionLogSystem } from './ActionLogSystem';
@@ -50,6 +53,7 @@ export function createBaseSystems<TCore>(config: BaseSystemsConfig = {}): Engine
         createUndoSystem(undo),
         createInteractionSystem(),
         createSimpleChoiceSystem(),
+        createCompareRollChoiceSystem(),
         createRematchSystem(),
         createResponseWindowSystem(),
         createTutorialSystem(),

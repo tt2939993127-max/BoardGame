@@ -38,7 +38,7 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const { openModal, closeModal } = useModalStack();
-    const { requests, unreadTotal } = useSocial();
+    const { requests, unreadTotal, ensureRealtimeConnection } = useSocial();
     const { t } = useTranslation(['auth', 'social']);
     const [isOpen, setIsOpen] = useState(false);
     const [hasNewNotification, setHasNewNotification] = useState(false);
@@ -92,6 +92,7 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
     }, []);
 
     const handleOpenFriends = () => {
+        ensureRealtimeConnection();
         setIsOpen(false);
         openModal({
             closeOnBackdrop: true,
@@ -103,6 +104,7 @@ export const UserMenu = ({ onLogout }: UserMenuProps) => {
     };
 
     const handleOpenNotifications = () => {
+        ensureRealtimeConnection();
         setIsOpen(false);
         markNotificationsSeen();
         openModal({

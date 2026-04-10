@@ -20,6 +20,7 @@ import { reduce } from '../domain/reducer';
 import { INITIAL_HEALTH, INITIAL_CP, CP_MAX, HAND_LIMIT } from '../domain/types';
 import { RESOURCE_IDS } from '../domain/resources';
 import { STATUS_IDS, TOKEN_IDS } from '../domain/ids';
+import { getUsableTokensForTiming } from '../domain/tokenResponse';
 import type { DiceThroneCore, DiceThroneEvent } from '../domain/types';
 import {
     createRunner, createInitializedState, createSetupWithHand,
@@ -32,6 +33,11 @@ import {
 
 function getInitCore(): DiceThroneCore {
     const state = createInitializedState(['0', '1'], fixedRandom);
+    return state.core;
+}
+
+function getInitTeamCore(): DiceThroneCore {
+    const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
     return state.core;
 }
 
@@ -71,6 +77,42 @@ describe('HP 边界', () => {
         const core = getInitCore();
         const result = reduce(core, ev('DAMAGE_DEALT', { targetId: '0', actualDamage: INITIAL_HEALTH }));
         expect(result.players['0'].resources[RESOURCE_IDS.HP]).toBe(0);
+    });
+
+    it('2v2 模式下伤害会同步扣减同队共享体力', () => {
+        const core = getInitTeamCore();
+        const result = reduce(core, ev('DAMAGE_DEALT', { targetId: '0', actualDamage: 6 }));
+
+        expect(result.players['0'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 6);
+        expect(result.players['2'].resources[RESOURCE_IDS.HP]).toBe(INITIAL_HEALTH - 6);
+        expect(result.teamHealth).toEqual({ A: INITIAL_HEALTH - 6, B: INITIAL_HEALTH });
+    });
+
+    it('2v2 模式下治疗不会让共享体力超过上限', () => {
+        const core = getInitTeamCore();
+        const damaged = reduce(core, ev('DAMAGE_DEALT', { targetId: '0', actualDamage: 5 }));
+        const healed = reduce(damaged, ev('HEAL_APPLIED', { targetId: '2', amount: 100 }));
+
+        expect(healed.players['0'].resources[RESOURCE_IDS.HP]).toBe(60);
+        expect(healed.players['2'].resources[RESOURCE_IDS.HP]).toBe(60);
+        expect(healed.teamHealth).toEqual({ A: 60, B: INITIAL_HEALTH });
+    });
+
+    it('太极满值时再次获得不会污染本回合可增伤数量', () => {
+        const core = getInitCore();
+        core.players['0'].tokens[TOKEN_IDS.TAIJI] = 6;
+        core.players['0'].tokenStackLimits[TOKEN_IDS.TAIJI] = 6;
+
+        const result = reduce(core, ev('TOKEN_GRANTED', {
+            targetId: '0',
+            tokenId: TOKEN_IDS.TAIJI,
+            amount: 2,
+            newTotal: 6,
+        }));
+
+        expect(result.players['0'].tokens[TOKEN_IDS.TAIJI]).toBe(6);
+        expect(result.taijiGainedThisTurn?.['0'] ?? 0).toBe(0);
+        expect(getUsableTokensForTiming(result, '0', 'beforeDamageDealt').some(token => token.id === TOKEN_IDS.TAIJI)).toBe(true);
     });
 });
 
@@ -422,5 +464,30 @@ describe('胜负判定边界', () => {
 
         const result = DiceThroneDomain.isGameOver!(core);
         expect(result).toBeUndefined();
+    });
+
+    it('2v2 模式下一队共享体力归零时判定另一队获胜', () => {
+        const core = getInitTeamCore();
+        core.players['0'].resources[RESOURCE_IDS.HP] = 0;
+        core.players['2'].resources[RESOURCE_IDS.HP] = 0;
+        core.teamHealth = { A: 0, B: INITIAL_HEALTH };
+
+        const result = DiceThroneDomain.isGameOver!(core);
+        expect(result).toBeDefined();
+        expect(result!.winner).toBe('1');
+        expect(result!.winners).toEqual(['1', '3']);
+    });
+
+    it('2v2 模式下双方共享体力同时归零时判定平局', () => {
+        const core = getInitTeamCore();
+        core.players['0'].resources[RESOURCE_IDS.HP] = 0;
+        core.players['1'].resources[RESOURCE_IDS.HP] = 0;
+        core.players['2'].resources[RESOURCE_IDS.HP] = 0;
+        core.players['3'].resources[RESOURCE_IDS.HP] = 0;
+        core.teamHealth = { A: 0, B: 0 };
+
+        const result = DiceThroneDomain.isGameOver!(core);
+        expect(result).toBeDefined();
+        expect(result!.draw).toBe(true);
     });
 });

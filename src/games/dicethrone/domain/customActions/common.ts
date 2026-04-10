@@ -4,15 +4,18 @@
  */
 
 import type {
+    DiceThroneCore,
     DiceThroneEvent,
     CpChangedEvent,
     PendingInteraction,
     InteractionRequestedEvent,
 } from '../types';
-import { registerCustomActionHandler, type CustomActionContext } from '../effects';
+import type { PlayerId } from '../../../../engine/types';
+import { registerCustomActionHandler, resolveEffectsToEvents, type CustomActionContext } from '../effects';
 import { RESOURCE_IDS } from '../resources';
 import { CP_MAX } from '../types';
 import { getRollerId } from '../rules';
+import { findHeroCard } from '../../heroes';
 
 // ============================================================================
 // 资源处理器
@@ -55,6 +58,11 @@ export function resolveTargetOpponentDice(action: CustomActionContext['action'],
     return false;
 }
 
+export function resolveDiceOwnerId(state?: DiceThroneCore): PlayerId | undefined {
+    if (!state) return undefined;
+    return getRollerId(state);
+}
+
 // ============================================================================
 // 骰子修改处理器
 // ============================================================================
@@ -70,6 +78,7 @@ function handleModifyDieTo6({ attackerId, sourceAbilityId, timestamp, action, st
         selectCount: 1,
         selected: [],
         dieModifyConfig: { mode: 'set', targetValue: 6 },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -101,6 +110,7 @@ function handleModifyDieCopy({ attackerId, sourceAbilityId, timestamp, action, s
         selectCount: 2,
         selected: [],
         dieModifyConfig: { mode: 'copy' },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -117,6 +127,7 @@ function handleModifyDieAny1({ attackerId, sourceAbilityId, timestamp, action, s
         selectCount: 1,
         selected: [],
         dieModifyConfig: { mode: 'any' },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -133,6 +144,7 @@ function handleModifyDieAny2({ attackerId, sourceAbilityId, timestamp, action, s
         selectCount: 2,
         selected: [],
         dieModifyConfig: { mode: 'any' },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -149,6 +161,7 @@ function handleModifyDieAdjust1({ attackerId, sourceAbilityId, timestamp, action
         selectCount: 1,
         selected: [],
         dieModifyConfig: { mode: 'adjust', adjustRange: { min: -1, max: 1 } },
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -168,6 +181,7 @@ function handleRerollOpponentDie1({ attackerId, sourceAbilityId, timestamp, acti
         titleKey: 'interaction.selectOpponentDieToReroll',
         selectCount: 1,
         selected: [],
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -183,6 +197,7 @@ function handleRerollDie2({ attackerId, sourceAbilityId, timestamp, action, stat
         titleKey: 'interaction.selectDiceToReroll',
         selectCount: 2,
         selected: [],
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -198,6 +213,7 @@ function handleRerollDie5({ attackerId, sourceAbilityId, timestamp, action, stat
         titleKey: 'interaction.selectDiceToReroll',
         selectCount: 5,
         selected: [],
+        diceOwnerId: resolveDiceOwnerId(state),
         targetOpponentDice: resolveTargetOpponentDice(action, attackerId, state),
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
@@ -252,6 +268,34 @@ function handleTransferStatus({ attackerId, sourceAbilityId, state, timestamp }:
         transferConfig: {},
     };
     return [{ type: 'INTERACTION_REQUESTED', payload: { interaction }, sourceCommandType: 'ABILITY_EFFECT', timestamp } as InteractionRequestedEvent];
+}
+
+/** 四人模式下选定敌方目标后，继续结算原卡牌效果。 */
+function handleResolveCardEffectsOnSelectedOpponent({
+    attackerId,
+    targetId,
+    sourceAbilityId,
+    state,
+    timestamp,
+    random,
+}: CustomActionContext): DiceThroneEvent[] {
+    const attackerCharacterId = state.players[attackerId]?.characterId;
+    const card = findHeroCard(
+        sourceAbilityId,
+        attackerCharacterId && attackerCharacterId !== 'unselected' ? attackerCharacterId : undefined,
+    );
+    if (!card?.effects?.length) {
+        return [];
+    }
+
+    return resolveEffectsToEvents(card.effects, 'immediate', {
+        attackerId,
+        defenderId: targetId,
+        sourceAbilityId,
+        state,
+        damageDealt: 0,
+        timestamp,
+    }, { random });
 }
 
 // ============================================================================
@@ -314,5 +358,8 @@ export function registerCommonCustomActions(): void {
     registerCustomActionHandler('transfer-status', handleTransferStatus, {
         categories: ['status'],
         requiresInteraction: true,
+    });
+    registerCustomActionHandler('resolve-card-effects-on-selected-opponent', handleResolveCardEffectsOnSelectedOpponent, {
+        categories: ['card'],
     });
 }

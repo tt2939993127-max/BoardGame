@@ -25,13 +25,20 @@ import { hybridStorage } from './src/server/storage/HybridStorage';
 import { runStartupCleanupTasks, type StartupCleanupTask } from './src/server/storage/startupCleanup';
 import { createClaimSeatHandler, claimSeatUtils } from './src/server/claimSeat';
 import { evaluateEmptyRoomJoinGuard } from './src/server/joinGuard';
-import { hasOccupiedPlayers } from './src/server/matchOccupancy';
+import { areAllSeatsOccupied, hasOccupiedPlayers, isSeatOccupied, isSupportedPlayerCount } from './src/server/matchOccupancy';
+import {
+    createMatchWithOwnerConflictRetry,
+    decideDuplicateOwnerRoomAction,
+    DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
+    planDuplicateOwnerRoomCreate,
+} from './src/server/duplicateOwnerRooms';
 import { buildUgcServerGames } from './src/server/ugcRegistration';
 import { GameTransportServer } from './src/engine/transport/server';
 import type { GameEngineConfig } from './src/engine/transport/server';
 import type { MatchMetadata, MatchStorage } from './src/engine/transport/storage';
 import { resolveMatchStatus } from './src/engine/transport/storage';
 import logger, { gameLogger } from './server/logger';
+import { createTrainingDataRecorderFromEnv } from './server/trainingDataRecorder';
 import { requestLogger, errorHandler } from './server/middleware/logging';
 
 // ============================================================================
@@ -134,24 +141,54 @@ const RAW_WEB_ORIGINS = (process.env.WEB_ORIGINS || '')
     .map((s) => s.trim())
     .filter(Boolean);
 
+const DEFAULT_APP_WEB_ORIGINS = [
+    'http://localhost',
+    'https://localhost',
+    'capacitor://localhost',
+] as const;
+
+const RAW_APP_WEB_ORIGINS = (process.env.APP_WEB_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
 const DEV_CORS_ORIGINS = [
     'http://localhost:3000',
     'http://localhost:5173',
     'http://localhost:5174',
+    'http://localhost:4173',
+    'http://localhost:6174',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5173',
     'http://127.0.0.1:5174',
+    'http://127.0.0.1:4173',
+    'http://127.0.0.1:6174',
 ];
 
-const CORS_ORIGINS = RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS;
+const APP_CORS_ORIGINS = RAW_APP_WEB_ORIGINS.length > 0
+    ? RAW_APP_WEB_ORIGINS
+    : [...DEFAULT_APP_WEB_ORIGINS];
+const CORS_ORIGINS = Array.from(new Set([
+    ...(RAW_WEB_ORIGINS.length > 0 ? RAW_WEB_ORIGINS : DEV_CORS_ORIGINS),
+    ...APP_CORS_ORIGINS,
+]));
 const USE_PERSISTENT_STORAGE = process.env.USE_PERSISTENT_STORAGE !== 'false';
 const GAME_SERVER_PORT = Number(process.env.GAME_SERVER_PORT) || 18000;
+const SOCKET_IO_ALLOW_POLLING = process.env.SOCKET_IO_ALLOW_POLLING;
+const SOCKET_IO_SERVER_TRANSPORTS =
+    SOCKET_IO_ALLOW_POLLING === 'true'
+        ? ['websocket', 'polling']
+        : SOCKET_IO_ALLOW_POLLING === 'false'
+            ? ['websocket']
+            : process.env.NODE_ENV === 'production'
+                ? ['websocket']
+                : ['websocket', 'polling'];
 
 // ============================================================================
 // 归档逻辑
 // ============================================================================
 
-let storage: MatchStorage;
+const storage: MatchStorage = hybridStorage;
 
 type OwnerMatchLookupStorage = {
     findMatchesByOwnerKey: (ownerKey: string) => Promise<Array<{ matchID: string; gameName: string }>>;
@@ -170,6 +207,10 @@ const archiveMatchResult = async ({
     gameName: string;
     gameover?: { winner?: string | number };
 }) => {
+    if (!USE_PERSISTENT_STORAGE) {
+        return;
+    }
+
     try {
         const existing = await MatchRecord.findOne({ matchID });
         if (existing) return;
@@ -238,12 +279,14 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
         engines.push(engineConfig);
     }
 
-    // UGC 游戏注册
-    const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
-        existingGameIds: manifestGameIds,
-    });
-    ugcEngines.forEach((cfg) => engines.push(cfg));
-    ugcGameIds.forEach((id) => gameIds.push(id));
+    if (USE_PERSISTENT_STORAGE) {
+        // 纯内存模式不依赖 Mongo，跳过 UGC 数据库查询，保证无库也能起服务。
+        const { engineConfigs: ugcEngines, gameIds: ugcGameIds } = await buildUgcServerGames({
+            existingGameIds: manifestGameIds,
+        });
+        ugcEngines.forEach((cfg) => engines.push(cfg));
+        ugcGameIds.forEach((id) => gameIds.push(id));
+    }
 
     return { engines, gameIds };
 };
@@ -252,12 +295,13 @@ const buildServerEngines = async (): Promise<{ engines: GameEngineConfig[]; game
 // 初始化
 // ============================================================================
 
-await connectDB();
+if (USE_PERSISTENT_STORAGE) {
+    await connectDB();
+} else {
+    logger.info('[GameServer] 当前以纯内存模式启动，跳过 Mongo / UGC / 排行榜归档');
+}
 const { engines: SERVER_ENGINES, gameIds: SERVER_GAME_IDS } = await buildServerEngines();
 registerSupportedGames(SERVER_GAME_IDS);
-
-// 存储层：HybridStorage 直接实现 MatchStorage 接口
-storage = hybridStorage;
 
 // 创建 Koa 应用
 const app = new Koa();
@@ -274,6 +318,7 @@ const httpServer = http.createServer(app.callback());
 // 使用 MessagePack 序列化替代 JSON，减少 20-30% 传输体积
 const io = new IOServer(httpServer, {
     parser: msgpackParser,
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],
@@ -295,10 +340,14 @@ const io = new IOServer(httpServer, {
 });
 
 // 创建游戏传输服务器
+const trainingDataRecorder = createTrainingDataRecorderFromEnv(process.env);
+
 const gameTransport = new GameTransportServer({
     io,
     storage,
     games: SERVER_ENGINES,
+    trainingDataRecorder,
+    rulesVersion: process.env.npm_package_version ?? null,
     offlineGraceMs: 300000, // 5 分钟：给断线玩家充足的重连时间
     authenticate: async (matchID, playerID, credentials, metadata) => {
         if (!credentials) return false;
@@ -393,17 +442,25 @@ app.use(bodyParser());
 const resolveOwnerFromRequest = (
     ctx: Koa.Context,
     setupData: Record<string, unknown>,
-): { ownerKey: string; ownerType: 'user' | 'guest' } => {
+    requestedPlayerName?: string,
+): { ownerKey: string; ownerType: 'user' | 'guest'; ownerName?: string } => {
     const authHeader = ctx.get('authorization');
     const rawToken = claimSeatUtils.parseBearerToken(authHeader);
     const payload = rawToken ? claimSeatUtils.verifyGameToken(rawToken, JWT_SECRET) : null;
+    const normalizedRequestedPlayerName = typeof requestedPlayerName === 'string' && requestedPlayerName.trim()
+        ? requestedPlayerName.trim()
+        : undefined;
 
     if (rawToken && !payload?.userId) {
         ctx.throw(401, 'Invalid token');
         return { ownerKey: 'user:invalid', ownerType: 'user' };
     }
     if (payload?.userId) {
-        return { ownerKey: `user:${payload.userId}`, ownerType: 'user' };
+        return {
+            ownerKey: `user:${payload.userId}`,
+            ownerType: 'user',
+            ownerName: normalizedRequestedPlayerName ?? (payload.username?.trim() || undefined),
+        };
     }
 
     const guestId =
@@ -414,7 +471,11 @@ const resolveOwnerFromRequest = (
         ctx.throw(400, 'guestId is required');
         return { ownerKey: 'guest:invalid', ownerType: 'guest' };
     }
-    return { ownerKey: `guest:${guestId}`, ownerType: 'guest' };
+    return {
+        ownerKey: `guest:${guestId}`,
+        ownerType: 'guest',
+        ownerName: normalizedRequestedPlayerName,
+    };
 };
 
 const resolveOwnerKeyFromMetadata = (metadata?: MatchMetadata | null): string | undefined => {
@@ -427,16 +488,45 @@ const isEmptyRoomByMetadata = (metadata?: MatchMetadata | null): boolean => {
     return !hasOccupiedPlayers(metadata.players as Record<string, { name?: string; credentials?: string; isConnected?: boolean | null }>);
 };
 
-const cleanupMissingOwnerRoom = async (
+const resolveJoinSeat = (
+    players: MatchMetadata['players'],
+    requestedPlayerID?: string,
+): { playerID?: string; reason?: 'player_not_found' | 'seat_occupied' | 'room_full' } => {
+    if (requestedPlayerID) {
+        const requestedSeat = players[requestedPlayerID];
+        if (!requestedSeat) {
+            return { reason: 'player_not_found' };
+        }
+        if (isSeatOccupied(requestedSeat)) {
+            return { reason: 'seat_occupied' };
+        }
+        return { playerID: requestedPlayerID };
+    }
+
+    const openSeat = Object.entries(players)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .find(([, seat]) => !isSeatOccupied(seat));
+
+    if (!openSeat) {
+        return { reason: 'room_full' };
+    }
+
+    return { playerID: openSeat[0] };
+};
+
+type MatchCreateSetupData = Record<string, unknown> & {
+    ownerKey: string;
+    ownerType: 'user' | 'guest';
+    firstPlayerId?: string;
+    turnOrder?: string[];
+    prevMatchID?: string;
+};
+
+const cleanupMatchRoom = async (
     matchID: string,
     metadata?: MatchMetadata | null,
-    context?: string,
     emitRemoval = false,
-): Promise<boolean> => {
-    if (!isEmptyRoomByMetadata(metadata)) return false;
-    const ownerKey = resolveOwnerKeyFromMetadata(metadata);
-    if (ownerKey) return false;
-
+): Promise<void> => {
     await storage.wipe(matchID);
     gameTransport.unloadMatch(matchID, { disconnectSockets: true });
 
@@ -450,6 +540,19 @@ const cleanupMissingOwnerRoom = async (
     matchSubscribers.delete(matchID);
     rematchStateByMatch.delete(matchID);
     chatHistoryByMatch.delete(matchID);
+};
+
+const cleanupMissingOwnerRoom = async (
+    matchID: string,
+    metadata?: MatchMetadata | null,
+    context?: string,
+    emitRemoval = false,
+): Promise<boolean> => {
+    if (!isEmptyRoomByMetadata(metadata)) return false;
+    const ownerKey = resolveOwnerKeyFromMetadata(metadata);
+    if (ownerKey) return false;
+
+    await cleanupMatchRoom(matchID, metadata, emitRemoval);
     logger.warn(`[RoomCleanup] reason=missing_owner context=${context ?? 'unknown'} matchID=${matchID}`);
     return true;
 };
@@ -471,19 +574,73 @@ router.get('/games', async (ctx) => {
 });
 
 // POST /games/:name/create — 创建对局
+router.get('/internal/rooms', async (ctx) => {
+    const requestedGame = typeof ctx.query.gameName === 'string'
+        ? normalizeGameName(ctx.query.gameName)
+        : '';
+
+    if (requestedGame) {
+        if (!isSupportedGame(requestedGame)) {
+            ctx.throw(400, `Game ${ctx.query.gameName} not found`);
+        }
+        ctx.body = { items: await getLobbySnapshot(requestedGame) };
+        return;
+    }
+
+    ctx.body = { items: await getLobbySnapshotAll() };
+});
+
+router.delete('/internal/rooms/:matchID', async (ctx) => {
+    const matchID = String(ctx.params.matchID || '').trim();
+    if (!matchID) {
+        ctx.throw(400, 'Missing matchID');
+    }
+
+    const deleted = await destroyLobbyRoom(matchID);
+    ctx.body = { deleted, matchID };
+});
+
+router.post('/internal/rooms/bulk-delete', async (ctx) => {
+    const body = ctx.request.body as { ids?: unknown } | undefined;
+    const ids = Array.isArray(body?.ids)
+        ? body.ids
+            .filter((value): value is string => typeof value === 'string')
+            .map(value => value.trim())
+            .filter(Boolean)
+        : [];
+    const uniqueIds = Array.from(new Set(ids));
+
+    let deleted = 0;
+    for (const matchID of uniqueIds) {
+        const ok = await destroyLobbyRoom(matchID);
+        if (ok) {
+            deleted++;
+        }
+    }
+
+    ctx.body = { requested: uniqueIds.length, deleted };
+});
+
 router.post('/games/:name/create', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
     if (!gameName || !isSupportedGame(gameName)) {
         ctx.throw(404, `Game ${ctx.params.name} not found`);
     }
 
-    const gameEngine = SERVER_ENGINES.find((engine) => normalizeGameName(engine.gameId) === gameName);
+    const gameEntry = GAME_SERVER_MANIFEST.find((entry) => normalizeGameName(entry.manifest.id) === gameName);
+    const gameEngine = gameEntry?.engineConfig;
 
     const body = ctx.request.body as Record<string, unknown> | undefined;
     const numPlayers = Number(body?.numPlayers ?? 2);
+    // 当前策略：默认不自动删除活跃旧房，只有前端确认后才带 forceReplaceOwnerRoom 重试。
+    const forceReplaceOwnerRoom = body?.forceReplaceOwnerRoom === true;
+    const requestedOwnerName = typeof body?.playerName === 'string' && body.playerName.trim()
+        ? body.playerName.trim()
+        : undefined;
     const minPlayers = gameEngine?.minPlayers ?? 2;
     const maxPlayers = gameEngine?.maxPlayers ?? 2;
-    if (isNaN(numPlayers) || numPlayers < minPlayers || numPlayers > maxPlayers) {
+    const playerOptions = gameEntry?.manifest.playerOptions;
+    if (!isSupportedPlayerCount(numPlayers, minPlayers, maxPlayers, playerOptions)) {
         ctx.throw(400, 'Invalid numPlayers');
     }
 
@@ -491,8 +648,8 @@ router.post('/games/:name/create', async (ctx) => {
         body?.setupData && typeof body.setupData === 'object'
             ? (body.setupData as Record<string, unknown>)
             : {};
-    const { ownerKey, ownerType } = resolveOwnerFromRequest(ctx, rawSetupData);
-    const setupData = { ...rawSetupData, ownerKey, ownerType };
+    const { ownerKey, ownerType, ownerName } = resolveOwnerFromRequest(ctx, rawSetupData, requestedOwnerName);
+    const setupData: MatchCreateSetupData = { ...rawSetupData, ownerKey, ownerType };
 
     const matchID = nanoid(11);
     const seed = nanoid(16);
@@ -535,6 +692,67 @@ router.post('/games/:name/create', async (ctx) => {
         delete setupData.prevMatchID;
     }
 
+    if (ownerKey) {
+        const ownerMatches = supportsOwnerMatchLookup(storage)
+            ? await storage.findMatchesByOwnerKey(ownerKey)
+            : [];
+
+        if (ownerMatches.length > 0) {
+            const existingMatches = await Promise.all(ownerMatches.map(async (match) => {
+                const { metadata: existingMetadata } = await storage.fetch(match.matchID, { metadata: true });
+                return {
+                    ...match,
+                    metadata: existingMetadata,
+                    decision: decideDuplicateOwnerRoomAction(existingMetadata, {
+                        disconnectGraceMs: DUPLICATE_OWNER_DISCONNECT_GRACE_MS,
+                    }),
+                };
+            }));
+
+            const createPlan = planDuplicateOwnerRoomCreate(existingMatches, {
+                forceReplaceActive: forceReplaceOwnerRoom,
+            });
+
+            if (createPlan.action === 'block') {
+                const activeMatch = createPlan.activeMatch;
+                logger.info('duplicate_owner_room_blocked', {
+                    ownerKey,
+                    ownerType: ownerType ?? 'unknown',
+                    matchID: activeMatch.matchID,
+                    gameName: activeMatch.gameName,
+                    reason: activeMatch.decision.reason,
+                    canForceReplace: true,
+                });
+                ctx.status = 409;
+                ctx.body = {
+                    error: 'ACTIVE_MATCH_EXISTS',
+                    gameName: activeMatch.gameName,
+                    matchID: activeMatch.matchID,
+                    canForceReplace: true,
+                };
+                return;
+            }
+
+            const cleanableMatches = createPlan.cleanupMatches;
+            if (cleanableMatches.length > 0) {
+                logger.info(forceReplaceOwnerRoom ? 'force_cleanup_duplicate_owner_rooms' : 'cleanup_duplicate_owner_rooms', {
+                    ownerKey,
+                    ownerType: ownerType ?? 'unknown',
+                    count: cleanableMatches.length,
+                    matches: cleanableMatches.map((match) => ({
+                        matchID: match.matchID,
+                        gameName: match.gameName,
+                        reason: match.decision.reason,
+                    })),
+                });
+
+                await Promise.all(cleanableMatches.map(async (match) => {
+                    await cleanupMatchRoom(match.matchID, match.metadata, true);
+                }));
+            }
+        }
+    }
+
     // 初始化游戏状态
     const setupResult = await gameTransport.setupMatch(matchID, gameName, playerIds, seed, setupData);
     if (!setupResult) {
@@ -558,59 +776,64 @@ router.post('/games/:name/create', async (ctx) => {
         status: 'waiting',
     };
 
-    // ✅ 单房间限制：同一 ownerKey 创建新房间时自动清理旧房间
-    if (ownerKey) {
-        try {
-            const ownerMatches = supportsOwnerMatchLookup(storage)
-                ? await storage.findMatchesByOwnerKey(ownerKey)
-                : [];
+    let ownerCredentials: string | undefined;
+    if (ownerName) {
+        ownerCredentials = nanoid(21);
+        metadata.players['0'] = {
+            ...metadata.players['0'],
+            name: ownerName,
+            credentials: ownerCredentials,
+            isConnected: false,
+        };
+    }
 
-            // 删除旧房间并发送 MATCH_ENDED 事件
-            if (ownerMatches.length > 0) {
-                gameLogger.info('清理旧房间', {
-                    ownerKey,
-                    ownerType: ownerType ?? 'unknown',
-                    count: ownerMatches.length,
-                    matchIds: ownerMatches.map(m => m.matchID),
-                });
-
-                await Promise.all(ownerMatches.map(async (match) => {
-                    await storage.wipe(match.matchID);
-                    emitMatchEnded(match.gameName as SupportedGame, match.matchID);
-                }));
-            }
-        } catch (err) {
-            // 清理失败不应阻止创建新房间，记录日志后继续
-            logger.error('清理旧房间失败', {
+    const createMatchData = {
+        initialState: {
+            G: initialState,
+            _stateID: 0,
+            randomSeed: seed,
+            randomCursor,
+        },
+        metadata,
+    };
+    const createPersistResult = await createMatchWithOwnerConflictRetry({
+        createMatch: async () => {
+            await storage.createMatch(matchID, createMatchData);
+        },
+        fetchConflictMetadata: async (conflictMatchID) => {
+            const { metadata: conflictMetadata } = await storage.fetch(conflictMatchID, { metadata: true });
+            return conflictMetadata;
+        },
+        cleanupConflictMatch: async (conflictMatchID, conflictMetadata) => {
+            await cleanupMatchRoom(conflictMatchID, conflictMetadata, true);
+        },
+        forceReplaceActive: forceReplaceOwnerRoom,
+        onForceCleanup: async ({ attempt, conflict }) => {
+            logger.info('force_cleanup_duplicate_owner_rooms_race', {
                 ownerKey,
-                error: err instanceof Error ? err.message : String(err),
+                ownerType: ownerType ?? 'unknown',
+                matchID: conflict.matchID,
+                gameName: conflict.gameName,
+                attempt,
             });
-        }
+        },
+    });
+    if (createPersistResult.action === 'conflict') {
+        ctx.status = 409;
+        ctx.body = {
+            error: 'ACTIVE_MATCH_EXISTS',
+            gameName: createPersistResult.conflict.gameName,
+            matchID: createPersistResult.conflict.matchID,
+            canForceReplace: true,
+        };
+        return;
     }
 
-    try {
-        await storage.createMatch(matchID, {
-            initialState: {
-                G: initialState,
-                _stateID: 0,
-                randomSeed: seed,
-                randomCursor,
-            },
-            metadata,
-        });
-    } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        // 已有活跃房间 → 返回 409 + 已存在的 matchID，前端可直接跳转
-        const activeMatch = msg.match(/ACTIVE_MATCH_EXISTS:([^:]+):([^:]+)/);
-        if (activeMatch) {
-            ctx.status = 409;
-            ctx.body = { error: 'ACTIVE_MATCH_EXISTS', gameName: activeMatch[1], matchID: activeMatch[2] };
-            return;
-        }
-        throw err;
-    }
-
-    ctx.body = { matchID };
+    ctx.body = {
+        matchID,
+        ownerPlayerID: ownerCredentials ? '0' : undefined,
+        ownerCredentials,
+    };
 
     setTimeout(() => void handleMatchCreated(matchID, gameName), 100);
 });
@@ -626,11 +849,13 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
         data?: Record<string, unknown>;
     } | undefined;
 
-    const playerID = body?.playerID;
+    const requestedPlayerID = typeof body?.playerID === 'string' && body.playerID.trim()
+        ? body.playerID.trim()
+        : undefined;
     const playerName = body?.playerName;
 
-    if (!playerID) {
-        ctx.throw(403, 'playerID is required');
+    if (!playerName?.trim()) {
+        ctx.throw(403, 'playerName is required');
         return;
     }
 
@@ -671,12 +896,23 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
     }
 
     // 分配凭证
-    const credentials = nanoid(21);
-    const metadata = result.metadata;
-    if (!metadata.players[playerID]) {
-        ctx.throw(404, `Player ${playerID} not found`);
+    const joinSeat = resolveJoinSeat(result.metadata.players, requestedPlayerID);
+    if (!joinSeat.playerID) {
+        if (joinSeat.reason === 'player_not_found') {
+            ctx.throw(404, `Player ${requestedPlayerID} not found`);
+            return;
+        }
+        if (joinSeat.reason === 'seat_occupied') {
+            ctx.throw(409, `Seat ${requestedPlayerID} is occupied`);
+            return;
+        }
+        ctx.throw(409, 'Room is full');
         return;
     }
+
+    const playerID = joinSeat.playerID;
+    const credentials = nanoid(21);
+    const metadata = result.metadata;
 
     // 解析真实用户标识
     const authHeader = ctx.get('authorization');
@@ -691,7 +927,7 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
 
     metadata.players[playerID] = {
         ...metadata.players[playerID],
-        name: playerName,
+        name: playerName.trim(),
         credentials,
         ...(playerOwnerKey ? { ownerKey: playerOwnerKey } : {}),
     };
@@ -699,8 +935,7 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
 
     // 状态机：所有座位都有玩家时，从 waiting → playing
     if (metadata.status === 'waiting' || !metadata.status) {
-        const allSeated = Object.values(metadata.players).every(p => p.name || p.credentials);
-        if (allSeated) {
+        if (areAllSeatsOccupied(metadata.players)) {
             metadata.status = 'playing';
         }
     }
@@ -708,7 +943,7 @@ router.post('/games/:name/:matchID/join', async (ctx) => {
     await storage.setMetadata(matchID, metadata);
     gameTransport.updateMatchMetadata(matchID, metadata);
 
-    ctx.body = { playerCredentials: credentials };
+    ctx.body = { playerID, playerCredentials: credentials };
 
     setTimeout(() => void handleMatchJoined(matchID, gameName), 100);
 });
@@ -827,6 +1062,10 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
     await claimSeatHandler(ctx as unknown as Parameters<typeof claimSeatHandler>[0], matchID);
 
     if (ctx.status === 200 || !ctx.status) {
+        const refreshed = await storage.fetch(matchID, { metadata: true });
+        if (refreshed.metadata) {
+            gameTransport.updateMatchMetadata(matchID, refreshed.metadata);
+        }
         setTimeout(() => void handleMatchJoined(matchID, gameName), 50);
     }
 });
@@ -834,6 +1073,11 @@ router.post('/games/:name/:matchID/claim-seat', async (ctx) => {
 // GET /games/:name/leaderboard — 排行榜（必须在 :matchID 通配路由之前注册）
 router.get('/games/:name/leaderboard', async (ctx) => {
     const gameName = normalizeGameName(ctx.params.name);
+    if (!USE_PERSISTENT_STORAGE) {
+        ctx.body = { leaderboard: [] };
+        return;
+    }
+
     try {
         const records = await MatchRecord.find({ gameName });
         // 用 ownerKey 聚合（新数据），旧数据 fallback 到 name
@@ -1250,6 +1494,27 @@ const resolveGameFromMatch = (match: LobbyMatch | null): SupportedGame | null =>
     return normalized;
 };
 
+const destroyLobbyRoom = async (matchID: string): Promise<boolean> => {
+    if (!matchID) return false;
+
+    const match = await fetchLobbyMatch(matchID);
+    const indexed = matchGameIndex.get(matchID) ?? null;
+    const game = indexed || resolveGameFromMatch(match);
+
+    try {
+        await storage.wipe(matchID);
+    } catch (error) {
+        logger.warn(`[LobbyInternal] destroy room failed matchID=${matchID} error=${error instanceof Error ? error.message : String(error)}`);
+        return false;
+    }
+
+    if (game) {
+        emitMatchEnded(game, matchID);
+    }
+
+    return true;
+};
+
 const handleMatchCreated = async (matchID?: string, gameNameFromUrl?: string) => {
     const gameFromUrl = resolveGameFromUrl(gameNameFromUrl);
     if (gameFromUrl && lobbySubscribersByGame.get(gameFromUrl)?.size === 0) {
@@ -1343,6 +1608,7 @@ async function handleMatchLeft(matchID?: string, gameNameFromUrl?: string) {
 const lobbySocketIO = new IOServer(httpServer, {
     parser: msgpackParser,
     path: '/lobby-socket',
+    transports: SOCKET_IO_SERVER_TRANSPORTS,
     cors: {
         origin: CORS_ORIGINS,
         methods: ['GET', 'POST'],

@@ -5,6 +5,7 @@
  * - 米斯卡塔尼克大学：miskatonic_lost_knowledge（通往超凡的门 ongoing talent）
  * - 蒸汽朋克：steampunk_zeppelin（齐柏林飞艇 ongoing talent，含交互选择）
  * - 印斯茅斯：innsmouth_sacred_circle（宗教圆环 ongoing talent）
+ * - 狼人：巨石阵上的附着 talent 二次发动
  * - 验证/reduce/回合重置 全链路
  */
 
@@ -86,6 +87,61 @@ describe('ongoing 行动卡天赋 - 验证层', () => {
         expect(result.error).toContain('已使用');
     });
 
+    it('巨石阵允许狼人附着天赋第2次发动', () => {
+        const core = makeState({
+            standingStonesDoubleTalentMinionUid: undefined,
+            bases: [{
+                defId: 'base_standing_stones',
+                minions: [
+                    makeMinion('wolf-host', 'werewolf_teenage_wolf', '0', 5, {
+                        attachedActions: [{ uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true }],
+                    }),
+                    makeMinion('enemy', 'ghosts_spectre', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(core);
+        const result = validate(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any);
+        expect(result.valid).toBe(true);
+    });
+
+    it('巨石阵双才能名额已占用时拒绝狼人附着天赋第2次发动', () => {
+        const core = makeState({
+            standingStonesDoubleTalentMinionUid: 'used-minion',
+            bases: [{
+                defId: 'base_standing_stones',
+                minions: [
+                    makeMinion('wolf-host', 'werewolf_teenage_wolf', '0', 5, {
+                        attachedActions: [{ uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true }],
+                    }),
+                    makeMinion('enemy', 'ghosts_spectre', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(core);
+        const result = validate(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any);
+        expect(result.valid).toBe(false);
+        expect(result.error).toContain('已使用');
+    });
+
     it('不是自己的 ongoing 卡时拒绝', () => {
         const core = makeState({
             bases: [{
@@ -137,6 +193,30 @@ describe('ongoing 行动卡天赋 - 验证层', () => {
             payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
         } as any);
         expect(result.valid).toBe(false);
+    });
+
+    it('被压制的持续行动卡不能发动天赋', () => {
+        const core = makeState({
+            suppressedCardsUntilTurnStart: [{
+                cardUid: 'oa1',
+                baseIndex: 0,
+                suppressorPlayerId: '1',
+                cardType: 'ongoing',
+            }],
+            bases: [{
+                defId: 'base_a',
+                minions: [],
+                ongoingActions: [makeOngoing('oa1', 'miskatonic_lost_knowledge', '0')],
+            }],
+        });
+        const ms = makeMatchState(core);
+        const result = validate(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any);
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('该卡牌能力已被压制');
     });
 });
 
@@ -237,6 +317,50 @@ describe('miskatonic_lost_knowledge（通往超凡的门 ongoing talent）', () 
 
         expect(newCore.bases[0].ongoingActions[0].talentUsed).toBe(false); // 玩家 0 的卡重置
         expect(newCore.bases[0].ongoingActions[1].talentUsed).toBe(true);  // 玩家 1 的卡不重置
+    });
+});
+
+describe('werewolf_leader_of_the_pack（狼群领袖）@ 巨石阵', () => {
+    it('第2次发动应占用巨石阵名额，而不是额外天赋次数', () => {
+        const core = makeState({
+            standingStonesDoubleTalentMinionUid: undefined,
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_standing_stones',
+                minions: [
+                    makeMinion('wolf-host', 'werewolf_teenage_wolf', '0', 5, {
+                        attachedActions: [{ uid: 'oa1', defId: 'werewolf_leader_of_the_pack', ownerId: '0', talentUsed: true }],
+                    }),
+                    makeMinion('enemy', 'ghosts_spectre', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const validation = validate(makeMatchState(core), {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any);
+        expect(validation.valid).toBe(true);
+
+        const events = execute(makeMatchState(core), {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any, defaultRandom);
+
+        expect(events.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
+        const limitEvent = events.find(event => event.type === SU_EVENTS.LIMIT_MODIFIED) as any;
+        expect(limitEvent?.payload.limitType).toBe('action');
+
+        const resolved = applyEvents(core, events);
+        expect(resolved.standingStonesDoubleTalentMinionUid).toBe('wolf-host');
+        expect(resolved.players['0'].extraTalentUsesConsumed).toBeUndefined();
+        expect(resolved.bases[0].minions[0].attachedActions[0].talentUsed).toBe(true);
     });
 });
 
@@ -402,6 +526,93 @@ describe('steampunk_zeppelin（齐柏林飞艇 ongoing talent - 分两步交互�
         expect(legacy?.events ?? []).toHaveLength(0);
     });
 
+    it('从其他基地选择随从时，第二步只能移动到齐柏林所在基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [makeMinion('home-minion', 'pirate_first_mate', '0', 3, { powerModifier: 0 })],
+                    ongoingActions: [makeOngoing('oa1', 'steampunk_zeppelin', '0')],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [makeMinion('away-minion', 'pirate_saucy_wench', '0', 2, { powerModifier: 0 })],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_c',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const chooseMinion = getInteractionHandler('steampunk_zeppelin_choose_minion');
+        expect(chooseMinion).toBeDefined();
+
+        const result = chooseMinion!(
+            makeMatchState(core),
+            '0',
+            { minionUid: 'away-minion', baseIndex: 1 },
+            { continuationContext: { zepBaseIndex: 0 } } as any,
+            defaultRandom,
+            2200,
+        );
+        const chooseBaseInteraction = result ? getInteractionsFromMS(result.state)[0] : undefined;
+        const options = chooseBaseInteraction?.data?.options ?? [];
+        expect(chooseBaseInteraction?.data?.sourceId).toBe('steampunk_zeppelin_choose_base');
+        expect(chooseBaseInteraction?.data?.autoResolveIfSingle).toBe(true);
+        expect(options).toHaveLength(1);
+        expect(options[0]?.value?.baseIndex).toBe(0);
+    });
+
+    it('从齐柏林所在基地选择随从时，只能移动到其他基地', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [makeMinion('home-minion', 'pirate_first_mate', '0', 3, { powerModifier: 0 })],
+                    ongoingActions: [makeOngoing('oa1', 'steampunk_zeppelin', '0')],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [makeMinion('away-minion', 'pirate_saucy_wench', '0', 2, { powerModifier: 0 })],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_c',
+                    minions: [],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const chooseMinion = getInteractionHandler('steampunk_zeppelin_choose_minion');
+        expect(chooseMinion).toBeDefined();
+
+        const result = chooseMinion!(
+            makeMatchState(core),
+            '0',
+            { minionUid: 'home-minion', baseIndex: 0 },
+            { continuationContext: { zepBaseIndex: 0 } } as any,
+            defaultRandom,
+            2201,
+        );
+        const chooseBaseInteraction = result ? getInteractionsFromMS(result.state)[0] : undefined;
+        const options = chooseBaseInteraction?.data?.options ?? [];
+        expect(chooseBaseInteraction?.data?.sourceId).toBe('steampunk_zeppelin_choose_base');
+        expect(options).toHaveLength(2);
+        expect(options.map((option: any) => option.value.baseIndex)).toEqual([1, 2]);
+    });
+
     it('reduce 后 talentUsed 标记为 true', () => {
         const core = makeState({
             bases: [
@@ -492,6 +703,152 @@ describe('innsmouth_sacred_circle（宗教圆环 ongoing talent）', () => {
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.TALENT_USED);
         expect(types).toContain(SU_EVENTS.ABILITY_FEEDBACK);
+    });
+});
+
+// ============================================================================
+// 藏身处 POD（trickster_hideout_pod）：换位 + 仅限基地持续战术
+// ============================================================================
+
+describe('trickster_hideout_pod（藏身处 POD ongoing talent）', () => {
+    it('只提供手牌或牌库中的基地持续战术作为交换目标', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('h-smoke', 'ninja_smoke_bomb', 'action', '0'),
+                        makeCard('h-mist', 'trickster_enshrouding_mist_pod', 'action', '0'),
+                    ],
+                    deck: [
+                        makeCard('d-flame', 'trickster_flame_trap_pod', 'action', '0'),
+                        makeCard('d-mark', 'trickster_mark_of_sleep_pod', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [],
+                ongoingActions: [makeOngoing('oa1', 'trickster_hideout_pod', '0')],
+            }],
+        });
+
+        const ms = makeMatchState(core);
+        execute(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any, defaultRandom);
+
+        const interaction = getInteractionsFromMS(ms)[0];
+        expect(interaction?.data?.sourceId).toBe('trickster_hideout_pod_swap');
+
+        const candidateUids = (interaction?.data?.options ?? [])
+            .map((option: any) => option.value?.cardUid)
+            .filter((uid: string | undefined) => typeof uid === 'string');
+        expect(candidateUids).toEqual(['h-mist', 'd-flame']);
+    });
+
+    it('从手牌交换时把藏身处回到手牌，并继续给出消灭选项', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('h-flame', 'trickster_flame_trap_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [makeMinion('m-low', 'pirate_saucy_wench', '1', 2, { powerModifier: 0 })],
+                ongoingActions: [makeOngoing('oa1', 'trickster_hideout_pod', '0')],
+            }],
+        });
+
+        const ms = makeMatchState(core);
+        execute(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any, defaultRandom);
+
+        const swapInteraction = getInteractionsFromMS(ms)[0];
+        const swapHandler = getInteractionHandler('trickster_hideout_pod_swap');
+        expect(swapHandler).toBeDefined();
+
+        const result = swapHandler!(
+            ms,
+            '0',
+            { zone: 'hand', cardUid: 'h-flame', defId: 'trickster_flame_trap_pod' },
+            swapInteraction?.data,
+            defaultRandom,
+            3000,
+        );
+
+        expect(result?.events ?? []).not.toContainEqual(expect.objectContaining({ type: SU_EVENTS.DECK_RESHUFFLED }));
+        expect(result?.state.core.players['0'].hand).toEqual([
+            expect.objectContaining({ uid: 'oa1', defId: 'trickster_hideout_pod', type: 'action' }),
+        ]);
+        expect(result?.state.core.bases[0].ongoingActions[0]).toEqual(
+            expect.objectContaining({ uid: 'h-flame', defId: 'trickster_flame_trap_pod', ownerId: '0' }),
+        );
+
+        const destroyInteraction = (result?.state.sys as any).interaction?.queue?.[0];
+        expect(destroyInteraction?.data?.sourceId).toBe('trickster_hideout_pod_destroy');
+        expect((destroyInteraction?.data?.options ?? []).some((option: any) => option.value?.minionUid === 'm-low')).toBe(true);
+    });
+
+    it('从牌库交换时把藏身处洗回牌库，而不是回手', () => {
+        const shuffleRandom: RandomFn = {
+            ...defaultRandom,
+            shuffle: (arr: any[]) => [...arr].reverse(),
+        };
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [],
+                    deck: [
+                        makeCard('d-flame', 'trickster_flame_trap_pod', 'action', '0'),
+                        makeCard('d-extra', 'trickster_enshrouding_mist_pod', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [],
+                ongoingActions: [makeOngoing('oa1', 'trickster_hideout_pod', '0')],
+            }],
+        });
+
+        const ms = makeMatchState(core);
+        execute(ms, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { ongoingCardUid: 'oa1', baseIndex: 0 },
+        } as any, defaultRandom);
+
+        const swapInteraction = getInteractionsFromMS(ms)[0];
+        const swapHandler = getInteractionHandler('trickster_hideout_pod_swap');
+        expect(swapHandler).toBeDefined();
+
+        const result = swapHandler!(
+            ms,
+            '0',
+            { zone: 'deck', cardUid: 'd-flame', defId: 'trickster_flame_trap_pod' },
+            swapInteraction?.data,
+            shuffleRandom,
+            3001,
+        );
+
+        expect(result?.state.core.players['0'].hand.some(card => card.uid === 'oa1')).toBe(false);
+        expect(result?.state.core.players['0'].deck.map(card => card.uid)).toEqual(['oa1', 'd-extra']);
+        expect(result?.state.core.bases[0].ongoingActions[0]).toEqual(
+            expect.objectContaining({ uid: 'd-flame', defId: 'trickster_flame_trap_pod', ownerId: '0' }),
+        );
+
+        const reorderedEvent = (result?.events ?? []).find(event => event.type === SU_EVENTS.DECK_REORDERED) as any;
+        expect(reorderedEvent).toBeDefined();
+        expect(reorderedEvent.payload.deckUids).toEqual(['oa1', 'd-extra']);
     });
 });
 

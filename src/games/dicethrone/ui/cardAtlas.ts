@@ -9,27 +9,24 @@ import atlasConfigData from '../../../assets/atlas-configs/dicethrone/ability-ca
 // 向后兼容类型别名
 export type CardAtlasConfig = SpriteAtlasConfig;
 
-/** 解析并验证静态 JSON 配置（不规则网格，所有英雄共享） */
-function parseAtlasConfig(): SpriteAtlasConfig {
-    const data: unknown = atlasConfigData;
+/** 解析并验证静态 JSON 配置（支持公共网格和角色专属精确 frame） */
+function parseAtlasConfig(data: unknown, label: string): SpriteAtlasConfig {
     if (isSpriteAtlasConfig(data)) return data;
-    throw new Error('[DiceThrone] 无效的图集配置: ability-cards-common.atlas.json');
+    throw new Error(`[DiceThrone] 无效的图集配置: ${label}`);
 }
 
-/** 所有英雄共享的不规则网格配置（4行10列，帧间距不均匀） */
-export const COMMON_CARD_ATLAS_CONFIG = parseAtlasConfig();
+/** 默认公共配置：所有当前正式角色都沿用这份不规则网格。 */
+export const COMMON_CARD_ATLAS_CONFIG = parseAtlasConfig(atlasConfigData, 'ability-cards-common.atlas.json');
 
 /**
  * 初始化 DiceThrone 所有英雄的卡牌图集（模块加载时同步注册）
- * 所有英雄共享同一个不规则网格 JSON 配置，只是图片不同。
+ * 当前全部角色统一走公共 atlas。
  */
 export function initDiceThroneCardAtlases() {
-    const config = COMMON_CARD_ATLAS_CONFIG;
     for (const [, atlasId] of Object.entries(DICETHRONE_CARD_ATLAS_IDS)) {
         // 从 atlasId 提取 charId：'dicethrone:monk-cards' → 'monk'
         const charId = atlasId.replace('dicethrone:', '').replace('-cards', '');
-        const imageBase = ASSETS.CARDS_ATLAS(charId);
-        registerCardAtlasSource(atlasId, { image: imageBase, config });
+        registerCardAtlasSource(atlasId, { image: ASSETS.CARDS_ATLAS(charId), config: COMMON_CARD_ATLAS_CONFIG });
     }
 }
 

@@ -35,10 +35,57 @@ interface CounterCore {
 type CounterCommand = Command<'INCREMENT' | 'DECREMENT' | 'INVALID' | 'RANDOM_ADD', unknown>;
 type CounterEvent = GameEvent<'VALUE_CHANGED', { delta: number }>;
 
+interface TimestampReplayCore {
+    actionLimit: number;
+    actionsPlayed: number;
+    lastGrantedAt?: number;
+}
+
+type TimestampReplayCommand = Command<'GRANT_BONUS_ACTION' | 'PLAY_ACTION', unknown>;
+type TimestampReplayEvent =
+    | GameEvent<'ACTION_LIMIT_SET', { value: number; grantedAt: number }>
+    | GameEvent<'ACTION_PLAYED', { nextActionsPlayed: number }>;
+
 /** 创建测试用 MatchState */
 function createTestState(value: number, nextEventId = 1): MatchState<CounterCore> {
     return {
         core: { value },
+        sys: {
+            schemaVersion: 1,
+            undo: { snapshots: [], maxSnapshots: 0 },
+            interaction: { queue: [], current: undefined },
+            log: { entries: [], maxEntries: 100 },
+            eventStream: {
+                entries: [],
+                maxEntries: 100,
+                nextId: nextEventId,
+            },
+            actionLog: { entries: [], maxEntries: 100 },
+            rematch: { votes: {}, ready: false },
+            responseWindow: {},
+            tutorial: {
+                active: false,
+                manifestId: null,
+                stepIndex: 0,
+                steps: [],
+                step: null,
+            },
+            turnNumber: 1,
+            phase: 'main',
+        },
+    };
+}
+
+function createTimestampReplayState(
+    core: Partial<TimestampReplayCore> = {},
+    nextEventId = 1,
+): MatchState<TimestampReplayCore> {
+    return {
+        core: {
+            actionLimit: 1,
+            actionsPlayed: 0,
+            ...core,
+        },
         sys: {
             schemaVersion: 1,
             undo: { snapshots: [], maxSnapshots: 0 },
@@ -96,6 +143,64 @@ const counterDomain: DomainCore<CounterCore, CounterCommand, CounterEvent> = {
     },
 };
 
+const timestampReplayDomain: DomainCore<TimestampReplayCore, TimestampReplayCommand, TimestampReplayEvent> = {
+    gameId: 'timestamp-replay-test',
+    setup: () => ({ actionLimit: 1, actionsPlayed: 0 }),
+    validate: (state, command) => {
+        switch (command.type) {
+            case 'PLAY_ACTION':
+                if ((state.actionsPlayed ?? 0) >= (state.actionLimit ?? 1)) {
+                    return { valid: false, error: 'action_limit_exhausted' };
+                }
+                return { valid: true };
+            case 'GRANT_BONUS_ACTION':
+                return { valid: true };
+            default:
+                return { valid: false, error: 'unknown_command' };
+        }
+    },
+    execute: (state, command) => {
+        switch (command.type) {
+            case 'GRANT_BONUS_ACTION': {
+                const timestamp = command.timestamp ?? 0;
+                if (timestamp <= 0 || timestamp === state.lastGrantedAt) {
+                    return [];
+                }
+                return [{
+                    type: 'ACTION_LIMIT_SET',
+                    payload: { value: 2, grantedAt: timestamp },
+                    timestamp,
+                }];
+            }
+            case 'PLAY_ACTION':
+                return [{
+                    type: 'ACTION_PLAYED',
+                    payload: { nextActionsPlayed: (state.actionsPlayed ?? 0) + 1 },
+                    timestamp: command.timestamp ?? 0,
+                }];
+            default:
+                return [];
+        }
+    },
+    reduce: (state, event) => {
+        switch (event.type) {
+            case 'ACTION_LIMIT_SET':
+                return {
+                    ...state,
+                    actionLimit: (event.payload as { value: number }).value,
+                    lastGrantedAt: (event.payload as { grantedAt: number }).grantedAt,
+                };
+            case 'ACTION_PLAYED':
+                return {
+                    ...state,
+                    actionsPlayed: (event.payload as { nextActionsPlayed: number }).nextActionsPlayed,
+                };
+            default:
+                return state;
+        }
+    },
+};
+
 /** 测试用随机数生成器（固定值） */
 const fixedRandom: RandomFn = {
     random: () => 0.5,
@@ -110,6 +215,21 @@ function createTestPipelineConfig(): LatencyPipelineConfig {
         domain: counterDomain,
         systems: [] as EngineSystem<CounterCore>[],
     };
+}
+
+function createTimestampReplayEngine() {
+    return createOptimisticEngine({
+        pipelineConfig: {
+            domain: timestampReplayDomain,
+            systems: [] as EngineSystem<TimestampReplayCore>[],
+        },
+        commandDeterminism: {
+            GRANT_BONUS_ACTION: 'deterministic',
+            PLAY_ACTION: 'deterministic',
+        },
+        playerIds: ['0', '1'],
+        localRandom: fixedRandom,
+    });
 }
 
 /** 创建测试用引擎 */
@@ -277,6 +397,38 @@ describe('OptimisticEngine — Property 4: 链式乐观命令的正确调和', (
     });
 });
 
+describe('OptimisticEngine — stateID 确认健壮性', () => {
+    it('stateID 和 playerId 命中但 core 不一致时，不应把可疑服务端状态当作成功确认', () => {
+        const engine = createTestEngine({
+            INCREMENT: 'deterministic',
+        });
+
+        engine.reconcile(createTestState(10), { stateID: 0 });
+
+        const optimistic = engine.processCommand('INCREMENT', {}, '0');
+        expect((optimistic.stateToRender!.core as CounterCore).value).toBe(11);
+        expect(engine.hasPendingCommands()).toBe(true);
+
+        const suspicious = engine.reconcile(createTestState(10), {
+            stateID: 1,
+            lastCommandPlayerId: '0',
+        });
+
+        expect(suspicious.didRollback).toBe(false);
+        expect((suspicious.stateToRender.core as CounterCore).value).toBe(11);
+        expect(engine.hasPendingCommands()).toBe(true);
+
+        const corrected = engine.reconcile(createTestState(11), {
+            stateID: 1,
+            lastCommandPlayerId: '0',
+        });
+
+        expect(corrected.didRollback).toBe(false);
+        expect((corrected.stateToRender.core as CounterCore).value).toBe(11);
+        expect(engine.hasPendingCommands()).toBe(false);
+    });
+});
+
 // ============================================================================
 // Property 5：本地验证失败不更新乐观状态
 // ============================================================================
@@ -387,6 +539,29 @@ describe('OptimisticEngine 单元测试', () => {
 
         expect(engine.hasPendingCommands()).toBe(false);
         expect(engine.getCurrentState()).toBeNull();
+    });
+
+    it('replayPending 重放 pending 命令时必须保留原始 timestamp，避免依赖时间戳的后续命令失效', () => {
+        const engine = createTimestampReplayEngine();
+        const initialState = createTimestampReplayState();
+        engine.reconcile(initialState);
+
+        const grantBonus = engine.processCommand('GRANT_BONUS_ACTION', {}, '0');
+        expect(grantBonus.stateToRender).not.toBeNull();
+        expect((grantBonus.stateToRender!.core as TimestampReplayCore).actionLimit).toBe(2);
+
+        const playAction = engine.processCommand('PLAY_ACTION', {}, '0');
+        expect(playAction.stateToRender).not.toBeNull();
+        expect((playAction.stateToRender!.core as TimestampReplayCore).actionsPlayed).toBe(1);
+
+        const reconcileResult = engine.reconcile(initialState);
+        const replayedCore = reconcileResult.stateToRender.core as TimestampReplayCore;
+
+        expect(reconcileResult.didRollback).toBe(false);
+        expect(replayedCore.actionLimit).toBe(2);
+        expect(replayedCore.actionsPlayed).toBe(1);
+        expect(replayedCore.lastGrantedAt).toBeGreaterThan(0);
+        expect(engine.hasPendingCommands()).toBe(true);
     });
 
     it('动态确定性判断函数', () => {

@@ -10,16 +10,27 @@ const entry: GameManifestEntry = {
     playersKey: 'games.summonerwars.players',
     icon: '⚔️',
     thumbnailPath: 'summonerwars/thumbnails/cover',
-    allowLocalMode: false,
+    allowLocalMode: true,
     playerOptions: [2],
     tags: ['tactical', 'card_driven', 'dice_driven'],
     bestPlayers: [2],
+    ai: {
+        capture: true,
+        localAi: true,
+        remoteAi: false,
+    },
     cursorTheme: 'summonerwars-ethereal',
     fontFamily: { display: 'Bebas Neue' },
     mobileProfile: 'landscape-adapted',
     preferredOrientation: 'landscape',
-    mobileLayoutPreset: 'map-shell',
-    shellTargets: ['pwa'],
+    mobileLayoutPreset: 'board-shell',
+    shellTargets: ['pwa', 'app-webview', 'mini-program-webview'],
+    mobileDelivery: {
+        mode: 'package-managed',
+        runtimeChannel: 'stable',
+        modulePackId: 'summonerwars',
+        assetPackId: 'summonerwars',
+    },
 };
 
 export const SUMMONER_WARS_MANIFEST: GameManifestEntry = entry;

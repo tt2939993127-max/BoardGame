@@ -1,9 +1,11 @@
 import { beforeAll, afterAll, beforeEach, describe, it, expect, vi } from 'vitest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { Query } from 'mongoose';
 import type { MatchMetadata, StoredMatchState, CreateMatchData } from '../../../engine/transport/storage';
 import { mongoStorage } from '../MongoStorage';
 import { runStartupCleanupTasks, type StartupCleanupTask } from '../startupCleanup';
+import { MONGO_TEST_HOOK_TIMEOUT_MS, resolvePreferredTestMongoUri } from '../../testUtils/mongoMemory';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
 
 const buildState = (setupData: Record<string, unknown>): StoredMatchState => ({
     G: { __setupData: setupData },
@@ -11,13 +13,14 @@ const buildState = (setupData: Record<string, unknown>): StoredMatchState => ({
 });
 
 describe('MongoStorage.cleanupCorruptMatches', () => {
-    let mongo: MongoMemoryServer;
+    let mongo: MongoMemoryServer | null = null;
 
     beforeAll(async () => {
-        mongo = await MongoMemoryServer.create();
-        await mongoose.connect(mongo.getUri(), { dbName: 'boardgame-test-corrupt-cleanup' });
+        const resolved = await resolvePreferredTestMongoUri();
+        mongo = resolved.mongo;
+        await mongoose.connect(resolved.mongoUri, { dbName: 'boardgame-test-corrupt-cleanup' });
         await mongoStorage.connect();
-    }, 60000);
+    }, MONGO_TEST_HOOK_TIMEOUT_MS);
 
     beforeEach(async () => {
         await mongoose.connection.db!.dropDatabase();
@@ -226,14 +229,15 @@ type MatchIdDoc = { matchID: string };
 
 // MongoDB 内存服务器在某些环境下启动很慢（>60s），暂时跳过测试
 // 如需运行这些测试，请移除下面的 .skip
-describe.skip('MongoStorage 行为', () => {
-    let mongo: MongoMemoryServer;
+describe('MongoStorage 行为', () => {
+    let mongo: MongoMemoryServer | null = null;
 
     beforeAll(async () => {
-        mongo = await MongoMemoryServer.create();
-        await mongoose.connect(mongo.getUri(), { dbName: 'boardgame-test' });
+        const resolved = await resolvePreferredTestMongoUri();
+        mongo = resolved.mongo;
+        await mongoose.connect(resolved.mongoUri, { dbName: 'boardgame-test' });
         await mongoStorage.connect();
-    }, 60000); // 60 秒超时（MongoDB 内存服务器启动可能较慢）
+    }, MONGO_TEST_HOOK_TIMEOUT_MS);
 
     beforeEach(async () => {
         await mongoose.connection.db!.dropDatabase();
@@ -253,8 +257,84 @@ describe.skip('MongoStorage 行为', () => {
         // 验证旧房间已被清理
         const Match = mongoose.model('Match');
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
-        expect(remaining).toHaveLength(1);
-        expect(remaining[0].matchID).toBe('match-2');
+        expect(remaining).toHaveLength(2);
+        expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-1', 'match-2']);
+    });
+
+    it('fetchAuthMetadata 只返回鉴权所需字段，不携带 setupData', async () => {
+        const setupData = {
+            ownerKey: 'user:auth-owner',
+            password: 'secret',
+            seatControllers: {
+                0: { type: 'human' },
+            },
+        };
+        await mongoStorage.createMatch('match-auth-meta', {
+            initialState: buildState(setupData),
+            metadata: {
+                ...buildMetadata(setupData),
+                status: 'waiting',
+                gameover: { winner: '0' },
+                disconnectedSince: 123,
+                players: {
+                    0: { name: 'P0', credentials: 'cred-0', isConnected: false },
+                    1: {},
+                },
+            },
+        });
+
+        const metadata = await mongoStorage.fetchAuthMetadata('match-auth-meta');
+
+        expect(metadata).toBeTruthy();
+        expect(metadata).toMatchObject({
+            gameName: 'tictactoe',
+            status: 'waiting',
+            gameover: { winner: '0' },
+            disconnectedSince: 123,
+            players: {
+                0: { name: 'P0', credentials: 'cred-0', isConnected: false },
+                1: {},
+            },
+        });
+        expect(metadata?.setupData).toBeUndefined();
+    });
+
+    it('fetch 仅请求 metadata 时应使用最小投影', async () => {
+        const Match = mongoose.model('Match');
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn(async () => ({
+            metadata: buildMetadata(undefined),
+        }));
+        const findOneSpy = vi.spyOn(Match, 'findOne').mockReturnValue({
+            select,
+            lean,
+        } as unknown as Query<unknown, unknown>);
+
+        const result = await mongoStorage.fetch('match-metadata-only', { metadata: true });
+
+        expect(select).toHaveBeenCalledWith({ _id: 0, metadata: 1 });
+        expect(result.metadata?.gameName).toBe('tictactoe');
+        findOneSpy.mockRestore();
+    });
+
+    it('fetch 同时请求 state 和 metadata 时应只选择必要字段', async () => {
+        const Match = mongoose.model('Match');
+        const select = vi.fn().mockReturnThis();
+        const lean = vi.fn(async () => ({
+            state: buildState({}),
+            metadata: buildMetadata(undefined),
+        }));
+        const findOneSpy = vi.spyOn(Match, 'findOne').mockReturnValue({
+            select,
+            lean,
+        } as unknown as Query<unknown, unknown>);
+
+        const result = await mongoStorage.fetch('match-full-fetch', { state: true, metadata: true });
+
+        expect(select).toHaveBeenCalledWith({ _id: 0, state: 1, metadata: 1 });
+        expect(result.state?._stateID).toBe(0);
+        expect(result.metadata?.gameName).toBe('tictactoe');
+        findOneSpy.mockRestore();
     });
 
     it('不同 ownerKey 允许创建多个房间', async () => {
@@ -287,8 +367,8 @@ describe.skip('MongoStorage 行为', () => {
 
         // 验证旧房间已被清理
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
-        expect(remaining).toHaveLength(1);
-        expect(remaining[0].matchID).toBe('match-2');
+        expect(remaining).toHaveLength(2);
+        expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-1', 'match-2']);
     });
 
     it('cleanupDuplicateOwnerMatches 仅保留最新房间', async () => {
@@ -478,8 +558,8 @@ describe.skip('MongoStorage 行为', () => {
 
         const Match = mongoose.model('Match');
         const remaining = await Match.find({ 'metadata.setupData.ownerKey': 'user:1' }).lean<MatchIdDoc[]>();
-        expect(remaining).toHaveLength(1);
-        expect(remaining[0].matchID).toBe('match-new');
+        expect(remaining).toHaveLength(2);
+        expect(remaining.map(doc => doc.matchID).sort()).toEqual(['match-gameover', 'match-new']);
     });
 
     it('cleanupEphemeralMatches 强制清理幽灵连接（长时间无更新但 isConnected=true）', async () => {

@@ -44,7 +44,7 @@ import { execute, reduce } from './reducer';
 import { getAllBaseDefIds, getBaseDef, getCardDef } from '../data/cards';
 import { drawCards } from './utils';
 import {
-    countMadnessCards,
+    countMadnessCardsForPlayer,
     madnessVpPenalty,
     fireMinionPlayedTriggers,
     getTitanByUid,
@@ -251,6 +251,60 @@ function buildMultiBaseScoringInteraction(
     );
 }
 
+function buildRescoredBaseEvent(
+    state: MatchState<SmashUpCore>,
+    baseIndex: number,
+    now: number,
+): BaseScoredEvent | undefined {
+    const currentBase = state.core.bases[baseIndex];
+    if (!currentBase) {
+        return undefined;
+    }
+    const playerPowers = collectQualifiedPlayerPowers(state.core, currentBase, baseIndex);
+    const baseDef = getBaseDef(currentBase.defId);
+    if (!baseDef) {
+        return undefined;
+    }
+    const rankings = buildBaseRankings(baseDef, playerPowers);
+    const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
+
+    for (const minion of currentBase.minions) {
+        const breakdown = getEffectivePowerBreakdown(state.core, minion, baseIndex);
+        if (!minionBreakdowns[minion.controller]) {
+            minionBreakdowns[minion.controller] = [];
+        }
+        minionBreakdowns[minion.controller].push({
+            defId: minion.defId,
+            basePower: breakdown.basePower,
+            finalPower: breakdown.finalPower,
+            modifiers: [
+                ...(breakdown.permanentModifier !== 0
+                    ? [{ sourceDefId: minion.defId, sourceName: 'actionLog.powerModifier.permanent', value: breakdown.permanentModifier }]
+                    : []),
+                ...(breakdown.tempModifier !== 0
+                    ? [{ sourceDefId: minion.defId, sourceName: 'actionLog.powerModifier.temp', value: breakdown.tempModifier }]
+                    : []),
+                ...breakdown.ongoingDetails.map(detail => ({
+                    sourceDefId: detail.sourceDefId,
+                    sourceName: detail.sourceName,
+                    value: detail.value,
+                })),
+            ],
+        });
+    }
+
+    return {
+        type: SU_EVENTS.BASE_SCORED,
+        payload: {
+            baseIndex,
+            baseDefId: currentBase.defId,
+            rankings,
+            minionBreakdowns,
+        },
+        timestamp: now,
+    };
+}
+
 function finalizeCurrentScoringBase(
     state: MatchState<SmashUpCore>,
     now: number,
@@ -261,6 +315,37 @@ function finalizeCurrentScoringBase(
         return { updatedState: state, events: [] };
     }
     const events: SmashUpEvent[] = [];
+    const baseIndex = resolveScoringBaseRefSlotIndex(state, currentBaseRef);
+    const initialPowers = session.afterScoringInitialPowers;
+    if (baseIndex !== undefined && initialPowers && initialPowers.baseRef.baseDefId === currentBaseRef.baseDefId) {
+        const currentBase = state.core.bases[baseIndex];
+        const currentPowers = currentBase
+            ? collectQualifiedPlayerPowers(state.core, currentBase, baseIndex)
+            : new Map<PlayerId, number>();
+        const comparedPlayerIds = new Set<PlayerId>([
+            ...(Object.keys(initialPowers.powers) as PlayerId[]),
+            ...currentPowers.keys(),
+        ]);
+        let powerChanged = false;
+        for (const playerId of comparedPlayerIds) {
+            const hadInitialEntry = Object.prototype.hasOwnProperty.call(initialPowers.powers, playerId);
+            const hasCurrentEntry = currentPowers.has(playerId);
+            if (hadInitialEntry !== hasCurrentEntry) {
+                powerChanged = true;
+                break;
+            }
+            if ((initialPowers.powers[playerId] ?? 0) !== (currentPowers.get(playerId) ?? 0)) {
+                powerChanged = true;
+                break;
+            }
+        }
+        if (powerChanged) {
+            const rescoredEvent = buildRescoredBaseEvent(state, baseIndex, now);
+            if (rescoredEvent) {
+                events.push(rescoredEvent);
+            }
+        }
+    }
 
     if (session.deferredPostScoringEvents?.length) {
         events.push(...session.deferredPostScoringEvents.map((event) => ({
@@ -273,7 +358,7 @@ function finalizeCurrentScoringBase(
     events.push(
         ...buildPendingPostScoringActionEvents(
             { core: state.core },
-            state.core.pendingPostScoringActions,
+            session.pendingPostScoringActions,
             now,
         ),
     );
@@ -690,6 +775,8 @@ export function scoreOneBase(
     }
 
     if (playersWithAfterScoringCards.length > 0) {
+        const currentBase = afterScoringCore.bases[baseIndex];
+        const initialPowers = collectQualifiedPlayerPowers(afterScoringCore, currentBase, baseIndex);
         const serializedDeferredEvents = serializePostScoringEvents(postScoringEvents);
 
         if (ms && currentBaseRef) {
@@ -699,6 +786,10 @@ export function scoreOneBase(
                     currentBaseRef,
                     currentStep: 'awaiting-response-window',
                     deferredPostScoringEvents: serializedDeferredEvents,
+                    afterScoringInitialPowers: {
+                        baseRef: currentBaseRef,
+                        powers: Object.fromEntries(initialPowers.entries()),
+                    },
                 }
                 : session,
             );
@@ -1150,7 +1241,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                         markScoringBaseCompleted(currentState, activeBaseRef),
                         (session) => session ? { ...session, currentStep: 'awaiting-post-reduce' } : session,
                     );
-                    return { events: [], halt: true, updatedState: missingBaseState } as PhaseExitResult;
+                    return { events: [], updatedState: missingBaseState } as PhaseExitResult;
                 }
                 return events;
             }
@@ -1178,7 +1269,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 markScoringBaseCompleted(nextState, activeBaseRef),
                 (session) => session ? { ...session, currentStep: 'awaiting-post-reduce' } : session,
             );
-            return { events: result.events, halt: true, updatedState: completedState } as PhaseExitResult;
+            return { events: result.events, updatedState: completedState } as PhaseExitResult;
         }
 
         return [];
@@ -1194,6 +1285,16 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         let hasSysUpdate = false;
 
         if (to === 'startTurn') {
+            if ((currentMatchState.sys as any).afterScoringInitialPowers) {
+                currentMatchState = {
+                    ...currentMatchState,
+                    sys: {
+                        ...currentMatchState.sys,
+                        afterScoringInitialPowers: undefined,
+                    } as any,
+                };
+                hasSysUpdate = true;
+            }
             let nextPlayerId = pid;
             let nextTurnNumber = core.turnNumber;
             if (from === 'endTurn') {
@@ -1226,7 +1327,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             const startTurnTriggeredEvents: SmashUpEvent[] = [];
 
             // 瑙﹀彂鍩哄湴 onTurnStart 鑳藉姏锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
-            const baseResult = triggerAllBaseAbilities('onTurnStart', startTurnCore, nextPlayerId, now, undefined, currentMatchState);
+            const baseResult = triggerAllBaseAbilities('onTurnStart', startTurnCore, nextPlayerId, now, undefined, currentMatchState, random);
             startTurnTriggeredEvents.push(...baseResult.events);
             if (baseResult.matchState) {
                 hasSysUpdate = hasSysUpdate || baseResult.matchState.sys !== currentMatchState.sys;
@@ -1540,8 +1641,8 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     }
     // 骞冲眬锛氱柉鐙傚崱杈冨皯鑰呰儨锛堝厠鑻忛瞾鎵╁睍瑙勫垯锛?
     if (state.madnessDeck !== undefined) {
-        const madnessA = countMadnessCards(state.players[sorted[0]]);
-        const madnessB = countMadnessCards(state.players[sorted[1]]);
+        const madnessA = countMadnessCardsForPlayer(state, sorted[0]);
+        const madnessB = countMadnessCardsForPlayer(state, sorted[1]);
         if (madnessA !== madnessB) {
             return { winner: madnessA < madnessB ? sorted[0] : sorted[1], scores };
         }
@@ -1558,7 +1659,7 @@ export function getScores(state: SmashUpCore): Record<PlayerId, number> {
         let vp = player.vp;
         // P19: 鐤媯鍗?VP 鎯╃綒锛堟瘡 2 寮犳墸 1 VP锛?
         if (state.madnessDeck !== undefined) {
-            vp -= madnessVpPenalty(countMadnessCards(player));
+            vp -= madnessVpPenalty(countMadnessCardsForPlayer(state, pid));
         }
         scores[pid] = vp;
     }

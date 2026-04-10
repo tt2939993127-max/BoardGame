@@ -26,6 +26,7 @@ import ImageLightbox from '../../components/common/ImageLightbox';
 import DataTable, { type Column } from './components/DataTable';
 import { getAllGames } from '../../config/games.config';
 import { getDeveloperGameScopeLabel, normalizeDeveloperGameIds } from '../../lib/developerGameAccess';
+import { AdminDetailPageSkeleton } from './components/AdminSkeletons';
 
 interface UserDetail {
     id: string;
@@ -253,11 +254,7 @@ export default function UserDetailPage() {
     ];
 
     if (loading) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600" />
-            </div>
-        );
+        return <AdminDetailPageSkeleton />;
     }
     if (!user) return null;
 

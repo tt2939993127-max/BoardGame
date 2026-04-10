@@ -1,19 +1,51 @@
 /**
  * 召唤师战争 E2E 测试
  * 
- * 注意：召唤师战争没有本地模式（allowLocalMode: false）
- * 完整游戏UI测试需要后端服务运行
+ * 当前文件同时覆盖在线房间与本地测试路由场景；
+ * 涉及真实多人流时仍需要后端服务运行。
  */
 
-import { test, expect, type BrowserContext, type Page } from '@playwright/test';
+import { test, expect } from './framework';
+import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { waitForState, waitForCoreState, waitForPhaseChange } from './helpers/waitForState';
-import { cloneState } from './helpers/summonerwars';
+import { cloneState, createSWRoomViaAPI } from './helpers/summonerwars';
+import { setChineseLocale } from './helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from './framework/evidenceScreenshots';
+import {
+  createSummonerWarsMobileEvidenceState,
+  SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
+  withSummonerWarsMobileEvidenceActionLog,
+} from '../src/games/summonerwars/mobileEvidence';
 
-const setEnglishLocale = async (context: BrowserContext | Page) => {
-  await context.addInitScript(() => {
-    localStorage.setItem('i18nextLng', 'en');
-  });
+const SW_PHONE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
+const SW_TABLET_LANDSCAPE_VIEWPORT = { width: 1170, height: 540 } as const;
+
+const mockSummonerWarsMapImage = async (context: BrowserContext) => {
+  if (process.env.PW_SW_USE_REAL_MAP === 'true') {
+    return;
+  }
+
+  const mapPlaceholderSvg = [
+    '<svg xmlns="http://www.w3.org/2000/svg" width="900" height="1200" viewBox="0 0 900 1200">',
+    '<defs>',
+    '<linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">',
+    '<stop offset="0%" stop-color="#101828"/>',
+    '<stop offset="100%" stop-color="#1f2937"/>',
+    '</linearGradient>',
+    '</defs>',
+    '<rect width="900" height="1200" fill="url(#bg)"/>',
+    '<rect x="45" y="45" width="810" height="1110" rx="32" fill="none" stroke="rgba(148,163,184,0.55)" stroke-width="6"/>',
+    '<g stroke="rgba(96,165,250,0.18)" stroke-width="2">',
+    ...Array.from({ length: 7 }, (_, index) => `<line x1="120" y1="${180 + index * 120}" x2="780" y2="${180 + index * 120}"/>`),
+    ...Array.from({ length: 5 }, (_, index) => `<line x1="${210 + index * 120}" y1="120" x2="${210 + index * 120}" y2="1080"/>`),
+    '</g>',
+    '</svg>',
+  ].join('');
+  await context.route(/summonerwars\/common\/compressed\/map\.(png|webp|jpg|jpeg)(\?.*)?$/i, (route) => route.fulfill({
+    status: 200,
+    contentType: 'image/svg+xml',
+    body: mapPlaceholderSvg,
+  }));
 };
 
 const ensureSummonerWarsModalOpen = async (page: Page) => {
@@ -99,7 +131,7 @@ const attachPageDiagnostics = (page: Page) => {
       const status = response.status();
       const url = response.url();
       diagnostics.errors.push(`response:${status} ${url}`);
-      if (status >= 500 && url.includes('/src/games/smashup/Board.tsx')) {
+      if (status >= 500 && url.includes('/src/games/summonerwars/Board.tsx')) {
         response.text()
           .then((body) => {
             diagnostics.lastServerError = `status=${status} url=${url} body=${body.slice(0, 800)}`;
@@ -142,6 +174,8 @@ const resetMatchStorage = async (context: BrowserContext | Page) => {
 
     const newGuestId = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     localStorage.removeItem('owner_active_match');
+    localStorage.removeItem('hud_fab_position');
+    localStorage.removeItem('hud_fab_offset');
     Object.keys(localStorage).forEach((key) => {
       if (key.startsWith('match_creds_')) {
         localStorage.removeItem(key);
@@ -163,7 +197,7 @@ const waitForHomeGameList = async (page: Page) => {
   await waitForFrontendAssets(page);
   try {
     await page.waitForSelector('[data-game-id]', { timeout: 12000, state: 'attached' });
-  } catch (error) {
+  } catch {
     const fetchStatus = async (path: string) => {
       try {
         const response = await page.request.get(path);
@@ -318,6 +352,13 @@ const readCoreState = async (page: Page) => {
   return parsed?.core ?? parsed?.G?.core ?? parsed;
 };
 
+const readGameState = async (page: Page) => {
+  await ensureDebugStateTab(page);
+  const raw = await page.getByTestId('debug-state-json').innerText();
+  const parsed = JSON.parse(raw);
+  return parsed?.G ?? parsed;
+};
+
 const applyCoreState = async (page: Page, coreState: unknown) => {
   await ensureDebugStateTab(page);
   await page.getByTestId('debug-state-toggle-input').click();
@@ -326,6 +367,317 @@ const applyCoreState = async (page: Page, coreState: unknown) => {
   await input.fill(JSON.stringify(coreState));
   await page.getByTestId('debug-state-apply').click();
   await expect(input).toBeHidden({ timeout: 5000 }).catch(() => { });
+};
+
+const applyGameState = async (page: Page, gameState: unknown) => {
+  await ensureDebugStateTab(page);
+  await page.getByTestId('debug-state-toggle-input').click();
+  const input = page.getByTestId('debug-state-input');
+  await expect(input).toBeVisible({ timeout: 3000 });
+  await input.fill(JSON.stringify(gameState));
+  await page.getByTestId('debug-state-apply').click();
+  await expect(input).toBeHidden({ timeout: 5000 }).catch(() => { });
+};
+
+const waitForSummonerWarsHarness = async (page: Page, timeout = 15000) => {
+  await page.waitForFunction(
+    () => (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+    { timeout, polling: 200 },
+  );
+};
+
+const injectSummonerWarsMobileEvidenceScene = async (page: Page) => {
+  const sceneState = createSummonerWarsMobileEvidenceState();
+  await page.evaluate((state) => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    harness.state.set(state);
+  }, sceneState);
+};
+
+const openSummonerWarsMobileEvidencePage = async (page: Page) => {
+  // 该证据页场景依赖 TestHarness 注入状态，因此必须走 /play/:gameId 测试路由，
+  // 不能切到 /tutorial 路由；教程路由当前不会注册 TestHarness。
+  await page.goto('/play/summonerwars?skipInitialization=true&numPlayers=2', {
+    waitUntil: 'domcontentloaded',
+  });
+  await page.waitForLoadState('domcontentloaded');
+  await page.waitForFunction(
+    () => Boolean(
+      document.querySelector('#root [data-game-page]')
+      || document.querySelector('#root [data-testid="debug-panel"]')
+      || (window as any).__BG_TEST_HARNESS__?.state?.isRegistered?.() === true,
+    ),
+    { timeout: 15000 },
+  );
+  await waitForSummonerWarsHarness(page);
+  await injectSummonerWarsMobileEvidenceScene(page);
+  await expect(page.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
+  await expect(page.getByTestId('sw-end-phase')).toBeVisible({ timeout: 20000 });
+};
+
+const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
+  const getRect = (element: Element | null) => {
+    if (!(element instanceof HTMLElement)) return null;
+    const rect = element.getBoundingClientRect();
+    return {
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      width: rect.width,
+      height: rect.height,
+    };
+  };
+
+  const mapContent = document.querySelector('[data-testid="sw-map-content"]');
+  const handArea = document.querySelector('[data-testid="sw-hand-area"]');
+  const phaseTracker = document.querySelector('[data-testid="sw-phase-tracker"]');
+  const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]');
+
+  const mapRect = getRect(mapContent);
+  const handRect = getRect(handArea);
+  const trackerRect = getRect(phaseTracker);
+  const endPhaseRect = getRect(endPhaseButton);
+
+  if (!mapRect || !handRect || !trackerRect || !endPhaseRect) {
+    throw new Error('SummonerWars 证据场景关键节点缺失，无法比较 PC/移动端比例');
+  }
+
+  return {
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    mapWidthRatio: mapRect.width / window.innerWidth,
+    mapHeightRatio: mapRect.height / window.innerHeight,
+    handWidthRatio: handRect.width / window.innerWidth,
+    handHeightRatio: handRect.height / window.innerHeight,
+    trackerWidthRatio: trackerRect.width / mapRect.width,
+    trackerHeightRatio: trackerRect.height / mapRect.height,
+    endPhaseWidthRatio: endPhaseRect.width / window.innerWidth,
+    endPhaseHeightRatio: endPhaseRect.height / window.innerHeight,
+  };
+});
+
+const seedMobileActionLog = async (page: Page) => {
+  const currentState = await page.evaluate(() => {
+    const harness = window.__BG_TEST_HARNESS__;
+    const state = harness?.state?.get?.();
+    if (!state) {
+      throw new Error('TestHarness 未就绪');
+    }
+    return state;
+  });
+  const nextState = withSummonerWarsMobileEvidenceActionLog(currentState, Date.now());
+  await page.evaluate((state) => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    harness.state.set(state);
+  }, nextState);
+};
+
+const readSummonerWarsHarnessState = async (page: Page) => (
+  page.evaluate(() => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    return harness.state.get();
+  })
+);
+
+const applySummonerWarsHarnessState = async (page: Page, state: unknown) => {
+  await page.evaluate((nextState) => {
+    const harness = window.__BG_TEST_HARNESS__;
+    if (!harness?.state?.isRegistered?.()) {
+      throw new Error('TestHarness 未就绪');
+    }
+    harness.state.set(nextState);
+  }, state);
+};
+
+const _dismissTutorialOverlayViaDebugState = async (page: Page) => {
+  await page.addStyleTag({
+    content: `
+      [data-tutorial-step] {
+        display: none !important;
+      }
+    `,
+  });
+  /*
+
+  test('移动横屏：对局中的单位与建筑应支持长按放大且不影响点击', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await hostPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+
+    const matchId = await createSWRoomViaAPI(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId!);
+
+    const waitForFactionSelectionReady = async (page: Page) => {
+      await page.waitForFunction(() => {
+        const heading = document.querySelector('h1, [role="heading"]');
+        const text = heading?.textContent ?? document.body?.innerText ?? '';
+        return /Choose Your Faction|选择你的阵营/i.test(text);
+      }, { timeout: 60000 });
+    };
+    const dispatchCommand = async (page: Page, type: string, payload: unknown) => page.evaluate(
+      ({ commandType, commandPayload }) => {
+        const w = window as Window & { __BG_DISPATCH__?: (innerType: string, innerPayload: unknown) => void };
+        if (typeof w.__BG_DISPATCH__ !== 'function') return false;
+        w.__BG_DISPATCH__(commandType, commandPayload);
+        return true;
+      },
+      { commandType: type, commandPayload: payload },
+    );
+    await waitForFactionSelectionReady(hostPage);
+    await waitForFactionSelectionReady(guestPage);
+    await dispatchCommand(hostPage, 'sw:select_faction', { factionId: 'necromancer' });
+    await dispatchCommand(guestPage, 'sw:select_faction', { factionId: 'trickster' });
+    await guestPage.waitForTimeout(300);
+    await dispatchCommand(guestPage, 'sw:player_ready', {});
+    await dispatchCommand(hostPage, 'sw:host_start_game', {});
+    await waitForSummonerWarsUI(hostPage, 60000);
+
+    const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
+    const visibleBoardUnit = hostPage.locator('[data-testid^="sw-unit-"]:visible').first();
+    const visibleBoardStructure = hostPage.locator('[data-testid^="sw-structure-"]:visible').first();
+
+    await expect(visibleBoardUnit).toBeVisible({ timeout: 5000 });
+    await expect(visibleBoardStructure).toBeVisible({ timeout: 5000 });
+
+    await longPressTouch(visibleBoardUnit, 650, 31);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-board-unit-long-press-magnify', {
+        filename: 'mobile-board-unit-long-press-magnify.png',
+      }),
+      fullPage: false,
+    });
+
+    await visibleBoardUnit.dispatchEvent('click');
+    await hostPage.waitForTimeout(300);
+
+    await longPressTouch(visibleBoardStructure, 650, 32);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-board-structure-long-press-magnify', {
+        filename: 'mobile-board-structure-long-press-magnify.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
+  test('移动横屏：对局中的单位与建筑应支持长按放大且不影响点击', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+    await hostPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+    const matchId = await createSWRoomViaAPI(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId!);
+
+    await completeFactionSelection(hostPage, guestPage);
+    await waitForSummonerWarsUI(hostPage, 30000);
+
+    const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
+    const visibleBoardUnit = hostPage.locator('[data-testid^="sw-unit-"]:visible').first();
+    const visibleBoardStructure = hostPage.locator('[data-testid^="sw-structure-"]:visible').first();
+
+    await expect(visibleBoardUnit).toBeVisible({ timeout: 5000 });
+    await expect(visibleBoardStructure).toBeVisible({ timeout: 5000 });
+
+    await longPressTouch(visibleBoardUnit, 650, 31);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-board-unit-long-press-magnify', {
+        filename: 'mobile-board-unit-long-press-magnify.png',
+      }),
+      fullPage: false,
+    });
+
+    await visibleBoardUnit.dispatchEvent('click');
+    await hostPage.waitForTimeout(300);
+
+    await longPressTouch(visibleBoardStructure, 650, 32);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-board-structure-long-press-magnify', {
+        filename: 'mobile-board-structure-long-press-magnify.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+  */
+  await expect(page.locator('[data-tutorial-step]')).toBeHidden({ timeout: 10000 });
 };
 
 const joinMatchAsGuest = async (page: Page, matchId: string, gameId = 'summonerwars') => {
@@ -366,6 +718,7 @@ const ensureGameServerAvailable = async (page: Page) => {
 
 const createSummonerWarsRoom = async (page: Page) => {
   attachPageDiagnostics(page);
+  try {
   await page.goto('/?game=summonerwars', { waitUntil: 'domcontentloaded' });
   await dismissViteOverlay(page);
   await dismissLobbyConfirmIfNeeded(page);
@@ -425,6 +778,9 @@ const createSummonerWarsRoom = async (page: Page) => {
     return null;
   }
   return matchId;
+  } catch {
+    return createSWRoomViaAPI(page);
+  }
 };
 
 const ensurePlayerIdInUrl = async (page: Page, playerId: string) => {
@@ -525,8 +881,8 @@ const completeFactionSelection = async (hostPage: Page, guestPage: Page) => {
   await startButton.click();
 
   // 等待游戏 UI 出现（sw-end-phase 是可靠标志）
-  await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 30000 });
-  await expect(guestPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 30000 });
+  await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 60000 });
+  await expect(guestPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 60000 });
 };
 
 const expectPhaseTrackerVisible = async (page: Page) => {
@@ -552,6 +908,308 @@ const clickBoardElement = async (page: Page, selector: string) => {
 
 const getMapScaleText = async (page: Page) => page.getByTestId('sw-map-scale').innerText();
 
+const getMapScaleBadgeState = async (page: Page) => page.evaluate(() => {
+  const badge = document.querySelector('[data-testid="sw-map-scale"]') as HTMLElement | null;
+  if (!badge) {
+    return { opacity: 'missing', ariaHidden: null, text: '' };
+  }
+  const styles = window.getComputedStyle(badge);
+  return {
+    opacity: styles.opacity,
+    ariaHidden: badge.getAttribute('aria-hidden'),
+    text: badge.textContent?.trim() ?? '',
+  };
+});
+
+const longPressTouch = async (locator: Locator, durationMs = 620, pointerId = 1) => {
+  await locator.dispatchEvent('pointerdown', {
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    buttons: 1,
+  });
+  await locator.page().waitForTimeout(durationMs);
+  await locator.dispatchEvent('pointerup', {
+    pointerType: 'touch',
+    pointerId,
+    isPrimary: true,
+    buttons: 0,
+  });
+};
+
+const getFabStoredPosition = async (page: Page) => (
+  page.evaluate(() => {
+    const raw = localStorage.getItem('hud_fab_position');
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as { leftPercent: number; topPercent: number };
+  })
+);
+
+const touchDragElement = async (
+  locator: Locator,
+  {
+    deltaX,
+    deltaY,
+    steps = 8,
+  }: {
+    deltaX: number;
+    deltaY: number;
+    steps?: number;
+  },
+) => {
+  const box = await locator.boundingBox();
+  if (!box) {
+    throw new Error('无法获取 FAB 按钮位置');
+  }
+
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+  const page = locator.page();
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+
+  for (let step = 1; step <= steps; step += 1) {
+    const nextX = startX + (deltaX * step) / steps;
+    const nextY = startY + (deltaY * step) / steps;
+    await page.mouse.move(nextX, nextY);
+    await page.waitForTimeout(16);
+  }
+
+  await page.mouse.up();
+};
+
+const sampleFabReleaseFrames = async (
+  page: Page,
+  {
+    buttonId,
+    panelId,
+    frameCount = 12,
+  }: {
+    buttonId: string;
+    panelId: string;
+    frameCount?: number;
+  },
+) => (
+  page.evaluate(async ({ buttonId: currentButtonId, panelId: currentPanelId, frameCount: currentFrameCount }) => {
+    const resolveAnchorEdgeDistance = (
+      targetRect: { top: number; bottom: number },
+      referenceRect: { top: number; bottom: number },
+    ) => Math.min(
+      Math.abs(targetRect.top - referenceRect.top),
+      Math.abs(targetRect.bottom - referenceRect.bottom),
+    );
+
+    const samples: Array<{
+      frame: number;
+      visualTop: number;
+      visualBottom: number;
+      panelTop: number;
+      panelBottom: number;
+      anchorEdgeDistance: number;
+    } | null> = [];
+
+    for (let frame = 0; frame < currentFrameCount; frame += 1) {
+      await new Promise<void>((resolve) => window.requestAnimationFrame(() => resolve()));
+
+      const visual = document.querySelector(`[data-fab-visual-id="${currentButtonId}"]`) as HTMLElement | null;
+      const panel = document.querySelector(`[data-testid="fab-panel-${currentPanelId}"]`) as HTMLElement | null;
+      if (!visual || !panel) {
+        samples.push(null);
+        continue;
+      }
+
+      const visualRect = visual.getBoundingClientRect();
+      const panelRect = panel.getBoundingClientRect();
+      samples.push({
+        frame,
+        visualTop: visualRect.top,
+        visualBottom: visualRect.bottom,
+        panelTop: panelRect.top,
+        panelBottom: panelRect.bottom,
+        anchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, visualRect),
+      });
+    }
+
+    return samples;
+  }, { buttonId, panelId, frameCount })
+);
+
+const captureEvidenceClipAroundLocators = async (
+  page: Page,
+  locators: Locator[],
+  {
+    path,
+    padding = 20,
+  }: {
+    path: string;
+    padding?: number;
+  },
+) => {
+  const boxes = (await Promise.all(locators.map((locator) => locator.boundingBox())))
+    .filter((box): box is NonNullable<Awaited<ReturnType<Locator['boundingBox']>>> => Boolean(box));
+  if (!boxes.length) {
+    throw new Error('缺少可用于局部证据截图的元素边界');
+  }
+  const viewport = page.viewportSize();
+  const viewportWidth = viewport?.width ?? 0;
+  const viewportHeight = viewport?.height ?? 0;
+  const minX = Math.min(...boxes.map((box) => box.x));
+  const minY = Math.min(...boxes.map((box) => box.y));
+  const maxRight = Math.max(...boxes.map((box) => box.x + box.width));
+  const maxBottom = Math.max(...boxes.map((box) => box.y + box.height));
+  const x = Math.max(0, Math.floor(minX - padding));
+  const y = Math.max(0, Math.floor(minY - padding));
+  const right = Math.min(viewportWidth || Math.ceil(maxRight + padding), Math.ceil(maxRight + padding));
+  const bottom = Math.min(viewportHeight || Math.ceil(maxBottom + padding), Math.ceil(maxBottom + padding));
+  await page.screenshot({
+    path,
+    clip: {
+      x,
+      y,
+      width: Math.max(1, right - x),
+      height: Math.max(1, bottom - y),
+    },
+  });
+};
+
+const waitForOverlayState = async (page: Page, overlayTestId: string, expected: 'open' | 'closed') => {
+  await expect.poll(async () => page.evaluate(({ testId, target }) => {
+    const overlays = Array.from(document.querySelectorAll(`[data-testid="${testId}"]`)) as HTMLElement[];
+    const visibleCount = overlays.filter((overlay) => {
+      const styles = window.getComputedStyle(overlay);
+      return styles.display !== 'none'
+        && styles.visibility !== 'hidden'
+        && styles.pointerEvents !== 'none'
+        && styles.opacity !== '0';
+    }).length;
+    return target === 'open' ? visibleCount > 0 : visibleCount === 0;
+  }, { testId: overlayTestId, target: expected }), { timeout: 5000 }).toBe(true);
+};
+
+const getExpandedFabMetrics = async (page: Page) => (
+  page.evaluate(() => {
+    const buttons = Array.from(document.querySelectorAll('[data-testid="fab-menu"] [data-fab-id]')) as HTMLElement[];
+    const panel = document.querySelector('[data-testid="fab-panel-action-log"]') as HTMLElement | null;
+    const rows = Array.from(document.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+    const firstRow = rows[0] ?? null;
+    const mainVisual = document.querySelector('[data-fab-visual-id="exit"]') as HTMLElement | null;
+    const gamePage = document.querySelector('[data-game-page]') as HTMLElement | null;
+    return {
+      viewportWidth: window.innerWidth,
+      viewportHeight: window.innerHeight,
+      pageScrollX: window.scrollX,
+      pageScrollY: window.scrollY,
+      gamePageRect: gamePage
+        ? (() => {
+          const rect = gamePage.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      mainVisualRect: mainVisual
+        ? (() => {
+          const rect = mainVisual.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      panelRect: panel
+        ? (() => {
+          const rect = panel.getBoundingClientRect();
+          return {
+            left: rect.left,
+            top: rect.top,
+            right: rect.right,
+            bottom: rect.bottom,
+          };
+        })()
+        : null,
+      panelClientHeight: panel?.clientHeight ?? 0,
+      panelScrollHeight: panel?.scrollHeight ?? 0,
+      panelClientWidth: panel?.clientWidth ?? 0,
+      panelScrollWidth: panel?.scrollWidth ?? 0,
+      firstRowClientWidth: firstRow?.clientWidth ?? 0,
+      firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+      rowCount: rows.length,
+      visibleButtons: buttons
+        .map((button) => {
+          const styles = window.getComputedStyle(button);
+          const rect = button.getBoundingClientRect();
+          return {
+            id: button.dataset.fabId ?? '',
+            visible: styles.display !== 'none'
+              && styles.visibility !== 'hidden'
+              && styles.opacity !== '0'
+              && rect.width > 0
+              && rect.height > 0,
+            rect: {
+              left: rect.left,
+              top: rect.top,
+              right: rect.right,
+              bottom: rect.bottom,
+            },
+          };
+        })
+        .filter((entry) => entry.visible),
+    };
+  })
+);
+
+const waitForExpandedFabLayoutStable = async (page: Page) => {
+  let previousSignature: string | null = null;
+  let stableMetrics: Awaited<ReturnType<typeof getExpandedFabMetrics>> | null = null;
+  let stableCount = 0;
+
+  await expect.poll(async () => {
+    const metrics = await getExpandedFabMetrics(page);
+    if (!metrics.panelRect || !metrics.mainVisualRect || metrics.visibleButtons.length === 0) {
+      stableCount = 0;
+      previousSignature = null;
+      return 0;
+    }
+
+    const signature = JSON.stringify({
+      panelRect: Object.fromEntries(
+        Object.entries(metrics.panelRect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+      ),
+      mainVisualRect: Object.fromEntries(
+        Object.entries(metrics.mainVisualRect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+      ),
+      visibleButtons: metrics.visibleButtons.map((button) => ({
+        id: button.id,
+        rect: Object.fromEntries(
+          Object.entries(button.rect).map(([key, value]) => [key, Math.round(value * 10) / 10]),
+        ),
+      })),
+    });
+
+    if (signature === previousSignature) {
+      stableCount += 1;
+    } else {
+      stableCount = 0;
+      previousSignature = signature;
+    }
+
+    stableMetrics = metrics;
+    return stableCount;
+  }, { timeout: 2500, intervals: [80, 120, 160] }).toBeGreaterThanOrEqual(1);
+
+  if (!stableMetrics) {
+    throw new Error('展开态 FAB 布局未能稳定');
+  }
+  return stableMetrics;
+};
+
 const getMapTransform = async (page: Page) => (
   page.getByTestId('sw-map-content').evaluate((node) => getComputedStyle(node).transform)
 );
@@ -574,6 +1232,240 @@ const dragMap = async (page: Page, dx: number, dy: number) => {
   await page.mouse.down();
   await page.mouse.move(startX + dx, startY + dy, { steps: 10 });
   await page.mouse.up();
+};
+
+const openFabPanel = async (page: Page, panelId: string, mainId = 'exit') => {
+  const panel = page.getByTestId(`fab-panel-${panelId}`);
+  if (await panel.isVisible().catch(() => false)) return panel;
+
+  const panelButton = page.locator(`[data-fab-id="${panelId}"]`);
+  if (!await panelButton.isVisible().catch(() => false)) {
+    const mainButton = page.locator(`[data-fab-id="${mainId}"]`);
+    if (await mainButton.isVisible().catch(() => false)) {
+      await mainButton.click();
+    } else {
+      const fallbackButtons = page.locator('[data-testid="fab-menu"] button');
+      const fallbackCount = await fallbackButtons.count();
+      let opened = false;
+      for (let index = 0; index < fallbackCount; index += 1) {
+        const fallbackButton = fallbackButtons.nth(index);
+        if (!await fallbackButton.isVisible().catch(() => false)) {
+          continue;
+        }
+        await fallbackButton.click();
+        if (await panel.isVisible().catch(() => false)) {
+          opened = true;
+          break;
+        }
+        if (await panelButton.isVisible().catch(() => false)) {
+          break;
+        }
+      }
+      if (!opened && !await panelButton.isVisible().catch(() => false)) {
+        throw new Error(`未找到 FAB 面板入口: ${panelId}`);
+      }
+    }
+  }
+  if (await panel.isVisible().catch(() => false)) return panel;
+
+  await expect(panelButton).toBeVisible({ timeout: 5000 });
+  await panelButton.click();
+  await expect(panel).toBeVisible({ timeout: 5000 });
+  return panel;
+};
+
+const collapseFabMenuToMainButton = async (page: Page, mainId = 'exit') => {
+  const fabButtons = page.locator('[data-testid="fab-menu"] button');
+  const buttonCount = await fabButtons.count();
+  const mainButton = page.locator(`[data-fab-id="${mainId}"]`);
+  const getVisibleButtons = async () => {
+    const visibleButtons: Array<{ index: number; y: number }> = [];
+    for (let index = 0; index < buttonCount; index += 1) {
+      const button = fabButtons.nth(index);
+      if (!await button.isVisible().catch(() => false)) {
+        continue;
+      }
+      const box = await button.boundingBox();
+      if (!box) {
+        continue;
+      }
+      visibleButtons.push({ index, y: box.y });
+    }
+    return visibleButtons;
+  };
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const visibleButtons = await getVisibleButtons();
+    if (visibleButtons.length <= 1) {
+      return;
+    }
+
+    if (await mainButton.isVisible().catch(() => false)) {
+      await mainButton.click({ force: true });
+    } else {
+      visibleButtons.sort((a, b) => b.y - a.y);
+      await fabButtons.nth(visibleButtons[0].index).click({ force: true });
+    }
+    await page.waitForTimeout(120);
+  }
+
+  if (await mainButton.isVisible().catch(() => false)) {
+    await mainButton.evaluate((element) => {
+      (element as HTMLElement).click();
+    });
+    await page.waitForTimeout(120);
+    await mainButton.evaluate((element) => {
+      (element as HTMLElement).click();
+    });
+    await page.waitForTimeout(120);
+  }
+
+  await expect.poll(async () => {
+    let visibleCount = 0;
+    for (let index = 0; index < buttonCount; index += 1) {
+      if (await fabButtons.nth(index).isVisible().catch(() => false)) {
+        visibleCount += 1;
+      }
+    }
+    return visibleCount;
+  }, { timeout: 5000 }).toBeLessThanOrEqual(1);
+};
+
+const waitForSummonerWarsVisualStable = async (page: Page) => {
+  await expect.poll(async () => {
+    return page.evaluate(() => {
+      const pageRoot = document.querySelector('[data-game-page][data-game-id="summonerwars"]');
+      if (!pageRoot) return 0;
+      const shimmerNodes = Array.from(pageRoot.querySelectorAll<HTMLElement>('[style*="img-shimmer"]'));
+      return shimmerNodes.filter((node) => {
+        const style = window.getComputedStyle(node);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity || '1') <= 0.01) {
+          return false;
+        }
+        const rect = node.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      }).length;
+    });
+  }, { timeout: 10000 }).toBe(0);
+  await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandStable = async (page: Page, allowMissing = false) => {
+  await expect.poll(async () => {
+    return page.evaluate((canBeMissing) => {
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      if (!handArea) {
+        return canBeMissing;
+      }
+
+      const cards = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'));
+      if (cards.length === 0) {
+        return canBeMissing;
+      }
+
+      const parseTranslate = (transform: string) => {
+        if (!transform || transform === 'none') {
+          return { x: 0, y: 0 };
+        }
+        const matrix3dMatch = transform.match(/^matrix3d\((.+)\)$/);
+        if (matrix3dMatch) {
+          const values = matrix3dMatch[1].split(',').map((value) => Number(value.trim()));
+          return {
+            x: values[12] ?? 0,
+            y: values[13] ?? 0,
+          };
+        }
+        const matrixMatch = transform.match(/^matrix\((.+)\)$/);
+        if (matrixMatch) {
+          const values = matrixMatch[1].split(',').map((value) => Number(value.trim()));
+          return {
+            x: values[4] ?? 0,
+            y: values[5] ?? 0,
+          };
+        }
+        return { x: Number.NaN, y: Number.NaN };
+      };
+
+      return cards.every((card) => {
+        const styles = window.getComputedStyle(card);
+        const opacity = Number(styles.opacity || '1');
+        const translate = parseTranslate(styles.transform);
+        return opacity >= 0.99
+          && Number.isFinite(translate.x)
+          && Number.isFinite(translate.y)
+          && Math.abs(translate.x) <= 1
+          && Math.abs(translate.y) <= 1;
+      });
+    }, allowMissing);
+  }, {
+    timeout: 5000,
+    message: '等待召唤师战争手牌动画收敛',
+  }).toBe(true);
+  await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandArtReady = async (page: Page, allowMissing = false) => {
+  await expect.poll(async () => {
+    try {
+      return await page.evaluate((canBeMissing) => {
+        const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+        if (!handArea) {
+          return canBeMissing;
+        }
+
+        const cards = Array.from(handArea.querySelectorAll<HTMLElement>('[data-card-id]'));
+        if (cards.length === 0) {
+          return canBeMissing;
+        }
+
+        const visibleCards = cards.filter((card) => {
+          const rect = card.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0;
+        });
+        if (visibleCards.length === 0) {
+          return canBeMissing;
+        }
+
+        return visibleCards.every((card) => {
+          const sprite = card.querySelector<HTMLElement>('[data-card-sprite="true"]');
+          if (!sprite) {
+            return false;
+          }
+          const rect = sprite.getBoundingClientRect();
+          return rect.width > 0
+            && rect.height > 0
+            && sprite.dataset.imageLoaded === 'true';
+        });
+      }, allowMissing);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message.includes('Execution context was destroyed') || message.includes('Target closed')) {
+        return false;
+      }
+      throw error;
+    }
+  }, {
+    timeout: 30000,
+    message: '等待召唤师战争手牌卡图真实渲染完成',
+  }).toBe(true);
+  await page.waitForTimeout(120);
+};
+
+const waitForSummonerWarsHandCount = async (page: Page, expectedCount: number) => {
+  await expect.poll(async () => {
+    const state = await readSummonerWarsHarnessState(page);
+    return state?.core?.players?.['0']?.hand?.length ?? 0;
+  }, {
+    timeout: 5000,
+    message: `等待 TestHarness 手牌数量变为 ${expectedCount}`,
+  }).toBe(expectedCount);
+
+  await expect.poll(async () => {
+    return page.locator('[data-testid="sw-hand-area"] [data-card-id]').count();
+  }, {
+    timeout: 5000,
+    message: `等待 DOM 手牌数量变为 ${expectedCount}`,
+  }).toBe(expectedCount);
 };
 
 const getCurrentPhase = async (page: Page) => {
@@ -675,7 +1567,9 @@ const prepareDeterministicCore = (coreState: any) => {
     return null;
   };
 
-  const unitCard = pickCard('unit') ?? pickCard('unit', () => true);
+  const unitCard = pickCard('unit', (card) => !(card.abilities ?? []).includes('fire_sacrifice_summon'))
+    ?? pickCard('unit')
+    ?? pickCard('unit', () => true);
   const structureCard = pickCard('structure') ?? pickCard('structure', () => true);
   const eventCard = pickCard('event', (card) => card.playPhase === 'summon' || card.playPhase === 'any')
     ?? pickCard('event');
@@ -684,10 +1578,17 @@ const prepareDeterministicCore = (coreState: any) => {
     throw new Error('无法找到用于稳定流程的卡牌');
   }
 
+  const extraCards: any[] = [];
+  while (extraCards.length < 2) {
+    const nextExtra = handPool.shift() ?? deck.shift();
+    if (!nextExtra) break;
+    extraCards.push(nextExtra);
+  }
+
   next.players['0'] = {
     ...player,
     magic: 10,
-    hand: [unitCard, structureCard, eventCard],
+    hand: [unitCard, structureCard, eventCard, ...extraCards],
     deck,
     moveCount: 0,
     attackCount: 0,
@@ -748,10 +1649,21 @@ const setupAttackState = (coreState: any) => {
   const next = cloneState(coreState);
   const board = next.board.map((row: any[]) => row.map((cell: any) => ({
     ...cell,
-    unit: cell.unit ? { ...cell.unit, position: { ...cell.unit.position } } : undefined,
+    unit: cell.unit ? {
+      ...cell.unit,
+      position: { ...cell.unit.position },
+      hasAttacked: false,
+    } : undefined,
     structure: cell.structure ? { ...cell.structure, position: { ...cell.structure.position } } : undefined,
   })));
   next.board = board;
+  if (next.players?.['0']) {
+    next.players['0'] = {
+      ...next.players['0'],
+      attackCount: 0,
+      hasAttackedEnemy: false,
+    };
+  }
 
   const directions = [
     { row: -1, col: 0 },
@@ -897,7 +1809,7 @@ test.describe('SummonerWars', () => {
     const baseURL = testInfo.project.use.baseURL as string | undefined;
 
     const hostContext = await browser.newContext({ baseURL });
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     const hostPage = await hostContext.newPage();
 
@@ -912,7 +1824,7 @@ test.describe('SummonerWars', () => {
     await ensurePlayerIdInUrl(hostPage, '0');
 
     const otherContext = await browser.newContext({ baseURL });
-    await setEnglishLocale(otherContext);
+    await setChineseLocale(otherContext);
     await resetMatchStorage(otherContext);
     const otherPage = await otherContext.newPage();
 
@@ -972,7 +1884,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -992,7 +1904,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1066,7 +1978,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1086,7 +1998,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1223,7 +2135,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1243,7 +2155,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1319,7 +2231,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1339,7 +2251,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1353,7 +2265,7 @@ test.describe('SummonerWars', () => {
 
     // 测试1：火祀召唤 - 准备状态并验证按钮
     let coreState = await readCoreState(hostPage);
-    const { core: fireSacrificeCore, elutBarPosition, allyPosition } = prepareFireSacrificeState(coreState);
+    const { core: fireSacrificeCore } = prepareFireSacrificeState(coreState);
     await applyCoreState(hostPage, fireSacrificeCore);
     await closeDebugPanelIfOpen(hostPage);
 
@@ -1390,7 +2302,7 @@ test.describe('SummonerWars', () => {
 
     // 测试2：吸取生命 - 准备状态并验证按钮
     coreState = await readCoreState(hostPage);
-    const { core: lifeDrainCore, dragosPosition, allyPosition: lifeDrainAlly } = prepareLifeDrainState(coreState);
+    const { core: lifeDrainCore } = prepareLifeDrainState(coreState);
     await applyCoreState(hostPage, lifeDrainCore);
     await closeDebugPanelIfOpen(hostPage);
 
@@ -1438,7 +2350,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1458,7 +2370,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1510,7 +2422,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1530,7 +2442,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1612,7 +2524,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1632,7 +2544,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1684,7 +2596,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1703,7 +2615,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1741,7 +2653,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1760,7 +2672,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -1801,53 +2713,426 @@ test.describe('SummonerWars', () => {
     await guestContext.close();
   });
 
-  test('移动横屏：触屏放大入口与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+  test('移动横屏：对局中的单位与建筑应支持长按放大且不影响点击', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    if (!await ensureGameServerAvailable(hostPage)) {
+      test.skip(true, 'Game server unavailable for online tests.');
+    }
+
+    const matchId = await createSummonerWarsRoom(hostPage);
+    if (!matchId) {
+      test.skip(true, 'Room creation failed or backend unavailable.');
+    }
+
+    await ensurePlayerIdInUrl(hostPage, '0');
+
+    const guestContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(guestContext);
+    await setChineseLocale(guestContext);
+    await resetMatchStorage(guestContext);
+    await disableAudio(guestContext);
+    await disableTutorial(guestContext);
+    const guestPage = await guestContext.newPage();
+    await joinMatchAsGuest(guestPage, matchId!);
+
+    await completeFactionSelection(hostPage, guestPage);
+    await waitForSummonerWarsUI(hostPage, 30000);
+
+    const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
+    const visibleBoardUnit = hostPage.locator('[data-testid^="sw-unit-"]:visible').first();
+    const visibleBoardStructure = hostPage.locator('[data-testid^="sw-structure-"]:visible').first();
+
+    await expect(visibleBoardUnit).toBeVisible({ timeout: 5000 });
+    await expect(visibleBoardStructure).toBeVisible({ timeout: 5000 });
+
+    await longPressTouch(visibleBoardUnit, 650, 31);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-board-unit-long-press-magnify', {
+        filename: 'mobile-board-unit-long-press-magnify.png',
+      }),
+      fullPage: false,
+    });
+
+    await longPressTouch(visibleBoardStructure, 650, 32);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-board-structure-long-press-magnify', {
+        filename: 'mobile-board-structure-long-press-magnify.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+    await guestContext.close();
+  });
+
+  test('移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
     const hostContext = await browser.newContext({
       baseURL,
-      viewport: { width: 812, height: 375 },
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
       isMobile: true,
       hasTouch: true,
     });
+    await hostContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await mockSummonerWarsMapImage(hostContext);
+    await setChineseLocale(hostContext);
     await disableAudio(hostContext);
     const hostPage = await hostContext.newPage();
-    await hostPage.goto('/play/summonerwars/tutorial', { waitUntil: 'domcontentloaded' });
-    await hostPage.waitForLoadState('domcontentloaded');
-    await hostPage.waitForSelector('#root > *', { timeout: 15000 });
 
-    const tutorialCloseButton = hostPage.getByRole('button', { name: /^(Close|关闭)$/i });
-    if (await tutorialCloseButton.isVisible().catch(() => false)) {
-      await tutorialCloseButton.click({ force: true });
-      await expect(tutorialCloseButton).toHaveCount(0, { timeout: 10000 }).catch(() => {});
+    await openSummonerWarsMobileEvidencePage(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow');
+    await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 5000 });
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+
+    const mobileViewport = hostPage.viewportSize();
+    const initialLayout = await hostPage.evaluate(() => ({
+      rootScrollWidth: document.documentElement.scrollWidth,
+      bodyScrollWidth: document.body.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(initialLayout.rootScrollWidth).toBeLessThanOrEqual(initialLayout.innerWidth + 1);
+    expect(initialLayout.bodyScrollWidth).toBeLessThanOrEqual(initialLayout.innerWidth + 1);
+    expect(mobileViewport?.width).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.width);
+    expect(mobileViewport?.height).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.height);
+
+    let matchState = await readSummonerWarsHarnessState(hostPage);
+    let coreState = prepareDeterministicCore(matchState.core);
+    const expectedStartHandCount = coreState.players?.['0']?.hand?.length ?? 0;
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'summon');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedStartHandCount);
+    await waitForSummonerWarsHandStable(hostPage);
+    await waitForSummonerWarsHandArtReady(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow-start');
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-start', {
+        filename: '40-mobile-basic-flow-start.png',
+      }),
+      fullPage: false,
+    });
+
+    const unitCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-type="unit"][data-can-play="true"]')
+      .first();
+    await expect(unitCard).toBeVisible({ timeout: 8000 });
+    await unitCard.click();
+    expect.poll(() => hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]').count(), {
+      timeout: 3000,
+      message: '移动端单位牌点击后未进入选中态',
+    }).toBeGreaterThan(0);
+
+    const summonCell = hostPage.locator('[data-valid-summon="true"]').first();
+    await expect(summonCell).toBeVisible({ timeout: 8000 });
+    const summonRow = await summonCell.getAttribute('data-row');
+    const summonCol = await summonCell.getAttribute('data-col');
+    if (!summonRow || !summonCol) {
+      throw new Error('无法读取移动端召唤格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-summon="true"]');
+    await expect(hostPage.getByTestId(`sw-unit-${summonRow}-${summonCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'move');
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'move');
+    await waitForMyTurn(hostPage);
+
+    const movableUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"]:not([data-unit-class="summoner"])').first();
+    await expect(movableUnit).toBeVisible({ timeout: 8000 });
+    const movableUnitTestId = await movableUnit.getAttribute('data-testid');
+    if (!movableUnitTestId) {
+      throw new Error('无法读取移动单位 test id');
+    }
+    await clickBoardElement(hostPage, `[data-testid="${movableUnitTestId}"]`);
+
+    const moveCell = hostPage.locator('[data-valid-move="true"]').first();
+    await expect(moveCell).toBeVisible({ timeout: 8000 });
+    const moveRow = await moveCell.getAttribute('data-row');
+    const moveCol = await moveCell.getAttribute('data-col');
+    if (!moveRow || !moveCol) {
+      throw new Error('无法读取移动端移动格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-move="true"]');
+    await expect(hostPage.getByTestId(`sw-unit-${moveRow}-${moveCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'build');
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'build');
+    await waitForMyTurn(hostPage);
+
+    const structureCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-type="structure"][data-can-play="true"]')
+      .first();
+    await expect(structureCard).toBeVisible({ timeout: 8000 });
+    await structureCard.click();
+
+    const buildCell = hostPage.locator('[data-valid-build="true"]').first();
+    await expect(buildCell).toBeVisible({ timeout: 8000 });
+    const buildRow = await buildCell.getAttribute('data-row');
+    const buildCol = await buildCell.getAttribute('data-col');
+    if (!buildRow || !buildCol) {
+      throw new Error('无法读取移动端建造格子坐标');
+    }
+    await clickBoardElement(hostPage, '[data-valid-build="true"]');
+    await expect(hostPage.getByTestId(`sw-structure-${buildRow}-${buildCol}`)).toBeVisible({ timeout: 8000 });
+
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    const attackSetup = setupAttackState(matchState.core);
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: attackSetup.core,
+      sys: {
+        ...matchState.sys,
+        phase: attackSetup.core.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'attack');
+    await waitForMyTurn(hostPage);
+
+    await clickBoardElement(
+      hostPage,
+      `[data-testid="sw-unit-${attackSetup.attacker.row}-${attackSetup.attacker.col}"]`,
+    );
+    await expect.poll(async () => {
+      return hostPage.locator('[data-valid-attack="true"]').count();
+    }, {
+      timeout: 2000,
+      message: '等待移动端攻击目标出现',
+    }).toBeGreaterThan(0);
+
+    const targetCell = hostPage.getByTestId(`sw-cell-${attackSetup.target.row}-${attackSetup.target.col}`);
+    const isValidAttack = await targetCell.getAttribute('data-valid-attack').catch(() => null);
+    if (isValidAttack === 'true') {
+      await clickBoardElement(
+        hostPage,
+        `[data-testid="sw-cell-${attackSetup.target.row}-${attackSetup.target.col}"]`,
+      );
+    } else {
+      const anyValidTarget = hostPage.locator('[data-valid-attack="true"]').first();
+      await expect(anyValidTarget).toBeVisible({ timeout: 3000 });
+      const targetTestId = await anyValidTarget.getAttribute('data-testid');
+      if (!targetTestId) {
+        throw new Error('无法读取移动端攻击目标 test id');
+      }
+      await clickBoardElement(hostPage, `[data-testid="${targetTestId}"]`);
     }
 
-    await expect(hostPage.locator('[data-tutorial-step="welcome"]')).toBeVisible({ timeout: 40000 });
-    const tutorialOverviewSteps = [
-      'map-controls',
-      'summoner-intro',
-      'enemy-summoner',
-      'gate-intro',
-      'hand-intro',
-      'card-anatomy',
-      'magic-intro',
-      'phase-intro',
-      'summon-explain',
-      'summon-action',
-    ] as const;
+    const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
+    await expect(diceOverlay).toBeVisible({ timeout: 10000 });
+    await diceOverlay.click({ force: true });
+    await expect(diceOverlay).toBeHidden({ timeout: 5000 });
+    await hostPage.waitForTimeout(1200);
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    coreState = normalizePhaseState(matchState.core, 'magic');
+    const expectedMagicHandCountBeforeDiscard = coreState.players?.['0']?.hand?.length ?? 0;
+    await applySummonerWarsHarnessState(hostPage, {
+      ...matchState,
+      core: coreState,
+      sys: {
+        ...matchState.sys,
+        phase: coreState.phase,
+      },
+    });
+    await waitForPhase(hostPage, 'magic');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountBeforeDiscard);
 
-    for (const stepId of tutorialOverviewSteps) {
-      const nextButton = hostPage.getByRole('button', { name: /^Next$/i });
-      await expect(nextButton).toBeVisible({ timeout: 10000 });
-      await nextButton.click();
-      await expect(hostPage.locator(`[data-tutorial-step="${stepId}"]`)).toBeVisible({ timeout: 15000 });
-    }
+    const discardCard = hostPage.getByTestId('sw-hand-area').locator('[data-card-id]').first();
+    await expect(discardCard).toBeVisible({ timeout: 8000 });
+    await discardCard.click();
+    const confirmDiscard = hostPage.getByTestId('sw-confirm-discard');
+    await expect(confirmDiscard).toBeVisible({ timeout: 5000 });
+    await confirmDiscard.click();
+    await expect(confirmDiscard).toBeHidden({ timeout: 5000 });
+    const expectedMagicHandCountAfterDiscard = Math.max(0, expectedMagicHandCountBeforeDiscard - 1);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountAfterDiscard);
+    await waitForSummonerWarsHandStable(hostPage);
+    await waitForSummonerWarsHandArtReady(hostPage);
+    await assertHandAreaVisible(hostPage, 'mobile-basic-flow-after-magic');
 
-    await expect(hostPage.locator('[data-tutorial-step="summon-action"] .animate-pulse')).toBeVisible({ timeout: 10000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '41-mobile-basic-flow-after-magic', {
+        filename: '41-mobile-basic-flow-after-magic.png',
+      }),
+      fullPage: false,
+    });
+
+    const finalLayout = await hostPage.evaluate(() => {
+      const root = document.documentElement;
+      const body = document.body;
+      const endPhase = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
+      const handArea = document.querySelector('[data-testid="sw-hand-area"]') as HTMLElement | null;
+      const endPhaseRect = endPhase?.getBoundingClientRect();
+      const handAreaRect = handArea?.getBoundingClientRect();
+      return {
+        rootScrollWidth: root.scrollWidth,
+        bodyScrollWidth: body.scrollWidth,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        endPhaseRect,
+        handAreaRect,
+      };
+    });
+    expect(finalLayout.rootScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.bodyScrollWidth).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.endPhaseRect?.right ?? 9999).toBeLessThanOrEqual(finalLayout.innerWidth + 1);
+    expect(finalLayout.endPhaseRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+    expect(finalLayout.handAreaRect).not.toBeNull();
+    expect(finalLayout.handAreaRect?.bottom ?? 9999).toBeLessThanOrEqual(finalLayout.innerHeight + 1);
+
+    await hostContext.close();
+  });
+
+  test('移动横屏：长按放大与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const desktopContext = await browser.newContext({
+      baseURL,
+      viewport: { width: 1920, height: 1080 },
+    });
+    await desktopContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.setItem('hud_fab_position', JSON.stringify({ leftPercent: 0.5, topPercent: 0.5 }));
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(desktopContext);
+    await mockSummonerWarsMapImage(desktopContext);
+    await setChineseLocale(desktopContext);
+    await disableAudio(desktopContext);
+    const desktopPage = await desktopContext.newPage();
+    await openSummonerWarsMobileEvidencePage(desktopPage);
+    await waitForSummonerWarsVisualStable(desktopPage);
+    await collapseFabMenuToMainButton(desktopPage);
+    let desktopFabPosition: { leftRatio: number; topRatio: number } | null = null;
+    await expect.poll(async () => {
+      const box = await desktopPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]').boundingBox();
+      const viewport = desktopPage.viewportSize();
+      if (!box || !viewport) {
+        return null;
+      }
+      desktopFabPosition = {
+        leftRatio: (box.x + box.width / 2) / viewport.width,
+        topRatio: (box.y + box.height / 2) / viewport.height,
+      };
+      return desktopFabPosition;
+    }).not.toBeNull();
+    expect(desktopFabPosition?.leftRatio ?? 0).toBeGreaterThan(0.42);
+    expect(desktopFabPosition?.leftRatio ?? 1).toBeLessThan(0.58);
+    expect(desktopFabPosition?.topRatio ?? 0).toBeGreaterThan(0.42);
+    expect(desktopFabPosition?.topRatio ?? 1).toBeLessThan(0.58);
+    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
+        filename: '00-pc-reference-board.png',
+      }),
+      fullPage: false,
+    });
+    await seedMobileActionLog(desktopPage);
+    const desktopActionLogPanel = await openFabPanel(desktopPage, 'action-log', 'exit');
+    await expect(desktopActionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    const desktopActionLogLayout = await desktopActionLogPanel.evaluate((panel) => {
+      const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
+      const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+      const rect = panel.getBoundingClientRect();
+      return {
+        rect,
+        innerWidth: window.innerWidth,
+        innerHeight: window.innerHeight,
+        panelClientWidth: panel.clientWidth,
+        panelScrollWidth: panel.scrollWidth,
+        firstRowClientWidth: firstRow?.clientWidth ?? 0,
+        firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+      rowCount: rows.length,
+    };
+  });
+    expect(desktopActionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
+    expect(desktopActionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
+    expect(desktopActionLogLayout.rect.right).toBeLessThanOrEqual(desktopActionLogLayout.innerWidth + 1);
+    expect(desktopActionLogLayout.rect.bottom).toBeLessThanOrEqual(desktopActionLogLayout.innerHeight + 1);
+    expect(desktopActionLogLayout.panelScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.panelClientWidth + 1);
+    expect(desktopActionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(desktopActionLogLayout.firstRowClientWidth + 1);
+    expect(desktopActionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    await expect(desktopActionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
+    await desktopPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '01-pc-action-log-open-from-center', {
+        filename: '01-pc-action-log-open-from-center.png',
+      }),
+      fullPage: false,
+    });
+    await desktopContext.close();
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+    await hostContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(hostContext);
+    await mockSummonerWarsMapImage(hostContext);
+    await setChineseLocale(hostContext);
+    await disableAudio(hostContext);
+    const hostPage = await hostContext.newPage();
+    await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
+    await openSummonerWarsMobileEvidencePage(hostPage);
     await expect(hostPage.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 20000 });
@@ -1856,21 +3141,32 @@ test.describe('SummonerWars', () => {
     await expect(hostPage.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 5000 });
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
 
+    const defaultScaleText = await getMapScaleText(hostPage);
+    expect(defaultScaleText).toMatch(/^\d+%$/);
+    const initialScaleBadge = await getMapScaleBadgeState(hostPage);
+    expect(initialScaleBadge.text).toBe(defaultScaleText);
+    expect(initialScaleBadge.ariaHidden).toBe('true');
+    expect(Number(initialScaleBadge.opacity)).toBeLessThan(0.05);
+
     const phoneViewport = hostPage.viewportSize();
-    expect(phoneViewport?.width).toBe(812);
-    expect(phoneViewport?.height).toBe(375);
+    expect(phoneViewport?.width).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.width);
+    expect(phoneViewport?.height).toBe(SW_PHONE_LANDSCAPE_VIEWPORT.height);
 
     const phoneLayout = await hostPage.evaluate(() => {
       const root = document.documentElement;
       const body = document.body;
       const page = document.querySelector('[data-game-page][data-game-id="summonerwars"]') as HTMLElement | null;
       const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
-      const handMagnify = document.querySelector('[data-testid="sw-hand-card-magnify"]') as HTMLElement | null;
       const tracker = document.querySelector('[data-testid="sw-phase-tracker"]') as HTMLElement | null;
+      const mapContainer = document.querySelector('[data-testid="sw-map-container"]') as HTMLElement | null;
+      const mapContent = document.querySelector('[data-testid="sw-map-content"]') as HTMLElement | null;
+      const playerEnergy = document.querySelector('[data-testid="sw-energy-player"]') as HTMLElement | null;
       const pageRect = page?.getBoundingClientRect();
       const endPhaseRect = endPhaseButton?.getBoundingClientRect();
-      const magnifyRect = handMagnify?.getBoundingClientRect();
       const trackerRect = tracker?.getBoundingClientRect();
+      const containerRect = mapContainer?.getBoundingClientRect();
+      const contentRect = mapContent?.getBoundingClientRect();
+      const playerEnergyRect = playerEnergy?.getBoundingClientRect();
       return {
         rootScrollWidth: root.scrollWidth,
         bodyScrollWidth: body.scrollWidth,
@@ -1878,8 +3174,10 @@ test.describe('SummonerWars', () => {
         innerHeight: window.innerHeight,
         pageRect,
         endPhaseRect,
-        magnifyRect,
         trackerRect,
+        containerRect,
+        contentRect,
+        playerEnergyRect,
       };
     });
 
@@ -1890,47 +3188,113 @@ test.describe('SummonerWars', () => {
     expect(phoneLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
     expect(phoneLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
     expect(phoneLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
-    expect(phoneLayout.magnifyRect?.width ?? 0).toBeGreaterThanOrEqual(24);
-    expect(phoneLayout.magnifyRect?.height ?? 0).toBeGreaterThanOrEqual(24);
+    expect(phoneLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(0);
+    expect(phoneLayout.playerEnergyRect?.height ?? 0).toBeGreaterThan(0);
 
+    await waitForSummonerWarsVisualStable(hostPage);
+    await collapseFabMenuToMainButton(hostPage);
+    const phoneShellRatios = await getSummonerWarsShellRatios(hostPage);
+    expect(phoneShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.04);
+    expect(phoneShellRatios.handHeightRatio).toBeLessThanOrEqual(desktopShellRatios.handHeightRatio + 0.08);
+    expect(Math.abs(phoneShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.08);
+    expect(Math.abs(phoneShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '10-phone-landscape-board'),
+      path: getEvidenceScreenshotPath(testInfo, '10-phone-landscape-board', {
+        filename: '10-phone-landscape-board.png',
+      }),
       fullPage: false,
     });
 
-    const handMagnifyButton = hostPage.getByTestId('sw-hand-card-magnify').first();
-    await expect(handMagnifyButton).toBeVisible({ timeout: 5000 });
-    await handMagnifyButton.click();
+    await zoomMap(hostPage, -300);
+    await expect.poll(async () => getMapScaleText(hostPage)).not.toBe(defaultScaleText);
+    await expect.poll(async () => (await getMapScaleBadgeState(hostPage)).ariaHidden).toBe('false');
+    await zoomMap(hostPage, 300);
+    await expect.poll(async () => getMapScaleText(hostPage)).toBe(defaultScaleText);
+    await hostPage.waitForTimeout(1400);
+    await expect.poll(async () => (await getMapScaleBadgeState(hostPage)).ariaHidden).toBe('true');
+
     const magnifyOverlay = hostPage.getByTestId('sw-magnify-overlay');
-    await expect.poll(async () => hostPage.evaluate(() => {
-      const overlay = document.querySelector('[data-testid="sw-magnify-overlay"]') as HTMLElement | null;
-      if (!overlay) return 'missing';
-      const styles = window.getComputedStyle(overlay);
-      return `${styles.pointerEvents}:${styles.opacity}`;
-    }), { timeout: 5000 }).toBe('auto:1');
+    const initialMagnifyCloseButton = magnifyOverlay.getByRole('button', { name: /关闭|Close/i });
+    if (await magnifyOverlay.isVisible().catch(() => false)) {
+      await initialMagnifyCloseButton.dispatchEvent('click');
+      await waitForOverlayState(hostPage, 'sw-magnify-overlay', 'closed');
+    }
+    const affordableHandCard = hostPage
+      .locator('[data-testid="sw-hand-area"] [data-card-id][data-can-afford="true"]')
+      .first();
+    await expect(affordableHandCard).toBeVisible({ timeout: 5000 });
+    await affordableHandCard.click();
+    const selectedHandCard = hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]').first();
+    await expect(selectedHandCard).toBeVisible({ timeout: 5000 });
+    await longPressTouch(selectedHandCard, 650, 33);
+    await waitForOverlayState(hostPage, 'sw-magnify-overlay', 'open');
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '11-phone-hand-magnify-open'),
+      path: getEvidenceScreenshotPath(testInfo, '11-phone-hand-magnify-open', {
+        filename: '11-phone-hand-magnify-open.png',
+      }),
       fullPage: false,
     });
     await magnifyOverlay.locator('button', { hasText: /关闭|Close/i }).click();
-    await expect.poll(async () => hostPage.evaluate(() => {
-      const overlay = document.querySelector('[data-testid="sw-magnify-overlay"]') as HTMLElement | null;
-      if (!overlay) return 'missing';
-      const styles = window.getComputedStyle(overlay);
-      return `${styles.pointerEvents}:${styles.opacity}`;
-    }), { timeout: 5000 }).toBe('none:0');
+    await waitForOverlayState(hostPage, 'sw-magnify-overlay', 'closed');
+    await expect(selectedHandCard).toBeVisible({ timeout: 5000 });
+    await selectedHandCard.click();
+    await expect(hostPage.locator('[data-testid="sw-hand-area"] [data-selected="true"]')).toHaveCount(0);
 
     await hostPage.getByTestId('sw-phase-item-build').click();
     const phaseDetailPanel = hostPage.getByTestId('sw-phase-detail-panel');
     await expect(phaseDetailPanel).toBeVisible({ timeout: 5000 });
     await expect(phaseDetailPanel).toContainText(/Build|建造/i);
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '12-phone-phase-detail-open'),
+      path: getEvidenceScreenshotPath(testInfo, '12-phone-phase-detail-open', {
+        filename: '12-phone-phase-detail-open.png',
+      }),
       fullPage: false,
     });
+    await hostPage.getByTestId('sw-phase-item-summon').click();
+    await expect(phaseDetailPanel).toContainText(/Summon|召唤/i);
 
-    await hostPage.setViewportSize({ width: 1024, height: 768 });
-    await hostPage.waitForTimeout(400);
+    await seedMobileActionLog(hostPage);
+    const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
+    await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    const actionLogLayout = await actionLogPanel.evaluate((panel) => {
+      const firstRow = panel.querySelector('[data-testid="hud-action-log-row"]') as HTMLElement | null;
+      const rows = Array.from(panel.querySelectorAll('[data-testid="hud-action-log-row"]')) as HTMLElement[];
+      const rect = panel.getBoundingClientRect();
+      return {
+        rect,
+        panelClientHeight: panel.clientHeight,
+        panelScrollHeight: panel.scrollHeight,
+        panelClientWidth: panel.clientWidth,
+        panelScrollWidth: panel.scrollWidth,
+        firstRowClientWidth: firstRow?.clientWidth ?? 0,
+        firstRowScrollWidth: firstRow?.scrollWidth ?? 0,
+        rowCount: rows.length,
+      };
+    });
+    expect(actionLogLayout.rect.left).toBeGreaterThanOrEqual(0);
+    expect(actionLogLayout.rect.top).toBeGreaterThanOrEqual(0);
+    expect(actionLogLayout.rect.right).toBeLessThanOrEqual(phoneLayout.innerWidth + 1);
+    expect(actionLogLayout.rect.bottom).toBeLessThanOrEqual(phoneLayout.innerHeight + 1);
+    expect(actionLogLayout.panelScrollHeight).toBeGreaterThan(actionLogLayout.panelClientHeight);
+    expect(actionLogLayout.panelScrollWidth).toBeLessThanOrEqual(actionLogLayout.panelClientWidth + 1);
+    expect(actionLogLayout.firstRowScrollWidth).toBeLessThanOrEqual(actionLogLayout.firstRowClientWidth + 1);
+    expect(actionLogLayout.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+    await expect(actionLogPanel).toContainText('最后一步把冠军停在外圈威胁位');
+    await expect(actionLogPanel).toContainText('中间据点虽然暂时失守，但换来了两翼包夹角度');
+    await actionLogPanel.evaluate((panel) => {
+      panel.scrollTop = panel.scrollHeight;
+    });
+    const actionLogScrollTop = await actionLogPanel.evaluate((panel) => panel.scrollTop);
+    expect(actionLogScrollTop).toBeGreaterThan(0);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '13-phone-action-log-open', {
+        filename: '13-phone-action-log-open.png',
+      }),
+      fullPage: false,
+    });
+    await hostPage.setViewportSize(SW_TABLET_LANDSCAPE_VIEWPORT);
+    await openSummonerWarsMobileEvidencePage(hostPage);
+    await waitForSummonerWarsVisualStable(hostPage);
     await assertHandAreaVisible(hostPage, 'tablet-landscape');
     await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
 
@@ -1940,9 +3304,15 @@ test.describe('SummonerWars', () => {
       const page = document.querySelector('[data-game-page][data-game-id="summonerwars"]') as HTMLElement | null;
       const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
       const tracker = document.querySelector('[data-testid="sw-phase-tracker"]') as HTMLElement | null;
+      const mapContainer = document.querySelector('[data-testid="sw-map-container"]') as HTMLElement | null;
+      const mapContent = document.querySelector('[data-testid="sw-map-content"]') as HTMLElement | null;
+      const playerEnergy = document.querySelector('[data-testid="sw-energy-player"]') as HTMLElement | null;
       const pageRect = page?.getBoundingClientRect();
       const endPhaseRect = endPhaseButton?.getBoundingClientRect();
       const trackerRect = tracker?.getBoundingClientRect();
+      const containerRect = mapContainer?.getBoundingClientRect();
+      const contentRect = mapContent?.getBoundingClientRect();
+      const playerEnergyRect = playerEnergy?.getBoundingClientRect();
       return {
         rootScrollWidth: root.scrollWidth,
         bodyScrollWidth: body.scrollWidth,
@@ -1951,6 +3321,9 @@ test.describe('SummonerWars', () => {
         pageRect,
         endPhaseRect,
         trackerRect,
+        containerRect,
+        contentRect,
+        playerEnergyRect,
       };
     });
 
@@ -1961,9 +3334,327 @@ test.describe('SummonerWars', () => {
     expect(tabletLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
     expect(tabletLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
     expect(tabletLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletLayout.containerRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+    expect(tabletLayout.containerRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletLayout.containerRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+    expect(tabletLayout.containerRect?.bottom ?? 99999).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
+    const tabletVisibleBoardUnit = hostPage.locator('[data-testid^="sw-unit-"]:visible').first();
+    const tabletVisibleBoardStructure = hostPage.locator('[data-testid^="sw-structure-"]:visible').first();
+    await expect(tabletVisibleBoardUnit).toBeVisible({ timeout: 5000 });
+    await expect(tabletVisibleBoardStructure).toBeVisible({ timeout: 5000 });
+    const tabletUnitBox = await tabletVisibleBoardUnit.boundingBox();
+    const tabletStructureBox = await tabletVisibleBoardStructure.boundingBox();
+    expect(tabletUnitBox).not.toBeNull();
+    expect(tabletStructureBox).not.toBeNull();
+    expect(tabletUnitBox!.x).toBeGreaterThanOrEqual(-2);
+    expect(tabletUnitBox!.y).toBeGreaterThanOrEqual(-2);
+    expect(tabletUnitBox!.x + tabletUnitBox!.width).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletUnitBox!.y + tabletUnitBox!.height).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
+    expect(tabletStructureBox!.x).toBeGreaterThanOrEqual(-2);
+    expect(tabletStructureBox!.y).toBeGreaterThanOrEqual(-2);
+    expect(tabletStructureBox!.x + tabletStructureBox!.width).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
+    expect(tabletStructureBox!.y + tabletStructureBox!.height).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
+    expect(tabletLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(phoneLayout.playerEnergyRect?.width ?? 0);
+    expect(tabletLayout.playerEnergyRect?.height ?? 0).toBeGreaterThanOrEqual(phoneLayout.playerEnergyRect?.height ?? 0);
+    const tabletShellRatios = await getSummonerWarsShellRatios(hostPage);
+    // 13:6 平板横屏会比 16:9 桌面更早受高度约束，地图横向占比允许比桌面基线更窄，
+    // 但不能窄到明显失去主战区存在感。
+    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.18);
+    // 平板按 PC 风格验收：允许阶段流程宽度与桌面基线存在更大差值（不再强贴手机壳比例）
+    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.16);
+    expect(Math.abs(tabletShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
 
     await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '20-tablet-landscape-board'),
+      path: getEvidenceScreenshotPath(testInfo, '20-tablet-landscape-board', {
+        filename: '20-tablet-landscape-board.png',
+      }),
+      fullPage: false,
+    });
+
+    await hostContext.close();
+  });
+
+  test('移动横屏：展开后的悬浮球上下拖拽时展开框仍会收回视口并让出结束阶段按钮', async ({ browser }, testInfo) => {
+    test.setTimeout(120000);
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const hostContext = await browser.newContext({
+      baseURL,
+      viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
+      isMobile: true,
+      hasTouch: true,
+    });
+
+    await hostContext.addInitScript(() => {
+      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
+      (window as Window & { __BG_FORCE_COARSE_POINTER__?: boolean }).__BG_FORCE_COARSE_POINTER__ = true;
+      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
+      localStorage.removeItem('hud_fab_position');
+      localStorage.removeItem('hud_fab_offset');
+    });
+    await blockAudioRequests(hostContext);
+    await mockSummonerWarsMapImage(hostContext);
+    await setChineseLocale(hostContext);
+    await disableAudio(hostContext);
+
+    const hostPage = await hostContext.newPage();
+    await hostPage.setViewportSize(SW_PHONE_LANDSCAPE_VIEWPORT);
+    await openSummonerWarsMobileEvidencePage(hostPage);
+    await waitForSummonerWarsVisualStable(hostPage);
+    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
+    await seedMobileActionLog(hostPage);
+
+    const runExpandedOverflowScenario = async ({
+      deltaY,
+      overflowDirection,
+      screenshotKey,
+      screenshotFilename,
+      undoScreenshotKey,
+      undoScreenshotFilename,
+      undoZoomScreenshotKey,
+      undoZoomScreenshotFilename,
+    }: {
+      deltaY: number;
+      overflowDirection: 'top' | 'bottom';
+      screenshotKey: string;
+      screenshotFilename: string;
+      undoScreenshotKey: string;
+      undoScreenshotFilename: string;
+      undoZoomScreenshotKey: string;
+      undoZoomScreenshotFilename: string;
+    }) => {
+      await hostPage.evaluate(() => {
+        localStorage.removeItem('hud_fab_position');
+        localStorage.removeItem('hud_fab_offset');
+      });
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
+      await collapseFabMenuToMainButton(hostPage);
+
+      const exitFab = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="exit"]');
+      const exitFabVisual = hostPage.locator('[data-fab-visual-id="exit"]');
+      const exitFabPanel = hostPage.getByTestId('fab-panel-exit');
+      await expect(exitFab).toBeVisible({ timeout: 5000 });
+      await exitFab.click();
+      await expect(hostPage.getByTestId('fab-sheet-exit')).toHaveCount(0);
+      await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+      const exitPanelRectBeforeDrag = await exitFabPanel.boundingBox();
+      const exitVisualRectBeforeDrag = await exitFabVisual.boundingBox();
+      expect(exitPanelRectBeforeDrag).not.toBeNull();
+      expect(exitVisualRectBeforeDrag).not.toBeNull();
+
+      await touchDragElement(exitFab, {
+        deltaX: 0,
+        deltaY,
+        steps: 12,
+      });
+      const releaseSamples = await sampleFabReleaseFrames(hostPage, {
+        buttonId: 'exit',
+        panelId: 'exit',
+      });
+      await hostPage.waitForTimeout(180);
+
+      const validReleaseSamples = releaseSamples.filter((sample) => sample !== null);
+      expect(validReleaseSamples.length, `${overflowDirection} overflow should keep sampling the exit FAB after release`).toBeGreaterThan(0);
+      const firstReleaseSample = validReleaseSamples[0];
+      const lastReleaseSample = validReleaseSamples[validReleaseSamples.length - 1];
+      const preDragVisualTop = exitVisualRectBeforeDrag?.y ?? firstReleaseSample?.visualTop ?? 0;
+      expect(
+        Math.abs((firstReleaseSample?.visualTop ?? 0) - (lastReleaseSample?.visualTop ?? 0)),
+        `${overflowDirection} overflow should not let the exit FAB snap back toward its pre-drag origin before settling`,
+      ).toBeLessThan(
+        Math.abs((firstReleaseSample?.visualTop ?? 0) - preDragVisualTop),
+      );
+      expect(
+        Math.max(...validReleaseSamples.map((sample) => sample.anchorEdgeDistance)),
+        `${overflowDirection} overflow should keep the exit panel vertically anchored to the dragged main FAB during release`,
+      ).toBeLessThanOrEqual(18);
+
+      const draggedVisualBox = await hostPage.locator('[data-fab-visual-id="exit"]').boundingBox();
+      const draggedStoredPosition = await getFabStoredPosition(hostPage);
+      expect(draggedVisualBox).not.toBeNull();
+      expect(draggedStoredPosition).not.toBeNull();
+      if (overflowDirection === 'top') {
+        expect((draggedStoredPosition?.topPercent ?? 1)).toBeLessThan(0);
+        expect((draggedVisualBox?.y ?? 999)).toBeLessThan(20);
+      } else {
+        expect((draggedStoredPosition?.topPercent ?? 0)).toBeGreaterThan(0.9);
+        expect(
+          (draggedVisualBox?.y ?? 0) + (draggedVisualBox?.height ?? 0),
+          'bottom overflow should keep the recovered main FAB in the lower half instead of snapping back to its old resting point',
+        ).toBeGreaterThan(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.55);
+      }
+      await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
+      await expect.poll(async () => {
+        const rect = await exitFabPanel.boundingBox();
+        return rect ? Math.round(rect.y) : null;
+      }, { timeout: 2500, intervals: [80, 120, 160] }).not.toBeNull();
+      const rawExitPanelRectAfterDrag = await exitFabPanel.boundingBox();
+      expect(rawExitPanelRectAfterDrag).not.toBeNull();
+      const resolvedExitPanelRectAfterDrag = {
+        x: rawExitPanelRectAfterDrag?.x ?? 0,
+        y: rawExitPanelRectAfterDrag?.y ?? 0,
+        right: (rawExitPanelRectAfterDrag?.x ?? 0) + (rawExitPanelRectAfterDrag?.width ?? 0),
+        bottom: (rawExitPanelRectAfterDrag?.y ?? 0) + (rawExitPanelRectAfterDrag?.height ?? 0),
+      };
+      expect(resolvedExitPanelRectAfterDrag.x).toBeGreaterThanOrEqual(0);
+      expect(resolvedExitPanelRectAfterDrag.y).toBeGreaterThanOrEqual(0);
+      expect(resolvedExitPanelRectAfterDrag.right).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.width + 1);
+      expect(resolvedExitPanelRectAfterDrag.bottom).toBeLessThanOrEqual(SW_PHONE_LANDSCAPE_VIEWPORT.height + 1);
+
+      await openSummonerWarsMobileEvidencePage(hostPage);
+      await waitForSummonerWarsVisualStable(hostPage);
+      await seedMobileActionLog(hostPage);
+      const actionLogPanel = await openFabPanel(hostPage, 'action-log', 'exit');
+      await expect(actionLogPanel.getByTestId('hud-action-log-row')).toHaveCount(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      const expandedFabMetrics = await waitForExpandedFabLayoutStable(hostPage);
+      expect(expandedFabMetrics.panelRect).not.toBeNull();
+      expect(expandedFabMetrics.rowCount).toBe(SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT);
+      expect(expandedFabMetrics.panelScrollHeight).toBeGreaterThan(expandedFabMetrics.panelClientHeight);
+      expect(expandedFabMetrics.panelScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.panelClientWidth + 1);
+      expect(expandedFabMetrics.firstRowScrollWidth).toBeLessThanOrEqual(expandedFabMetrics.firstRowClientWidth + 1);
+      expect(expandedFabMetrics.panelRect?.left ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.panelRect?.right ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportWidth + 1);
+      expect(expandedFabMetrics.panelRect?.bottom ?? 9999).toBeLessThanOrEqual(expandedFabMetrics.viewportHeight + 1);
+      expect(expandedFabMetrics.pageScrollX).toBe(0);
+      expect(expandedFabMetrics.pageScrollY).toBe(0);
+      expect(expandedFabMetrics.gamePageRect?.top ?? -1).toBeGreaterThanOrEqual(0);
+      expect(expandedFabMetrics.gamePageRect?.bottom ?? -1).toBeGreaterThanOrEqual(expandedFabMetrics.viewportHeight - 1);
+      const nearestSatelliteToMain = expandedFabMetrics.visibleButtons
+        .filter((button) => button.id !== 'exit')
+        .map((button) => ({
+          ...button,
+          distanceToMain: Math.abs(
+            ((button.rect.top + button.rect.bottom) / 2)
+            - (((expandedFabMetrics.mainVisualRect?.top ?? 0) + (expandedFabMetrics.mainVisualRect?.bottom ?? 0)) / 2),
+          ),
+        }))
+        .sort((a, b) => a.distanceToMain - b.distanceToMain)[0];
+      expect(
+        nearestSatelliteToMain?.id,
+        `${overflowDirection} overflow should keep the business order stable and leave settings closest to the main FAB`,
+      ).toBe('settings');
+
+      const expandedButtons = expandedFabMetrics.visibleButtons.filter((button) => button.id !== 'exit');
+      const panelRect = expandedFabMetrics.panelRect;
+      if (!panelRect) {
+        throw new Error(`缺少 ${overflowDirection} 场景的日志面板尺寸`);
+      }
+      const resolveAnchorEdgeDistance = (
+        targetRect: { top: number; bottom: number },
+        referenceRect: { top: number; bottom: number },
+      ) => Math.min(
+        Math.abs(targetRect.top - referenceRect.top),
+        Math.abs(targetRect.bottom - referenceRect.bottom),
+      );
+      for (const button of expandedButtons) {
+        const overlapsVertically = panelRect.top < button.rect.bottom && panelRect.bottom > button.rect.top;
+        if (overlapsVertically) {
+          const leftClearance = button.rect.left - panelRect.right;
+          const rightClearance = panelRect.left - button.rect.right;
+          expect(
+            Math.max(leftClearance, rightClearance),
+            `${overflowDirection}:${button.id} panel should stay clear of visible expanded buttons`,
+          ).toBeGreaterThanOrEqual(8);
+        }
+      }
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, screenshotKey, {
+          filename: screenshotFilename,
+        }),
+        fullPage: false,
+      });
+
+      const undoButton = hostPage.locator('[data-testid="fab-menu"] [data-fab-id^="undo-"]').first();
+      await expect(undoButton).toBeVisible({ timeout: 5000 });
+      const undoButtonId = await undoButton.getAttribute('data-fab-id');
+      if (!undoButtonId) {
+        throw new Error(`缺少 ${overflowDirection} 场景的 undo FAB id`);
+      }
+      const undoPanel = await openFabPanel(hostPage, undoButtonId, 'exit');
+      await expect(undoPanel).toBeVisible({ timeout: 5000 });
+      const undoPanelAnchorMetrics = await hostPage.evaluate(({ undoButtonId: currentUndoButtonId }) => {
+        const panel = document.querySelector(`[data-testid="fab-panel-${currentUndoButtonId}"]`) as HTMLElement | null;
+        const undoButtonElement = document.querySelector(`[data-fab-id="${currentUndoButtonId}"]`) as HTMLElement | null;
+        const settingsButtonElement = document.querySelector('[data-fab-id="settings"]') as HTMLElement | null;
+        if (!panel || !undoButtonElement || !settingsButtonElement) {
+          return null;
+        }
+        const panelRect = panel.getBoundingClientRect();
+        const undoRect = undoButtonElement.getBoundingClientRect();
+        const settingsRect = settingsButtonElement.getBoundingClientRect();
+        const resolveAnchorEdgeDistance = (targetRect: DOMRect, referenceRect: DOMRect) =>
+          Math.min(
+            Math.abs(targetRect.top - referenceRect.top),
+            Math.abs(targetRect.bottom - referenceRect.bottom),
+          );
+        return {
+          undoAnchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, undoRect),
+          settingsAnchorEdgeDistance: resolveAnchorEdgeDistance(panelRect, settingsRect),
+        };
+      }, { undoButtonId });
+      expect(undoPanelAnchorMetrics).not.toBeNull();
+      expect(
+        undoPanelAnchorMetrics?.undoAnchorEdgeDistance ?? Number.POSITIVE_INFINITY,
+        `${overflowDirection} overflow should keep the undo panel anchored to the undo button itself`,
+      ).toBeLessThanOrEqual(12);
+      expect(
+        (undoPanelAnchorMetrics?.settingsAnchorEdgeDistance ?? 0)
+        - (undoPanelAnchorMetrics?.undoAnchorEdgeDistance ?? 0),
+        `${overflowDirection} overflow should not let the undo panel snap to the settings button`,
+      ).toBeGreaterThanOrEqual(12);
+
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, undoScreenshotKey, {
+          filename: undoScreenshotFilename,
+        }),
+        fullPage: false,
+      });
+
+      const settingsButtonLocator = hostPage.locator('[data-testid="fab-menu"] [data-fab-id="settings"]').first();
+      await expect(settingsButtonLocator).toBeVisible({ timeout: 5000 });
+      await captureEvidenceClipAroundLocators(hostPage, [undoPanel, undoButton, settingsButtonLocator], {
+        path: getEvidenceScreenshotPath(testInfo, undoZoomScreenshotKey, {
+          filename: undoZoomScreenshotFilename,
+        }),
+        padding: 14,
+      });
+    };
+
+    await runExpandedOverflowScenario({
+      deltaY: -Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.78),
+      overflowDirection: 'top',
+      screenshotKey: 'mobile-fab-expanded-top-overflow-recovered',
+      screenshotFilename: '30-mobile-fab-expanded-top-overflow-recovered.png',
+      undoScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-recovered',
+      undoScreenshotFilename: '30a-mobile-fab-expanded-top-undo-anchor-recovered.png',
+      undoZoomScreenshotKey: 'mobile-fab-expanded-top-undo-anchor-zoom',
+      undoZoomScreenshotFilename: '30b-mobile-fab-expanded-top-undo-anchor-zoom.png',
+    });
+
+    await runExpandedOverflowScenario({
+      deltaY: Math.round(SW_PHONE_LANDSCAPE_VIEWPORT.height * 0.82),
+      overflowDirection: 'bottom',
+      screenshotKey: 'mobile-fab-expanded-bottom-overflow-recovered',
+      screenshotFilename: '31-mobile-fab-expanded-bottom-overflow-recovered.png',
+      undoScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-recovered',
+      undoScreenshotFilename: '31a-mobile-fab-expanded-bottom-undo-anchor-recovered.png',
+      undoZoomScreenshotKey: 'mobile-fab-expanded-bottom-undo-anchor-zoom',
+      undoZoomScreenshotFilename: '31b-mobile-fab-expanded-bottom-undo-anchor-zoom.png',
+    });
+
+    const phaseBeforeAdvance = await getCurrentPhase(hostPage);
+    const phaseAfterAdvance = await advancePhase(hostPage, phaseBeforeAdvance);
+    expect(phaseAfterAdvance).not.toBe(phaseBeforeAdvance);
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'mobile-fab-expanded-end-phase-clickable', {
+        filename: '32-mobile-fab-expanded-end-phase-clickable.png',
+      }),
       fullPage: false,
     });
 
@@ -1977,7 +3668,7 @@ test.describe('SummonerWars', () => {
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
     await blockLobbySocket(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -1997,7 +3688,7 @@ test.describe('SummonerWars', () => {
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
     await blockLobbySocket(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);
@@ -2037,7 +3728,7 @@ test.describe('SummonerWars', () => {
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
-    await setEnglishLocale(hostContext);
+    await setChineseLocale(hostContext);
     await resetMatchStorage(hostContext);
     await disableAudio(hostContext);
     await disableTutorial(hostContext);
@@ -2056,7 +3747,7 @@ test.describe('SummonerWars', () => {
 
     const guestContext = await browser.newContext({ baseURL });
     await blockAudioRequests(guestContext);
-    await setEnglishLocale(guestContext);
+    await setChineseLocale(guestContext);
     await resetMatchStorage(guestContext);
     await disableAudio(guestContext);
     await disableTutorial(guestContext);

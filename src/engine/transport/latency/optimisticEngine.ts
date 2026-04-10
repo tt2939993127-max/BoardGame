@@ -24,6 +24,7 @@ import type {
     ReconcileResult,
 } from './types';
 import { executePipeline, createSeededRandom } from '../../pipeline';
+import { resolveNextCommandTimestamp } from '../../utils';
 
 // ============================================================================
 // 公共接口
@@ -175,6 +176,13 @@ export function filterPlayedEvents(
             },
         },
     };
+}
+
+function isCoreStateEqual(
+    left: MatchState<unknown>['core'],
+    right: MatchState<unknown>['core'],
+): boolean {
+    return JSON.stringify(left) === JSON.stringify(right);
 }
 
 // ============================================================================
@@ -427,10 +435,14 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
             }
 
             try {
+                const replayTimestamp = typeof cmd.timestamp === 'number'
+                    ? cmd.timestamp
+                    : Math.max(1, resolveNextCommandTimestamp(currentState));
                 const command: Command = {
                     type: cmd.type,
                     playerId: cmd.playerId,
                     payload: cmd.payload,
+                    timestamp: replayTimestamp,
                 };
 
                 const result = executePipeline(
@@ -451,6 +463,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 const predictedState = applyAnimationMode(result.state, currentState, mode);
                 replayed.push({
                     ...cmd,
+                    timestamp: replayTimestamp,
                     predictedState,
                     previousState: currentState,
                 });
@@ -489,7 +502,8 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
 
             // 尝试本地执行 Pipeline
             try {
-                const command: Command = { type, playerId, payload };
+                const timestamp = Math.max(1, resolveNextCommandTimestamp(currentState));
+                const command: Command = { type, playerId, payload, timestamp };
 
                 // 开发环境断言：显式声明 'deterministic' 的命令，用独立 probe 验证是否真的不调用 random
                 // 若检测到 random 调用，说明 commandDeterminism 配置错误（比不声明更危险，因为跳过了 probe 安全网）
@@ -563,6 +577,7 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 pendingCommands.push({
                     seq: nextSeq++,
                     type,
+                    timestamp,
                     payload,
                     playerId,
                     predictedState,
@@ -586,28 +601,21 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
         },
 
         reconcile(serverState: MatchState<unknown>, meta?: { stateID?: number; lastCommandPlayerId?: string; randomCursor?: number }): ReconcileResult {
-            // 更新确认状态
-            confirmedState = serverState;
-
-            // 更新 confirmedStateID（用于后续 processCommand 推算 predictedStateID）
-            if (meta?.stateID !== undefined) {
-                confirmedStateID = meta.stateID;
-            }
-
-            // 同步随机数游标：根据服务端 cursor 重建 localRandom，确保后续预测准确
-            if (isRandomSynced && syncedSeed !== null && typeof meta?.randomCursor === 'number') {
-                syncedCursor = meta.randomCursor;
-                const synced = createSeededRandom(syncedSeed);
-                // 快进到服务端 cursor 位置
-                for (let i = 0; i < meta.randomCursor; i++) {
-                    synced.random();
-                }
-                localRandom = synced;
-                randomProbe = createRandomProbe(localRandom);
-            }
-
             if (pendingCommands.length === 0) {
                 // 无 pending 命令，直接使用确认状态，重置水位线
+                confirmedState = serverState;
+                if (meta?.stateID !== undefined) {
+                    confirmedStateID = meta.stateID;
+                }
+                if (isRandomSynced && syncedSeed !== null && typeof meta?.randomCursor === 'number') {
+                    syncedCursor = meta.randomCursor;
+                    const synced = createSeededRandom(syncedSeed);
+                    for (let i = 0; i < meta.randomCursor; i++) {
+                        synced.random();
+                    }
+                    localRandom = synced;
+                    randomProbe = createRandomProbe(localRandom);
+                }
                 optimisticEventWatermark = null;
                 waitConfirmWatermark = null;
                 // 清除未预测命令屏障：服务端确认状态已包含所有命令的效果
@@ -645,7 +653,22 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
                 const stateIDMatch = meta.stateID === firstPending.predictedStateID;
                 const playerMatch = meta.lastCommandPlayerId === undefined
                     || meta.lastCommandPlayerId === firstPending.playerId;
-                firstCommandConfirmed = stateIDMatch && playerMatch;
+                const coreMatch = isCoreStateEqual(firstPending.predictedState.core, serverState.core);
+
+                if (stateIDMatch && playerMatch && !coreMatch) {
+                    if (process.env.NODE_ENV === 'development') {
+                        console.warn(
+                            '[OptimisticEngine] 命中 stateID/playerId 确认条件，但服务端 core 与本地预测不一致，忽略这次可疑确认并保留乐观状态',
+                            { serverStateID: meta.stateID, commandType: firstPending.type, playerId: firstPending.playerId },
+                        );
+                    }
+                    return {
+                        stateToRender: pendingCommands[pendingCommands.length - 1].predictedState,
+                        didRollback: false,
+                        optimisticEventWatermark: null,
+                    };
+                }
+                firstCommandConfirmed = stateIDMatch && playerMatch && coreMatch;
 
                 // 开发环境诊断：stateID 匹配但 playerId 不匹配 → 对手命令，非自己的确认
                 if (process.env.NODE_ENV === 'development' && stateIDMatch && !playerMatch) {
@@ -657,7 +680,21 @@ export function createOptimisticEngine(config: OptimisticEngineConfig): Optimist
             } else {
                 // Fallback: JSON.stringify 深度比较
                 firstCommandConfirmed =
-                    JSON.stringify(firstPending.predictedState.core) === JSON.stringify(serverState.core);
+                    isCoreStateEqual(firstPending.predictedState.core, serverState.core);
+            }
+
+            confirmedState = serverState;
+            if (meta?.stateID !== undefined) {
+                confirmedStateID = meta.stateID;
+            }
+            if (isRandomSynced && syncedSeed !== null && typeof meta?.randomCursor === 'number') {
+                syncedCursor = meta.randomCursor;
+                const synced = createSeededRandom(syncedSeed);
+                for (let i = 0; i < meta.randomCursor; i++) {
+                    synced.random();
+                }
+                localRandom = synced;
+                randomProbe = createRandomProbe(localRandom);
             }
 
             if (firstCommandConfirmed) {

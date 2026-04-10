@@ -25,6 +25,7 @@ import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { makeMatchState as makeMatchStateFromHelpers } from './helpers';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
+import { INTERACTION_COMMANDS, refreshInteractionOptions } from '../../../engine/systems/InteractionSystem';
 
 beforeAll(() => {
     clearRegistry();
@@ -407,6 +408,46 @@ describe('巫师派系能力（第6批）', () => {
         expect(current?.data?.sourceId).toBe('wizard_mass_enchantment');
     });
 
+    it('wizard_mass_enchantment: 对手牌库顶变化后不应继续保留过期行动卡候选', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'wizard_mass_enchantment', 'action', '0')],
+                }),
+                '1': makePlayer('1', {
+                    deck: [
+                        makeCard('d1', 'test_action', 'action', '1'),
+                        makeCard('d2', 'test_minion', 'minion', '1'),
+                    ],
+                }),
+            },
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const refreshedState = refreshInteractionOptions({
+            ...matchState,
+            core: {
+                ...matchState.core,
+                players: {
+                    ...matchState.core.players,
+                    '1': {
+                        ...matchState.core.players['1'],
+                        deck: [
+                            makeCard('intrude', 'test_minion', 'minion', '1'),
+                            makeCard('d1', 'test_action', 'action', '1'),
+                            makeCard('d2', 'test_minion', 'minion', '1'),
+                        ],
+                    },
+                },
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('wizard_mass_enchantment');
+        const optionUids = (current?.data?.options ?? []).map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionUids).not.toContain('d1');
+    });
+
     it('wizard_mass_enchantment: 对手牌库为空时无事件', () => {
         const state = makeState({
             players: {
@@ -492,6 +533,47 @@ describe('巫师派系能力（第6批）', () => {
         expect(current?.data?.sourceId).toBe('wizard_portal_order');
     });
 
+    it('wizard_portal_order: 牌库顶被插入新牌后不应继续保留旧揭示排序候选', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'wizard_portal', 'action', '0')],
+                    deck: [
+                        makeCard('d1', 'test_a', 'action', '0'),
+                        makeCard('d2', 'test_a2', 'action', '0'),
+                        makeCard('d3', 'test_a3', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const refreshedState = refreshInteractionOptions({
+            ...matchState,
+            core: {
+                ...matchState.core,
+                players: {
+                    ...matchState.core.players,
+                    '0': {
+                        ...matchState.core.players['0'],
+                        deck: [
+                            makeCard('intrude', 'test_a4', 'action', '0'),
+                            ...matchState.core.players['0'].deck,
+                        ],
+                    },
+                },
+            },
+        });
+
+        const current = (refreshedState.sys as any).interaction?.current;
+        expect(current?.data?.sourceId).toBe('wizard_portal_order');
+        const optionUids = (current?.data?.options ?? []).map((option: any) => option.value?.cardUid).filter(Boolean);
+        expect(optionUids).not.toContain('d1');
+        expect(optionUids).not.toContain('d2');
+        expect(optionUids).not.toContain('d3');
+    });
+
     it('wizard_scry: 单张行动卡时创建 Prompt', () => {
         const state = makeState({
             players: {
@@ -528,6 +610,83 @@ describe('巫师派系能力（第6批）', () => {
         const { events, matchState } = execPlayAction(state, '0', 'a1');
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         expect(drawEvents.length).toBe(0);
+    });
+
+    it('wizard_scry: 召唤→时间法师→占卜→女巫链中，废物利用不应回退成占卜', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [
+                        makeCard('a-summon', 'wizard_summon', 'action', '0'),
+                        makeCard('m-chrono', 'wizard_chronomage', 'minion', '0'),
+                        makeCard('a-scry', 'wizard_scry', 'action', '0'),
+                        makeCard('m-enchant', 'wizard_enchantress', 'minion', '0'),
+                    ],
+                    deck: [
+                        makeCard('d-scrap-1', 'steampunk_scrap_diving', 'action', '0'),
+                        makeCard('d-change', 'steampunk_change_of_venue', 'action', '0'),
+                        makeCard('d-scrap-2', 'steampunk_scrap_diving', 'action', '0'),
+                    ],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                { defId: 'base_the_homeworld', minions: [], ongoingActions: [] },
+            ],
+        }));
+
+        const playSummon = runCommand(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a-summon' },
+            timestamp: 500,
+        }, defaultRandom);
+        expect(playSummon.success).toBe(true);
+        expect(playSummon.finalState.core.players['0'].minionLimit).toBe(2);
+
+        const playChronomage = runCommand(playSummon.finalState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'm-chrono', baseIndex: 0 },
+            timestamp: 1000,
+        }, defaultRandom);
+        expect(playChronomage.success).toBe(true);
+        expect(playChronomage.finalState.core.players['0'].actionLimit).toBe(2);
+
+        const playScry = runCommand(playChronomage.finalState, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a-scry' },
+            timestamp: 2000,
+        }, defaultRandom);
+        expect(playScry.success).toBe(true);
+        expect(playScry.finalState.sys.interaction?.current?.data?.sourceId).toBe('wizard_scry');
+
+        const resolveScry = runCommand(playScry.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: '0',
+            payload: { optionId: 'card-0' },
+            timestamp: 3000,
+        }, defaultRandom);
+        expect(resolveScry.success).toBe(true);
+        expect(resolveScry.finalState.core.players['0'].hand.map(card => card.uid)).toContain('d-scrap-1');
+        expect(resolveScry.finalState.core.players['0'].hand.map(card => card.uid)).not.toContain('a-scry');
+        expect(resolveScry.finalState.core.players['0'].deck.map(card => card.uid)).not.toContain('d-scrap-1');
+
+        const playEnchantress = runCommand(resolveScry.finalState, {
+            type: SU_COMMANDS.PLAY_MINION,
+            playerId: '0',
+            payload: { cardUid: 'm-enchant', baseIndex: 0 },
+            timestamp: 4000,
+        }, defaultRandom);
+        expect(playEnchantress.success).toBe(true);
+
+        const finalPlayer = playEnchantress.finalState.core.players['0'];
+        const finalHandUids = finalPlayer.hand.map(card => card.uid);
+        expect(finalHandUids).toContain('d-scrap-1');
+        expect(finalHandUids).toContain('d-change');
+        expect(finalHandUids).not.toContain('a-scry');
+        expect(finalPlayer.deck.map(card => card.uid)).toEqual(['d-scrap-2']);
     });
 
     it('wizard_sacrifice: 多个己方随从时创建 Prompt 选择', () => {

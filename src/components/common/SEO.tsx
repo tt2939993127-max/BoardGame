@@ -9,6 +9,7 @@ interface SEOProps {
     ogImage?: string;
     ogType?: string;
     canonical?: string;
+    noIndex?: boolean;
 }
 
 /**
@@ -24,6 +25,7 @@ export const SEO: React.FC<SEOProps> = ({
     ogImage,
     ogType = 'website',
     canonical,
+    noIndex = false,
 }) => {
     const siteName = '易桌游';
     const siteTitle = `${siteName} - 桌游教学与联机平台`;
@@ -34,12 +36,15 @@ export const SEO: React.FC<SEOProps> = ({
             <title>{fullTitle}</title>
             {description && <meta name="description" content={description} />}
             {keywords && <meta name="keywords" content={keywords} />}
+            <meta name="robots" content={noIndex ? 'noindex,nofollow' : 'index,follow'} />
+            <meta name="googlebot" content={noIndex ? 'noindex,nofollow' : 'index,follow'} />
 
             {/* Open Graph 元信息 */}
             <meta property="og:title" content={ogTitle || fullTitle} />
             {ogDescription && <meta property="og:description" content={ogDescription} />}
             {ogImage && <meta property="og:image" content={ogImage} />}
             <meta property="og:type" content={ogType} />
+            <meta property="og:locale" content="zh_CN" />
 
             {/* Twitter 元信息 */}
             <meta name="twitter:card" content="summary_large_image" />

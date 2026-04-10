@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import clsx from 'clsx';
@@ -6,6 +6,80 @@ import { useAuth } from '../../contexts/AuthContext';
 import { ModalBase } from '../common/overlays/ModalBase';
 import { LoadingArcaneAether } from '../system/LoadingVariants';
 import { AnimatePresence } from 'framer-motion';
+import { PasswordField } from '../common/PasswordField';
+
+const AUTH_REMEMBERED_FIELDS_STORAGE_KEY = 'auth_modal_remembered_fields_v1';
+
+interface AuthRememberedFields {
+    account: string;
+    username: string;
+    email: string;
+    resetEmail: string;
+}
+
+const EMPTY_REMEMBERED_FIELDS: AuthRememberedFields = {
+    account: '',
+    username: '',
+    email: '',
+    resetEmail: '',
+};
+let inMemoryRememberedFields: AuthRememberedFields = { ...EMPTY_REMEMBERED_FIELDS };
+
+function mergeRememberedFields(
+    previous: AuthRememberedFields,
+    incoming: Partial<AuthRememberedFields>
+): AuthRememberedFields {
+    const nextAccount = typeof incoming.account === 'string' ? incoming.account.trim() : '';
+    const nextUsername = typeof incoming.username === 'string' ? incoming.username.trim() : '';
+    const nextEmail = typeof incoming.email === 'string' ? incoming.email.trim() : '';
+    const nextResetEmail = typeof incoming.resetEmail === 'string' ? incoming.resetEmail.trim() : '';
+
+    return {
+        account: nextAccount || previous.account,
+        username: nextUsername || previous.username,
+        email: nextEmail || previous.email,
+        resetEmail: nextResetEmail || previous.resetEmail || nextEmail || nextAccount,
+    };
+}
+
+function readRememberedFields(): AuthRememberedFields {
+    if (typeof window === 'undefined') return inMemoryRememberedFields;
+
+    try {
+        const raw = window.localStorage.getItem(AUTH_REMEMBERED_FIELDS_STORAGE_KEY);
+        if (!raw) return inMemoryRememberedFields;
+        const parsed = JSON.parse(raw) as Partial<AuthRememberedFields>;
+        const merged = {
+            account: inMemoryRememberedFields.account,
+            username: inMemoryRememberedFields.username,
+            email: inMemoryRememberedFields.email,
+            resetEmail: inMemoryRememberedFields.resetEmail,
+        };
+        const nextFields = {
+            ...merged,
+            account: typeof parsed.account === 'string' && parsed.account.length > 0 ? parsed.account : merged.account,
+            username: typeof parsed.username === 'string' && parsed.username.length > 0 ? parsed.username : merged.username,
+            email: typeof parsed.email === 'string' && parsed.email.length > 0 ? parsed.email : merged.email,
+            resetEmail: typeof parsed.resetEmail === 'string' && parsed.resetEmail.length > 0 ? parsed.resetEmail : merged.resetEmail,
+        };
+        inMemoryRememberedFields = nextFields;
+        return nextFields;
+    } catch {
+        return inMemoryRememberedFields;
+    }
+}
+
+function writeRememberedFields(fields: AuthRememberedFields): void {
+    const nextFields = mergeRememberedFields(inMemoryRememberedFields, fields);
+    inMemoryRememberedFields = nextFields;
+    if (typeof window === 'undefined') return;
+
+    try {
+        window.localStorage.setItem(AUTH_REMEMBERED_FIELDS_STORAGE_KEY, JSON.stringify(nextFields));
+    } catch {
+        // 忽略本地存储不可用的运行环境。
+    }
+}
 
 interface AuthModalProps {
     isOpen: boolean;
@@ -36,38 +110,117 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
     const [resetCountdown, setResetCountdown] = useState(0);
     const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
     const resetCountdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const rememberedFieldsRef = useRef<AuthRememberedFields>(EMPTY_REMEMBERED_FIELDS);
+    const draftHydratedRef = useRef(false);
 
     const { t } = useTranslation('auth');
     const { login, register, sendRegisterCode, sendResetCode, resetPassword: resetPasswordAction } = useAuth();
+    const fieldLabelClassName = 'block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2';
+    const textInputClassName = 'auth-form-input w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] caret-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-base sm:text-lg';
+    const codeActionButtonClassName = 'px-3 py-1.5 bg-[#8c7b64] hover:bg-[#6b5d4a] text-white text-xs uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer';
+    const secondaryTextButtonClassName = 'text-xs text-[#8c7b64] hover:text-[#433422] transition-colors';
+    const persistRememberedField = useCallback((key: keyof AuthRememberedFields, value: string) => {
+        rememberedFieldsRef.current = {
+            ...rememberedFieldsRef.current,
+            [key]: value.trim(),
+        };
+        writeRememberedFields(rememberedFieldsRef.current);
+    }, []);
+    const handleAccountChange = (value: string) => {
+        setAccount(value);
+        persistRememberedField('account', value);
+    };
+    const handleUsernameChange = (value: string) => {
+        setUsername(value);
+        persistRememberedField('username', value);
+    };
+    const handleEmailChange = (value: string) => {
+        setEmail(value);
+        persistRememberedField('email', value);
+    };
+    const handleResetEmailChange = (value: string) => {
+        setResetEmail(value);
+        persistRememberedField('resetEmail', value);
+    };
+
+    const clearSensitiveFields = useCallback(() => {
+        setError('');
+        setCode('');
+        setPassword('');
+        setConfirmPassword('');
+        setCodeSent(false);
+        setCountdown(0);
+        setResetCode('');
+        setResetNewPassword('');
+        setResetConfirmPassword('');
+        setResetCodeSent(false);
+        setResetCountdown(0);
+        if (countdownRef.current) {
+            clearInterval(countdownRef.current);
+            countdownRef.current = null;
+        }
+        if (resetCountdownRef.current) {
+            clearInterval(resetCountdownRef.current);
+            resetCountdownRef.current = null;
+        }
+    }, []);
 
     useEffect(() => {
         if (isOpen) {
+            const remembered = readRememberedFields();
+            rememberedFieldsRef.current = remembered;
+            draftHydratedRef.current = false;
             setMode(initialMode);
-            setError('');
-            setAccount('');
-            setUsername('');
-            setEmail('');
-            setCode('');
-            setPassword('');
-            setConfirmPassword('');
-            setCodeSent(false);
-            setCountdown(0);
-            setResetEmail('');
-            setResetCode('');
-            setResetNewPassword('');
-            setResetConfirmPassword('');
-            setResetCodeSent(false);
-            setResetCountdown(0);
-            if (countdownRef.current) {
-                clearInterval(countdownRef.current);
-                countdownRef.current = null;
-            }
-            if (resetCountdownRef.current) {
-                clearInterval(resetCountdownRef.current);
-                resetCountdownRef.current = null;
-            }
+            setAccount(remembered.account);
+            setUsername(remembered.username);
+            setEmail(remembered.email);
+            setResetEmail(remembered.resetEmail || remembered.email || remembered.account);
+            clearSensitiveFields();
+            draftHydratedRef.current = true;
         }
-    }, [isOpen, initialMode]);
+    }, [clearSensitiveFields, isOpen, initialMode]);
+
+    useEffect(() => {
+        if (!draftHydratedRef.current) return;
+        rememberedFieldsRef.current = {
+            account: account.trim(),
+            username: username.trim(),
+            email: email.trim(),
+            resetEmail: resetEmail.trim(),
+        };
+        writeRememberedFields(rememberedFieldsRef.current);
+    }, [account, username, email, resetEmail]);
+
+    useEffect(() => {
+        if (!isOpen) return;
+
+        const remembered = readRememberedFields();
+        rememberedFieldsRef.current = remembered;
+
+        if (mode === 'login') {
+            const preferredAccount = remembered.account || remembered.email || remembered.resetEmail;
+            if (!account.trim() && preferredAccount) {
+                setAccount(preferredAccount);
+            }
+            return;
+        }
+
+        if (mode === 'register') {
+            const preferredEmail = remembered.email || remembered.account || remembered.resetEmail;
+            if (!email.trim() && preferredEmail) {
+                setEmail(preferredEmail);
+            }
+            if (!username.trim() && remembered.username) {
+                setUsername(remembered.username);
+            }
+            return;
+        }
+
+        const preferredResetEmail = remembered.resetEmail || remembered.email || remembered.account;
+        if (!resetEmail.trim() && preferredResetEmail) {
+            setResetEmail(preferredResetEmail);
+        }
+    }, [isOpen, mode, account, email, username, resetEmail]);
 
     useEffect(() => {
         return () => {
@@ -203,30 +356,25 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
     };
 
     const switchMode = (nextMode: 'login' | 'register' | 'reset') => {
+        const remembered = rememberedFieldsRef.current;
+        const preferredEmail = email.trim() || account.trim() || resetEmail.trim() || remembered.email || remembered.account || remembered.resetEmail;
+        const preferredAccount = account.trim() || email.trim() || resetEmail.trim() || remembered.account || remembered.email || remembered.resetEmail;
+        const preferredResetEmail = resetEmail.trim() || email.trim() || account.trim() || remembered.resetEmail || remembered.email || remembered.account;
+        const nextRememberedFields: AuthRememberedFields = {
+            account: nextMode === 'login' ? preferredAccount : preferredAccount || remembered.account,
+            email: nextMode === 'register' ? preferredEmail : preferredEmail || remembered.email,
+            resetEmail: nextMode === 'reset' ? preferredResetEmail : preferredResetEmail || remembered.resetEmail,
+            username: username.trim() || remembered.username,
+        };
+
         setMode(nextMode);
-        setError('');
-        setCodeSent(false);
-        setCountdown(0);
-        setResetCodeSent(false);
-        setResetCountdown(0);
-        setAccount('');
-        setUsername('');
-        setEmail('');
-        setCode('');
-        setPassword('');
-        setConfirmPassword('');
-        setResetEmail('');
-        setResetCode('');
-        setResetNewPassword('');
-        setResetConfirmPassword('');
-        if (countdownRef.current) {
-            clearInterval(countdownRef.current);
-            countdownRef.current = null;
-        }
-        if (resetCountdownRef.current) {
-            clearInterval(resetCountdownRef.current);
-            resetCountdownRef.current = null;
-        }
+        setAccount(nextRememberedFields.account);
+        setEmail(nextRememberedFields.email);
+        setResetEmail(nextRememberedFields.resetEmail);
+        setUsername(nextRememberedFields.username);
+        rememberedFieldsRef.current = nextRememberedFields;
+        writeRememberedFields(nextRememberedFields);
+        clearSensitiveFields();
     };
 
     return (
@@ -234,8 +382,17 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
             onClose={onClose}
             closeOnBackdrop={closeOnBackdrop}
             containerClassName="p-0"
+            containerStyle={{
+                paddingTop: 'max(1rem, var(--safe-area-top))',
+                paddingRight: 'max(1rem, var(--safe-area-right))',
+                paddingBottom: 'max(1rem, var(--runtime-modal-bottom-inset))',
+                paddingLeft: 'max(1rem, var(--safe-area-left))',
+            }}
         >
-            <div className="bg-[#fcfbf9] pointer-events-auto w-[calc(100vw-2rem)] max-w-[400px] shadow-[0_10px_40px_rgba(67,52,34,0.1)] border border-[#e5e0d0] p-6 sm:p-10 relative rounded-sm mx-4 overflow-hidden">
+            <div
+                className="bg-[#fcfbf9] pointer-events-auto relative mx-4 flex w-[calc(100vw-2rem)] max-w-[400px] max-h-[var(--runtime-modal-max-height)] flex-col overflow-hidden rounded-sm border border-[#e5e0d0] shadow-[0_10px_40px_rgba(67,52,34,0.1)]"
+                data-testid="auth-modal"
+            >
                 {/* 装饰边角 */}
                 <div className="absolute top-2 left-2 w-3 h-3 border-t border-l border-[#c0a080]" />
                 <div className="absolute top-2 right-2 w-3 h-3 border-t border-r border-[#c0a080]" />
@@ -265,302 +422,341 @@ export const AuthModal = ({ isOpen, onClose, initialMode = 'login', closeOnBackd
                     )}
                 </AnimatePresence>
 
-                <div className="text-center mb-8">
+                <div className="shrink-0 px-6 pt-6 pb-4 sm:px-10 sm:pt-10 sm:pb-6 text-center">
                     <h2 className="text-2xl font-serif font-bold text-[#433422] tracking-wide mb-2">
                         {t(mode === 'login' ? 'login.title' : mode === 'register' ? 'register.title' : 'reset.title')}
                     </h2>
                     <div className="h-px w-12 bg-[#c0a080] mx-auto opacity-50" />
                 </div>
 
-                {error && (
-                    <motion.div
-                        initial={{ opacity: 0, y: -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-2 mb-6 font-serif text-center"
-                    >
-                        {error}
-                    </motion.div>
-                )}
+                <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col font-serif">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-4 sm:px-10 sm:pb-6">
+                        {error && (
+                            <motion.div
+                                initial={{ opacity: 0, y: -10 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                className="bg-red-50 border border-red-100 text-red-600 text-sm px-4 py-2 mb-6 font-serif text-center"
+                            >
+                                {error}
+                            </motion.div>
+                        )}
 
-                <form onSubmit={handleSubmit} className="space-y-5 font-serif">
-                    {mode === 'register' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            className="space-y-5"
-                        >
-                            <div>
-                                <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                    {t('email.label.address')}
-                                </label>
-                                <div className="flex gap-2 items-end">
+                        <div className="space-y-5">
+                            {mode === 'register' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="space-y-5"
+                                >
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.address')}
+                                        </label>
+                                        <div className="flex flex-wrap gap-2 items-end" data-testid="auth-register-email-row">
+                                            <div className="min-w-0 flex-1">
+                                                <input
+                                                    type="email"
+                                                    value={email}
+                                                    onChange={(e) => handleEmailChange(e.target.value)}
+                                                    className={textInputClassName}
+                                                    placeholder={t('email.placeholder.address')}
+                                                    required
+                                                    autoComplete="email"
+                                                    autoFocus
+                                                    data-testid="auth-register-email-input"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleSendCode}
+                                                disabled={isSendingCode || countdown > 0}
+                                                className={codeActionButtonClassName}
+                                                data-testid="auth-register-send-code"
+                                            >
+                                                {isSendingCode
+                                                    ? t('email.button.sending')
+                                                    : countdown > 0
+                                                        ? t('email.button.resendCountdown', { count: countdown })
+                                                        : codeSent
+                                                            ? t('email.button.resend')
+                                                            : t('email.button.sendCode')}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.code')}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={code}
+                                            onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                            className={textInputClassName}
+                                            placeholder={t('email.placeholder.code')}
+                                            required
+                                            maxLength={6}
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            data-testid="auth-register-code-input"
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {mode === 'reset' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                    className="space-y-5"
+                                >
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.address')}
+                                        </label>
+                                        <div className="flex flex-wrap gap-2 items-end" data-testid="auth-reset-email-row">
+                                            <div className="min-w-0 flex-1">
+                                                <input
+                                                    type="email"
+                                                    value={resetEmail}
+                                                    onChange={(e) => handleResetEmailChange(e.target.value)}
+                                                    className={textInputClassName}
+                                                    placeholder={t('email.placeholder.address')}
+                                                    required
+                                                    autoComplete="email"
+                                                    autoFocus
+                                                    data-testid="auth-reset-email-input"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={handleSendResetCode}
+                                                disabled={isSendingResetCode || resetCountdown > 0}
+                                                className={codeActionButtonClassName}
+                                                data-testid="auth-reset-send-code"
+                                            >
+                                                {isSendingResetCode
+                                                    ? t('email.button.sending')
+                                                    : resetCountdown > 0
+                                                        ? t('email.button.resendCountdown', { count: resetCountdown })
+                                                        : resetCodeSent
+                                                            ? t('email.button.resend')
+                                                            : t('email.button.sendCode')}
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <label className={fieldLabelClassName}>
+                                            {t('email.label.code')}
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={resetCode}
+                                            onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                            className={textInputClassName}
+                                            placeholder={t('email.placeholder.code')}
+                                            required
+                                            maxLength={6}
+                                            inputMode="numeric"
+                                            autoComplete="one-time-code"
+                                            data-testid="auth-reset-code-input"
+                                        />
+                                    </div>
+                                </motion.div>
+                            )}
+
+                            {mode === 'login' ? (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.account')}
+                                    </label>
                                     <input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        className="flex-1 px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                        placeholder={t('email.placeholder.address')}
+                                        type="text"
+                                        value={account}
+                                        onChange={(e) => handleAccountChange(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.account')}
                                         required
+                                        autoComplete="username"
                                         autoFocus
+                                        data-testid="auth-login-account-input"
                                     />
+                                </div>
+                            ) : mode === 'register' ? (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.username')}
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => handleUsernameChange(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.username')}
+                                        required
+                                        autoComplete="nickname"
+                                        data-testid="auth-register-username-input"
+                                    />
+                                </div>
+                            ) : null}
+
+                            {mode === 'login' && (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.password')}
+                                    </label>
+                                    <PasswordField
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="current-password"
+                                        data-testid="auth-login-password-input"
+                                        toggleButtonTestId="auth-login-password-toggle"
+                                    />
+                                </div>
+                            )}
+
+                            {mode === 'register' && (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.password')}
+                                    </label>
+                                    <PasswordField
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-register-password-input"
+                                        toggleButtonTestId="auth-register-password-toggle"
+                                    />
+                                </div>
+                            )}
+
+                            {mode === 'reset' && (
+                                <div>
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.newPassword')}
+                                    </label>
+                                    <PasswordField
+                                        value={resetNewPassword}
+                                        onChange={(e) => setResetNewPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-reset-new-password-input"
+                                        toggleButtonTestId="auth-reset-new-password-toggle"
+                                    />
+                                </div>
+                            )}
+
+                            {mode === 'register' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                >
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.confirmPassword')}
+                                    </label>
+                                    <PasswordField
+                                        value={confirmPassword}
+                                        onChange={(e) => setConfirmPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-register-confirm-password-input"
+                                        toggleButtonTestId="auth-register-confirm-password-toggle"
+                                    />
+                                </motion.div>
+                            )}
+
+                            {mode === 'reset' && (
+                                <motion.div
+                                    initial={{ opacity: 0, height: 0 }}
+                                    animate={{ opacity: 1, height: 'auto' }}
+                                >
+                                    <label className={fieldLabelClassName}>
+                                        {t('label.confirmPassword')}
+                                    </label>
+                                    <PasswordField
+                                        value={resetConfirmPassword}
+                                        onChange={(e) => setResetConfirmPassword(e.target.value)}
+                                        className={textInputClassName}
+                                        placeholder={t('placeholder.password')}
+                                        required
+                                        minLength={4}
+                                        autoComplete="new-password"
+                                        data-testid="auth-reset-confirm-password-input"
+                                        toggleButtonTestId="auth-reset-confirm-password-toggle"
+                                    />
+                                </motion.div>
+                            )}
+
+                            {mode === 'login' && (
+                                <div className="text-right">
                                     <button
                                         type="button"
-                                        onClick={handleSendCode}
-                                        disabled={isSendingCode || countdown > 0}
-                                        className="px-3 py-1.5 bg-[#8c7b64] hover:bg-[#6b5d4a] text-white text-xs uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer"
+                                        onClick={() => switchMode('reset')}
+                                        className={secondaryTextButtonClassName}
                                     >
-                                        {isSendingCode
-                                            ? t('email.button.sending')
-                                            : countdown > 0
-                                                ? t('email.button.resendCountdown', { count: countdown })
-                                                : codeSent
-                                                    ? t('email.button.resend')
-                                                    : t('email.button.sendCode')}
+                                        {t('login.forgot')}
                                     </button>
                                 </div>
-                            </div>
+                            )}
+                        </div>
+                    </div>
 
-                            <div>
-                                <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                    {t('email.label.code')}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={code}
-                                    onChange={(e) => setCode(e.target.value)}
-                                    className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                    placeholder={t('email.placeholder.code')}
-                                    required
-                                    maxLength={6}
-                                />
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {mode === 'reset' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                            className="space-y-5"
+                    <div className="shrink-0 border-t border-[#e5e0d0] bg-[#fcfbf9] px-6 py-4 sm:px-10 sm:py-6">
+                        <button
+                            type="submit"
+                            disabled={isLoading}
+                            className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed cursor-pointer"
+                            data-testid="auth-submit-button"
                         >
-                            <div>
-                                <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                    {t('email.label.address')}
-                                </label>
-                                <div className="flex gap-2 items-end">
-                                    <input
-                                        type="email"
-                                        value={resetEmail}
-                                        onChange={(e) => setResetEmail(e.target.value)}
-                                        className="flex-1 px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                        placeholder={t('email.placeholder.address')}
-                                        required
-                                        autoFocus
-                                    />
-                                    <button
-                                        type="button"
-                                        onClick={handleSendResetCode}
-                                        disabled={isSendingResetCode || resetCountdown > 0}
-                                        className="px-3 py-1.5 bg-[#8c7b64] hover:bg-[#6b5d4a] text-white text-xs uppercase tracking-wider transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap cursor-pointer"
-                                    >
-                                        {isSendingResetCode
-                                            ? t('email.button.sending')
-                                            : resetCountdown > 0
-                                                ? t('email.button.resendCountdown', { count: resetCountdown })
-                                                : resetCodeSent
-                                                    ? t('email.button.resend')
-                                                    : t('email.button.sendCode')}
-                                    </button>
-                                </div>
-                            </div>
+                            {isLoading
+                                ? t('button.processing')
+                                : t(mode === 'login' ? 'login.submit' : mode === 'register' ? 'register.submit' : 'reset.submit')}
+                        </button>
 
-                            <div>
-                                <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                    {t('email.label.code')}
-                                </label>
-                                <input
-                                    type="text"
-                                    value={resetCode}
-                                    onChange={(e) => setResetCode(e.target.value)}
-                                    className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                    placeholder={t('email.placeholder.code')}
-                                    required
-                                    maxLength={6}
-                                />
-                            </div>
-                        </motion.div>
-                    )}
-
-                    {mode === 'login' ? (
-                        <div>
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.account')}
-                            </label>
-                            <input
-                                type="text"
-                                value={account}
-                                onChange={(e) => setAccount(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                placeholder={t('placeholder.account')}
-                                required
-                                autoFocus
-                            />
-                        </div>
-                    ) : mode === 'register' ? (
-                        <div>
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.username')}
-                            </label>
-                            <input
-                                type="text"
-                                value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                placeholder={t('placeholder.username')}
-                                required
-                            />
-                        </div>
-                    ) : null}
-
-                    {mode === 'login' && (
-                        <div>
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.password')}
-                            </label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'register' && (
-                        <div>
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.password')}
-                            </label>
-                            <input
-                                type="password"
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'reset' && (
-                        <div>
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.newPassword')}
-                            </label>
-                            <input
-                                type="password"
-                                value={resetNewPassword}
-                                onChange={(e) => setResetNewPassword(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-sm sm:text-lg"
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                            />
-                        </div>
-                    )}
-
-                    {mode === 'register' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                        >
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.confirmPassword')}
-                            </label>
-                            <input
-                                type="password"
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-lg"
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                            />
-                        </motion.div>
-                    )}
-
-                    {mode === 'reset' && (
-                        <motion.div
-                            initial={{ opacity: 0, height: 0 }}
-                            animate={{ opacity: 1, height: 'auto' }}
-                        >
-                            <label className="block text-xs font-bold text-[#8c7b64] uppercase tracking-wider mb-2">
-                                {t('label.confirmPassword')}
-                            </label>
-                            <input
-                                type="password"
-                                value={resetConfirmPassword}
-                                onChange={(e) => setResetConfirmPassword(e.target.value)}
-                                className="w-full px-0 py-2 bg-transparent border-b-2 border-[#e5e0d0] text-[#433422] placeholder-[#c0a080]/50 outline-none focus:border-[#433422] transition-colors text-lg"
-                                placeholder={t('placeholder.password')}
-                                required
-                                minLength={4}
-                            />
-                        </motion.div>
-                    )}
-
-                    {mode === 'login' && (
-                        <div className="text-right">
+                        <div className="mt-4 flex items-center justify-center gap-4 text-sm font-serif italic">
                             <button
                                 type="button"
-                                onClick={() => switchMode('reset')}
-                                className="text-xs text-[#8c7b64] hover:text-[#433422] transition-colors"
+                                onClick={() => mode !== 'login' && switchMode('login')}
+                                className={clsx(
+                                    "group relative cursor-pointer transition-colors px-1 py-1",
+                                    mode === 'login' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
+                                )}
+                                data-testid="auth-switch-login"
                             >
-                                {t('login.forgot')}
+                                <span className="relative z-10">{t('menu.login')}</span>
+                                <span className="underline-center h-[1px] opacity-60" />
+                            </button>
+                            <div className="w-px h-3 bg-[#c0a080] opacity-40" />
+                            <button
+                                type="button"
+                                onClick={() => mode !== 'register' && switchMode('register')}
+                                className={clsx(
+                                    "group relative cursor-pointer transition-colors px-1 py-1",
+                                    mode === 'register' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
+                                )}
+                                data-testid="auth-switch-register"
+                            >
+                                <span className="relative z-10">{t('menu.register')}</span>
+                                <span className="underline-center h-[1px] opacity-60" />
                             </button>
                         </div>
-                    )}
-
-                    <button
-                        type="submit"
-                        disabled={isLoading}
-                        className="w-full py-3 bg-[#433422] hover:bg-[#2b2114] text-[#fcfbf9] font-bold text-sm uppercase tracking-widest shadow-lg hover:shadow-xl transition-all active:transform active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed mt-4 cursor-pointer"
-                    >
-                        {isLoading
-                            ? t('button.processing')
-                            : t(mode === 'login' ? 'login.submit' : mode === 'register' ? 'register.submit' : 'reset.submit')}
-                    </button>
+                    </div>
                 </form>
-
-                <div className="mt-6 flex items-center justify-center gap-4 text-sm font-serif italic pb-2">
-                    <button
-                        type="button"
-                        onClick={() => mode !== 'login' && switchMode('login')}
-                        className={clsx(
-                            "group relative cursor-pointer transition-colors px-1 py-1",
-                            mode === 'login' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
-                        )}
-                    >
-                        <span className="relative z-10">{t('menu.login')}</span>
-                        <span className="underline-center h-[1px] opacity-60" />
-                    </button>
-                    <div className="w-px h-3 bg-[#c0a080] opacity-40" />
-                    <button
-                        type="button"
-                        onClick={() => mode !== 'register' && switchMode('register')}
-                        className={clsx(
-                            "group relative cursor-pointer transition-colors px-1 py-1",
-                            mode === 'register' ? "text-[#433422] font-bold" : "text-[#8c7b64] hover:text-[#433422]"
-                        )}
-                    >
-                        <span className="relative z-10">{t('menu.register')}</span>
-                        <span className="underline-center h-[1px] opacity-60" />
-                    </button>
-                </div>
             </div>
         </ModalBase>
     );

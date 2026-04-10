@@ -11,10 +11,18 @@ import type { Command, GameEvent, MatchState, PlayerId, RandomFn } from '../type
 import { isDevEnv } from '../env';
 import type { EngineSystem, HookResult } from './types';
 import { SYSTEM_IDS } from './types';
+import { hasBlockingResolutionFrame } from './resolutionStack';
 
 const isDev = isDevEnv();
+const isFlowDebugEnabled = (): boolean => {
+    if (!isDev) return false;
+    if (typeof window !== 'undefined') {
+        return (window as typeof window & { __BG_FLOW_DEBUG__?: boolean }).__BG_FLOW_DEBUG__ === true;
+    }
+    return typeof process !== 'undefined' && process.env?.BG_FLOW_DEBUG === 'true';
+};
 const logDev = (...args: unknown[]) => {
-    if (isDev) {
+    if (isFlowDebugEnabled()) {
         console.log(...args);
     }
 };
@@ -109,6 +117,8 @@ export interface FlowHooks<TCore = unknown> {
         to: string;
         command: Command;
         random: RandomFn;
+        /** onPhaseExit 产生的事件（尚未 reduce 进 core） */
+        exitEvents?: GameEvent[];
     }): GameEvent[] | PhaseEnterResult | void;
 
     /** 用于 SYS_PHASE_CHANGED 事件的 activePlayerId（可选） */
@@ -201,6 +211,13 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
     const from = getCurrentPhase(state) || hooks.initialPhase;
     logDev(`[FlowSystem][${logLabel}] ADVANCE_PHASE from=${from} playerId=${command.playerId}`);
 
+    if (hasBlockingResolutionFrame(state, from)) {
+        logDev(`[FlowSystem][${logLabel}] blocked by active resolution frame`);
+        return invalidPlayerStrategy === 'error'
+            ? { halt: true, error: 'resolution_blocked' }
+            : undefined;
+    }
+
     // 引擎层通用校验：命令发送者必须是当前活跃玩家
     // 防止快速点击导致命令队列越过回合边界，推进对手的阶段
     if (hooks.getCurrentPlayerId) {
@@ -257,7 +274,8 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
         };
     }
 
-    const nextState = setPhase(state, to);
+    const exitState = updatedState ?? state;
+    const nextState = setPhase(exitState, to);
     // 阶段成功推进，清除 halt 标记
     nextState.sys = { ...nextState.sys, flowHalted: false };
     logDev(`[FlowSystem][${logLabel}] phase updated from=${from} to=${to}`);
@@ -269,7 +287,7 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
         timestamp,
     };
 
-    const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random });
+    const enter = hooks.onPhaseEnter?.({ state: nextState, from, to, command, random, exitEvents });
     let enterEvents: GameEvent[] = [];
     let enterUpdatedState: MatchState<TCore> | undefined;
 
@@ -284,9 +302,11 @@ function executePhaseAdvance<TCore>(params: PhaseAdvanceParams<TCore>): HookResu
 
     // 如果 onPhaseEnter 返回了 updatedState（如基地能力创建了 Interaction），
     // 合并 sys 到 nextState，确保 Interaction 等 sys 变更不丢失
-    const finalState = enterUpdatedState
-        ? { ...nextState, sys: { ...enterUpdatedState.sys, phase: to, flowHalted: false } }
-        : nextState;
+    const enterState = enterUpdatedState ?? nextState;
+    const finalState = {
+        ...enterState,
+        sys: { ...enterState.sys, phase: to, flowHalted: false },
+    };
 
     return {
         halt: haltOnExit ? true : undefined,
@@ -345,7 +365,6 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
             if (!result?.autoContinue) return;
 
             if (!playerIds.includes(result.playerId)) {
-                console.log('[FlowSystem][afterEvents] playerId not in playerIds, skipping autoContinue');
                 return;
             }
 
@@ -360,14 +379,11 @@ export function createFlowSystem<TCore>(config: FlowSystemConfig<TCore>): Engine
 
             // 自动继续：执行与 ADVANCE_PHASE 相同的逻辑
             const { playerId } = result;
-            const from = getCurrentPhase(state) || hooks.initialPhase;
             const syntheticCommand: Command = {
                 type: FLOW_COMMANDS.ADVANCE_PHASE,
                 playerId,
                 payload: undefined,
             };
-            console.log('[FlowSystem][afterEvents] executing autoContinue from=' + from + ' playerId=' + playerId);
-
             return executePhaseAdvance({
                 state,
                 command: syntheticCommand,

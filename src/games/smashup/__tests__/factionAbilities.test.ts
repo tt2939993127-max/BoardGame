@@ -18,6 +18,9 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { clearOngoingEffectRegistry, fireTriggers } from '../domain/ongoingEffects';
+import { scoreOneBase } from '../domain';
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { makeMatchState } from './helpers';
@@ -25,6 +28,8 @@ import { makeMatchState } from './helpers';
 beforeAll(() => {
     clearRegistry();
     clearBaseAbilityRegistry();
+    clearOngoingEffectRegistry();
+    clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
 });
@@ -70,16 +75,128 @@ describe('trickster interaction regressions', () => {
         expect((destroyEvent as any).payload.minionUid).toBe('e1');
         expect(respondResult.finalState.core.bases[0].minions.some(m => m.uid === 'e1')).toBe(false);
     });
+
+    it('trickster_gnome_pod beforeScoring options exclude the source gnome itself', () => {
+        const state = makeState({
+            bases: [{
+                defId: 'base_the_homeworld',
+                minions: [
+                    makeMinion('gnome-1', 'trickster_gnome_pod', '0', 3),
+                    makeMinion('ally-1', 'test_ally', '0', 5),
+                    makeMinion('enemy-1', 'test_enemy', '1', 1),
+                    makeMinion('enemy-2', 'test_enemy', '1', 2),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const result = fireTriggers(state, 'beforeScoring', {
+            state,
+            matchState: makeMatchState(state),
+            playerId: '0',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 1000,
+        });
+
+        const interaction = result.matchState?.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('trickster_gnome_pod');
+
+        const targetUids = ((interaction?.data?.options ?? []) as any[])
+            .map(option => option?.value?.minionUid)
+            .filter(Boolean);
+
+        expect(targetUids).not.toContain('gnome-1');
+        expect(targetUids).toContain('enemy-1');
+        expect(targetUids).toContain('enemy-2');
+    });
+
+    it('trickster_gnome_pod resolves only once for the same gnome during one scoring', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_the_homeworld',
+                minions: [
+                    makeMinion('gnome-1', 'trickster_gnome_pod', '0', 3),
+                    makeMinion('ally-1', 'test_ally', '0', 5),
+                    makeMinion('ally-2', 'test_ally', '0', 5),
+                    makeMinion('enemy-1', 'test_enemy', '1', 1),
+                ],
+                ongoingActions: [],
+            }],
+            baseDeck: ['base_the_mothership'],
+        });
+        const initialMatchState = {
+            ...makeMatchState(core),
+            sys: {
+                ...makeMatchState(core).sys,
+                phase: 'scoreBases',
+            },
+        } as MatchState<SmashUpCore>;
+
+        const scoringResult = scoreOneBase(
+            core,
+            0,
+            core.baseDeck,
+            '0',
+            1000,
+            defaultRandom,
+            initialMatchState,
+        );
+        expect(scoringResult.matchState?.sys.interaction?.current).toBeDefined();
+
+        const scoringState = {
+            ...scoringResult.matchState!,
+            core: applyEventsLocal(scoringResult.matchState!.core, scoringResult.events),
+        };
+        const interaction = scoringState.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('trickster_gnome_pod');
+
+        const targetOption = interaction?.data?.options?.find((option: any) => option?.value?.minionUid === 'enemy-1');
+        expect(targetOption).toBeDefined();
+
+        const respondResult = runCommand(scoringState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: targetOption.id },
+            timestamp: 1001,
+        } as any, defaultRandom);
+
+        const destroyEvents = respondResult.events.filter(e => e.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvents).toHaveLength(1);
+        expect((destroyEvents[0] as any).payload.minionUid).toBe('enemy-1');
+        expect(respondResult.finalState.sys.interaction?.current).toBeUndefined();
+        expect(respondResult.finalState.sys.interaction?.queue ?? []).toHaveLength(0);
+    });
 });
 
 // ============================================================================
 // 辅助函数
 // ============================================================================
 
-function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
+function makeMinion(
+    uid: string,
+    defId: string,
+    controller: string,
+    power: number,
+    ownerOrOverrides?: string | Partial<MinionOnBase>,
+    overrides?: Partial<MinionOnBase>,
+): MinionOnBase {
+    const base: MinionOnBase = {
+        uid,
+        defId,
+        controller,
+        owner: typeof ownerOrOverrides === 'string' ? ownerOrOverrides : controller,
+        basePower: power,
+        powerCounters: 0,
+        powerModifier: 0,
+        tempPowerModifier: 0,
+        talentUsed: false,
+        attachedActions: [],
+    };
     return {
-        uid, defId, controller, owner: owner ?? controller,
-        basePower: power, powerCounters: 0, powerModifier: 0, tempPowerModifier: 0, talentUsed: false, attachedActions: [],
+        ...base,
+        ...(typeof ownerOrOverrides === 'object' ? ownerOrOverrides : null),
+        ...overrides,
     };
 }
 
@@ -264,7 +381,7 @@ describe('忍者派系能力', () => {
 // ============================================================================
 
 describe('恐龙派系能力', () => {
-    it('dino_rampage: 选择基地降低爆破点', () => {
+    it('dino_rampage: 多个基地时先创建基地选择', () => {
         const state = makeState({
             players: {
                 '0': makePlayer('0', {
@@ -282,6 +399,57 @@ describe('恐龙派系能力', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('dino_rampage');
+    });
+
+    it('dino_rampage: 单基地多个己方随从时应创建随从选择', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_rampage', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1',
+                    minions: [
+                        makeMinion('m0', 'test', '0', 3),
+                        makeMinion('m1', 'test', '0', 2, { powerModifier: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_rampage_choose_minion');
+        expect(current?.data?.options).toHaveLength(2);
+    });
+
+    it('dino_rampage: 单基地单个己方随从时也应显式创建随从选择', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_rampage', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1',
+                    minions: [makeMinion('m0', 'test', '0', 3)],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const { matchState } = execPlayAction(state, '0', 'a1');
+        const current = (matchState.sys as any).interaction?.current;
+        expect(current).toBeDefined();
+        expect(current?.data?.sourceId).toBe('dino_rampage_choose_minion');
+        expect(current?.data?.options).toHaveLength(1);
     });
 
     it('dino_augmentation: 多个己方随从时创建 Prompt 选择', () => {
@@ -395,6 +563,54 @@ describe('恐龙派系能力', () => {
         expect(current?.data?.sourceId).toBe('dino_natural_selection_choose_mine');
     });
 
+    it('dino_natural_selection: 第二段目标不会列出挂有烟雾弹的对手随从', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'dino_natural_selection', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'b1', minions: [
+                        makeMinion('ally-1', 'test', '0', 5),
+                        makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 3, {
+                            attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                        } as any),
+                        makeMinion('enemy-plain', 'test', '1', 4),
+                    ], ongoingActions: [],
+                },
+            ],
+        });
+
+        const playResult = runCommand(makeMatchState(state), {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'a1' },
+        } as any, defaultRandom);
+
+        const firstPrompt = playResult.finalState.sys.interaction?.current as any;
+        expect(firstPrompt?.data?.sourceId).toBe('dino_natural_selection_choose_mine');
+        const allyOption = firstPrompt.data.options.find((option: any) => option?.value?.minionUid === 'ally-1');
+        expect(allyOption).toBeDefined();
+
+        const targetResult = runCommand(playResult.finalState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: allyOption.id },
+        } as any, defaultRandom);
+
+        const secondPrompt = targetResult.finalState.sys.interaction?.current as any;
+        expect(secondPrompt?.data?.sourceId).toBe('dino_natural_selection_choose_target');
+        const targetUids = ((secondPrompt?.data?.options ?? []) as any[])
+            .map(option => option?.value?.minionUid)
+            .filter(Boolean);
+
+        expect(targetUids).toContain('enemy-plain');
+        expect(targetUids).not.toContain('enemy-smoke');
+    });
+
     it('dino_natural_selection: 无合法目标时无事件', () => {
         const state = makeState({
             players: {
@@ -498,6 +714,53 @@ describe('机器人派系能力', () => {
         expect(limitEvents.length).toBe(1);
     });
 
+    it('robot_microbot_guard: 4个己方随从时只能选择力量小于4的目标', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('m1', 'robot_microbot_guard', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [
+                    makeMinion('ally-1', 'robot_microbot_alpha', '0', 1),
+                    makeMinion('ally-2', 'robot_microbot_fixer', '0', 1),
+                    makeMinion('ally-3', 'robot_microbot_reclaimer', '0', 1),
+                    makeMinion('target-ok', 'test_enemy', '1', 3),
+                    makeMinion('target-bad', 'wizard_archmage', '1', 4),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
+        const interaction = matchState.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('robot_microbot_guard');
+
+        const targetUids = ((interaction?.data?.options ?? []) as any[])
+            .map(option => option?.value?.minionUid)
+            .filter(Boolean);
+        expect(targetUids).toContain('target-ok');
+        expect(targetUids).not.toContain('target-bad');
+        expect(targetUids).not.toContain('m1');
+
+        const validTargetOption = interaction?.data?.options?.find(
+            (option: any) => option?.value?.minionUid === 'target-ok',
+        );
+        expect(validTargetOption).toBeDefined();
+
+        const respondResult = runCommand(matchState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: validTargetOption.id },
+        } as any, defaultRandom);
+
+        expect(respondResult.finalState.core.bases[0].minions.some(minion => minion.uid === 'target-ok')).toBe(false);
+        expect(respondResult.finalState.core.bases[0].minions.some(minion => minion.uid === 'target-bad')).toBe(true);
+    });
+
     it('robot_tech_center: 单个基地时创建 Prompt', () => {
         const deckCards = Array.from({ length: 5 }, (_, i) =>
             makeCard(`d${i}`, 'test_card', 'minion', '0')
@@ -586,7 +849,7 @@ describe('巫师派系能力', () => {
         const current = (matchState.sys as any).interaction?.current;
         expect(current).toBeDefined();
         expect(current?.data?.sourceId).toBe('wizard_neophyte');
-        expect(current?.data?.targetType).toBe('generic');
+        expect(current?.data?.targetType).toBe('button');
     });
 
     it('wizard_neophyte: 牌库顶不是行动卡时不产生事件', () => {

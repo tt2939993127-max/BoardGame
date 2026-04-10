@@ -3,6 +3,9 @@
     "title": "易桌游",
     "subtitle": "桌游教程、联机与原型制作平台",
     "logoAlt": "桌游平台 Logo",
+    "gameDetailsLoadingEyebrow": "正在准备",
+    "gameDetailsLoadingTitle": "游戏详情",
+    "gameDetailsLoadingDescription": "内容马上出现，请稍候。",
     "audio": {
       "mute": "静音",
       "unmute": "取消静音"
@@ -30,6 +33,11 @@
     "exitActiveMatch": {
       "title": "退出当前对局",
       "description": "你正在进行对局，确认退出并加入新的房间吗？"
+    },
+    "forceReplaceOwnerRoom": {
+      "title": "强制清理旧房间",
+      "description": "检测到你还有一个活跃房间（#{{id}}）。继续后会先删除旧房间，再创建新房间。",
+      "confirm": "清理并创建"
     }
   },
   "actions": {
@@ -41,8 +49,10 @@
     "reconnectEnter": "重连进入",
     "join": "加入",
     "spectate": "观战",
-    "localPlay": "👥 本地同屏",
-    "tutorial": "🎓 教程模式",
+    "localPlay": "单机模式",
+    "singleDevice": "单机模式",
+    "playAi": "对战AI",
+    "tutorial": "教程模式",
     "createRoom": "创建房间",
     "confirm": "确认",
     "cancel": "取消"
@@ -53,14 +63,21 @@
   "button": {
     "processing": "处理中..."
   },
+  "tutorial": {
+    "steps": {
+      "setup": "准备房间"
+    }
+  },
   "activeMatch": {
     "notice": "您当前正在进行一场对局",
     "return": "返回当前对局 (#{{id}})"
   },
   "rooms": {
+    "loading": "正在加载房间...",
     "empty": "暂无活跃房间",
     "matchTitle": "对局 #{{id}}",
     "mine": "我的",
+    "seatSeparator": " / ",
     "emptySlot": "空位",
     "ownerMustReconnect": "这是您创建的房间，请重连进入",
     "ownerRejoinOnly": "空房间仅房主可重连（游客需使用原浏览器/设备，清理缓存后需重新创建）",
@@ -96,8 +113,113 @@
     "hint": "当前先展示电子化作者署名，后续如有更完整的作者介绍，会从这里展开。",
     "close": "关闭"
   },
+  "packageManager": {
+    "cardLabel": "{{game}} 移动端包管理",
+    "eyebrow": "移动端包",
+    "mode": "按需下载",
+    "notInstalled": "未安装",
+    "notInstalledHint": "首次进入 {{game}} 前，需要先下载对应的游戏资源包。",
+    "installedTitle": "已可进入",
+    "installedHint": "{{game}} 的移动端包已就绪，可以直接进入对局。",
+    "installedCompletedBadge": "已完成",
+    "installedVersionBadge": "已完成 · {{version}}",
+    "installAction": "安装游戏包",
+    "confirmEyebrow": "安装确认",
+    "confirmTitle": "下载 {{game}} 游戏包",
+    "confirmDescription": "本次会为当前游戏准备独立的本地资源包，未游玩的其他游戏不会一起下载。",
+    "confirmHint": "实际下载大小和进度会按当前发布清单与设备下载结果实时更新。",
+    "modalHint": "下载完成后会自动校验并切换到本地已安装资源。",
+    "confirmAction": "确认下载",
+    "totalSize": "预计下载大小",
+    "modulePack": "代码包",
+    "assetPack": "素材包",
+    "packIdUnknown": "包标识待同步",
+    "sizeUnknown": "大小待同步",
+    "packageSyncing": "同步中",
+    "packageUnpublished": "下载包未发布",
+    "runtimeUnsupported": "当前运行环境暂不支持下载游戏包，请在 Android App 内重试。",
+    "failedTitle": "下载失败",
+    "failedHint": "游戏包下载、校验或激活失败，请稍后重试。",
+    "notificationSettingsAction": "打开通知设置",
+    "retryAction": "重新发起",
+    "cancelAction": "取消下载",
+    "pending": "该游戏的移动端包管理正在接入，入口位置和状态骨架已预留。",
+    "updateRequiredEyebrow": "需要更新 App",
+    "updateRequiredBadge": "更新后可玩",
+    "updateRequiredTitle": "当前版本暂不支持",
+    "updateRequiredHint": "{{game}} 需要更新到新的 App 版本后才能游玩，当前版本先不开放入口。",
+    "updateRequiredHintWithVersion": "{{game}} 需要把 App 更新到 {{version}} 或更高版本后才能游玩，当前版本先不开放入口。",
+    "progress": {
+      "label": "当前进度",
+      "percent": "{{percent}}%",
+      "pendingPercent": "等待中",
+      "queuedTitle": "排队中",
+      "queuedHint": "当前设备同一时间只处理一个游戏下载任务，轮到后会自动开始。",
+      "manifestTitle": "读取清单",
+      "manifestHint": "正在读取当前游戏的发布清单。",
+      "downloadTitle": "下载中",
+      "downloadHint": "正在下载当前游戏需要的资源文件。",
+      "verifyTitle": "校验中",
+      "verifyHint": "正在校验下载内容并激活本地资源。"
+    }
+  },
   "player": {
     "guest": "游客{{id}}"
+  },
+  "ota": {
+    "forceUpdate": {
+      "eyebrow": "更新中",
+      "checkingTitle": "正在准备更新",
+      "checkingDescription": "正在检查并准备新版本，请稍候。",
+      "downloadingTitle": "正在下载更新",
+      "downloadingDescription": "正在下载必要更新，完成后会自动切换。",
+      "applyingTitle": "正在切换新版本",
+      "applyingDescription": "更新已下载完成，正在重启并切换到新版本。",
+      "requiredTitle": "需要更新 App",
+      "requiredDescription": "当前 App 版本过旧，需要先安装新版本后继续使用。",
+      "requiredDescriptionWithVersion": "当前 App 版本过旧，需要升级到 {{version}} 或更高版本后继续使用。",
+      "errorTitle": "更新失败",
+      "errorDescription": "下载或切换新版本失败，请重试。",
+      "bundleVersion": "目标本体版本",
+      "currentAppVersion": "当前 App 版本",
+      "requiredAppVersion": "所需 App 版本",
+      "progressLabel": "下载进度",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "准备中",
+      "retryAction": "重新检查"
+    }
+  },
+  "nativeUpdate": {
+    "gate": {
+      "eyebrow": "安装新版 App",
+      "checkingTitle": "正在准备安装包",
+      "checkingDescription": "正在检查并准备新的 App 安装包，请稍候。",
+      "downloadingTitle": "正在下载安装包",
+      "downloadingDescription": "正在下载新的 App 安装包，完成后会自动拉起系统安装界面。",
+      "verifyingTitle": "正在校验安装包",
+      "verifyingDescription": "安装包已下载完成，正在校验完整性。",
+      "permissionTitle": "需要安装授权",
+      "permissionDescription": "请先允许当前 App 安装未知应用，返回后再继续安装。",
+      "installingTitle": "正在打开系统安装器",
+      "installingDescription": "系统安装界面已经准备就绪，请按系统提示完成覆盖安装。",
+      "errorTitle": "安装包更新失败",
+      "errorDescription": "下载安装包或启动安装失败，请重试。",
+      "targetVersion": "目标 App 版本",
+      "progressLabel": "下载进度",
+      "progressPercent": "{{percent}}%",
+      "progressPending": "准备中",
+      "openSettingsAction": "打开授权页",
+      "continueInstallAction": "继续安装",
+      "retryAction": "重新下载"
+    },
+    "toast": {
+      "disabled": "当前 Android 壳未启用原生更新配置。",
+      "upToDate": "当前已经是最新 App 版本。",
+      "available": "发现新的 App 版本 {{version}}，可直接开始安装。",
+      "installerOpened": "系统安装界面已打开，请按提示完成更新。",
+      "openSettingsFailed": "打开安装授权页失败，请稍后重试。",
+      "missingPreparedUpdate": "没有可继续安装的已下载更新包，请重新下载。"
+    }
   },
   "gameDetails": {
     "description": "经典策略游戏。连成3个符号即可获胜。"
@@ -182,11 +304,24 @@
     "tutorialTitle": "正在学习 {{game}}",
     "matchTitle": "正在对局 {{game}}",
     "loadingResources": "正在加载对局资源...",
+    "creatingRoom": "正在创建房间并进入对局...",
     "namespaceLoadFailed": "游戏文案加载失败",
     "namespaceLoadFailedDesc": "未能加载当前游戏的 i18n 资源，请重试；如果问题持续出现，请提交反馈。",
+    "clientLoadFailed": "游戏客户端加载失败",
+    "clientLoadFailedDesc": "未能加载当前游戏的客户端代码或资源，请重试；如果问题持续出现，请提交反馈。",
     "joiningRoom": "正在加入房间...",
+    "loadingProgress": {
+      "step": "{{current}}/{{total}}",
+      "preparingRoom": "准备房间...",
+      "joiningRoom": "校验房间席位...",
+      "loadingGameModule": "加载游戏模块...",
+      "connecting": "连接服务器...",
+      "syncing": "同步游戏状态...",
+      "loadingAssets": "加载素材 {{loaded}}/{{total}}"
+    },
     "title": {
       "joining": "加入中",
+      "creating": "创建中",
       "connecting": "连接中",
       "tutorial": "学习模式",
       "local": "本地模式",
@@ -200,6 +335,34 @@
       "description": "无法连接到游戏服务器，请检查网络或服务状态",
       "retry": "重试",
       "backToLobby": "返回大厅"
+    },
+    "rescue": {
+      "eyebrow": "游戏页保护",
+      "title": "页面没有正常显示",
+      "description": "检测到当前游戏页没有正常渲染。为了避免继续停留在黑屏，这里先切到友好提示页。",
+      "reload": "刷新重试",
+      "backToLobby": "返回大厅",
+      "copyDiagnostics": "复制诊断",
+      "copied": "已复制",
+      "reason": {
+        "game-viewport-missing": "长时间没有检测到游戏视口容器，页面很可能卡在启动阶段。",
+        "game-shell-collapsed": "检测到游戏画布尺寸异常，主内容区已经塌缩到不可用状态。",
+        "game-content-missing": "检测到游戏主容器存在，但长时间没有渲染出可见内容。"
+      }
+    },
+    "routeLoadingTimeout": {
+      "eyebrow": "进入超时",
+      "title": "游戏页面加载超时",
+      "description": "当前设备迟迟没有完成游戏页面加载。为了避免一直停留在黑屏，这里先切到可操作提示页。",
+      "reason": "通常是游戏模块加载、WebView 兼容性或启动阶段资源初始化卡住了。你可以先刷新重试；如果反复出现，再返回大厅。"
+    },
+    "connectionError": {
+      "unauthorizedTitle": "进入房间失败",
+      "unauthorizedDescription": "当前房间凭证无效或已失效，请返回大厅后重新加入。",
+      "matchNotFoundTitle": "房间不存在",
+      "matchNotFoundDescription": "目标房间可能已被销毁或已失效，请返回大厅后重试。",
+      "syncTimeoutTitle": "同步房间状态失败",
+      "syncTimeoutDescription": "已连接到服务器，但迟迟没有收到对局状态。请重试；如果问题持续出现，说明服务端同步链路存在异常。"
     },
     "ugc": {
       "loading": "UGC 运行态加载中…",
@@ -230,6 +393,8 @@
     "createRoomForbidden": "当前权限不足，无法创建房间。",
     "createRoomNotFound": "游戏服务未找到该游戏，请刷新页面后重试。",
     "createRoomRequestSize": "请求数据异常，请刷新页面后再试。",
+    "createRoomErrorCodeOnly": "（错误码：{{code}}）",
+    "createRoomErrorCodeWithStatus": "（错误码：{{code}} / 状态码：{{status}}）",
     "activeMatchStale": "检测到旧房间已失效，已自动清理，现在可以重新创建房间。",
     "destroyForbidden": "无法销毁房间：凭证无效或已失效，请重新进入房间后再试。",
     "destroyNetwork": "销毁房间失败：网络或服务异常，请稍后重试。",
@@ -242,12 +407,45 @@
     "roomFull": "房间已满",
     "ownerClaimFailed": "无法重连该房间：可能是游客身份丢失或服务器重启导致凭据失效。请使用原浏览器重试，或重新创建房间。",
     "roomCreatedButClaimFailed": "房间已创建但入座失败，请返回大厅重试。",
+    "roomCreatedButEnterFailed": "房间已创建，但自动进入失败，请返回大厅重新进入。",
+    "aiSeatClaimFailed": "部分 AI 座位初始化失败，已进入房间，请检查座位状态。",
     "joinRoomFailed": "加入房间失败",
     "actionFailed": "操作失败，请稍后重试。",
     "serviceUnavailable": {
       "title": "服务目前不可用",
       "desc": "无法连接到后端服务。请检查网络或确认后端容器（MongoDB/Server）已启动。"
     }
+  },
+  "ai": {
+    "supportTitle": "AI 支持",
+    "unsupported": "暂不支持 AI",
+    "capture": "对局采集",
+    "local": "本地 AI",
+    "remote": "远程 AI",
+    "configureTitle": "本地对战设置",
+    "configureHint": "选择本机参与人数，并为每个座位指定真人、本地 AI 或远程 AI。",
+    "playerCount": "本地人数",
+    "seat": "座位 {{seat}}",
+    "primarySeat": "主座位",
+    "secondarySeat": "副座位",
+    "controllers": {
+      "human": "真人",
+      "local": "本地 AI",
+      "remote": "远程 AI"
+    },
+    "difficulty": "难度",
+    "difficulties": {
+      "easy": "简单",
+      "normal": "普通",
+      "hard": "困难",
+      "expert": "专家"
+    },
+    "policyId": "策略 ID",
+    "policyPlaceholder": "留空则使用默认策略",
+    "providerId": "Provider ID",
+    "providerPlaceholder": "留空则使用 astrbot",
+    "quickStart": "默认快速开始：1 号位为真人，2 号位在支持时自动使用该游戏的本地 AI。",
+    "startLocal": "开始本地对战"
   },
   "createRoom": {
     "title": "创建房间",
@@ -266,7 +464,25 @@
       "3days": "3 天",
       "7days": "7 天"
     },
-    "retentionHint": "保存期内可重连，过期自动清理"
+    "retentionHint": "保存期内可重连，过期自动清理",
+    "multiSelectPlaceholder": "选择扩展",
+    "multiSelectButton": "已选 {{count}} 项",
+    "multiSelectSelected": "已启用 {{count}} 项",
+    "multiSelectNone": "未启用",
+    "enableOption": "启用 {{label}}",
+    "disableOption": "关闭 {{label}}",
+    "removeSelectedOption": "取消 {{label}}",
+    "enableRoomAi": "加入 AI",
+    "enableRoomAiHint": "为当前房间启用 AI 占位，关闭时会自动折叠。",
+    "enableRoomAiSummary": "已开启 · {{players}}P · {{aiCount}} AI",
+    "enabled": "已开启",
+    "disabled": "未开启",
+    "occupiedSeats": "AI 占位",
+    "occupiedSeatsHint": "点击由 AI 占据的座位，1 号位固定留给房主。",
+    "ownerSeatUnit": "{{seat}} 号位（房主）",
+    "occupiedSeatUnit": "{{seat}} 号位",
+    "aiPlayerName": "AI {{seat}} 号位",
+    "confirm": "确认创建"
   },
   "socket": {
     "invalidGameId": "非法 gameId，已忽略订阅: {{value}}",

@@ -40,21 +40,28 @@ export const useLobbyMatchPresence = ({
         if (!next) {
             return;
         }
-        setHasSeen((prev) => prev || matches.some((match) => match.matchID === next));
+        queueMicrotask(() => {
+            setHasSeen((prev) => prev || matches.some((match) => match.matchID === next));
+        });
     }, [matchId, matches]);
 
     useEffect(() => {
         if (!enabled || !gameId) {
-            setMatches([]);
-            setHasSnapshot(false);
-            setHasSeen(false);
+            queueMicrotask(() => {
+                setMatches([]);
+                setHasSnapshot(false);
+                setHasSeen(false);
+            });
             return;
         }
 
         let isActive = true;
-        setMatches([]);
-        setHasSnapshot(false);
-        setHasSeen(false);
+        queueMicrotask(() => {
+            if (!isActive) return;
+            setMatches([]);
+            setHasSnapshot(false);
+            setHasSeen(false);
+        });
 
         const updateHandler = (newMatches: LobbyMatch[]) => {
             if (!isActive) return;
@@ -65,12 +72,16 @@ export const useLobbyMatchPresence = ({
                 setHasSeen(true);
             }
         };
-
-        const unsubscribe = lobbySocket.subscribe(gameId, updateHandler);
+        let unsubscribe: (() => void) | null = null;
+        const subscribeTimer = window.setTimeout(() => {
+            if (!isActive) return;
+            unsubscribe = lobbySocket.subscribe(gameId, updateHandler);
+        }, 0);
 
         return () => {
             isActive = false;
-            unsubscribe();
+            window.clearTimeout(subscribeTimer);
+            unsubscribe?.();
         };
     }, [enabled, gameId]);
 

@@ -34,76 +34,111 @@ import manifest9 from './ugcbuilder/manifest';
 import Thumbnail9 from './ugcbuilder/thumbnail';
 
 const loadRuntime3 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule] = await Promise.all([
+    const [gameModule, boardModule] = await Promise.all([
         import('./cardia/game'),
         import('./cardia/Board'),
-        import('./cardia/tutorial'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
     };
 };
 
+const loadTutorial3 = async () => {
+    const tutorialModule = await import('./cardia/tutorial');
+    return tutorialModule.default;
+};
+
+const loadCriticalImageResolver3 = async () => {
+    const resolverModule = await import('./cardia/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.cardiaCriticalImageResolver;
+};
+
 const loadRuntime4 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./dicethrone/game'),
         import('./dicethrone/Board'),
-        import('./dicethrone/tutorial'),
         import('./dicethrone/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.diceThroneLatencyConfig,
     };
 };
 
+const loadTutorial4 = async () => {
+    const tutorialModule = await import('./dicethrone/tutorial');
+    return tutorialModule.default;
+};
+
+const loadCriticalImageResolver4 = async () => {
+    const resolverModule = await import('./dicethrone/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.diceThroneCriticalImageResolver;
+};
+
 const loadRuntime6 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./smashup/game'),
         import('./smashup/Board'),
-        import('./smashup/tutorial'),
         import('./smashup/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.smashUpLatencyConfig,
     };
 };
 
+const loadTutorial6 = async () => {
+    const tutorialModule = await import('./smashup/tutorial');
+    return tutorialModule.default;
+};
+
+const loadCriticalImageResolver6 = async () => {
+    const resolverModule = await import('./smashup/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.smashUpCriticalImageResolver;
+};
+
 const loadRuntime7 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./summonerwars/game'),
         import('./summonerwars/Board'),
-        import('./summonerwars/tutorial'),
         import('./summonerwars/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.summonerWarsLatencyConfig,
     };
 };
 
+const loadTutorial7 = async () => {
+    const tutorialModule = await import('./summonerwars/tutorial');
+    return tutorialModule.default;
+};
+
+const loadCriticalImageResolver7 = async () => {
+    const resolverModule = await import('./summonerwars/criticalImageResolver');
+    return resolverModule.default ?? resolverModule.summonerWarsCriticalImageResolver;
+};
+
 const loadRuntime8 = async (): Promise<GameClientRuntimeModule> => {
-    const [gameModule, boardModule, tutorialModule, latencyModule] = await Promise.all([
+    const [gameModule, boardModule, latencyModule] = await Promise.all([
         import('./tictactoe/game'),
         import('./tictactoe/Board'),
-        import('./tictactoe/tutorial'),
         import('./tictactoe/latencyConfig'),
     ]);
     return {
         engineConfig: gameModule.engineConfig,
         board: boardModule.default,
-        tutorial: tutorialModule.default,
         latencyConfig: latencyModule.ticTacToeLatencyConfig,
     };
+};
+
+const loadTutorial8 = async () => {
+    const tutorialModule = await import('./tictactoe/tutorial');
+    return tutorialModule.default;
 };
 
 const entry0: GameClientManifestEntry = {
@@ -125,12 +160,16 @@ const entry3: GameClientManifestEntry = {
     manifest: manifest3,
     thumbnail: <Thumbnail3 />,
     loadRuntime: loadRuntime3,
+    loadTutorial: loadTutorial3,
+    loadCriticalImageResolver: loadCriticalImageResolver3,
 };
 
 const entry4: GameClientManifestEntry = {
     manifest: manifest4,
     thumbnail: <Thumbnail4 />,
     loadRuntime: loadRuntime4,
+    loadTutorial: loadTutorial4,
+    loadCriticalImageResolver: loadCriticalImageResolver4,
 };
 
 const entry5: GameClientManifestEntry = {
@@ -142,18 +181,23 @@ const entry6: GameClientManifestEntry = {
     manifest: manifest6,
     thumbnail: <Thumbnail6 />,
     loadRuntime: loadRuntime6,
+    loadTutorial: loadTutorial6,
+    loadCriticalImageResolver: loadCriticalImageResolver6,
 };
 
 const entry7: GameClientManifestEntry = {
     manifest: manifest7,
     thumbnail: <Thumbnail7 />,
     loadRuntime: loadRuntime7,
+    loadTutorial: loadTutorial7,
+    loadCriticalImageResolver: loadCriticalImageResolver7,
 };
 
 const entry8: GameClientManifestEntry = {
     manifest: manifest8,
     thumbnail: <Thumbnail8 />,
     loadRuntime: loadRuntime8,
+    loadTutorial: loadTutorial8,
 };
 
 const entry9: GameClientManifestEntry = {

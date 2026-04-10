@@ -5,6 +5,8 @@
 import { describe, it, expect } from 'vitest';
 import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
+import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
+import { buildSummonerWarsAiLegalActions, summonerWarsAiRuntime } from '../ai';
 
 import { GameTestRunner, type TestCase, type StateExpectation } from '../../../engine/testing';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -12,8 +14,213 @@ import {
     BOARD_ROWS,
     BOARD_COLS,
     getValidSummonPositions,
+    getSummoner,
 } from '../domain/helpers';
-import { createInitializedCore } from './test-helpers';
+import { createInitializedCore, placeTestUnit, resetInstanceCounter } from './test-helpers';
+import { engineConfig } from '../game';
+
+const aiTestRandom = {
+    random: () => 0,
+    d: () => 1,
+    range: (min: number) => min,
+    shuffle: <T>(arr: T[]) => [...arr],
+};
+
+function createModerateThreatAttackCore(): SummonerWarsCore {
+    const core = createInitializedCore(['0', '1'], aiTestRandom);
+    core.phase = 'attack';
+    core.board[6][2].unit = undefined;
+    core.board[6][3].unit = undefined;
+    core.board[5][2].unit = undefined;
+
+    const defenderCard: UnitCard = {
+        id: 'test-guard',
+        cardType: 'unit',
+        name: '测试护卫',
+        unitClass: 'common',
+        faction: 'necromancer',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const threateningCard: UnitCard = {
+        id: 'test-threat',
+        cardType: 'unit',
+        name: '测试威胁兵',
+        unitClass: 'common',
+        faction: 'paladin',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const championCard: UnitCard = {
+        id: 'test-champion',
+        cardType: 'unit',
+        name: '测试冠军',
+        unitClass: 'champion',
+        faction: 'paladin',
+        strength: 3,
+        life: 4,
+        cost: 3,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+
+    placeTestUnit(core, { row: 6, col: 2 }, {
+        card: defenderCard,
+        owner: '0',
+    });
+    placeTestUnit(core, { row: 6, col: 3 }, {
+        card: threateningCard,
+        owner: '1',
+    });
+    placeTestUnit(core, { row: 5, col: 2 }, {
+        card: championCard,
+        owner: '1',
+        damage: 0,
+    });
+
+    return core;
+}
+
+function createBoardControlTiebreakAttackCore(): SummonerWarsCore {
+    const core = createModerateThreatAttackCore();
+    const ownSummoner = core.board[7][3].unit;
+    core.board[7][3].unit = undefined;
+    core.board[7][0].unit = ownSummoner
+        ? {
+            ...ownSummoner,
+            position: { row: 7, col: 0 },
+        }
+        : undefined;
+    return core;
+}
+
+function createActivatedAbilityHeuristicCore(): SummonerWarsCore {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], aiTestRandom, {
+        faction0: 'barbaric',
+        faction1: 'paladin',
+    });
+    core.phase = 'move';
+    core.currentPlayer = '0';
+
+    for (let row = 0; row < BOARD_ROWS; row += 1) {
+        for (let col = 0; col < BOARD_COLS; col += 1) {
+            const unit = core.board[row][col].unit;
+            if (unit && unit.card.unitClass !== 'summoner') {
+                core.board[row][col].unit = undefined;
+            }
+        }
+    }
+
+    const ownSummoner = getSummoner(core, '0');
+    const enemySummoner = getSummoner(core, '1');
+    if (!ownSummoner || !enemySummoner) {
+        throw new Error('测试场景缺少召唤师');
+    }
+    ownSummoner.hasMoved = true;
+    enemySummoner.hasMoved = true;
+
+    const inspireSourceCard: UnitCard = {
+        id: 'test-inspire-source',
+        cardType: 'unit',
+        name: '测试鼓舞者',
+        unitClass: 'champion',
+        faction: 'barbaric',
+        strength: 2,
+        life: 4,
+        cost: 2,
+        attackType: 'melee',
+        attackRange: 1,
+        abilities: ['inspire'],
+        deckSymbols: [],
+    };
+    const prepareSourceCard: UnitCard = {
+        id: 'test-prepare-source',
+        cardType: 'unit',
+        name: '测试预备者',
+        unitClass: 'common',
+        faction: 'barbaric',
+        strength: 1,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        abilities: ['prepare'],
+        deckSymbols: [],
+    };
+    const allyChampionCard: UnitCard = {
+        id: 'test-inspired-champion',
+        cardType: 'unit',
+        name: '测试前锋冠军',
+        unitClass: 'champion',
+        faction: 'barbaric',
+        strength: 3,
+        life: 4,
+        cost: 3,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+    const allyCommonCard: UnitCard = {
+        id: 'test-inspired-common',
+        cardType: 'unit',
+        name: '测试护卫兵',
+        unitClass: 'common',
+        faction: 'barbaric',
+        strength: 2,
+        life: 3,
+        cost: 1,
+        attackType: 'melee',
+        attackRange: 1,
+        deckSymbols: [],
+    };
+
+    const inspireSourcePos = {
+        row: ownSummoner.position.row - 1,
+        col: ownSummoner.position.col,
+    };
+    placeTestUnit(core, inspireSourcePos, {
+        card: inspireSourceCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: inspireSourcePos.row,
+        col: inspireSourcePos.col - 1,
+    }, {
+        card: allyChampionCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: inspireSourcePos.row,
+        col: inspireSourcePos.col + 1,
+    }, {
+        card: allyCommonCard,
+        owner: '0',
+        hasMoved: true,
+    });
+    placeTestUnit(core, {
+        row: ownSummoner.position.row - 2,
+        col: 0,
+    }, {
+        card: prepareSourceCard,
+        owner: '0',
+        hasMoved: false,
+        tempAbilities: ['immobile'],
+    });
+
+    return core;
+}
 
 // ============================================================================
 // 召唤师战争专用断言
@@ -741,5 +948,359 @@ describe('召唤师战争流程测试', () => {
     it.each(testCases)('$name', (testCase) => {
         const result = runner.run(testCase);
         expect(result.assertionErrors).toEqual([]);
+    });
+});
+
+describe('召唤师战争本地 AI', () => {
+    it('选角阶段应为房主选择阵营', async () => {
+        const core = SummonerWarsDomain.setup(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-setup-ai',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: SW_COMMANDS.SELECT_FACTION,
+            payload: { factionId: 'necromancer' },
+        });
+    });
+
+    it('选角阶段应避开已被其他玩家选走的阵营', async () => {
+        const core = SummonerWarsDomain.setup(['0', '1'], aiTestRandom);
+        core.selectedFactions['0'] = 'necromancer';
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-setup-unique-ai',
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('1');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]?.type).toBe(SW_COMMANDS.SELECT_FACTION);
+        expect(resolution?.action.commands[0]).not.toMatchObject({
+            payload: { factionId: 'necromancer' },
+        });
+    });
+
+    it('召唤阶段应优先选择合法召唤动作，而不是直接结束阶段', async () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-summon-ai',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]?.type).toBe(SW_COMMANDS.SUMMON_UNIT);
+
+        const summonCommand = resolution?.action.commands[0];
+        const summonPosition = (summonCommand?.payload as { position?: { row: number; col: number } } | undefined)?.position;
+        const validPositions = getValidSummonPositions(core, '0');
+        expect(summonPosition).toBeTruthy();
+        expect(validPositions).toContainEqual(summonPosition);
+    });
+
+
+    it('攻击类 legal action 会附带 strategy tags，供通用 profile scorer 复用', () => {
+        const core = createModerateThreatAttackCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const threatAttack = actions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 6 && target?.col === 3;
+        });
+        const championAttack = actions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 5 && target?.col === 2;
+        });
+
+        expect(threatAttack?.metadata?.strategyTags).toContain('summoner-defense');
+        expect(threatAttack?.metadata?.strategyTags).toContain('board-control');
+        expect(championAttack?.metadata?.strategyTags).toContain('board-control');
+        expect(championAttack?.metadata?.strategyTags).not.toContain('summoner-defense');
+    });
+
+    it('通用 strategy profile scorer 会在中度承压时抬高回防标签动作的评分', async () => {
+        const core = createModerateThreatAttackCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-strategy-profile',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            totalScore: number;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const threatAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 6 && target?.col === 3;
+        });
+        const championAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 5 && target?.col === 2;
+        });
+        const threatEval = evaluations.find((item) => item.actionId === threatAttack?.actionId);
+        const championEval = evaluations.find((item) => item.actionId === championAttack?.actionId);
+
+        expect(threatAttack?.metadata?.strategyTags).toContain('summoner-defense');
+        expect(threatEval?.contributions.some((item) => item.scorerId === 'strategy-profile-fit' && item.score > 0)).toBe(true);
+        expect(threatEval?.totalScore ?? -Infinity).toBeGreaterThan(championEval?.totalScore ?? -Infinity);
+        expect(decision?.actionId).toBe(threatAttack?.actionId);
+    });
+
+    it('当两个攻击动作都只有 board-control 标签时，仍应由 attack-value 选择更高价值目标', async () => {
+        const core = createBoardControlTiebreakAttackCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-board-control-tiebreak',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            totalScore: number;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const commonAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 6 && target?.col === 3;
+        });
+        const championAttack = context.legalActions.find((action) => {
+            const target = action.metadata?.target as { row?: number; col?: number } | undefined;
+            return action.kind === 'declare-attack' && target?.row === 5 && target?.col === 2;
+        });
+        const commonEval = evaluations.find((item) => item.actionId === commonAttack?.actionId);
+        const championEval = evaluations.find((item) => item.actionId === championAttack?.actionId);
+        const commonProfileScore = commonEval?.contributions.find((item) => item.scorerId === 'strategy-profile-fit')?.score ?? 0;
+        const championProfileScore = championEval?.contributions.find((item) => item.scorerId === 'strategy-profile-fit')?.score ?? 0;
+        const commonAttackScore = commonEval?.contributions.find((item) => item.scorerId === 'attack-value')?.score ?? -Infinity;
+        const championAttackScore = championEval?.contributions.find((item) => item.scorerId === 'attack-value')?.score ?? -Infinity;
+
+        expect(commonAttack?.metadata?.strategyTags).toEqual(['board-control']);
+        expect(championAttack?.metadata?.strategyTags).toEqual(['board-control']);
+        expect(championProfileScore).toBe(commonProfileScore);
+        expect(championAttackScore).toBeGreaterThan(commonAttackScore);
+        expect(championEval?.totalScore ?? -Infinity).toBeGreaterThan(commonEval?.totalScore ?? -Infinity);
+        expect(decision?.actionId).toBe(championAttack?.actionId);
+    });
+
+    it('activated ability 会根据效果目标自动补齐 strategy tags', () => {
+        const core = createActivatedAbilityHeuristicCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const inspireAction = actions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'inspire';
+        });
+        const prepareAction = actions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'prepare';
+        });
+
+        expect(inspireAction?.metadata?.strategyTags).toContain('ability-tempo');
+        expect(inspireAction?.metadata?.strategyTags).toContain('board-control');
+        expect(inspireAction?.metadata?.strategyTags).toContain('summoner-defense');
+        expect(inspireAction?.metadata?.adjacentAllyCount).toBe(3);
+        expect(inspireAction?.metadata?.adjacentChampionCount).toBe(1);
+        expect(inspireAction?.metadata?.adjacentSummonerCount).toBe(1);
+
+        expect(prepareAction?.metadata?.strategyTags).toEqual(['ability-tempo']);
+        expect(prepareAction?.metadata?.selfChargeGain).toBe(1);
+    });
+
+    it('多个无目标 activated ability 同时可用时，应优先选择能强化多名友军的能力', async () => {
+        const core = createActivatedAbilityHeuristicCore();
+        const sys = createInitialSystemState(['0', '1'], []);
+        const context = buildAiDecisionContext({
+            gameId: 'summonerwars',
+            matchId: 'local:summonerwars-activated-ability-heuristics',
+            playerId: '0',
+            visibleState: { core, sys },
+            rulesVersion: null,
+            decisionBudgetMs: 250,
+            source: 'local',
+            seatController: { type: 'local-ai', difficulty: 'hard' },
+        });
+
+        const decision = await summonerWarsAiRuntime.localPolicies?.baseline.decide(context);
+        const evaluations = (decision?.providerMetadata?.evaluations ?? []) as Array<{
+            actionId: string;
+            totalScore: number;
+            contributions: Array<{ scorerId: string; score: number }>;
+        }>;
+        const inspireAction = context.legalActions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'inspire';
+        });
+        const prepareAction = context.legalActions.find((action) => {
+            return action.kind === 'activate-ability' && action.metadata?.abilityId === 'prepare';
+        });
+        const inspireEval = evaluations.find((item) => item.actionId === inspireAction?.actionId);
+        const prepareEval = evaluations.find((item) => item.actionId === prepareAction?.actionId);
+        const inspireAbilityScore = inspireEval?.contributions.find((item) => item.scorerId === 'activated-ability')?.score ?? -Infinity;
+        const prepareAbilityScore = prepareEval?.contributions.find((item) => item.scorerId === 'activated-ability')?.score ?? -Infinity;
+
+        expect(inspireAbilityScore).toBeGreaterThan(prepareAbilityScore);
+        expect(inspireEval?.totalScore ?? -Infinity).toBeGreaterThan(prepareEval?.totalScore ?? -Infinity);
+        expect(decision?.actionId).toBe(inspireAction?.actionId);
+    });
+
+    it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+        sys.interaction = {
+            ...sys.interaction,
+            current: {
+                id: 'sw-ai-simple-choice-multi',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    options: [
+                        { id: 'opt-a', label: '选项 A' },
+                        { id: 'opt-b', label: '选项 B' },
+                        { id: 'opt-c', label: '选项 C' },
+                    ],
+                    multi: { min: 2, max: 2 },
+                },
+            } as any,
+        };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const payloads = actions
+            .filter((action) => action.kind === 'interaction-choice')
+            .map((action) => ((action.commands[0]?.payload as { optionIds?: string[] } | undefined)?.optionIds ?? []).join(','))
+            .sort();
+
+        expect(payloads).toEqual([
+            'opt-a,opt-b',
+            'opt-a,opt-c',
+            'opt-b,opt-c',
+        ]);
+    });
+
+    it('召唤师受致命威胁时应优先攻击威胁单位，而不是追击其他目标', async () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        core.phase = 'attack';
+        core.board[7][3].unit!.damage = core.board[7][3].unit!.card.life - 2;
+        core.board[6][2].unit = undefined;
+        core.board[6][3].unit = undefined;
+        core.board[5][2].unit = undefined;
+
+        const defenderCard: UnitCard = {
+            id: 'test-guard',
+            cardType: 'unit',
+            name: '测试护卫',
+            unitClass: 'common',
+            faction: 'necromancer',
+            strength: 2,
+            life: 3,
+            cost: 1,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+        const threateningCard: UnitCard = {
+            id: 'test-threat',
+            cardType: 'unit',
+            name: '测试威胁兵',
+            unitClass: 'common',
+            faction: 'paladin',
+            strength: 2,
+            life: 3,
+            cost: 1,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+        const championCard: UnitCard = {
+            id: 'test-champion',
+            cardType: 'unit',
+            name: '测试冠军',
+            unitClass: 'champion',
+            faction: 'paladin',
+            strength: 3,
+            life: 1,
+            cost: 3,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+
+        placeTestUnit(core, { row: 6, col: 2 }, {
+            card: defenderCard,
+            owner: '0',
+        });
+        placeTestUnit(core, { row: 6, col: 3 }, {
+            card: threateningCard,
+            owner: '1',
+        });
+        placeTestUnit(core, { row: 5, col: 2 }, {
+            card: championCard,
+            owner: '1',
+            damage: 0,
+        });
+
+        const sys = createInitialSystemState(['0', '1'], []);
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state: { core, sys },
+            matchId: 'local:summonerwars-threat-response-ai',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.source).toBe('local-ai');
+        expect(resolution?.action.commands[0]).toMatchObject({
+            type: SW_COMMANDS.DECLARE_ATTACK,
+            payload: {
+                target: { row: 6, col: 3 },
+            },
+        });
     });
 });

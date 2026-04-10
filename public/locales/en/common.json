@@ -4,6 +4,26 @@
     "cancel": "Cancel",
     "close": "Close"
   },
+  "actions": {
+    "closePreview": "Close Preview"
+  },
+  "selection": {
+    "title": "Choose Character",
+    "notSelected": "Not Selected",
+    "you": "You",
+    "ready": "Ready",
+    "readyWaiting": "Waiting for other players",
+    "pressStart": "Start Match",
+    "waitingAll": "Waiting for everyone to be ready"
+  },
+  "tutorial": {
+    "steps": {
+      "setup": "Preparing room"
+    }
+  },
+  "characters": {
+    "placeholder": "Character"
+  },
   "category": {
     "all": "All Games",
     "card": "Card",
@@ -21,6 +41,9 @@
     "card_driven": "Card Driven",
     "casual": "Casual"
   },
+  "status_tags": {
+    "under_construction": "Under Construction"
+  },
   "game_details": {
     "best_players": "Best Players",
     "people": "Players",
@@ -36,6 +59,16 @@
   },
   "toast": {
     "close": "Close"
+  },
+  "socketCompatibility": {
+    "title": "Real-time connection was unstable, so compatibility mode was enabled",
+    "description": "This network did not handle websocket-only connections reliably. Polling fallback is now allowed and reconnection has started. It may respond a bit slower; you can turn compatibility mode off after the network recovers.",
+    "enable": "Enable compatibility mode",
+    "enabledTitle": "Compatibility mode enabled",
+    "enabledDescription": "Polling fallback is now allowed for real-time updates. If your network becomes normal again, you can turn it off to recover faster response.",
+    "disable": "Turn compatibility mode off",
+    "disabledTitle": "Compatibility mode disabled",
+    "disabledDescription": "Returned to websocket-only mode and reconnecting now."
   },
   "rematch": {
     "playAgain": "Play Again",
@@ -56,9 +89,17 @@
   },
   "accept": "Accept",
   "reject": "Reject",
+  "close": "Close",
   "back": "Back",
   "loading": "Loading",
+  "routeLoading": {
+    "eyebrow": "Loading Page",
+    "title": "Loading page...",
+    "description": "Preparing the current page content.",
+    "progress": "Loading page module..."
+  },
   "unknownUser": "Unknown User",
+  "unknownError": "An unknown error occurred",
   "notFound": {
     "seoTitle": "404 - Page Not Found",
     "seoDescription": "The page you are looking for does not exist.",
@@ -84,13 +125,12 @@
     "seoDescription": "This browser is missing modern CSS features required by the app. Please try the latest Chrome or update Android System WebView.",
     "badge": "Compatibility Notice",
     "currentBrowser": "Detected browser: {{browser}}",
-    "requiredVersions": "Recommended minimum: Chrome 111+, Edge 111+, Safari 16.4+, Firefox 128+",
+    "requiredVersions": "In practice Chrome 88+, Edge 88+, Android WebView 88+, Safari 14+, and Firefox 78+ are more stable, but lower versions are still allowed when the required capabilities are present.",
     "title": "This browser is not fully compatible",
-    "description": "We detected that the current environment is missing modern CSS features required by this app. That can cause missing styles, broken layout, or unusable buttons. This commonly happens in older browser engines and older in-app webviews.",
+    "description": "This environment is missing critical capabilities that the project does not currently have a safe fallback for. We only block in that case. If the page can still run correctly, a lower browser version alone will not be blocked.",
     "reasonTitle": "Missing capabilities",
-    "reasonOklch": "OKLCH colors are not supported, so theme colors and some backgrounds may fail.",
-    "reasonTranslate": "The standalone CSS translate property is not supported, so layout and motion may shift out of place.",
-    "reasonRegisterProperty": "CSS.registerProperty is not supported, so part of the Tailwind-generated variable styling cannot work correctly.",
+    "reasonRuntimeCore": "Core runtime features such as Promise, fetch, or URLSearchParams are missing, so the main app flow cannot be trusted to work.",
+    "reasonResizeObserver": "ResizeObserver is missing, so board sizing and critical layout calculations in gameplay are likely to break.",
     "recommendationTitle": "Recommended next steps",
     "recommendationChrome": "Open this page with the latest Chrome, Edge, or another up-to-date browser.",
     "recommendationWebView": "If this page is opened inside an app, update Android System WebView or open it in an external browser instead.",
@@ -103,9 +143,16 @@
     "contextBrowser": "Older browser engine detected"
   },
   "game_names": {
+    "archview": "Architecture View",
+    "assetslicer": "Asset Slicer",
+    "audiobrowser": "Audio Browser",
+    "cardia": "Cardia",
     "tictactoe": "Tic-Tac-Toe",
     "dicethrone": "Dice Throne",
-    "summonerwars": "Summoner Wars"
+    "fxpreview": "Effect Preview",
+    "smashup": "Smash Up",
+    "summonerwars": "Summoner Wars",
+    "ugcbuilder": "UGC Prototype Builder"
   },
   "matchRoom": {
     "tutorialTitle": "{{game}} - Tutorial",

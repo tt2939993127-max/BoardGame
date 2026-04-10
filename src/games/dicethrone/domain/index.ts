@@ -5,7 +5,7 @@
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
 import { registerDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
-import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor } from './types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor, DtResponseWindowType, TeamId } from './types';
 import { RESOURCE_IDS } from './resources';
 import { validateCommand } from './commandValidation';
 import { execute } from './execute';
@@ -25,6 +25,11 @@ import { shadowThiefDiceDefinition } from '../heroes/shadow_thief/diceConfig';
 import { SHADOW_THIEF_RESOURCES as shadowThiefResourceDefinitions } from '../heroes/shadow_thief/resourceConfig';
 import { paladinDiceDefinition } from '../heroes/paladin/diceConfig';
 import { paladinResourceDefinitions } from '../heroes/paladin/resourceConfig';
+import { gunslingerDiceDefinition } from '../heroes/gunslinger/diceConfig';
+import { samuraiDiceDefinition } from '../heroes/samurai/diceConfig';
+import { INITIAL_HEALTH } from './types';
+import { buildTeamIdByPlayerIdFromSeatingOrder, getTeamIdByPlayerIdMap, isTeamMode } from './rules';
+import type { SeatControllerKind } from './types';
 
 // 注册 DiceThrone 游戏特定条件（骰子组合、顺子等）
 registerDiceThroneConditions();
@@ -36,6 +41,8 @@ registerDiceDefinition(pyromancerDiceDefinition);
 registerDiceDefinition(moonElfDiceDefinition);
 registerDiceDefinition(shadowThiefDiceDefinition);
 registerDiceDefinition(paladinDiceDefinition);
+registerDiceDefinition(gunslingerDiceDefinition);
+registerDiceDefinition(samuraiDiceDefinition);
 monkResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 barbarianResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
 pyromancerResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def));
@@ -50,7 +57,7 @@ paladinResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def)
 export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, DiceThroneEvent> = {
     gameId: 'dicethrone',
 
-    setup: (playerIds: PlayerId[], _random: RandomFn): DiceThroneCore => {
+    setup: (playerIds: PlayerId[], _random: RandomFn, setupData?: Record<string, unknown>): DiceThroneCore => {
         const players: Record<PlayerId, HeroState> = {};
         const selectedCharacters: Record<PlayerId, CharacterId> = {};
 
@@ -79,8 +86,32 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             readyPlayers[pid] = false;
         }
 
+        const isFourPlayerTeamMode = playerIds.length === 4;
+        const seatingOrder = isFourPlayerTeamMode ? [...playerIds] : undefined;
+        const rawSeatControllers = setupData?.seatControllers && typeof setupData.seatControllers === 'object' && !Array.isArray(setupData.seatControllers)
+            ? setupData.seatControllers as Record<string, unknown>
+            : {};
+        const seatControllers = playerIds.reduce((acc, playerId) => {
+            const rawController = rawSeatControllers[playerId];
+            const type = rawController && typeof rawController === 'object' && 'type' in rawController
+                ? (rawController as { type?: unknown }).type
+                : undefined;
+            acc[playerId] = type === 'human' || type == null ? 'human' : 'ai';
+            return acc;
+        }, {} as Record<PlayerId, SeatControllerKind>);
+        const teamIdByPlayerId = isFourPlayerTeamMode && seatingOrder
+            ? buildTeamIdByPlayerIdFromSeatingOrder(seatingOrder)
+            : undefined;
+        const teamHealth = isFourPlayerTeamMode
+            ? { A: INITIAL_HEALTH, B: INITIAL_HEALTH }
+            : undefined;
+
         return {
             players,
+            seatingOrder,
+            seatControllers,
+            teamIdByPlayerId,
+            teamHealth,
             selectedCharacters,
             readyPlayers,
             hostPlayerId: playerIds[0],
@@ -102,6 +133,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     validate: (state, command) => {
         const phase = (state.sys?.phase ?? 'setup') as TurnPhase;
         const interaction = state.sys?.interaction?.current;
+        const responseWindowType = state.sys?.responseWindow?.current?.windowType as DtResponseWindowType | undefined;
 
         // dt:card-interaction：data 直接是 PendingInteraction（状态选择类）
         // multistep-choice：骰子类交互，从 meta 构造兼容的 InteractionDescriptor
@@ -109,20 +141,31 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
         if (interaction?.kind === 'dt:card-interaction') {
             pendingInteraction = interaction.data as InteractionDescriptor;
         } else if (interaction?.kind === 'multistep-choice') {
-            const meta = (interaction.data as any)?.meta;
+            const multistepData = interaction.data as { meta?: { dtType?: unknown }; sourceId?: unknown };
+            const meta = multistepData.meta;
             if (meta?.dtType === 'modifyDie' || meta?.dtType === 'selectDie') {
                 // 构造最小兼容结构，validateCommand 只用 playerId 做权限检查
                 pendingInteraction = {
                     id: interaction.id,
                     playerId: interaction.playerId,
-                    sourceCardId: (interaction.data as any)?.sourceId ?? '',
+                    sourceCardId: typeof multistepData.sourceId === 'string' ? multistepData.sourceId : '',
                     type: meta.dtType === 'selectDie' ? 'selectDie' : 'modifyDie',
                     titleKey: '',
                 } as InteractionDescriptor;
             }
         }
 
-        return validateCommand(state.core, command, phase, pendingInteraction);
+        const effectivePendingInteraction = interaction?.kind === 'dt:card-interaction'
+            ? pendingInteraction
+            : interaction;
+
+        return validateCommand(
+            state.core,
+            command,
+            phase,
+            effectivePendingInteraction as InteractionDescriptor | undefined,
+            responseWindowType,
+        );
     },
     execute: (state, command, random) => execute(state, command, random),
     reduce,
@@ -131,6 +174,34 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     isGameOver: (state: DiceThroneCore): GameOverResult | undefined => {
         // 在 setup 阶段不进行胜负判定，避免血量未初始化导致误判
         if (!state.hostStarted) return undefined;
+
+        if (isTeamMode(state)) {
+            const teamIdByPlayerId = getTeamIdByPlayerIdMap(state);
+            const healthByTeam: Record<TeamId, number> = {
+                A: state.teamHealth?.A ?? INITIAL_HEALTH,
+                B: state.teamHealth?.B ?? INITIAL_HEALTH,
+            };
+
+            (Object.keys(state.players) as PlayerId[]).forEach((playerId) => {
+                const teamId = teamIdByPlayerId[playerId];
+                if (!teamId) return;
+                const hp = state.players[playerId]?.resources[RESOURCE_IDS.HP] ?? healthByTeam[teamId];
+                healthByTeam[teamId] = Math.min(healthByTeam[teamId], hp);
+            });
+
+            const teamADefeated = healthByTeam.A <= 0;
+            const teamBDefeated = healthByTeam.B <= 0;
+
+            if (!teamADefeated && !teamBDefeated) return undefined;
+            if (teamADefeated && teamBDefeated) return { draw: true };
+
+            const winnerTeamId: TeamId = teamADefeated ? 'B' : 'A';
+            const winners = (Object.keys(state.players) as PlayerId[]).filter(
+                (playerId) => teamIdByPlayerId[playerId] === winnerTeamId
+            );
+            const winner = winners[0];
+            return winner ? { winner, winners } : { draw: true };
+        }
 
         const playerIds = Object.keys(state.players);
         const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);
@@ -155,5 +226,13 @@ export type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent } from './types
 export * from './rules';
 
 // 导出常量
-export { STATUS_IDS, TOKEN_IDS, DICE_FACE_IDS } from './ids';
+export {
+    STATUS_IDS,
+    TOKEN_IDS,
+    DICE_FACE_IDS,
+    SAMURAI_DICE_FACE_IDS,
+    DICETHRONE_CARD_ATLAS_IDS,
+    DICETHRONE_STATUS_ATLAS_IDS,
+    DICETHRONE_COMMANDS,
+} from './ids';
 export { RESOURCE_IDS } from './resources';

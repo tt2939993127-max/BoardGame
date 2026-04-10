@@ -147,7 +147,7 @@ Cloudflare 控制台 → **Workers & Pages** → 选择你的 Pages 项目 → *
 - **环境变量**（非常重要）：
   - `VITE_BACKEND_URL` = `https://api.<你的域名>`
   - 例如：`VITE_BACKEND_URL=https://api.easyboardgame.top`
-- **如果 Android App 使用 remote WebView 模式**：
+- **如果 Android App 临时使用 remote WebView 模式**：
   - `ANDROID_REMOTE_WEB_URL` 应指向实际对外可访问的前端页面入口，例如 `https://easyboardgame.top`
   - 不要把 `ANDROID_REMOTE_WEB_URL` 指到纯 API 域名，例如 `https://api.easyboardgame.top`
 - **自定义域名**：
@@ -196,15 +196,71 @@ SMTP_PASS=xxx
 
 ### Android remote WebView 额外约束
 
-如果 Android 壳使用 `ANDROID_WEBVIEW_MODE=remote`，部署侧还需要满足以下条件：
+如果 Android 壳临时使用 `ANDROID_WEBVIEW_MODE=remote`，部署侧还需要满足以下条件：
 
-- `ANDROID_REMOTE_WEB_URL` 必须是绝对 HTTPS 地址，且应指向真实前端入口
+- `ANDROID_REMOTE_WEB_URL` 必须是绝对 HTTP/HTTPS 地址，且应指向真实前端入口
+- 除局域网临时调试或短期灰度外，仍优先使用 HTTPS
 - 该前端入口加载出来的 H5 仍然会访问你的后端接口，因此 `WEB_ORIGINS` 必须包含这个前端域名
 - 远程模式下，Android App 会与线上 Web 同步更新；如果线上前端需要回滚，App 也会一起回滚，不再依赖重新发 APK
 - Android `remote` 打包应视为“纯壳模式”：不会执行 `vite build`，也不会把 `dist` 前端资源复制进 APK；打包只更新原生壳、Capacitor 配置和壳内静态资产（例如方向映射、图标、启动图）
 - Android `remote` 的 `build-debug / build-release / build-bundle` 不再自动执行 `capacitor sync/update`；如果你新增了 Capacitor 插件、修改了 Android 原生模板或首次初始化工程，先手动执行一次 `npm run mobile:android:sync`
 - 当前 Android 壳默认行为：游戏页按 `preferredOrientation` 自动切换横竖屏，并隐藏顶部状态栏；非游戏页恢复竖屏和系统状态栏
 - Android 壳进入后台、按 Home、锁屏或熄屏时，会主动通知 H5 停止当前 BGM；恢复前台后默认不自动续播
+
+> **主线口径**：`remote WebView` 只作为兼容 / 调试 / 短期灰度路径保留。Android 的长期主线应是 `embedded` 打包；若未来需要热更新 H5 本体，应演进为 `embedded + OTA/Live Update`，而不是继续把 `remote` 当默认产品方案。
+
+### Android embedded OTA 发布源
+
+当前 Android 主线热更新不再依赖 `remote`，而是：
+
+- App 打包仍走 `embedded`
+- H5 本体通过 OTA manifest + zip bundle 更新
+- 发布源复用同一个对象存储桶，路径前缀为 `official/app-updates/android/<channel>/...`
+
+默认约定：
+
+- `latest.json`：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/latest.json`
+- bundle zip：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/bundles/<bundleVersion>.zip`
+- version manifest：`https://assets.easyboardgame.top/official/app-updates/android/<channel>/manifests/<bundleVersion>.json`
+
+发布命令：
+
+```bash
+node scripts/mobile/release-android.mjs ota --channel stable --dry-run
+node scripts/mobile/release-android.mjs ota --channel stable --skip-latest
+node scripts/mobile/release-android.mjs ota --channel stable
+```
+
+强制约束：
+
+- Android OTA 发布不得把 `public/assets/i18n/**` 这类大体积运行时资源打进 OTA zip；这些资源应继续走 R2 / 游戏包链路，而不是 H5 OTA。
+- `scripts/mobile/publish-android-ota.mjs` 只接受显式命名参数，并要求 `dist/` 已经经过 Android 专用裁剪；若 `dist/` 中仍存在 `dist/assets/i18n/**` 或非 `dist/locales/zh-CN/**` 资源，脚本会直接失败，禁止继续发布。
+- 若最终 OTA zip 体积异常过大（当前门禁为 `20MB`），发布脚本必须直接失败，禁止继续覆盖 `latest.json`。
+
+GitHub Actions 自动化：
+
+- 自动正式发版 workflow：`.github/workflows/android-push-release.yml`
+- 手动 OTA workflow：`.github/workflows/android-ota-publish.yml`
+- `main` 自动发版：命中 Android H5 / 原生壳相关路径后，自动发布 **stable OTA + stable native update**
+- 自动版本管理：自动发版成功后，workflow 会把 `package.json` / `package-lock.json` 自动递增到下一个 patch 版本，并回推一个带 `[skip android release]` 的 bot commit，避免发版循环
+- 手动触发：仍可手动选择 `stable` / `gray` / `edge` 单独发布 OTA，并支持 `dry_run`、`skip_latest`、`force_update`
+- 正式门禁：`stable` 发布应绑定 `android-ota-production` Environment 审批
+- 项目强制规则：OTA manifest 不得再写 `targetNativeVersion` / `minNativeVersion` / `maxNativeVersion`；所有已安装版本默认都必须收到 OTA。若误传这些参数，发布脚本必须直接失败。
+
+约束：
+
+- `--dry-run` 只本地打 zip 和 manifest，不上传
+- `--skip-latest` 会上传 bundle 与版本 manifest，但不会切换该 channel 的 `latest.json`
+- 正式覆盖 `latest.json` 后，指向该 channel 的 Android App 会在下一次启动后的后台检查中感知到新 bundle，并在切后台或重启后生效
+- OTA 只覆盖 Web bundle；涉及原生层改动时仍必须重新发 APK / AAB
+
+## Android 原生 APK 更新源
+
+- 路径前缀：`official/native-app-updates/android/<channel>/...`
+- `latest.json`：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/latest.json`
+- APK：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/packages/<version>.apk`
+- version manifest：`https://assets.easyboardgame.top/official/native-app-updates/android/<channel>/manifests/<version>.json`
+- 当前 App 内置的是“下载 APK -> 调起系统安装器”的私有分发链路，不是静默安装
 
 ## Nginx 反向代理（自动管理）
 
@@ -234,6 +290,8 @@ SMTP_PASS=xxx
 > **生产环境更新必须使用部署脚本**：`bash scripts/deploy/deploy-image.sh update [tag]`
 >
 > 禁止在生产服务器上直接运行 `docker compose up -d`，因为默认使用 `docker-compose.yml` 而非 `docker-compose.prod.yml`，两者的端口映射和环境变量配置不同。
+>
+> **当前部署脚本已内建 post-deploy smoke + 自动回退**：更新后会自动等待关键容器 ready，并检查首页、`/health`、`/notifications`。若新版本 smoke 失败，脚本会自动回退到部署前实际运行的 `web` / `game-server` 镜像引用，并再次执行 smoke。即使自动回退成功，本次更新命令仍会以失败状态退出，用于明确提示“服务已恢复，但升级未成功”。
 
 ## 同域策略
 
@@ -252,10 +310,22 @@ SMTP_PASS=xxx
 ## 资源 /assets 与对象存储映射（官方）
 
 - **开发**：直接使用 `public/assets`（不配置 R2 也能跑通）。
-- **生产**：`/assets/*` 反代到对象存储（如 Cloudflare R2）。
+- **生产默认**：前端资源基址为官方资源域名 `https://assets.easyboardgame.top/official`。
+- **生产兼容方案**：也可将 `/assets/*` 反代到对象存储（如 Cloudflare R2）。
 - **对象存储 key 前缀**：`official/<gameId>/...`
   - 路径对应：`/assets/<gameId>/...` ⇄ `official/<gameId>/...`
-- **可选独立资源域名**：前端可配置 `VITE_ASSETS_BASE_URL`（默认 `/assets`）。
+- **资源基址配置**：前端可通过 `VITE_ASSETS_BASE_URL` 覆盖；当前代码内置默认值为 `https://assets.easyboardgame.top/official`。
+- **缓存失效机制**：构建时会扫描 `public/assets`，为资源 URL 自动追加 `?v=<content-hash>`。资源内容变化后 URL 会自动变化，因此 R2 上的图片/音频/SVG 可以安全使用长期缓存。
+- **本地 JSON / 图集配置**：仍走本地 `/assets`，但同样会追加 `?v=<content-hash>`，避免本地回退路径拿到旧配置。
+
+## 非 /assets 静态资源缓存策略（当前主链路）
+
+- **适用范围**：`/fonts/*`、`/logos/*`、大多数 `/game-data/*` 即使没有上 R2，也可以使用长期缓存；关键不在“是否走对象存储”，而在“URL 是否带内容版本指纹”。
+- **当前实现**：构建阶段会为 `public/fonts`、`public/logos`、静态 `public/game-data` 生成内容 hash，并在最终 `index.html`、字体 CSS、运行时代码引用里自动追加 `?v=<content-hash>`。
+- **服务端缓存头**：生产单体服务会把上述目录按 `Cache-Control: public, max-age=31536000, immutable` 提供；浏览器或 Cloudflare 拿到新 URL 才会请求新内容。
+- **例外文件**：`/game-data/summonerwars.layout.json` 仍保持 `no-cache, no-store, must-revalidate`，因为它承载运行时布局编辑结果，不能误进长期缓存。
+- **入口页策略不变**：`index.html` 和 SPA fallback 继续 `no-cache, no-store, must-revalidate`，确保部署后刷新页面一定拿到新的资源引用关系。
+- **新增 game-data 的判断规则**：如果文件是“构建期静态产物”，应纳入版本指纹 + 长缓存；如果文件可能被后台、编辑器或运行时直接改写，则默认保守缓存，除非同时设计了独立版本号或发布链路。
 
 ## 资源发布流程（官方）
 
@@ -263,6 +333,26 @@ SMTP_PASS=xxx
 2. 生成清单：`npm run assets:manifest`（输出 `assets-manifest.json`）。
 3. 校验清单：`npm run assets:validate`（缺文件/变体不一致会报错）。
 4. 上传资源与清单到对象存储（路径 `official/<gameId>/...`）。
+5. 如仅修改了对象元数据（例如 `Cache-Control`），使用 `npm run assets:upload:force` 重新上传；常规资源内容更新不需要手动 purge，因为 URL 会随内容 hash 自动变化。
+
+### Android OTA 产物发布流程
+
+Android OTA 产物也走同一个对象存储桶，但前缀独立：
+
+1. 日常主线：直接 `push main`，GitHub Actions 自动发布 **stable OTA + stable native update**
+2. 自动发版成功后，bot 会把仓库版本号自动 bump 到下一个 patch，作为下一次发版基线
+3. 若只想单独操作 OTA 灰度/预演，继续手动执行：
+   - `node scripts/mobile/release-android.mjs ota --channel gray --dry-run`
+   - `node scripts/mobile/release-android.mjs ota --channel gray --skip-latest`
+   - `node scripts/mobile/release-android.mjs ota --channel gray`
+4. 若要本地一次性正式发布 stable OTA + native，可执行：`node scripts/mobile/release-android.mjs full --channel stable`
+
+当前默认发布节奏：
+
+1. 开发者把待发版版本号写进 `package.json`
+2. `push main`
+3. CI 直接发布该版本到 stable
+4. CI 自动把仓库版本号 bump 到下一个 patch，等待下一次 push
 
 ## UGC 资源前缀预留（未实现）
 
@@ -296,6 +386,8 @@ SMTP_PASS=xxx
 | `.env.server` | 生产 .env 生成脚本 | ✘ | ✔ |
 
 **本地开发**：直接复制 `.env.example` 即可。
+
+**强制约定**：凡是本地开发脚本、资源脚本或校验脚本会读取的环境变量，新增或修改时必须同步更新 `.env.example`。不能假设“只写进 `.env` 就够了”，也不能依赖“`.env` 缺字段时自动回退到 `.env.example`”，因为只要本机存在 `.env`，很多脚本就会优先读取它；如果 `.env` 里缺少某个字段，脚本可能直接报错。`R2_ACCOUNT_ID`、`R2_ACCESS_KEY_ID`、`R2_SECRET_ACCESS_KEY`、`R2_BUCKET_NAME` 属于这类必须同时维护在 `.env.example` 的变量。
 
 **生产环境（最小配置）**：只需密钥和域名，其余由 `docker-compose.prod.yml` 覆盖。
 

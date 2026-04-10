@@ -3,6 +3,7 @@
  *
  * 覆盖：
  * - base_beautiful_castle: power≥5 → destroy/move/affect 保护；power<5 → 不保护
+ * - base_egg_chamber: 有 +1 力量指示物 → destroy 保护；仅 powerModifier 不保护
  * - base_pony_paradise: 2+ 随从 → destroy 保护；1 随从 → 不保护
  * - base_house_of_nine_lives: 消灭时创建玩家选择交互（暂缓消灭）；本基地不触发；不在场不触发
  */
@@ -198,6 +199,34 @@ describe('base_pony_paradise: 2+ 随从免疫消灭', () => {
         });
         const state = makeState({ bases: [ponyBase, otherBase] });
         expect(isMinionProtected(state, otherBase.minions[0], 1, '1', 'destroy')).toBe(false);
+    });
+});
+
+// ============================================================================
+// base_egg_chamber: 卵室 - 有 +1 力量指示物的随从不能被消灭
+// ============================================================================
+
+describe('base_egg_chamber: +1 力量指示物保护', () => {
+    it('有 powerCounters 的随从受 destroy 保护', () => {
+        const protectedMinion = makeMinion('m1', '0', 3);
+        protectedMinion.powerCounters = 1;
+        const eggBase = makeBase('base_egg_chamber', {
+            minions: [protectedMinion],
+        });
+
+        const state = makeState({ bases: [eggBase] });
+        expect(isMinionProtected(state, protectedMinion, 0, '1', 'destroy')).toBe(true);
+    });
+
+    it('只有 powerModifier 的随从不受 destroy 保护', () => {
+        const buffedOnlyMinion = makeMinion('m1', '0', 3);
+        buffedOnlyMinion.powerModifier = 2;
+        const eggBase = makeBase('base_egg_chamber', {
+            minions: [buffedOnlyMinion],
+        });
+
+        const state = makeState({ bases: [eggBase] });
+        expect(isMinionProtected(state, buffedOnlyMinion, 0, '1', 'destroy')).toBe(false);
     });
 });
 

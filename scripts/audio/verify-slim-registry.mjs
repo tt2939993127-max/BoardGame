@@ -30,6 +30,13 @@ console.log('=== 验证精简版音频注册表 ===\n');
 // 1. 读取注册表
 const registry = JSON.parse(readFileSync(REGISTRY_PATH, 'utf-8'));
 const slim = JSON.parse(readFileSync(SLIM_PATH, 'utf-8'));
+const fullKeys = new Set(registry.entries.map(e => e.key));
+const registryPrefixes = [...new Set(registry.entries.map(e => e.key.split('.')[0]))]
+  .sort((a, b) => b.length - a.length);
+const keyPattern = new RegExp(
+  `['"\`]((?:${registryPrefixes.join('|')})\\.[a-zA-Z0-9_.]+)['"\`]`,
+  'g',
+);
 
 console.log(`全量注册表: ${registry.entries.length} 条`);
 console.log(`精简注册表: ${slim.entries.length} 条`);
@@ -38,8 +45,6 @@ console.log(`缩减比例: ${((1 - slim.entries.length / registry.entries.length
 // 2. 提取代码中的音效引用（排除 i18n key）
 const srcFiles = walkDir('src');
 const usedKeys = new Set();
-const keyPattern = /['"`]((?:ui|game|bgm|fx)\.[a-zA-Z0-9_.]+)['"`]/g;
-
 for (const file of srcFiles) {
   const content = readFileSync(file, 'utf-8');
   let match;
@@ -47,7 +52,7 @@ for (const file of srcFiles) {
     const key = match[1];
     // 排除 i18n key（通过上下文判断：t('ui.xxx') 或 t("ui.xxx")）
     const beforeMatch = content.substring(Math.max(0, match.index - 10), match.index);
-    if (!beforeMatch.includes('t(') && !beforeMatch.includes('t (')) {
+    if (!beforeMatch.includes('t(') && !beforeMatch.includes('t (') && fullKeys.has(key)) {
       usedKeys.add(key);
     }
   }
@@ -95,7 +100,6 @@ if (unused.length > 0) {
 }
 
 // 4. 验证所有 slim 条目都在全量注册表中
-const fullKeys = new Set(registry.entries.map(e => e.key));
 const invalid = [...slimKeys].filter(k => !fullKeys.has(k));
 if (invalid.length > 0) {
   console.error('❌ 错误：以下音效在 slim registry 中但不在全量注册表中：');

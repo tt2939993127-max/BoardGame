@@ -34,8 +34,8 @@ export interface LocalInteractionState {
     totalAdjustment: number;
     /** 已选择的状态 */
     selectedStatus?: { playerId: string; statusId: string };
-    /** 已选择的玩家 ID */
-    selectedPlayer?: string;
+    /** 已选择的玩家 ID 列表 */
+    selectedPlayers: string[];
 }
 
 /**
@@ -62,7 +62,7 @@ const INITIAL_STATE: LocalInteractionState = {
     modifiedDice: [],
     totalAdjustment: 0,
     selectedStatus: undefined,
-    selectedPlayer: undefined,
+    selectedPlayers: [],
 };
 
 /**
@@ -76,7 +76,15 @@ export function useInteractionState(pendingInteraction?: InteractionDescriptor) 
 
     // 当 pendingInteraction 变化时自动重置状态
     useEffect(() => {
-        setLocalState(INITIAL_STATE);
+        let cancelled = false;
+        queueMicrotask(() => {
+            if (!cancelled) {
+                setLocalState(INITIAL_STATE);
+            }
+        });
+        return () => {
+            cancelled = true;
+        };
     }, [pendingInteraction?.id]);
 
     /**
@@ -161,11 +169,16 @@ export function useInteractionState(pendingInteraction?: InteractionDescriptor) 
      * 选择玩家
      */
     const selectPlayer = useCallback((playerId: string) => {
+        const maxSelectCount = pendingInteraction?.selectCount ?? 1;
         setLocalState(prev => ({
             ...prev,
-            selectedPlayer: prev.selectedPlayer === playerId ? undefined : playerId
+            selectedPlayers: prev.selectedPlayers.includes(playerId)
+                ? prev.selectedPlayers.filter(id => id !== playerId)
+                : (prev.selectedPlayers.length < maxSelectCount
+                    ? [...prev.selectedPlayers, playerId]
+                    : prev.selectedPlayers),
         }));
-    }, []);
+    }, [pendingInteraction?.selectCount]);
 
     /**
      * 手动重置状态

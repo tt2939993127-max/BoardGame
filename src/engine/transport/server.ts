@@ -15,10 +15,15 @@ import type {
     StoredMatchState,
     MatchMetadata,
 } from './storage';
+import { isMatchAuthMetadataProvider } from './storage';
 import type {
     MatchPlayerInfo,
 } from './protocol';
+import type { TrainingDataRecorder } from './trainingData';
+import { buildTrainingDecisionSample } from './trainingData';
 import logger, { gameLogger } from '../../../server/logger.js';
+import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
+import { applyPlayerViewToState, buildAiDecisionContext, getAiSeatIds } from '../ai';
 import {
     executePipeline,
     createSeededRandom,
@@ -26,7 +31,17 @@ import {
     type PipelineConfig,
 } from '../pipeline';
 import { INTERACTION_COMMANDS } from '../systems/InteractionSystem';
+import { setUndoAiSeatIds } from '../systems/UndoSystem';
 import { computeDiff } from './patch';
+import {
+    applyAiAutoRecoveryRejection,
+    buildAiProgressMarker,
+    resolveCurrentPlayerId,
+    resolveForceAdvancePhaseAfterRecovery,
+    resolveForceEndTurnForStalledAi,
+    type AiAutoRecoveryAttemptTracker,
+    type ForceEndTurnStalledAiResolution,
+} from './onlineAiRecovery';
 
 // 离线裁决：按交互 kind 选择最小语义正确的兜底命令
 // - simple-choice: 走通用系统取消
@@ -49,6 +64,72 @@ const ALLOWED_INJECT_STATE_ENVS = new Set(['test', 'development']);
 
 const canInjectStateInCurrentEnv = (nodeEnv: string | undefined): boolean =>
     typeof nodeEnv === 'string' && ALLOWED_INJECT_STATE_ENVS.has(nodeEnv);
+
+const extractSetupSeatControllers = (setupData: unknown): Record<string, { type?: unknown } | undefined> | undefined => {
+    if (!setupData || typeof setupData !== 'object' || Array.isArray(setupData)) {
+        return undefined;
+    }
+
+    const rawSeatControllers = (setupData as { seatControllers?: unknown }).seatControllers;
+    if (!rawSeatControllers || typeof rawSeatControllers !== 'object' || Array.isArray(rawSeatControllers)) {
+        return undefined;
+    }
+
+    return rawSeatControllers as Record<string, { type?: unknown } | undefined>;
+};
+
+const DEFAULT_TRAINING_CAPTURE_POLICY = 'human-only' as const;
+const DEFAULT_ONLINE_AI_RECOVERY_TICK_MS = 500;
+const DEFAULT_ONLINE_AI_RECOVERY_TIMEOUT_MS = 8000;
+const DEFAULT_ONLINE_AI_RECOVERY_MAX_ADVANCE_STEPS = 16;
+const DEFAULT_ONLINE_AI_RECOVERY_FEEDBACK_COOLDOWN_MS = 60_000;
+const DEFAULT_ONLINE_AI_RECOVERY_FAILURE_REPORT_THRESHOLD = 2;
+
+function resolveSeatControllerTypeForTraining(
+    seatControllers: Record<string, { type?: unknown } | undefined> | undefined,
+    playerId: string,
+): 'human' | 'local-ai' | 'remote-ai' {
+    const type = seatControllers?.[playerId]?.type;
+    return type === 'local-ai' || type === 'remote-ai' ? type : 'human';
+}
+
+type OnlineAiRecoveryTracker = AiAutoRecoveryAttemptTracker & {
+    key: string;
+    failureCount: number;
+};
+
+type OnlineAiRecoveryFeedbackPayload = {
+    matchId: string;
+    gameId: string;
+    playerId: string;
+    incidentKind: 'force-end-turn-success' | 'force-end-turn-failed';
+    severity: 'medium' | 'high';
+    reason: string;
+    trackerKey: string;
+    progressMarker: string;
+    stateSnapshot: string;
+    actionLog?: string;
+};
+
+const resolveOnlineAiFeedbackEndpoint = (): string | null => {
+    const rawCandidates = [
+        process.env.FEEDBACK_API_URL,
+        process.env.VITE_FEEDBACK_API_URL,
+        process.env.VITE_BACKEND_URL ? `${process.env.VITE_BACKEND_URL.replace(/\/$/, '')}/feedback` : null,
+        process.env.BACKEND_URL ? `${process.env.BACKEND_URL.replace(/\/$/, '')}/feedback` : null,
+        process.env.API_SERVER_PORT ? `http://127.0.0.1:${process.env.API_SERVER_PORT}/feedback` : null,
+        'http://127.0.0.1:18001/feedback',
+    ];
+    for (const candidate of rawCandidates) {
+        if (!candidate) continue;
+        const normalized = candidate.trim();
+        if (!normalized) continue;
+        if (normalized.startsWith('http://') || normalized.startsWith('https://')) {
+            return normalized.replace(/\/$/, '');
+        }
+    }
+    return null;
+};
 
 // ============================================================================
 // 游戏引擎定义
@@ -211,6 +292,14 @@ export interface GameTransportServerConfig {
     ) => boolean | Promise<boolean>;
     /** 游戏结束回调（可选） */
     onGameOver?: (matchID: string, gameName: string, gameover: unknown) => void;
+    trainingDataRecorder?: TrainingDataRecorder;
+    rulesVersion?: string | null;
+    onlineAiRecoveryTickMs?: number;
+    onlineAiRecoveryTimeoutMs?: number;
+    onlineAiRecoveryMaxAdvanceSteps?: number;
+    onlineAiRecoveryFeedbackCooldownMs?: number;
+    onlineAiRecoveryFailureReportThreshold?: number;
+    onlineAiFeedbackReporter?: (payload: OnlineAiRecoveryFeedbackPayload) => Promise<void>;
 }
 
 export class GameTransportServer {
@@ -222,6 +311,18 @@ export class GameTransportServer {
     private readonly offlineGraceMs: number;
     private readonly authenticate?: GameTransportServerConfig['authenticate'];
     private readonly onGameOver?: GameTransportServerConfig['onGameOver'];
+    private readonly trainingDataRecorder?: TrainingDataRecorder;
+    private readonly rulesVersion: string | null;
+    private readonly onlineAiRecoveryTickMs: number;
+    private readonly onlineAiRecoveryTimeoutMs: number;
+    private readonly onlineAiRecoveryMaxAdvanceSteps: number;
+    private readonly onlineAiRecoveryFeedbackCooldownMs: number;
+    private readonly onlineAiRecoveryFailureReportThreshold: number;
+    private readonly onlineAiFeedbackReporter?: GameTransportServerConfig['onlineAiFeedbackReporter'];
+    private readonly onlineAiRecoveryTrackers = new Map<string, OnlineAiRecoveryTracker>();
+    private readonly onlineAiRecoveryFeedbackCooldown = new Map<string, number>();
+    private readonly onlineAiRecoveryInFlight = new Set<string>();
+    private onlineAiRecoveryTimer: ReturnType<typeof setInterval> | null = null;
 
     constructor(config: GameTransportServerConfig) {
         this.io = config.io;
@@ -232,6 +333,14 @@ export class GameTransportServer {
         this.offlineGraceMs = config.offlineGraceMs ?? 30000;
         this.authenticate = config.authenticate;
         this.onGameOver = config.onGameOver;
+        this.trainingDataRecorder = config.trainingDataRecorder;
+        this.rulesVersion = config.rulesVersion ?? null;
+        this.onlineAiRecoveryTickMs = config.onlineAiRecoveryTickMs ?? DEFAULT_ONLINE_AI_RECOVERY_TICK_MS;
+        this.onlineAiRecoveryTimeoutMs = config.onlineAiRecoveryTimeoutMs ?? DEFAULT_ONLINE_AI_RECOVERY_TIMEOUT_MS;
+        this.onlineAiRecoveryMaxAdvanceSteps = config.onlineAiRecoveryMaxAdvanceSteps ?? DEFAULT_ONLINE_AI_RECOVERY_MAX_ADVANCE_STEPS;
+        this.onlineAiRecoveryFeedbackCooldownMs = config.onlineAiRecoveryFeedbackCooldownMs ?? DEFAULT_ONLINE_AI_RECOVERY_FEEDBACK_COOLDOWN_MS;
+        this.onlineAiRecoveryFailureReportThreshold = config.onlineAiRecoveryFailureReportThreshold ?? DEFAULT_ONLINE_AI_RECOVERY_FAILURE_REPORT_THRESHOLD;
+        this.onlineAiFeedbackReporter = config.onlineAiFeedbackReporter;
     }
 
     /** 启动传输层，监听 /game namespace */
@@ -265,8 +374,10 @@ export class GameTransportServer {
                 // 教程 AI 命令：payload 中携带 __tutorialPlayerId 时，以该 ID 作为执行者
                 // 仅在教程模式激活时生效，防止普通玩家伪造 playerId
                 const payloadRecord = payload && typeof payload === 'object' ? payload as Record<string, unknown> : null;
-                const tutorialOverrideId = typeof payloadRecord?.__tutorialPlayerId === 'string'
-                    ? payloadRecord.__tutorialPlayerId
+                const tutorialOverrideId = typeof payloadRecord?.__internalPlayerId === 'string'
+                    ? payloadRecord.__internalPlayerId
+                    : typeof payloadRecord?.__tutorialPlayerId === 'string'
+                        ? payloadRecord.__tutorialPlayerId
                     : undefined;
                 const match = this.activeMatches.get(matchID);
                 const isTutorialActive = !!(match?.state?.sys as Record<string, unknown> | undefined)
@@ -275,8 +386,22 @@ export class GameTransportServer {
                     ? tutorialOverrideId
                     : info.playerID;
                 // 清除 payload 中的 __tutorialPlayerId，避免传入领域层
-                const normalizedPayload = payloadRecord && '__tutorialPlayerId' in payloadRecord
-                    ? (() => { const { __tutorialPlayerId: _ignored, ...rest } = payloadRecord; return rest; })()
+                const normalizedPayload = payloadRecord && (
+                    '__internalPlayerId' in payloadRecord
+                    || '__internalAiCommand' in payloadRecord
+                    || '__tutorialPlayerId' in payloadRecord
+                    || '__tutorialAiCommand' in payloadRecord
+                )
+                    ? (() => {
+                        const {
+                            __internalPlayerId: _ignored0,
+                            __internalAiCommand: _ignored1,
+                            __tutorialPlayerId: _ignored2,
+                            __tutorialAiCommand: _ignored3,
+                            ...rest
+                        } = payloadRecord;
+                        return rest;
+                    })()
                     : payload;
                 await this.handleCommand(matchID, resolvedPlayerId, commandType, normalizedPayload);
             });
@@ -303,6 +428,12 @@ export class GameTransportServer {
             });
 
         });
+
+        if (!this.onlineAiRecoveryTimer && this.onlineAiRecoveryTickMs > 0) {
+            this.onlineAiRecoveryTimer = setInterval(() => {
+                void this.runOnlineAiRecoveryTick();
+            }, this.onlineAiRecoveryTickMs);
+        }
     }
 
     // ========================================================================
@@ -327,7 +458,10 @@ export class GameTransportServer {
             engineConfig.systems as EngineSystem[],
             matchID,
         );
-        const state: MatchState<unknown> = { sys, core };
+        const state = setUndoAiSeatIds(
+            { sys, core },
+            getAiSeatIds(extractSetupSeatControllers(setupData)),
+        );
         return {
             state,
             randomCursor: trackedRandom.getCursor(),
@@ -351,6 +485,26 @@ export class GameTransportServer {
         const active = this.activeMatches.get(matchID);
         if (!active) return;
         active.metadata = metadata;
+    }
+
+    private async readFreshAuthMetadata(
+        matchID: string,
+        fallback?: MatchMetadata,
+    ): Promise<MatchMetadata | undefined> {
+        if (isMatchAuthMetadataProvider(this.storage)) {
+            return (await this.storage.fetchAuthMetadata(matchID)) ?? fallback;
+        }
+        return (await this.storage.fetch(matchID, { metadata: true })).metadata ?? fallback;
+    }
+
+    private mergeActiveMetadata(matchID: string, metadata: MatchMetadata): void {
+        const active = this.activeMatches.get(matchID);
+        if (!active) return;
+        active.metadata = {
+            ...active.metadata,
+            ...metadata,
+            players: metadata.players,
+        };
     }
 
     /**
@@ -510,6 +664,8 @@ export class GameTransportServer {
         }
 
         this.activeMatches.delete(matchID);
+        this.onlineAiRecoveryTrackers.delete(matchID);
+        this.onlineAiRecoveryInFlight.delete(matchID);
 
         if (options?.disconnectSockets) {
             const nsp = this.io.of('/game');
@@ -520,6 +676,355 @@ export class GameTransportServer {
                 .catch((error) => {
                     logger.warn('[GameTransport] disconnect room sockets failed', { matchID, error });
                 });
+        }
+    }
+
+    private async runOnlineAiRecoveryTick(): Promise<void> {
+        const now = Date.now();
+        for (const [key, expiresAt] of this.onlineAiRecoveryFeedbackCooldown.entries()) {
+            if (expiresAt <= now) {
+                this.onlineAiRecoveryFeedbackCooldown.delete(key);
+            }
+        }
+
+        for (const match of this.activeMatches.values()) {
+            if (this.onlineAiRecoveryInFlight.has(match.matchID)) {
+                continue;
+            }
+
+            const rawSeatControllers = extractSetupSeatControllers(match.metadata.setupData);
+            const seatControllers = Object.fromEntries(
+                Object.keys(match.metadata.players).map((playerId) => {
+                    const controller = rawSeatControllers?.[playerId];
+                    return [
+                        playerId,
+                        controller?.type === 'local-ai' || controller?.type === 'remote-ai'
+                            ? controller as { type: 'local-ai' | 'remote-ai' }
+                            : { type: 'human' },
+                    ];
+                }),
+            ) as Record<string, { type: 'human' | 'local-ai' | 'remote-ai' }>;
+
+            const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
+            if (!hasAiSeat) {
+                this.onlineAiRecoveryTrackers.delete(match.matchID);
+                continue;
+            }
+
+            const candidate = resolveForceEndTurnForStalledAi({
+                sharedState: match.state,
+                seatControllers,
+                seatStates: {},
+            });
+            if (!candidate) {
+                this.onlineAiRecoveryTrackers.delete(match.matchID);
+                continue;
+            }
+
+            const progressMarker = buildAiProgressMarker(match.state);
+            const trackerKey = `${candidate.playerId}:${candidate.reason}:${candidate.resolution.attemptKey}:${progressMarker}`;
+            const currentTracker = this.onlineAiRecoveryTrackers.get(match.matchID);
+
+            if (!currentTracker || currentTracker.key !== trackerKey) {
+                this.onlineAiRecoveryTrackers.set(match.matchID, {
+                    key: trackerKey,
+                    firstSeenAt: now,
+                    autoSubmittedAt: null,
+                    lastReportedFailureReason: null,
+                    failureCount: 0,
+                });
+                continue;
+            }
+
+            if (currentTracker.autoSubmittedAt || now - currentTracker.firstSeenAt < this.onlineAiRecoveryTimeoutMs) {
+                continue;
+            }
+
+            currentTracker.autoSubmittedAt = now;
+            this.onlineAiRecoveryInFlight.add(match.matchID);
+            void this.runOnlineAiRecoverySequence(match, currentTracker, candidate, progressMarker, seatControllers)
+                .finally(() => {
+                    this.onlineAiRecoveryInFlight.delete(match.matchID);
+                });
+        }
+    }
+
+    private async runOnlineAiRecoverySequence(
+        match: ActiveMatch,
+        tracker: OnlineAiRecoveryTracker,
+        candidate: ForceEndTurnStalledAiResolution,
+        progressMarkerBeforeRecovery: string,
+        seatControllers: Record<string, { type: 'human' | 'local-ai' | 'remote-ai' }>,
+    ): Promise<void> {
+        if (match.executing) {
+            tracker.autoSubmittedAt = null;
+            return;
+        }
+
+        match.executing = true;
+        const initialCommandType = candidate.resolution.action.commands[0]?.type ?? 'UNKNOWN';
+        let phaseLabel = candidate.requiresConfirmedAdvancePhase ? 'recover-interaction' : 'follow-up-advance';
+        let totalAdvanceSteps = initialCommandType === 'ADVANCE_PHASE' ? 1 : 0;
+
+        try {
+            const initialSuccess = await this.executeCommandInternal(
+                match,
+                candidate.playerId,
+                initialCommandType,
+                candidate.resolution.action.commands[0]?.payload ?? {},
+            );
+
+            if (!initialSuccess) {
+                await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'command_failed');
+                return;
+            }
+
+            let lastMarker = buildAiProgressMarker(match.state);
+            while (totalAdvanceSteps < this.onlineAiRecoveryMaxAdvanceSteps) {
+                const followUp = resolveForceAdvancePhaseAfterRecovery({
+                    authoritativeState: match.state,
+                    seatControllers,
+                    playerId: candidate.playerId,
+                });
+                if (!followUp) {
+                    break;
+                }
+
+                phaseLabel = 'follow-up-advance';
+                const nextSuccess = await this.executeCommandInternal(
+                    match,
+                    candidate.playerId,
+                    'ADVANCE_PHASE',
+                    followUp.action.commands[0]?.payload ?? {},
+                );
+                if (!nextSuccess) {
+                    await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'command_failed');
+                    return;
+                }
+
+                totalAdvanceSteps += 1;
+                const nextMarker = buildAiProgressMarker(match.state);
+                if (nextMarker === lastMarker) {
+                    break;
+                }
+                lastMarker = nextMarker;
+            }
+
+            logger.warn('[GameTransport] online-ai-watchdog recovered stalled AI', {
+                matchID: match.matchID,
+                gameId: match.gameId,
+                playerID: candidate.playerId,
+                reason: candidate.reason,
+                advanceSteps: totalAdvanceSteps,
+                markerBefore: progressMarkerBeforeRecovery,
+                markerAfter: buildAiProgressMarker(match.state),
+            });
+
+            this.onlineAiRecoveryTrackers.delete(match.matchID);
+            await this.reportOnlineAiRecoveryFeedback({
+                matchId: match.matchID,
+                gameId: match.gameId,
+                playerId: candidate.playerId,
+                incidentKind: 'force-end-turn-success',
+                severity: 'medium',
+                reason: `${candidate.reason}:${phaseLabel}:steps=${totalAdvanceSteps}`,
+                trackerKey: tracker.key,
+                progressMarker: progressMarkerBeforeRecovery,
+                stateSnapshot: this.buildOnlineAiRecoveryStateSnapshot(match, candidate, progressMarkerBeforeRecovery),
+                actionLog: this.buildOnlineAiRecoveryActionLog(match),
+            });
+        } finally {
+            await this.drainCommandQueue(match);
+            match.executing = false;
+        }
+    }
+
+    private async handleOnlineAiRecoveryFailure(
+        match: ActiveMatch,
+        tracker: OnlineAiRecoveryTracker,
+        candidate: ForceEndTurnStalledAiResolution,
+        phaseLabel: 'recover-interaction' | 'follow-up-advance',
+        progressMarkerBeforeRecovery: string,
+        reason: string,
+    ): Promise<void> {
+        const rejection = applyAiAutoRecoveryRejection(tracker, reason, Date.now());
+        const nextTracker: OnlineAiRecoveryTracker = {
+            ...rejection.nextTracker,
+            key: tracker.key,
+            failureCount: tracker.failureCount + 1,
+        };
+        this.onlineAiRecoveryTrackers.set(match.matchID, nextTracker);
+
+        logger.warn('[GameTransport] online-ai-watchdog failed', {
+            matchID: match.matchID,
+            gameId: match.gameId,
+            playerID: candidate.playerId,
+            incidentKey: tracker.key,
+            reason,
+            phase: phaseLabel,
+            failureCount: nextTracker.failureCount,
+            markerBefore: progressMarkerBeforeRecovery,
+            markerAfter: buildAiProgressMarker(match.state),
+        });
+
+        if (nextTracker.failureCount >= this.onlineAiRecoveryFailureReportThreshold) {
+            await this.reportOnlineAiRecoveryFeedback({
+                matchId: match.matchID,
+                gameId: match.gameId,
+                playerId: candidate.playerId,
+                incidentKind: 'force-end-turn-failed',
+                severity: 'high',
+                reason: `${candidate.reason}:${phaseLabel}:${reason}`,
+                trackerKey: tracker.key,
+                progressMarker: progressMarkerBeforeRecovery,
+                stateSnapshot: this.buildOnlineAiRecoveryStateSnapshot(match, candidate, progressMarkerBeforeRecovery),
+                actionLog: this.buildOnlineAiRecoveryActionLog(match),
+            });
+        }
+    }
+
+    private buildOnlineAiRecoveryStateSnapshot(
+        match: ActiveMatch,
+        candidate: ForceEndTurnStalledAiResolution,
+        progressMarker: string,
+    ): string {
+        const interaction = match.state.sys?.interaction as {
+            current?: { id?: unknown; kind?: unknown; playerId?: unknown; data?: { sourceId?: unknown; title?: unknown } };
+            isBlocked?: unknown;
+        } | undefined;
+        const responseWindow = match.state.sys?.responseWindow as {
+            current?: {
+                responderQueue?: unknown;
+                currentResponderIndex?: unknown;
+            };
+        } | undefined;
+        return JSON.stringify({
+            matchId: match.matchID,
+            gameId: match.gameId,
+            playerId: candidate.playerId,
+            reason: candidate.reason,
+            phase: match.state.sys?.phase ?? null,
+            turnNumber: match.state.sys?.turnNumber ?? null,
+            currentPlayerId: resolveCurrentPlayerId(match.state),
+            progressMarker,
+            interaction: interaction?.current ? {
+                id: interaction.current.id ?? null,
+                kind: interaction.current.kind ?? null,
+                playerId: interaction.current.playerId ?? null,
+                sourceId: interaction.current.data?.sourceId ?? null,
+                title: interaction.current.data?.title ?? null,
+                isBlocked: interaction.isBlocked ?? null,
+            } : {
+                isBlocked: interaction?.isBlocked ?? null,
+            },
+            responseWindow: responseWindow?.current ? {
+                responderQueue: Array.isArray(responseWindow.current.responderQueue) ? responseWindow.current.responderQueue : [],
+                currentResponderIndex: responseWindow.current.currentResponderIndex ?? 0,
+            } : null,
+        });
+    }
+
+    private buildOnlineAiRecoveryActionLog(match: ActiveMatch): string | undefined {
+        const entries = (match.state.sys?.actionLog as { entries?: Array<{ text?: unknown; event?: { type?: unknown } }> } | undefined)?.entries;
+        if (!Array.isArray(entries) || entries.length === 0) {
+            return undefined;
+        }
+        const tail = entries.slice(-5).map((entry) => ({
+            text: typeof entry?.text === 'string' ? entry.text : undefined,
+            type: entry?.event?.type,
+        }));
+        return JSON.stringify(tail);
+    }
+
+    private async reportOnlineAiRecoveryFeedback(payload: OnlineAiRecoveryFeedbackPayload): Promise<void> {
+        const dedupeKey = `${payload.matchId}:${payload.playerId}:${payload.incidentKind}:${payload.reason}:${payload.progressMarker}`;
+        const now = Date.now();
+        const cooldownUntil = this.onlineAiRecoveryFeedbackCooldown.get(dedupeKey) ?? 0;
+        if (cooldownUntil > now) {
+            return;
+        }
+        this.onlineAiRecoveryFeedbackCooldown.set(dedupeKey, now + this.onlineAiRecoveryFeedbackCooldownMs);
+
+        const reporter = this.onlineAiFeedbackReporter ?? this.defaultOnlineAiFeedbackReporter.bind(this);
+        try {
+            await reporter(payload);
+            logger.info('[GameTransport] online-ai-watchdog feedback reported', {
+                matchID: payload.matchId,
+                gameId: payload.gameId,
+                playerID: payload.playerId,
+                incidentKind: payload.incidentKind,
+                reason: payload.reason,
+                trackerKey: payload.trackerKey,
+            });
+        } catch (error) {
+            logger.warn('[GameTransport] online-ai-watchdog feedback failed', {
+                matchID: payload.matchId,
+                gameId: payload.gameId,
+                playerID: payload.playerId,
+                incidentKind: payload.incidentKind,
+                reason: payload.reason,
+                trackerKey: payload.trackerKey,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
+    private async defaultOnlineAiFeedbackReporter(payload: OnlineAiRecoveryFeedbackPayload): Promise<void> {
+        const endpoint = resolveOnlineAiFeedbackEndpoint();
+        if (!endpoint) {
+            return;
+        }
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                content: `[system][online-ai-watchdog] ${payload.incidentKind} ${payload.reason}`,
+                type: 'bug',
+                severity: payload.severity,
+                gameName: payload.gameId,
+                contactInfo: 'system:online-ai-watchdog',
+                actionLog: payload.actionLog,
+                stateSnapshot: payload.stateSnapshot,
+                clientContext: {
+                    route: 'server-watchdog',
+                    mode: 'online',
+                    matchId: payload.matchId,
+                    playerId: payload.playerId,
+                    gameId: payload.gameId,
+                    timezone: 'server',
+                },
+                errorContext: {
+                    source: 'online-ai-watchdog',
+                    message: payload.reason,
+                    name: payload.incidentKind,
+                },
+            }),
+        });
+        if (!response.ok) {
+            throw new Error(`feedback_http_${response.status}`);
+        }
+    }
+
+    private async drainCommandQueue(match: ActiveMatch): Promise<void> {
+        while (match.commandQueue.length > 0) {
+            const next = match.commandQueue.shift()!;
+            try {
+                if ('_batch' in next) {
+                    await next.execute();
+                    next.resolve(true);
+                } else {
+                    const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
+                    next.resolve(queuedSuccess);
+                }
+            } catch (error) {
+                logger.error('[GameTransport] 队列中命令执行异常', {
+                    matchID: match.matchID,
+                    error: error instanceof Error ? error.message : String(error),
+                });
+                next.resolve(false);
+            }
         }
     }
 
@@ -535,6 +1040,7 @@ export class GameTransportServer {
     ): Promise<void> {
         // 加载或获取活跃对局
         let match = this.activeMatches.get(matchID);
+        const reusedActiveMatch = Boolean(match);
         if (!match) {
             match = await this.loadMatch(matchID);
             if (!match) {
@@ -546,7 +1052,10 @@ export class GameTransportServer {
         // 认证（旁观者无需凭证）。
         // 这里必须基于存储层最新 metadata 做校验，避免 leave/join 后内存缓存滞后。
         if (playerID !== null) {
-            const ok = await this.validateCommandAuth(matchID, playerID, credentials);
+            const authMetadata = reusedActiveMatch
+                ? await this.readFreshAuthMetadata(matchID, match.metadata) ?? match.metadata
+                : match.metadata;
+            const ok = await this.validateCommandAuth(matchID, playerID, credentials, authMetadata);
             if (!ok) {
                 socket.emit('error', matchID, 'unauthorized');
                 return;
@@ -579,8 +1088,18 @@ export class GameTransportServer {
 
             // 更新 metadata 连接状态
             if (match.metadata.players[playerID]) {
+                const wasConnected = match.metadata.players[playerID].isConnected === true;
                 match.metadata.players[playerID].isConnected = true;
-                await this.storage.setMetadata(matchID, match.metadata);
+                if (!wasConnected) {
+                    match.metadata.updatedAt = Date.now();
+                    this.storage.setMetadata(matchID, match.metadata).catch((error) => {
+                        logger.warn('[GameTransport] persist connected metadata failed', {
+                            matchID,
+                            playerID,
+                            error,
+                        });
+                    });
+                }
             }
         }
 
@@ -632,28 +1151,7 @@ export class GameTransportServer {
         match.executing = true;
         try {
             const success = await this.executeCommandInternal(match, playerID, commandType, payload);
-
-            // 处理队列中的后续命令（包括 batch 任务）
-            while (match.commandQueue.length > 0) {
-                const next = match.commandQueue.shift()!;
-                try {
-                    if ('_batch' in next) {
-                        // batch 任务：执行完整的 batch 逻辑
-                        await next.execute();
-                        next.resolve(true);
-                    } else {
-                        const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                        next.resolve(queuedSuccess);
-                    }
-                } catch (error) {
-                    logger.error('[handleCommand] 队列中命令执行异常', {
-                        matchID: match.matchID,
-                        error: error instanceof Error ? error.message : String(error),
-                    });
-                    next.resolve(false);
-                }
-            }
-
+            await this.drainCommandQueue(match);
             return success;
         } finally {
             match.executing = false;
@@ -725,25 +1223,7 @@ export class GameTransportServer {
             const authoritative = this.stripStateForTransport(match.state, { stripEventStream: true });
             socket.emit('batch:confirmed', matchID, batchId, authoritative);
         } finally {
-            // 消费 batch 执行期间排队的普通命令和 batch 任务（与 handleCommand 保持一致）
-            while (match.commandQueue.length > 0) {
-                const next = match.commandQueue.shift()!;
-                try {
-                    if ('_batch' in next) {
-                        await next.execute();
-                        next.resolve(true);
-                    } else {
-                        const queuedSuccess = await this.executeCommandInternal(match, next.playerID, next.commandType, next.payload);
-                        next.resolve(queuedSuccess);
-                    }
-                } catch (error) {
-                    logger.error('[handleBatch] 队列中命令执行异常', {
-                        matchID: match.matchID,
-                        error: error instanceof Error ? error.message : String(error),
-                    });
-                    next.resolve(false);
-                }
-            }
+            await this.drainCommandQueue(match);
             match.executing = false;
         }
     }
@@ -879,6 +1359,98 @@ export class GameTransportServer {
         };
     }
 
+    private stripStateForTraining(viewState: unknown): unknown {
+        const stripped = this.stripStateForTransport(viewState, { stripEventStream: true }) as {
+            sys?: Record<string, unknown>;
+        };
+
+        if (!stripped?.sys) return stripped;
+
+        const sys = stripped.sys;
+        const patches: Record<string, unknown> = {};
+
+        const actionLog = sys.actionLog as { entries?: unknown[] } | undefined;
+        if (actionLog?.entries && actionLog.entries.length > 0) {
+            patches.actionLog = {
+                ...actionLog,
+                entries: [],
+                entryCount: actionLog.entries.length,
+            };
+        }
+
+        const log = sys.log as { entries?: unknown[] } | undefined;
+        if (log?.entries && log.entries.length > 0) {
+            patches.log = {
+                ...log,
+                entries: [],
+                entryCount: log.entries.length,
+            };
+        }
+
+        if (Object.keys(patches).length === 0) return stripped;
+
+        return {
+            ...stripped,
+            sys: { ...sys, ...patches },
+        };
+    }
+
+    private recordTrainingDecisionSample(args: {
+        match: ActiveMatch;
+        playerID: string;
+        commandType: string;
+        payload: unknown;
+        stateIdBefore: number;
+        stateIdAfter: number;
+        preState: unknown;
+        postState: unknown;
+        gameOver?: unknown;
+    }): void {
+        if (!this.trainingDataRecorder) return;
+        const manifest = GAME_MANIFEST_BY_ID[args.match.engineConfig.gameId];
+        if (manifest && manifest.ai.capture === false) return;
+        const seatControllers = extractSetupSeatControllers(args.match.metadata.setupData);
+        const seatControllerType = resolveSeatControllerTypeForTraining(seatControllers, args.playerID);
+        const capturePolicy = manifest?.ai?.capturePolicy ?? DEFAULT_TRAINING_CAPTURE_POLICY;
+        if (capturePolicy === 'human-only' && seatControllerType !== 'human') {
+            return;
+        }
+
+        const sample = buildTrainingDecisionSample({
+            rulesVersion: this.rulesVersion,
+            gameId: args.match.engineConfig.gameId,
+            matchId: args.match.matchID,
+            playerId: args.playerID,
+            seatControllerType,
+            stateIdBefore: args.stateIdBefore,
+            stateIdAfter: args.stateIdAfter,
+            commandType: args.commandType,
+            payload: args.payload,
+            preState: args.preState,
+            postState: args.postState,
+            legalActions: buildAiDecisionContext({
+                gameId: args.match.engineConfig.gameId,
+                matchId: args.match.matchID,
+                playerId: args.playerID,
+                visibleState: args.preState as MatchState<unknown>,
+                rulesVersion: this.rulesVersion,
+                decisionBudgetMs: 250,
+                source: 'online',
+            }).legalActions,
+            gameOver: args.gameOver,
+        });
+
+        Promise.resolve(this.trainingDataRecorder.recordDecisionSample(sample)).catch((error) => {
+            logger.warn('[GameTransport] training data capture failed', {
+                matchID: args.match.matchID,
+                gameId: args.match.engineConfig.gameId,
+                commandType: args.commandType,
+                playerID: args.playerID,
+                error: error instanceof Error ? error.message : String(error),
+            });
+        });
+    }
+
     private async executeCommandInternal(
         match: ActiveMatch,
         playerID: string,
@@ -888,6 +1460,8 @@ export class GameTransportServer {
     ): Promise<boolean> {
         const startTime = Date.now();
         const { engineConfig, state, random, playerIds } = match;
+        const stateIdBefore = match.stateID;
+        const preTrainingState = this.stripStateForTraining(this.applyPlayerView(match, playerID)) as MatchState<unknown>;
 
         const command: Command = {
             type: commandType,
@@ -906,7 +1480,6 @@ export class GameTransportServer {
         try {
             result = executePipeline(pipelineConfig, state, command, random, playerIds);
         } catch (error) {
-            const duration = Date.now() - startTime;
             gameLogger.commandFailed(
                 match.matchID,
                 commandType,
@@ -1030,13 +1603,26 @@ export class GameTransportServer {
         };
         await this.storage.setState(match.matchID, storedState);
 
+        const gameOver = result.state.sys.gameover;
+        const postTrainingState = this.stripStateForTraining(this.applyPlayerView(match, playerID)) as MatchState<unknown>;
+        this.recordTrainingDecisionSample({
+            match,
+            playerID,
+            commandType,
+            payload,
+            stateIdBefore,
+            stateIdAfter: match.stateID,
+            preState: preTrainingState,
+            postState: postTrainingState,
+            gameOver,
+        });
+
         // 广播状态（批次执行期间抑制中间广播，仅在批次完成后统一广播）
         if (!options?.suppressBroadcast) {
             this.broadcastState(match);
         }
 
         // 检查游戏结束（管线已将结果写入 sys.gameover）
-        const gameOver = result.state.sys.gameover;
         if (gameOver && !match.metadata.gameover) {
             match.metadata.gameover = gameOver;
             await this.storage.setMetadata(match.matchID, match.metadata);
@@ -1247,24 +1833,7 @@ export class GameTransportServer {
     }
 
     private applyPlayerView(match: ActiveMatch, playerID: string | null): unknown {
-        const { engineConfig, state } = match;
-        let viewCore = state.core;
-        let viewSys: unknown = state.sys;
-
-        if (playerID !== null && engineConfig.domain.playerView) {
-            const partial = engineConfig.domain.playerView(state.core, playerID);
-            viewCore = partial !== undefined ? { ...(state.core as Record<string, unknown>), ...partial } : state.core;
-        }
-
-        if (playerID !== null) {
-            for (const system of engineConfig.systems as EngineSystem<unknown>[]) {
-                if (!system.playerView) continue;
-                const sysPartial = system.playerView(state as MatchState<unknown>, playerID);
-                viewSys = { ...(viewSys as Record<string, unknown>), ...sysPartial };
-            }
-        }
-
-        return { sys: viewSys, core: viewCore };
+        return applyPlayerViewToState(match.engineConfig, match.state, playerID);
     }
 
     private buildMatchPlayers(match: ActiveMatch): MatchPlayerInfo[] {
@@ -1287,7 +1856,10 @@ export class GameTransportServer {
         const engineConfig = this.gameIndex.get(gameId);
         if (!engineConfig) return undefined;
 
-        const state = result.state.G as MatchState<unknown>;
+        const state = setUndoAiSeatIds(
+            result.state.G as MatchState<unknown>,
+            getAiSeatIds(extractSetupSeatControllers(result.metadata.setupData)),
+        );
         const playerIds = Object.keys(result.metadata.players) as PlayerId[];
 
         const randomSeed = resolveStoredRandomSeed(result.state, matchID);
@@ -1322,20 +1894,17 @@ export class GameTransportServer {
         matchID: string,
         playerID: string,
         credentials?: string,
+        metadata?: MatchMetadata,
     ): Promise<boolean> {
         if (!this.authenticate) return true;
 
-        const result = await this.storage.fetch(matchID, { metadata: true });
-        const metadata = result.metadata;
-        if (!metadata) return false;
+        const resolvedMetadata = metadata ?? await this.readFreshAuthMetadata(matchID);
+        if (!resolvedMetadata) return false;
 
-        const ok = await this.authenticate(matchID, playerID, credentials, metadata);
+        const ok = await this.authenticate(matchID, playerID, credentials, resolvedMetadata);
         if (!ok) return false;
 
-        const active = this.activeMatches.get(matchID);
-        if (active) {
-            active.metadata = metadata;
-        }
+        this.mergeActiveMetadata(matchID, resolvedMetadata);
         return true;
     }
 }

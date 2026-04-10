@@ -1,0 +1,89 @@
+name: Android Native Update Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      channel:
+        description: '目标原生更新 channel'
+        required: true
+        default: 'stable'
+        type: string
+      dry_run:
+        description: '只本地构建与生成 manifest，不上传'
+        required: false
+        default: false
+        type: boolean
+      skip_latest:
+        description: '上传 APK 与版本 manifest，但不覆盖 latest.json'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  publish-native-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.1.0
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Create Android env file
+        run: |
+          cat <<'EOF' > .env.android
+          VITE_BACKEND_URL=${{ vars.VITE_BACKEND_URL || vars.ANDROID_VITE_BACKEND_URL || secrets.VITE_BACKEND_URL || secrets.ANDROID_VITE_BACKEND_URL }}
+          VITE_ASSETS_BASE_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}
+          CAPACITOR_APP_ID=${{ vars.CAPACITOR_APP_ID || 'top.easyboardgame.app' }}
+          CAPACITOR_APP_NAME=${{ vars.CAPACITOR_APP_NAME || '易桌游' }}
+          ANDROID_WEBVIEW_MODE=embedded
+          VITE_ANDROID_NATIVE_UPDATE_ENABLED=true
+          VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/native-app-updates/android/${{ inputs.channel }}/latest.json
+          VITE_ANDROID_NATIVE_UPDATE_CHANNEL=${{ inputs.channel }}
+          VITE_ANDROID_OTA_ENABLED=true
+          VITE_ANDROID_OTA_MANIFEST_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/app-updates/android/stable/latest.json
+          VITE_ANDROID_OTA_CHANNEL=stable
+          VITE_ANDROID_OTA_APP_READY_TIMEOUT_MS=${{ vars.ANDROID_OTA_APP_READY_TIMEOUT_MS || '15000' }}
+          ANDROID_ICON_SOURCE=${{ vars.ANDROID_ICON_SOURCE || 'public/logos/logo_1_grid.png' }}
+          ANDROID_SPLASH_SOURCE=${{ vars.ANDROID_SPLASH_SOURCE || 'public/logos/logo_1_grid.png' }}
+          ANDROID_ICON_BACKGROUND=${{ vars.ANDROID_ICON_BACKGROUND || '#FFFFFF' }}
+          ANDROID_SPLASH_BACKGROUND=${{ vars.ANDROID_SPLASH_BACKGROUND || '#FFFFFF' }}
+          ANDROID_KEYSTORE_BASE64=${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
+          R2_ACCOUNT_ID=${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID=${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY=${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME=${{ secrets.R2_BUCKET_NAME }}
+          EOF
+
+      - name: Build signed release APK
+        run: npm run mobile:android:build:release
+
+      - name: Publish native update package
+        run: |
+          args=(--channel "${{ inputs.channel }}")
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            args+=(--dry-run)
+          fi
+          if [ "${{ inputs.skip_latest }}" = "true" ]; then
+            args+=(--skip-latest)
+          fi
+          npm run mobile:android:native-update:publish -- "${args[@]}"

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createDamageCalculation } from '../../../engine/primitives/damageCalculation';
 import type { DiceThroneCore } from '../domain/core-types';
+import { validateCommand } from '../domain/commandValidation';
 import { checkPlayCard } from '../domain/rules';
 import type { DiceThroneEvent } from '../domain/types';
 import { PYROMANCER_CARDS } from '../heroes/pyromancer/cards';
@@ -56,7 +57,78 @@ describe('红热攻击修正出牌边界', () => {
         const result = checkPlayCard(makeRuleCheckCore(), '0', redHotCard, 'offensiveRoll');
 
         expect(result.ok).toBe(false);
-        expect((result as any).reason).toBe('wrongPhaseForCard');
+        expect((result as any).reason).toBe('attackModifierRequiresSelectedAttack');
+    });
+
+    it('4 人模式未选定 defender 时不能提前打出需要单一受击者的攻击修正卡', () => {
+        const result = checkPlayCard(makeRuleCheckCore({
+            players: {
+                '0': {
+                    heroId: 'pyromancer',
+                    health: 50,
+                    resources: { cp: 10 },
+                    hand: [redHotCard],
+                    deck: [],
+                    discard: [],
+                    statusEffects: {},
+                    tokens: {},
+                    abilityLevels: {},
+                    abilities: [],
+                    upgradeCardByAbilityId: {},
+                } as any,
+                '1': {
+                    heroId: 'barbarian',
+                    health: 50,
+                    resources: { cp: 10 },
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    statusEffects: {},
+                    tokens: {},
+                    abilityLevels: {},
+                    abilities: [],
+                    upgradeCardByAbilityId: {},
+                } as any,
+                '2': {
+                    heroId: 'monk',
+                    health: 50,
+                    resources: { cp: 10 },
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    statusEffects: {},
+                    tokens: {},
+                    abilityLevels: {},
+                    abilities: [],
+                    upgradeCardByAbilityId: {},
+                } as any,
+                '3': {
+                    heroId: 'samurai',
+                    health: 50,
+                    resources: { cp: 10 },
+                    hand: [],
+                    deck: [],
+                    discard: [],
+                    statusEffects: {},
+                    tokens: {},
+                    abilityLevels: {},
+                    abilities: [],
+                    upgradeCardByAbilityId: {},
+                } as any,
+            } as any,
+            pendingAttack: {
+                attackerId: '0',
+                defenderId: undefined,
+                isDefendable: true,
+                sourceAbilityId: 'meteor',
+                damageResolved: false,
+                resolvedDamage: 0,
+                attackDiceFaceCounts: {},
+            } as any,
+        }), '0', redHotCard, 'offensiveRoll');
+
+        expect(result.ok).toBe(false);
+        expect((result as any).reason).toBe('attackModifierRequiresSelectedDefender');
     });
 
     it('已有当前攻击时攻击方可以在 offensiveRoll 打出攻击修正卡', () => {
@@ -106,6 +178,59 @@ describe('红热攻击修正出牌边界', () => {
 
         expect(result.ok).toBe(false);
         expect((result as any).reason).toBe('wrongPhaseForCard');
+    });
+
+    it('afterRollConfirmed 鍝嶅簲绐楀彛涓嶅簲鍏佽绾㈢儹', () => {
+        const result = validateCommand(
+            makeRuleCheckCore({
+                turnPhase: 'defensiveRoll',
+                pendingAttack: {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'meteor',
+                    damageResolved: false,
+                    resolvedDamage: 0,
+                    attackDiceFaceCounts: {},
+                } as any,
+            }),
+            {
+                type: 'PLAY_CARD',
+                playerId: '0',
+                payload: { cardId: 'card-red-hot' },
+            } as any,
+            'defensiveRoll',
+            undefined,
+            'afterRollConfirmed'
+        );
+
+        expect(result.valid).toBe(false);
+        expect(result.error).toBe('wrongPhaseForCard');
+    });
+
+    it('绂诲紑鍝嶅簲绐楀彛鍚庣孩鐑粛鍙湪 defensiveRoll 鎵撳嚭', () => {
+        const result = validateCommand(
+            makeRuleCheckCore({
+                turnPhase: 'defensiveRoll',
+                pendingAttack: {
+                    attackerId: '0',
+                    defenderId: '1',
+                    isDefendable: true,
+                    sourceAbilityId: 'meteor',
+                    damageResolved: false,
+                    resolvedDamage: 0,
+                    attackDiceFaceCounts: {},
+                } as any,
+            }),
+            {
+                type: 'PLAY_CARD',
+                playerId: '0',
+                payload: { cardId: 'card-red-hot' },
+            } as any,
+            'defensiveRoll'
+        );
+
+        expect(result.valid).toBe(true);
     });
 });
 

@@ -13,6 +13,7 @@ import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverl
 import { ConfirmSkipModal } from './ConfirmSkipModal';
 import { ConfirmRemoveKnockdownModal } from './ConfirmRemoveKnockdownModal';
 import { ChoiceModal } from './ChoiceModal';
+import { CompareRollOverlay } from './CompareRollOverlay';
 import { BonusDieOverlay } from './BonusDieOverlay';
 import { CardSpotlightOverlay } from './CardSpotlightOverlay';
 import { TokenResponseModal } from './TokenResponseModal';
@@ -28,7 +29,11 @@ import type { CardSpotlightItem } from './CardSpotlightOverlay';
 import type { PendingDamage } from '../domain/types';
 import type { TokenDef } from '../domain/tokenTypes';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
-import { DEFAULT_ABILITY_SLOT_LAYOUT } from './abilitySlotLayout';
+import type { CompareRollChoiceData } from '../../../engine/systems/InteractionSystem';
+import {
+    getAbilitySlotLayoutForCharacter,
+    getPlayerBoardAspectRatio,
+} from './abilitySlotLayout';
 import { useHorizontalDragScroll } from '../../../hooks/ui/useHorizontalDragScroll';
 import { getSlotAbilityId, getUpgradeCardPreviewRef } from './AbilityOverlays';
 import { createScopedLogger } from '../../../lib/logger';
@@ -65,21 +70,27 @@ export interface BoardOverlaysProps {
     pendingInteraction?: InteractionDescriptor;
     players: Record<PlayerId, HeroState>;
     currentPlayerId: PlayerId;
+    playerNames: Record<PlayerId, string>;
+    seatingOrder?: PlayerId[];
+    teamIdByPlayerId?: Record<PlayerId, string>;
     onSelectStatus: (playerId: PlayerId, statusId: string) => void;
     onSelectPlayer: (playerId: PlayerId) => void;
     onConfirmStatusInteraction: () => void;
     onCancelInteraction: () => void;
 
     // 选择弹窗
+    compareRoll?: (CompareRollChoiceData & { id: string; playerId: string }) | undefined;
     choice: {
         hasChoice: boolean;
         title?: string;
-        options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string; value?: number }>;
+        options: Array<{ id: string; label: string; statusId?: string; tokenId?: string; customId?: string; value?: number; disabled?: boolean }>;
+        sourceAbilityId?: string;
         /** slider 模式配置（存在时渲染滑动条） */
         slider?: { confirmLabelKey: string; hintKey?: string; skipLabelKey?: string };
     };
     canResolveChoice: boolean;
     onResolveChoice: (optionId: string) => void;
+    onConfirmCompareRoll: () => void;
 
     // 卡牌特写
     cardSpotlightQueue: CardSpotlightItem[];
@@ -103,7 +114,6 @@ export interface BoardOverlaysProps {
         characterId?: string;
     };
     onBonusDieClose: () => void;
-
     // 奖励骰重掷交互
     pendingBonusDiceSettlement?: PendingBonusDiceSettlement;
     canRerollBonusDie: boolean;
@@ -140,7 +150,6 @@ export interface BoardOverlaysProps {
 
     // 选角相关
     selectedCharacters: Record<PlayerId, CharacterId>;
-    playerNames: Record<PlayerId, string>;
     hostPlayerId: PlayerId;
 }
 
@@ -153,9 +162,10 @@ const MagnifyUpgradeOverlay: React.FC<{
     abilityLevels: Record<string, number>;
     locale: string;
 }> = ({ characterId, abilityLevels, locale }) => {
+    const slots = getAbilitySlotLayoutForCharacter(characterId);
     return (
         <div className="absolute inset-0 pointer-events-none">
-            {DEFAULT_ABILITY_SLOT_LAYOUT.map((slot) => {
+            {slots.map((slot) => {
                 if (slot.id === 'ultimate') return null;
                 const baseAbilityId = getSlotAbilityId(characterId, slot.id);
                 const level = baseAbilityId ? (abilityLevels[baseAbilityId] ?? 1) : 1;
@@ -209,9 +219,10 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
 
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
+    const playerBoardAspectRatio = getPlayerBoardAspectRatio(props.viewCharacterId);
     const magnifyContainerClassName = `
         group/modal
-        ${isPlayerBoardPreview ? 'aspect-[2048/1673] h-auto w-auto max-h-[90vh] max-w-[90vw]' : ''}
+        ${isPlayerBoardPreview ? 'h-auto w-auto max-h-[90vh] max-w-[90vw]' : ''}
         ${props.magnifiedCard ? 'aspect-[0.61] h-auto w-auto max-h-[90vh] max-w-[60vw]' : ''}
         ${isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
         ${!isPlayerBoardPreview && !props.magnifiedCard && !isMultiCardPreview ? 'max-h-[90vh] max-w-[90vw]' : ''}
@@ -220,6 +231,16 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
     return (
         <>
             <AnimatePresence>
+                {props.compareRoll && (
+                    <CompareRollOverlay
+                        compareRoll={props.compareRoll}
+                        isVisible={true}
+                        locale={props.locale}
+                        onResolveOption={props.onResolveChoice}
+                        onConfirm={props.onConfirmCompareRoll}
+                    />
+                )}
+
                 {/* 放大预览 */}
                 {props.isMagnifyOpen && (
                     <MagnifyOverlay
@@ -250,12 +271,15 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                                 locale={props.locale}
                             />
                         ) : (
-                            <div className="relative">
+                            <div
+                                className="relative"
+                                style={isPlayerBoardPreview ? { aspectRatio: String(playerBoardAspectRatio) } : undefined}
+                            >
                                 <OptimizedImage
                                     src={props.magnifiedImage ?? ''}
                                     locale={props.locale}
-                                    className="max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
-                                    alt="Preview"
+                                    className="block max-h-[90vh] max-w-[90vw] w-auto h-auto object-contain"
+                                    alt="预览图"
                                 />
                                 {/* 玩家面板放大时叠加升级卡预览 */}
                                 {isPlayerBoardPreview && props.viewCharacterId && props.abilityLevels && (
@@ -292,7 +316,9 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
 
                 {/* Token 响应窗口 */}
                 {(() => {
-                    const shouldRender = props.pendingDamage && props.tokenResponsePhase && props.isTokenResponder;
+                    const shouldRender = props.pendingDamage
+                        && props.tokenResponsePhase
+                        && props.isTokenResponder;
                     return shouldRender ? (
                         <TokenResponseModal
                             key="token-response"
@@ -330,6 +356,9 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         interaction={props.pendingInteraction}
                         players={props.players}
                         currentPlayerId={props.currentPlayerId}
+                        playerNames={props.playerNames}
+                        seatingOrder={props.seatingOrder}
+                        teamIdByPlayerId={props.teamIdByPlayerId}
                         onSelectStatus={props.onSelectStatus}
                         onSelectPlayer={props.onSelectPlayer}
                         onConfirm={props.onConfirmStatusInteraction}
@@ -343,7 +372,14 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                 {props.choice.hasChoice && (
                     <ChoiceModal
                         key="choice"
-                        choice={props.choice.hasChoice ? { title: props.choice.title ?? '', options: props.choice.options, slider: props.choice.slider } : null}
+                        choice={props.choice.hasChoice
+                            ? {
+                                title: props.choice.title ?? '',
+                                options: props.choice.options,
+                                slider: props.choice.slider,
+                                sourceAbilityId: props.choice.sourceAbilityId,
+                            }
+                            : null}
                         canResolve={props.canResolveChoice}
                     onResolve={(optionId) => {
                             props.dispatch(INTERACTION_COMMANDS.RESPOND, { optionId });
@@ -353,6 +389,10 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         }}
                         locale={props.locale}
                         statusIconAtlas={props.statusIconAtlas}
+                        currentPlayerId={props.currentPlayerId}
+                        players={props.players}
+                        playerNames={props.playerNames}
+                        teamIdByPlayerId={props.teamIdByPlayerId}
                     />
                 )}{/* 额外骰子特写 / 重掷交互 */}
                 {(props.bonusDie.show || props.pendingBonusDiceSettlement) && (
@@ -373,8 +413,8 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                         rerollCostAmount={props.pendingBonusDiceSettlement?.rerollCostAmount}
                         rerollCostTokenId={props.pendingBonusDiceSettlement?.rerollCostTokenId}
                         displayOnly={props.pendingBonusDiceSettlement?.displayOnly ?? props.bonusDie.displayOnly}
-                        summaryEffectKey={props.bonusDie.summaryEffectKey}
-                        summaryEffectParams={props.bonusDie.summaryEffectParams}
+                        summaryEffectKey={props.pendingBonusDiceSettlement?.summaryEffectKey ?? props.bonusDie.summaryEffectKey}
+                        summaryEffectParams={props.pendingBonusDiceSettlement?.summaryEffectParams ?? props.bonusDie.summaryEffectParams}
                         characterId={
                             props.pendingBonusDiceSettlement
                                 ? props.selectedCharacters[props.pendingBonusDiceSettlement.attackerId]

@@ -38,6 +38,7 @@ function createState(opts: {
     attackerHP?: number;
     attackerEvasive?: number;
     pendingAttackFaceCounts?: Record<string, number>;
+    pendingAttackValueCounts?: Record<number, number>;
 }): DiceThroneCore {
     const attacker: HeroState = {
         id: '0', characterId: 'moon_elf',
@@ -64,11 +65,12 @@ function createState(opts: {
         activePlayerId: '0', startingPlayerId: '0', turnNumber: 1,
         pendingAttack: null, tokenDefinitions: [],
     };
-    if (opts.pendingAttackFaceCounts) {
+    if (opts.pendingAttackFaceCounts || opts.pendingAttackValueCounts) {
         state.pendingAttack = {
             attackerId: '0', defenderId: '1', isDefendable: true,
             damage: 5, bonusDamage: 0,
             attackDiceFaceCounts: opts.pendingAttackFaceCounts,
+            attackDiceValueCounts: opts.pendingAttackValueCounts,
         } as any;
     }
     return state;
@@ -114,10 +116,11 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
     // ========================================================================
     // 长弓连击判定
     // ========================================================================
-    describe('moon_elf-longbow-bonus-check-4 (长弓II连击：≥4相同符号→缠绕)', () => {
-        it('4个相同符号时施加缠绕', () => {
+    describe('moon_elf-longbow-bonus-check-4 (长弓II连击：≥4相同数字→缠绕)', () => {
+        it('4个相同数字时施加缠绕', () => {
             const state = createState({
                 pendingAttackFaceCounts: { [FACES.BOW]: 4, [FACES.FOOT]: 1 },
+                pendingAttackValueCounts: { 1: 4, 5: 1 },
             });
             const handler = getCustomActionHandler('moon_elf-longbow-bonus-check-4')!;
             const events = handler(buildCtx(state, 'moon_elf-longbow-bonus-check-4'));
@@ -127,9 +130,10 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             expect((status[0] as any).payload.statusId).toBe(STATUS_IDS.ENTANGLE);
         });
 
-        it('不足4个相同符号时不施加', () => {
+        it('仅4弓但不足4个相同数字时不施加', () => {
             const state = createState({
-                pendingAttackFaceCounts: { [FACES.BOW]: 3, [FACES.FOOT]: 2 },
+                pendingAttackFaceCounts: { [FACES.BOW]: 4, [FACES.FOOT]: 1 },
+                pendingAttackValueCounts: { 1: 2, 2: 2, 4: 1 },
             });
             const handler = getCustomActionHandler('moon_elf-longbow-bonus-check-4')!;
             const events = handler(buildCtx(state, 'moon_elf-longbow-bonus-check-4'));
@@ -144,10 +148,11 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
         });
     });
 
-    describe('moon_elf-longbow-bonus-check-3 (长弓III连击：≥3同面→缠绕)', () => {
-        it('3个相同骰面时施加缠绕', () => {
+    describe('moon_elf-longbow-bonus-check-3 (长弓III连击：≥3相同数字→缠绕)', () => {
+        it('3个相同数字时施加缠绕', () => {
             const state = createState({
                 pendingAttackFaceCounts: { [FACES.BOW]: 3, [FACES.FOOT]: 2 },
+                pendingAttackValueCounts: { 1: 3, 4: 1, 5: 1 },
             });
             const handler = getCustomActionHandler('moon_elf-longbow-bonus-check-3')!;
             const events = handler(buildCtx(state, 'moon_elf-longbow-bonus-check-3'));
@@ -155,9 +160,10 @@ describe('月精灵 Custom Action 运行时行为断言', () => {
             expect(eventsOfType(events, 'STATUS_APPLIED')).toHaveLength(1);
         });
 
-        it('不足3个相同骰面时不施加', () => {
+        it('仅3弓但不足3个相同数字时不施加', () => {
             const state = createState({
-                pendingAttackFaceCounts: { [FACES.BOW]: 2, [FACES.FOOT]: 2, [FACES.MOON]: 1 },
+                pendingAttackFaceCounts: { [FACES.BOW]: 3, [FACES.FOOT]: 2 },
+                pendingAttackValueCounts: { 1: 1, 2: 1, 3: 1, 4: 1, 5: 1 },
             });
             const handler = getCustomActionHandler('moon_elf-longbow-bonus-check-3')!;
             const events = handler(buildCtx(state, 'moon_elf-longbow-bonus-check-3'));
