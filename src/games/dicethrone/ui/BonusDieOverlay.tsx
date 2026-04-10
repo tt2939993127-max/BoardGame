@@ -92,7 +92,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
         if (!summaryEffectKey || !summaryEffectParams) {
             return undefined;
         }
-        if (i18n.exists(summaryEffectKey)) {
+        if (i18n.exists(summaryEffectKey, { ns: 'game-dicethrone' })) {
             return t(summaryEffectKey, summaryEffectParams);
         }
         if (summaryEffectKey.startsWith('bonusDie.effect.')) {

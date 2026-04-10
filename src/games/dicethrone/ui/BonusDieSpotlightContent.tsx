@@ -84,7 +84,8 @@ export const BonusDieSpotlightContent: React.FC<BonusDieSpotlightContentProps> =
     // 获取翻译后的效果文本
     const effectText = React.useMemo(() => {
         if (!effectKey) return null;
-        return i18n.exists(effectKey) ? t(effectKey, effectParams) : effectKey;
+        const hasTranslation = i18n.exists(effectKey, { ns: 'game-dicethrone' });
+        return hasTranslation ? t(effectKey, effectParams) : effectKey;
     }, [t, i18n, effectKey, effectParams]);
     const shouldRenderEffectText = !hideEffectText && Boolean(effectText);
 
