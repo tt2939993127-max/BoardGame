@@ -45,17 +45,27 @@
 - **原因**：理论上不会无解，但若出现“全 disabled”异常状态，流程会重复进入该交互。
 - **修复**：emergency skip 时若识别为“Token 选择”（选项含 `use-*` + `skip`），则 **标记 `offensiveRollEndTokenResolved = true`**，防止重复弹窗。
 
+### 发现 3：dt:card-interaction 无可选目标时，AI 监护会因交互锁定而误判失败
+- **原因**：在线 AI 监护仅识别 simple-choice 的无解状态，遇到 `dt:card-interaction`（状态选择类）时，只会尝试 `RESPONSE_PASS`，但响应窗口被交互锁定，导致 `RESPONSE_PASS` 被拒绝 → “强制结束失败”。
+- **修复**：
+  - 在线 AI 监护扩展识别 `dt:card-interaction` 的 **无可选目标** 情况（如 `selectStatus` 且目标玩家均无状态/Token）。
+  - 无可选时自动下发 `SYS_INTERACTION_CANCEL`，并携带 `reason=empty-options`，保证交互被取消并触发解锁推进。
+
 ## 5. 验证证据
 - **单测（定向）**
   - `node scripts/infra/vitest-cli-safe.mjs run --configLoader native src/games/dicethrone/__tests__/flow.test.ts --testNamePattern "targetingRoll 无可选目标时 emergency skip 会清理 pendingAttack"`
+  - 结果：✅ 通过（仅跑此用例）
+  - `node scripts/infra/vitest-cli-safe.mjs run --configLoader native src/engine/transport/__tests__/server.test.ts --testNamePattern "online AI watchdog 应能识别 dt:card-interaction 无可选目标并携带 reason 取消交互"`
   - 结果：✅ 通过（仅跑此用例）
 
 ## 6. 未覆盖风险
 - 其他 `CHOICE_REQUESTED` 来源若出现“空选项/全 disabled”，仍可能需要 **领域级兜底逻辑**（目前仅覆盖 targetingRoll + offensiveRollEnd）。
 - 若未来新增“必须选择”的交互类型，需要同步补充 emergency skip 的 **语义回填**（例如自动选择默认目标或强制终止该动作）。
+- `dt:card-interaction` 的“无解”判定仍是基于当前 core 状态的轻量检查；若交互语义更复杂（需要多条件组合），可能仍需补充更精细的判定逻辑。
 
 ## 7. 修订记录
 - 2026-04-10：新增 emergency skip 领域兜底，避免 targetingRoll 无解卡死；新增对应单测。
+- 2026-04-11：在线 AI 监护识别 `dt:card-interaction` 无可选目标并自动取消，避免交互锁定导致“强制结束失败”。
 
 ## 8. CHOICE_REQUESTED 生成点审计（补充）
 **结论**：除 targetingRoll 边缘场景外，其余生成点均显式保证 options 非空，且多数包含 skip 选项，不会产生“无解交互”。  
