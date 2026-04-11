@@ -1000,7 +1000,7 @@ describe('GameTransportServer（离座与重连）', () => {
         }
     });
 
-    it('online AI watchdog 应在 active-turn 卡死时多步 ADVANCE_PHASE 直到切回真人回合', async () => {
+    it('online AI watchdog 在 active-turn 卡死时仅推进一个阶段（无阶段则跳过回合）', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
         const feedbackReporter = vi.fn(async () => undefined);
@@ -1077,9 +1077,9 @@ describe('GameTransportServer（离座与重连）', () => {
         await nextTick();
         await nextTick();
 
-        expect(executeSpy).toHaveBeenCalledTimes(2);
-        expect(match.state.sys.phase).toBe('main1');
-        expect(match.state.core.activePlayerId).toBe('0');
+        expect(executeSpy).toHaveBeenCalledTimes(1);
+        expect(match.state.sys.phase).toBe('discard');
+        expect(match.state.core.activePlayerId).toBe('1');
         expect(feedbackReporter).toHaveBeenCalledTimes(1);
         expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
             matchId: 'match-watchdog-success',
