@@ -495,15 +495,15 @@ const DICE_ATLAS: {
     rows: number;
     faceMap: Record<number, { col: number; row: number }>;
 } = {
-    cols: 3,
+    cols: 2,
     rows: 3,
     faceMap: {
-        1: { col: 0, row: 2 },
-        2: { col: 0, row: 1 },
-        3: { col: 1, row: 2 },
+        1: { col: 0, row: 0 },
+        2: { col: 1, row: 0 },
+        3: { col: 0, row: 1 },
         4: { col: 1, row: 1 },
-        5: { col: 2, row: 1 },
-        6: { col: 2, row: 2 },
+        5: { col: 0, row: 2 },
+        6: { col: 1, row: 2 },
     },
 };
 

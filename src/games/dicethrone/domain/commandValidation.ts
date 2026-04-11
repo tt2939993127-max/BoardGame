@@ -51,10 +51,13 @@ import {
     checkPlayUpgradeCard,
     getAvailableAbilityIds,
     isCardPlayableInResponseWindow,
+    getActiveDice,
 } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
 import { DICETHRONE_CHARACTER_CATALOG } from './core-types';
+import { getUsableTokensForTiming } from './tokenResponse';
+import { getMaxTokenUseAmount, getTokenUseOptions } from './tokenTypes';
 
 // ============================================================================
 // 验证函数
@@ -68,6 +71,100 @@ const isCommandType = <TType extends DiceThroneCommand['type']>(
     command: DiceThroneCommand,
     type: TType
 ): command is Extract<DiceThroneCommand, { type: TType }> => command.type === type;
+
+type ValidationInteractionDescriptor = InteractionDescriptor & {
+    allowedDieIds?: number[];
+    completedDieIds?: number[];
+};
+
+const getValidationInteraction = (
+    pendingInteraction?: InteractionDescriptor
+): ValidationInteractionDescriptor | undefined => pendingInteraction as ValidationInteractionDescriptor | undefined;
+
+const getInteractionTargetPlayerIds = (
+    state: DiceThroneCore,
+    pendingInteraction: InteractionDescriptor
+): PlayerId[] => pendingInteraction.targetPlayerIds?.length
+    ? pendingInteraction.targetPlayerIds
+    : Object.keys(state.players);
+
+const playerHasStatusOrToken = (
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    statusId?: string
+): boolean => {
+    const player = state.players[playerId];
+    if (!player) return false;
+    if (statusId) {
+        return (player.statusEffects[statusId] ?? 0) > 0 || (player.tokens[statusId] ?? 0) > 0;
+    }
+    return Object.values(player.statusEffects).some(value => value > 0)
+        || Object.values(player.tokens).some(value => value > 0);
+};
+
+const validateInteractionOwnership = (
+    pendingInteraction: InteractionDescriptor | undefined,
+    playerId: PlayerId
+): ValidationResult | null => {
+    if (!pendingInteraction) {
+        return fail('no_pending_interaction');
+    }
+    if (pendingInteraction.playerId !== playerId) {
+        return fail('player_mismatch');
+    }
+    return null;
+};
+
+const validateTargetPlayerInInteraction = (
+    state: DiceThroneCore,
+    pendingInteraction: InteractionDescriptor,
+    targetPlayerId: PlayerId
+): ValidationResult | null => {
+    const targetPlayerIds = getInteractionTargetPlayerIds(state, pendingInteraction);
+    if (!targetPlayerIds.includes(targetPlayerId)) {
+        return fail('invalid_target_player');
+    }
+    if (!state.players[targetPlayerId]) {
+        return fail('player_not_found');
+    }
+    return null;
+};
+
+const validateDieInteraction = (
+    state: DiceThroneCore,
+    pendingInteraction: InteractionDescriptor | undefined,
+    playerId: PlayerId,
+    dieId: number,
+    limitError: string,
+): { interaction: ValidationInteractionDescriptor } | ValidationResult => {
+    const ownershipError = validateInteractionOwnership(pendingInteraction, playerId);
+    if (ownershipError) return ownershipError;
+
+    const interaction = getValidationInteraction(pendingInteraction)!;
+    const die = state.dice.find(entry => entry.id === dieId);
+    if (!die) {
+        return fail('die_not_found');
+    }
+
+    const allowedDieIds = interaction.allowedDieIds?.length
+        ? interaction.allowedDieIds
+        : getActiveDice(state).map(activeDie => activeDie.id);
+    if (!allowedDieIds.includes(dieId)) {
+        return fail('invalid_die_selection');
+    }
+
+    const completedDieIds = Array.from(new Set((interaction.completedDieIds ?? []).filter(id => typeof id === 'number')));
+    if (completedDieIds.includes(dieId)) {
+        return fail('die_already_completed');
+    }
+
+    const selectCount = interaction.selectCount ?? allowedDieIds.length;
+    if (completedDieIds.length >= selectCount) {
+        return fail(limitError);
+    }
+
+    return { interaction };
+};
 
 /**
  * 验证掷骰命令
@@ -636,18 +733,8 @@ const validateModifyDie = (
     playerId: PlayerId,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    // 检查是否有待处理的交互（从 sys.interaction 读取）
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    // 检查骰子是否存在
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
+    const validation = validateDieInteraction(state, pendingInteraction, playerId, cmd.payload.dieId, 'modify_die_limit_reached');
+    if ('valid' in validation) return validation;
     // 检查新值是否在范围内
     if (cmd.payload.newValue < 1 || cmd.payload.newValue > 6) {
         return fail('invalid_die_value');
@@ -664,16 +751,8 @@ const validateRerollDie = (
     playerId: PlayerId,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
-    const die = state.dice.find(d => d.id === cmd.payload.dieId);
-    if (!die) {
-        return fail('die_not_found');
-    }
+    const validation = validateDieInteraction(state, pendingInteraction, playerId, cmd.payload.dieId, 'reroll_die_limit_reached');
+    if ('valid' in validation) return validation;
     return ok();
 };
 
@@ -681,17 +760,26 @@ const validateRerollDie = (
  * 验证移除状态效果命令
  */
 const validateRemoveStatus = (
-    _state: DiceThroneCore,
-    _cmd: RemoveStatusCommand,
+    state: DiceThroneCore,
+    cmd: RemoveStatusCommand,
     playerId: PlayerId,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
+    const ownershipError = validateInteractionOwnership(pendingInteraction, playerId);
+    if (ownershipError) return ownershipError;
+
+    const interaction = pendingInteraction!;
+    const targetError = validateTargetPlayerInInteraction(state, interaction, cmd.payload.targetPlayerId);
+    if (targetError) return targetError;
+
+    if (cmd.payload.statusId) {
+        if (!playerHasStatusOrToken(state, cmd.payload.targetPlayerId, cmd.payload.statusId)) {
+            return fail('no_status');
+        }
+    } else if (interaction.requiresTargetWithStatus === true && !playerHasStatusOrToken(state, cmd.payload.targetPlayerId)) {
+        return fail('target_has_no_status');
     }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
+
     return ok();
 };
 
@@ -699,17 +787,36 @@ const validateRemoveStatus = (
  * 验证转移状态效果命令
  */
 const validateTransferStatus = (
-    _state: DiceThroneCore,
-    _cmd: TransferStatusCommand,
+    state: DiceThroneCore,
+    cmd: TransferStatusCommand,
     playerId: PlayerId,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
+    const ownershipError = validateInteractionOwnership(pendingInteraction, playerId);
+    if (ownershipError) return ownershipError;
+
+    const interaction = pendingInteraction!;
+    const sourceTargetError = validateTargetPlayerInInteraction(state, interaction, cmd.payload.fromPlayerId);
+    if (sourceTargetError) return sourceTargetError;
+
+    const targetError = validateTargetPlayerInInteraction(state, interaction, cmd.payload.toPlayerId);
+    if (targetError) return targetError;
+
+    if (cmd.payload.fromPlayerId === cmd.payload.toPlayerId) {
+        return fail('invalid_target_player');
     }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
+
+    if (interaction.transferConfig?.sourcePlayerId && interaction.transferConfig.sourcePlayerId !== cmd.payload.fromPlayerId) {
+        return fail('invalid_source_player');
     }
+    if (interaction.transferConfig?.statusId && interaction.transferConfig.statusId !== cmd.payload.statusId) {
+        return fail('invalid_status');
+    }
+
+    if (!playerHasStatusOrToken(state, cmd.payload.fromPlayerId, cmd.payload.statusId)) {
+        return fail('no_status');
+    }
+
     return ok();
 };
 
@@ -784,10 +891,11 @@ const validateUseToken = (
     cmd: UseTokenCommand,
     playerId: PlayerId
 ): ValidationResult => {
-    if (!state.pendingDamage) {
+    const pendingDamage = state.pendingDamage;
+    if (!pendingDamage) {
         return fail('no_pending_damage');
     }
-    if (!isMoveAllowed(playerId, state.pendingDamage.responderId)) {
+    if (!isMoveAllowed(playerId, pendingDamage.responderId)) {
         return fail('player_mismatch');
     }
 
@@ -805,6 +913,31 @@ const validateUseToken = (
     }
 
     if (cmd.payload.amount <= 0) {
+        return fail('invalid_amount');
+    }
+
+    if (!tokenDef.activeUse?.timing?.includes(pendingDamage.responseType)) {
+        return fail('invalid_token_timing');
+    }
+
+    const usedInWindow = pendingDamage.tokenUsageTotals?.[cmd.payload.tokenId] ?? 0;
+    const maxWindowUsage = getMaxTokenUseAmount(tokenDef);
+    const hasExplicitWindowCap = (tokenDef.activeUse.allowedConsumeAmounts?.length ?? 0) > 0;
+    const remainingWindowUsage = hasExplicitWindowCap
+        ? Math.max(0, maxWindowUsage - usedInWindow)
+        : currentAmount;
+    if (remainingWindowUsage <= 0) {
+        return fail('invalid_amount');
+    }
+
+    const usableTokens = getUsableTokensForTiming(state, playerId, pendingDamage.responseType);
+    if (!usableTokens.some(token => token.id === cmd.payload.tokenId)) {
+        return fail('invalid_token_timing');
+    }
+
+    const availableAmount = Math.min(currentAmount, remainingWindowUsage);
+    const allowedConsumeAmounts = getTokenUseOptions(tokenDef, availableAmount);
+    if (!allowedConsumeAmounts.includes(cmd.payload.amount)) {
         return fail('invalid_amount');
     }
 
@@ -1002,17 +1135,18 @@ const validateUsePassiveAbility = (
  * 验证目标玩家在交互的 targetPlayerIds 中。
  */
 const validateGrantTokens = (
-    _state: DiceThroneCore,
-    _cmd: GrantTokensCommand,
+    state: DiceThroneCore,
+    cmd: GrantTokensCommand,
     playerId: PlayerId,
     pendingInteraction?: InteractionDescriptor
 ): ValidationResult => {
-    if (!pendingInteraction) {
-        return fail('no_pending_interaction');
-    }
-    if (pendingInteraction.playerId !== playerId) {
-        return fail('player_mismatch');
-    }
+    const ownershipError = validateInteractionOwnership(pendingInteraction, playerId);
+    if (ownershipError) return ownershipError;
+
+    const interaction = pendingInteraction!;
+    const targetError = validateTargetPlayerInInteraction(state, interaction, cmd.payload.targetPlayerId);
+    if (targetError) return targetError;
+
     return ok();
 };
 

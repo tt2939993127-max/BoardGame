@@ -11,6 +11,7 @@ import { validateCommand } from './commandValidation';
 import { execute } from './execute';
 import { reduce } from './reducer';
 import { playerView } from './view';
+import { getActiveDice } from './rules';
 import { registerDiceThroneConditions } from '../conditions';
 import { ALL_TOKEN_DEFINITIONS } from './characters';
 import { monkDiceDefinition } from '../heroes/monk/diceConfig';
@@ -100,6 +101,8 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             pendingAttack: null,
             tokenDefinitions: ALL_TOKEN_DEFINITIONS,
             lastEffectSourceByPlayerId: {},
+            attackResolvedSequence: 0,
+            afterAttackResponseWindowSequence: 0,
         };
     },
 
@@ -114,15 +117,26 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
         if (interaction?.kind === 'dt:card-interaction') {
             pendingInteraction = interaction.data as InteractionDescriptor;
         } else if (interaction?.kind === 'multistep-choice') {
-            const meta = (interaction.data as any)?.meta;
+            const data = (interaction.data as Record<string, unknown> | undefined) ?? {};
+            const meta = data.meta as Record<string, unknown> | undefined;
             if (meta?.dtType === 'modifyDie' || meta?.dtType === 'selectDie') {
-                // 构造最小兼容结构，validateCommand 只用 playerId 做权限检查
+                const activeDieIds = getActiveDice(state.core).map(die => die.id);
+                const completedDieIds = Array.isArray(data.completedDieIds)
+                    ? data.completedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')
+                    : [];
                 pendingInteraction = {
                     id: interaction.id,
                     playerId: interaction.playerId,
-                    sourceCardId: (interaction.data as any)?.sourceId ?? '',
+                    sourceCardId: typeof data.sourceId === 'string' ? data.sourceId : '',
                     type: meta.dtType === 'selectDie' ? 'selectDie' : 'modifyDie',
                     titleKey: '',
+                    selectCount: typeof meta.selectCount === 'number' ? meta.selectCount : 1,
+                    selected: completedDieIds.map(String),
+                    dieModifyConfig: meta.dieModifyConfig as InteractionDescriptor['dieModifyConfig'] | undefined,
+                    diceOwnerId: typeof meta.diceOwnerId === 'string' ? meta.diceOwnerId : undefined,
+                    targetOpponentDice: meta.targetOpponentDice === true,
+                    allowedDieIds: activeDieIds,
+                    completedDieIds,
                 } as InteractionDescriptor;
             }
         }

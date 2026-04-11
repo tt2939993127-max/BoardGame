@@ -93,7 +93,9 @@ const isCommandValid = (
     type: string,
     payload: unknown = {},
 ): boolean => {
-    if (isInteractionCommand(type)) return true;
+    if (isInteractionCommand(type)) {
+        return validateInteractionCommand(state, playerId, type, payload);
+    }
     const result = SummonerWarsDomain.validate(state, createCommand(playerId, type, payload) as never);
     return result.valid;
 };
@@ -111,21 +113,186 @@ const appendAction = (
 };
 
 const buildSimpleChoicePayload = (
+    interactionId: string,
     optionIds: string[],
     multi: PromptMultiConfig | undefined,
     optionValue?: unknown,
 ): Record<string, unknown> => {
     if (optionIds.length <= 1 && !multi) {
         return optionValue === undefined
-            ? { optionId: optionIds[0] }
-            : { optionId: optionIds[0], mergedValue: optionValue };
+            ? { interactionId, optionId: optionIds[0] }
+            : { interactionId, optionId: optionIds[0], mergedValue: optionValue };
     }
     if (optionIds.length <= 1 && (multi?.min ?? 0) <= 1) {
         return optionValue === undefined
-            ? { optionId: optionIds[0] }
-            : { optionId: optionIds[0], mergedValue: optionValue };
+            ? { interactionId, optionId: optionIds[0] }
+            : { interactionId, optionId: optionIds[0], mergedValue: optionValue };
     }
-    return { optionIds };
+    return { interactionId, optionIds };
+};
+
+const isRecoverableInteractionValue = (value: unknown): boolean => {
+    if (!value || typeof value !== 'object') {
+        return false;
+    }
+    const candidate = value as {
+        skip?: unknown;
+        done?: unknown;
+        cancel?: unknown;
+        __cancel__?: unknown;
+        __emergency_skip__?: unknown;
+    };
+    return Boolean(
+        candidate.skip
+        || candidate.done
+        || candidate.cancel
+        || candidate.__cancel__
+        || candidate.__emergency_skip__,
+    );
+};
+
+const resolveSimpleChoiceFallbackReason = (
+    options: SummonerWarsInteractionOption[],
+    multi: PromptMultiConfig | undefined,
+): 'empty-options' | 'all-options-disabled' | 'min-selection-unreachable' => {
+    const minSelections = typeof multi?.min === 'number' ? multi.min : 1;
+    if (options.length === 0) {
+        return 'empty-options';
+    }
+    const enabledOptions = options.filter((option) => option.disabled !== true);
+    if (enabledOptions.length === 0) {
+        return 'all-options-disabled';
+    }
+    if (enabledOptions.length < Math.max(0, minSelections)) {
+        return 'min-selection-unreachable';
+    }
+    return 'empty-options';
+};
+
+const buildEmergencyInteractionFallbackAction = (
+    current: EngineInteractionDescriptor,
+    reason: 'empty-options' | 'all-options-disabled' | 'min-selection-unreachable',
+): AiLegalAction => {
+    if (current.kind === 'simple-choice') {
+        const data = current.data as {
+            options?: SummonerWarsInteractionOption[];
+            multi?: PromptMultiConfig;
+        };
+        const enabledOptions = (data.options ?? []).filter((option): option is Required<Pick<SummonerWarsInteractionOption, 'id'>> & SummonerWarsInteractionOption => {
+            return typeof option?.id === 'string' && option.disabled !== true;
+        });
+        const recoverableOption = enabledOptions.find((option) => isRecoverableInteractionValue(option.value));
+        if (recoverableOption) {
+            return {
+                actionId: createAiLegalActionId('interaction', current.id, recoverableOption.id),
+                kind: 'interaction-choice',
+                label: recoverableOption.label ?? '跳过交互',
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: buildSimpleChoicePayload(current.id, [recoverableOption.id], data.multi, recoverableOption.value),
+                }],
+                aiHints: [OPTIONAL_SKIP_AI_HINT],
+                metadata: {
+                    interactionId: current.id,
+                    optionId: recoverableOption.id,
+                    reason,
+                    emergencyFallback: true,
+                },
+            };
+        }
+
+        if ((data.multi?.min ?? 1) === 0) {
+            return {
+                actionId: createAiLegalActionId('interaction', current.id, 'empty-selection'),
+                kind: 'interaction-choice',
+                label: '不选择任何项',
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: { interactionId: current.id, optionIds: [] },
+                }],
+                aiHints: [OPTIONAL_SKIP_AI_HINT],
+                metadata: {
+                    interactionId: current.id,
+                    optionIds: [],
+                    reason,
+                    emergencyFallback: true,
+                },
+            };
+        }
+    }
+
+    return {
+        actionId: createAiLegalActionId('interaction', current.id, 'emergency-cancel'),
+        kind: 'interaction-cancel',
+        label: '取消交互',
+        commands: [{
+            type: 'SYS_INTERACTION_CANCEL',
+            payload: { interactionId: current.id, reason },
+        }],
+        aiHints: [OPTIONAL_SKIP_AI_HINT],
+        metadata: {
+            interactionId: current.id,
+            reason,
+            emergencyFallback: true,
+        },
+    };
+};
+
+const validateInteractionCommand = (
+    state: SummonerWarsState,
+    playerId: PlayerId,
+    type: string,
+    payload: unknown,
+): boolean => {
+    const current = state.sys.interaction?.current as EngineInteractionDescriptor | undefined;
+    if (!current || current.playerId !== playerId) return false;
+
+    const interactionId = (payload as { interactionId?: unknown } | undefined)?.interactionId;
+    if (typeof interactionId !== 'string' || interactionId !== current.id) return false;
+
+    if (type === 'SYS_INTERACTION_CANCEL') {
+        return true;
+    }
+
+    if (type === 'SYS_INTERACTION_CONFIRM') {
+        return current.kind === 'multistep-choice';
+    }
+
+    if (type !== 'SYS_INTERACTION_RESPOND' || current.kind !== 'simple-choice') {
+        return false;
+    }
+
+    const data = current.data as {
+        options?: SummonerWarsInteractionOption[];
+        multi?: PromptMultiConfig;
+    };
+    const availableOptions = (data.options ?? []).filter((option): option is Required<Pick<SummonerWarsInteractionOption, 'id'>> & SummonerWarsInteractionOption => {
+        return typeof option?.id === 'string' && option.disabled !== true;
+    });
+    const optionsById = new Map(availableOptions.map((option) => [option.id, option] as const));
+    const response = payload as { optionId?: unknown; optionIds?: unknown; mergedValue?: unknown };
+
+    if (data.multi) {
+        const rawOptionIds = Array.isArray(response.optionIds)
+            ? response.optionIds
+            : typeof response.optionId === 'string'
+                ? [response.optionId]
+                : [];
+        const selectedIds = Array.from(new Set(rawOptionIds.filter((id): id is string => typeof id === 'string')));
+        if (selectedIds.some((id) => !optionsById.has(id))) return false;
+        if (response.mergedValue !== undefined) return false;
+
+        const selectedOptions = selectedIds.map((id) => optionsById.get(id)!);
+        const selectedSingleRecovery = selectedOptions.length === 1 && isRecoverableInteractionValue(selectedOptions[0]?.value);
+        const minSelections = typeof data.multi.min === 'number' ? data.multi.min : 1;
+        const maxSelections = typeof data.multi.max === 'number' ? data.multi.max : undefined;
+        if (!selectedSingleRecovery && selectedIds.length < minSelections) return false;
+        if (!selectedSingleRecovery && maxSelections !== undefined && selectedIds.length > maxSelections) return false;
+        return true;
+    }
+
+    if (typeof response.optionId !== 'string') return false;
+    return optionsById.has(response.optionId);
 };
 
 const buildOptionCombinations = (
@@ -695,65 +862,96 @@ const buildInteractionActions = (
     playerId: PlayerId,
 ): AiLegalAction[] | null => {
     const current = state.sys.interaction?.current as EngineInteractionDescriptor | undefined;
-    if (!current || current.playerId !== playerId) return null;
+    if (!current) return null;
+    if (current.playerId !== playerId) return [];
 
     if (current.kind === 'simple-choice') {
         const data = current.data as {
             options?: SummonerWarsInteractionOption[];
             multi?: PromptMultiConfig;
         };
-        const availableOptions = (data.options ?? []).filter((option): option is Required<Pick<SummonerWarsInteractionOption, 'id'>> & SummonerWarsInteractionOption => {
-            return typeof option.id === 'string' && option.disabled !== true;
+        const allOptions = data.options ?? [];
+        const availableOptions = allOptions.filter((option): option is Required<Pick<SummonerWarsInteractionOption, 'id'>> & SummonerWarsInteractionOption => {
+            return typeof option?.id === 'string' && option.disabled !== true;
         });
-        const minCount = Math.max(1, data.multi?.min ?? 1);
-        const maxCount = Math.max(minCount, data.multi?.max ?? minCount);
+        const minCount = typeof data.multi?.min === 'number' ? data.multi.min : 1;
+        const maxCount = typeof data.multi?.max === 'number' ? Math.max(minCount, data.multi.max) : minCount;
+        const actions: AiLegalAction[] = [];
 
-        if (minCount > 1 || maxCount > 1) {
-            const combos = buildOptionCombinations(
-                availableOptions.map((option) => option.id),
-                minCount,
-                maxCount,
-            );
-            return combos.map((combo, index) => {
-                const aiHints = combo.flatMap((optionId) => {
-                    const option = availableOptions.find((candidate) => candidate.id === optionId);
-                    return option ? buildInteractionOptionAiHints(state, playerId, current, option) : [];
-                });
-                return {
-                    actionId: createAiLegalActionId('interaction', current.id, ...combo),
+        if (data.multi) {
+            if (minCount === 0) {
+                actions.push({
+                    actionId: createAiLegalActionId('interaction', current.id, 'empty-selection'),
                     kind: 'interaction-choice',
-                    label: `交互组合 ${index + 1}`,
+                    label: '不选择任何项',
                     commands: [{
                         type: 'SYS_INTERACTION_RESPOND',
-                        payload: buildSimpleChoicePayload(combo, data.multi),
+                        payload: { interactionId: current.id, optionIds: [] },
+                    }],
+                    aiHints: [OPTIONAL_SKIP_AI_HINT],
+                    metadata: {
+                        interactionId: current.id,
+                        optionIds: [],
+                    },
+                });
+            }
+
+            if (maxCount > 0 && availableOptions.length > 0) {
+                const combos = buildOptionCombinations(
+                    availableOptions.map((option) => option.id),
+                    Math.max(1, minCount),
+                    Math.max(Math.max(1, minCount), maxCount),
+                );
+                actions.push(...combos.map((combo, index) => {
+                    const aiHints = combo.flatMap((optionId) => {
+                        const option = availableOptions.find((candidate) => candidate.id === optionId);
+                        return option ? buildInteractionOptionAiHints(state, playerId, current, option) : [];
+                    });
+                    return {
+                        actionId: createAiLegalActionId('interaction', current.id, ...combo),
+                        kind: 'interaction-choice',
+                        label: `交互组合 ${index + 1}`,
+                        commands: [{
+                            type: 'SYS_INTERACTION_RESPOND',
+                            payload: buildSimpleChoicePayload(current.id, combo, data.multi),
+                        }],
+                        ...(aiHints.length > 0 ? { aiHints } : {}),
+                        metadata: {
+                            interactionId: current.id,
+                            optionIds: combo,
+                        },
+                    };
+                }));
+            }
+        } else {
+            actions.push(...availableOptions.map((option, index) => {
+                const aiHints = buildInteractionOptionAiHints(state, playerId, current, option);
+                return {
+                    actionId: createAiLegalActionId('interaction', current.id, option.id),
+                    kind: 'interaction-choice',
+                    label: option.label ?? `交互选择 ${index + 1}`,
+                    commands: [{
+                        type: 'SYS_INTERACTION_RESPOND',
+                        payload: buildSimpleChoicePayload(current.id, [option.id], data.multi, option.value),
                     }],
                     ...(aiHints.length > 0 ? { aiHints } : {}),
                     metadata: {
                         interactionId: current.id,
-                        optionIds: combo,
+                        optionId: option.id,
+                        optionValue: option.value,
                     },
                 };
-            });
+            }));
         }
 
-        return availableOptions.map((option, index) => {
-            const aiHints = buildInteractionOptionAiHints(state, playerId, current, option);
-            return {
-                actionId: createAiLegalActionId('interaction', current.id, option.id),
-                kind: 'interaction-choice',
-                label: option.label ?? `交互选择 ${index + 1}`,
-                commands: [{
-                    type: 'SYS_INTERACTION_RESPOND',
-                    payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
-                }],
-                ...(aiHints.length > 0 ? { aiHints } : {}),
-                metadata: {
-                    interactionId: current.id,
-                    optionId: option.id,
-                    optionValue: option.value,
-                },
-            };
-        });
+        if (actions.length > 0) {
+            return actions;
+        }
+
+        return [buildEmergencyInteractionFallbackAction(
+            current,
+            resolveSimpleChoiceFallbackReason(allOptions, data.multi),
+        )];
     }
 
     if (current.kind === 'multistep-choice') {
@@ -781,7 +979,7 @@ const buildInteractionActions = (
         ];
     }
 
-    return null;
+    return [];
 };
 
 const buildSetupActions = (
@@ -1299,8 +1497,10 @@ export function buildSummonerWarsAiLegalActions(args: {
     const state = args.state as SummonerWarsState;
     const playerId = args.playerId;
     const interactionActions = buildInteractionActions(state, playerId);
-    if (interactionActions && interactionActions.length > 0) {
-        return interactionActions;
+    if (interactionActions !== null) {
+        return interactionActions.filter((action) =>
+            action.commands.every((command) => isCommandValid(state, playerId, command.type, command.payload)),
+        );
     }
 
     const phase = getCurrentPhase(state);

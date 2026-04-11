@@ -581,10 +581,28 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
  * 注意：实际状态由 ResponseWindowSystem 管理在 sys.responseWindow 中
  */
 const handleResponseWindowOpened: EventHandler<Extract<DiceThroneEvent, { type: 'RESPONSE_WINDOW_OPENED' }>> = (
-    state
+    state,
+    event
 ) => {
-    // 不修改核心状态，响应窗口由系统层管理
-    return state;
+    // 不修改响应窗口状态（由系统层管理）
+    // 但需要记录 afterAttackResolved 响应窗口已处理的攻击序号，避免重复弹窗
+    if (event.payload.windowType !== 'afterAttackResolved') {
+        return state;
+    }
+
+    const attackSequence = state.attackResolvedSequence ?? 0;
+    if (attackSequence <= 0) {
+        return state;
+    }
+
+    if (state.afterAttackResponseWindowSequence === attackSequence) {
+        return state;
+    }
+
+    return {
+        ...state,
+        afterAttackResponseWindowSequence: attackSequence,
+    };
 };
 
 /**

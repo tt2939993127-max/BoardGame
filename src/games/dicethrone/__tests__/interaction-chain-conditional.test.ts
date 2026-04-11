@@ -432,6 +432,44 @@ describe('card-dizzy afterAttackResolved 响应窗口链', () => {
         expect(result.passed).toBe(true);
     });
 
+    it('跳过后不应重复触发 afterAttackResolved 响应窗口', () => {
+        const runner = createRunner(fixedRandom);
+        const result = runner.run({
+            name: 'card-dizzy skip no reopen',
+            setup: createHeroMatchup('barbarian', 'barbarian', (core) => {
+                core.players['0'].hand = [{ ...cardDizzy }];
+            }),
+            commands: [
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '0'), cmd('ROLL_DICE', '0'), cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('SELECT_ABILITY', '0', { abilityId: 'slap-5' }),
+                cmd('ADVANCE_PHASE', '0'),
+                cmd('ROLL_DICE', '1'), cmd('CONFIRM_ROLL', '1'),
+                    cmd('SELECT_ABILITY', '1', { abilityId: 'meditation' }),
+                    cmd('ADVANCE_PHASE', '1'),
+                cmd('RESPONSE_PASS', '0'),
+            ],
+            expect: {
+                turnPhase: 'main2',
+                players: {
+                    '1': {
+                        hp: INITIAL_HEALTH - 8,
+                        statusEffects: { [STATUS_IDS.CONCUSSION]: 0 },
+                    },
+                },
+            },
+        });
+
+        const passIndex = result.steps.findIndex(step => step.commandType === 'RESPONSE_PASS');
+        const eventsAfterPass = passIndex >= 0
+            ? result.steps.slice(passIndex).flatMap(step => step.events)
+            : [];
+        expect(eventsAfterPass.filter(e => e === 'RESPONSE_WINDOW_OPENED').length).toBe(0);
+        expect(result.finalState.sys.responseWindow?.current).toBeUndefined();
+        expect(result.passed).toBe(true);
+    });
+
     it('伤害<8  不触发 afterAttackResolved 窗口', () => {
         const runner = createRunner(createQueuedRandom([1, 1, 1, 4, 4, 1, 1, 1]));
         const result = runner.run({

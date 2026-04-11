@@ -1433,6 +1433,97 @@ describe('召唤师战争本地 AI', () => {
         ]);
     });
 
+
+    it('simple-choice 交互响应应携带 interactionId，避免白名单全放行', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+        sys.interaction = {
+            ...sys.interaction,
+            current: {
+                id: 'sw-ai-simple-choice-id-guard',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    options: [
+                        { id: 'opt-a', label: '选项 A' },
+                    ],
+                },
+            } as any,
+        };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        expect(actions).toHaveLength(1);
+        expect(actions[0]?.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: {
+                interactionId: 'sw-ai-simple-choice-id-guard',
+                optionId: 'opt-a',
+            },
+        });
+    });
+
+    it('simple-choice 无可选项时应返回 emergency cancel，而不是回落普通 phase actions', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        core.phase = 'move';
+        core.currentPlayer = '0';
+        const sys = createInitialSystemState(['0', '1'], []);
+        sys.interaction = {
+            ...sys.interaction,
+            current: {
+                id: 'sw-ai-empty-choice',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    options: [],
+                },
+            } as any,
+        };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        expect(actions).toHaveLength(1);
+        expect(actions[0]?.kind).toBe('interaction-cancel');
+        expect(actions[0]?.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_CANCEL',
+            payload: {
+                interactionId: 'sw-ai-empty-choice',
+                reason: 'empty-options',
+            },
+        });
+    });
+
+    it('其他玩家交互存在时，当前 AI 不应回落到普通 phase actions', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        core.phase = 'move';
+        core.currentPlayer = '0';
+        const sys = createInitialSystemState(['0', '1'], []);
+        sys.interaction = {
+            ...sys.interaction,
+            current: {
+                id: 'sw-ai-other-player-choice',
+                kind: 'simple-choice',
+                playerId: '1',
+                data: {
+                    options: [{ id: 'opt-a', label: '选项 A' }],
+                },
+            } as any,
+        };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        expect(actions).toEqual([]);
+    });
+
     it('simple-choice 交互会生成目标语义 aiHint，并对跳过选项降权', () => {
         const core = createInitializedCore(['0', '1'], aiTestRandom);
         const sys = createInitialSystemState(['0', '1'], []);

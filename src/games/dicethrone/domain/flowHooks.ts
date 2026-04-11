@@ -275,6 +275,11 @@ function checkAfterAttackResponseWindow(
     // 先 apply 所有事件得到最新状态（含 lastResolvedAttackDamage）
     const stateAfterAttack = applyEvents(core, allEvents as DiceThroneEvent[], reduce);
 
+    const attackSequence = stateAfterAttack.attackResolvedSequence ?? 0;
+    if (attackSequence > 0 && stateAfterAttack.afterAttackResponseWindowSequence === attackSequence) {
+        return null;
+    }
+
     // 找到攻击方 ID
     const attackResolved = allEvents.find(e => e.type === 'ATTACK_RESOLVED') as
         Extract<DiceThroneEvent, { type: 'ATTACK_RESOLVED' }> | undefined;

@@ -570,7 +570,21 @@ export function scoreOneBase(
     }
 
     // 璁＄畻鎺掑悕锛堜娇鐢?reduce 鍚庣殑 core锛屽寘鍚?beforeScoring 鐨勪复鏃跺姏閲忎慨姝?+ ongoing 鍗″姏閲忚础鐚級
-    const updatedBase = updatedCore.bases[baseIndex];
+    const updatedBaseAfterBefore = updatedCore.bases[baseIndex];
+    // beforeScoring 处理后，如果该基地已不再达标，则本次计分直接跳过
+    // （例如 pirate_king 移走随从导致基地力量降到 breakpoint 以下）
+    if (!updatedBaseAfterBefore) {
+        if (ms) ms = { ...ms, core: updatedCore };
+        return { events, newBaseDeck: baseDeck, matchState: ms };
+    }
+    const effectiveBreakpointAfterBefore = getEffectiveBreakpoint(updatedCore, baseIndex);
+    const totalPowerAfterBefore = getTotalEffectivePowerOnBase(updatedCore, updatedBaseAfterBefore, baseIndex);
+    if (totalPowerAfterBefore < effectiveBreakpointAfterBefore) {
+        if (ms) ms = { ...ms, core: updatedCore };
+        return { events, newBaseDeck: baseDeck, matchState: ms };
+    }
+
+    const updatedBase = updatedBaseAfterBefore;
     const playerPowers = collectQualifiedPlayerPowers(updatedCore, updatedBase, baseIndex);
     const preliminaryRankings = buildBaseRankings(baseDef, playerPowers);
 
@@ -1486,6 +1500,23 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 payload: {},
                 timestamp: now,
             } as GameEvent);
+
+            // 进入计分阶段时，清理遗留的 onTurnStart 触发（避免跨阶段滞留触发）
+            const pendingTriggers = currentMatchState.core.triggerQueue;
+            if (pendingTriggers && pendingTriggers.length > 0) {
+                const filtered = pendingTriggers.filter((trigger) => trigger.timing !== 'onTurnStart');
+                if (filtered.length !== pendingTriggers.length) {
+                    currentMatchState = {
+                        ...currentMatchState,
+                        core: {
+                            ...currentMatchState.core,
+                            triggerQueue: filtered.length > 0 ? filtered : undefined,
+                        },
+                    };
+                    core = currentMatchState.core;
+                    hasSysUpdate = true;
+                }
+            }
 
             const eligibleIndices = getScoringEligibleBaseIndices(core);
             currentMatchState = eligibleIndices.length > 0

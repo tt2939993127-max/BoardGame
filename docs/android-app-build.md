@@ -324,16 +324,17 @@ node scripts/mobile/release-android.mjs ota --channel stable --force-update --fo
 
 如果走 GitHub Actions 自动化：
 
-- `main` 分支合入影响 H5 bundle 的改动后，会自动发布到非生产 channel，默认是 `edge`
-- `stable` / `gray` 通过 Actions `Android OTA Publish` 手动触发
-- `stable` 建议绑定 `android-ota-production` Environment 审批，避免误发
+- `main` 分支合入影响 H5 bundle 的改动后，会自动发布 **stable OTA**
+- `gray` / `edge` 仍可通过 Actions `Android OTA Publish` 手动触发（`stable` 也可手动重发）
+- 如需人工审批，可在**手动** OTA workflow 上绑定 `android-ota-production` Environment
+- **原生壳更新始终手动发包**，不走 `main` 自动流程
 - 手动触发时，workflow 只保留 `force_update`、`force_update_title`、`force_update_message`；原生版本门禁参数已移除
 
 推荐发布策略：
 
-1. 日常合并到 `main`：自动发 `edge`
-2. 群友 / 测试机验证：手动发 `gray`
-3. 确认稳定：手动发 `stable`
+1. 日常合并到 `main`：自动发 **stable OTA**
+2. 灰度/测试机验证：手动发 `gray` 或 `edge`
+3. 需要原生壳更新时：手动发 native update（与 OTA 独立）
 
 可选参数：
 

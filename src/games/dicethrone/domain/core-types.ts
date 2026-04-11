@@ -509,6 +509,16 @@ export interface DiceThroneCore {
      */
     lastResolvedAttackDamage?: number;
     /**
+     * 攻击结算序号（自增）
+     * 用于 afterAttackResolved 响应窗口去重，避免 autoContinue 重入反复弹窗
+     */
+    attackResolvedSequence?: number;
+    /**
+     * 已处理 afterAttackResolved 响应窗口的攻击序号
+     * 等于 attackResolvedSequence 时表示该次攻击的响应窗口已处理
+     */
+    afterAttackResponseWindowSequence?: number;
+    /**
      * 额外攻击进行中标志（晕眩 daze 触发）
      * 当防御方带有 daze 时，攻击结算后当前攻击者立即再次攻击
      * 此标志在额外攻击的 offensiveRoll 开始时设置，在进入 main2 时清除并恢复原活跃玩家

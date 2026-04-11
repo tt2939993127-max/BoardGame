@@ -429,6 +429,8 @@ export const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type:
         }
     }
 
+    const nextAttackResolvedSequence = (state.attackResolvedSequence ?? 0) + 1;
+
     return {
         ...state,
         activatingAbilityId: sourceAbilityId || defenseAbilityId,
@@ -438,6 +440,7 @@ export const handleAttackResolved: EventHandler<Extract<DiceThroneEvent, { type:
             : state.teamHealth,
         pendingAttack: null,
         lastResolvedAttackDamage: state.pendingAttack?.resolvedDamage ?? event.payload.totalDamage,
+        attackResolvedSequence: nextAttackResolvedSequence,
     };
 };
 

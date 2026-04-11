@@ -1482,7 +1482,7 @@ export const MatchRoom = () => {
         if (shouldAutoJoin || isAutoJoining || autoJoinGraceRef.current) return;
         // 如果 matchStatus 没有报错，说明房间仍然存在（可能只是游戏结束后从大厅列表移除了）
         // 此时不应该跳转，让玩家看到结果和再来一局按钮
-        if (!matchStatus.error) return;
+        if (matchStatus.errorKind !== 'not_found') return;
         if (handledMissingMatchRef.current === matchId) return;
         handledMissingMatchRef.current = matchId;
         clearMatchLocalState();
@@ -1492,7 +1492,7 @@ export const MatchRoom = () => {
             { dedupeKey: `matchRoom.missing.${matchId}` }
         );
         navigateBackToLobby();
-    }, [clearMatchLocalState, hasEverReceivedOnlineState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.error, navigateBackToLobby, shouldAutoJoin, toast]);
+    }, [clearMatchLocalState, hasEverReceivedOnlineState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.errorKind, navigateBackToLobby, shouldAutoJoin, toast]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();
@@ -1620,13 +1620,13 @@ export const MatchRoom = () => {
             setShouldShowMatchError(false);
             return;
         }
-        if (!matchStatus.error) {
+        if (matchStatus.errorKind !== 'not_found') {
             setShouldShowMatchError(false);
             return;
         }
         // 404 错误立即显示，无需延迟
         setShouldShowMatchError(true);
-    }, [hasEverReceivedOnlineState, isTutorialRoute, matchStatus.error]);
+    }, [hasEverReceivedOnlineState, isTutorialRoute, matchStatus.errorKind]);
 
     // 如果房间不存在，显示错误并自动跳转
     useEffect(() => {

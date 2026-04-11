@@ -170,6 +170,14 @@ export interface ExitMatchResult {
     error?: 'not_found' | 'forbidden' | 'server_error' | 'network' | 'unknown';
 }
 
+export type RejoinMatchError =
+    | 'not_found'
+    | 'room_full'
+    | 'forbidden'
+    | 'unauthorized'
+    | 'network'
+    | 'invalid_response';
+
 export function clearMatchCredentials(matchID: string): void {
     if (!matchID) return;
     localStorage.removeItem(`${MATCH_CREDENTIALS_PREFIX}${matchID}`);
@@ -515,9 +523,7 @@ export async function destroyMatch(
             }
 
             if (response.status >= 500) {
-                clearMatchCredentials(matchID);
-                clearOwnerActiveMatch(matchID);
-                return { success: true, cleanedLocal: true, error: 'server_error' };
+                return { success: false, error: 'server_error' };
             }
 
             const message = await response.text().catch(() => '');
@@ -547,6 +553,7 @@ export interface MatchStatus {
     players: PlayerStatus[];
     isLoading: boolean;
     error: string | null;
+    errorKind: 'not_found' | 'transient_unreachable' | null;
     myPlayerID: string | null;
     opponentName: string | null;
     opponentConnected: boolean;
@@ -561,6 +568,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
     const [players, setPlayers] = useState<PlayerStatus[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [errorKind, setErrorKind] = useState<'not_found' | 'transient_unreachable' | null>(null);
     const failureCountRef = useRef(0);
     const lastFailureAtRef = useRef<number | null>(null);
     // 用 ref 持有最新的 gameName/matchID，避免 fetchMatchStatus 依赖变化导致 useEffect 反复重建 interval
@@ -587,6 +595,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             failureCountRef.current = 0;
             lastFailureAtRef.current = null;
             setError(null);
+            setErrorKind(null);
         } catch (err: unknown) {
             console.error('获取房间状态失败:', err);
             // 切房间后旧请求报错也直接忽略
@@ -595,10 +604,11 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             const is404 = isMatchNotFoundError(err);
             if (is404) {
                 clearMatchCredentials(requestMatchID);
+                setErrorKind('not_found');
                 setError('房间不存在或已被删除');
                 return;
             }
-            
+             
             // 其他错误（网络问题等）需要连续 3 次失败才触发
             failureCountRef.current += 1;
             if (!lastFailureAtRef.current) {
@@ -606,8 +616,10 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             }
             const shouldExposeError = failureCountRef.current >= 3;
             if (shouldExposeError) {
-                setError(prev => prev ?? '房间不存在或已被删除');
+                setErrorKind('transient_unreachable');
+                setError('房间暂时不可达，请稍后重试');
             } else {
+                setErrorKind(null);
                 setError(null);
             }
         } finally {
@@ -622,6 +634,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
         failureCountRef.current = 0;
         lastFailureAtRef.current = null;
         setError(null);
+        setErrorKind(null);
         setPlayers([]);
         setIsLoading(Boolean(matchID));
     }, [matchID, gameName]);
@@ -658,6 +671,7 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
         players,
         isLoading,
         error,
+        errorKind,
         myPlayerID,
         opponentName: opponent?.name || null,
         opponentConnected: opponent?.isConnected || false,
@@ -715,16 +729,23 @@ export async function exitMatch(
 export async function rejoinMatch(
     gameName: string,
     matchID: string,
-    playerID: string,
+    playerID: string | undefined,
     playerName: string,
     options?: { guestId?: string }
-): Promise<{ success: boolean; credentials?: string }> {
+): Promise<{ success: boolean; playerID?: string; credentials?: string; error?: RejoinMatchError; status?: number }> {
     try {
-        const { playerCredentials } = await matchApi.joinMatch(gameName, matchID, {
+        const { playerCredentials, playerID: assignedPlayerID } = await matchApi.joinMatch(gameName, matchID, {
             playerID,
             playerName,
             data: options?.guestId ? { guestId: options.guestId } : undefined,
         });
+        const resolvedPlayerID = assignedPlayerID ?? playerID;
+        if (!playerCredentials || !resolvedPlayerID) {
+            return {
+                success: false,
+                error: 'invalid_response',
+            };
+        }
 
         // 保存新凭证
         const storageKey = `match_creds_${matchID}`;
@@ -741,17 +762,32 @@ export async function rejoinMatch(
 
         persistMatchCredentials(matchID, {
             ...(existing || {}),
-            playerID,
+            playerID: resolvedPlayerID,
             credentials: playerCredentials,
             matchID,
             gameName,
             playerName,
         });
 
-        return { success: true, credentials: playerCredentials };
-    } catch (err) {
+        return { success: true, playerID: resolvedPlayerID, credentials: playerCredentials };
+    } catch (err: unknown) {
         console.error('重新加入房间失败:', err);
         clearMatchCredentials(matchID);
-        return { success: false };
+        const status = typeof err === 'object' && err !== null && 'status' in err
+            ? (err as { status?: unknown }).status
+            : undefined;
+        if (status === 404) {
+            return { success: false, error: 'not_found', status };
+        }
+        if (status === 409) {
+            return { success: false, error: 'room_full', status };
+        }
+        if (status === 403) {
+            return { success: false, error: 'forbidden', status };
+        }
+        if (status === 401) {
+            return { success: false, error: 'unauthorized', status };
+        }
+        return { success: false, error: 'network', status: typeof status === 'number' ? status : undefined };
     }
 }

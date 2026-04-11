@@ -254,10 +254,10 @@ describe('StatusEffectsIcons', () => {
         expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/assets/'))).toBe(true);
     });
 
-    it('骰图切片坐标应匹配旧版 3x3 atlas 布局', () => {
-        expect(DICE_BG_SIZE).toBe('300% 300%');
-        expect(getDiceSpritePosition(2)).toEqual({ xPos: 0, yPos: 50 });
-        expect(getDiceSpritePosition(5)).toEqual({ xPos: 100, yPos: 50 });
+    it('骰图切片坐标应匹配 2x3 atlas 布局', () => {
+        expect(DICE_BG_SIZE).toBe('200% 300%');
+        expect(getDiceSpritePosition(2)).toEqual({ xPos: 100, yPos: 0 });
+        expect(getDiceSpritePosition(5)).toEqual({ xPos: 0, yPos: 100 });
         expect(getDiceSpritePosition(6)).toEqual({ xPos: 100, yPos: 100 });
     });
 

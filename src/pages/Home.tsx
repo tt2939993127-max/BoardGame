@@ -897,7 +897,7 @@ export const Home = () => {
                 // 无凭证：让服务端直接分配可用席位
                 const playerName = user?.username || getGuestName();
                 const guestId = user?.id ? undefined : getGuestId();
-                const { success, playerID: assignedPlayerID } = await rejoinMatch(
+                const { success, playerID: assignedPlayerID, error } = await rejoinMatch(
                     gameId,
                     activeMatch.matchID,
                     undefined,
@@ -909,7 +909,25 @@ export const Home = () => {
                         // 失败不阻塞进房
                     });
                     navigate(`/play/${gameId}/match/${activeMatch.matchID}?playerID=${assignedPlayerID}`);
+                    return;
                 }
+
+                if (error === 'not_found' || error === 'forbidden' || error === 'unauthorized') {
+                    clearMatchCredentials(activeMatch.matchID);
+                    clearOwnerActiveMatch(activeMatch.matchID);
+                    setActiveMatch(null);
+                    setMyMatchRole(null);
+                    setLocalStorageTick((t) => t + 1);
+                    toastError({ kind: 'i18n', key: 'error.ownerClaimFailed', ns: 'lobby' });
+                    return;
+                }
+
+                if (error === 'room_full') {
+                    toastError({ kind: 'i18n', key: 'error.roomFull', ns: 'lobby' });
+                    return;
+                }
+
+                toastError({ kind: 'i18n', key: 'error.joinRoomFailed', ns: 'lobby' });
             } catch {
                 // 忽略错误
             }

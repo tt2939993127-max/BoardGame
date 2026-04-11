@@ -28,6 +28,7 @@ import AdminGuard from './components/auth/AdminGuard';
 import { MobileOrientationGuard } from './components/common/MobileOrientationGuard';
 import { installGlobalErrorContextCapture } from './lib/feedback/errorContext';
 import { isNativeAndroidRuntime } from './lib/mobile/androidRuntime';
+import { HOME_V2_PREVIEW_PATH } from './lib/homeV2Routing';
 import { AdminShellSkeleton } from './pages/admin/components/AdminSkeletons';
 
 import { HomeEntry } from './pages/HomeEntry';
@@ -66,6 +67,9 @@ const UgcSandboxPage = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./ugc
 const UgcRuntimeViewPage = ENABLE_INTERNAL_DEVTOOLS ? React.lazy(() => import('./ugc/runtime/RuntimeViewPage')) : null;
 const HomeV2AuthoringPage = ENABLE_INTERNAL_DEVTOOLS
   ? React.lazy(() => import('./pages/HomeV2Draft').then(m => ({ default: m.HomeV2Draft })))
+  : null;
+const HomeV2PreviewPage = ENABLE_INTERNAL_DEVTOOLS
+  ? React.lazy(() => import('./pages/HomeV2').then(m => ({ default: m.HomeV2 })))
   : null;
 const AdminLayout = React.lazy(() => import('./pages/admin/components/AdminLayout'));
 const AdminDashboard = React.lazy(() => import('./pages/admin/index'));
@@ -171,6 +175,9 @@ const AppContent = () => {
                     )}
                     {ENABLE_INTERNAL_DEVTOOLS && HomeV2AuthoringPage && (
                       <Route path="/dev/home-v2-authoring" element={<React.Suspense fallback={null}><HomeV2AuthoringPage /></React.Suspense>} />
+                    )}
+                    {ENABLE_INTERNAL_DEVTOOLS && HomeV2PreviewPage && (
+                      <Route path={HOME_V2_PREVIEW_PATH} element={<React.Suspense fallback={null}><HomeV2PreviewPage /></React.Suspense>} />
                     )}
                     {ENABLE_INTERNAL_DEVTOOLS && UgcBuilderPage && (
                       <Route path="/dev/ugc" element={<React.Suspense fallback={null}><UgcBuilderPage /></React.Suspense>} />
