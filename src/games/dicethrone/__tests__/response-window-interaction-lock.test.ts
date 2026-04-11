@@ -173,6 +173,41 @@ describe('modifyDie 严格超限回归', () => {
         const completedDieIds = (thirdModify.finalState.sys.interaction?.current?.data as any)?.completedDieIds;
         expect(completedDieIds).toEqual([0, 1]);
     });
+
+    it('card-unexpected 重复修改同一颗骰子时，应拒绝重复消费且不得提前完成交互', () => {
+        const random = createQueuedRandom([3, 3, 3, 3, 3]);
+        const runner = createRunner(random, true);
+
+        const setupResult = runner.run({
+            name: 'card-unexpected 重复修改同一颗骰子',
+            setup: createSetupWithHand(['card-unexpected'], {
+                playerId: '1',
+                cp: 10,
+                mutate: (core) => {
+                    core.players['0'].hand = [];
+                    core.players['0'].deck = [];
+                    core.players['1'].deck = [];
+                },
+            }),
+            commands: [
+                ...advanceTo('offensiveRoll'),
+                cmd('ROLL_DICE', '0'),
+                cmd('CONFIRM_ROLL', '0'),
+                cmd('PLAY_CARD', '1', { cardId: 'card-unexpected' }),
+            ],
+        });
+
+        runner.setState(setupResult.finalState);
+
+        const firstModify = runner.dispatch('MODIFY_DIE', { playerId: '1', dieId: 0, newValue: 4 });
+        expect(firstModify.success).toBe(true);
+
+        const secondModify = runner.dispatch('MODIFY_DIE', { playerId: '1', dieId: 0, newValue: 5 });
+        expect(secondModify.success).toBe(false);
+        expect(secondModify.error).toBe('die_already_completed');
+        expect(secondModify.finalState.sys.interaction?.current?.kind).toBe('multistep-choice');
+        expect((secondModify.finalState.sys.interaction?.current?.data as any)?.completedDieIds).toEqual([0]);
+    });
 });
 
 describe('响应窗口交互锁定：骰子重掷类（selectDie）', () => {

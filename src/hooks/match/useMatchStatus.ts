@@ -178,6 +178,39 @@ export type RejoinMatchError =
     | 'network'
     | 'invalid_response';
 
+export interface RejoinMatchResult {
+    success: boolean;
+    playerID?: string;
+    credentials?: string;
+    error?: RejoinMatchError;
+    status?: number;
+}
+
+const resolveRejoinMatchError = (err: unknown): { error: Exclude<RejoinMatchError, 'invalid_response'>; status?: number } => {
+    if (isMatchNotFoundError(err)) {
+        return { error: 'not_found', status: 404 };
+    }
+    const status = typeof err === 'object' && err !== null && 'status' in err
+        ? (err as { status?: number }).status
+        : undefined;
+    const code = typeof err === 'object' && err !== null && 'code' in err
+        ? String((err as { code?: unknown }).code ?? '')
+        : '';
+    if (status === 401 || code === 'INVALID_TOKEN') {
+        return { error: 'unauthorized', status: status ?? 401 };
+    }
+    if (status === 403) {
+        return { error: 'forbidden', status };
+    }
+    if (status === 409 || code === 'ROOM_FULL') {
+        return { error: 'room_full', status: status ?? 409 };
+    }
+    return {
+        error: 'network',
+        status: typeof status === 'number' ? status : undefined,
+    };
+};
+
 export function clearMatchCredentials(matchID: string): void {
     if (!matchID) return;
     localStorage.removeItem(`${MATCH_CREDENTIALS_PREFIX}${matchID}`);
@@ -732,7 +765,7 @@ export async function rejoinMatch(
     playerID: string | undefined,
     playerName: string,
     options?: { guestId?: string }
-): Promise<{ success: boolean; playerID?: string; credentials?: string; error?: RejoinMatchError; status?: number }> {
+): Promise<RejoinMatchResult> {
     try {
         const { playerCredentials, playerID: assignedPlayerID } = await matchApi.joinMatch(gameName, matchID, {
             playerID,
@@ -773,21 +806,7 @@ export async function rejoinMatch(
     } catch (err: unknown) {
         console.error('重新加入房间失败:', err);
         clearMatchCredentials(matchID);
-        const status = typeof err === 'object' && err !== null && 'status' in err
-            ? (err as { status?: unknown }).status
-            : undefined;
-        if (status === 404) {
-            return { success: false, error: 'not_found', status };
-        }
-        if (status === 409) {
-            return { success: false, error: 'room_full', status };
-        }
-        if (status === 403) {
-            return { success: false, error: 'forbidden', status };
-        }
-        if (status === 401) {
-            return { success: false, error: 'unauthorized', status };
-        }
-        return { success: false, error: 'network', status: typeof status === 'number' ? status : undefined };
+        const resolvedError = resolveRejoinMatchError(err);
+        return { success: false, ...resolvedError };
     }
 }

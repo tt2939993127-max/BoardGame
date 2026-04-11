@@ -1589,4 +1589,47 @@ describe('武士荣誉 (Honor) Token', () => {
         expect(thirdUseValidation.valid).toBe(false);
         expect(thirdUseValidation.error).toBe('invalid_amount');
     });
+
+    it('USE_TOKEN 在响应时机不匹配时应被 validate 拒绝', () => {
+        const core = {
+            players: {
+                '0': {
+                    tokens: { [TOKEN_IDS.CRIT]: 1 },
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                    statusEffects: {},
+                    damageShields: [],
+                },
+                '1': {
+                    tokens: {},
+                    resources: { [RESOURCE_IDS.HP]: 50 },
+                    statusEffects: {},
+                    damageShields: [],
+                },
+            },
+            tokenDefinitions: ALL_TOKEN_DEFINITIONS,
+            pendingDamage: {
+                id: 'crit-wrong-timing',
+                sourcePlayerId: '0',
+                targetPlayerId: '1',
+                originalDamage: 5,
+                currentDamage: 5,
+                responseType: 'beforeDamageReceived',
+                responderId: '0',
+                isFullyEvaded: false,
+            },
+        } as any;
+
+        const validation = validateCommand(
+            core,
+            {
+                type: 'USE_TOKEN',
+                playerId: '0',
+                payload: { tokenId: TOKEN_IDS.CRIT, amount: 1 },
+            } as any,
+            'main1' as any,
+        );
+
+        expect(validation.valid).toBe(false);
+        expect(validation.error).toBe('invalid_token_timing');
+    });
 });

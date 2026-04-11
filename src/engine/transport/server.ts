@@ -1768,7 +1768,7 @@ export class GameTransportServer {
 
             if (
                 seatControllerType !== 'human'
-                && commandType === INTERACTION_COMMANDS.RESPOND
+                && (commandType === INTERACTION_COMMANDS.RESPOND || commandType === INTERACTION_COMMANDS.CANCEL)
                 && eventType === INTERACTION_EVENTS.CANCELLED
             ) {
                 const payload = (event as GameEvent & {

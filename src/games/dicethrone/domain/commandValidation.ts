@@ -32,8 +32,6 @@ import type {
     RemoveStatusCommand,
     TransferStatusCommand,
     ResolveInteractionCommand,
-    ConfirmInteractionCommand,
-    CancelInteractionCommand,
     UseTokenCommand,
     SkipTokenResponseCommand,
     UsePurifyCommand,
@@ -323,6 +321,10 @@ const validateConfirmRoll = (
     
     if (state.rollCount === 0) {
         return fail('no_roll_yet');
+    }
+
+    if (state.rollConfirmed) {
+        return fail('roll_already_confirmed');
     }
     
     return ok();

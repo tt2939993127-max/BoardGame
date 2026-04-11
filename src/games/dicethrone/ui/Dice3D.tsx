@@ -56,6 +56,8 @@ export const Dice3D = ({
     definitionId,
 }: Dice3DProps) => {
     const translateZ = `calc(${size} / 2)`;
+    const rootRef = React.useRef<HTMLDivElement | null>(null);
+    const lastInspectKeyRef = React.useRef<string | null>(null);
 
     const faces = [
         { id: 1, trans: `translateZ(${translateZ})` },
@@ -89,6 +91,53 @@ export const Dice3D = ({
         });
     }, [characterId, definitionId, locale, spriteUrl]);
 
+    const isSpotlight = variant === 'spotlight';
+    const resolvedSpriteUrl = spriteUrl;
+    const isSpriteReady = Boolean(resolvedSpriteUrl);
+
+    React.useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const root = rootRef.current;
+        if (!root) return;
+        const inspectKey = [
+            resolvedSpriteUrl ?? 'null',
+            isSpriteReady ? 'ready' : 'not-ready',
+            size,
+            value,
+        ].join('|');
+        if (lastInspectKeyRef.current === inspectKey) return;
+        lastInspectKeyRef.current = inspectKey;
+
+        const faceEl = root.querySelector('[data-face-id="1"]') as HTMLElement | null;
+        if (!faceEl) {
+            dice3DLogger.warn('sprite-inspect-missing-face', {
+                definitionId: definitionId ?? null,
+                characterId,
+                locale: locale ?? null,
+            });
+            return;
+        }
+
+        const style = window.getComputedStyle(faceEl);
+        dice3DLogger.info('sprite-inspect', {
+            definitionId: definitionId ?? null,
+            characterId,
+            locale: locale ?? null,
+            spriteUrl: resolvedSpriteUrl ?? null,
+            isSpriteReady,
+            size,
+            value,
+            diceBgSize: DICE_BG_SIZE,
+            backgroundImage: style.backgroundImage,
+            backgroundSize: style.backgroundSize,
+            backgroundPosition: style.backgroundPosition,
+            backgroundRepeat: style.backgroundRepeat,
+            opacity: style.opacity,
+            visibility: style.visibility,
+            display: style.display,
+        });
+    }, [characterId, definitionId, isSpriteReady, locale, resolvedSpriteUrl, size, value]);
+
     const getFinalTransform = (val: number) => {
         switch (val) {
             case 1: return 'rotateX(0deg) rotateY(0deg)';
@@ -101,9 +150,6 @@ export const Dice3D = ({
         }
     };
 
-    const isSpotlight = variant === 'spotlight';
-    const resolvedSpriteUrl = spriteUrl;
-    const isSpriteReady = Boolean(resolvedSpriteUrl);
     const animationClass = isSpotlight ? 'animate-dice3d-bonus-tumble' : 'animate-dice3d-tumble';
     const borderRadius = isSpotlight ? 'rounded-[1vw]' : 'rounded-[0.5vw]';
     const borderStyle = isSpotlight ? 'border-2 border-slate-600/50' : 'border border-slate-700/50';
@@ -112,6 +158,7 @@ export const Dice3D = ({
 
     return (
         <div
+            ref={rootRef}
             className="relative dice3d-perspective"
             style={{ width: size, height: size }}
             data-testid="dice-3d"

@@ -282,6 +282,10 @@ export interface InteractionDescriptor {
     /** 当前被操作的骰池归属玩家 */
     diceOwnerId?: PlayerId;
     targetOpponentDice?: boolean;
+    /** multistep 骰子交互允许操作的骰子 ID 列表 */
+    allowedDieIds?: number[];
+    /** multistep 骰子交互已完成的骰子 ID（用于去重与校验） */
+    completedDieIds?: number[];
     /** 为 true 时，UI 只允许选择已有状态效果/token 的玩家（如"移除所有状态"） */
     requiresTargetWithStatus?: boolean;
 }
