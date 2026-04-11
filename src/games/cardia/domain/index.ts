@@ -87,10 +87,11 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
     /**
      * 游戏结束判定
      * 
-     * ⚠️ 重要：不同胜利条件在不同阶段检查
-     * - 阶段1（play）：无牌可打胜利条件
-     * - 阶段2（ability）：特殊胜利条件（精灵、机械精灵等能力引发的胜利）
-     * - 阶段3（end）：标准印戒胜利条件
+     * ⚠️ 重要：印戒胜利条件在所有阶段都检查（修复：之前只在 end 阶段检查，导致游戏继续到 7+ 印戒）
+     * - 优先级1：直接胜利标记（gameWonBy）
+     * - 优先级2：印戒胜利条件（任何阶段）
+     * - 优先级3：无牌可打胜利条件（play 阶段）
+     * - 优先级4：特殊能力胜利条件（ability 阶段）
      */
     isGameOver: (core): GameOverResult | undefined => {
         // 优先检查直接胜利标记（精灵能力等）
@@ -105,7 +106,39 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
             return player.playedCards.reduce((sum: number, card: PlayedCard) => sum + card.signets, 0);
         };
         
-        // ⚠️ 阶段1（打出卡牌）：检查无牌可打的胜利条件
+        // ⚠️ 关键修复：在所有阶段都检查印戒胜利条件
+        // 原因：印戒在 play 阶段授予（遭遇解析时），但之前只在 end 阶段检查，导致游戏继续到 7+ 印戒
+        const signetsCount: Record<PlayerId, number> = {};
+        for (const playerId of core.playerOrder) {
+            const player = core.players[playerId];
+            signetsCount[playerId] = getTotalSignets(player);
+        }
+        
+        // 找出所有达到目标印戒数的玩家
+        const playersWithEnoughSignets = core.playerOrder.filter(
+            pid => signetsCount[pid] >= core.targetSignets
+        );
+        
+        if (playersWithEnoughSignets.length > 0) {
+            // 如果多个玩家同时达到目标，比较印戒数量
+            if (playersWithEnoughSignets.length > 1) {
+                const maxSignets = Math.max(...playersWithEnoughSignets.map(pid => signetsCount[pid]));
+                const winnersWithMaxSignets = playersWithEnoughSignets.filter(
+                    pid => signetsCount[pid] === maxSignets
+                );
+                
+                // 如果有多个玩家拥有相同的最高印戒数，判定为平局
+                if (winnersWithMaxSignets.length > 1) {
+                    return { draw: true };
+                }
+                // 只有一个玩家拥有最高印戒数，该玩家获胜
+                return { winner: winnersWithMaxSignets[0] };
+            }
+            // 只有一个玩家达到目标，该玩家获胜
+            return { winner: playersWithEnoughSignets[0] };
+        }
+        
+        // ⚠️ 阶段特定检查：无牌可打的胜利条件（仅 play 阶段）
         if (core.phase === 'play') {
             const playersWithoutCards = core.playerOrder.filter(playerId => {
                 const player = core.players[playerId];
@@ -138,12 +171,9 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
                     return { draw: true };
                 }
             }
-            
-            // play 阶段其他情况不触发胜利
-            return undefined;
         }
         
-        // ⚠️ 阶段2（能力阶段）：检查特殊胜利条件（能力引发的胜利）
+        // ⚠️ 阶段特定检查：特殊能力胜利条件（仅 ability 阶段）
         if (core.phase === 'ability') {
             for (const playerId of core.playerOrder) {
                 const player = core.players[playerId];
@@ -169,49 +199,9 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
                     }
                 }
             }
-            
-            // ability 阶段没有特殊胜利条件触发，游戏继续
-            return undefined;
         }
         
-        // ⚠️ 阶段3（回合结束阶段）：检查标准印戒胜利条件
-        if (core.phase !== 'end') {
-            // 非 play、ability、end 阶段，不触发任何胜利条件
-            return undefined;
-        }
-        
-        // 阶段3（回合结束阶段）：检查标准印戒胜利条件
-        const signetsCount: Record<PlayerId, number> = {};
-        for (const playerId of core.playerOrder) {
-            const player = core.players[playerId];
-            signetsCount[playerId] = getTotalSignets(player);
-        }
-        
-        // 找出所有达到目标印戒数的玩家
-        const playersWithEnoughSignets = core.playerOrder.filter(
-            pid => signetsCount[pid] >= core.targetSignets
-        );
-        
-        if (playersWithEnoughSignets.length > 0) {
-            // 如果多个玩家同时达到目标，比较印戒数量
-            if (playersWithEnoughSignets.length > 1) {
-                const maxSignets = Math.max(...playersWithEnoughSignets.map(pid => signetsCount[pid]));
-                const winnersWithMaxSignets = playersWithEnoughSignets.filter(
-                    pid => signetsCount[pid] === maxSignets
-                );
-                
-                // 如果有多个玩家拥有相同的最高印戒数，判定为平局
-                if (winnersWithMaxSignets.length > 1) {
-                    return { draw: true };
-                }
-                // 只有一个玩家拥有最高印戒数，该玩家获胜
-                return { winner: winnersWithMaxSignets[0] };
-            }
-            // 只有一个玩家达到目标，该玩家获胜
-            return { winner: playersWithEnoughSignets[0] };
-        }
-        
-        // end 阶段没有达到印戒胜利条件，游戏继续
+        // 没有任何胜利条件触发，游戏继续
         return undefined;
     },
 };
