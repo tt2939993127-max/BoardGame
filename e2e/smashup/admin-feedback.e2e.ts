@@ -454,7 +454,7 @@ test.describe('后台反馈管理 E2E', () => {
         await expect(page.getByTestId('feedback-copy-ai-payload')).toBeVisible();
 
         await page.screenshot({
-            path: 'test-results/admin-feedback-developer-readonly.png',
+            path: 'test-results/_shared/admin-feedback-developer-readonly.png',
             fullPage: true,
         });
     });

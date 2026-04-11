@@ -31,7 +31,7 @@
 
 截图路径：`D:\gongzuo\webgame\BoardGame\test-results\admin-feedback-ai-payload.png`
 
-![管理员反馈页](../test-results/admin-feedback-ai-payload.png)
+![管理员反馈页](../test-results/_shared/admin-feedback-ai-payload.png)
 
 截图分析：
 
@@ -43,7 +43,7 @@
 
 截图路径：`D:\gongzuo\webgame\BoardGame\test-results\admin-feedback-developer-readonly.png`
 
-![开发者反馈页只读视角](../test-results/admin-feedback-developer-readonly.png)
+![开发者反馈页只读视角](../test-results/_shared/admin-feedback-developer-readonly.png)
 
 截图分析：
 
