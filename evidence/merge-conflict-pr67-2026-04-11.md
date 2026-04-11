@@ -24,3 +24,8 @@
 
 ## 备注
 - wildlife_preserve 相关用例已重新通过：不再阻止枪手决斗消灭失败的敌方随从。
+
+## Merge Audit
+- merge commit: 9ec6cc54
+- merge:audit: 12 files checked / 混合结果 11 / 与两侧相同 1
+- merge:audit:strict: 通过（无单边结果）
