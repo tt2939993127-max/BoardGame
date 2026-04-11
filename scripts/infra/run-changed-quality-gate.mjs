@@ -32,6 +32,10 @@ const PRE_PUSH_CORE_TARGET_GROUPS = [
     targets: ['src/components', 'src/pages'],
   },
 ];
+const ESLINT_WARNING_DELTA_IGNORE_PATTERNS = [
+  /^e2e\//,
+  /(^|\/)__tests__\//,
+];
 const VITEST_SAFE_ENTRY = ['scripts/infra/vitest-cli-safe.mjs'];
 const VITEST_SHARDED_TARGETS = new Map([
   [
@@ -189,6 +193,10 @@ function isLintTarget(file) {
     && !file.startsWith('temp/')
     && !file.startsWith('dist/')
     && !file.startsWith('test-results/');
+}
+
+function isLintWarningDeltaIgnored(file) {
+  return ESLINT_WARNING_DELTA_IGNORE_PATTERNS.some((pattern) => pattern.test(file));
 }
 
 function isEncodingTarget(file) {
@@ -556,6 +564,9 @@ function collectCommands(files, baseRef, affectsTypecheck) {
   const lintCandidateFiles = isPrePushMode
     ? prePushLintFiles.filter(isLintTarget)
     : files.filter(isLintTarget);
+  const lintWarningDeltaFiles = isPrePushMode
+    ? lintCandidateFiles.filter((file) => !isLintWarningDeltaIgnored(file))
+    : lintCandidateFiles;
   const lintFiles = lintCandidateFiles.filter(fileExistsInWorkspace);
   const coreSourceChanged = hasAny(
     files,
@@ -574,13 +585,15 @@ function collectCommands(files, baseRef, affectsTypecheck) {
     });
   }
 
-  if (isPrePushMode && lintCandidateFiles.length > 0) {
+  if (isPrePushMode && lintWarningDeltaFiles.length > 0) {
     commands.push({
       label: 'ESLint warning delta',
-      reason: 'pre-push 模式下仅阻止新增 warning，同时继续阻止当前 errors',
+      reason: 'pre-push 模式下仅阻止新增 warning，同时继续阻止当前 errors（忽略 e2e 与 __tests__ 的 warning 计数）',
       command: 'internal:eslint-warning-delta',
-      args: lintCandidateFiles,
+      args: lintWarningDeltaFiles,
     });
+  } else if (isPrePushMode && lintCandidateFiles.length > 0 && lintWarningDeltaFiles.length === 0) {
+    console.log('[changed-quality-gate] pre-push lint warning 计数：所有 lint 目标均被忽略（e2e 或 __tests__），跳过 warning delta。');
   } else if (lintFiles.length > 0) {
     const eslintBaseArgs = ['eslint', '--max-warnings', '999'];
     const lintChunks = splitFilesForCommand(eslintBaseArgs, lintFiles);
