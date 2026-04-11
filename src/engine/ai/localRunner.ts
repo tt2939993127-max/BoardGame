@@ -187,8 +187,22 @@ export async function resolveNextAiAction(
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
         if (seatController.type === 'human') continue;
 
+        const hasSeatResolver = typeof args.visibleStateResolver === 'function';
         const resolvedSeatState = args.visibleStateResolver?.(playerId);
-        if (resolvedSeatState === null) {
+        if (hasSeatResolver && !resolvedSeatState) {
+            continue;
+        }
+        const seatInteraction = resolvedSeatState?.sys?.interaction as {
+            current?: unknown;
+            isBlocked?: unknown;
+        } | undefined;
+        const seatResponseWindow = resolvedSeatState?.sys?.responseWindow as { current?: unknown } | undefined;
+        if (
+            resolvedSeatState
+            && seatInteraction?.current == null
+            && seatInteraction?.isBlocked === true
+            && !seatResponseWindow?.current
+        ) {
             continue;
         }
 

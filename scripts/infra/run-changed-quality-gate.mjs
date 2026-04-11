@@ -123,6 +123,10 @@ function dedupeValues(values) {
   return [...new Set(values)];
 }
 
+function fileExistsInWorkspace(file) {
+  return existsSync(path.resolve(repoRoot, file));
+}
+
 function splitFilesForCommand(baseArgs, files, maxCommandLength = 7000) {
   if (files.length === 0) return [];
 
@@ -440,7 +444,7 @@ function collectScopedVitestTargets(files, targets) {
       .map((file) => resolveScopedVitestTarget(file, targets, coverage))
       .filter(Boolean),
   );
-  return expandVitestTargetsToTestFiles(scopedTargets, coverage);
+  return expandVitestTargetsToTestFiles(scopedTargets, coverage).filter(fileExistsInWorkspace);
 }
 
 function createVitestCommands({ label, reason, target, vitestArgs }) {
@@ -464,14 +468,14 @@ function createVitestCommands({ label, reason, target, vitestArgs }) {
 
 function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
-  const lintFiles = files.filter(isLintTarget);
+  const lintFiles = files.filter((file) => isLintTarget(file) && fileExistsInWorkspace(file));
   const coreSourceChanged = hasAny(
     files,
     isPrePushMode ? affectsPrePushGlobalVitest : isCoreSourceFile,
   );
-  const coreTestFiles = files.filter(isNonGameTestFile);
+  const coreTestFiles = files.filter((file) => isNonGameTestFile(file) && fileExistsInWorkspace(file));
   const gameSourceIds = collectGameIds(files, { sourceOnly: true });
-  const gameTestFiles = files.filter((file) => isGameFile(file) && isTestFile(file));
+  const gameTestFiles = files.filter((file) => isGameFile(file) && isTestFile(file) && fileExistsInWorkspace(file));
 
   if (hasAny(files, affectsTypecheck)) {
     commands.push({
