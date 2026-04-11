@@ -31,9 +31,14 @@ registerCardPreviewGetter('cardia', getCardiaCardPreviewRef);
 import './assets';
 import { registerCriticalImageResolver } from '../../core';
 import { cardiaCriticalImageResolver } from './criticalImageResolver';
+import { registerGameAiRuntime } from '../../engine/ai';
+import { cardiaAiRuntime } from './ai';
 
 // 注册关键图片解析器
 registerCriticalImageResolver('cardia', cardiaCriticalImageResolver);
+
+// 注册 AI Runtime
+registerGameAiRuntime(cardiaAiRuntime);
 
 // 导入所有能力组以注册执行器（必须在游戏引擎创建前执行）
 import './domain/abilities/group1-resources';
