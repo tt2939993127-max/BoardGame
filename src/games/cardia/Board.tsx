@@ -508,8 +508,8 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
             logger.debug('[CardiaBoard] handlePlayCard blocked: already played');
             return;
         }
-        logger.debug('[CardiaBoard] Dispatching PLAY_CARD', { cardUid });
-        dispatch(CARDIA_COMMANDS.PLAY_CARD, { cardUid });
+        logger.debug('[CardiaBoard] Dispatching PLAY_CARD', { cardUid, slotIndex: core.turnNumber - 1 });
+        dispatch(CARDIA_COMMANDS.PLAY_CARD, { cardUid, slotIndex: core.turnNumber - 1 });
     };
     
     const handleActivateAbility = () => {
