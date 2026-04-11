@@ -627,54 +627,11 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
             // 注意：每个命令是独立的 pipeline 调用，不能靠单次 afterEvents 的事件数量判断。
             const current = newState.sys.interaction.current;
             if (current?.kind === 'multistep-choice') {
-                const data = current.data as MultistepChoiceData & { completedSteps?: number };
-                if (data.maxSteps !== undefined) {
-                    const dieModifiedCount = events.filter(e => e.type === 'DIE_MODIFIED').length;
-                    const dieRerolledCount = events.filter(e => e.type === 'DIE_REROLLED').length;
-                    const newSteps = dieModifiedCount + dieRerolledCount;
-                    if (newSteps > 0) {
-                        const completedSteps = (data.completedSteps ?? 0) + newSteps;
-                        if (completedSteps >= data.maxSteps) {
-                            // 达到最大步骤数，自动 resolve
-                            newState = resolveInteraction(newState);
-                            nextEvents.push({
-                                type: INTERACTION_EVENTS.CONFIRMED,
-                                payload: {
-                                    interactionId: current.id,
-                                    playerId: current.playerId,
-                                    sourceId: (current.data as any)?.sourceId,
-                                },
-                                timestamp: events[events.length - 1]?.timestamp ?? 0,
-                            });
-                        } else {
-                            // 未达到最大步骤数，更新累计步骤数
-                            newState = {
-                                ...newState,
-                                sys: {
-                                    ...newState.sys,
-                                    interaction: {
-                                        ...newState.sys.interaction,
-                                        current: {
-                                            ...current,
-                                            data: { ...data, completedSteps },
-                                        },
-                                    },
-                                },
-                            };
-                        }
-                    }
-                }
-            }
-
-            const currentAfterStepTracking = newState.sys.interaction.current;
-            if (currentAfterStepTracking?.kind === 'multistep-choice') {
-                const data = currentAfterStepTracking.data as MultistepChoiceData & {
-                    completedDieIds?: number[];
-                    meta?: { dtType?: string };
-                };
-                const isDiceInteraction = data.meta?.dtType === 'modifyDie' || data.meta?.dtType === 'selectDie';
-                if (isDiceInteraction) {
-                    const touchedDieIds = Array.from(new Set(
+                const data = current.data as MultistepChoiceData & { completedSteps?: number; completedDieIds?: number[] };
+                const meta = data.meta as { dtType?: string } | undefined;
+                const isDiceInteraction = meta?.dtType === 'modifyDie' || meta?.dtType === 'selectDie';
+                const touchedDieIds = isDiceInteraction
+                    ? Array.from(new Set(
                         events
                             .filter(e => e.type === 'DIE_MODIFIED' || e.type === 'DIE_REROLLED')
                             .map(e => {
@@ -682,9 +639,39 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                                 return typeof dieId === 'number' ? dieId : null;
                             })
                             .filter((dieId): dieId is number => dieId !== null)
-                    ));
-                    if (touchedDieIds.length > 0) {
-                        const completedDieIds = Array.from(new Set([...(data.completedDieIds ?? []), ...touchedDieIds]));
+                    ))
+                    : [];
+                const previousCompletedDieIds = isDiceInteraction
+                    ? Array.from(new Set((data.completedDieIds ?? []).filter(dieId => typeof dieId === 'number')))
+                    : [];
+                const completedDieIds = isDiceInteraction
+                    ? Array.from(new Set([...previousCompletedDieIds, ...touchedDieIds]))
+                    : previousCompletedDieIds;
+                const newSteps = isDiceInteraction
+                    ? completedDieIds.length - previousCompletedDieIds.length
+                    : events.filter(e => e.type === 'DIE_MODIFIED' || e.type === 'DIE_REROLLED').length;
+
+                if (newSteps > 0) {
+                    const completedSteps = isDiceInteraction
+                        ? completedDieIds.length
+                        : (data.completedSteps ?? 0) + newSteps;
+                    if (data.maxSteps !== undefined && completedSteps >= data.maxSteps) {
+                        // 达到最大步骤数，自动 resolve
+                        newState = resolveInteraction(newState);
+                        nextEvents.push({
+                            type: INTERACTION_EVENTS.CONFIRMED,
+                            payload: {
+                                interactionId: current.id,
+                                playerId: current.playerId,
+                                sourceId: (current.data as any)?.sourceId,
+                            },
+                            timestamp: events[events.length - 1]?.timestamp ?? 0,
+                        });
+                    } else {
+                        // 未达到最大步骤数，或该交互需要手动确认，但仍需记录已完成骰子防止重复消费
+                        const nextData = isDiceInteraction
+                            ? { ...data, completedSteps, completedDieIds }
+                            : { ...data, completedSteps };
                         newState = {
                             ...newState,
                             sys: {
@@ -692,8 +679,8 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                                 interaction: {
                                     ...newState.sys.interaction,
                                     current: {
-                                        ...currentAfterStepTracking,
-                                        data: { ...data, completedDieIds },
+                                        ...current,
+                                        data: nextData,
                                     },
                                 },
                             },
