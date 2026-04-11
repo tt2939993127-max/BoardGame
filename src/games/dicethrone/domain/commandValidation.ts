@@ -31,6 +31,7 @@ import type {
     RerollDieCommand,
     RemoveStatusCommand,
     TransferStatusCommand,
+    ResolveInteractionCommand,
     ConfirmInteractionCommand,
     CancelInteractionCommand,
     UseTokenCommand,
@@ -712,6 +713,24 @@ const validateTransferStatus = (
     return ok();
 };
 
+const validateResolveInteraction = (
+    _state: DiceThroneCore,
+    _cmd: ResolveInteractionCommand,
+    playerId: PlayerId,
+    pendingInteraction?: InteractionDescriptor,
+): ValidationResult => {
+    if (!pendingInteraction) {
+        return fail('no_pending_interaction');
+    }
+    if (pendingInteraction.playerId !== playerId) {
+        return fail('player_mismatch');
+    }
+    if (pendingInteraction.type !== 'selectPlayer') {
+        return fail('invalid_interaction_type');
+    }
+    return ok();
+};
+
 /**
  * 验证确认交互命令
  * @deprecated 已废弃 - 使用 InteractionSystem 的 RESPOND 命令
@@ -1037,6 +1056,7 @@ export const validateCommand = (
     if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'REMOVE_STATUS')) return validateRemoveStatus(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'TRANSFER_STATUS')) return validateTransferStatus(state, command, playerId, pendingInteraction);
+    if (isCommandType(command, 'RESOLVE_INTERACTION')) return validateResolveInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CONFIRM_INTERACTION')) return validateConfirmInteraction(state, command, playerId, pendingInteraction);
     // if (isCommandType(command, 'CANCEL_INTERACTION')) return validateCancelInteraction(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'USE_TOKEN')) return validateUseToken(state, command, playerId);

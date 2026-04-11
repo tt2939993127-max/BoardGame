@@ -11,10 +11,17 @@ import {
     createActionKindScorer,
     createLookaheadLocalAiPolicy,
 } from '../../engine/ai';
+import {
+    OPTIONAL_SKIP_AI_HINT,
+    buildTargetAiHint,
+    createInteractionHintScorer,
+} from '../../engine/ai/semantics';
 import type {
     AiDecisionContext,
     AiLegalAction,
     AiStrategyProfile,
+    AiEffectIntent,
+    AiHint,
     GameAiRuntime,
     LocalAiActionScorer,
 } from '../../engine/ai';
@@ -114,6 +121,23 @@ type CardInteractionData = {
         statusId: string;
         amount: number;
     }>;
+};
+
+type ChoiceOptionValue = {
+    statusId?: string;
+    tokenId?: string;
+    value?: number;
+    customId?: string;
+    labelKey?: string;
+    disabled?: boolean;
+};
+
+type SimpleChoiceOption = {
+    id?: string;
+    label?: string;
+    disabled?: boolean;
+    value?: ChoiceOptionValue;
+    _ai?: AiHint;
 };
 
 const createCommand = (playerId: PlayerId, type: string, payload: unknown = {}): Command => ({
@@ -509,6 +533,15 @@ const isFriendlyTarget = (state: DiceThroneState, actingPlayerId: PlayerId, targ
         || areTeammates(state.core, actingPlayerId, targetPlayerId);
 };
 
+const getRelationToActor = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    targetPlayerId: PlayerId,
+): AiHint['relationToActor'] => {
+    if (actingPlayerId === targetPlayerId) return 'self';
+    return areTeammates(state.core, actingPlayerId, targetPlayerId) ? 'ally' : 'enemy';
+};
+
 const getCardInteractionById = (
     state: DiceThroneState,
     interactionId: string | null,
@@ -630,6 +663,223 @@ const buildStatusInteractionStrategyTags = (
     return ['purify-control'];
 };
 
+const getEffectIntentForCategory = (
+    category: 'buff' | 'debuff' | 'consumable' | null,
+    mode: 'apply' | 'remove',
+): AiEffectIntent | null => {
+    if (!category) return null;
+    if (mode === 'remove') {
+        if (category === 'debuff') return 'buff';
+        if (category === 'buff') return 'debuff';
+        return 'resource';
+    }
+    if (category === 'debuff') return 'debuff';
+    if (category === 'buff') return 'buff';
+    return 'resource';
+};
+
+const parseTargetPlayerIdFromCustomId = (customId: string | undefined): PlayerId | null => {
+    if (!customId?.startsWith('select-target:')) return null;
+    const targetPlayerId = customId.slice('select-target:'.length);
+    return targetPlayerId ? targetPlayerId : null;
+};
+
+const isBenefitChoiceCustomId = (customId: string | undefined): boolean => {
+    if (!customId) return false;
+    return customId.startsWith('use-')
+        || customId.endsWith('-pay')
+        || customId.endsWith('-confirmed');
+};
+
+const buildChoiceOptionAiHints = (
+    state: DiceThroneState,
+    playerId: PlayerId,
+    option: SimpleChoiceOption,
+): AiHint[] => {
+    const hints: AiHint[] = [];
+    if (option._ai) {
+        hints.push(option._ai);
+    }
+
+    const value = option.value;
+    const customId = typeof value?.customId === 'string' ? value.customId : undefined;
+    const optionId = typeof option.id === 'string' ? option.id : undefined;
+
+    if (customId === 'skip' || optionId === 'skip' || optionId === '__cancel__') {
+        hints.push(OPTIONAL_SKIP_AI_HINT);
+    }
+
+    const targetPlayerId = parseTargetPlayerIdFromCustomId(customId);
+    if (targetPlayerId) {
+        hints.push(buildTargetAiHint({
+            actorPlayerId: playerId,
+            targetPlayerId,
+            relationToActor: getRelationToActor(state, playerId, targetPlayerId),
+            targetKind: 'player',
+            effectIntent: 'debuff',
+            tags: ['choice:select-target'],
+        }));
+    }
+
+    const effectId = value?.tokenId ?? value?.statusId;
+    const category = effectId ? getEffectCategory(state, effectId) : null;
+    const effectMode = (value?.value ?? 1) < 0 && !isBenefitChoiceCustomId(customId)
+        ? 'remove'
+        : 'apply';
+    const effectIntent = getEffectIntentForCategory(category, effectMode);
+    if (effectId && effectIntent) {
+        hints.push(buildTargetAiHint({
+            actorPlayerId: playerId,
+            targetPlayerId: playerId,
+            relationToActor: getRelationToActor(state, playerId, playerId),
+            targetKind: 'player',
+            effectIntent,
+            tags: [
+                'choice:effect',
+                `effect:${effectId}`,
+                ...(category ? [`effect-category:${category}`] : []),
+            ],
+        }));
+    }
+
+    return hints;
+};
+
+const buildSelectPlayerActionAiHints = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    selectedPlayerIds: PlayerId[],
+    interaction: CardInteractionData,
+): AiHint[] => {
+    const hints: AiHint[] = [];
+    const tokenConfigs = interaction.tokenGrantConfigs ?? (
+        interaction.tokenGrantConfig ? [interaction.tokenGrantConfig] : []
+    );
+    const statusConfigs = interaction.statusGrantConfigs ?? (
+        interaction.statusGrantConfig ? [interaction.statusGrantConfig] : []
+    );
+
+    for (const targetPlayerId of selectedPlayerIds) {
+        for (const config of tokenConfigs) {
+            const category = getEffectCategory(state, config.tokenId);
+            const effectIntent = getEffectIntentForCategory(category, 'apply');
+            if (!effectIntent) continue;
+            hints.push(buildTargetAiHint({
+                actorPlayerId: actingPlayerId,
+                targetPlayerId,
+                relationToActor: getRelationToActor(state, actingPlayerId, targetPlayerId),
+                targetKind: 'player',
+                effectIntent,
+                estimatedSwing: getGrantedEffectValue(
+                    state,
+                    actingPlayerId,
+                    targetPlayerId,
+                    config.tokenId,
+                    config.amount,
+                ),
+                tags: [`grant-token:${config.tokenId}`],
+            }));
+        }
+
+        for (const config of statusConfigs) {
+            const category = getEffectCategory(state, config.statusId);
+            const effectIntent = getEffectIntentForCategory(category, 'apply');
+            if (!effectIntent) continue;
+            hints.push(buildTargetAiHint({
+                actorPlayerId: actingPlayerId,
+                targetPlayerId,
+                relationToActor: getRelationToActor(state, actingPlayerId, targetPlayerId),
+                targetKind: 'player',
+                effectIntent,
+                estimatedSwing: getGrantedEffectValue(
+                    state,
+                    actingPlayerId,
+                    targetPlayerId,
+                    config.statusId,
+                    config.amount,
+                ),
+                tags: [`grant-status:${config.statusId}`],
+            }));
+        }
+
+        if (tokenConfigs.length === 0 && statusConfigs.length === 0 && interaction.requiresTargetWithStatus === true) {
+            const swing = scoreRemoveAllStatusesTarget(state, actingPlayerId, targetPlayerId);
+            if (swing !== 0) {
+                hints.push(buildTargetAiHint({
+                    actorPlayerId: actingPlayerId,
+                    targetPlayerId,
+                    relationToActor: getRelationToActor(state, actingPlayerId, targetPlayerId),
+                    targetKind: 'player',
+                    effectIntent: 'affect',
+                    estimatedSwing: swing,
+                    tags: ['remove-status:all'],
+                }));
+            }
+        }
+    }
+
+    return hints;
+};
+
+const buildRemoveStatusAiHints = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    targetPlayerId: PlayerId,
+    statusId: string,
+): AiHint[] => {
+    const category = getEffectCategory(state, statusId);
+    const effectIntent = getEffectIntentForCategory(category, 'remove');
+    if (!effectIntent) return [];
+    return [buildTargetAiHint({
+        actorPlayerId: actingPlayerId,
+        targetPlayerId,
+        relationToActor: getRelationToActor(state, actingPlayerId, targetPlayerId),
+        targetKind: 'player',
+        effectIntent,
+        estimatedSwing: scoreRemoveSingleStatusTarget(state, actingPlayerId, targetPlayerId, statusId),
+        tags: [`remove-status:${statusId}`],
+    })];
+};
+
+const buildTransferStatusAiHints = (
+    state: DiceThroneState,
+    actingPlayerId: PlayerId,
+    fromPlayerId: PlayerId,
+    toPlayerId: PlayerId,
+    statusId: string,
+): AiHint[] => {
+    const category = getEffectCategory(state, statusId);
+    const removeIntent = getEffectIntentForCategory(category, 'remove');
+    const applyIntent = getEffectIntentForCategory(category, 'apply');
+    const hints: AiHint[] = [];
+
+    if (removeIntent) {
+        hints.push(buildTargetAiHint({
+            actorPlayerId: actingPlayerId,
+            targetPlayerId: fromPlayerId,
+            relationToActor: getRelationToActor(state, actingPlayerId, fromPlayerId),
+            targetKind: 'player',
+            effectIntent: removeIntent,
+            estimatedSwing: scoreRemoveSingleStatusTarget(state, actingPlayerId, fromPlayerId, statusId),
+            tags: [`transfer-remove:${statusId}`],
+        }));
+    }
+
+    if (applyIntent) {
+        hints.push(buildTargetAiHint({
+            actorPlayerId: actingPlayerId,
+            targetPlayerId: toPlayerId,
+            relationToActor: getRelationToActor(state, actingPlayerId, toPlayerId),
+            targetKind: 'player',
+            effectIntent: applyIntent,
+            estimatedSwing: getGrantedEffectValue(state, actingPlayerId, toPlayerId, statusId, 1),
+            tags: [`transfer-apply:${statusId}`],
+        }));
+    }
+
+    return hints;
+};
+
 const buildInteractionActions = (
     state: DiceThroneState,
     playerId: PlayerId,
@@ -639,10 +889,10 @@ const buildInteractionActions = (
 
     if (current.kind === 'simple-choice') {
         const data = current.data as {
-            options?: Array<{ id?: string; label?: string; disabled?: boolean }>;
+            options?: SimpleChoiceOption[];
             multi?: PromptMultiConfig;
         };
-        const availableOptions = (data.options ?? []).filter((option): option is { id: string; label?: string } => {
+        const availableOptions = (data.options ?? []).filter((option): option is SimpleChoiceOption & { id: string } => {
             return typeof option?.id === 'string' && option.disabled !== true;
         });
         const minCount = data.multi?.min ?? 1;
@@ -659,6 +909,7 @@ const buildInteractionActions = (
                         type: 'SYS_INTERACTION_RESPOND',
                         payload: { optionIds: [] },
                     }],
+                    aiHints: [OPTIONAL_SKIP_AI_HINT],
                     metadata: {
                         interactionId: current.id,
                         optionIds: [],
@@ -671,38 +922,46 @@ const buildInteractionActions = (
                 Math.max(1, minCount),
                 maxCount,
             );
-            actions.push(...combinations.map((combination, index) => ({
-                actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
-                kind: 'interaction-choice',
-                label: combination.map((option) => option.label ?? option.id).join(' + ') || `选择 ${index + 1}`,
-                commands: [{
-                    type: 'SYS_INTERACTION_RESPOND',
-                    payload: buildSimpleChoicePayload(
-                        combination.map((option) => option.id),
-                        data.multi,
-                    ),
-                }],
-                metadata: {
-                    interactionId: current.id,
-                    optionIds: combination.map((option) => option.id),
-                },
-            })));
+            actions.push(...combinations.map((combination, index) => {
+                const aiHints = combination.flatMap((option) => buildChoiceOptionAiHints(state, playerId, option));
+                return {
+                    actionId: createAiLegalActionId('interaction', current.id, 'combo', ...combination.map((option) => option.id)),
+                    kind: 'interaction-choice',
+                    label: combination.map((option) => option.label ?? option.id).join(' + ') || `选择 ${index + 1}`,
+                    commands: [{
+                        type: 'SYS_INTERACTION_RESPOND',
+                        payload: buildSimpleChoicePayload(
+                            combination.map((option) => option.id),
+                            data.multi,
+                        ),
+                    }],
+                    ...(aiHints.length > 0 ? { aiHints } : {}),
+                    metadata: {
+                        interactionId: current.id,
+                        optionIds: combination.map((option) => option.id),
+                    },
+                };
+            }));
             return actions;
         }
 
-        return availableOptions.map((option, index) => ({
-            actionId: createAiLegalActionId('interaction', current.id, option.id),
-            kind: 'interaction-choice',
-            label: option.label ?? `选择 ${index + 1}`,
-            commands: [{
-                type: 'SYS_INTERACTION_RESPOND',
-                payload: buildSimpleChoicePayload([option.id], data.multi),
-            }],
-            metadata: {
-                interactionId: current.id,
-                optionId: option.id,
-            },
-        }));
+        return availableOptions.map((option, index) => {
+            const aiHints = buildChoiceOptionAiHints(state, playerId, option);
+            return {
+                actionId: createAiLegalActionId('interaction', current.id, option.id),
+                kind: 'interaction-choice',
+                label: option.label ?? `选择 ${index + 1}`,
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: buildSimpleChoicePayload([option.id], data.multi),
+                }],
+                ...(aiHints.length > 0 ? { aiHints } : {}),
+                metadata: {
+                    interactionId: current.id,
+                    optionId: option.id,
+                },
+            };
+        });
     }
 
     if (current.kind === 'compare-roll-choice') {
@@ -752,19 +1011,23 @@ const buildInteractionActions = (
                 .filter((targetId) => !data.requiresTargetWithStatus || playerHasStatusOrToken(state, targetId));
             const selections = buildPlayerSelectionCombos(targetPlayerIds, data.selectCount ?? 1);
 
-            return selections.map((selectedPlayerIds, index) => ({
-                actionId: createAiLegalActionId('interaction', current.id, 'select-player', index),
-                kind: 'interaction-select-player',
-                label: `选择玩家 ${selectedPlayerIds.join(', ')}`,
-                commands: [{
-                    type: 'RESOLVE_INTERACTION',
-                    payload: { selectedPlayerIds },
-                }],
-                metadata: {
-                    interactionId: current.id,
-                    selectedPlayerIds,
-                },
-            }));
+            return selections.map((selectedPlayerIds, index) => {
+                const aiHints = buildSelectPlayerActionAiHints(state, playerId, selectedPlayerIds, data);
+                return {
+                    actionId: createAiLegalActionId('interaction', current.id, 'select-player', index),
+                    kind: 'interaction-select-player',
+                    label: `选择玩家 ${selectedPlayerIds.join(', ')}`,
+                    commands: [{
+                        type: 'RESOLVE_INTERACTION',
+                        payload: { selectedPlayerIds },
+                    }],
+                    ...(aiHints.length > 0 ? { aiHints } : {}),
+                    metadata: {
+                        interactionId: current.id,
+                        selectedPlayerIds,
+                    },
+                };
+            });
         }
 
         if (data.type === 'selectStatus') {
@@ -792,6 +1055,13 @@ const buildInteractionActions = (
                                     type: 'TRANSFER_STATUS',
                                     payload: { fromPlayerId: sourcePlayerId, toPlayerId: targetPlayerId, statusId },
                                 }],
+                                aiHints: buildTransferStatusAiHints(
+                                    state,
+                                    playerId,
+                                    sourcePlayerId,
+                                    targetPlayerId,
+                                    statusId,
+                                ),
                                 metadata: withAiActionStrategyTags({
                                     interactionId: current.id,
                                     fromPlayerId: sourcePlayerId,
@@ -814,6 +1084,7 @@ const buildInteractionActions = (
                         type: 'REMOVE_STATUS',
                         payload: { targetPlayerId, statusId },
                     }],
+                    aiHints: buildRemoveStatusAiHints(state, playerId, targetPlayerId, statusId),
                     metadata: withAiActionStrategyTags({
                         interactionId: current.id,
                         targetPlayerId,
@@ -846,6 +1117,7 @@ const buildInteractionActions = (
                     type: 'TRANSFER_STATUS',
                     payload: { fromPlayerId: sourcePlayerId, toPlayerId: targetPlayerId, statusId },
                 }],
+                aiHints: buildTransferStatusAiHints(state, playerId, sourcePlayerId, targetPlayerId, statusId),
                 metadata: withAiActionStrategyTags({
                     interactionId: current.id,
                     fromPlayerId: sourcePlayerId,
@@ -2024,6 +2296,17 @@ const interactionValueScorer: LocalAiActionScorer = {
     },
 };
 
+const interactionHintScorer = createInteractionHintScorer({
+    id: 'interaction-ai-hints',
+    actionKinds: [
+        'interaction-choice',
+        'interaction-select-player',
+        'interaction-remove-status',
+        'interaction-transfer-status',
+    ],
+    skipPenaltyWhenAlternativesExist: 35,
+});
+
 const bonusDieScorer: LocalAiActionScorer = {
     id: 'bonus-die',
     score(context, action) {
@@ -2578,6 +2861,7 @@ const diceThroneLocalPolicyScorers: LocalAiActionScorer[] = [
     abilityValueScorer,
     cardValueScorer,
     interactionValueScorer,
+    interactionHintScorer,
     bonusDieScorer,
     dicePlanScorer,
     passiveValueScorer,

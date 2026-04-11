@@ -426,6 +426,22 @@ describe('InteractionSystem', () => {
         ]));
     });
 
+    it('buildTargetAiHint 允许游戏显式覆盖 ally relation', () => {
+        const hint = buildTargetAiHint({
+            actorPlayerId: '0',
+            targetPlayerId: '2',
+            relationToActor: 'ally',
+            effectIntent: 'buff',
+            targetKind: 'player',
+        });
+
+        expect(hint.relationToActor).toBe('ally');
+        expect(hint.tags).toEqual(expect.arrayContaining([
+            'relation:ally',
+            'intent:buff',
+        ]));
+    });
+
     it('inspect 语义评分会优先侦察敌方而不是己方', () => {
         const enemyHint = buildTargetAiHint({
             actorPlayerId: '0',

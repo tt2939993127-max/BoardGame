@@ -194,6 +194,17 @@ const createEngineConfig = (): GameEngineConfig => ({
     systems: [],
 });
 
+const createEngineConfigWithGameOver = (): GameEngineConfig => {
+    const base = createEngineConfig();
+    return {
+        ...base,
+        domain: {
+            ...base.domain,
+            isGameOver: () => ({ winner: '0' }),
+        },
+    };
+};
+
 const createInteractiveEngineConfig = (): GameEngineConfig => ({
     gameId: 'test-game',
     domain: {
@@ -759,7 +770,7 @@ describe('GameTransportServer（离座与重连）', () => {
         const server = new GameTransportServer({
             io: io as unknown as any,
             storage,
-            games: [createEngineConfig()],
+            games: [createEngineConfigWithGameOver()],
             trainingDataRecorder: recorder,
             rulesVersion: 'test-rules-v1',
             authenticate: async (_matchID, playerID, credentials, metadata) => {
@@ -804,7 +815,7 @@ describe('GameTransportServer（离座与重连）', () => {
         const server = new GameTransportServer({
             io: io as unknown as any,
             storage,
-            games: [createEngineConfig()],
+            games: [createEngineConfigWithGameOver()],
             trainingDataRecorder: new FailingTrainingDataRecorder(),
             authenticate: async (_matchID, playerID, credentials, metadata) => {
                 return metadata.players[playerID]?.credentials === credentials;
@@ -821,6 +832,55 @@ describe('GameTransportServer（离座与重连）', () => {
         const persisted = await storage.fetch('match-train-fail', { state: true });
         expect(persisted.state?._stateID).toBe(1);
         expect(hasEvent(socket, 'error')).toBe(false);
+    });
+
+    it('训练采集应在达到时长门槛后才写入', async () => {
+        vi.useFakeTimers();
+        const now = Date.now();
+        const minDurationMs = 10 * 60 * 1000;
+
+        try {
+            const io = new MockIO();
+            const storage = new InMemoryStorage();
+            const recorder = new MockTrainingDataRecorder();
+
+            await storage.createMatch('match-train-duration', {
+                initialState: createStoredState(),
+                metadata: {
+                    ...createMetadata('cred-duration'),
+                    createdAt: now,
+                    updatedAt: now,
+                },
+            });
+
+            const server = new GameTransportServer({
+                io: io as unknown as any,
+                storage,
+                games: [createEngineConfig()],
+                trainingDataRecorder: recorder,
+                trainingDataMinMatchDurationMs: minDurationMs,
+                authenticate: async (_matchID, playerID, credentials, metadata) => {
+                    return metadata.players[playerID]?.credentials === credentials;
+                },
+            });
+            server.start();
+
+            const socket = new MockSocket('socket-train-duration');
+            io.gameNamespace.connectSocket(socket);
+            await socket.clientEmit('sync', 'match-train-duration', '0', 'cred-duration');
+            await socket.clientEmit('command', 'match-train-duration', 'TEST_CMD', { foo: 'bar' }, 'cred-duration');
+
+            expect(recorder.samples).toHaveLength(0);
+
+            vi.setSystemTime(now + minDurationMs + 1000);
+            await socket.clientEmit('command', 'match-train-duration', 'TEST_CMD_2', { foo: 'baz' }, 'cred-duration');
+
+            expect(recorder.samples).toHaveLength(2);
+            expect(recorder.samples[0].command.type).toBe('TEST_CMD');
+            expect(recorder.samples[1].command.type).toBe('TEST_CMD_2');
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('默认应跳过 AI seat 的训练样本，只记录真人 seat', async () => {
@@ -848,7 +908,7 @@ describe('GameTransportServer（离座与重连）', () => {
         const server = new GameTransportServer({
             io: io as unknown as any,
             storage,
-            games: [createEngineConfig()],
+            games: [createEngineConfigWithGameOver()],
             trainingDataRecorder: recorder,
             authenticate: async (_matchID, playerID, credentials, metadata) => {
                 return metadata.players[playerID]?.credentials === credentials;
@@ -909,7 +969,7 @@ describe('GameTransportServer（离座与重连）', () => {
             const server = new GameTransportServer({
                 io: io as unknown as any,
                 storage,
-                games: [createEngineConfig()],
+                games: [createEngineConfigWithGameOver()],
                 trainingDataRecorder: recorder,
                 authenticate: async (_matchID, playerID, credentials, metadata) => {
                     return metadata.players[playerID]?.credentials === credentials;

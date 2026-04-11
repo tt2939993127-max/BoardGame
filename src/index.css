@@ -529,7 +529,10 @@
 
     [data-game-page][data-mobile-layout-preset="board-shell"][data-mobile-profile="landscape-adapted"] .mobile-board-shell {
         position: absolute;
-        inset: 0 auto auto 0;
+        top: var(--mobile-board-shell-offset-y, 0px);
+        left: var(--mobile-board-shell-offset-x, 0px);
+        right: auto;
+        bottom: auto;
         transform-origin: top left;
         transform: scale(var(--mobile-board-shell-scale));
         width: var(--mobile-board-shell-design-width);

@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { test, expect } from '../framework';
 import { getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
 import { setChineseLocale } from '../helpers/common';
-import { DESKTOP_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
+import { DESKTOP_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
 
 async function saveEvidenceLocatorScreenshot(page: any, locator: any, testInfo: any, subdir: string, filename: string) {
     const path = getEvidenceScreenshotPath(testInfo, filename, { subdir, filename });

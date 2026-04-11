@@ -469,19 +469,46 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
     };
   };
 
-  const toRatios = (rect: ReturnType<typeof toRect>, viewportWidth: number, viewportHeight: number) => {
+  const rootStyles = window.getComputedStyle(document.documentElement);
+  const shell = document.querySelector('.mobile-board-shell');
+  const shellRect = shell instanceof HTMLElement ? shell.getBoundingClientRect() : null;
+  const shellStyle = shell instanceof HTMLElement ? window.getComputedStyle(shell) : null;
+  const parsePx = (value: string) => {
+    const parsed = Number.parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
+  const rawDesignWidth = parsePx(rootStyles.getPropertyValue('--mobile-board-shell-design-width'));
+  const rawDesignHeight = parsePx(rootStyles.getPropertyValue('--mobile-board-shell-logical-height'));
+  const rawScale = parsePx(rootStyles.getPropertyValue('--mobile-board-shell-scale')) || 1;
+  const shouldUseViewportBase = rawScale >= 0.999
+    && window.innerWidth > 0
+    && window.innerHeight > 0
+    && (rawDesignWidth === 0 || window.innerWidth >= rawDesignWidth);
+  const designWidth = shouldUseViewportBase ? window.innerWidth : (rawDesignWidth || window.innerWidth);
+  const designHeight = shouldUseViewportBase ? window.innerHeight : (rawDesignHeight || window.innerHeight);
+  const scale = shouldUseViewportBase ? 1 : rawScale;
+  const offsetX = shouldUseViewportBase ? 0 : (parsePx(rootStyles.getPropertyValue('--mobile-board-shell-offset-x')) || 0);
+  const offsetY = shouldUseViewportBase ? 0 : (parsePx(rootStyles.getPropertyValue('--mobile-board-shell-offset-y')) || 0);
+
+  const toRatios = (rect: ReturnType<typeof toRect>) => {
     if (!rect) return null;
-    const centerX = (rect.left + rect.right) / 2;
-    const centerY = (rect.top + rect.bottom) / 2;
+    const left = (rect.left - offsetX) / scale;
+    const top = (rect.top - offsetY) / scale;
+    const right = (rect.right - offsetX) / scale;
+    const bottom = (rect.bottom - offsetY) / scale;
+    const width = rect.width / scale;
+    const height = rect.height / scale;
+    const centerX = (left + right) / 2;
+    const centerY = (top + bottom) / 2;
     return {
-      left: rect.left / viewportWidth,
-      top: rect.top / viewportHeight,
-      right: rect.right / viewportWidth,
-      bottom: rect.bottom / viewportHeight,
-      width: rect.width / viewportWidth,
-      height: rect.height / viewportHeight,
-      centerX: centerX / viewportWidth,
-      centerY: centerY / viewportHeight,
+      left: left / designWidth,
+      top: top / designHeight,
+      right: right / designWidth,
+      bottom: bottom / designHeight,
+      width: width / designWidth,
+      height: height / designHeight,
+      centerX: centerX / designWidth,
+      centerY: centerY / designHeight,
     };
   };
 
@@ -509,22 +536,42 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
     throw new Error('SummonerWars 证据场景关键节点缺失，无法比较 PC/移动端比例');
   }
 
-  const viewportWidth = window.innerWidth;
-  const viewportHeight = window.innerHeight;
-
   return {
-    viewportWidth,
-    viewportHeight,
+    viewportWidth: designWidth,
+    viewportHeight: designHeight,
+    shellRect: {
+      left: offsetX,
+      top: offsetY,
+      width: designWidth,
+      height: designHeight,
+      scale,
+    },
+    debug: {
+      rawScale,
+      rawDesignWidth,
+      rawDesignHeight,
+      offsetX,
+      offsetY,
+      shell: shellRect
+        ? {
+          width: shellRect.width,
+          height: shellRect.height,
+          left: shellRect.left,
+          top: shellRect.top,
+          transform: shellStyle?.transform ?? '',
+        }
+        : null,
+    },
     elements: {
-      map: toRatios(mapRect, viewportWidth, viewportHeight),
-      hand: toRatios(handRect, viewportWidth, viewportHeight),
-      phaseTracker: toRatios(trackerRect, viewportWidth, viewportHeight),
-      endPhase: toRatios(endPhaseRect, viewportWidth, viewportHeight),
-      playerBar: toRatios(playerRect, viewportWidth, viewportHeight),
-      opponentBar: toRatios(opponentRect, viewportWidth, viewportHeight),
-      discardPile: toRatios(discardRect, viewportWidth, viewportHeight),
-      drawDeck: toRatios(drawRect, viewportWidth, viewportHeight),
-      actionBanner: toRatios(bannerRect, viewportWidth, viewportHeight),
+      map: toRatios(mapRect),
+      hand: toRatios(handRect),
+      phaseTracker: toRatios(trackerRect),
+      endPhase: toRatios(endPhaseRect),
+      playerBar: toRatios(playerRect),
+      opponentBar: toRatios(opponentRect),
+      discardPile: toRatios(discardRect),
+      drawDeck: toRatios(drawRect),
+      actionBanner: toRatios(bannerRect),
     },
   };
 });

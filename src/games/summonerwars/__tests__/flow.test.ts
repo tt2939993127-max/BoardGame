@@ -1433,6 +1433,65 @@ describe('召唤师战争本地 AI', () => {
         ]);
     });
 
+    it('simple-choice 交互会生成目标语义 aiHint，并对跳过选项降权', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        const sys = createInitialSystemState(['0', '1'], []);
+
+        const enemyCard: UnitCard = {
+            id: 'test-enemy',
+            cardType: 'unit',
+            name: '测试敌兵',
+            unitClass: 'common',
+            faction: 'paladin',
+            strength: 2,
+            life: 3,
+            cost: 1,
+            attackType: 'melee',
+            attackRange: 1,
+            deckSymbols: [],
+        };
+        placeTestUnit(core, { row: 4, col: 4 }, {
+            card: enemyCard,
+            owner: '1',
+        });
+
+        sys.interaction = {
+            ...sys.interaction,
+            current: {
+                id: 'sw-ai-simple-choice-hint',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    sourceId: 'entangle',
+                    options: [
+                        {
+                            id: 'opt-target',
+                            label: '选择敌方单位',
+                            value: { targetPosition: { row: 4, col: 4 } },
+                        },
+                        {
+                            id: 'opt-skip',
+                            label: '跳过',
+                            value: {},
+                        },
+                    ],
+                },
+            } as any,
+        };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        const targetAction = actions.find((action) => action.metadata?.optionId === 'opt-target');
+        const skipAction = actions.find((action) => action.metadata?.optionId === 'opt-skip');
+
+        expect(targetAction?.aiHints?.some((hint) => hint.relationToActor === 'enemy')).toBe(true);
+        expect(targetAction?.aiHints?.some((hint) => hint.effectIntent === 'destroy')).toBe(true);
+        expect(skipAction?.aiHints?.some((hint) => hint.effectIntent === 'optional-skip')).toBe(true);
+    });
+
     it('召唤师受致命威胁时应优先攻击威胁单位，而不是追击其他目标', async () => {
         const core = createInitializedCore(['0', '1'], aiTestRandom);
         core.phase = 'attack';

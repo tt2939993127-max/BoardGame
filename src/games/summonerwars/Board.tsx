@@ -29,7 +29,7 @@ import { useEndgame } from '../../hooks/game/useEndgame';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
-import { TutorialSelectionGate } from '../../components/game/framework';
+import { MobileBoardShell, TutorialSelectionGate } from '../../components/game/framework';
 import { saveSummonerWarsLayout } from '../../api/layout';
 import type { BoardLayoutConfig, GridConfig } from '../../core/ui/board-layout.types';
 import { initSpriteAtlases, resolveCardAtlasId } from './ui/cardAtlas';
@@ -69,7 +69,6 @@ import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey
 import { SUMMONER_WARS_MANIFEST } from './manifest';
 import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
-import { resolveRuntimeLayoutScaleMetrics } from '../mobileSupport';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
@@ -80,9 +79,35 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
 const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1920;
+const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT = 1080;
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
-const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.067;
+
+const resolveSummonerWarsShellMetrics = (viewport: { width: number; height: number }) => {
+  const safeWidth = Number.isFinite(viewport.width) && viewport.width > 0
+    ? viewport.width
+    : SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH;
+  const safeHeight = Number.isFinite(viewport.height) && viewport.height > 0
+    ? viewport.height
+    : SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT;
+  const widthScale = safeWidth / SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH;
+  const heightScale = safeHeight / SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT;
+  const scale = Math.min(widthScale, heightScale);
+  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
+  const inverseScale = 1 / safeScale;
+  const logicalHeight = safeHeight / safeScale;
+  const inlineUnit = SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH / 100;
+  const blockUnit = logicalHeight / 100;
+
+  return {
+    designWidth: SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH,
+    scale: safeScale,
+    inverseScale,
+    logicalHeight,
+    inlineUnit,
+    blockUnit,
+  };
+};
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
@@ -97,13 +122,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const { t } = useTranslation('game-summonerwars');
   const viewport = useRuntimeViewport();
   const isLandscapeRuntimeViewport = viewport.width > viewport.height;
-  // 手机横屏高度过短，默认完整塞入整张地图会让主战区比 PC 明显更瘦。
-  // 这里仅调整移动横屏的默认 framing，地图本身仍保持等比，且保留拖拽/双指缩放。
   const isPhoneLandscapeViewport = isMobileViewport && isLandscapeRuntimeViewport;
   const mapInitialScale = MOBILE_LANDSCAPE_MAP_INITIAL_SCALE;
-  const mapSideRatio = isPhoneLandscapeViewport
-    ? PHONE_LANDSCAPE_MAP_SIDE_RATIO
-    : DEFAULT_MAP_SIDE_RATIO;
+  const mapSideRatio = DEFAULT_MAP_SIDE_RATIO;
   const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
   const mapContainerPaddingBlock = '0px';
   const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
@@ -120,12 +141,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
   const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
-  const boardShellVars = isPhoneLandscapeViewport
-    ? {
-      '--sw-hand-card-width-ratio': '0.1067',
-    } as React.CSSProperties
-    : undefined;
-
   useEffect(() => {
     if (typeof document === 'undefined') {
       return;
@@ -134,10 +149,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       return;
     }
 
-    const metrics = resolveRuntimeLayoutScaleMetrics(
-      { width: viewport.width, height: viewport.height },
-      SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH,
-    );
+    const metrics = resolveSummonerWarsShellMetrics({
+      width: viewport.width,
+      height: viewport.height,
+    });
     const rootStyle = document.documentElement.style;
     rootStyle.setProperty('--mobile-board-shell-design-width', `${metrics.designWidth}px`);
     rootStyle.setProperty('--mobile-board-shell-scale', metrics.scale.toFixed(6));
@@ -147,6 +162,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     rootStyle.setProperty('--mobile-board-shell-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
     rootStyle.setProperty('--mobile-layout-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
     rootStyle.setProperty('--mobile-layout-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
+    const scaledWidth = metrics.designWidth * metrics.scale;
+    const offsetX = Math.max(0, (viewport.width - scaledWidth) / 2);
+    rootStyle.setProperty('--mobile-board-shell-offset-x', `${offsetX.toFixed(3)}px`);
+    rootStyle.setProperty('--mobile-board-shell-offset-y', '0px');
   }, [isPhoneLandscapeViewport, viewport.height, viewport.width]);
 
   // 阵营选择状态
@@ -709,35 +728,43 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   return (
     <UndoProvider value={{ G, dispatch, playerID, isGameOver: !!isGameOver, isLocalMode: isLocalMatch }}>
-      {/* 阵营选择阶段 */}
-      {isInFactionSelection ? (
-        <TutorialSelectionGate
-          isTutorialMode={isTutorialMode}
-          isTutorialActive={isTutorialActive}
-          containerClassName="bg-neutral-900"
-          textClassName="text-lg"
-        >
-          <>
-            <FactionSelection
-              isOpen={true}
-              currentPlayerId={rootPid}
-              hostPlayerId={G.core.hostPlayerId}
-              selectedFactions={G.core.selectedFactions}
-              readyPlayers={G.core.readyPlayers ?? {}}
-              playerNames={playerNames as Record<PlayerId, string>}
-              customDeckData={G.core.customDeckData}
-              onSelect={handleSelectFaction}
-              onSelectCustomDeck={handleSelectCustomDeck}
-              onReady={handlePlayerReady}
-              onUnready={handlePlayerUnready}
-              onStart={handleHostStart}
-            />
-            {debugPanel}
-          </>
-        </TutorialSelectionGate>
-      ) : (
-        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900" data-game-page data-game-id="summonerwars" style={boardShellVars}>
-          {isEditingLayout ? (
+      <div
+        className="relative h-full w-full"
+        data-game-page
+        data-game-id="summonerwars"
+        data-mobile-profile={SUMMONER_WARS_MANIFEST.mobileProfile}
+        data-mobile-layout-preset={SUMMONER_WARS_MANIFEST.mobileLayoutPreset}
+        data-preferred-orientation={SUMMONER_WARS_MANIFEST.preferredOrientation}
+      >
+        <MobileBoardShell>
+          <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900">
+          {/* 阵营选择阶段 */}
+          {isInFactionSelection ? (
+            <TutorialSelectionGate
+              isTutorialMode={isTutorialMode}
+              isTutorialActive={isTutorialActive}
+              containerClassName="bg-neutral-900"
+              textClassName="text-lg"
+            >
+              <>
+                <FactionSelection
+                  isOpen={true}
+                  currentPlayerId={rootPid}
+                  hostPlayerId={G.core.hostPlayerId}
+                  selectedFactions={G.core.selectedFactions}
+                  readyPlayers={G.core.readyPlayers ?? {}}
+                  playerNames={playerNames as Record<PlayerId, string>}
+                  customDeckData={G.core.customDeckData}
+                  onSelect={handleSelectFaction}
+                  onSelectCustomDeck={handleSelectCustomDeck}
+                  onReady={handlePlayerReady}
+                  onUnready={handlePlayerUnready}
+                  onStart={handleHostStart}
+                />
+                {debugPanel}
+              </>
+            </TutorialSelectionGate>
+          ) : isEditingLayout ? (
             <div className="flex-1 overflow-auto p-4">
               <div className="mb-2 flex items-center gap-2">
                 <button onClick={handleExitLayoutEditor} className="px-3 py-1 bg-slate-700 text-white rounded hover:bg-slate-600">{t('layoutEditor.backToGame')}</button>
@@ -1172,8 +1199,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               {debugPanel}
             </div>
           )}
-        </div>
-      )}
+          </div>
+        </MobileBoardShell>
+      </div>
     </UndoProvider>
   );
 };

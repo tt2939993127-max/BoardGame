@@ -14,7 +14,7 @@ import { test, expect } from '../framework';
 import type { Locator, Page } from '@playwright/test';
 import { setEnglishLocale, disableAudio, blockAudioRequests } from '../helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
-import { MOBILE_REFERENCE_VIEWPORT } from '../src/shared/referenceViewports';
+import { MOBILE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
 
 type InteractionOption = {
     id: string;

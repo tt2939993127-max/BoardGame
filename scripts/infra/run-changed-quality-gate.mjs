@@ -696,14 +696,18 @@ function collectCommands(files, baseRef, affectsTypecheck) {
         });
       }
       if (gameSourceIds.length > 0) {
-        gameSourceIds.forEach((gameId) => {
-          commands.push({
-            label: `${gameId} tests`,
-            reason: `${gameId} 源码改动，跑该游戏完整测试集`,
-            command: process.execPath,
-            args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+        if (isLatestCommitScopeMode) {
+          console.log('[changed-quality-gate] pre-push 最新提交范围模式：游戏源码改动不再默认回归整游戏全量测试，避免历史红灯阻塞当前增量；请依赖本轮显式改动测试或 CI 全量回归。');
+        } else {
+          gameSourceIds.forEach((gameId) => {
+            commands.push({
+              label: `${gameId} tests`,
+              reason: `${gameId} 源码改动，跑该游戏完整测试集`,
+              command: process.execPath,
+              args: [...VITEST_SAFE_ENTRY, 'run', `src/games/${gameId}`, ...GAME_VITEST_ARGS],
+            });
           });
-        });
+        }
       } else if (gameTestFiles.length > 0) {
         commands.push({
           label: 'Changed game test files',
@@ -1043,6 +1047,7 @@ const {
   baselinePathByFile: prePushLintBaselinePathByFile,
   scopeLabel: prePushLintScopeLabel,
 } = resolvePrePushLintContext();
+const isLatestCommitScopeMode = isPrePushMode && effectiveBaseRef !== baseRef;
 const affectsTypecheck = createTypecheckPredicate(effectiveBaseRef, headSha);
 console.log(`[changed-quality-gate] 模式: ${mode}`);
 console.log(`[changed-quality-gate] 基线: ${baseRef}`);

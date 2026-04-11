@@ -19,7 +19,7 @@ import { isMatchAuthMetadataProvider } from './storage';
 import type {
     MatchPlayerInfo,
 } from './protocol';
-import type { TrainingDataRecorder } from './trainingData';
+import type { TrainingDataRecorder, TrainingDecisionSample } from './trainingData';
 import { buildTrainingDecisionSample } from './trainingData';
 import logger, { gameLogger } from '../../../server/logger.js';
 import { GAME_MANIFEST_BY_ID } from '../../games/manifest';
@@ -111,6 +111,12 @@ type OnlineAiRecoveryFeedbackPayload = {
     progressMarker: string;
     stateSnapshot: string;
     actionLog?: string;
+};
+
+type PendingTrainingSamples = {
+    matchId: string;
+    gameId: string;
+    samples: TrainingDecisionSample[];
 };
 
 const UNSATISFIABLE_INTERACTION_REASONS = new Set([
@@ -370,6 +376,7 @@ export interface GameTransportServerConfig {
     /** 游戏结束回调（可选） */
     onGameOver?: (matchID: string, gameName: string, gameover: unknown) => void;
     trainingDataRecorder?: TrainingDataRecorder;
+    trainingDataMinMatchDurationMs?: number;
     rulesVersion?: string | null;
     onlineAiRecoveryTickMs?: number;
     onlineAiRecoveryTimeoutMs?: number;
@@ -389,6 +396,7 @@ export class GameTransportServer {
     private readonly authenticate?: GameTransportServerConfig['authenticate'];
     private readonly onGameOver?: GameTransportServerConfig['onGameOver'];
     private readonly trainingDataRecorder?: TrainingDataRecorder;
+    private readonly trainingDataMinMatchDurationMs: number;
     private readonly rulesVersion: string | null;
     private readonly onlineAiRecoveryTickMs: number;
     private readonly onlineAiRecoveryTimeoutMs: number;
@@ -400,6 +408,8 @@ export class GameTransportServer {
     private readonly onlineAiRecoveryFeedbackCooldown = new Map<string, number>();
     private readonly onlineAiRecoveryInFlight = new Set<string>();
     private onlineAiRecoveryTimer: ReturnType<typeof setInterval> | null = null;
+    private readonly pendingTrainingSamples = new Map<string, PendingTrainingSamples>();
+    private readonly eligibleTrainingMatches = new Set<string>();
 
     constructor(config: GameTransportServerConfig) {
         this.io = config.io;
@@ -411,6 +421,9 @@ export class GameTransportServer {
         this.authenticate = config.authenticate;
         this.onGameOver = config.onGameOver;
         this.trainingDataRecorder = config.trainingDataRecorder;
+        this.trainingDataMinMatchDurationMs = Number.isFinite(config.trainingDataMinMatchDurationMs ?? 0)
+            ? Math.max(0, config.trainingDataMinMatchDurationMs ?? 0)
+            : 0;
         this.rulesVersion = config.rulesVersion ?? null;
         this.onlineAiRecoveryTickMs = config.onlineAiRecoveryTickMs ?? DEFAULT_ONLINE_AI_RECOVERY_TICK_MS;
         this.onlineAiRecoveryTimeoutMs = config.onlineAiRecoveryTimeoutMs ?? DEFAULT_ONLINE_AI_RECOVERY_TIMEOUT_MS;
@@ -1492,6 +1505,25 @@ export class GameTransportServer {
         };
     }
 
+    private resolveTrainingMatchDurationMs(match: ActiveMatch): number | null {
+        const createdAt = match.metadata.createdAt;
+        if (typeof createdAt !== 'number' || !Number.isFinite(createdAt)) {
+            return null;
+        }
+        return Date.now() - createdAt;
+    }
+
+    private isTrainingCaptureEligible(match: ActiveMatch): boolean {
+        if (this.trainingDataMinMatchDurationMs <= 0) {
+            return true;
+        }
+        const durationMs = this.resolveTrainingMatchDurationMs(match);
+        if (durationMs === null) {
+            return false;
+        }
+        return durationMs >= this.trainingDataMinMatchDurationMs;
+    }
+
     private recordTrainingDecisionSample(args: {
         match: ActiveMatch;
         playerID: string;
@@ -1537,12 +1569,65 @@ export class GameTransportServer {
             gameOver: args.gameOver,
         });
 
-        Promise.resolve(this.trainingDataRecorder.recordDecisionSample(sample)).catch((error) => {
+        const matchId = args.match.matchID;
+        if (this.eligibleTrainingMatches.has(matchId)) {
+            this.recordTrainingDecisionSampleNow(sample);
+            if (args.gameOver) {
+                this.eligibleTrainingMatches.delete(matchId);
+                this.pendingTrainingSamples.delete(matchId);
+            }
+            return;
+        }
+
+        const pending = this.pendingTrainingSamples.get(matchId) ?? {
+            matchId,
+            gameId: args.match.engineConfig.gameId,
+            samples: [],
+        };
+        pending.samples.push(sample);
+        this.pendingTrainingSamples.set(matchId, pending);
+
+        if (this.isTrainingCaptureEligible(args.match)) {
+            this.eligibleTrainingMatches.add(matchId);
+            this.flushTrainingDecisionSamples(matchId, args.gameOver);
+            if (args.gameOver) {
+                this.eligibleTrainingMatches.delete(matchId);
+            }
+            return;
+        }
+
+        if (args.gameOver) {
+            this.pendingTrainingSamples.delete(matchId);
+        }
+    }
+
+    private flushTrainingDecisionSamples(matchID: string, gameOver?: unknown): void {
+        const pending = this.pendingTrainingSamples.get(matchID);
+        if (!pending || pending.samples.length === 0) {
+            this.pendingTrainingSamples.delete(matchID);
+            return;
+        }
+
+        this.pendingTrainingSamples.delete(matchID);
+
+        for (const sample of pending.samples) {
+            if (gameOver && sample.gameOver === undefined) {
+                sample.gameOver = gameOver;
+            }
+            this.recordTrainingDecisionSampleNow(sample, pending);
+        }
+    }
+
+    private recordTrainingDecisionSampleNow(
+        sample: TrainingDecisionSample,
+        context?: { matchId: string; gameId: string },
+    ): void {
+        Promise.resolve(this.trainingDataRecorder?.recordDecisionSample(sample)).catch((error) => {
             logger.warn('[GameTransport] training data capture failed', {
-                matchID: args.match.matchID,
-                gameId: args.match.engineConfig.gameId,
-                commandType: args.commandType,
-                playerID: args.playerID,
+                matchID: context?.matchId ?? sample.matchId,
+                gameId: context?.gameId ?? sample.gameId,
+                commandType: sample.command.type,
+                playerID: sample.playerId,
                 error: error instanceof Error ? error.message : String(error),
             });
         });

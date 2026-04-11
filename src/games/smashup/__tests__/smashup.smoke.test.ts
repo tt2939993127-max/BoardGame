@@ -5125,6 +5125,34 @@ describe('smashup', () => {
         expect(nextPrompt?.data?.sourceId).toBe('titan_pirates_the_kraken_play_replacement');
     });
 
+    it('全速航行POD 作为标准行动卡，在普通出牌阶段也应允许直接打出', () => {
+        const state = makeMatchState(makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('full-sail-1', 'pirate_full_sail_pod', 'action', '0')],
+                    factions: [SMASHUP_FACTION_IDS.GHOSTS_POD, SMASHUP_FACTION_IDS.PIRATES_POD],
+                    actionsPlayed: 0,
+                    actionLimit: 1,
+                }),
+                '1': makePlayer('1', {
+                    factions: [SMASHUP_FACTION_IDS.ROBOTS, SMASHUP_FACTION_IDS.WIZARDS],
+                }),
+            },
+            currentPlayerIndex: 0,
+            turnOrder: ['0', '1'],
+            bases: [
+                makeBase('base_the_factory'),
+                makeBase('base_tortuga'),
+            ],
+        }));
+
+        expect(SmashUpDomain.validate(state, {
+            type: SU_COMMANDS.PLAY_ACTION,
+            playerId: '0',
+            payload: { cardUid: 'full-sail-1' },
+        })).toMatchObject({ valid: true });
+    });
+
     it('海怪克拉肯的替换基地进场交互在补发计分后事件时会真正把泰坦落到新基地', () => {
         const core = makeState({
             bases: [

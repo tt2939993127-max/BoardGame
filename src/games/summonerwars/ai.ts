@@ -7,7 +7,14 @@ import {
     createScoredLocalAiPolicy,
     withAiActionStrategyTags,
 } from '../../engine/ai';
+import {
+    OPTIONAL_SKIP_AI_HINT,
+    buildTargetAiHint,
+    createInteractionHintScorer,
+} from '../../engine/ai/semantics';
 import type {
+    AiEffectIntent,
+    AiHint,
     AiLegalAction,
     AiStrategyProfile,
     GameAiRuntime,
@@ -57,6 +64,7 @@ type SummonerWarsInteractionOption = {
     label?: string;
     value?: unknown;
     disabled?: boolean;
+    _ai?: AiHint;
 };
 
 const FACTION_PRIORITY: FactionId[] = [
@@ -204,6 +212,117 @@ const getCurrentPhase = (state: SummonerWarsState): SummonerWarsTurnPhase => {
 const getFactionPriority = (factionId: FactionId): number => {
     const index = FACTION_PRIORITY.indexOf(factionId);
     return index >= 0 ? index : FACTION_PRIORITY.length + 10;
+};
+
+const EFFECT_INTENT_PRIORITY: AiEffectIntent[] = [
+    'destroy',
+    'debuff',
+    'buff',
+    'move',
+    'resource',
+];
+
+const inferAbilityEffectIntent = (abilityDef: AbilityDef | undefined): AiEffectIntent | null => {
+    if (!abilityDef?.effects || abilityDef.effects.length === 0) return null;
+
+    const found = new Set<AiEffectIntent>();
+    for (const effect of abilityDef.effects) {
+        switch (effect.type) {
+            case 'damage':
+            case 'destroyUnit':
+                found.add('destroy');
+                break;
+            case 'takeControl':
+            case 'preventMagicGain':
+            case 'removeCharge':
+                found.add('debuff');
+                break;
+            case 'heal':
+            case 'addCharge':
+            case 'grantExtraAttack':
+            case 'doubleStrength':
+            case 'reduceDamage':
+                found.add('buff');
+                break;
+            case 'modifyStrength': {
+                if (typeof effect.value === 'number') {
+                    found.add(effect.value >= 0 ? 'buff' : 'debuff');
+                }
+                break;
+            }
+            case 'modifyLife': {
+                if (typeof effect.value === 'number') {
+                    found.add(effect.value >= 0 ? 'buff' : 'debuff');
+                }
+                break;
+            }
+            case 'modifyMagic':
+            case 'setCharge':
+                found.add('resource');
+                break;
+            case 'moveUnit':
+            case 'pushPull':
+            case 'extraMove':
+                found.add('move');
+                break;
+            default:
+                break;
+        }
+    }
+
+    for (const intent of EFFECT_INTENT_PRIORITY) {
+        if (found.has(intent)) return intent;
+    }
+    return null;
+};
+
+const getInteractionSourceAbility = (
+    current: EngineInteractionDescriptor | undefined,
+): AbilityDef | undefined => {
+    const data = current?.data as { sourceId?: string } | undefined;
+    const sourceId = typeof data?.sourceId === 'string' ? data.sourceId : undefined;
+    return sourceId ? abilityRegistry.get(sourceId) : undefined;
+};
+
+const buildInteractionOptionAiHints = (
+    state: SummonerWarsState,
+    playerId: PlayerId,
+    current: EngineInteractionDescriptor,
+    option: SummonerWarsInteractionOption,
+): AiHint[] => {
+    const hints: AiHint[] = [];
+    if (option._ai) hints.push(option._ai);
+
+    const optionId = String(option.id ?? '').toLowerCase();
+    if (optionId.includes('cancel') || optionId.includes('skip') || optionId.includes('pass')) {
+        hints.push(OPTIONAL_SKIP_AI_HINT);
+    }
+
+    const value = option.value as { targetPosition?: CellCoord } | undefined;
+    const targetPosition = value?.targetPosition;
+    if (!targetPosition) return hints;
+
+    const targetUnit = getUnitAt(state.core, targetPosition);
+    const targetStructure = targetUnit ? null : getStructureAt(state.core, targetPosition);
+    const targetOwner = targetUnit?.owner ?? targetStructure?.owner;
+
+    const abilityDef = getInteractionSourceAbility(current);
+    const effectIntent = inferAbilityEffectIntent(abilityDef);
+
+    if (targetOwner) {
+        hints.push(buildTargetAiHint({
+            actorPlayerId: playerId,
+            targetPlayerId: targetOwner,
+            targetKind: 'card',
+            effectIntent: effectIntent ?? 'affect',
+            tags: [
+                'sw:interaction',
+                ...(abilityDef ? [`ability:${abilityDef.id}`] : []),
+            ],
+        }));
+    }
+
+    return hints;
 };
 
 const getCardKeepValue = (card: Card): number => {
@@ -595,35 +714,46 @@ const buildInteractionActions = (
                 minCount,
                 maxCount,
             );
-            return combos.map((combo, index) => ({
-                actionId: createAiLegalActionId('interaction', current.id, ...combo),
-                kind: 'interaction-choice',
-                label: `交互组合 ${index + 1}`,
-                commands: [{
-                    type: 'SYS_INTERACTION_RESPOND',
-                    payload: buildSimpleChoicePayload(combo, data.multi),
-                }],
-                metadata: {
-                    interactionId: current.id,
-                    optionIds: combo,
-                },
-            }));
+            return combos.map((combo, index) => {
+                const aiHints = combo.flatMap((optionId) => {
+                    const option = availableOptions.find((candidate) => candidate.id === optionId);
+                    return option ? buildInteractionOptionAiHints(state, playerId, current, option) : [];
+                });
+                return {
+                    actionId: createAiLegalActionId('interaction', current.id, ...combo),
+                    kind: 'interaction-choice',
+                    label: `交互组合 ${index + 1}`,
+                    commands: [{
+                        type: 'SYS_INTERACTION_RESPOND',
+                        payload: buildSimpleChoicePayload(combo, data.multi),
+                    }],
+                    ...(aiHints.length > 0 ? { aiHints } : {}),
+                    metadata: {
+                        interactionId: current.id,
+                        optionIds: combo,
+                    },
+                };
+            });
         }
 
-        return availableOptions.map((option, index) => ({
-            actionId: createAiLegalActionId('interaction', current.id, option.id),
-            kind: 'interaction-choice',
-            label: option.label ?? `交互选择 ${index + 1}`,
-            commands: [{
-                type: 'SYS_INTERACTION_RESPOND',
-                payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
-            }],
-            metadata: {
-                interactionId: current.id,
-                optionId: option.id,
-                optionValue: option.value,
-            },
-        }));
+        return availableOptions.map((option, index) => {
+            const aiHints = buildInteractionOptionAiHints(state, playerId, current, option);
+            return {
+                actionId: createAiLegalActionId('interaction', current.id, option.id),
+                kind: 'interaction-choice',
+                label: option.label ?? `交互选择 ${index + 1}`,
+                commands: [{
+                    type: 'SYS_INTERACTION_RESPOND',
+                    payload: buildSimpleChoicePayload([option.id], data.multi, option.value),
+                }],
+                ...(aiHints.length > 0 ? { aiHints } : {}),
+                metadata: {
+                    interactionId: current.id,
+                    optionId: option.id,
+                    optionValue: option.value,
+                },
+            };
+        });
     }
 
     if (current.kind === 'multistep-choice') {
@@ -1249,6 +1379,12 @@ const interactionScorer: LocalAiActionScorer = {
     },
 };
 
+const interactionHintScorer = createInteractionHintScorer({
+    id: 'interaction-ai-hints',
+    actionKinds: ['interaction-choice'],
+    skipPenaltyWhenAlternativesExist: 35,
+});
+
 const setupScorer: LocalAiActionScorer = {
     id: 'setup-priority',
     score(_context, action) {
@@ -1643,6 +1779,7 @@ const baselineLocalPolicy = createScoredLocalAiPolicy({
     id: 'baseline',
     scorers: [
         actionKindScorer,
+        interactionHintScorer,
         interactionScorer,
         setupScorer,
         setupRandomScorer,

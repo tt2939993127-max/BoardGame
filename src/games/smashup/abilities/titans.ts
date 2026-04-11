@@ -182,27 +182,6 @@ function buildOtherPlayerChoiceOptions(state: AbilityContext['state'], playerId:
         }));
 }
 
-function getMajorUrsaEnemyMinionTargets(state: AbilityContext['state'], playerId: string, baseIndex: number) {
-    const base = state.bases[baseIndex];
-    if (!base) return [];
-
-    return base.minions
-        .filter((minion) => {
-            if (minion.controller === playerId) return false;
-            const def = getCardDef(minion.defId) as MinionCardDef | undefined;
-            return (def?.power ?? minion.basePower) <= 3;
-        })
-        .map(minion => {
-            const def = getCardDef(minion.defId) as MinionCardDef | undefined;
-            return ({
-            uid: minion.uid,
-            defId: minion.defId,
-            baseIndex,
-            label: `${def?.name ?? minion.defId} (${def?.power ?? minion.basePower})`,
-        });
-        });
-}
-
 function getDeferredPostScoringEvents(
     state: MatchState<SmashUpCore>,
     interactionData: Record<string, unknown> | undefined,
@@ -3631,7 +3610,7 @@ export function registerTitanInteractionHandlers(): void {
             continuationContext?: { titanUid?: string; titanDefId?: string };
         } | undefined)?.continuationContext;
         const titan = continuation?.titanUid ? getTitanByUid(state.core, continuation.titanUid) : undefined;
-        const replacementEvent = getDeferredPostScoringEvents(state, data as Record<string, unknown> | undefined)?.find(
+        const replacementEvent = getDeferredPostScoringEvents(data as Record<string, unknown> | undefined)?.find(
             event => event.type === SU_EVENTS.BASE_REPLACED,
         );
         const replacementBaseIndex = replacementEvent?.payload?.baseIndex;

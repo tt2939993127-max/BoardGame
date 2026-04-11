@@ -403,6 +403,64 @@ describe('AI legal actions', () => {
         });
     });
 
+    it('simple-choice 的 token/skip 选项会生成 aiHint，并优先选择增益选项', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.activePlayerId = '0';
+        state.sys.phase = 'main2';
+        state.sys.interaction = {
+            current: {
+                id: 'ai-choice-token',
+                kind: 'simple-choice',
+                playerId: '0',
+                data: {
+                    title: 'interaction.chooseToken',
+                    sourceId: 'offensive-roll-end-token',
+                    options: [
+                        {
+                            id: 'option-0',
+                            label: '使用暴击',
+                            value: { tokenId: TOKEN_IDS.CRIT, value: 1, customId: 'use-crit' },
+                        },
+                        {
+                            id: 'option-1',
+                            label: '跳过',
+                            value: { value: 0, customId: 'skip' },
+                        },
+                    ],
+                },
+            } as unknown as NonNullable<typeof state.sys.interaction.current>,
+            queue: [],
+            isBlocked: false,
+        };
+
+        const actions = buildDiceThroneAiLegalActions({
+            playerId: '0',
+            state,
+        });
+
+        const useAction = actions.find((action) => action.metadata?.optionId === 'option-0');
+        const skipAction = actions.find((action) => action.metadata?.optionId === 'option-1');
+
+        expect(useAction?.aiHints?.some((hint) =>
+            hint.effectIntent === 'resource' && hint.relationToActor === 'self'
+        )).toBe(true);
+        expect(skipAction?.aiHints?.some((hint) => hint.effectIntent === 'optional-skip')).toBe(true);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test-choice',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.commands[0]).toEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: { optionId: 'option-0' },
+        });
+    });
+
     it('本地 AI 在敌方单选交互中优先选择更低血量的目标', async () => {
         const state = createInitializedState(['0', '1', '2', '3'], fixedRandom);
         state.core.players['1'].resources[RESOURCE_IDS.HP] = 30;
