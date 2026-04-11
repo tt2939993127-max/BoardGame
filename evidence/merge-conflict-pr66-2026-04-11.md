@@ -70,6 +70,8 @@
 - 未跑项：完整 typecheck / merge audit / 更大范围 Smash Up 回归，待本批 PR 全部收口后统一执行。
 
 ## 7. 结果
-- merge commit：待提交
-- merge audit：待 merge commit 后执行
+- merge commit：`168a3a78 merge: 合并 PR66 修正额外出牌时机`
+- merge audit：
+  - `npm run merge:audit -- HEAD` → 13 个冲突文件全部为“混合结果”
+  - `npm run merge:audit:strict -- HEAD` → 通过；`完全等于父1/父2` 均为 0
 - push：待本批 PR 全部合并并收口后执行

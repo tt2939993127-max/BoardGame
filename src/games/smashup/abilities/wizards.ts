@@ -592,6 +592,7 @@ function registerWizardOngoingEffects(): void {
                         limitType: 'action' as const,
                         delta: 1,
                         reason: triggeredArchmage.defId,
+                        playTiming: 'immediate',
                     },
                     timestamp: trigCtx.now,
                 }];
