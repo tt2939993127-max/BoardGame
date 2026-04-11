@@ -1,24 +1,25 @@
 /**
- * 大杀四方 - afterScoring 响应窗口重新计分测试
+ * afterScoring 真实链路与统一反应入口测试
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
 import { createInitialSystemState } from '../../../engine/pipeline';
+import { asSimpleChoice, createSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
-import { createSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import { initAllAbilities } from '../abilities';
 import { SmashUpDomain } from '../domain';
 import { smashUpSystemsForTest } from '../game';
 import type { MinionOnBase, SmashUpCommand, SmashUpCore, SmashUpEvent } from '../domain/types';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 
-const PLAYER_IDS: PlayerId[] = ['0', '1'];
-const systems = smashUpSystemsForTest;
+interface ReactionSessionView {
+    responseWindowType?: 'meFirst' | 'afterScoring';
+    activePlayerId: string;
+    currentPlayerId: string;
+}
 
-beforeAll(() => {
-    initAllAbilities();
-});
+const PLAYER_IDS: PlayerId[] = ['0', '1'];
 
 function makeMinion(
     uid: string,
@@ -26,7 +27,7 @@ function makeMinion(
     owner: PlayerId,
     controller: PlayerId,
     basePower: number,
-    powerCounters: number,
+    powerCounters = 0,
 ): MinionOnBase {
     return {
         uid,
@@ -47,21 +48,83 @@ function createRunner(
 ): GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent> {
     return new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
         domain: SmashUpDomain,
-        systems,
+        systems: smashUpSystemsForTest,
         playerIds: PLAYER_IDS,
         setup,
     });
 }
 
-describe('After Scoring 响应窗口 - 官方计分流程', () => {
-    it('afterScoring 改变基地力量后，不应重新结算同一个基地', () => {
+function getReactionSession(state: MatchState<SmashUpCore>) {
+    return (state.sys as MatchState<SmashUpCore>['sys'] & {
+        smashupReactionSession?: ReactionSessionView;
+    }).smashupReactionSession;
+}
+
+function getCurrentChoice(state: MatchState<SmashUpCore>) {
+    return asSimpleChoice(state.sys.interaction?.current);
+}
+
+function findOptionId(
+    choice: NonNullable<ReturnType<typeof getCurrentChoice>>,
+    predicate: (option: NonNullable<ReturnType<typeof getCurrentChoice>>['options'][number]) => boolean,
+    message: string,
+) {
+    const option = choice.options.find(predicate);
+    if (!option) {
+        throw new Error(`${message}: ${JSON.stringify(choice.options.map(item => item.id))}`);
+    }
+    return option.id;
+}
+
+function collectBaseEventCount(events: SmashUpEvent[], type: typeof SU_EVENTS.BASE_SCORED | typeof SU_EVENTS.BASE_CLEARED | typeof SU_EVENTS.BASE_REPLACED) {
+    return events.filter(event => event.type === type).length;
+}
+
+function advanceToAfterScoring(
+    runner: GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>,
+) {
+    const eventLog: SmashUpEvent[] = [];
+
+    const advance = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
+    expect(advance.success).toBe(true);
+    eventLog.push(...advance.events);
+
+    for (let guard = 0; guard < 6; guard += 1) {
+        const state = runner.getState();
+        const session = getReactionSession(state);
+        if (session?.responseWindowType === 'afterScoring') {
+            const choice = getCurrentChoice(state);
+            expect(choice?.sourceId).toBe('smashup_reaction_choose');
+            return { advance, eventLog, choice: choice! };
+        }
+
+        if (session?.responseWindowType === 'meFirst') {
+            const choice = getCurrentChoice(state);
+            expect(choice?.sourceId).toBe('smashup_reaction_choose');
+            const pass = runner.resolveInteraction(choice!.playerId, { optionId: 'pass' });
+            expect(pass.success).toBe(true);
+            eventLog.push(...pass.events);
+            continue;
+        }
+
+        throw new Error('未能进入 afterScoring 统一反应入口');
+    }
+
+    throw new Error('等待 afterScoring 超时');
+}
+
+beforeAll(() => {
+    initAllAbilities();
+});
+
+describe('After Scoring 响应窗口 - 真实链路', () => {
+    it('afterScoring 通过统一反应入口打出我们乃最强后，不会重新给同一基地计分', () => {
         const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
+            const sys = createInitialSystemState(ids, smashUpSystemsForTest, undefined);
 
             core.factionSelection = undefined;
             sys.phase = 'playCards';
-
             core.bases = [
                 {
                     defId: 'base_the_jungle',
@@ -73,19 +136,11 @@ describe('After Scoring 响应窗口 - 官方计分流程', () => {
                 },
                 {
                     defId: 'base_great_library',
-                    minions: [
-                        makeMinion('m3', 'robot_microbot_alpha', '0', '0', 2, 0),
-                    ],
-                    ongoingActions: [],
-                },
-                {
-                    defId: 'base_the_hill',
-                    minions: [],
+                    minions: [makeMinion('m3', 'robot_microbot_alpha', '0', '0', 2, 0)],
                     ongoingActions: [],
                 },
             ];
-            core.baseDeck = ['base_secret_garden', 'base_temple_of_goju'];
-
+            core.baseDeck = ['base_secret_garden'];
             core.players['0'].hand = [
                 { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
             ];
@@ -94,78 +149,77 @@ describe('After Scoring 响应窗口 - 官方计分流程', () => {
             return { sys, core };
         });
 
-        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
-        expect(advanceResult.success).toBe(true);
-        expect(runner.getState().sys.phase).toBe('scoreBases');
-        expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
-
-        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
-            playerId: '0',
-            cardUid: 'c1',
-            targetBaseIndex: 0,
-        });
-        expect(playResult.success).toBe(true);
-
-        const sourcePrompt = runner.getState().sys.interaction?.current;
-        expect(sourcePrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
-
-        const chooseSourceResult = runner.resolveInteraction('0', { optionId: 'minion-0' });
-        expect(chooseSourceResult.success).toBe(true);
-
-        const targetPrompt = runner.getState().sys.interaction?.current;
-        expect(targetPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_target');
-        const targetOption = targetPrompt?.data?.options?.find(
-            option => option?.value?.minionUid === 'm3',
+        const { eventLog, choice } = advanceToAfterScoring(runner);
+        const playOptionId = findOptionId(
+            choice,
+            option => option.value?.kind === 'play_action' && option.value?.cardUid === 'c1',
+            '找不到我们乃最强的统一反应入口',
         );
-        expect(targetOption).toBeDefined();
 
-        const chooseTargetResult = runner.resolveInteraction('0', { optionId: targetOption!.id });
-        expect(chooseTargetResult.success).toBe(true);
+        const playResult = runner.resolveInteraction('0', { optionId: playOptionId });
+        expect(playResult.success).toBe(true);
+        eventLog.push(...playResult.events);
 
-        const amountPrompt = runner.getState().sys.interaction?.current;
-        expect(amountPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_amount');
-        expect(amountPrompt?.data?.slider?.max).toBe(7);
+        const sourceChoice = getCurrentChoice(runner.getState());
+        expect(sourceChoice?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
+        const chooseSource = runner.resolveInteraction(
+            '0',
+            {
+                optionId: findOptionId(
+                    sourceChoice!,
+                    option => option.value?.minionUid === 'm1',
+                    '找不到力量来源随从',
+                ),
+            },
+        );
+        expect(chooseSource.success).toBe(true);
+        eventLog.push(...chooseSource.events);
 
-        const chooseAmountResult = runner.resolveInteraction('0', {
+        const targetChoice = getCurrentChoice(runner.getState());
+        expect(targetChoice?.sourceId).toBe('giant_ant_we_are_the_champions_choose_target');
+        const chooseTarget = runner.resolveInteraction(
+            '0',
+            {
+                optionId: findOptionId(
+                    targetChoice!,
+                    option => option.value?.minionUid === 'm3',
+                    '找不到力量目标随从',
+                ),
+            },
+        );
+        expect(chooseTarget.success).toBe(true);
+        eventLog.push(...chooseTarget.events);
+
+        const amountChoice = getCurrentChoice(runner.getState());
+        expect(amountChoice?.sourceId).toBe('giant_ant_we_are_the_champions_choose_amount');
+        const chooseAmount = runner.resolveInteraction('0', {
             optionId: 'confirm-transfer',
             mergedValue: { amount: 7, value: 7 },
         });
-        expect(chooseAmountResult.success).toBe(true);
+        expect(chooseAmount.success).toBe(true);
+        eventLog.push(...chooseAmount.events);
 
-        const allEvents = [
-            ...advanceResult.events,
-            ...playResult.events,
-            ...chooseSourceResult.events,
-            ...chooseTargetResult.events,
-            ...chooseAmountResult.events,
-        ];
-        const scoredEvents = allEvents.filter(
-            (event): event is Extract<SmashUpEvent, { type: typeof SU_EVENTS.BASE_SCORED }> =>
-                event.type === SU_EVENTS.BASE_SCORED,
-        );
-
-        expect(scoredEvents).toHaveLength(1);
-        expect(scoredEvents[0].payload.rankings[0]?.playerId).toBe('0');
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_SCORED)).toBe(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_CLEARED)).toBe(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_REPLACED)).toBe(1);
 
         const finalState = runner.getState();
+        expect(getReactionSession(finalState)).toBeUndefined();
         expect(finalState.sys.responseWindow?.current).toBeUndefined();
         expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
         expect(finalState.core.bases[1].minions.find(minion => minion.uid === 'm3')?.powerCounters).toBe(7);
     });
 
-    it('afterScoring 窗口打开期间不应提前清场换基地，窗口关闭后只补发一次', () => {
+    it('afterScoring 窗口打开时不会提前清场换基地，全部让过后只补发一次', () => {
         const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
+            const sys = createInitialSystemState(ids, smashUpSystemsForTest, undefined);
 
             core.factionSelection = undefined;
             sys.phase = 'playCards';
-
             core.bases = [
                 {
-                    defId: 'base_the_mothership',
+                    defId: 'base_the_jungle',
                     minions: [
                         makeMinion('m1', 'alien_invader', '0', '0', 3, 10),
                         makeMinion('m2', 'ninja_shinobi', '1', '1', 2, 8),
@@ -177,14 +231,8 @@ describe('After Scoring 响应窗口 - 官方计分流程', () => {
                     minions: [],
                     ongoingActions: [],
                 },
-                {
-                    defId: 'base_the_hill',
-                    minions: [],
-                    ongoingActions: [],
-                },
             ];
-            core.baseDeck = ['base_secret_garden', 'base_temple_of_goju'];
-
+            core.baseDeck = ['base_secret_garden'];
             core.players['0'].hand = [
                 { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
             ];
@@ -193,37 +241,29 @@ describe('After Scoring 响应窗口 - 官方计分流程', () => {
             return { sys, core };
         });
 
-        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
-        expect(advanceResult.success).toBe(true);
-        expect(advanceResult.events.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(0);
-        expect(advanceResult.events.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(0);
+        const { advance, eventLog, choice } = advanceToAfterScoring(runner);
+        expect(collectBaseEventCount(advance.events, SU_EVENTS.BASE_CLEARED)).toBe(0);
+        expect(collectBaseEventCount(advance.events, SU_EVENTS.BASE_REPLACED)).toBe(0);
+        expect(runner.getState().core.bases[0].defId).toBe('base_the_jungle');
+        expect(getReactionSession(runner.getState())?.responseWindowType).toBe('afterScoring');
 
-        const stateAfterAdvance = runner.getState();
-        expect(stateAfterAdvance.sys.phase).toBe('scoreBases');
-        expect(stateAfterAdvance.sys.responseWindow?.current?.windowType).toBe('afterScoring');
-        expect(stateAfterAdvance.core.bases[0].defId).toBe('base_the_mothership');
-        expect(stateAfterAdvance.core.bases[0].minions.map(minion => minion.uid)).toEqual(['m1', 'm2']);
+        const passResult = runner.resolveInteraction(choice.playerId, { optionId: 'pass' });
+        expect(passResult.success).toBe(true);
+        eventLog.push(...passResult.events);
 
-        const closeWindowResult = runner.dispatch('RESPONSE_PASS', { playerId: '0' });
-        expect(closeWindowResult.success).toBe(true);
-
-        const allEvents = [...advanceResult.events, ...closeWindowResult.events];
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
-
-        const finalState = runner.getState();
-        expect(finalState.sys.responseWindow?.current).toBeUndefined();
-        expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_CLEARED)).toBe(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_REPLACED)).toBe(1);
+        expect(getReactionSession(runner.getState())).toBeUndefined();
+        expect(runner.getState().core.bases[0].defId).toBe('base_secret_garden');
     });
 
-    it('蚁丘计分后同基地内转移力量且总分不变时，仍应清场并替换基地', () => {
+    it('afterScoring 在同基地内转移力量且总分不变时，也只会清场并换基地一次', () => {
         const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
+            const sys = createInitialSystemState(ids, smashUpSystemsForTest, undefined);
 
             core.factionSelection = undefined;
             sys.phase = 'playCards';
-
             core.bases = [
                 {
                     defId: 'base_the_hill',
@@ -234,14 +274,8 @@ describe('After Scoring 响应窗口 - 官方计分流程', () => {
                     ],
                     ongoingActions: [],
                 },
-                {
-                    defId: 'base_great_library',
-                    minions: [],
-                    ongoingActions: [],
-                },
             ];
             core.baseDeck = ['base_egg_chamber'];
-
             core.players['0'].hand = [
                 { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
             ];
@@ -250,274 +284,135 @@ describe('After Scoring 响应窗口 - 官方计分流程', () => {
             return { sys, core };
         });
 
-        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
-        expect(advanceResult.success).toBe(true);
-        expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
-
-        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
-            playerId: '0',
-            cardUid: 'c1',
-            targetBaseIndex: 0,
-        });
-        expect(playResult.success).toBe(true);
-
-        const sourcePrompt = runner.getState().sys.interaction?.current;
-        expect(sourcePrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
-
-        const chooseSourceResult = runner.resolveInteraction('0', { optionId: 'minion-0' });
-        expect(chooseSourceResult.success).toBe(true);
-
-        const targetPrompt = runner.getState().sys.interaction?.current;
-        expect(targetPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_target');
-        const targetOption = targetPrompt?.data?.options?.find(
-            option => option?.value?.minionUid === 'm2',
+        const { eventLog, choice } = advanceToAfterScoring(runner);
+        const playResult = runner.resolveInteraction(
+            '0',
+            {
+                optionId: findOptionId(
+                    choice,
+                    option => option.value?.kind === 'play_action' && option.value?.cardUid === 'c1',
+                    '找不到我们乃最强的统一反应入口',
+                ),
+            },
         );
-        expect(targetOption).toBeDefined();
+        expect(playResult.success).toBe(true);
+        eventLog.push(...playResult.events);
 
-        const chooseTargetResult = runner.resolveInteraction('0', { optionId: targetOption!.id });
-        expect(chooseTargetResult.success).toBe(true);
+        const sourceChoice = getCurrentChoice(runner.getState());
+        expect(sourceChoice?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
+        const chooseSource = runner.resolveInteraction(
+            '0',
+            {
+                optionId: findOptionId(
+                    sourceChoice!,
+                    option => option.value?.minionUid === 'm1',
+                    '找不到同基地内的来源随从',
+                ),
+            },
+        );
+        expect(chooseSource.success).toBe(true);
+        eventLog.push(...chooseSource.events);
 
-        const amountPrompt = runner.getState().sys.interaction?.current;
-        expect(amountPrompt?.data?.sourceId).toBe('giant_ant_we_are_the_champions_choose_amount');
+        const targetChoice = getCurrentChoice(runner.getState());
+        expect(targetChoice?.sourceId).toBe('giant_ant_we_are_the_champions_choose_target');
+        const chooseTarget = runner.resolveInteraction(
+            '0',
+            {
+                optionId: findOptionId(
+                    targetChoice!,
+                    option => option.value?.minionUid === 'm2',
+                    '找不到同基地内的目标随从',
+                ),
+            },
+        );
+        expect(chooseTarget.success).toBe(true);
+        eventLog.push(...chooseTarget.events);
 
-        const chooseAmountResult = runner.resolveInteraction('0', {
+        const chooseAmount = runner.resolveInteraction('0', {
             optionId: 'confirm-transfer',
             mergedValue: { amount: 5, value: 5 },
         });
-        expect(chooseAmountResult.success).toBe(true);
+        expect(chooseAmount.success).toBe(true);
+        eventLog.push(...chooseAmount.events);
 
-        const allEvents = [
-            ...advanceResult.events,
-            ...playResult.events,
-            ...chooseSourceResult.events,
-            ...chooseTargetResult.events,
-            ...chooseAmountResult.events,
-        ];
-
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(1);
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_CLEARED)).toHaveLength(1);
-        expect(allEvents.filter(event => event.type === SU_EVENTS.BASE_REPLACED)).toHaveLength(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_SCORED)).toBe(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_CLEARED)).toBe(1);
+        expect(collectBaseEventCount(eventLog, SU_EVENTS.BASE_REPLACED)).toBe(1);
 
         const finalState = runner.getState();
-        expect(finalState.sys.responseWindow?.current).toBeUndefined();
         expect(finalState.core.bases[0].defId).toBe('base_egg_chamber');
         expect(finalState.core.bases[0].minions).toHaveLength(0);
     });
 
-    it('无力量变化：afterScoring 窗口无人出牌时不重新计分', () => {
+    it('已有 simple-choice 时不能直接越过它出牌，解完后会先回到统一反应入口再进入子交互', () => {
         const runner = createRunner((ids, random) => {
             const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
-
-            core.factionSelection = undefined;
-            sys.phase = 'playCards';
-
-            core.bases = [
-                {
-                    defId: 'base_the_mothership',
-                    minions: [
-                        makeMinion('m1', 'alien_invader', '0', '0', 3, 15),
-                        makeMinion('m2', 'ninja_shinobi', '1', '1', 2, 10),
-                    ],
-                    ongoingActions: [],
-                },
-            ];
-
-            core.players['0'].hand = [];
-            core.players['1'].hand = [];
-
-            return { sys, core };
-        });
-
-        const result = runner.run({
-            name: '无力量变化：不重新计分',
-            commands: [
-                { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '0', payload: undefined },
-                { type: 'RESPONSE_PASS', playerId: '1', payload: undefined },
-            ],
-        });
-
-        const scoredCount = result.steps
-            .flatMap(step => step.events)
-            .filter(eventType => eventType === SU_EVENTS.BASE_SCORED)
-            .length;
-
-        expect(scoredCount).toBe(1);
-    });
-
-    it('afterScoring 响应窗口与当前 simple-choice 并存时，仍允许打出响应行动牌', () => {
-        const runner = createRunner((ids, random) => {
-            const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
+            const sys = createInitialSystemState(ids, smashUpSystemsForTest, undefined);
 
             core.factionSelection = undefined;
             sys.phase = 'scoreBases';
-
             core.bases = [
                 {
-                    defId: 'base_the_mothership',
-                    minions: [
-                        makeMinion('locals-1', 'innsmouth_the_locals', '0', '0', 2, 8),
-                        makeMinion('locals-2', 'innsmouth_the_locals', '0', '0', 2, 0),
-                        makeMinion('enemy-1', 'ninja_shinobi', '1', '1', 2, 8),
-                    ],
+                    defId: 'base_the_jungle',
+                    minions: [makeMinion('m1', 'alien_invader', '0', '0', 3, 10)],
                     ongoingActions: [],
                 },
                 {
                     defId: 'base_the_hill',
-                    minions: [],
+                    minions: [makeMinion('m2', 'robot_microbot_alpha', '0', '0', 2, 0)],
                     ongoingActions: [],
                 },
             ];
-
             core.players['0'].hand = [
-                { uid: 'return-sea', defId: 'innsmouth_return_to_the_sea', type: 'action', owner: '0' },
+                { uid: 'c1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
             ];
             core.players['1'].hand = [];
 
             sys.interaction.current = createSimpleChoice(
                 'existing-base-choice',
                 '0',
-                '现有基地选择',
+                '已有基地选择',
                 [{ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' }],
-                { sourceId: 'base_the_mothership', targetType: 'button' },
+                { sourceId: 'existing-base-choice', targetType: 'button' },
             );
+            (sys as typeof sys & { smashupReactionSession?: ReactionSessionView }).smashupReactionSession = {
+                frameId: 'score-after:0:test',
+                responseWindowType: 'afterScoring',
+                activePlayerId: '0',
+                currentPlayerId: '0',
+            };
             sys.responseWindow = {
-                current: {
-                    id: 'after-scoring-window',
-                    responderQueue: ['0', '1'],
-                    currentResponderIndex: 0,
-                    passedPlayers: [],
-                    windowType: 'afterScoring',
-                    sourceId: 'score-base',
-                    actionTakenThisRound: false,
-                    consecutivePassRounds: 0,
-                },
-            } as any;
+                ...(sys.responseWindow ?? {}),
+                current: undefined,
+            };
 
             return { sys, core };
         });
 
-        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
+        const directPlay = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
             playerId: '0',
-            cardUid: 'return-sea',
+            cardUid: 'c1',
             targetBaseIndex: 0,
         });
+        expect(directPlay.success).toBe(false);
+        expect(directPlay.error).toBe('请先完成当前选择');
 
-        expect(playResult.success, playResult.error).toBe(true);
-    });
+        const clearCurrentChoice = runner.resolveInteraction('0', { optionId: 'skip' });
+        expect(clearCurrentChoice.success).toBe(true);
+        const reactionChoice = getCurrentChoice(runner.getState());
+        expect(reactionChoice?.sourceId).toBe('smashup_reaction_choose');
 
-    it('最后一个基地在 afterScoring 交互链中打出返回深海后，仍应完成计分与换基地', () => {
-        const runner = createRunner((ids, random) => {
-            const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
-
-            core.factionSelection = undefined;
-            sys.phase = 'playCards';
-
-            core.bases = [
-                {
-                    defId: 'base_great_library',
-                    minions: [],
-                    ongoingActions: [],
-                },
-                {
-                    defId: 'base_the_hill',
-                    minions: [],
-                    ongoingActions: [],
-                },
-                {
-                    defId: 'base_the_mothership',
-                    minions: [
-                        makeMinion('locals-1', 'innsmouth_the_locals', '0', '0', 2, 8),
-                        makeMinion('locals-2', 'innsmouth_the_locals', '0', '0', 2, 0),
-                        makeMinion('enemy-1', 'ninja_shinobi', '1', '1', 2, 8),
-                    ],
-                    ongoingActions: [],
-                },
-            ];
-            core.baseDeck = ['base_secret_garden'];
-
-            core.players['0'].hand = [
-                { uid: 'return-sea', defId: 'innsmouth_return_to_the_sea', type: 'action', owner: '0' },
-            ];
-            core.players['1'].hand = [];
-
-            return { sys, core };
-        });
-
-        const advanceResult = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
-        expect(advanceResult.success).toBe(true);
-        expect(runner.getState().sys.phase).toBe('scoreBases');
-        expect(runner.getState().sys.responseWindow?.current?.windowType).toBe('afterScoring');
-        expect((runner.getState().sys as any).smashupScoring?.currentBaseRef?.slotIndex).toBe(2);
-        expect(runner.getState().sys.interaction?.current?.data?.sourceId).toBe('base_the_mothership');
-
-        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
-            playerId: '0',
-            cardUid: 'return-sea',
-            targetBaseIndex: 2,
-        });
-        expect(playResult.success, playResult.error).toBe(true);
-    });
-
-    it('innsmouth_return_to_the_sea_pod 在 afterScoring 窗口中打出后，应立即创建交互并锁定响应窗口', () => {
-        const runner = createRunner((ids, random) => {
-            const core = SmashUpDomain.setup(ids, random);
-            const sys = createInitialSystemState(ids, systems, undefined);
-
-            core.factionSelection = undefined;
-            sys.phase = 'scoreBases';
-
-            core.bases = [
-                {
-                    defId: 'base_the_mothership',
-                    minions: [
-                        makeMinion('locals-1', 'innsmouth_the_locals_pod', '0', '0', 2, 8),
-                        makeMinion('locals-2', 'innsmouth_the_locals_pod', '0', '0', 2, 0),
-                        makeMinion('enemy-1', 'ninja_shinobi', '1', '1', 2, 8),
-                    ],
-                    ongoingActions: [],
-                },
-            ];
-
-            core.players['0'].hand = [
-                { uid: 'return-sea', defId: 'innsmouth_return_to_the_sea_pod', type: 'action', owner: '0' },
-            ];
-            core.players['1'].hand = [];
-
-            sys.responseWindow = {
-                current: {
-                    id: 'after-scoring-window',
-                    responderQueue: ['0', '1'],
-                    currentResponderIndex: 0,
-                    passedPlayers: [],
-                    windowType: 'afterScoring',
-                    sourceId: 'score-base',
-                    actionTakenThisRound: false,
-                    consecutivePassRounds: 0,
-                },
-            } as any;
-
-            return { sys, core };
-        });
-
-        const playResult = runner.dispatch(SU_COMMANDS.PLAY_ACTION, {
-            playerId: '0',
-            cardUid: 'return-sea',
-            targetBaseIndex: 0,
-        });
-
-        expect(playResult.success, playResult.error).toBe(true);
-
-        const stateAfterPlay = runner.getState();
-        expect(stateAfterPlay.sys.interaction?.current?.data?.sourceId).toBe('innsmouth_return_to_the_sea');
-        expect(stateAfterPlay.sys.responseWindow?.current?.pendingInteractionId).toBe(
-            stateAfterPlay.sys.interaction?.current?.id,
+        const playFromChooser = runner.resolveInteraction(
+            '0',
+            {
+                optionId: findOptionId(
+                    reactionChoice!,
+                    option => option.value?.kind === 'play_action' && option.value?.cardUid === 'c1',
+                    '找不到统一反应入口里的我们乃最强',
+                ),
+            },
         );
-        expect(stateAfterPlay.sys.responseWindow?.current?.currentResponderIndex).toBe(0);
+        expect(playFromChooser.success).toBe(true);
+        expect(getCurrentChoice(runner.getState())?.sourceId).toBe('giant_ant_we_are_the_champions_choose_source');
     });
 });

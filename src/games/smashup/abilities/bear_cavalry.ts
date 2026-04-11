@@ -18,9 +18,11 @@ import {
     createSkipOption,
     addTempPower,
     addPowerCounter,
+    grantContextualExtraAction,
     grantExtraAction,
     buildValidatedDestroyEvents,
     buildValidatedMoveEvents,
+    getTitansOnBase,
 } from '../domain/abilityHelpers';
 import { SU_EVENT_TYPES } from '../domain/events';
 import { SU_EVENTS } from '../domain/types';
@@ -33,20 +35,20 @@ import { createSimpleChoice, queueInteraction } from '../../../engine/systems/In
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { PlayerId } from '../../../engine/types';
 
-// 本文件中使用的 defId 匹配工具：基础版 + `_pod` 版本都视为同一张牌
+// 本文件中使用的 defId 匹配工具：基础版与 `_pod` 版本都视为同一张牌
 function matchesDefId(defId: string | undefined | null, baseDefId: string): boolean {
     return defId === baseDefId || defId === `${baseDefId}_pod`;
 }
 
-/** 注册黑熊骑兵派系所有能力*/
+/** 注册黑熊骑兵派系所有能力 */
 export function registerBearCavalryAbilities(): void {
-    // 黑熊擒抱（行动卡）：每位对手消灭自己最弱随从
+    // 黑熊擒抱（行动卡）：每位对手消灭自己最弱的随从
     registerAbility('bear_cavalry_bear_hug', 'onPlay', bearCavalryBearHug);
-    registerAbility('bear_cavalry_bear_hug_pod', 'onPlay', bearCavalryBearHug);  // POD版相同
+    registerAbility('bear_cavalry_bear_hug_pod', 'onPlay', bearCavalryBearHug);  // POD 版相同
     // 委任（行动卡）：额外打出一个随从
     registerAbility('bear_cavalry_commission', 'onPlay', bearCavalryCommission);
-    registerAbility('bear_cavalry_commission_pod', 'onPlay', bearCavalryCommission);  // POD版相同
-    // 黑熊骑兵（随从onPlay）：移动对手在本基地的一个随从到另一个基地
+    registerAbility('bear_cavalry_commission_pod', 'onPlay', bearCavalryCommission);  // POD 版相同
+    // 黑熊骑兵（随从 onPlay）：移动对手在本基地的一个随从到另一个基地
     registerAbility('bear_cavalry_bear_cavalry', 'onPlay', bearCavalryBearCavalryAbility);
     // 你们已经完蛋（行动卡）：选择有己方随从的基地，移动对手随从
     registerAbility('bear_cavalry_youre_screwed', 'onPlay', bearCavalryYoureScrewed);
@@ -54,7 +56,7 @@ export function registerBearCavalryAbilities(): void {
     registerAbility('bear_cavalry_bear_rides_you', 'onPlay', bearCavalryBearRidesYou);
     // 你们都是美食（行动卡）：移动一个基地上所有对手随从到其他基地
     registerAbility('bear_cavalry_youre_pretty_much_borscht', 'onPlay', bearCavalryYourePrettyMuchBorscht);
-    registerAbility('bear_cavalry_youre_pretty_much_borscht_pod', 'onPlay', bearCavalryYourePrettyMuchBorscht);  // POD版相同
+    registerAbility('bear_cavalry_youre_pretty_much_borscht_pod', 'onPlay', bearCavalryYourePrettyMuchBorscht);  // POD 版相同
     // 黑熊口粮（行动卡）：消灭一个随从或一个已打出的行动卡
     registerAbility('bear_cavalry_bear_necessities', 'onPlay', bearCavalryBearNecessities);
 
@@ -63,7 +65,7 @@ export function registerBearCavalryAbilities(): void {
     registerProtection('bear_cavalry_general_ivan', 'destroy', bearCavalryGeneralIvanChecker);
     // 极地突击队员：唯一随从时不收回可消灭（+2力量的ongoingModifiers 中注册）
     registerProtection('bear_cavalry_polar_commando', 'destroy', bearCavalryPolarCommandoChecker);
-    // 全面优势：保护己方随从不收回被消灭移动/影响
+    // 全面优势：保护己方随从不受被消灭、移动、影响类效果影响
     registerProtection('bear_cavalry_superiority', 'destroy', bearCavalrySuperiorityChecker);
     registerProtection('bear_cavalry_superiority', 'move', bearCavalrySuperiorityChecker);
     registerProtection('bear_cavalry_superiority', 'affect', bearCavalrySuperiorityChecker);
@@ -73,19 +75,19 @@ export function registerBearCavalryAbilities(): void {
     registerTrigger('bear_cavalry_high_ground', 'onMinionMoved', bearCavalryHighGroundTrigger);
 
     // === POD 版本能力注册 ===
-    // 伊万将军 POD: 保护 + 响应式加力
+    // 伊万将军 POD：保护 + 响应式加成
     registerProtection('bear_cavalry_general_ivan_pod', 'destroy', bearCavalryGeneralIvanPodProtection);
     registerTrigger('bear_cavalry_general_ivan_pod', 'onMinionMoved', bearCavalryGeneralIvanPodTrigger);
-    // 极地突击队员 POD: 天赋放置指示物
+    // 极地突击队员 POD：天赋放置指示物
     registerAbility('bear_cavalry_polar_commando_pod', 'talent', bearCavalryPolarCommandoPodTalent);
     // 黑熊骑兵 POD: 入场移动
     registerAbility('bear_cavalry_bear_cavalry_pod', 'onPlay', bearCavalryBearCavalryPodAbility);
-    // 幼熊斥候 POD: 响应式消灭
+    // 幼熊斥候 POD：响应式消灭
     registerTrigger('bear_cavalry_cub_scout_pod', 'onMinionMoved', bearCavalryCubScoutPodTrigger);
-    // 黑熊擒抱 POD: 全球最弱消灭（与原版相同，已在上方注册）
-    // 你们已经完蛋 POD: 降低临界点 或 +2 力量
+    // 黑熊擒抱 POD：全局最弱消灭（与原版相同，已在上方注册）
+    // 你们已经完蛋 POD：降低临界点并提供 +2 力量
     registerAbility('bear_cavalry_youre_screwed_pod', 'onPlay', bearCavalryYoureScrewedPodAbility);
-    // 黑熊口粮 POD: 压制天赋 + 回合开始自毁
+    // 黑熊口粮 POD：压制天赋 + 回合开始自毁
     registerAbility('bear_cavalry_bear_necessities_pod', 'talent', bearCavalryBearNecessitiesPodTalent);
     registerTrigger('bear_cavalry_bear_necessities_pod', 'onTurnStart', bearCavalryBearNecessitiesPodTurnStart);
     // 你们都是美食 POD: 批量移动（与原版相同，已在上方注册）
@@ -97,7 +99,7 @@ export function registerBearCavalryAbilities(): void {
     registerProtection('bear_cavalry_superiority_pod', 'move', bearCavalrySuperiorityPodProtection);
     registerProtection('bear_cavalry_superiority_pod', 'affect', bearCavalrySuperiorityPodProtection);
     registerAbility('bear_cavalry_superiority_pod', 'talent', bearCavalrySuperiorityPodTalent);
-    // 制高点 POD: 响应式消灭并抽牌
+    // 制高点 POD：响应式消灭并抽牌
     registerTrigger('bear_cavalry_high_ground_pod', 'onMinionMoved', bearCavalryHighGroundPodTrigger);
 }
 
@@ -211,13 +213,13 @@ function bearCavalryCommission(ctx: AbilityContext): AbilityResult {
         '委任：选择要额外打出的随从', options as any[],
         { sourceId: 'bear_cavalry_commission_choose_minion', targetType: 'hand' },
     );
-    // 标记是否为 POD 版本，用于后续交互链区分“必须移动”与“可以跳过”
+    // 标记是否为 POD 版本，用于后续交互链区分“必须移动”和“可以跳过”
     (interaction.data as any).isPod = ctx.defId === 'bear_cavalry_commission_pod';
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 
-/** 委任 POD onPlay：额外随从+移动 */
+/** 委任 POD onPlay：额外随从并移动 */
 // ============================================================================
 // ongoing 效果检查器与触发器
 // ============================================================================
@@ -228,7 +230,7 @@ function bearCavalryGeneralIvanChecker(ctx: ProtectionCheckContext): boolean {
         const ivan = base.minions.find(m => matchesDefId(m.defId, 'bear_cavalry_general_ivan'));
         if (ivan && ivan.controller === ctx.targetMinion.controller) {
             // 原版文本：Your minions cannot be destroyed.
-            // FAQ 指明不区分来源，因此同控制者的所有随从（包括伊万自己）一律保护。
+            // FAQ 指明不区分来源，因此同控制者的所有随从（包括伊万自己）一律保护
             return true;
         }
     }
@@ -251,7 +253,7 @@ function bearCavalryGeneralIvanPodProtection(ctx: ProtectionCheckContext): boole
 }
 
 
-/** 伊万将军 POD 触发器：其他玩家随从移动后可选择给己方随从+1力量（每回合限一次） */
+/** 伊万将军 POD 触发器：其他玩家随从移动后可选择给己方随从 +1 力量（每回合限一次） */
 function bearCavalryGeneralIvanPodTrigger(ctx: TriggerContext): SmashUpEvent[] | { events: SmashUpEvent[]; matchState?: any } {
     const events: SmashUpEvent[] = [];
     
@@ -305,13 +307,13 @@ function bearCavalryGeneralIvanPodTrigger(ctx: TriggerContext): SmashUpEvent[] |
             }
         }
         
-        // 创建交互：询问是否给己方随从+1力量（"you may"）
+        // 创建交互：询问是否给己方随从 +1 力量（"you may"）
         const interaction = createSimpleChoice(
             `bear_cavalry_general_ivan_pod_trigger_${ctx.now}_${ivan.uid}`,
             ivan.controller,
-            '伊万将军：是否给对手随从移动到的基地上你的随从+1力量直到回合结束？（每回合限一次）',
+            '伊万将军：是否给对手随从移动到的基地上你的随从 +1 力量直到回合结束？（每回合限一次）',
             [
-                { id: 'yes', label: '是（给己方随从+1力量）', value: 'yes' as any },
+                { id: 'yes', label: '是（给己方随从 +1 力量）', value: 'yes' as any },
                 { id: 'no', label: '否', value: 'no' as any }
             ],
             { sourceId: 'bear_cavalry_general_ivan_pod_trigger', targetType: 'generic' }
@@ -332,7 +334,7 @@ function bearCavalryGeneralIvanPodTrigger(ctx: TriggerContext): SmashUpEvent[] |
     return events;
 }
 
-/** 极地突击队员保护检查：基地上唯一己方随从时不收回可消灭*/
+/** 极地突击队员保护检查：基地上唯一己方随从时不收回可消灭 */
 function bearCavalryPolarCommandoChecker(ctx: ProtectionCheckContext): boolean {
     if (!matchesDefId(ctx.targetMinion.defId, 'bear_cavalry_polar_commando')) return false;
     const base = ctx.state.bases[ctx.targetBaseIndex];
@@ -342,7 +344,7 @@ function bearCavalryPolarCommandoChecker(ctx: ProtectionCheckContext): boolean {
 }
 
 
-/** 极地突击队员 POD 天赋：放置+1力量标记 */
+/** 极地突击队员 POD 天赋：放置 +1 力量标记 */
 function bearCavalryPolarCommandoPodTalent(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
@@ -380,7 +382,7 @@ function bearCavalryPolarCommandoPodTalent(ctx: AbilityContext): AbilityResult {
     
     return resolveOrPrompt(ctx, buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId }), {
         id: 'bear_cavalry_polar_commando_pod_talent',
-        title: '选择放置+1力量标记的随从',
+        title: '选择放置 +1 力量标记的随从',
         sourceId: 'bear_cavalry_polar_commando_pod',
         targetType: 'minion',
     }, (value) => ({
@@ -388,7 +390,7 @@ function bearCavalryPolarCommandoPodTalent(ctx: AbilityContext): AbilityResult {
     }));
 }
 
-/** 全面优势保护检查：保护基地上己方随从不收回被其他玩家消灭移动/影响 */
+/** 全面优势保护检查：保护基地上己方随从不受其他玩家的消灭、移动和影响 */
 function bearCavalrySuperiorityChecker(ctx: ProtectionCheckContext): boolean {
     if (ctx.sourcePlayerId === ctx.targetMinion.controller) return false;
     const base = ctx.state.bases[ctx.targetBaseIndex];
@@ -576,7 +578,7 @@ function bearCavalryCubScoutPodTrigger(ctx: TriggerContext): SmashUpEvent[] | { 
     return events;
 }
 
-/** 制高点触发：有己方随从时消灭移入的对手随从*/
+/** 制高点触发：有己方随从时消灭移入的对手随从 */
 function bearCavalryHighGroundTrigger(ctx: TriggerContext): SmashUpEvent[] {
     const events: SmashUpEvent[] = [];
     const destBaseIndex = ctx.baseIndex;
@@ -613,7 +615,7 @@ function bearCavalryHighGroundTrigger(ctx: TriggerContext): SmashUpEvent[] {
 }
 
 
-/** 制高点 POD 触发器：移动后消灭或摸牌打战术 */
+/** 制高点 POD 触发器：移动后消灭，或摸牌并打出战术 */
 function bearCavalryHighGroundPodTrigger(ctx: TriggerContext): SmashUpEvent[] | { events: SmashUpEvent[]; matchState?: any } {
     const events: SmashUpEvent[] = [];
     const destBaseIndex = ctx.baseIndex;
@@ -715,7 +717,7 @@ function bearCavalryHighGroundPodTrigger(ctx: TriggerContext): SmashUpEvent[] | 
     return events;
 }
 
-/** 黑熊骑兵 onPlay：移动对手在本基地的一个随从到另一个基地*/
+/** 黑熊骑兵 onPlay：移动对手在本基地的一个随从到另一个基地 */
 function bearCavalryBearCavalryAbility(ctx: AbilityContext): AbilityResult {
     const base = ctx.state.bases[ctx.baseIndex];
     if (!base) return { events: [] };
@@ -729,7 +731,7 @@ function bearCavalryBearCavalryAbility(ctx: AbilityContext): AbilityResult {
     const otherBases = ctx.state.bases.map((b, i) => i).filter(i => i !== ctx.baseIndex);
     if (otherBases.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    // 选择随从（第一步）- buildMinionTargetOptions 会自动过滤受保护的随从
+    // 选择随从（第一步），buildMinionTargetOptions 会自动过滤受保护的随从
     const options = buildMinionTargetOptions(
         opponentMinions.map(m => {
             const def = getCardDef(m.defId) as MinionCardDef | undefined;
@@ -813,7 +815,7 @@ function bearCavalryYoureScrewed(ctx: AbilityContext): AbilityResult {
 }
 
 
-/** 你们已经完蛋 POD onPlay：ongoing 效果（动态调整爆破点） */
+/** 你们已经完蛋 POD onPlay：ongoing 效果（动态调整临界点） */
 function bearCavalryYoureScrewedPodAbility(ctx: AbilityContext): AbilityResult {
     // POD 版本是 ongoing 卡，效果在 ongoingModifiers 中实现
     // onPlay 时不产生事件
@@ -843,7 +845,7 @@ function bearCavalryBearRidesYou(ctx: AbilityContext): AbilityResult {
 }
 
 
-/** 与熊同行 POD onPlay：移动随从+压制能力 */
+/** 与熊同行 POD onPlay：移动随从并压制能力 */
 function bearCavalryBearRidesYouPod(ctx: AbilityContext): AbilityResult {
     // 收集所有随从（己方和对手）
     const allMinions: { uid: string; defId: string; baseIndex: number; controller: string; label: string }[] = [];
@@ -876,7 +878,7 @@ type BearRidesYouPodSuppressTarget =
     | { kind: 'skip' }
     | { kind: 'base'; baseIndex: number };
 
-/** 你们都是美食 onPlay：选择有己方随从的基地→选择目标基地，移动所有对手随从*/
+/** 你们都是美食 onPlay：选择有己方随从的基地，再选择目标基地，移动所有对手随从 */
 function bearCavalryYourePrettyMuchBorscht(ctx: AbilityContext): AbilityResult {
     // 找有己方随从的基地（POD 文本：Choose a base where you have a minion.）
     const candidates: { baseIndex: number; label: string }[] = [];
@@ -1063,7 +1065,8 @@ export function registerBearCavalryInteractionHandlers(): void {
             });
             const interaction = createSimpleChoice(
                 `bear_cavalry_bear_hug_${opId}_${timestamp}`, opId,
-                '黑熊擒抱：选择要消灭的最弱随从', buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: opId }),
+                '\u9ed1\u718a\u64d2\u62b1\uff1a\u9009\u62e9\u8981\u6d88\u706d\u7684\u6700\u5f31\u968f\u4ece',
+                buildMinionTargetOptions(options, { state: state.core, sourcePlayerId: opId }),
                 { sourceId: 'bear_cavalry_bear_hug', targetType: 'minion', autoCancelOption: true }
             );
             (interaction.data as any).continuationContext = { opponents: ctx.opponents, opponentIdx: i };
@@ -1131,8 +1134,12 @@ export function registerBearCavalryInteractionHandlers(): void {
             };
         }
         const next = createSimpleChoice(
-            `bear_cavalry_commission_choose_base_${timestamp}`, playerId, '委任：选择打出随从的基地', buildBaseTargetOptions(baseCandidates, state.core), { sourceId: 'bear_cavalry_commission_choose_base', targetType: 'base' }
-            );
+            `bear_cavalry_commission_choose_base_${timestamp}`,
+            playerId,
+            '委任：选择打出随从的基地',
+            buildBaseTargetOptions(baseCandidates, state.core),
+            { sourceId: 'bear_cavalry_commission_choose_base', targetType: 'base' }
+        );
         return {
             state: queueInteraction(state, {
                 ...next,
@@ -1253,8 +1260,12 @@ export function registerBearCavalryInteractionHandlers(): void {
             return { baseIndex: i, label: baseDef?.name ?? `基地 ${i + 1}` };
         });
         const next = createSimpleChoice(
-            `bear_cavalry_bear_cavalry_choose_base_${timestamp}`, playerId, '选择要移动到的基地', buildBaseTargetOptions(options, state.core), { sourceId: 'bear_cavalry_bear_cavalry_choose_base', targetType: 'base' }
-            );
+            `bear_cavalry_bear_cavalry_choose_base_${timestamp}`,
+            playerId,
+            '选择要移动到的基地',
+            buildBaseTargetOptions(options, state.core),
+            { sourceId: 'bear_cavalry_bear_cavalry_choose_base', targetType: 'base' }
+        );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { minionUid, minionDefId: target.defId, fromBase } } }), events: [] };
     });
 
@@ -1415,8 +1426,12 @@ export function registerBearCavalryInteractionHandlers(): void {
         }
         if (destBases.length === 0) return { state, events: [] };
         const next = createSimpleChoice(
-            `bear_cavalry_borscht_choose_dest_${timestamp}`, playerId, '选择目标基地（移动对手随从到此处）', buildBaseTargetOptions(destBases, state.core), { sourceId: 'bear_cavalry_borscht_choose_dest', targetType: 'base' }
-            );
+            `bear_cavalry_borscht_choose_dest_${timestamp}`,
+            playerId,
+            '选择目标基地（移动对手随从到此处）',
+            buildBaseTargetOptions(destBases, state.core),
+            { sourceId: 'bear_cavalry_borscht_choose_dest', targetType: 'base' }
+        );
         return { state: queueInteraction(state, { ...next, data: { ...next.data, continuationContext: { fromBase } } }), events: [] };
     });
 
@@ -1442,7 +1457,7 @@ export function registerBearCavalryInteractionHandlers(): void {
         return { state, events };
     });
 
-    // === POD 版本交互处理器 ===
+    // === POD 版本交互处理 ===
     // 幼熊斥候 POD：消灭对手随从后，可选择移动己方小随从到本基地
     registerInteractionHandler('bear_cavalry_cub_scout_pod_destroy', (state, playerId, value, iData, _random, timestamp) => {
         const events: SmashUpEvent[] = [];
@@ -1452,7 +1467,7 @@ export function registerBearCavalryInteractionHandlers(): void {
             return { state, events };
         }
         
-        // 获取交互数据（直接从 iData 读取，不是 iData.data）
+        // 获取交互数据（直接从 iData 读取，不走 iData.data）
         const { minionUid, minionDefId, baseIndex, ownerId, scoutUid, scoutBaseIndex } = (iData ?? {}) as any;
         
         // 1. 消灭对手随从
@@ -1646,17 +1661,13 @@ export function registerBearCavalryInteractionHandlers(): void {
             });
         }
 
-        // 泰坦：检查所有玩家的 activeTitan 是否在该基地
-        for (const pid of state.core.turnOrder) {
-            const p = state.core.players[pid];
-            const t = (p as any)?.activeTitan as { titanUid: string; baseIndex: number; defId: string } | undefined;
-            if (!t) continue;
-            if (t.baseIndex !== toBase) continue;
-            const tDef = getCardDef(t.defId);
+        // 泰坦：检查该基地上所有在场泰坦
+        for (const titan of getTitansOnBase(state, toBase)) {
+            const tDef = getCardDef(titan.defId);
             suppressOptions.push({
-                id: `titan-${t.titanUid}`,
-                label: `[泰坦] ${tDef?.name ?? t.defId}`,
-                value: { kind: 'titan', titanUid: t.titanUid, baseIndex: toBase, ownerId: pid },
+                id: `titan-${titan.uid}`,
+                label: `[泰坦] ${tDef?.name ?? titan.defId}`,
+                value: { kind: 'titan', titanUid: titan.uid, baseIndex: toBase, ownerId: titan.ownerId },
             });
         }
 
@@ -1694,7 +1705,19 @@ export function registerBearCavalryInteractionHandlers(): void {
             };
         }
 
-        return { state, events: [] };
+        return {
+            state,
+            events: [{
+                type: SU_EVENTS.CARD_SUPPRESSED,
+                payload: {
+                    cardUid: chosen.kind === 'minion' ? chosen.minionUid : chosen.kind === 'titan' ? chosen.titanUid : chosen.cardUid,
+                    suppressedBy: playerId,
+                    cardType: chosen.kind === 'minion' ? 'minion' : chosen.kind === 'titan' ? 'titan' : 'ongoing',
+                    baseIndex: chosen.baseIndex,
+                },
+                timestamp,
+            } as any],
+        };
     });
     
     // 全面优势 POD 天赋：摸牌或保护
@@ -1778,13 +1801,13 @@ export function registerBearCavalryInteractionHandlers(): void {
             }
             
             // 打出一张战术（额外行动额度）
-            events.push(grantExtraAction(playerId, 'bear_cavalry_high_ground_pod', timestamp));
+            events.push(grantContextualExtraAction({ playerId, now: timestamp, matchState: state }, 'bear_cavalry_high_ground_pod'));
         }
         
         return { state, events };
     });
     
-    // 极地突击队员 POD 天赋：放置+1力量标记
+    // 极地突击队员 POD 天赋：放置 1 个力量标记
     registerInteractionHandler('bear_cavalry_polar_commando_pod', (state, playerId, value, _iData, _random, timestamp) => {
         const { minionUid, baseIndex } = value as { minionUid: string; baseIndex: number };
         return {
@@ -1793,7 +1816,7 @@ export function registerBearCavalryInteractionHandlers(): void {
         };
     });
     
-    // 伊万将军 POD 触发器：玩家选择是否给己方随从+1力量
+    // 伊万将军 POD 触发器：玩家选择是否给己方随从 +1 力量
     registerInteractionHandler('bear_cavalry_general_ivan_pod_trigger', (state, _playerId, value, iData, _random, timestamp) => {
         const events: SmashUpEvent[] = [];
         const action = value as string;
@@ -1809,7 +1832,7 @@ export function registerBearCavalryInteractionHandlers(): void {
         state.core.specialLimitUsed[limitKey].push(0); // 使用 0 作为占位符（不需要基地索引）
         
         if (action === 'yes') {
-            // 玩家选择使用效果：给该基地上己方所有随从+1临时力量
+            // 玩家选择使用效果：给该基地上己方所有随从 +1 临时力量
             const baseIndex = (iData as any).baseIndex as number;
             const ivanController = (iData as any).ivanController as string;
             const base = state.core.bases[baseIndex];
@@ -1827,5 +1850,4 @@ export function registerBearCavalryInteractionHandlers(): void {
         return { state, events };
     });
 }
-
 
