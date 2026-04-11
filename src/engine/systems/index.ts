@@ -9,6 +9,7 @@ export * from './types';
 export { createFlowSystem, getCurrentPhase, setPhase, FLOW_COMMANDS, FLOW_EVENTS, type FlowHooks, type FlowSystemConfig, type PhaseChangedEvent, type PhaseExitResult, type PhaseEnterResult, type CanAdvanceResult } from './FlowSystem';
 export { createUndoSystem, getUndoSnapshotCount, UNDO_COMMANDS, type UndoSystemConfig } from './UndoSystem';
 export { createInteractionSystem, createSimpleChoice, createMultistepChoice, queueInteraction, resolveInteraction, asSimpleChoice, asMultistepChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS, type InteractionDescriptor, type InteractionState, type SimpleChoiceData, type MultistepChoiceData, type InteractionSystemConfig, type SimpleChoiceResponseValidationMode } from './InteractionSystem';
+export { createCompareRollChoiceSystem, type CompareRollChoiceSystemConfig } from './CompareRollChoiceSystem';
 export { createSimpleChoiceSystem, type SimpleChoiceSystemConfig } from './SimpleChoiceSystem';
 export { createMultistepChoiceSystem, type MultistepChoiceSystemConfig } from './MultistepChoiceSystem';
 export { useMultistepInteraction, type MultistepInteractionState } from './useMultistepInteraction';
@@ -27,6 +28,7 @@ export { CharacterSelectionSystem, CHARACTER_SELECTION_COMMANDS, type CharacterS
 import { createUndoSystem } from './UndoSystem';
 import { createInteractionSystem } from './InteractionSystem';
 import { createSimpleChoiceSystem } from './SimpleChoiceSystem';
+import { createCompareRollChoiceSystem } from './CompareRollChoiceSystem';
 import { createEventStreamSystem } from './EventStreamSystem';
 import { createRematchSystem } from './RematchSystem';
 import { createActionLogSystem } from './ActionLogSystem';
@@ -51,6 +53,7 @@ export function createBaseSystems<TCore>(config: BaseSystemsConfig = {}): Engine
         createUndoSystem(undo),
         createInteractionSystem(),
         createSimpleChoiceSystem(),
+        createCompareRollChoiceSystem(),
         createRematchSystem(),
         createResponseWindowSystem(),
         createTutorialSystem(),

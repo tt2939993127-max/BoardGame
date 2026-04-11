@@ -251,7 +251,15 @@ function handleSimpleChoiceRespond<TCore>(
                 ...(mergedValue as Record<string, unknown>),
             };
         } else {
-            return { halt: true, error: '非法的选择值' };
+            const mergedRecord = mergedValue as Record<string, unknown>;
+            const hasConflict = Object.keys(mergedRecord).some((key) => key in selectedOptionRecord);
+            if (hasConflict) {
+                return { halt: true, error: '非法的选择值' };
+            }
+            resolvedValue = {
+                ...selectedOptionRecord,
+                ...mergedRecord,
+            };
         }
     } else {
         const isSingleRecoveryChoice = isMulti
