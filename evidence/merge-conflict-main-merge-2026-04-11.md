@@ -13,6 +13,6 @@
   - npx eslint src/games/smashup/abilities/titans.ts
 
 ## Merge Audit
-- merge commit: （待写入）
-- merge:audit: （待写入）
-- merge:audit:strict: （待写入）
+- merge commit: 90a6eca2
+- merge:audit: 5 files checked / 混合结果 5 / 与两侧相同 0
+- merge:audit:strict: 通过（无单边结果）
