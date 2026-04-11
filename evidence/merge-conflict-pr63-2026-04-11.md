@@ -22,6 +22,6 @@
   - node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/alien-scout-pod-afterscore.test.ts src/games/smashup/__tests__/bearCavalry-youre-screwed-pod-breakpoint.test.ts src/games/smashup/__tests__/buccaneer-pod-limit.test.ts src/games/smashup/__tests__/elderThingsPod.test.ts src/games/smashup/__tests__/giantAntsPod.test.ts src/games/smashup/__tests__/killer-plant-pod-verification.test.ts src/games/smashup/__tests__/ninja-acolyte-pod-consistency.test.ts src/games/smashup/__tests__/ninja-infiltrate-pod-talent.test.ts src/games/smashup/__tests__/podPowerModifierRegistration.test.ts src/games/smashup/__tests__/steampunk-pod-verification.test.ts src/games/smashup/__tests__/vampiresPod.test.ts --configLoader native
 
 ## Merge Audit
-- merge commit: （待写入）
-- merge:audit: （待写入）
-- merge:audit:strict: （待写入）
+- merge commit: bee6460d
+- merge:audit: 3 files checked / 混合结果 3 / 与两侧相同 0
+- merge:audit:strict: 通过（无单边结果）
