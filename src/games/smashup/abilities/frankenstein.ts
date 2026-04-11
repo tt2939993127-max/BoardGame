@@ -21,6 +21,30 @@ import { registerInteractionHandler } from '../domain/abilityInteractionHandlers
 import { matchesDefId } from '../domain/utils';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 
+const BODY_SHOP_PENDING_DISTRIBUTIONS_KEY = '_pendingBodyShopDistributions';
+
+interface BodyShopPendingDistribution {
+    playerId: PlayerId;
+    targetMinionUid: string;
+    totalCounters: number;
+}
+
+function appendPendingBodyShopDistribution(
+    matchState: MatchState<SmashUpCore>,
+    pending: BodyShopPendingDistribution,
+): MatchState<SmashUpCore> {
+    const existing = Array.isArray((matchState.sys as any)[BODY_SHOP_PENDING_DISTRIBUTIONS_KEY])
+        ? (matchState.sys as any)[BODY_SHOP_PENDING_DISTRIBUTIONS_KEY] as BodyShopPendingDistribution[]
+        : [];
+    return {
+        ...matchState,
+        sys: {
+            ...matchState.sys,
+            [BODY_SHOP_PENDING_DISTRIBUTIONS_KEY]: [...existing, pending],
+        } as typeof matchState.sys,
+    };
+}
+
 // ============================================================================
 // 注册入口
 // ============================================================================
@@ -356,36 +380,15 @@ function frankensteinBodyShop(ctx: AbilityContext): AbilityResult {
             destroyMinion(val.minionUid, val.defId, val.baseIndex, minion.owner, undefined, 'frankenstein_body_shop', ctx.now),
         ];
         if (power <= 0) return { events };
-        // 需要创建分配交互
-        return createBodyShopDistributeInteraction(ctx, power, val.minionUid, events);
+        return {
+            events,
+            matchState: appendPendingBodyShopDistribution(ctx.matchState, {
+                playerId: ctx.playerId,
+                targetMinionUid: val.minionUid,
+                totalCounters: power,
+            }),
+        };
     });
-}
-
-/** 创建尸体商店第二步：分配指示物 */
-function createBodyShopDistributeInteraction(ctx: AbilityContext, totalCounters: number, excludeUid: string, priorEvents: SmashUpEvent[]): AbilityResult {
-    const candidates = buildOwnMinionOptions(ctx, excludeUid);
-    if (candidates.length === 0) return { events: priorEvents };
-    if (candidates.length === 1) {
-        // 只有一个随从，全部指示物给它
-        priorEvents.push(addPowerCounter(candidates[0].uid, candidates[0].baseIndex, totalCounters, 'frankenstein_body_shop', ctx.now));
-        return { events: priorEvents };
-    }
-    // 多个候选随从，逐个分配（每次选一个随从放1个指示物）
-    const options = candidates.map((c, i) => ({
-        id: `minion-${i}`,
-        label: c.label,
-        value: { minionUid: c.uid, minionDefId: c.defId, baseIndex: c.baseIndex, remaining: totalCounters },
-        _source: 'field' as const,
-        displayMode: 'card' as const,
-    }));
-
-    const interaction = createSimpleChoice(
-        `frankenstein_body_shop_distribute_${ctx.now}`, ctx.playerId,
-        `选择随从放置+1指示物（剩余 ${totalCounters} 个）`,
-        options,
-        { sourceId: 'frankenstein_body_shop_distribute', targetType: 'minion' },
-    );
-    return { events: priorEvents, matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 /** 闪电攻击 onPlay：逐个点击己方随从移除指示物，然后消灭力量≤移除数的随从 */
@@ -500,32 +503,14 @@ const handleBodyShopChooseMinion: IH = (state, playerId, value, _data, _random, 
     ];
     if (power <= 0) return { state, events };
 
-    const candidates: { uid: string; baseIndex: number; label: string }[] = [];
-    for (let i = 0; i < state.core.bases.length; i++) {
-        for (const mi of state.core.bases[i].minions) {
-            if (mi.controller === playerId && mi.uid !== v.minionUid) {
-                const def = getCardDef(mi.defId);
-                candidates.push({ uid: mi.uid, baseIndex: i, label: def?.name ?? mi.defId });
-            }
-        }
-    }
-    if (candidates.length === 0) return { state, events };
-    if (candidates.length === 1) {
-        events.push(addPowerCounter(candidates[0].uid, candidates[0].baseIndex, power, 'frankenstein_body_shop', now));
-        return { state, events };
-    }
-    const options = candidates.map((c, idx) => ({
-        id: `minion-${idx}`, label: c.label,
-        value: { minionUid: c.uid, minionDefId: c.defId, baseIndex: c.baseIndex, remaining: power },
-        _source: 'field' as const,
-        displayMode: 'card' as const,
-    }));
-    const interaction = createSimpleChoice(
-        `frankenstein_body_shop_distribute_${now}`, playerId,
-        `选择随从放置+1指示物（剩余 ${power} 个）`, options,
-        { sourceId: 'frankenstein_body_shop_distribute', targetType: 'minion' },
-    );
-    return { state: queueInteraction(state, interaction), events };
+    return {
+        state: appendPendingBodyShopDistribution(state, {
+            playerId,
+            targetMinionUid: v.minionUid,
+            totalCounters: power,
+        }),
+        events,
+    };
 };
 
 const handleBodyShopDistribute: IH = (state, _pid, value, _data, _random, now) => {

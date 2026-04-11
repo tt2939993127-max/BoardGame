@@ -7,6 +7,7 @@ export {
     buildAiProgressMarker,
     resolveCurrentPlayerId,
     resolveForceAdvancePhaseAfterRecovery,
+    resolveForceEndTurnRecoveryStep,
     resolveForceEndTurnFollowUpAfterConfirmation,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,

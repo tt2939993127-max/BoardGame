@@ -4,7 +4,7 @@ import {
     DICE_BG_SIZE,
     getDiceFaceFallbackSkin,
     getDiceSpritePosition,
-    getDiceSpriteUrls,
+    getDiceSpriteUrl,
 } from './assets';
 
 export interface Dice3DProps {
@@ -26,15 +26,7 @@ export interface Dice3DProps {
     definitionId?: string;
 }
 
-type SpriteLoadState = 'loading' | 'ready' | 'error';
-interface SpriteState {
-    status: SpriteLoadState;
-    url?: string;
-}
 const dice3DLogger = createScopedLogger('dicethrone:dice3d');
-const spriteProbeStatusCache = new Map<string, 'ready' | 'error'>();
-const spriteProbePromiseCache = new Map<string, Promise<'ready' | 'error'>>();
-const DIRECT_IMAGE_URL_RE = /^(?:data:|blob:)/i;
 const DICE3D_STYLE_ELEMENT_ID = 'dicethrone-dice3d-styles';
 const DICE3D_STYLE_TEXT = `
 .dice3d-perspective { perspective: 1000px; }
@@ -52,83 +44,6 @@ const DICE3D_STYLE_TEXT = `
 .animate-dice3d-bonus-tumble { animation: dice3d-bonus-tumble 0.8s linear infinite; }
 `;
 
-const isRemoteUrl = (url: string) => {
-    if (!/^https?:\/\//i.test(url)) return false;
-    if (typeof window === 'undefined' || !window.location?.origin) return true;
-    try {
-        return new URL(url, window.location.href).origin !== window.location.origin;
-    } catch {
-        return true;
-    }
-};
-
-const shouldLoadViaBlob = (candidateUrl: string) => (
-    !DIRECT_IMAGE_URL_RE.test(candidateUrl) && !isRemoteUrl(candidateUrl)
-);
-
-const probeSpriteUrl = (candidateUrl: string) => {
-    const cachedStatus = spriteProbeStatusCache.get(candidateUrl);
-    if (cachedStatus) {
-        return Promise.resolve(cachedStatus);
-    }
-
-    const existingPromise = spriteProbePromiseCache.get(candidateUrl);
-    if (existingPromise) {
-        return existingPromise;
-    }
-
-    const probePromise = new Promise<'ready' | 'error'>((resolve) => {
-        const finalize = (result: 'ready' | 'error') => {
-            spriteProbeStatusCache.set(candidateUrl, result);
-            spriteProbePromiseCache.delete(candidateUrl);
-            resolve(result);
-        };
-
-        try {
-            const image = new Image();
-            image.decoding = 'async';
-            image.onload = () => finalize('ready');
-            image.onerror = () => finalize('error');
-            image.src = candidateUrl;
-
-            if (image.complete) {
-                queueMicrotask(() => finalize(image.naturalWidth > 0 ? 'ready' : 'error'));
-            }
-        } catch {
-            finalize('error');
-        }
-    });
-
-    spriteProbePromiseCache.set(candidateUrl, probePromise);
-    return probePromise;
-};
-
-const loadLocalSpriteBlobUrl = async (candidateUrl: string) => {
-    if (typeof fetch === 'undefined' || typeof URL === 'undefined' || typeof URL.createObjectURL !== 'function') {
-        return { status: 'error' as const };
-    }
-
-    try {
-        const response = await fetch(candidateUrl, { credentials: 'same-origin' });
-        if (!response.ok) {
-            return { status: 'error' as const };
-        }
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
-        const probeResult = await probeSpriteUrl(objectUrl);
-        if (probeResult !== 'ready') {
-            URL.revokeObjectURL(objectUrl);
-            return { status: 'error' as const };
-        }
-        return {
-            status: 'ready' as const,
-            url: objectUrl,
-        };
-    } catch {
-        return { status: 'error' as const };
-    }
-};
-
 /** 3D 骰子组件 */
 export const Dice3D = ({
     value,
@@ -141,7 +56,6 @@ export const Dice3D = ({
     definitionId,
 }: Dice3DProps) => {
     const translateZ = `calc(${size} / 2)`;
-    const localObjectUrlRef = React.useRef<string | null>(null);
 
     const faces = [
         { id: 1, trans: `translateZ(${translateZ})` },
@@ -152,31 +66,10 @@ export const Dice3D = ({
         { id: 5, trans: `rotateX(-90deg) translateZ(${translateZ})` },
     ];
 
-    const spriteUrls = React.useMemo(
-        () => getDiceSpriteUrls(definitionId, characterId, locale),
+    const spriteUrl = React.useMemo(
+        () => getDiceSpriteUrl(definitionId, characterId, locale),
         [characterId, definitionId, locale],
     );
-    const [spriteState, setSpriteState] = React.useState<SpriteState>(() => {
-        const initialUrl = spriteUrls[0];
-        const cachedStatus = initialUrl ? spriteProbeStatusCache.get(initialUrl) : undefined;
-        if (cachedStatus === 'ready' && initialUrl) {
-            return { status: 'ready', url: initialUrl };
-        }
-        if (cachedStatus === 'error') {
-            return { status: 'error', url: undefined };
-        }
-        return {
-            status: spriteUrls.length > 0 ? 'loading' : 'error',
-            url: initialUrl,
-        };
-    });
-
-    const clearLocalObjectUrl = React.useCallback(() => {
-        if (localObjectUrlRef.current) {
-            URL.revokeObjectURL(localObjectUrlRef.current);
-            localObjectUrlRef.current = null;
-        }
-    }, []);
 
     React.useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -188,110 +81,13 @@ export const Dice3D = ({
     }, []);
 
     React.useEffect(() => {
-        dice3DLogger.debug('sprite-candidates', {
+        dice3DLogger.debug('sprite-resolved', {
             definitionId: definitionId ?? null,
             characterId,
             locale: locale ?? null,
-            spriteUrls,
+            spriteUrl: spriteUrl ?? null,
         });
-    }, [characterId, definitionId, locale, spriteUrls]);
-
-    React.useEffect(() => {
-        if (!spriteUrls.length) {
-            dice3DLogger.warn('sprite-candidates-empty', {
-                definitionId: definitionId ?? null,
-                characterId,
-                locale: locale ?? null,
-            });
-            setSpriteState({ status: 'error', url: undefined });
-            return undefined;
-        }
-
-        if (typeof Image === 'undefined') {
-            dice3DLogger.warn('image-constructor-unavailable', {
-                definitionId: definitionId ?? null,
-                characterId,
-                locale: locale ?? null,
-                selectedUrl: spriteUrls[0],
-            });
-            clearLocalObjectUrl();
-            setSpriteState({ status: 'ready', url: spriteUrls[0] });
-            return undefined;
-        }
-
-        const firstCachedUrl = spriteUrls.find((url) => !shouldLoadViaBlob(url) && spriteProbeStatusCache.get(url) === 'ready');
-        if (firstCachedUrl) {
-            clearLocalObjectUrl();
-            setSpriteState({ status: 'ready', url: firstCachedUrl });
-            return undefined;
-        }
-
-        clearLocalObjectUrl();
-        setSpriteState({ status: 'loading', url: undefined });
-        let cancelled = false;
-
-        const tryLoad = async (index: number): Promise<void> => {
-            if (cancelled) return;
-            if (index >= spriteUrls.length) {
-                dice3DLogger.error('sprite-all-failed', {
-                    definitionId: definitionId ?? null,
-                    characterId,
-                    locale: locale ?? null,
-                    spriteUrls,
-                });
-                setSpriteState({ status: 'error', url: undefined });
-                return;
-            }
-
-            const candidateUrl = spriteUrls[index];
-            dice3DLogger.debug('sprite-probe-start', {
-                index,
-                candidateUrl,
-                viaBlob: shouldLoadViaBlob(candidateUrl),
-            });
-
-            const loaded = shouldLoadViaBlob(candidateUrl)
-                ? await loadLocalSpriteBlobUrl(candidateUrl)
-                : { status: await probeSpriteUrl(candidateUrl), url: candidateUrl };
-            if (cancelled) return;
-
-            if (loaded.status === 'ready' && loaded.url) {
-                dice3DLogger.info('sprite-probe-success', {
-                    index,
-                    candidateUrl,
-                    resolvedUrl: loaded.url,
-                });
-                clearLocalObjectUrl();
-                if (shouldLoadViaBlob(candidateUrl)) {
-                    localObjectUrlRef.current = loaded.url;
-                }
-                setSpriteState({ status: 'ready', url: loaded.url });
-                return;
-            }
-
-            dice3DLogger.warn('sprite-probe-fail', {
-                index,
-                candidateUrl,
-            });
-            await tryLoad(index + 1);
-        };
-        void tryLoad(0);
-
-        return () => {
-            cancelled = true;
-            clearLocalObjectUrl();
-        };
-    }, [characterId, clearLocalObjectUrl, definitionId, locale, spriteUrls]);
-
-    React.useEffect(() => {
-        dice3DLogger.debug('sprite-render-state', {
-            definitionId: definitionId ?? null,
-            characterId,
-            locale: locale ?? null,
-            spriteLoadState: spriteState.status,
-            resolvedSpriteUrl: spriteState.url ?? null,
-        });
-    }, [characterId, definitionId, locale, spriteState.status, spriteState.url]);
+    }, [characterId, definitionId, locale, spriteUrl]);
 
     const getFinalTransform = (val: number) => {
         switch (val) {
@@ -306,8 +102,8 @@ export const Dice3D = ({
     };
 
     const isSpotlight = variant === 'spotlight';
-    const resolvedSpriteUrl = spriteState.url;
-    const isSpriteReady = spriteState.status === 'ready' && Boolean(resolvedSpriteUrl);
+    const resolvedSpriteUrl = spriteUrl;
+    const isSpriteReady = Boolean(resolvedSpriteUrl);
     const animationClass = isSpotlight ? 'animate-dice3d-bonus-tumble' : 'animate-dice3d-tumble';
     const borderRadius = isSpotlight ? 'rounded-[1vw]' : 'rounded-[0.5vw]';
     const borderStyle = isSpotlight ? 'border-2 border-slate-600/50' : 'border border-slate-700/50';
@@ -321,7 +117,6 @@ export const Dice3D = ({
             data-testid="dice-3d"
             data-sprite-ready={isSpriteReady ? 'true' : 'false'}
             data-definition-id={definitionId ?? ''}
-            data-sprite-candidates={String(spriteUrls.length)}
             data-sprite-url={resolvedSpriteUrl ?? ''}
         >
             <div

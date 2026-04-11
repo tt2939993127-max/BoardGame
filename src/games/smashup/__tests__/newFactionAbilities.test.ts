@@ -3832,6 +3832,131 @@ describe('巨蚁派系能力', () => {
         expect(getInteractionsFromMS(preventResult.finalState).length).toBe(0);
     });
 
+    it('尸体商店+雄蜂：选择防止消灭时，应先结算雄蜂且不进入指示物分配', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('body-shop', 'frankenstein_body_shop_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('dok', 'frankenstein_herr_doktor_pod', '0', 2, { powerCounters: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [
+                        makeMinion('monster', 'frankenstein_the_monster_pod', '0', 4, { powerCounters: 0 }),
+                        makeMinion('drone', 'giant_ant_drone_pod', '0', 3, { powerCounters: 1 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'body-shop' } },
+            defaultTestRandom,
+        );
+        expect(play.success).toBe(true);
+
+        const choosePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(choosePrompt?.data?.sourceId).toBe('frankenstein_body_shop');
+        const chooseDok = choosePrompt.data.options.find((entry: any) => entry.value?.minionUid === 'dok');
+        expect(chooseDok).toBeDefined();
+
+        const afterChoose = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseDok.id } } as any,
+            defaultTestRandom,
+        );
+        expect(afterChoose.success).toBe(true);
+        expect(afterChoose.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+
+        const pendingPrompt = getInteractionsFromMS(afterChoose.finalState)[0] as any;
+        expect(pendingPrompt?.data?.sourceId).toBe('giant_ant_drone_prevent_destroy');
+        const droneOption = pendingPrompt.data.options.find((entry: any) => entry.value?.droneUid === 'drone');
+        expect(droneOption).toBeDefined();
+
+        const prevent = runCommand(
+            afterChoose.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: droneOption.id } } as any,
+            defaultTestRandom,
+        );
+        expect(prevent.success).toBe(true);
+        expect(prevent.events.some(e => e.type === SU_EVENTS.POWER_COUNTER_REMOVED)).toBe(true);
+        expect(prevent.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(false);
+        expect(prevent.finalState.core.bases[0].minions.some(m => m.uid === 'dok')).toBe(true);
+        expect(prevent.finalState.core.bases[1].minions.find(m => m.uid === 'drone')?.powerCounters).toBe(0);
+        expect(prevent.finalState.core.bases[1].minions.find(m => m.uid === 'monster')?.powerCounters ?? 0).toBe(0);
+        expect(getInteractionsFromMS(prevent.finalState).length).toBe(0);
+    });
+
+    it('尸体商店+雄蜂：选择不防止消灭时，应在确认消灭后再进入指示物分配', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('body-shop', 'frankenstein_body_shop_pod', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('dok', 'frankenstein_herr_doktor_pod', '0', 2, { powerCounters: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+                {
+                    defId: 'base_b',
+                    minions: [
+                        makeMinion('monster', 'frankenstein_the_monster_pod', '0', 4, { powerCounters: 0 }),
+                        makeMinion('drone', 'giant_ant_drone_pod', '0', 3, { powerCounters: 1 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'body-shop' } },
+            defaultTestRandom,
+        );
+        const choosePrompt = getInteractionsFromMS(play.finalState)[0] as any;
+        const chooseDok = choosePrompt.data.options.find((entry: any) => entry.value?.minionUid === 'dok');
+
+        const afterChoose = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseDok.id } } as any,
+            defaultTestRandom,
+        );
+
+        const preventPrompt = getInteractionsFromMS(afterChoose.finalState)[0] as any;
+        expect(preventPrompt?.data?.sourceId).toBe('giant_ant_drone_prevent_destroy');
+
+        const skip = runCommand(
+            afterChoose.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: 'skip' } } as any,
+            defaultTestRandom,
+        );
+        expect(skip.success).toBe(true);
+        expect(skip.events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
+
+        const distributePrompt = getInteractionsFromMS(skip.finalState)[0] as any;
+        expect(distributePrompt?.data?.sourceId).toBe('frankenstein_body_shop_distribute');
+        const chooseMonster = distributePrompt.data.options.find((entry: any) => entry.value?.minionUid === 'monster');
+        expect(chooseMonster).toBeDefined();
+        expect(skip.finalState.core.bases[0].minions.some(m => m.uid === 'dok')).toBe(false);
+    });
+
     it('雄蜂：选择跳过时恢复消灭，且不会再次弹出同一拦截交互', () => {
         const core = makeState({
             players: {

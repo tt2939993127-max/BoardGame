@@ -75,9 +75,6 @@ jobs:
           CAPACITOR_APP_ID=${{ vars.CAPACITOR_APP_ID || 'top.easyboardgame.app' }}
           CAPACITOR_APP_NAME=${{ vars.CAPACITOR_APP_NAME || '易桌游' }}
           ANDROID_WEBVIEW_MODE=embedded
-          VITE_ANDROID_NATIVE_UPDATE_ENABLED=true
-          VITE_ANDROID_NATIVE_UPDATE_MANIFEST_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/native-app-updates/android/stable/latest.json
-          VITE_ANDROID_NATIVE_UPDATE_CHANNEL=stable
           VITE_ANDROID_OTA_ENABLED=true
           VITE_ANDROID_OTA_MANIFEST_URL=${{ vars.VITE_ASSETS_BASE_URL || 'https://assets.easyboardgame.top/official' }}/app-updates/android/stable/latest.json
           VITE_ANDROID_OTA_CHANNEL=stable
@@ -86,19 +83,15 @@ jobs:
           ANDROID_SPLASH_SOURCE=${{ vars.ANDROID_SPLASH_SOURCE || 'public/logos/logo_1_grid.png' }}
           ANDROID_ICON_BACKGROUND=${{ vars.ANDROID_ICON_BACKGROUND || '#FFFFFF' }}
           ANDROID_SPLASH_BACKGROUND=${{ vars.ANDROID_SPLASH_BACKGROUND || '#FFFFFF' }}
-          ANDROID_KEYSTORE_BASE64=${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS=${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD=${{ secrets.ANDROID_KEY_PASSWORD }}
           EOF
 
-      - name: Release Android stable bundle + native package
+      - name: Release Android stable OTA bundle
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
           R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
-        run: node scripts/mobile/release-android.mjs full --channel stable
+        run: node scripts/mobile/release-android.mjs ota --channel stable
 
       - name: Bump next patch version
         id: next_version
@@ -132,7 +125,7 @@ jobs:
             echo "|---|---|"
             echo "| 发布版本 | ${{ steps.current_version.outputs.current_version }} |"
             echo "| 下一开发版本 | ${{ steps.next_version.outputs.next_version }} |"
-            echo "| 发布内容 | stable OTA + stable native update |"
+            echo "| 发布内容 | stable OTA |"
             echo "| 触发方式 | push main |"
             echo "| 版本回写 | 已提交到 main（带 [skip android release]） |"
           } >> "${GITHUB_STEP_SUMMARY}"

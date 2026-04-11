@@ -237,6 +237,70 @@ export function resolveForceAdvancePhaseAfterRecovery(args: {
     });
 }
 
+export function resolveForceEndTurnRecoveryStep(args: {
+    authoritativeState: MatchState<unknown> | null | undefined;
+    seatControllers: Record<string, AiSeatController>;
+    playerId: string;
+}): AiResolution | null {
+    const { authoritativeState, seatControllers, playerId } = args;
+    if (!authoritativeState) {
+        return null;
+    }
+    if (seatControllers[playerId]?.type === 'human') {
+        return null;
+    }
+    if (resolveCurrentPlayerId(authoritativeState) !== playerId) {
+        return null;
+    }
+
+    const pendingDamage = (authoritativeState.core as { pendingDamage?: { responderId?: unknown; id?: unknown } } | undefined)?.pendingDamage;
+    const pendingResponderId = typeof pendingDamage?.responderId === 'string' ? pendingDamage.responderId : null;
+    if (pendingResponderId === playerId) {
+        return buildForceEndTurnResolution({
+            playerId,
+            suffix: `pending-damage-step:${playerId}:${pendingDamage?.id ?? 'unknown'}`,
+            commands: [{ type: 'SKIP_TOKEN_RESPONSE', payload: {} }],
+        });
+    }
+
+    const currentInteraction = authoritativeState.sys?.interaction as { current?: unknown } | undefined;
+    const visibleCurrent = currentInteraction?.current as HiddenInteractionDescriptor | undefined;
+    if (visibleCurrent?.playerId && String(visibleCurrent.playerId) === playerId) {
+        const resolution = buildForceEndTurnFromInteractionState(
+            authoritativeState,
+            playerId,
+            'visible-interaction',
+        );
+        if (resolution) {
+            return resolution.resolution;
+        }
+    }
+
+    const responseWindow = authoritativeState.sys?.responseWindow as {
+        current?: { responderQueue?: unknown; currentResponderIndex?: unknown };
+    } | undefined;
+    const responderQueue = Array.isArray(responseWindow?.current?.responderQueue)
+        ? responseWindow?.current?.responderQueue
+        : [];
+    const responderIndex = typeof responseWindow?.current?.currentResponderIndex === 'number'
+        ? responseWindow.current.currentResponderIndex
+        : 0;
+    const responderId = responderQueue[responderIndex];
+    if (typeof responderId === 'string' && responderId === playerId) {
+        return buildForceEndTurnResolution({
+            playerId,
+            suffix: `response-window-step:${playerId}`,
+            commands: [{ type: 'RESPONSE_PASS', payload: {} }],
+        });
+    }
+
+    return buildForceEndTurnResolution({
+        playerId,
+        suffix: buildForceEndTurnFollowUpSuffix(authoritativeState, playerId),
+        commands: [{ type: 'ADVANCE_PHASE', payload: {} }],
+    });
+}
+
 export function resolveForceEndTurnFollowUpAfterConfirmation(args: {
     candidate: ForceEndTurnStalledAiResolution;
     authoritativeState: MatchState<unknown> | null | undefined;

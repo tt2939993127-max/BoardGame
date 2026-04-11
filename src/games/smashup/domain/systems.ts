@@ -6,12 +6,14 @@
  * - 对交互解决产生的事件应用保护过滤和触发链（与 execute() 后处理对齐）
  */
 
-import type { GameEvent } from '../../../engine/types';
+import type { GameEvent, MatchState } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
-import { INTERACTION_EVENTS, resolveInteraction } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoice, INTERACTION_EVENTS, queueInteraction, resolveInteraction } from '../../../engine/systems/InteractionSystem';
 import type { SmashUpCore, SmashUpEvent } from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
+import { addPowerCounter } from './abilityHelpers';
 import { SU_EVENT_TYPES } from './events';
+import { SU_EVENTS } from './events';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import {
     getDeferredPostScoringEvents,
@@ -21,6 +23,141 @@ import {
     updateScoringSession,
 } from './scoringSession';
 import { postProcessSystemEvents } from './index';
+import { getCardDef } from '../data/cards';
+
+const BODY_SHOP_PENDING_DISTRIBUTIONS_KEY = '_pendingBodyShopDistributions';
+
+interface BodyShopPendingDistribution {
+    playerId: string;
+    targetMinionUid: string;
+    totalCounters: number;
+}
+
+function getPendingBodyShopDistributions(state: { sys: Record<string, unknown> }): BodyShopPendingDistribution[] {
+    const raw = state.sys[BODY_SHOP_PENDING_DISTRIBUTIONS_KEY];
+    return Array.isArray(raw) ? raw as BodyShopPendingDistribution[] : [];
+}
+
+function setPendingBodyShopDistributions(
+    state: MatchState<SmashUpCore>,
+    items: BodyShopPendingDistribution[],
+): MatchState<SmashUpCore> {
+    return {
+        ...state,
+        sys: {
+            ...state.sys,
+            [BODY_SHOP_PENDING_DISTRIBUTIONS_KEY]: items.length > 0 ? items : undefined,
+        } as typeof state.sys,
+    };
+}
+
+function materializeBodyShopDistribution(
+    state: MatchState<SmashUpCore>,
+    pending: BodyShopPendingDistribution,
+    timestamp: number,
+): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } {
+    const candidates: { uid: string; defId: string; baseIndex: number; label: string }[] = [];
+    for (let baseIndex = 0; baseIndex < state.core.bases.length; baseIndex++) {
+        for (const minion of state.core.bases[baseIndex].minions) {
+            if (minion.controller !== pending.playerId) continue;
+            if (minion.uid === pending.targetMinionUid) continue;
+            const def = getCardDef(minion.defId);
+            candidates.push({
+                uid: minion.uid,
+                defId: minion.defId,
+                baseIndex,
+                label: def?.name ?? minion.defId,
+            });
+        }
+    }
+
+    if (candidates.length === 0) {
+        return { state, events: [] };
+    }
+
+    if (candidates.length === 1) {
+        return {
+            state,
+            events: [addPowerCounter(candidates[0].uid, candidates[0].baseIndex, pending.totalCounters, 'frankenstein_body_shop', timestamp)],
+        };
+    }
+
+    const options = candidates.map((candidate, index) => ({
+        id: `minion-${index}`,
+        label: candidate.label,
+        value: {
+            minionUid: candidate.uid,
+            minionDefId: candidate.defId,
+            baseIndex: candidate.baseIndex,
+            remaining: pending.totalCounters,
+        },
+        _source: 'field' as const,
+        displayMode: 'card' as const,
+    }));
+
+    const interaction = createSimpleChoice(
+        `frankenstein_body_shop_distribute_${timestamp}`,
+        pending.playerId,
+        `选择随从放置+1指示物（剩余 ${pending.totalCounters} 个）`,
+        options,
+        { sourceId: 'frankenstein_body_shop_distribute', targetType: 'minion' },
+    );
+
+    return {
+        state: queueInteraction(state, interaction),
+        events: [],
+    };
+}
+
+function reconcilePendingBodyShopDistributions(
+    state: MatchState<SmashUpCore>,
+    events: readonly GameEvent[],
+    fallbackTimestamp: number,
+): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } {
+    const pending = getPendingBodyShopDistributions(state);
+    if (pending.length === 0) {
+        return { state, events: [] };
+    }
+
+    let nextState = state;
+    const remaining: BodyShopPendingDistribution[] = [];
+    const emitted: SmashUpEvent[] = [];
+
+    for (const item of pending) {
+        const matchedDestroy = events.find((event) =>
+            event.type === SU_EVENTS.MINION_DESTROYED
+            && (event as any).payload?.minionUid === item.targetMinionUid,
+        );
+        const matchedSave = events.find((event) => {
+            if (event.type === SU_EVENTS.MINION_RETURNED || event.type === SU_EVENTS.MINION_MOVED) {
+                return (event as any).payload?.minionUid === item.targetMinionUid;
+            }
+            if (event.type === SU_EVENTS.CARD_TO_DECK_BOTTOM || event.type === SU_EVENTS.CARD_TO_DECK_TOP) {
+                return (event as any).payload?.cardUid === item.targetMinionUid;
+            }
+            return false;
+        });
+
+        if (matchedSave) {
+            continue;
+        }
+
+        if (matchedDestroy) {
+            const timestamp = typeof matchedDestroy.timestamp === 'number' ? matchedDestroy.timestamp : fallbackTimestamp;
+            const result = materializeBodyShopDistribution(nextState, item, timestamp);
+            nextState = result.state;
+            emitted.push(...result.events);
+            continue;
+        }
+
+        remaining.push(item);
+    }
+
+    return {
+        state: setPendingBodyShopDistributions(nextState, remaining),
+        events: emitted,
+    };
+}
 
 // ============================================================================
 // SmashUp 事件处理系统
@@ -63,6 +200,9 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             }
 
             for (const event of events) {
+                const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+                latestTimestamp = Math.max(latestTimestamp, eventTimestamp);
+
                 // 监听 SYS_INTERACTION_RESOLVED → 从 sourceId 查找处理函数 → 生成后续事件
                 if (event.type === INTERACTION_EVENTS.RESOLVED) {
                     const payload = event.payload as {
@@ -73,9 +213,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         sourceId?: string;
                         interactionData?: Record<string, unknown>;
                     };
-                    const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
-                    latestTimestamp = eventTimestamp;
-
 
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);
@@ -162,8 +299,24 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                 }
                             }
                         }
+
+                        if (payload.sourceId === 'giant_ant_drone_prevent_destroy') {
+                            const targetMinionUid = (payload.interactionData?.continuationContext as { targetMinionUid?: string } | undefined)?.targetMinionUid;
+                            const selected = payload.value as { skip?: boolean } | undefined;
+                            if (targetMinionUid && !selected?.skip) {
+                                const pending = getPendingBodyShopDistributions(newState)
+                                    .filter((item) => item.targetMinionUid !== targetMinionUid);
+                                newState = setPendingBodyShopDistributions(newState, pending);
+                            }
+                        }
                     }
                 }
+            }
+
+            const bodyShopFollowUp = reconcilePendingBodyShopDistributions(newState, events, latestTimestamp);
+            newState = bodyShopFollowUp.state;
+            if (bodyShopFollowUp.events.length > 0) {
+                nextEvents.push(...bodyShopFollowUp.events);
             }
 
             if (!newState.sys.interaction?.current) {

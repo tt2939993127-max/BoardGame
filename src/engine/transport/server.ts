@@ -39,7 +39,7 @@ import {
     applyAiAutoRecoveryRejection,
     buildAiProgressMarker,
     resolveCurrentPlayerId,
-    resolveForceAdvancePhaseAfterRecovery,
+    resolveForceEndTurnRecoveryStep,
     resolveForceEndTurnForStalledAi,
     type AiAutoRecoveryAttemptTracker,
     type ForceEndTurnStalledAiResolution,
@@ -870,8 +870,9 @@ export class GameTransportServer {
             }
 
             let lastMarker = buildAiProgressMarker(match.state);
-            while (totalAdvanceSteps < this.onlineAiRecoveryMaxAdvanceSteps) {
-                const followUp = resolveForceAdvancePhaseAfterRecovery({
+            let recoverySteps = 0;
+            while (recoverySteps < this.onlineAiRecoveryMaxAdvanceSteps) {
+                const followUp = resolveForceEndTurnRecoveryStep({
                     authoritativeState: match.state,
                     seatControllers,
                     playerId: candidate.playerId,
@@ -881,10 +882,11 @@ export class GameTransportServer {
                 }
 
                 phaseLabel = 'follow-up-advance';
+                const nextCommandType = followUp.action.commands[0]?.type ?? 'UNKNOWN';
                 const nextSuccess = await this.executeCommandInternal(
                     match,
                     candidate.playerId,
-                    'ADVANCE_PHASE',
+                    nextCommandType,
                     followUp.action.commands[0]?.payload ?? {},
                 );
                 if (!nextSuccess) {
@@ -892,7 +894,10 @@ export class GameTransportServer {
                     return;
                 }
 
-                totalAdvanceSteps += 1;
+                if (nextCommandType === 'ADVANCE_PHASE') {
+                    totalAdvanceSteps += 1;
+                }
+                recoverySteps += 1;
                 const nextMarker = buildAiProgressMarker(match.state);
                 if (nextMarker === lastMarker) {
                     break;

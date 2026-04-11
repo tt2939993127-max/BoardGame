@@ -62,7 +62,7 @@ import { resolveOnlineHudPresence } from './matchHudPresence';
 import { haveAiSeatCredentialsChanged, loadOnlineAiSeatState } from './onlineAiSeats';
 import {
     applyAiAutoRecoveryRejection,
-    resolveForceAdvancePhaseAfterRecovery,
+    resolveForceEndTurnRecoveryStep,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -552,7 +552,7 @@ const OnlineAiSeatBridge = ({
                 if (stepIndex >= MAX_FORCE_END_TURN_FOLLOW_UP_STEPS) {
                     return null;
                 }
-                return resolveForceAdvancePhaseAfterRecovery({
+                return resolveForceEndTurnRecoveryStep({
                     authoritativeState,
                     seatControllers,
                     playerId: candidate.playerId,
