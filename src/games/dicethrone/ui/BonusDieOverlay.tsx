@@ -15,6 +15,7 @@ import BonusDieSpotlightContent from './BonusDieSpotlightContent';
 import { GameButton } from './components/GameButton';
 import { UI_Z_INDEX } from '../../../core';
 import { createScopedLogger } from '../../../lib/logger';
+import { resolveBonusDieText } from './bonusDieTranslation';
 
 const bonusDieOverlayLogger = createScopedLogger('DT_BONUS_DIE_OVERLAY');
 
@@ -92,22 +93,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
         if (!summaryEffectKey || !summaryEffectParams) {
             return undefined;
         }
-        if (i18n.exists(summaryEffectKey, { ns: 'game-dicethrone' })) {
-            return t(summaryEffectKey, summaryEffectParams);
-        }
-        if (summaryEffectKey.startsWith('bonusDie.effect.')) {
-            const suffix = summaryEffectKey.slice('bonusDie.effect.'.length);
-            const effectMap = i18n.getResource(
-                i18n.language,
-                'game-dicethrone',
-                'bonusDie.effect'
-            ) as Record<string, string> | undefined;
-            const template = effectMap?.[suffix];
-            if (typeof template === 'string') {
-                return i18n.services.interpolator.interpolate(template, summaryEffectParams, i18n.language);
-            }
-        }
-        return summaryEffectKey;
+        return resolveBonusDieText(summaryEffectKey, { t, i18n }, summaryEffectParams);
     }, [summaryEffectKey, summaryEffectParams, i18n, t]);
 
     // 调试日志：组件渲染

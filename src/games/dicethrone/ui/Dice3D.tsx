@@ -1,10 +1,10 @@
 import React from 'react';
 import { createScopedLogger } from '../../../lib/logger';
+import { OptimizedImage, SHIMMER_BG } from '../../../components/common/media/OptimizedImage';
 import {
     DICE_BG_SIZE,
-    getDiceFaceFallbackSkin,
     getDiceSpritePosition,
-    getDiceSpriteUrl,
+    getDiceSpriteAssetPath,
 } from './assets';
 
 export interface Dice3DProps {
@@ -58,6 +58,11 @@ export const Dice3D = ({
     const translateZ = `calc(${size} / 2)`;
     const rootRef = React.useRef<HTMLDivElement | null>(null);
     const lastInspectKeyRef = React.useRef<string | null>(null);
+    const spriteAssetPath = React.useMemo(
+        () => getDiceSpriteAssetPath(definitionId, characterId),
+        [characterId, definitionId],
+    );
+    const effectiveLocale = locale ?? 'zh-CN';
 
     const faces = [
         { id: 1, trans: `translateZ(${translateZ})` },
@@ -68,10 +73,8 @@ export const Dice3D = ({
         { id: 5, trans: `rotateX(-90deg) translateZ(${translateZ})` },
     ];
 
-    const spriteUrl = React.useMemo(
-        () => getDiceSpriteUrl(definitionId, characterId, locale),
-        [characterId, definitionId, locale],
-    );
+    const [resolvedSpriteUrl, setResolvedSpriteUrl] = React.useState<string | null>(null);
+    const [isSpriteReady, setIsSpriteReady] = React.useState(false);
 
     React.useEffect(() => {
         if (typeof document === 'undefined') return;
@@ -83,17 +86,33 @@ export const Dice3D = ({
     }, []);
 
     React.useEffect(() => {
+        setIsSpriteReady(false);
+        setResolvedSpriteUrl(null);
+    }, [spriteAssetPath, effectiveLocale]);
+
+    const handleSpriteLoad = React.useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
+        const nextUrl = event.currentTarget.currentSrc || event.currentTarget.src || '';
+        setResolvedSpriteUrl(nextUrl || null);
+        setIsSpriteReady(Boolean(nextUrl));
+    }, []);
+
+    const handleSpriteError = React.useCallback(() => {
+        setResolvedSpriteUrl(null);
+        setIsSpriteReady(false);
+    }, []);
+
+    React.useEffect(() => {
         dice3DLogger.debug('sprite-resolved', {
             definitionId: definitionId ?? null,
             characterId,
-            locale: locale ?? null,
-            spriteUrl: spriteUrl ?? null,
+            locale: effectiveLocale,
+            spriteAssetPath: spriteAssetPath ?? null,
+            spriteUrl: resolvedSpriteUrl ?? null,
+            isSpriteReady,
         });
-    }, [characterId, definitionId, locale, spriteUrl]);
+    }, [characterId, definitionId, effectiveLocale, isSpriteReady, resolvedSpriteUrl, spriteAssetPath]);
 
     const isSpotlight = variant === 'spotlight';
-    const resolvedSpriteUrl = spriteUrl;
-    const isSpriteReady = Boolean(resolvedSpriteUrl);
 
     React.useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -166,6 +185,19 @@ export const Dice3D = ({
             data-definition-id={definitionId ?? ''}
             data-sprite-url={resolvedSpriteUrl ?? ''}
         >
+            {spriteAssetPath && (
+                <OptimizedImage
+                    src={spriteAssetPath}
+                    locale={effectiveLocale}
+                    alt=""
+                    aria-hidden
+                    placeholder={false}
+                    className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
+                    onLoad={handleSpriteLoad}
+                    onError={handleSpriteError}
+                    draggable={false}
+                />
+            )}
             <div
                 className={`relative w-full h-full dice3d-preserve-3d ${isRolling ? animationClass : ''}`}
                 style={{
@@ -179,7 +211,7 @@ export const Dice3D = ({
                     const { xPos, yPos } = getDiceSpritePosition(face.id);
                     const needsFlip = face.id === 1 || face.id === 6;
                     const faceTransform = needsFlip ? `${face.trans} rotateZ(180deg)` : face.trans;
-                    const fallbackSkin = getDiceFaceFallbackSkin(face.id, definitionId, characterId);
+                    const hasSprite = Boolean(isSpriteReady && resolvedSpriteUrl);
 
                     return (
                         <div
@@ -187,45 +219,25 @@ export const Dice3D = ({
                             className={`absolute inset-0 flex items-center justify-center bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner overflow-hidden`}
                             style={{
                                 transform: faceTransform,
-                                backgroundImage: isSpriteReady && resolvedSpriteUrl ? `url("${resolvedSpriteUrl}")` : undefined,
-                                backgroundSize: isSpriteReady ? DICE_BG_SIZE : undefined,
-                                backgroundPosition: isSpriteReady ? `${xPos}% ${yPos}%` : undefined,
-                                background: isSpriteReady ? undefined : fallbackSkin.faceBackground,
-                                borderColor: isSpriteReady ? undefined : fallbackSkin.faceBorder,
+                                ...(hasSprite && resolvedSpriteUrl ? {
+                                    backgroundImage: `url("${resolvedSpriteUrl}")`,
+                                    backgroundSize: DICE_BG_SIZE,
+                                    backgroundPosition: `${xPos}% ${yPos}%`,
+                                    backgroundRepeat: 'no-repeat',
+                                } : {
+                                    backgroundColor: SHIMMER_BG.backgroundColor,
+                                    backgroundImage: SHIMMER_BG.backgroundImage,
+                                    backgroundSize: SHIMMER_BG.backgroundSize,
+                                    backgroundPosition: SHIMMER_BG.backgroundPosition,
+                                    backgroundRepeat: 'no-repeat',
+                                    animation: SHIMMER_BG.animation,
+                                }),
                                 boxShadow,
                                 imageRendering: 'auto',
                             }}
                             data-face-id={face.id}
-                            data-face-symbol={isSpriteReady ? undefined : fallbackSkin.faceId ?? String(face.id)}
-                            data-face-fallback={isSpriteReady ? 'false' : 'true'}
+                            data-face-fallback={hasSprite ? 'false' : 'loading'}
                         >
-                            {!isSpriteReady && (
-                                <>
-                                    <span
-                                        className="select-none font-black leading-none"
-                                        style={{
-                                            color: fallbackSkin.textColor,
-                                            textShadow: fallbackSkin.textShadow,
-                                            fontSize: isSpotlight ? '42%' : '36%',
-                                            letterSpacing: '0.02em',
-                                        }}
-                                    >
-                                        {fallbackSkin.glyph}
-                                    </span>
-                                    <span
-                                        className="absolute right-[10%] top-[10%] flex min-w-[24%] items-center justify-center rounded-full border px-[0.12em] py-[0.05em] text-center font-bold leading-none"
-                                        style={{
-                                            background: fallbackSkin.badgeBackground,
-                                            borderColor: fallbackSkin.badgeBorder,
-                                            color: fallbackSkin.captionColor,
-                                            fontSize: isSpotlight ? '18%' : '16%',
-                                            boxShadow: '0 2px 8px rgba(15,23,42,0.28)',
-                                        }}
-                                    >
-                                        {fallbackSkin.label}
-                                    </span>
-                                </>
-                            )}
                         </div>
                     );
                 })}

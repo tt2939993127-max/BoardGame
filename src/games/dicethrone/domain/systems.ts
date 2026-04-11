@@ -23,6 +23,7 @@ import { findPlayerAbility } from './abilityLookup';
 import { getChoiceResolvedEventHandler } from './choiceResolvedEvents';
 import { RESOURCE_IDS } from './resources';
 import { CP_MAX } from './core-types';
+import { getActiveDice } from './rules';
 
 const UNSATISFIABLE_CHOICE_REASONS = new Set(['empty-options', 'all-options-disabled', 'min-selection-unreachable']);
 
@@ -298,13 +299,22 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                         const config = pendingInteraction.dieModifyConfig;
                         const selectCount = pendingInteraction.selectCount ?? 1;
                         const mode = config?.mode;
+                        const allowedDieIds = Array.isArray(pendingInteraction.allowedDieIds) && pendingInteraction.allowedDieIds.length > 0
+                            ? Array.from(new Set(pendingInteraction.allowedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')))
+                            : getActiveDice(newState.core).map(die => die.id);
+                        const completedDieIds = Array.isArray(pendingInteraction.completedDieIds)
+                            ? Array.from(new Set(pendingInteraction.completedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')))
+                            : [];
 
                         // any/adjust 模式：用户需要反复 +/- 调整骰子值，禁用 auto-confirm，由用户手动确认
                         // set/copy 模式：每次点击选中一颗骰子，选满后自动 confirm
                         const isManualConfirmMode = mode === 'any' || mode === 'adjust';
                         const maxSteps = isManualConfirmMode ? undefined : selectCount;
 
-                        const multistepData: MultistepChoiceData<DiceModifyStep, DiceModifyResult> = {
+                        const multistepData: MultistepChoiceData<DiceModifyStep, DiceModifyResult> & {
+                            allowedDieIds?: number[];
+                            completedDieIds?: number[];
+                        } = {
                             title: pendingInteraction.titleKey,
                             sourceId: pendingInteraction.sourceCardId,
                             maxSteps,
@@ -312,6 +322,8 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             initialResult: { modifications: {}, modCount: 0, totalAdjustment: 0 },
                             localReducer: (current, step) => diceModifyReducer(current, step, config),
                             toCommands: diceModifyToCommands,
+                            allowedDieIds,
+                            completedDieIds,
                             meta: {
                                 dtType: 'modifyDie',
                                 dieModifyConfig: config,
@@ -333,8 +345,17 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                     // 骰子选择（重掷）类交互 → multistep-choice
                     if (pendingInteraction.type === 'selectDie') {
                         const selectCount = pendingInteraction.selectCount ?? 1;
+                        const allowedDieIds = Array.isArray(pendingInteraction.allowedDieIds) && pendingInteraction.allowedDieIds.length > 0
+                            ? Array.from(new Set(pendingInteraction.allowedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')))
+                            : getActiveDice(newState.core).map(die => die.id);
+                        const completedDieIds = Array.isArray(pendingInteraction.completedDieIds)
+                            ? Array.from(new Set(pendingInteraction.completedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')))
+                            : [];
 
-                        const multistepData: MultistepChoiceData<DiceSelectStep, DiceSelectResult> = {
+                        const multistepData: MultistepChoiceData<DiceSelectStep, DiceSelectResult> & {
+                            allowedDieIds?: number[];
+                            completedDieIds?: number[];
+                        } = {
                             title: pendingInteraction.titleKey,
                             sourceId: pendingInteraction.sourceCardId,
                             maxSteps: selectCount,
@@ -342,6 +363,8 @@ export function createDiceThroneEventSystem(): EngineSystem<DiceThroneCore> {
                             initialResult: { selectedDiceIds: [] },
                             localReducer: diceSelectReducer,
                             toCommands: diceSelectToCommands,
+                            allowedDieIds,
+                            completedDieIds,
                             meta: {
                                 dtType: 'selectDie',
                                 selectCount,

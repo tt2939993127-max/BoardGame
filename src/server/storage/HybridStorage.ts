@@ -41,11 +41,13 @@ const resolveSetupDataFromCreateMatch = (data: CreateMatchData): MatchSetupData 
     return { ...setupDataFromMetadata, ...setupDataFromState };
 };
 
-const resolveStorageTarget = (setupData: MatchSetupData): StorageTarget => {
+const resolveStorageTarget = (setupData: MatchSetupData, persistGuestRooms: boolean): StorageTarget => {
     const ownerKey = setupData.ownerKey;
     const ownerType = setupData.ownerType;
     if (ownerType === 'user' || (ownerKey ? ownerKey.startsWith('user:') : false)) return 'mongo';
-    if (ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false)) return 'memory';
+    if (ownerType === 'guest' || (ownerKey ? ownerKey.startsWith('guest:') : false)) {
+        return persistGuestRooms ? 'mongo' : 'memory';
+    }
     return 'memory';
 };
 
@@ -62,7 +64,7 @@ const hasFetchResult = (result: FetchResult, opts: FetchOpts): boolean => {
 };
 
 /**
- * 内存存储（游客房间使用）
+ * 内存存储（持久化关闭或显式禁用游客落库时使用）
  */
 class InMemoryStorage {
     private readonly stateMap = new Map<string, StoredMatchState>();
@@ -124,6 +126,7 @@ export class HybridStorage implements MatchStorage, MatchAuthMetadataProvider {
     private readonly mongo: MongoStorage;
     private readonly memory: InMemoryStorage;
     private readonly persistentEnabled: boolean;
+    private readonly persistGuestRooms: boolean;
     private readonly matchStorage = new Map<string, StorageTarget>();
     private readonly memoryOwnerIndex = new Map<string, string>();
     private readonly memoryMatchOwner = new Map<string, string>();
@@ -132,11 +135,13 @@ export class HybridStorage implements MatchStorage, MatchAuthMetadataProvider {
         mongo: MongoStorage,
         options?: {
             persistentEnabled?: boolean;
+            persistGuestRooms?: boolean;
         },
     ) {
         this.mongo = mongo;
         this.memory = new InMemoryStorage();
         this.persistentEnabled = options?.persistentEnabled ?? true;
+        this.persistGuestRooms = options?.persistGuestRooms ?? true;
     }
 
     async connect(): Promise<void> {
@@ -148,7 +153,9 @@ export class HybridStorage implements MatchStorage, MatchAuthMetadataProvider {
 
     async createMatch(matchID: string, data: CreateMatchData): Promise<void> {
         const setupData = resolveSetupDataFromCreateMatch(data);
-        const target = this.persistentEnabled ? resolveStorageTarget(setupData) : 'memory';
+        const target = this.persistentEnabled
+            ? resolveStorageTarget(setupData, this.persistGuestRooms)
+            : 'memory';
         const ownerKey = setupData.ownerKey;
 
         if (target === 'memory') {
@@ -410,4 +417,5 @@ export class HybridStorage implements MatchStorage, MatchAuthMetadataProvider {
 
 export const hybridStorage = new HybridStorage(mongoStorage, {
     persistentEnabled: process.env.USE_PERSISTENT_STORAGE !== 'false',
+    persistGuestRooms: true,
 });

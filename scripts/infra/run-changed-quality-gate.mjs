@@ -6,6 +6,8 @@ import { ESLint } from 'eslint';
 import { acquireGlobalHeavyBudget } from './global-heavy-budget.mjs';
 import { acquireTaskGuard } from './heavy-task-guard.mjs';
 import { runAssetPipelineGuard } from './asset-pipeline-guard.mjs';
+import { runDicethroneDiceAtlasGuard } from './dicethrone-dice-atlas-guard.mjs';
+import { runAtlasContractGuard } from './atlas-contract-guard.mjs';
 
 const repoRoot = process.cwd();
 const modeInput = (process.argv[2] || process.env.QUALITY_GATE_MODE || 'local').trim().toLowerCase();
@@ -1140,6 +1142,8 @@ try {
   mkdirSync(CACHE_DIR, { recursive: true });
   runEncodingGuard(files);
   runAssetPipelineGuard(files);
+  runAtlasContractGuard(files, { repoRoot });
+  runDicethroneDiceAtlasGuard(files, { repoRoot, mode });
 
   const commands = collectCommands(files, baseRef, affectsTypecheck);
   if (commands.length === 0) {

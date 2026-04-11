@@ -111,8 +111,11 @@ export interface AndroidOtaManifest {
     url: string;
     checksum?: string;
     channel?: string;
+    /** @deprecated 禁止使用原生版本门禁，运行时将忽略 */
     targetNativeVersion?: string | string[];
+    /** @deprecated 禁止使用原生版本门禁，运行时将忽略 */
     minNativeVersion?: string;
+    /** @deprecated 禁止使用原生版本门禁，运行时将忽略 */
     maxNativeVersion?: string;
     notes?: string;
     publishedAt?: string;
@@ -381,38 +384,40 @@ export const readAndroidLiveUpdateConfig = (
     };
 };
 
-export const isManifestCompatibleWithNativeVersion = (
-    manifest: AndroidOtaManifest,
-    nativeVersion: string,
-): { compatible: boolean; reason?: string } => {
+const hasNativeVersionGate = (manifest: AndroidOtaManifest): boolean => {
     const targetVersions = Array.isArray(manifest.targetNativeVersion)
         ? manifest.targetNativeVersion
         : manifest.targetNativeVersion
             ? [manifest.targetNativeVersion]
             : [];
+    return targetVersions.length > 0
+        || typeof manifest.minNativeVersion === 'string'
+        || typeof manifest.maxNativeVersion === 'string';
+};
 
-    if (targetVersions.length > 0 && !targetVersions.includes(nativeVersion)) {
-        return {
-            compatible: false,
-            reason: `目标 nativeVersion 不匹配，当前=${nativeVersion}`,
-        };
+export const isManifestCompatibleWithNativeVersion = (
+    manifest: AndroidOtaManifest,
+    nativeVersion: string,
+): { compatible: boolean; reason?: string } => {
+    if (!hasNativeVersionGate(manifest)) {
+        return { compatible: true };
     }
 
-    if (manifest.minNativeVersion && compareVersion(nativeVersion, manifest.minNativeVersion) < 0) {
-        return {
-            compatible: false,
-            reason: `当前 nativeVersion=${nativeVersion} 低于最小要求=${manifest.minNativeVersion}`,
-        };
-    }
+    const reason = 'manifest 包含原生版本门禁字段，已按规则忽略';
+    logMobileRuntime('OTA', 'native-version-gate-ignored', {
+        nativeVersion,
+        targetNativeVersion: manifest.targetNativeVersion,
+        minNativeVersion: manifest.minNativeVersion,
+        maxNativeVersion: manifest.maxNativeVersion,
+    }, 'warn');
+    emitCriticalOtaLog('native-version-gate-ignored', {
+        nativeVersion,
+        targetNativeVersion: manifest.targetNativeVersion,
+        minNativeVersion: manifest.minNativeVersion,
+        maxNativeVersion: manifest.maxNativeVersion,
+    });
 
-    if (manifest.maxNativeVersion && compareVersion(nativeVersion, manifest.maxNativeVersion) > 0) {
-        return {
-            compatible: false,
-            reason: `当前 nativeVersion=${nativeVersion} 高于最大允许=${manifest.maxNativeVersion}`,
-        };
-    }
-
-    return { compatible: true };
+    return { compatible: true, reason };
 };
 
 const loadUpdater = async () => {

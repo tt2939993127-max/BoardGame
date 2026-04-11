@@ -636,7 +636,6 @@ export function useMatchStatus(gameName: string | undefined, matchID: string | u
             // 404 错误（房间不存在）立即触发错误状态，无需等待 3 次失败
             const is404 = isMatchNotFoundError(err);
             if (is404) {
-                clearMatchCredentials(requestMatchID);
                 setErrorKind('not_found');
                 setError('房间不存在或已被删除');
                 return;
@@ -805,8 +804,13 @@ export async function rejoinMatch(
         return { success: true, playerID: resolvedPlayerID, credentials: playerCredentials };
     } catch (err: unknown) {
         console.error('重新加入房间失败:', err);
-        clearMatchCredentials(matchID);
         const resolvedError = resolveRejoinMatchError(err);
+        const shouldClearLocal = resolvedError.error === 'not_found'
+            || resolvedError.error === 'unauthorized'
+            || resolvedError.error === 'forbidden';
+        if (shouldClearLocal) {
+            clearMatchCredentials(matchID);
+        }
         return { success: false, ...resolvedError };
     }
 }

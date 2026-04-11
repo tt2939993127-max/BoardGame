@@ -10,17 +10,17 @@ import { test, expect } from '../framework';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
 import { ensureGameServerAvailable, getGameServerBaseURL, initContext, setChineseLocale, waitForTestHarness } from '../helpers/common';
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
-import { createCharacterDice } from '../src/games/dicethrone/domain/characters';
-import { COMMON_CARDS } from '../src/games/dicethrone/domain/commonCards';
-import { GUNSLINGER_DICE_FACE_IDS, PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../src/games/dicethrone/domain/ids';
-import { RESOURCE_IDS } from '../src/games/dicethrone/domain/resources';
-import { getAvailableAbilityIds } from '../src/games/dicethrone/domain/rules';
-import { registerDiceThroneConditions } from '../src/games/dicethrone/conditions';
-import { DEADEYE_2, FAN_THE_HAMMER_2 } from '../src/games/dicethrone/heroes/gunslinger/abilities';
-import { GUNSLINGER_CARDS } from '../src/games/dicethrone/heroes/gunslinger/cards';
-import { VENGEANCE_2 } from '../src/games/dicethrone/heroes/paladin/abilities';
-import { PALADIN_CARDS } from '../src/games/dicethrone/heroes/paladin/cards';
-import { SAMURAI_CARDS } from '../src/games/dicethrone/heroes/samurai/cards';
+import { createCharacterDice } from '../../src/games/dicethrone/domain/characters';
+import { COMMON_CARDS } from '../../src/games/dicethrone/domain/commonCards';
+import { GUNSLINGER_DICE_FACE_IDS, PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
+import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
+import { getAvailableAbilityIds } from '../../src/games/dicethrone/domain/rules';
+import { registerDiceThroneConditions } from '../../src/games/dicethrone/conditions';
+import { DEADEYE_2, FAN_THE_HAMMER_2 } from '../../src/games/dicethrone/heroes/gunslinger/abilities';
+import { GUNSLINGER_CARDS } from '../../src/games/dicethrone/heroes/gunslinger/cards';
+import { VENGEANCE_2 } from '../../src/games/dicethrone/heroes/paladin/abilities';
+import { PALADIN_CARDS } from '../../src/games/dicethrone/heroes/paladin/cards';
+import { SAMURAI_CARDS } from '../../src/games/dicethrone/heroes/samurai/cards';
 import {
     claimDTSeatViaAPI,
     cleanupDTMatch,
@@ -845,6 +845,104 @@ const buildTwoPlayerMeteorState = (state: any) => {
     return next;
 };
 
+const buildTwoPlayerAfterRollResponseState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+    const responseCard = RESPONSE_WINDOW_CARD;
+    if (!responseCard) {
+        throw new Error(`未找到稳定响应卡 ${RESPONSE_WINDOW_CARD_ID}，无法构造 2 人响应窗口场景`);
+    }
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'offensiveRoll';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = null;
+    next.core.selectedAbilityId = undefined;
+    next.core.rollConfirmed = false;
+    next.core.rollCount = 1;
+    next.core.rollLimit = 3;
+    next.core.rollDiceCount = 5;
+    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: 'response-2p-inst' }];
+    next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 10);
+
+    const fallbackCharacterId = typeof next.core?.players?.['0']?.characterId === 'string'
+        ? next.core.players['0'].characterId
+        : 'monk';
+    next.core.dice = (Array.isArray(next.core.dice) && next.core.dice.length > 0
+        ? next.core.dice
+        : createCharacterDice(fallbackCharacterId)
+    ).map((die: any, index: number) => ({
+        ...die,
+        id: typeof die?.id === 'number' ? die.id : index,
+        value: 1,
+        isKept: false,
+    }));
+
+    return next;
+};
+
+const buildTwoPlayerAfterAttackResponseState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+    const responseCard = RESPONSE_WINDOW_CARD;
+    if (!responseCard) {
+        throw new Error(`未找到稳定响应卡 ${RESPONSE_WINDOW_CARD_ID}，无法构造 afterAttackResolved 响应窗口场景`);
+    }
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'main2';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = null;
+    next.core.rollConfirmed = true;
+    next.core.attackResolvedSequence = 1;
+    next.core.afterAttackResponseWindowSequence = 1;
+    next.core.lastResolvedAttackDamage = 6;
+    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: 'response-after-attack' }];
+    next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 10);
+    next.sys.responseWindow = {
+        ...next.sys.responseWindow,
+        current: {
+            id: 'after-attack-2p',
+            windowType: 'afterAttackResolved',
+            responderQueue: ['1'],
+            currentResponderIndex: 0,
+            passedPlayers: [],
+        },
+    };
+
+    return next;
+};
+
+const buildTwoPlayerAfterCardResponseState = (state: any) => {
+    const next = buildFourPlayerNoResponseState(state);
+    const responseCard = RESPONSE_WINDOW_CARD;
+    if (!responseCard) {
+        throw new Error(`未找到稳定响应卡 ${RESPONSE_WINDOW_CARD_ID}，无法构造 afterCardPlayed 响应窗口场景`);
+    }
+    if (!TRANSFER_STATUS_CARD) {
+        throw new Error(`未找到稳定卡牌 ${TRANSFER_STATUS_CARD_ID}，无法构造 afterCardPlayed 响应窗口场景`);
+    }
+
+    next.core.activePlayerId = '0';
+    next.sys.phase = 'main1';
+    next.sys.flowHalted = false;
+    next.core.pendingAttack = null;
+    next.core.rollConfirmed = false;
+    next.core.players['1'].hand = [{ ...structuredClone(responseCard), id: 'response-after-card' }];
+    next.core.players['1'].resources.cp = Math.max(next.core.players['1'].resources.cp ?? 0, 10);
+    next.sys.responseWindow = {
+        ...next.sys.responseWindow,
+        current: {
+            id: 'after-card-2p',
+            windowType: 'afterCardPlayed',
+            sourceId: TRANSFER_STATUS_CARD_ID,
+            responderQueue: ['1'],
+            currentResponderIndex: 0,
+            passedPlayers: [],
+        },
+    };
+
+    return next;
+};
+
 const buildFourPlayerTransferTokenState = (state: any) => {
     const next = buildFourPlayerNoResponseState(state);
     const transferCard = TRANSFER_STATUS_CARD;
@@ -1553,6 +1651,169 @@ test.describe('DiceThrone Simple Start', () => {
         const guestState = await readHarnessState<any>(guestPage);
         expect(hostState.core.players['1'].resources[RESOURCE_IDS.HP] ?? 0).toBe(46);
         expect(guestState.core.players['1'].resources[RESOURCE_IDS.HP] ?? 0).toBe(46);
+
+        await cleanupDTMatch(setup);
+    });
+
+    test('Online 2-player afterRollConfirmed: response pass should not reopen window after repeated confirm', async ({ browser }, testInfo) => {
+        test.setTimeout(90000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage, guestPage, matchId } = setup;
+
+        await selectCharacter(hostPage, 'monk');
+        await selectCharacter(guestPage, 'paladin');
+        await readyAndStartGame(hostPage, guestPage);
+
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+        await waitForHarnessPages([hostPage, guestPage]);
+
+        await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerAfterRollResponseState);
+        await waitForPhase(hostPage, 'offensiveRoll');
+
+        await dispatchHarnessCommand(hostPage, 'CONFIRM_ROLL', '0');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.sys?.responseWindow?.current?.windowType === 'afterRollConfirmed';
+        }, undefined, { timeout: 10000 });
+
+        const responseState = await readHarnessState<any>(hostPage);
+        expect(responseState.sys.responseWindow?.current?.responderQueue).toEqual(['1']);
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '04-two-player-after-roll-response-open');
+
+        await dispatchHarnessCommand(guestPage, 'RESPONSE_PASS', '1');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return !state?.sys?.responseWindow?.current;
+        }, undefined, { timeout: 10000 });
+
+        await dispatchHarnessCommand(hostPage, 'CONFIRM_ROLL', '0');
+        await expect.poll(async () => {
+            const state = await readHarnessState<any>(hostPage);
+            return Boolean(state.sys.responseWindow?.current);
+        }, {
+            timeout: 3000,
+            message: '重复确认骰面后不应再次弹出响应窗口',
+        }).toBe(false);
+
+        const finalState = await readHarnessState<any>(hostPage);
+        expect(finalState.core.rollConfirmed).toBe(true);
+        expect(finalState.sys.responseWindow?.current).toBeUndefined();
+
+        await saveEvidenceScreenshot(hostPage, testInfo, '05-two-player-after-roll-response-closed');
+
+        await cleanupDTMatch(setup);
+    });
+
+    test('Online 2-player afterAttackResolved: response pass should close and not reopen', async ({ browser }, testInfo) => {
+        test.setTimeout(90000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage, guestPage, matchId } = setup;
+
+        await selectCharacter(hostPage, 'monk');
+        await selectCharacter(guestPage, 'paladin');
+        await readyAndStartGame(hostPage, guestPage);
+
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+        await waitForHarnessPages([hostPage, guestPage]);
+
+        await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerAfterAttackResponseState);
+
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.sys?.responseWindow?.current?.windowType === 'afterAttackResolved';
+        }, undefined, { timeout: 10000 });
+
+        const responseState = await readHarnessState<any>(hostPage);
+        expect(responseState.sys.responseWindow?.current?.responderQueue).toEqual(['1']);
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '06-two-player-after-attack-response-open');
+
+        await dispatchHarnessCommand(guestPage, 'RESPONSE_PASS', '1');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return !state?.sys?.responseWindow?.current;
+        }, undefined, { timeout: 10000 });
+
+        await expect.poll(async () => {
+            const state = await readHarnessState<any>(hostPage);
+            return Boolean(state.sys.responseWindow?.current);
+        }, {
+            timeout: 3000,
+            message: '响应跳过后不应再次弹出 afterAttackResolved 响应窗口',
+        }).toBe(false);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, '07-two-player-after-attack-response-closed');
+
+        await cleanupDTMatch(setup);
+    });
+
+    test('Online 2-player afterCardPlayed: response pass should close and not reopen', async ({ browser }, testInfo) => {
+        test.setTimeout(90000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage, guestPage, matchId } = setup;
+
+        await selectCharacter(hostPage, 'monk');
+        await selectCharacter(guestPage, 'paladin');
+        await readyAndStartGame(hostPage, guestPage);
+
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+        await waitForHarnessPages([hostPage, guestPage]);
+
+        await applyOnlineMatchState(matchId, hostPage, buildTwoPlayerAfterCardResponseState);
+
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return state?.sys?.responseWindow?.current?.windowType === 'afterCardPlayed';
+        }, undefined, { timeout: 10000 });
+
+        const responseState = await readHarnessState<any>(hostPage);
+        expect(responseState.sys.responseWindow?.current?.responderQueue).toEqual(['1']);
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '08-two-player-after-card-response-open');
+
+        await dispatchHarnessCommand(guestPage, 'RESPONSE_PASS', '1');
+        await hostPage.waitForFunction(() => {
+            const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+            return !state?.sys?.responseWindow?.current;
+        }, undefined, { timeout: 10000 });
+
+        await expect.poll(async () => {
+            const state = await readHarnessState<any>(hostPage);
+            return Boolean(state.sys.responseWindow?.current);
+        }, {
+            timeout: 3000,
+            message: '响应跳过后不应再次弹出 afterCardPlayed 响应窗口',
+        }).toBe(false);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, '09-two-player-after-card-response-closed');
 
         await cleanupDTMatch(setup);
     });

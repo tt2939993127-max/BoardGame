@@ -241,8 +241,10 @@ export function resolveForceEndTurnRecoveryStep(args: {
     authoritativeState: MatchState<unknown> | null | undefined;
     seatControllers: Record<string, AiSeatController>;
     playerId: string;
+    allowAdvancePhase?: boolean;
 }): AiResolution | null {
     const { authoritativeState, seatControllers, playerId } = args;
+    const allowAdvancePhase = args.allowAdvancePhase !== false;
     if (!authoritativeState) {
         return null;
     }
@@ -262,6 +264,9 @@ export function resolveForceEndTurnRecoveryStep(args: {
             commands: [{ type: 'SKIP_TOKEN_RESPONSE', payload: {} }],
         });
     }
+    if (pendingDamage) {
+        return null;
+    }
 
     const currentInteraction = authoritativeState.sys?.interaction as { current?: unknown } | undefined;
     const visibleCurrent = currentInteraction?.current as HiddenInteractionDescriptor | undefined;
@@ -274,6 +279,9 @@ export function resolveForceEndTurnRecoveryStep(args: {
         if (resolution) {
             return resolution.resolution;
         }
+    }
+    if (visibleCurrent?.playerId) {
+        return null;
     }
 
     const responseWindow = authoritativeState.sys?.responseWindow as {
@@ -293,7 +301,13 @@ export function resolveForceEndTurnRecoveryStep(args: {
             commands: [{ type: 'RESPONSE_PASS', payload: {} }],
         });
     }
+    if (responseWindow?.current) {
+        return null;
+    }
 
+    if (!allowAdvancePhase) {
+        return null;
+    }
     return buildForceEndTurnResolution({
         playerId,
         suffix: buildForceEndTurnFollowUpSuffix(authoritativeState, playerId),

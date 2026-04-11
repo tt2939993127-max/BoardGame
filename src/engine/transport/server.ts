@@ -194,6 +194,25 @@ const buildInteractionSelectabilityDiagnostic = (
     };
 };
 
+const resolveUnsatisfiableReasonFromSelectability = (
+    snapshot: AiInteractionSnapshot | null | undefined,
+): string | null => {
+    const diagnostic = buildInteractionSelectabilityDiagnostic(snapshot);
+    if (!diagnostic) {
+        return null;
+    }
+    if (diagnostic.totalOptions === 0) {
+        return 'empty-options';
+    }
+    if (diagnostic.enabledOptions === 0) {
+        return 'all-options-disabled';
+    }
+    if (diagnostic.minSelectionCount > 0 && diagnostic.enabledOptions < diagnostic.minSelectionCount) {
+        return 'min-selection-unreachable';
+    }
+    return null;
+};
+
 const resolveOnlineAiFeedbackEndpoint = (): string | null => {
     const rawCandidates = [
         process.env.FEEDBACK_API_URL,
@@ -876,6 +895,7 @@ export class GameTransportServer {
                     authoritativeState: match.state,
                     seatControllers,
                     playerId: candidate.playerId,
+                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true && recoverySteps === 0,
                 });
                 if (!followUp) {
                     break;
@@ -1777,7 +1797,11 @@ export class GameTransportServer {
                         interactionId?: unknown;
                     };
                 }).payload;
-                const reason = typeof payload?.reason === 'string' ? payload.reason : null;
+                const rawReason = typeof payload?.reason === 'string' ? payload.reason : null;
+                const inferredReason = rawReason ?? resolveUnsatisfiableReasonFromSelectability(
+                    extractAiInteractionSnapshot(preTrainingState),
+                );
+                const reason = inferredReason;
                 if (reason && UNSATISFIABLE_INTERACTION_REASONS.has(reason)) {
                     const interaction = extractAiInteractionSnapshot(preTrainingState);
                     const trackerKey = `${playerID}:unsatisfiable-interaction:${typeof payload?.interactionId === 'string' ? payload.interactionId : 'unknown'}:${reason}:${progressMarkerBeforeCommand}`;

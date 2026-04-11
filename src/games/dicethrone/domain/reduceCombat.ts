@@ -53,9 +53,22 @@ const buildNextTeamHealth = (
     if (!isTeamMode(state)) return state.teamHealth;
     const teamId = getTeamId(state, targetId);
     if (!teamId) return state.teamHealth;
+    const resolveTeamHealth = (id: 'A' | 'B') => {
+        if (state.teamHealth?.[id] !== undefined) {
+            return state.teamHealth[id]!;
+        }
+        for (const [playerId, player] of Object.entries(state.players)) {
+            if (getTeamId(state, playerId) === id) {
+                return player.resources[RESOURCE_IDS.HP] ?? 0;
+            }
+        }
+        return undefined;
+    };
+    const baseA = resolveTeamHealth('A');
+    const baseB = resolveTeamHealth('B');
     return {
-        A: teamId === 'A' ? newHp : (state.teamHealth?.A ?? newHp),
-        B: teamId === 'B' ? newHp : (state.teamHealth?.B ?? newHp),
+        A: teamId === 'A' ? newHp : (baseA ?? newHp),
+        B: teamId === 'B' ? newHp : (baseB ?? newHp),
     };
 };
 

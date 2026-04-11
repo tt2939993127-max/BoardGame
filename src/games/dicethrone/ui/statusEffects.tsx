@@ -162,7 +162,20 @@ export const getStatusEffectIconNode = (
     }
 
     if (!frame || !targetAtlas) {
-        // 无精灵图时不显示内容，外层渐变背景已提供视觉标识
+        if (meta.iconPath) {
+            return (
+                <span
+                    className="block w-full h-full drop-shadow-md"
+                    style={{
+                        backgroundImage: buildLocalizedImageSet(meta.iconPath, locale),
+                        backgroundSize: 'contain',
+                        backgroundPosition: 'center',
+                        backgroundRepeat: 'no-repeat',
+                    }}
+                />
+            );
+        }
+        // 无精灵图且无单图时不显示内容，外层渐变背景已提供视觉标识
         return <span className="block w-full h-full" />;
     }
     const sizeClass = size === 'choice' ? 'w-full h-full' : 'w-full h-full';

@@ -696,9 +696,33 @@ export function queueInteraction<TCore>(
 export function resolveInteraction<TCore>(
     state: MatchState<TCore>,
 ): MatchState<TCore> {
-    const { queue } = state.sys.interaction;
+    const { current, queue } = state.sys.interaction;
     let next = queue[0];
     const newQueue = queue.slice(1);
+
+    // 传递延迟的 afterScoring 事件给下一个交互（避免链式交互丢失）
+    if (current && next) {
+        const currentData = current.data as Record<string, unknown>;
+        const currentCtx = (currentData.continuationContext ?? {}) as Record<string, unknown>;
+        const deferredEvents = currentCtx._deferredPostScoringEvents;
+
+        if (Array.isArray(deferredEvents) && deferredEvents.length > 0) {
+            const nextData = next.data as Record<string, unknown>;
+            const nextCtx = (nextData.continuationContext ?? {}) as Record<string, unknown>;
+            if (!nextCtx._deferredPostScoringEvents) {
+                next = {
+                    ...next,
+                    data: {
+                        ...nextData,
+                        continuationContext: {
+                            ...nextCtx,
+                            _deferredPostScoringEvents: deferredEvents,
+                        },
+                    },
+                };
+            }
+        }
+    }
 
     // 如果下一个交互是 simple-choice，刷新选项
     if (next && next.kind === 'simple-choice') {
@@ -717,7 +741,10 @@ export function resolveInteraction<TCore>(
         freshOptions = normalizeFreshSimpleChoiceOptions(freshOptions, data);
 
         // 智能处理 multi.min 限制
-        if (!(data.multi?.min && freshOptions.length > 0 && freshOptions.length < data.multi.min)) {
+        const hasEmergencySkip = freshOptions.some(
+            (option) => option.id === '__emergency_skip__' && option.disabled !== true,
+        );
+        if (!(data.multi?.min && freshOptions.length > 0 && freshOptions.length < data.multi.min && !hasEmergencySkip)) {
             next = {
                 ...next,
                 data: { ...data, options: freshOptions },
@@ -1022,7 +1049,10 @@ export function refreshInteractionOptions<TCore>(
 
     // 智能处理 multi.min 限制
     // 如果过滤后无法满足最小选择数，且又不是“已经明确没有任何可选项”的场景，则保持原始选项（安全降级）
-    if (data.multi?.min && freshOptions.length > 0 && freshOptions.length < data.multi.min) {
+    const hasEmergencySkip = freshOptions.some(
+        (option) => option.id === '__emergency_skip__' && option.disabled !== true,
+    );
+    if (data.multi?.min && freshOptions.length > 0 && freshOptions.length < data.multi.min && !hasEmergencySkip) {
         return state;
     }
     

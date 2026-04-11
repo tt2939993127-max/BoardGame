@@ -25,7 +25,12 @@ import type {
     AdvancePhaseCommand,
     SelectCharacterCommand,
     HostStartGameCommand,
+    MoveSeatCommand,
+    RequestSeatSwapCommand,
+    RespondSeatSwapCommand,
+    CancelSeatSwapCommand,
     PlayerReadyCommand,
+    PlayerUnreadyCommand,
     ResponsePassCommand,
     ModifyDieCommand,
     RerollDieCommand,
@@ -50,6 +55,8 @@ import {
     getAvailableAbilityIds,
     isCardPlayableInResponseWindow,
     getActiveDice,
+    getSeatingOrder,
+    isTeamMode,
 } from './rules';
 import { RESOURCE_IDS } from './resources';
 import { STATUS_IDS, DICETHRONE_COMMANDS, TOKEN_IDS } from './ids';
@@ -173,7 +180,7 @@ const validateRollDice = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') {
+    if (phase !== 'offensiveRoll' && phase !== 'targetingRoll' && phase !== 'defensiveRoll') {
         return fail('invalid_phase');
     }
 
@@ -246,6 +253,166 @@ const validateHostStartGame = (
         return fail('player_mismatch');
     }
 
+    if (state.seatSwapRequest) {
+        return fail('seat_swap_request_pending');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证玩家取消准备命令
+ */
+const validatePlayerUnready = (
+    state: DiceThroneCore,
+    _cmd: PlayerUnreadyCommand,
+    playerId: PlayerId,
+    phase: TurnPhase
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    const char = state.selectedCharacters[playerId];
+    if (!char || char === 'unselected') {
+        return fail('character_not_selected');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证移动座位命令（2v2 setup 阶段）
+ */
+const validateMoveSeat = (
+    state: DiceThroneCore,
+    cmd: MoveSeatCommand,
+    playerId: PlayerId,
+    phase: TurnPhase
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('invalid_mode');
+    }
+
+    if (!isMoveAllowed(playerId, state.hostPlayerId)) {
+        return fail('player_mismatch');
+    }
+
+    const movingPlayerId = cmd.payload.playerId;
+    if (!state.players[movingPlayerId]) {
+        return fail('player_not_found');
+    }
+
+    const seatingOrder = getSeatingOrder(state);
+    const sourceSeatIndex = seatingOrder.indexOf(movingPlayerId);
+    if (sourceSeatIndex < 0) {
+        return fail('player_not_found');
+    }
+
+    const targetSeatIndex = cmd.payload.targetSeatIndex;
+    if (targetSeatIndex < 0 || targetSeatIndex >= seatingOrder.length) {
+        return fail('invalid_seat_index');
+    }
+
+    if (targetSeatIndex === sourceSeatIndex) {
+        return fail('seat_not_changed');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证申请换位命令（2v2 setup 阶段）
+ */
+const validateRequestSeatSwap = (
+    state: DiceThroneCore,
+    cmd: RequestSeatSwapCommand,
+    playerId: PlayerId,
+    phase: TurnPhase
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('invalid_mode');
+    }
+
+    const targetPlayerId = cmd.payload.targetPlayerId;
+    if (!state.players[playerId] || !state.players[targetPlayerId]) {
+        return fail('player_not_found');
+    }
+
+    if (playerId === targetPlayerId) {
+        return fail('seat_not_changed');
+    }
+
+    if (state.seatSwapRequest) {
+        return fail('seat_swap_request_pending');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证响应换位命令（2v2 setup 阶段）
+ */
+const validateRespondSeatSwap = (
+    state: DiceThroneCore,
+    _cmd: RespondSeatSwapCommand,
+    playerId: PlayerId,
+    phase: TurnPhase
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('invalid_mode');
+    }
+
+    const pendingRequest = state.seatSwapRequest;
+    if (!pendingRequest) {
+        return fail('seat_swap_request_missing');
+    }
+
+    if (pendingRequest.targetPlayerId !== playerId) {
+        return fail('player_mismatch');
+    }
+
+    return ok();
+};
+
+/**
+ * 验证取消换位命令（2v2 setup 阶段）
+ */
+const validateCancelSeatSwap = (
+    state: DiceThroneCore,
+    _cmd: CancelSeatSwapCommand,
+    playerId: PlayerId,
+    phase: TurnPhase
+): ValidationResult => {
+    if (phase !== 'setup') {
+        return fail('invalid_phase');
+    }
+
+    if (!isTeamMode(state)) {
+        return fail('invalid_mode');
+    }
+
+    const pendingRequest = state.seatSwapRequest;
+    if (!pendingRequest) {
+        return fail('seat_swap_request_missing');
+    }
+
+    if (pendingRequest.requesterId !== playerId) {
+        return fail('player_mismatch');
+    }
+
     return ok();
 };
 
@@ -281,7 +448,7 @@ const validateToggleDieLock = (
     phase: TurnPhase
 ): ValidationResult => {
     // 只允许在进攻阶段锁定骰子
-    if (phase !== 'offensiveRoll') {
+    if (phase !== 'offensiveRoll' && phase !== 'targetingRoll') {
         return fail('invalid_phase');
     }
     
@@ -310,7 +477,7 @@ const validateConfirmRoll = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    if (phase !== 'offensiveRoll' && phase !== 'defensiveRoll') {
+    if (phase !== 'offensiveRoll' && phase !== 'targetingRoll' && phase !== 'defensiveRoll') {
         return fail('invalid_phase');
     }
     
@@ -1186,7 +1353,12 @@ export const validateCommand = (
     if (isCommandType(command, 'ADVANCE_PHASE')) return validateAdvancePhase(state, command, playerId, phase);
     if (isCommandType(command, 'SELECT_CHARACTER')) return validateSelectCharacter(state, command, playerId, phase);
     if (isCommandType(command, 'HOST_START_GAME')) return validateHostStartGame(state, command, playerId, phase);
+    if (isCommandType(command, 'MOVE_SEAT')) return validateMoveSeat(state, command, playerId, phase);
+    if (isCommandType(command, 'REQUEST_SEAT_SWAP')) return validateRequestSeatSwap(state, command, playerId, phase);
+    if (isCommandType(command, 'RESPOND_SEAT_SWAP')) return validateRespondSeatSwap(state, command, playerId, phase);
+    if (isCommandType(command, 'CANCEL_SEAT_SWAP')) return validateCancelSeatSwap(state, command, playerId, phase);
     if (isCommandType(command, 'PLAYER_READY')) return validatePlayerReady(state, command, playerId, phase);
+    if (isCommandType(command, 'PLAYER_UNREADY')) return validatePlayerUnready(state, command, playerId, phase);
     if (isCommandType(command, 'RESPONSE_PASS')) return validateResponsePass(state, command, playerId);
     if (isCommandType(command, 'MODIFY_DIE')) return validateModifyDie(state, command, playerId, pendingInteraction);
     if (isCommandType(command, 'REROLL_DIE')) return validateRerollDie(state, command, playerId, pendingInteraction);

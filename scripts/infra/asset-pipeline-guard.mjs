@@ -4,6 +4,9 @@ import { fileURLToPath } from 'node:url';
 
 const UI_SCOPE_RE = /^src\/games\/[^/]+\/(ui\/|Board[^/]*\.tsx$)/;
 const ALLOW_MARKER_RE = /@asset-pipeline-allow/;
+const BACKGROUND_SHORTHAND_RE = /(^|[^-])\bbackground\s*:/;
+const BACKGROUND_SIZE_RE = /\bbackgroundSize\s*:/;
+const BACKGROUND_POSITION_RE = /\bbackgroundPosition\s*:/;
 
 const RULES = [
   {
@@ -33,6 +36,15 @@ function analyzeFile(filePath, content) {
   if (ALLOW_MARKER_RE.test(content)) return null;
 
   const hits = RULES.filter((rule) => rule.pattern.test(content));
+  if (
+    BACKGROUND_SHORTHAND_RE.test(content)
+    && (BACKGROUND_SIZE_RE.test(content) || BACKGROUND_POSITION_RE.test(content))
+  ) {
+    hits.push({
+      id: 'background-shorthand',
+      message: '同一文件内同时使用 background 简写与 backgroundSize/backgroundPosition，可能重置裁剪参数导致精灵图空白。',
+    });
+  }
   if (hits.length === 0) return null;
 
   return {

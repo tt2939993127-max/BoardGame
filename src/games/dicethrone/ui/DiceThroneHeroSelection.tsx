@@ -195,7 +195,9 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
         const colors = PLAYER_COLORS[pid] || PLAYER_COLORS['0'];
         const hasSelected = selectedCharacters[pid] && selectedCharacters[pid] !== 'unselected';
         const isMe = pid === currentPlayerId;
-        const isAiSeat = (seatControllers?.[pid] ?? 'human') === 'ai';
+        const controller = seatControllers?.[pid];
+        const controllerType = controller?.type ?? 'human';
+        const isAiSeat = controllerType !== 'human';
         const isRequesterSeat = currentSeatSwapRequest?.requesterId === pid;
         const isTargetSeat = currentSeatSwapRequest?.targetPlayerId === pid;
         const avatarDisabled = !isFourPlayerMode || isSeatSwapPending || isMe;

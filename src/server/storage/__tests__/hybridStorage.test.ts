@@ -60,27 +60,26 @@ describe('HybridStorage 行为', () => {
         if (mongo) await mongo.stop(); // 防御性检查
     });
 
-    it('游客房间只在内存中创建，不落库', async () => {
+    it('游客房间在持久化开启时落库，保证重启可恢复', async () => {
         await hybrid.createMatch('guest-1', buildCreateData());
 
         const Match = mongoose.model('Match');
         const doc = await Match.findOne({ matchID: 'guest-1' }).lean();
-        expect(doc).toBeNull();
+        expect(doc).toBeTruthy();
 
         const { metadata } = await hybrid.fetch('guest-1', { metadata: true });
         expect(metadata).toBeTruthy();
     });
 
-    it('游客重复创建会覆盖旧房间', async () => {
+    it('游客重复创建在存储层不自动覆盖，由上层防重逻辑处理', async () => {
         await hybrid.createMatch('guest-1', buildCreateData());
         await hybrid.createMatch('guest-2', buildCreateData());
 
-        const matches = await hybrid.listMatches();
-        expect(matches).toContain('guest-2');
-        expect(matches).not.toContain('guest-1');
+        const matches = (await hybrid.listMatches()).sort();
+        expect(matches).toEqual(['guest-1', 'guest-2']);
     });
 
-    it('内存临时房间断线超时后清理', async () => {
+    it('游客临时房间断线超时后清理（走 Mongo 清理流程）', async () => {
         const disconnectedSince = Date.now() - 6 * 60 * 1000;
         const setupData = buildSetupData();
         const baseMetadata = {

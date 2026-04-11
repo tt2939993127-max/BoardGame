@@ -254,14 +254,14 @@ describe('StatusEffectsIcons', () => {
         expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/assets/'))).toBe(true);
     });
 
-    it('骰图切片坐标应匹配 2x3 atlas 布局', () => {
-        expect(DICE_BG_SIZE).toBe('200% 300%');
-        expect(getDiceSpritePosition(2)).toEqual({ xPos: 100, yPos: 0 });
-        expect(getDiceSpritePosition(5)).toEqual({ xPos: 0, yPos: 100 });
+    it('骰图切片坐标应匹配 3x3 atlas（使用下两行）', () => {
+        expect(DICE_BG_SIZE).toBe('300% 300%');
+        expect(getDiceSpritePosition(2)).toEqual({ xPos: 50, yPos: 50 });
+        expect(getDiceSpritePosition(5)).toEqual({ xPos: 50, yPos: 100 });
         expect(getDiceSpritePosition(6)).toEqual({ xPos: 100, yPos: 100 });
     });
 
-    it('dice sprite 缺失时应渲染 fallback 骰面字形，避免整块空白', () => {
+    it('dice sprite 缺失时应渲染 shimmer 占位（与手牌一致），避免整块空白', () => {
         const html = renderToStaticMarkup(
             <Dice3D
                 value={6}
@@ -274,9 +274,6 @@ describe('StatusEffectsIcons', () => {
 
         expect(html).toContain('data-sprite-ready="false"');
         expect(html).toContain('data-face-id="1"');
-        expect(html).toContain('data-face-fallback="true"');
-        expect(html).toContain('data-face-symbol="bow"');
-        expect(html).toContain('>弓<');
-        expect(html).toContain('>月<');
+        expect(html).toContain('data-face-fallback="loading"');
     });
 });

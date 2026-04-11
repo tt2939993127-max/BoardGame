@@ -24,6 +24,7 @@ import {
     clearMatchCredentials,
     clearOwnerActiveMatch,
     suppressOwnerActiveMatch,
+    isMatchNotFoundError,
     readStoredAiSeatCredentials,
     readStoredMatchCredentials,
     validateStoredMatchSeat,
@@ -556,6 +557,7 @@ const OnlineAiSeatBridge = ({
                     authoritativeState,
                     seatControllers,
                     playerId: candidate.playerId,
+                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true && stepIndex === 0,
                 });
             },
             onCompleted: () => {
@@ -1485,14 +1487,40 @@ export const MatchRoom = () => {
         if (matchStatus.errorKind !== 'not_found') return;
         if (handledMissingMatchRef.current === matchId) return;
         handledMissingMatchRef.current = matchId;
-        clearMatchLocalState();
-        toast.warning(
-            { kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' },
-            undefined,
-            { dedupeKey: `matchRoom.missing.${matchId}` }
-        );
-        navigateBackToLobby();
-    }, [clearMatchLocalState, hasEverReceivedOnlineState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.errorKind, navigateBackToLobby, shouldAutoJoin, toast]);
+
+        let cancelled = false;
+        const confirmMissing = async () => {
+            if (!gameId) {
+                handledMissingMatchRef.current = null;
+                return;
+            }
+
+            try {
+                await matchApi.getMatch(gameId, matchId);
+                if (cancelled) return;
+                handledMissingMatchRef.current = null;
+            } catch (err) {
+                if (cancelled) return;
+                if (!isMatchNotFoundError(err)) {
+                    handledMissingMatchRef.current = null;
+                    return;
+                }
+                clearMatchLocalState();
+                toast.warning(
+                    { kind: 'i18n', key: 'error.roomDestroyed', ns: 'lobby' },
+                    undefined,
+                    { dedupeKey: `matchRoom.missing.${matchId}` }
+                );
+                navigateBackToLobby();
+            }
+        };
+
+        void confirmMissing();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [clearMatchLocalState, gameId, hasEverReceivedOnlineState, isAutoJoining, isTutorialRoute, lobbyPresence.isMissing, matchId, matchStatus.errorKind, navigateBackToLobby, shouldAutoJoin, toast]);
 
     const handleForceExitLocal = () => {
         clearMatchLocalState();

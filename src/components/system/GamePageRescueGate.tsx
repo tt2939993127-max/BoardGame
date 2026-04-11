@@ -1,5 +1,5 @@
 import { AlertTriangle, ArrowLeft, Check, Copy, RefreshCw } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { UI_Z_INDEX } from '../../core';
@@ -12,7 +12,8 @@ const MIN_RENDERABLE_SIZE_PX = 48;
 const MIN_MEANINGFUL_AREA_PX = 48 * 48;
 const MAX_VISIBLE_ELEMENT_SCAN = 160;
 
-export const GAME_PAGE_RESCUE_GRACE_MS = 8000;
+export const GAME_PAGE_RESCUE_GRACE_MS = 60_000;
+export const GAME_PAGE_RESCUE_CONFIRM_MS = 6_000;
 
 export type GamePageRescueSignal =
     | 'game-viewport-missing'
@@ -34,10 +35,14 @@ export interface GamePageRescueSignalInput {
 interface RescueSnapshot {
     signal: GamePageRescueSignal | null;
     elapsedMs: number;
+    elapsedSinceHealthyMs?: number;
     viewportRect?: { width: number; height: number } | null;
     shellRect?: { width: number; height: number } | null;
     contentRect?: { width: number; height: number } | null;
     meaningfulContentCount: number;
+    hasFriendlyScreen: boolean;
+    hasLoadingScreen: boolean;
+    hasBootstrapLoader: boolean;
 }
 
 const isGameRoutePath = (pathname: string) => pathname.startsWith('/play/');
@@ -144,7 +149,7 @@ const removeInitialLoaderIfPresent = () => {
     document.getElementById(INITIAL_LOADER_ID)?.remove();
 };
 
-const readRescueSnapshot = (pathname: string, enteredAt: number): RescueSnapshot => {
+const readRescueSnapshot = (pathname: string, enteredAt: number): Omit<RescueSnapshot, 'signal'> => {
     const loadingScreen = document.querySelector('[data-testid="loading-screen"]');
     const friendlyScreen = document.querySelector('[data-bg-friendly-screen="true"]:not([data-bg-rescue-gate="true"])');
     const bootstrapLoader = document.getElementById(INITIAL_LOADER_ID);
@@ -155,22 +160,14 @@ const readRescueSnapshot = (pathname: string, enteredAt: number): RescueSnapshot
     const meaningfulContentCount = countMeaningfulVisibleDescendants(content);
 
     return {
-        signal: detectGamePageRescueSignal({
-            pathname,
-            elapsedMs,
-            hasFriendlyScreen: Boolean(friendlyScreen),
-            hasLoadingScreen: Boolean(loadingScreen),
-            hasBootstrapLoader: Boolean(bootstrapLoader),
-            viewportRect: toRectSize(viewport),
-            shellRect: toRectSize(shell),
-            contentRect: toRectSize(content),
-            meaningfulContentCount,
-        }),
         elapsedMs,
         viewportRect: toRectSize(viewport),
         shellRect: toRectSize(shell),
         contentRect: toRectSize(content),
         meaningfulContentCount,
+        hasFriendlyScreen: Boolean(friendlyScreen),
+        hasLoadingScreen: Boolean(loadingScreen),
+        hasBootstrapLoader: Boolean(bootstrapLoader),
     };
 };
 
@@ -180,6 +177,8 @@ export const GamePageRescueGate = () => {
     const { t } = useTranslation('lobby');
     const [copied, setCopied] = useState(false);
     const [snapshot, setSnapshot] = useState<RescueSnapshot | null>(null);
+    const lastHealthyAtRef = useRef<number | null>(null);
+    const firstBadAtRef = useRef<number | null>(null);
 
     useEffect(() => {
         if (!isGameRoutePath(location.pathname)) {
@@ -189,13 +188,57 @@ export const GamePageRescueGate = () => {
         }
 
         const enteredAt = Date.now();
+        lastHealthyAtRef.current = enteredAt;
+        firstBadAtRef.current = null;
         const runCheck = () => {
-            const nextSnapshot = readRescueSnapshot(location.pathname, enteredAt);
-            const hasHealthyUi = !nextSnapshot.signal || nextSnapshot.meaningfulContentCount > 0;
-            if (hasHealthyUi) {
+            const baseSnapshot = readRescueSnapshot(location.pathname, enteredAt);
+            const now = Date.now();
+            const hasMeaningfulContent = baseSnapshot.meaningfulContentCount > 0;
+            const hasActiveScreen = baseSnapshot.hasFriendlyScreen
+                || baseSnapshot.hasLoadingScreen
+                || baseSnapshot.hasBootstrapLoader;
+            const isHealthyForGrace = hasActiveScreen || hasMeaningfulContent;
+
+            if (isHealthyForGrace) {
+                lastHealthyAtRef.current = now;
+                firstBadAtRef.current = null;
+            }
+
+            const elapsedSinceHealthy = now - (lastHealthyAtRef.current ?? enteredAt);
+            const signal = detectGamePageRescueSignal({
+                pathname: location.pathname,
+                elapsedMs: elapsedSinceHealthy,
+                hasFriendlyScreen: baseSnapshot.hasFriendlyScreen,
+                hasLoadingScreen: baseSnapshot.hasLoadingScreen,
+                hasBootstrapLoader: baseSnapshot.hasBootstrapLoader,
+                viewportRect: baseSnapshot.viewportRect,
+                shellRect: baseSnapshot.shellRect,
+                contentRect: baseSnapshot.contentRect,
+                meaningfulContentCount: baseSnapshot.meaningfulContentCount,
+            });
+
+            if (baseSnapshot.hasFriendlyScreen || baseSnapshot.hasLoadingScreen || hasMeaningfulContent) {
                 removeInitialLoaderIfPresent();
             }
-            setSnapshot(nextSnapshot.signal ? nextSnapshot : null);
+
+            let nextSnapshot: RescueSnapshot | null = null;
+            if (signal) {
+                if (firstBadAtRef.current === null) {
+                    firstBadAtRef.current = now;
+                }
+                const badDuration = now - (firstBadAtRef.current ?? now);
+                if (badDuration >= GAME_PAGE_RESCUE_CONFIRM_MS) {
+                    nextSnapshot = {
+                        ...baseSnapshot,
+                        signal,
+                        elapsedSinceHealthyMs: elapsedSinceHealthy,
+                    };
+                }
+            } else {
+                firstBadAtRef.current = null;
+            }
+
+            setSnapshot(nextSnapshot);
         };
 
         runCheck();
@@ -219,6 +262,7 @@ export const GamePageRescueGate = () => {
             `signal=${snapshot.signal ?? 'none'}`,
             `path=${location.pathname}${location.search}`,
             `elapsedMs=${snapshot.elapsedMs}`,
+            `elapsedSinceHealthyMs=${snapshot.elapsedSinceHealthyMs ?? 'unknown'}`,
             `inner=${window.innerWidth}x${window.innerHeight}`,
             `visual=${Math.round(visualViewport?.width ?? window.innerWidth)}x${Math.round(visualViewport?.height ?? window.innerHeight)}`,
             `viewport=${snapshot.viewportRect ? `${snapshot.viewportRect.width}x${snapshot.viewportRect.height}` : 'missing'}`,

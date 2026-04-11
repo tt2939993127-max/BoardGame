@@ -89,6 +89,33 @@ public/assets/
 - **修回归先查接线是否偏离统一链路**：当图片出现“之前正常、后来空白/错图/偶发失败”时，优先检查是否绕过了 `AssetLoader`、是否引入组件内特判、是否手动拼接了与统一规则不一致的路径；禁止直接继续堆特例。
 - **如确实需要补充共享能力，应下沉到公共层**：如果统一链路不能满足某类图片展示需求，应补到 `AssetLoader` 或通用媒体组件，而不是在单个游戏/单个组件里偷偷复制一份资源加载逻辑。
 
+### 精灵图/图集裁剪安全规则（强制）
+
+- **禁止使用 `background` 简写设置精灵图背景**：`background` 会重置 `background-size / background-position`，导致裁剪参数丢失而出现“图加载了但显示空白/错位”。  
+  ✅ 正确：`backgroundImage` + `backgroundSize` + `backgroundPosition`  
+  ❌ 错误：`background: linear-gradient(...);`（与裁剪参数共存）
+- **图集裁剪必须“先看图，再采样”**：不得仅依赖脚本猜测行列；必须先人工核对图片内容，再确定 `rows/cols/faceMap` 或裁剪坐标。
+- **所有图集定义必须写裁剪合同注释**：凡在 `ui/` 内定义 `*ATLAS` 且包含 `cols/rows`，必须添加 `// @atlas-contract ...`，写明图片名称、网格布局与采样依据。
+- **修改裁剪配置必须配套测试或契约校验**：至少有一条断言覆盖 `background-size / position` 的关键值，避免回归。
+
+#### ✅ 精灵图正确写法模板（强制参考）
+
+```ts
+const hasSprite = Boolean(spriteUrl);
+const backgroundImage = hasSprite
+  ? `url("${spriteUrl}")`
+  : 'linear-gradient(145deg, rgba(0,0,0,0.7), rgba(0,0,0,0.9))';
+
+style={{
+  backgroundImage,
+  backgroundSize: hasSprite ? '300% 300%' : undefined,
+  backgroundPosition: hasSprite ? '0% 50%' : undefined,
+  backgroundRepeat: hasSprite ? 'no-repeat' : undefined,
+}}
+```
+
+> **禁止**在同一元素同时使用 `background:` 简写与 `backgroundSize/backgroundPosition`。
+
 ### 路径规则（强制）
 
 - `src` 传相对路径（如 `dicethrone/images/foo.png`），**不带** `/assets/` 前缀

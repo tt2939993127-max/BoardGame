@@ -254,9 +254,10 @@ export function execute(
             const requesterId = command.playerId;
             const { targetPlayerId } = command.payload as { targetPlayerId: PlayerId };
             const seatingOrder = getSeatingOrder(state);
-            const controller = state.seatControllers?.[targetPlayerId] ?? 'human';
+            const controller = state.seatControllers?.[targetPlayerId];
+            const controllerType = controller?.type ?? 'human';
 
-            if (controller === 'ai') {
+            if (controllerType !== 'human') {
                 const swapResult = buildSwappedSeatingOrder(seatingOrder, requesterId, targetPlayerId);
                 if (!swapResult) {
                     break;

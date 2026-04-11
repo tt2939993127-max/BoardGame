@@ -5,13 +5,14 @@
 import type { DomainCore, GameOverResult, PlayerId, RandomFn } from '../../../engine/types';
 import { registerDiceDefinition } from './diceRegistry';
 import { resourceSystem } from './resourceSystem';
-import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor, DtResponseWindowType } from './types';
+import type { DiceThroneCore, DiceThroneCommand, DiceThroneEvent, HeroState, CharacterId, TurnPhase, InteractionDescriptor, DtResponseWindowType, SeatControllerKind } from './types';
+import { INITIAL_HEALTH } from './types';
 import { RESOURCE_IDS } from './resources';
 import { validateCommand } from './commandValidation';
 import { execute } from './execute';
 import { reduce } from './reducer';
 import { playerView } from './view';
-import { getActiveDice } from './rules';
+import { buildTeamIdByPlayerIdFromSeatingOrder, getActiveDice, getTeamId, isTeamMode } from './rules';
 import { registerDiceThroneConditions } from '../conditions';
 import { ALL_TOKEN_DEFINITIONS } from './characters';
 import { monkDiceDefinition } from '../heroes/monk/diceConfig';
@@ -55,9 +56,51 @@ paladinResourceDefinitions.forEach(def => resourceSystem.registerDefinition(def)
 export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, DiceThroneEvent> = {
     gameId: 'dicethrone',
 
-    setup: (playerIds: PlayerId[], _random: RandomFn): DiceThroneCore => {
+    setup: (playerIds: PlayerId[], _random: RandomFn, setupData?: unknown): DiceThroneCore => {
         const players: Record<PlayerId, HeroState> = {};
         const selectedCharacters: Record<PlayerId, CharacterId> = {};
+        const rawSetupData = (setupData && typeof setupData === 'object') ? setupData as Record<string, unknown> : undefined;
+        const seatingOrderInput = rawSetupData?.seatingOrder;
+        const resolvedSeatingOrder = Array.isArray(seatingOrderInput)
+            ? seatingOrderInput.filter((pid): pid is PlayerId => typeof pid === 'string' && playerIds.includes(pid))
+            : [];
+        const seatingOrder = resolvedSeatingOrder.length === playerIds.length ? resolvedSeatingOrder : [...playerIds];
+
+        const rawSeatControllers = rawSetupData?.seatControllers;
+        const seatControllers = (() => {
+            if (!rawSeatControllers || typeof rawSeatControllers !== 'object') {
+                return undefined;
+            }
+
+            const normalized: Record<PlayerId, SeatControllerKind> = {};
+            let hasEntry = false;
+            for (const pid of playerIds) {
+                const controller = (rawSeatControllers as Record<string, unknown>)[pid];
+                if (controller && typeof controller === 'object' && 'type' in controller) {
+                    const type = (controller as { type?: unknown }).type;
+                    if (type === 'human' || type === 'local-ai' || type === 'remote-ai') {
+                        normalized[pid] = controller as SeatControllerKind;
+                        hasEntry = true;
+                        continue;
+                    }
+                    if (type === 'ai') {
+                        normalized[pid] = { type: 'local-ai' } as SeatControllerKind;
+                        hasEntry = true;
+                        continue;
+                    }
+                }
+                if (controller === 'ai') {
+                    normalized[pid] = { type: 'local-ai' } as SeatControllerKind;
+                    hasEntry = true;
+                    continue;
+                }
+                if (controller === 'human') {
+                    normalized[pid] = { type: 'human' } as SeatControllerKind;
+                    hasEntry = true;
+                }
+            }
+            return hasEntry ? normalized : undefined;
+        })();
 
         for (const pid of playerIds) {
             // 初始占位，等待选角后再按需初始化具体资源/技能/牌库
@@ -84,12 +127,21 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             readyPlayers[pid] = false;
         }
 
+        const isTeamSetup = playerIds.length === 4;
+        const teamIdByPlayerId = isTeamSetup
+            ? buildTeamIdByPlayerIdFromSeatingOrder(seatingOrder)
+            : undefined;
+
         return {
             players,
             selectedCharacters,
             readyPlayers,
             hostPlayerId: playerIds[0],
             hostStarted: false,
+            seatingOrder: isTeamSetup ? seatingOrder : undefined,
+            teamIdByPlayerId,
+            teamHealth: isTeamSetup ? { A: INITIAL_HEALTH, B: INITIAL_HEALTH } : undefined,
+            seatControllers,
             dice: [], // 选角后再创建
             rollCount: 0,
             rollLimit: 3,
@@ -120,7 +172,14 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
             const data = (interaction.data as Record<string, unknown> | undefined) ?? {};
             const meta = data.meta as Record<string, unknown> | undefined;
             if (meta?.dtType === 'modifyDie' || meta?.dtType === 'selectDie') {
-                const activeDieIds = getActiveDice(state.core).map(die => die.id);
+                const rawAllowedDieIds = Array.isArray(data.allowedDieIds)
+                    ? data.allowedDieIds
+                    : Array.isArray(meta?.allowedDieIds)
+                        ? meta?.allowedDieIds
+                        : [];
+                const allowedDieIds = rawAllowedDieIds.length > 0
+                    ? Array.from(new Set(rawAllowedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')))
+                    : getActiveDice(state.core).map(die => die.id);
                 const completedDieIds = Array.isArray(data.completedDieIds)
                     ? data.completedDieIds.filter((dieId): dieId is number => typeof dieId === 'number')
                     : [];
@@ -135,7 +194,7 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
                     dieModifyConfig: meta.dieModifyConfig as InteractionDescriptor['dieModifyConfig'] | undefined,
                     diceOwnerId: typeof meta.diceOwnerId === 'string' ? meta.diceOwnerId : undefined,
                     targetOpponentDice: meta.targetOpponentDice === true,
-                    allowedDieIds: activeDieIds,
+                    allowedDieIds,
                     completedDieIds,
                 } as InteractionDescriptor;
             }
@@ -150,6 +209,34 @@ export const DiceThroneDomain: DomainCore<DiceThroneCore, DiceThroneCommand, Dic
     isGameOver: (state: DiceThroneCore): GameOverResult | undefined => {
         // 在 setup 阶段不进行胜负判定，避免血量未初始化导致误判
         if (!state.hostStarted) return undefined;
+
+        if (isTeamMode(state)) {
+            const resolveTeamHealth = (teamId: 'A' | 'B') => {
+                if (state.teamHealth?.[teamId] !== undefined) {
+                    return state.teamHealth[teamId]!;
+                }
+                for (const [playerId, player] of Object.entries(state.players)) {
+                    if (getTeamId(state, playerId) === teamId) {
+                        return player.resources[RESOURCE_IDS.HP] ?? 0;
+                    }
+                }
+                return 0;
+            };
+            const teamA = resolveTeamHealth('A');
+            const teamB = resolveTeamHealth('B');
+
+            if (teamA <= 0 && teamB <= 0) {
+                return { draw: true };
+            }
+            if (teamA <= 0 || teamB <= 0) {
+                const winningTeam = teamA <= 0 ? 'B' : 'A';
+                const winners = Object.keys(state.players).filter(
+                    (playerId) => getTeamId(state, playerId) === winningTeam,
+                );
+                return winners.length > 0 ? { winner: winners[0], winners } : { draw: true };
+            }
+            return undefined;
+        }
 
         const playerIds = Object.keys(state.players);
         const defeated = playerIds.filter(id => (state.players[id]?.resources[RESOURCE_IDS.HP] ?? 0) <= 0);

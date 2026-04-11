@@ -77,6 +77,7 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
             '攻击者额外获得 1 CP。',
             '赏金不会自动移除。',
         ],
+        iconPath: 'dicethrone/images/gunslinger/icons/赏金',
         sfxKey: 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a',
         stackLimit: 1,
         category: 'debuff',

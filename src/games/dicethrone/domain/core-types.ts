@@ -4,6 +4,7 @@
  */
 
 import type { PlayerId } from '../../../engine/types';
+import type { AiSeatController } from '../../../engine/ai/types';
 import type { CardPreviewRef } from '../../../core';
 import type { CharacterBadgeDef } from '../../../core/ui';
 import type { AbilityDef, AbilityEffect } from './combat';
@@ -454,7 +455,7 @@ export interface HeroState {
     pendingBonusDamage?: number;
 }
 
-export type SeatControllerKind = 'human' | 'ai';
+export type SeatControllerKind = AiSeatController;
 
 export interface PendingSeatSwapRequest {
     requesterId: PlayerId;
