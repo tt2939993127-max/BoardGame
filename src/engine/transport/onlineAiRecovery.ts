@@ -19,6 +19,36 @@ type HiddenSimpleChoiceInteraction = {
     };
 };
 
+type HiddenInteractionDescriptor = {
+    id?: unknown;
+    playerId?: unknown;
+    kind?: unknown;
+    data?: unknown;
+};
+
+type HiddenDtCardInteractionData = {
+    type?: unknown;
+    targetPlayerIds?: unknown;
+    requiresTargetWithStatus?: unknown;
+    transferConfig?: {
+        sourcePlayerId?: unknown;
+        statusId?: unknown;
+    };
+};
+
+type HiddenPlayerState = {
+    statusEffects?: Record<string, number | undefined> | null;
+    tokens?: Record<string, number | undefined> | null;
+};
+
+const hasAnyStatusOrToken = (player?: HiddenPlayerState | null): boolean => {
+    if (!player) return false;
+    const effects = player.statusEffects ?? {};
+    const tokens = player.tokens ?? {};
+    return Object.values(effects).some((value) => typeof value === 'number' && value > 0)
+        || Object.values(tokens).some((value) => typeof value === 'number' && value > 0);
+};
+
 export type ForceSkippableHiddenAiInteraction = {
     playerId: string;
     interactionId: string;
@@ -120,7 +150,7 @@ function buildForceEndTurnFromInteractionState(
     playerId: string,
     reason: 'hidden-interaction' | 'visible-interaction',
 ): ForceEndTurnStalledAiResolution | null {
-    const current = (state.sys as { interaction?: { current?: unknown } } | undefined)?.interaction?.current as HiddenSimpleChoiceInteraction | undefined;
+    const current = (state.sys as { interaction?: { current?: unknown } } | undefined)?.interaction?.current as HiddenInteractionDescriptor | undefined;
     if (!current || String(current.playerId) !== playerId || typeof current.id !== 'string') {
         return null;
     }
@@ -139,7 +169,7 @@ function buildForceEndTurnFromInteractionState(
         };
     }
 
-    const unsatisfiableReason = resolveUnsatisfiableReasonFromInteraction(current);
+    const unsatisfiableReason = resolveUnsatisfiableReasonFromInteraction(state, current);
     return {
         playerId,
         reason,
@@ -225,29 +255,85 @@ export function resolveForceEndTurnFollowUpAfterConfirmation(args: {
 }
 
 function resolveUnsatisfiableReasonFromInteraction(
-    current: HiddenSimpleChoiceInteraction | undefined,
+    state: MatchState<unknown>,
+    current: HiddenInteractionDescriptor | undefined,
 ): string | null {
-    if (!current || current.kind !== 'simple-choice') {
+    if (!current) {
         return null;
     }
 
-    const data = current.data;
-    const options = Array.isArray(data?.options) ? data.options : [];
-    const enabledOptions = options.filter((option) => option?.disabled !== true);
-    const minCount = typeof data?.multi?.min === 'number' ? data.multi.min : 1;
+    if (current.kind === 'simple-choice') {
+        const data = (current as HiddenSimpleChoiceInteraction).data;
+        const options = Array.isArray(data?.options) ? data.options : [];
+        const enabledOptions = options.filter((option) => option?.disabled !== true);
+        const minCount = typeof data?.multi?.min === 'number' ? data.multi.min : 1;
 
-    if (minCount <= 0) {
+        if (minCount <= 0) {
+            return null;
+        }
+        if (options.length === 0) {
+            return 'empty-options';
+        }
+        if (enabledOptions.length === 0) {
+            return 'all-options-disabled';
+        }
+        if (enabledOptions.length < minCount) {
+            return 'min-selection-unreachable';
+        }
         return null;
     }
-    if (options.length === 0) {
+
+    if (current.kind !== 'dt:card-interaction') {
+        return null;
+    }
+
+    const data = current.data as HiddenDtCardInteractionData | undefined;
+    const players = (state.core as { players?: Record<string, HiddenPlayerState> } | undefined)?.players ?? {};
+    const rawTargets = Array.isArray(data?.targetPlayerIds)
+        ? data?.targetPlayerIds
+        : Object.keys(players);
+    const targetIds = rawTargets
+        .map((playerId) => String(playerId))
+        .filter((playerId) => Boolean(players[playerId]));
+
+    if (targetIds.length === 0) {
         return 'empty-options';
     }
-    if (enabledOptions.length === 0) {
-        return 'all-options-disabled';
+
+    const interactionType = typeof data?.type === 'string' ? data.type : '';
+    const requiresTargetWithStatus = data?.requiresTargetWithStatus === true
+        || interactionType === 'selectStatus'
+        || interactionType === 'selectTargetStatus';
+
+    if (interactionType === 'selectTargetStatus') {
+        const sourcePlayerId = typeof data?.transferConfig?.sourcePlayerId === 'string'
+            ? data.transferConfig?.sourcePlayerId
+            : null;
+        const statusId = typeof data?.transferConfig?.statusId === 'string'
+            ? data.transferConfig?.statusId
+            : null;
+        if (!sourcePlayerId || !statusId) {
+            return 'empty-options';
+        }
+        const sourcePlayer = players[sourcePlayerId];
+        const sourceHasStatus = (sourcePlayer?.statusEffects?.[statusId] ?? 0) > 0
+            || (sourcePlayer?.tokens?.[statusId] ?? 0) > 0;
+        if (!sourceHasStatus) {
+            return 'empty-options';
+        }
+        const eligibleTargets = targetIds.filter((playerId) => playerId !== sourcePlayerId);
+        if (eligibleTargets.length === 0) {
+            return 'empty-options';
+        }
     }
-    if (enabledOptions.length < minCount) {
-        return 'min-selection-unreachable';
+
+    if (requiresTargetWithStatus) {
+        const hasAnyStatus = targetIds.some((playerId) => hasAnyStatusOrToken(players[playerId]));
+        if (!hasAnyStatus) {
+            return 'empty-options';
+        }
     }
+
     return null;
 }
 

@@ -11,14 +11,14 @@ import { waitForState, waitForCoreState, waitForPhaseChange } from '../helpers/w
 import { cloneState, createSWRoomViaAPI } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
-import { DESKTOP_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
+import { DESKTOP_REFERENCE_VIEWPORT, MOBILE_LANDSCAPE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
 import {
   createSummonerWarsMobileEvidenceState,
   SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
   withSummonerWarsMobileEvidenceActionLog,
 } from '../../src/games/summonerwars/mobileEvidence';
 
-const SW_PHONE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
+const SW_PHONE_LANDSCAPE_VIEWPORT = MOBILE_LANDSCAPE_REFERENCE_VIEWPORT;
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
   if (process.env.PW_SW_USE_REAL_MAP === 'true') {
     return;
@@ -560,6 +560,16 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
     throw new Error('SummonerWars 证据场景关键节点缺失，无法比较 PC/移动端比例');
   }
 
+  const mapRatio = toRatios(mapRect)!;
+  const handRatio = toRatios(handRect)!;
+  const trackerRatio = toRatios(trackerRect)!;
+  const endPhaseRatio = toRatios(endPhaseRect)!;
+  const playerRatio = toRatios(playerRect)!;
+  const opponentRatio = toRatios(opponentRect)!;
+  const discardRatio = toRatios(discardRect)!;
+  const drawRatio = toRatios(drawRect)!;
+  const bannerRatio = toRatios(bannerRect)!;
+
   return {
     viewportWidth: designWidth,
     viewportHeight: designHeight,
@@ -590,16 +600,20 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
         }
         : null,
     },
+    mapWidthRatio: mapRatio.width,
+    handHeightRatio: handRatio.height,
+    trackerWidthRatio: trackerRatio.width,
+    endPhaseHeightRatio: endPhaseRatio.height,
     elements: {
-      map: toRatios(mapRect),
-      hand: toRatios(handRect),
-      phaseTracker: toRatios(trackerRect),
-      endPhase: toRatios(endPhaseRect),
-      playerBar: toRatios(playerRect),
-      opponentBar: toRatios(opponentRect),
-      discardPile: toRatios(discardRect),
-      drawDeck: toRatios(drawRect),
-      actionBanner: toRatios(bannerRect),
+      map: mapRatio,
+      hand: handRatio,
+      phaseTracker: trackerRatio,
+      endPhase: endPhaseRatio,
+      playerBar: playerRatio,
+      opponentBar: opponentRatio,
+      discardPile: discardRatio,
+      drawDeck: drawRatio,
+      actionBanner: bannerRatio,
     },
   };
 });

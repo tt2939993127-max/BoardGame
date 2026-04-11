@@ -4711,101 +4711,67 @@ describe('smashup', () => {
         });
     });
 
-    it('滑稽巨人通过交互移动到已有其他泰坦的标准基地时，会触发泰坦冲突并移除败者', () => {
+    it('交互解决产生的泰坦移动进入已有其他泰坦的标准基地时，会继续触发泰坦冲突', () => {
         const core = makeState({
             bases: [
-                makeBase({
-                    minions: [makeMinion('target-low-power', 'ghosts_spectre', '1', 2)],
-                }),
                 makeBase(),
+                makeBase({
+                    minions: [makeMinion('enemy-on-target', 'ghosts_spectre', '1', 3)],
+                }),
             ],
             titans: [
-                {
-                    uid: 't-bfg',
-                    defId: 'tricksters_big_funny_giant',
-                    faction: SMASHUP_FACTION_IDS.TRICKSTERS,
-                    ownerId: '0',
-                    controllerId: '0',
-                    powerCounters: 0,
-                    talentUsed: false,
-                    location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
-                } satisfies TitanState,
                 {
                     uid: 't-kraken',
                     defId: 'pirates_the_kraken',
                     faction: SMASHUP_FACTION_IDS.PIRATES,
+                    ownerId: '0',
+                    controllerId: '0',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'base', baseIndex: 0, enteredAt: 2 },
+                } satisfies TitanState,
+                {
+                    uid: 't-bfg',
+                    defId: 'tricksters_big_funny_giant',
+                    faction: SMASHUP_FACTION_IDS.TRICKSTERS,
                     ownerId: '1',
                     controllerId: '1',
                     powerCounters: 0,
                     talentUsed: false,
-                    location: { zone: 'base', baseIndex: 1, enteredAt: 2 },
+                    location: { zone: 'base', baseIndex: 1, enteredAt: 1 },
                 } satisfies TitanState,
             ],
         });
 
-        const chooseMinionInteraction = createSimpleChoice(
-            'test-bfg-choose-minion',
-            '0',
-            'choose minion',
-            [{
-                id: 'target-low-power',
-                label: 'target-low-power',
-                value: { minionUid: 'target-low-power', defId: 'ghosts_spectre', baseIndex: 0 },
-            }],
-            { sourceId: 'titan_tricksters_big_funny_giant_choose_minion', targetType: 'minion' },
-        );
-        const state = {
-            ...makeMatchState(core),
-            sys: {
-                ...makeMatchState(core).sys,
-                interaction: {
-                    ...makeMatchState(core).sys.interaction,
-                    current: chooseMinionInteraction,
-                    queue: [],
-                },
-            },
+        const state = makeMatchState(core);
+        const command: SmashUpCommand = {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { titanUid: 't-kraken', baseIndex: 0 },
+            timestamp: 70,
         };
 
-        const chooseMinionHandler = getInteractionHandler('titan_tricksters_big_funny_giant_choose_minion');
-        expect(chooseMinionHandler).toBeDefined();
+        expect(SmashUpDomain.validate(state, command).valid).toBe(true);
 
-        const chooseMinionResult = chooseMinionHandler!(
-            state,
-            '0',
-            { minionUid: 'target-low-power', defId: 'ghosts_spectre', baseIndex: 0 },
-            chooseMinionInteraction.data as any,
-            FIXED_RANDOM,
-            70,
-        );
-        const chooseBaseInteraction = chooseMinionResult.state.sys.interaction?.queue?.[0] as any;
-        expect(chooseBaseInteraction?.data?.sourceId).toBe('titan_tricksters_big_funny_giant_choose_base');
+        const events = SmashUpDomain.execute(state, command, FIXED_RANDOM);
+        expect(events.map(event => event.type)).toContain(SU_EVENTS.TALENT_USED);
+        expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_pirates_the_kraken_talent');
 
-        const chooseBaseOption = chooseBaseInteraction.data.options.find((option: any) => option.value?.baseIndex === 1)
-            ?? chooseBaseInteraction.data.options[0];
-        const interactionResolvedState = {
-            ...chooseMinionResult.state,
-            sys: {
-                ...chooseMinionResult.state.sys,
-                interaction: {
-                    ...chooseMinionResult.state.sys.interaction,
-                    current: chooseBaseInteraction,
-                    queue: [],
-                },
-            },
-        };
+        const chooseBaseOption = (state.sys.interaction.current as any).data.options.find((option: any) => option.value?.baseIndex === 1)
+            ?? (state.sys.interaction.current as any).data.options[0];
 
         const eventSystem = createSmashUpEventSystem();
         const hook = eventSystem.afterEvents?.({
-            state: interactionResolvedState,
+            state,
             events: [{
                 type: INTERACTION_EVENTS.RESOLVED,
                 payload: {
-                    interactionId: chooseBaseInteraction.id,
+                    interactionId: state.sys.interaction.current?.id,
                     playerId: '0',
                     optionId: chooseBaseOption.id,
                     value: chooseBaseOption.value,
-                    sourceId: 'titan_tricksters_big_funny_giant_choose_base',
-                    interactionData: chooseBaseInteraction.data,
+                    sourceId: 'titan_pirates_the_kraken_talent',
+                    interactionData: state.sys.interaction.current?.data,
                 },
                 timestamp: 71,
             } as any],
@@ -4815,7 +4781,7 @@ describe('smashup', () => {
         const emittedEvents = hook?.events ?? [];
         expect(emittedEvents.some((event: SmashUpEvent) => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
 
-        const postSystemState = hook?.state ?? interactionResolvedState;
+        const postSystemState = hook?.state ?? state;
         const finalCore = emittedEvents.reduce(
             (acc: SmashUpCore, event: SmashUpEvent) => SmashUpDomain.reduce(acc, event),
             postSystemState.core,

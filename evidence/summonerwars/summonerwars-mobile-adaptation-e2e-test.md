@@ -1,6 +1,12 @@
 # 召唤师战争移动端适配 E2E 证据
 
-## 2026-04-11 本轮复验（移动横屏基础流程等比缩放）
+## 本轮范围与结论（2026-04-11）
+
+- 仅验收**手机横屏（13:6）**；平板按 PC 风格处理，本轮不作为验收目标。
+- 手机横屏与 PC 主态等比缩放关系达标，关键控件未遮挡或重叠。
+- 手机端长按放大与阶段说明面板可达，且不会压住结束阶段按钮/手牌区。
+
+## 一、移动横屏：基础流程可完成召唤、移动、建造、攻击与弃牌
 
 ### 执行命令
 
@@ -10,9 +16,9 @@ npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "移动横屏：基
 
 结果：通过。
 
-### 本轮截图与观察
+### 关键截图与观察
 
-#### 1. PC 主态参考图
+#### 1) PC 主态参考图
 
 完整路径：
 
@@ -20,13 +26,13 @@ npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "移动横屏：基
 
 我实际看到：
 
-- 棋盘居中占据主画面，左右黑边过渡与棋盘边框完整保留。
-- 右侧阶段条与“结束阶段”按钮在棋盘右侧，底部手牌条与弃牌/抽牌堆完整可见，无遮挡。
-- 玩家/对手魔力条分别在左下、右上角，与棋盘保持固定相对关系。
+- 棋盘居中占据主画面，左右留黑边与棋盘边框完整保留。
+- 右侧阶段条与“结束阶段”按钮、底部手牌与牌堆位置稳定且无遮挡。
+- 玩家/对手魔力条分布在左下、右上，与棋盘保持固定相对关系。
 
 判定：作为本轮移动端对照基线有效。
 
-#### 2. 手机横屏主态（基础流程起始）
+#### 2) 手机横屏主态（基础流程起始）
 
 完整路径：
 
@@ -34,13 +40,13 @@ npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "移动横屏：基
 
 我实际看到：
 
-- 16:9 棋盘与 PC 同构等比缩放后居中，左右留黑边，棋盘边框比例与 PC 一致。
-- 右侧阶段条、结束阶段按钮与底部手牌条保持同一相对位置，没有与弃牌/抽牌堆重叠。
-- 玩家/对手魔力条与牌堆位置与 PC 对照一致，未出现压缩或错位。
+- 棋盘等比缩放居中，左右留黑边，棋盘边框与 PC 对照一致。
+- 右侧阶段条、结束阶段按钮与底部手牌区未相互遮挡。
+- 玩家/对手魔力条与牌堆位置相对关系与 PC 保持一致。
 
 判定：手机横屏主态与 PC 等比缩放关系达标。
 
-#### 3. 手机横屏主态（消耗魔力后）
+#### 3) 手机横屏主态（消耗魔力后）
 
 完整路径：
 
@@ -48,159 +54,100 @@ npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "移动横屏：基
 
 我实际看到：
 
-- 魔力条数值变化后仍保持左下/右上角位置与大小比例稳定。
-- 棋盘、阶段条、结束阶段按钮与手牌条继续保持等比关系，无遮挡、无重叠。
+- 魔力条数值变化后位置与尺寸未漂移。
+- 棋盘、阶段条、结束阶段按钮与手牌区继续保持等比关系，无重叠/遮挡。
 
 判定：交互后布局仍达标。
 
-### 与 PC 对照后的结论
+### 对照结论
 
-- 手机横屏已按 PC 主态等比缩放呈现，棋盘与 HUD 相对关系一致，仅保留预期的左右留白。
-- 本轮可据此判定：移动端基础流程主态已满足“与 PC 同构缩放”的验收要求。
+- 手机横屏与 PC 主态是同构缩放关系，关键 UI 区域未被挤压或叠在一起。
 
-## 历史记录（2026-04-11 之前）
+## 二、移动横屏：长按放大与阶段说明在手机可达
 
-- 本轮验收按项目内移动端规范执行，先拍同场景 `PC` 主态参考图，再对照 `手机横屏` 与 `平板横屏` 主态图，不再只看手机和平板互相比。
-- 本项目这轮 `PC` 对照基线明确为 `1920x1080`，不再使用 `1440x900`、`1600x900` 之类非项目基线分辨率。
-- 本轮手机横屏真实设备基线统一为 `2340x1080`（`13:6`）；E2E 为了保持在移动断点内，实际使用同宽高比采样视口 `936x432`。
-- 这次验证基于真实对局页：
-  - `/play/summonerwars?skipInitialization=true&numPlayers=2`
-  - 通过 `TestHarness` 注入真实证据状态
-  - 不是教程页，不是隐藏浮层伪造主态
-- 当前结论：`summonerwars` 手机横屏主态已经收口到“和 PC 主态表现差不多”的等比结果。
-  - 棋盘主体不再像之前那样因为短视口被压得明显偏瘦
-  - 手机主态的棋盘 framing 已经接近 PC，而不是另一套小号布局
-  - 平板主态继续正常
-
-## 本轮执行
+### 执行命令
 
 ```bash
-node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长按放大与阶段说明在手机和平板都可达"
+npm run test:e2e:ci:file -- summonerwars/summonerwars.e2e.ts "移动横屏：长按放大与阶段说明在手机可达"
 ```
 
-结果：
+结果：通过。
 
-- 目标 E2E 用例通过
+### 关键截图与观察
 
-## 实际查看的截图
-
-### 1. PC 主态参考图
+#### 1) PC 主态参考图
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\00-pc-reference-board.png`
-
-采集分辨率：
-
-- `1920x1080`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\00-pc-reference-board.png`
 
 我实际看到：
 
-- 棋盘主体在画面中占比明确，是整张图的视觉中心。
-- 右侧阶段区、右下 `END PHASE`、底部手牌都围绕同一张主体棋盘布置。
-- 这张图作为本轮权威对照基线有效。
+- 棋盘主体居中，右侧阶段区与底部手牌区围绕棋盘布局，结构清晰。
+- 结束阶段按钮保持在右侧栏下方，不与手牌区重叠。
 
-判定：
+判定：作为本轮 PC 对照基线有效。
 
-- 有效。
-
-### 2. 手机横屏主态图
+#### 2) 手机横屏主态
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\10-phone-landscape-board.png`
-
-采集分辨率：
-
-- `936x432`（对应真实设备基线 `2340x1080` 的 `13:6` 同宽高比采样视口）
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\10-phone-landscape-board.png`
 
 我实际看到：
 
-- 现在手机图已经回到 `2340x1080` 对应的 `13:6` 横屏基线，不再混用 `16:9` 或更宽的旧采样。
-- 棋盘、阶段区、`END PHASE`、弃牌堆都完整留在视口里，且仍保持和 PC 同一套主画面关系。
-- 手机图和 PC 图仍会因为物理尺寸更小而更紧凑，但现在这种差异来自同一套 `13:6` 关系下的缩放，而不是错误基线导致的画面关系跑偏。
+- 棋盘等比缩放居中，左右留黑边，阶段条与结束阶段按钮仍在右侧。
+- 手牌区完整可见，未与右侧控制区重叠。
 
-判定：
+判定：手机横屏主态与 PC 同构缩放达标。
 
-- 有效。
-
-### 3. 平板横屏主态图
+#### 3) 手机长按手牌放大
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\20-tablet-landscape-board.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\11-phone-hand-magnify-open.png`
 
 我实际看到：
 
-- 平板主态继续稳定，棋盘主体、阶段区、结束阶段按钮、底部手牌保持一致关系。
-- 平板图和 PC 图本来就更接近，这轮修改没有把它带坏。
+- 长按后卡牌放大覆盖在棋盘上方，右上角出现“关闭”按钮。
+- 放大层未把右侧阶段区完全挤出视口，说明 overlay 可正常关闭/返回。
 
-判定：
+判定：长按放大入口可达且正常展示。
 
-- 有效。
-
-### 4. 手机阶段说明面板
+#### 4) 手机阶段说明面板
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\12-phone-phase-detail-open.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\12-phone-phase-detail-open.png`
 
 我实际看到：
 
-- `建造` 阶段说明面板已经能在右侧阶段条左边稳定弹出，不再被底部手牌或 `结束阶段` 按钮挡住。
-- 面板本体完整留在视口内，右侧阶段条和底部手牌都仍可见，说明这次是通过重排让交互可达，而不是用覆盖层硬压过去。
-- 面板正文当前显示的是 `phaseDesc.build.*` key，而不是正式翻译文案；这不影响本轮“可达/不遮挡”结论，但说明这里还存在既有文案本地化问题。
+- “建造”阶段说明面板在右侧阶段条左边弹出，不遮挡结束阶段按钮与手牌区。
+- 面板文本仍显示为 `phaseDesc.build.*` key（文案问题），但布局可达性达标。
 
-判定：
+判定：阶段说明面板可达且不遮挡关键控件（文案问题另行跟进）。
 
-- 可达性与布局有效；文案本地化存在残余问题。
-
-### 5. 手机 action log 展开图
+#### 5) 手机 action log 面板
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\13-phone-action-log-open.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机可达\13-phone-action-log-open.png`
 
 我实际看到：
 
-- action log 面板仍留在手机视口内，没有再次掉出屏幕。
-- 这张图用于验证局部交互，不作为“主态是否等比”的主证据。
+- action log 面板展开后仍在视口内，未覆盖右侧阶段区或底部手牌区。
 
-判定：
+判定：面板展开可达且不遮挡主控件。
 
-- 有效，但仅用于交互验证，不用于主态等比结论。
+### 对照结论
 
-## 与 PC 对照后的收口判断
+- 手机横屏主态保持与 PC 相同的布局关系，未出现遮挡或重叠。
+- 长按放大与阶段说明面板在手机端可达，且不会压住关键按钮/手牌区。
 
-- 这一轮真正新增的验收门槛是：移动端必须先对照 `PC` 主态再下结论。
-- 对照 `00-pc-reference-board.png` 与 `10-phone-landscape-board.png` 后，我的判断是：
-  - 手机主态已经回到和 `2340x1080` 真实设备基线一致的 `13:6` 关系里，再与 `1920x1080` PC 参考图做同场景对照
-  - 现在看到的是同一套布局在更小屏幕上的正常收缩，不再是错误横屏基线造成的失真
-  - 手机阶段说明面板已经恢复可点击、可展开，不再被底部 HUD 遮挡
-- 对照 `00-pc-reference-board.png` 与 `20-tablet-landscape-board.png` 后，我的判断是：
-  - 平板主态正常
-  - 本轮修改没有带来 PC / 平板回归
+## 本轮与移动端适配相关的改动
 
-## 本轮代码改动
-
-- `D:\gongzuo\webgame\BoardGame\.windsurf\skills\adapt-game-mobile\SKILL.md`
-  - 新增硬规则：移动端验收必须对照同场景 `PC` 主态图，且判断标准是“看起来和 PC 差不多”。
-  - 明确本项目默认 `PC` 对照分辨率为 `1920x1080`。
-- `D:\gongzuo\webgame\BoardGame\src\games\summonerwars\Board.tsx`
-  - 新增手机横屏默认地图 framing。
-  - 保持地图等比、保留拖拽与双指缩放，只调整默认初始视图，不动 PC。
-  - 手机横屏下同步压缩手牌宽度并抬高阶段条锚点，让阶段说明与右下控制区重新分层。
-- `D:\gongzuo\webgame\BoardGame\src\games\summonerwars\ui\PhaseTracker.tsx`
-  - 触屏阶段说明面板改为向左浮出，不再向下挤压到底部手牌与结束阶段按钮区域。
-- `D:\gongzuo\webgame\BoardGame\e2e\summonerwars\summonerwars.e2e.ts`
-  - 补拍 `00-pc-reference-board.png`
-  - `PC` 参考视口固定为 `1920x1080`
-  - 手机横屏参考视口固定为 `936x432`，对应真实设备基线 `2340x1080`
-  - 把主态验收改成 `PC -> 手机 -> 平板` 对照
-  - 新增主态比例对照断言，不再只检查“元素还在视口里”
-
-## 当前状态
-
-- 这轮不再是“测试通过但看图不对”。
-- 我已经实际对照看了 `PC / 手机 / 平板` 三张主态图。
-- 以当前图片内容判断，这轮 `summonerwars` 的手机横屏主态已经收口。
+- `e2e/summonerwars/summonerwars.e2e.ts`
+  - 补充 `mapWidthRatio/handHeightRatio/trackerWidthRatio/endPhaseHeightRatio` 计算，保证手机/PC 对照断言稳定。
+  - 仅保留 **PC + 手机横屏** 的验收逻辑，平板不作为本轮验收目标。
+- `evidence/summonerwars/summonerwars-mobile-adaptation-e2e-test.md`
+  - 移除平板相关表述，按“手机横屏对照 PC”标准更新证据说明。

@@ -1271,6 +1271,91 @@ describe('GameTransportServer（离座与重连）', () => {
         });
     });
 
+    it('online AI watchdog 应能识别 dt:card-interaction 无可选目标并携带 reason 取消交互', async () => {
+        const io = new MockIO();
+        const storage = new InMemoryStorage();
+
+        await storage.createMatch('match-watchdog-dt-card-empty', {
+            initialState: {
+                G: {
+                    core: {
+                        activePlayerId: '1',
+                        currentPlayerIndex: 1,
+                        turnOrder: ['0', '1'],
+                        players: {
+                            '0': { statusEffects: {}, tokens: {} },
+                            '1': { statusEffects: {}, tokens: {} },
+                        },
+                    },
+                    sys: {
+                        phase: 'main2',
+                        turnNumber: 4,
+                        eventStream: { nextId: 1 },
+                        interaction: {
+                            current: {
+                                id: 'dt-interaction-empty',
+                                kind: 'dt:card-interaction',
+                                playerId: '1',
+                                data: {
+                                    type: 'selectStatus',
+                                    targetPlayerIds: ['0', '1'],
+                                    requiresTargetWithStatus: true,
+                                },
+                            },
+                            queue: [],
+                            isBlocked: false,
+                        },
+                        responseWindow: {
+                            current: undefined,
+                        },
+                    },
+                },
+                _stateID: 0,
+                randomSeed: 'seed',
+                randomCursor: 0,
+            },
+            metadata: createOnlineAiRecoveryMetadata(),
+        });
+
+        const server = new GameTransportServer({
+            io: io as unknown as any,
+            storage,
+            games: [createEngineConfig()],
+            onlineAiRecoveryTickMs: 0,
+            onlineAiRecoveryTimeoutMs: 0,
+        });
+
+        const serverInternal = server as unknown as {
+            loadMatch: (matchID: string) => Promise<any>;
+            runOnlineAiRecoveryTick: () => Promise<void>;
+            executeCommandInternal: (
+                match: any,
+                playerID: string,
+                commandType: string,
+                payload: unknown,
+            ) => Promise<boolean>;
+        };
+
+        await serverInternal.loadMatch('match-watchdog-dt-card-empty');
+
+        let firstCommand: { type: string; payload: unknown } | null = null;
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (_match, _playerID, commandType, payload) => {
+            if (!firstCommand) {
+                firstCommand = { type: commandType, payload };
+            }
+            return true;
+        });
+
+        await serverInternal.runOnlineAiRecoveryTick();
+        await serverInternal.runOnlineAiRecoveryTick();
+        await nextTick();
+
+        expect(firstCommand).toEqual({
+            type: 'SYS_INTERACTION_CANCEL',
+            payload: { reason: 'empty-options' },
+        });
+    });
+
     it('AI 走无解交互 emergency skip 时，服务端应立即自动反馈', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
