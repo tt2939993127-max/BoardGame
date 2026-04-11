@@ -19,9 +19,7 @@ interface BrowserSignature {
     pattern: RegExp;
 }
 
-const DEV_RESIZE_OBSERVER_REQUIRED_PREFIXES = [
-    '/dev/ugc',
-];
+const DEV_RESIZE_OBSERVER_REQUIRED_PREFIXES: string[] = [];
 
 const BROWSER_SIGNATURES: BrowserSignature[] = [
     { name: 'Edge', pattern: /Edg\/([\d.]+)/i },
