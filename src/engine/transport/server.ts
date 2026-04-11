@@ -895,7 +895,9 @@ export class GameTransportServer {
                     authoritativeState: match.state,
                     seatControllers,
                     playerId: candidate.playerId,
-                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true && recoverySteps === 0,
+                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true
+                        ? recoverySteps === 0
+                        : true,
                 });
                 if (!followUp) {
                     break;
