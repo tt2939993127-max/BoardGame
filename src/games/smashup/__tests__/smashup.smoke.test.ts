@@ -4712,7 +4712,7 @@ describe('smashup', () => {
     });
 
     it('滑稽巨人通过交互移动到已有其他泰坦的标准基地时，会触发泰坦冲突并移除败者', () => {
-        const state = makeMatchState(makeState({
+        const core = makeState({
             bases: [
                 makeBase({
                     minions: [makeMinion('target-low-power', 'ghosts_spectre', '1', 2)],
@@ -4741,47 +4741,89 @@ describe('smashup', () => {
                     location: { zone: 'base', baseIndex: 1, enteredAt: 2 },
                 } satisfies TitanState,
             ],
-        }));
+        });
 
-        const useTalent = runCommand(state, {
-            type: SU_COMMANDS.USE_TALENT,
-            playerId: '0',
-            payload: { titanUid: 't-bfg', baseIndex: 0 },
-            timestamp: 69,
-        }, FIXED_RANDOM);
-        expect(useTalent.success).toBe(true);
+        const chooseMinionInteraction = createSimpleChoice(
+            'test-bfg-choose-minion',
+            '0',
+            'choose minion',
+            [{
+                id: 'target-low-power',
+                label: 'target-low-power',
+                value: { minionUid: 'target-low-power', defId: 'ghosts_spectre', baseIndex: 0 },
+            }],
+            { sourceId: 'titan_tricksters_big_funny_giant_choose_minion', targetType: 'minion' },
+        );
+        const state = {
+            ...makeMatchState(core),
+            sys: {
+                ...makeMatchState(core).sys,
+                interaction: {
+                    ...makeMatchState(core).sys.interaction,
+                    current: chooseMinionInteraction,
+                    queue: [],
+                },
+            },
+        };
 
-        const chooseMinionPrompt = getInteractionsFromMS(useTalent.finalState)[0] as any;
-        expect(chooseMinionPrompt?.data?.sourceId).toBe('titan_tricksters_big_funny_giant_choose_minion');
-        const chooseMinionOption = chooseMinionPrompt.data.options.find((option: any) => option.value?.minionUid === 'target-low-power')
-            ?? chooseMinionPrompt.data.options[0];
+        const chooseMinionHandler = getInteractionHandler('titan_tricksters_big_funny_giant_choose_minion');
+        expect(chooseMinionHandler).toBeDefined();
 
-        const afterChooseMinion = runCommand(useTalent.finalState, {
-            type: 'SYS_INTERACTION_RESPOND',
-            playerId: '0',
-            payload: { optionId: chooseMinionOption.id },
-            timestamp: 70,
-        } as any, FIXED_RANDOM);
-        expect(afterChooseMinion.success).toBe(true);
+        const chooseMinionResult = chooseMinionHandler!(
+            state,
+            '0',
+            { minionUid: 'target-low-power', defId: 'ghosts_spectre', baseIndex: 0 },
+            chooseMinionInteraction.data as any,
+            FIXED_RANDOM,
+            70,
+        );
+        const chooseBaseInteraction = chooseMinionResult.state.sys.interaction?.queue?.[0] as any;
+        expect(chooseBaseInteraction?.data?.sourceId).toBe('titan_tricksters_big_funny_giant_choose_base');
 
-        const chooseBasePrompt = getInteractionsFromMS(afterChooseMinion.finalState)[0] as any;
-        expect(chooseBasePrompt?.data?.sourceId).toBe('titan_tricksters_big_funny_giant_choose_base');
-        const chooseBaseOption = chooseBasePrompt.data.options.find((option: any) => option.value?.baseIndex === 1)
-            ?? chooseBasePrompt.data.options[0];
+        const chooseBaseOption = chooseBaseInteraction.data.options.find((option: any) => option.value?.baseIndex === 1)
+            ?? chooseBaseInteraction.data.options[0];
+        const interactionResolvedState = {
+            ...chooseMinionResult.state,
+            sys: {
+                ...chooseMinionResult.state.sys,
+                interaction: {
+                    ...chooseMinionResult.state.sys.interaction,
+                    current: chooseBaseInteraction,
+                    queue: [],
+                },
+            },
+        };
 
-        const afterChooseBase = runCommand(afterChooseMinion.finalState, {
-            type: 'SYS_INTERACTION_RESPOND',
-            playerId: '0',
-            payload: { optionId: chooseBaseOption.id },
-            timestamp: 71,
-        } as any, FIXED_RANDOM);
-        expect(afterChooseBase.success).toBe(true);
-        expect(afterChooseBase.events.some(event => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
+        const eventSystem = createSmashUpEventSystem();
+        const hook = eventSystem.afterEvents?.({
+            state: interactionResolvedState,
+            events: [{
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: chooseBaseInteraction.id,
+                    playerId: '0',
+                    optionId: chooseBaseOption.id,
+                    value: chooseBaseOption.value,
+                    sourceId: 'titan_tricksters_big_funny_giant_choose_base',
+                    interactionData: chooseBaseInteraction.data,
+                },
+                timestamp: 71,
+            } as any],
+            random: FIXED_RANDOM,
+        }) as any;
 
-        const titansOnBaseOne = (afterChooseBase.finalState.core.titans ?? [])
+        const emittedEvents = hook?.events ?? [];
+        expect(emittedEvents.some((event: SmashUpEvent) => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
+
+        const postSystemState = hook?.state ?? interactionResolvedState;
+        const finalCore = emittedEvents.reduce(
+            (acc: SmashUpCore, event: SmashUpEvent) => SmashUpDomain.reduce(acc, event),
+            postSystemState.core,
+        );
+        const titansOnBaseOne = (finalCore.titans ?? [])
             .filter(candidate => candidate.location.zone === 'base' && candidate.location.baseIndex === 1);
         expect(titansOnBaseOne.map(candidate => candidate.uid)).toEqual(['t-bfg']);
-        expect((afterChooseBase.finalState.core.titans ?? []).find(candidate => candidate.uid === 't-kraken')?.location.zone).toBe('setaside');
+        expect((finalCore.titans ?? []).find(candidate => candidate.uid === 't-kraken')?.location.zone).toBe('setaside');
     });
 
     it('巨狼之灵满足你在 2 个或更多基地拥有最高战力后可通过 special 从牌库旁进场', () => {

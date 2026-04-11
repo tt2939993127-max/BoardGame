@@ -29,7 +29,7 @@ export type ForceSkippableHiddenAiInteraction = {
 
 export type ForceEndTurnStalledAiResolution = {
     playerId: string;
-    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'active-turn';
+    reason: 'hidden-interaction' | 'visible-interaction' | 'response-window' | 'pending-damage' | 'active-turn';
     requiresConfirmedAdvancePhase?: boolean;
     resolution: AiResolution;
 };
@@ -139,6 +139,7 @@ function buildForceEndTurnFromInteractionState(
         };
     }
 
+    const unsatisfiableReason = resolveUnsatisfiableReasonFromInteraction(current);
     return {
         playerId,
         reason,
@@ -146,7 +147,10 @@ function buildForceEndTurnFromInteractionState(
         resolution: buildForceEndTurnResolution({
             playerId,
             suffix: `${reason}:${current.id}`,
-            commands: [{ type: 'SYS_INTERACTION_CANCEL', payload: {} }],
+            commands: [{
+                type: 'SYS_INTERACTION_CANCEL',
+                payload: unsatisfiableReason ? { reason: unsatisfiableReason } : {},
+            }],
         }),
     };
 }
@@ -191,6 +195,11 @@ export function resolveForceAdvancePhaseAfterRecovery(args: {
         return null;
     }
 
+    const pendingDamage = (authoritativeState.core as { pendingDamage?: unknown } | undefined)?.pendingDamage;
+    if (pendingDamage) {
+        return null;
+    }
+
     return buildForceEndTurnResolution({
         playerId,
         suffix: buildForceEndTurnFollowUpSuffix(authoritativeState, playerId),
@@ -213,6 +222,33 @@ export function resolveForceEndTurnFollowUpAfterConfirmation(args: {
         seatControllers,
         playerId: candidate.playerId,
     });
+}
+
+function resolveUnsatisfiableReasonFromInteraction(
+    current: HiddenSimpleChoiceInteraction | undefined,
+): string | null {
+    if (!current || current.kind !== 'simple-choice') {
+        return null;
+    }
+
+    const data = current.data;
+    const options = Array.isArray(data?.options) ? data.options : [];
+    const enabledOptions = options.filter((option) => option?.disabled !== true);
+    const minCount = typeof data?.multi?.min === 'number' ? data.multi.min : 1;
+
+    if (minCount <= 0) {
+        return null;
+    }
+    if (options.length === 0) {
+        return 'empty-options';
+    }
+    if (enabledOptions.length === 0) {
+        return 'all-options-disabled';
+    }
+    if (enabledOptions.length < minCount) {
+        return 'min-selection-unreachable';
+    }
+    return null;
 }
 
 function buildForceSkipPayloadFromSeatState(state: MatchState<unknown>, playerId: string): {
@@ -340,6 +376,20 @@ export function resolveForceEndTurnForStalledAi(args: {
     seatControllers: Record<string, AiSeatController>;
     seatStates: Record<string, MatchState<unknown> | null | undefined>;
 }): ForceEndTurnStalledAiResolution | null {
+    const pendingDamage = (args.sharedState?.core as { pendingDamage?: { responderId?: unknown; id?: unknown } } | undefined)?.pendingDamage;
+    const pendingResponderId = typeof pendingDamage?.responderId === 'string' ? pendingDamage.responderId : null;
+    if (pendingResponderId && args.seatControllers[pendingResponderId]?.type !== 'human') {
+        return {
+            playerId: pendingResponderId,
+            reason: 'pending-damage',
+            resolution: buildForceEndTurnResolution({
+                playerId: pendingResponderId,
+                suffix: `pending-damage:${pendingResponderId}:${pendingDamage?.id ?? 'unknown'}`,
+                commands: [{ type: 'SKIP_TOKEN_RESPONSE', payload: {} }],
+            }),
+        };
+    }
+
     const currentInteraction = args.sharedState?.sys?.interaction as { current?: unknown; isBlocked?: unknown } | undefined;
     const visibleCurrent = currentInteraction?.current as HiddenSimpleChoiceInteraction | undefined;
     if (visibleCurrent?.playerId && args.seatControllers[String(visibleCurrent.playerId)]?.type !== 'human') {

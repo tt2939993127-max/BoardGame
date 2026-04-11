@@ -880,6 +880,23 @@ const buildTransferStatusAiHints = (
     return hints;
 };
 
+const buildEmergencyInteractionCancelAction = (
+    interactionId: string,
+    reason: string,
+): AiLegalAction => ({
+    actionId: createAiLegalActionId('interaction', interactionId, 'emergency-cancel'),
+    kind: 'interaction-cancel',
+    label: '跳过（无可用选项）',
+    commands: [{
+        type: 'SYS_INTERACTION_CANCEL',
+        payload: { reason },
+    }],
+    metadata: {
+        interactionId,
+        reason,
+    },
+});
+
 const buildInteractionActions = (
     state: DiceThroneState,
     playerId: PlayerId,
@@ -1011,7 +1028,7 @@ const buildInteractionActions = (
                 .filter((targetId) => !data.requiresTargetWithStatus || playerHasStatusOrToken(state, targetId));
             const selections = buildPlayerSelectionCombos(targetPlayerIds, data.selectCount ?? 1);
 
-            return selections.map((selectedPlayerIds, index) => {
+            const actions = selections.map((selectedPlayerIds, index) => {
                 const aiHints = buildSelectPlayerActionAiHints(state, playerId, selectedPlayerIds, data);
                 return {
                     actionId: createAiLegalActionId('interaction', current.id, 'select-player', index),
@@ -1028,6 +1045,9 @@ const buildInteractionActions = (
                     },
                 };
             });
+            return actions.length > 0
+                ? actions
+                : [buildEmergencyInteractionCancelAction(current.id, 'empty-options')];
         }
 
         if (data.type === 'selectStatus') {
@@ -1072,10 +1092,12 @@ const buildInteractionActions = (
                     });
                 });
 
-                return transferableActions;
+                return transferableActions.length > 0
+                    ? transferableActions
+                    : [buildEmergencyInteractionCancelAction(current.id, 'empty-options')];
             }
 
-            return targetPlayerIds.flatMap((targetPlayerId) => {
+            const actions = targetPlayerIds.flatMap((targetPlayerId) => {
                 return getSelectableStatusIds(state, targetPlayerId).map((statusId, index) => ({
                     actionId: createAiLegalActionId('interaction', current.id, 'remove-status', targetPlayerId, statusId, index),
                     kind: 'interaction-remove-status',
@@ -1092,6 +1114,9 @@ const buildInteractionActions = (
                     }, buildStatusInteractionStrategyTags(state, statusId)),
                 }));
             });
+            return actions.length > 0
+                ? actions
+                : [buildEmergencyInteractionCancelAction(current.id, 'empty-options')];
         }
 
         if (data.type === 'selectTargetStatus' && data.transferConfig?.sourcePlayerId && data.transferConfig?.statusId) {
@@ -1101,7 +1126,7 @@ const buildInteractionActions = (
                 .filter((targetId) => !!state.core.players[targetId])
                 .filter((targetId) => targetId !== sourcePlayerId);
 
-            return targetPlayerIds.map((targetPlayerId, index) => ({
+            const actions = targetPlayerIds.map((targetPlayerId, index) => ({
                 actionId: createAiLegalActionId(
                     'interaction',
                     current.id,
@@ -1125,6 +1150,9 @@ const buildInteractionActions = (
                     statusId,
                 }, buildStatusInteractionStrategyTags(state, statusId)),
             }));
+            return actions.length > 0
+                ? actions
+                : [buildEmergencyInteractionCancelAction(current.id, 'empty-options')];
         }
 
         return [];
