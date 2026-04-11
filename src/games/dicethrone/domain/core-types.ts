@@ -5,7 +5,7 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../core';
-import type { CharacterBadgeDef } from '../../../core/ui/CharacterSelection.types';
+import type { CharacterBadgeDef } from '../../../core/ui';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
@@ -91,12 +91,22 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     {
         id: 'gunslinger',
         nameKey: 'characters.gunslinger',
-        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
     },
     {
         id: 'samurai',
         nameKey: 'characters.samurai',
-        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+        badges: [{
+            id: 'under_construction',
+            labelKey: 'common:status_tags.under_construction',
+            tone: 'warning',
+            variant: 'disabled-overlay',
+        }],
     },
 ];
 
