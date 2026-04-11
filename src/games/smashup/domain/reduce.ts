@@ -787,15 +787,11 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     if (i !== targetBaseIndex) return base;
                     return {
                         ...base,
-                        minions: base.minions.map(m => {
-                            if (m.uid !== targetMinionUid) return m;
-                            const updated = { ...m, attachedActions: [...m.attachedActions, { uid: cardUid, defId, ownerId }] };
-                            // ghost_make_contact：附着时改变控制权
-                            if (defId === 'ghost_make_contact') {
-                                updated.controller = ownerId;
-                            }
-                            return updated;
-                        }),
+                        minions: base.minions.map(m => (
+                            m.uid !== targetMinionUid
+                                ? m
+                                : { ...m, attachedActions: [...m.attachedActions, { uid: cardUid, defId, ownerId }] }
+                        )),
                     };
                 });
                 return { ...state, bases: newBases };
@@ -1542,8 +1538,12 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
         }
 
         case SU_EVENTS.LIMIT_MODIFIED: {
-            const { playerId, limitType, delta, restrictToBase, powerMax, sameNameOnly, sameNameDefId } = event.payload;
+            const { playerId, limitType, delta, restrictToBase, powerMax, sameNameOnly, sameNameDefId, playTiming } = event.payload;
             const player = state.players[playerId];
+            if (playTiming === 'immediate') {
+                // 立即额外出牌只作为交互信号存在，不应沉淀为可跨时机保留的额度。
+                return state;
+            }
             if (limitType === 'minion') {
                 // 基地限定额度：写入 baseLimitedMinionQuota
                 if (restrictToBase !== undefined) {
@@ -2068,7 +2068,7 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                     if (!hadAttachment) return { ...m, attachedActions: filtered };
                     const updated = { ...m, attachedActions: filtered };
                     // ghost_make_contact：移除时恢复控制权为原始 owner
-                    if (defId === 'ghost_make_contact') {
+                    if (defId.startsWith('ghost_make_contact')) {
                         updated.controller = m.owner;
                     }
                     return updated;

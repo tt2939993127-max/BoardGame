@@ -1210,6 +1210,10 @@ export interface MinionReturnedEvent extends GameEvent<'su:minion_returned'> {
         reason: string;
         /** 效果来源玩家（可选，用于保护检查） */
         sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1220,6 +1224,8 @@ export interface LimitModifiedEvent extends GameEvent<'su:limit_modified'> {
         limitType: 'minion' | 'action';
         delta: number;
         reason: string;
+        /** 额外出牌时机：banked=可在当前出牌阶段暂存；immediate=必须立刻打出或放弃 */
+        playTiming?: 'banked' | 'immediate';
         /** 限定额度只能用于指定基地（不设则为全局额度） */
         restrictToBase?: number;
         /** 额外出牌的力量上限（如家园：力量≤2），不设则无限制 */
@@ -1377,6 +1383,10 @@ export interface MinionControlChangedEvent extends GameEvent<typeof SU_EVENTS.MI
         fromControllerId: PlayerId;
         toControllerId: PlayerId;
         sourcePlayerId: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
         reason: string;
     };
 }
@@ -1398,6 +1408,11 @@ export interface PowerCounterAddedEvent extends GameEvent<typeof SU_EVENTS.POWER
         baseIndex: number;
         amount: number;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1407,6 +1422,11 @@ export interface PowerCounterRemovedEvent extends GameEvent<typeof SU_EVENTS.POW
         baseIndex: number;
         amount: number;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1429,6 +1449,11 @@ export interface OngoingDetachedEvent extends GameEvent<typeof SU_EVENTS.ONGOING
         defId: string;
         ownerId: PlayerId;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1509,6 +1534,11 @@ export interface CardToDeckBottomEvent extends GameEvent<typeof SU_EVENTS.CARD_T
         defId: string;
         ownerId: PlayerId;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1519,6 +1549,11 @@ export interface CardToDeckTopEvent extends GameEvent<typeof SU_EVENTS.CARD_TO_D
         defId: string;
         ownerId: PlayerId;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1637,6 +1672,11 @@ export interface TempPowerAddedEvent extends GameEvent<typeof SU_EVENTS.TEMP_POW
         baseIndex: number;
         amount: number;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1647,6 +1687,11 @@ export interface PermanentPowerAddedEvent extends GameEvent<typeof SU_EVENTS.PER
         baseIndex: number;
         amount: number;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1665,6 +1710,11 @@ export interface BaseAbilitySuppressedEvent extends GameEvent<typeof SU_EVENTS.B
         baseIndex: number;
         suppressorPlayerId: PlayerId;
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 
@@ -1685,6 +1735,11 @@ export interface CardSuppressedEvent extends GameEvent<typeof SU_EVENTS.CARD_SUP
         suppressorPlayerId: PlayerId;
         cardType: 'minion' | 'ongoing' | 'attached' | 'titan';
         reason: string;
+        sourcePlayerId?: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
     };
 }
 

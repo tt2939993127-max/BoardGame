@@ -5,7 +5,7 @@
  */
 
 import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import { processDestroyMoveCycle, processAffectTriggers, processDeckInspectionTriggers, filterProtectedReturnEvents, filterProtectedDeckBottomEvents } from './reducer';
+import { processDestroyMoveCycle, processAffectTriggers, processDeckInspectionTriggers, filterProtectedAffectEvents } from './reducer';
 import type { FlowHooks, PhaseEnterResult } from '../../../engine/systems/FlowSystem';
 import type {
     SmashUpCommand,
@@ -22,6 +22,7 @@ import type {
     BaseClearedEvent,
     BaseReplacedEvent,
     DeckReshuffledEvent,
+    LimitModifiedEvent,
     MinionPlayedEvent,
     MinionPowerBreakdown,
     MinionOnBase,
@@ -60,6 +61,7 @@ import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import type { SpecialAfterScoringConsumedEvent } from './types';
+import { queueImmediateExtraPlayInteractions } from './extraPlay';
 import {
     buildPendingPostScoringActionEvents,
     clearScoringSession,
@@ -1875,9 +1877,8 @@ function postProcessSystemEvents(
     const afterDestroyMove = processDestroyMoveCycle(events, ms, pid, random, now);
     if (afterDestroyMove.matchState) ms = afterDestroyMove.matchState;
     // 杩斿洖鎵嬬墝/鏀剧墝搴撳簳淇濇姢杩囨护锛堜笌 execute() 鍚庡鐞嗗榻愶級
-    const afterReturn = filterProtectedReturnEvents(afterDestroyMove.events, ms.core, pid);
-    const afterDeckBottom = filterProtectedDeckBottomEvents(afterReturn, ms.core, pid);
-    const afterAffect = processAffectTriggers(afterDeckBottom, ms, pid, random, now);
+    const afterProtectedAffect = filterProtectedAffectEvents(afterDestroyMove.events, ms.core, pid);
+    const afterAffect = processAffectTriggers(afterProtectedAffect, ms, pid, random, now);
     if (afterAffect.matchState) ms = afterAffect.matchState;
     const afterDeckInspection = processDeckInspectionTriggers(afterAffect.events, ms, pid, random, now);
     if (afterDeckInspection.matchState) ms = afterDeckInspection.matchState;
@@ -2014,9 +2015,8 @@ function postProcessSystemEvents(
         const afterDerivedDestroyMove = processDestroyMoveCycle(derivedEvents, ms, pid, random, now);
         if (afterDerivedDestroyMove.matchState) ms = afterDerivedDestroyMove.matchState;
         // 杩斿洖鎵嬬墝/鏀剧墝搴撳簳淇濇姢杩囨护锛堜笌 execute() 鍚庡鐞嗗榻愶級
-        const afterDerivedReturn = filterProtectedReturnEvents(afterDerivedDestroyMove.events, ms.core, pid);
-        const afterDerivedDeckBottom = filterProtectedDeckBottomEvents(afterDerivedReturn, ms.core, pid);
-        const afterDerivedAffect = processAffectTriggers(afterDerivedDeckBottom, ms, pid, random, now);
+        const afterDerivedProtectedAffect = filterProtectedAffectEvents(afterDerivedDestroyMove.events, ms.core, pid);
+        const afterDerivedAffect = processAffectTriggers(afterDerivedProtectedAffect, ms, pid, random, now);
         if (afterDerivedAffect.matchState) ms = afterDerivedAffect.matchState;
         const afterDerivedDeckInspection = processDeckInspectionTriggers(afterDerivedAffect.events, ms, pid, random, now);
         if (afterDerivedDeckInspection.matchState) ms = afterDerivedDeckInspection.matchState;
@@ -2100,6 +2100,13 @@ function postProcessSystemEvents(
     if (rq) {
         finalEvents = [...finalEvents, ...rq.events];
         ms = rq.state;
+    }
+
+    const immediateExtraEvents = finalEvents.filter((event): event is LimitModifiedEvent =>
+        event.type === SU_EVENTS.LIMIT_MODIFIED && event.payload.playTiming === 'immediate',
+    );
+    if (immediateExtraEvents.length > 0) {
+        ms = queueImmediateExtraPlayInteractions(ms, immediateExtraEvents);
     }
 
     const startTurnWindowActive = ms.sys.phase === 'startTurn' || Boolean((ms.sys as any)._smashupStartTurnWindowActive);

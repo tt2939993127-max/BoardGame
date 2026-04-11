@@ -1803,7 +1803,6 @@ function resolvePriceOfPowerPodBaseIndex(ctx: AbilityContext): number | undefine
 }
 
 function getPriceOfPowerPodCandidateBases(ctx: AbilityContext): Array<{ baseIndex: number; label: string }> {
-    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
     const candidateIndices = windowType === 'meFirst'
         ? getScoringEligibleBaseIndices(ctx.state)
         : ctx.state.bases.map((_, index) => index);
