@@ -179,6 +179,26 @@ const applyReleaseShellDefaults = () => {
     logStep(`release 壳配置: appId=${process.env.CAPACITOR_APP_ID}, appName=${process.env.CAPACITOR_APP_NAME}`);
 };
 
+const forbiddenOtaCompatibilityArgs = [
+    'target-native-version',
+    'min-native-version',
+    'max-native-version',
+    'allow-legacy-shells',
+];
+
+const ensureNoForbiddenOtaCompatibilityArgs = (sourceArgs = args) => {
+    const matched = forbiddenOtaCompatibilityArgs.filter(
+        (name) => hasFlag(name, sourceArgs) || readArgValue(name, '', sourceArgs) !== '',
+    );
+    if (matched.length === 0) {
+        return;
+    }
+    throw new Error(
+        `已禁止按原生版本做 OTA 门禁：${matched.map((name) => `--${name}`).join(', ')}。`
+        + ' 当前项目规则是“所有版本都必须更新”，OTA manifest 不得再写 targetNativeVersion/minNativeVersion/maxNativeVersion。',
+    );
+};
+
 const buildOtaArgs = (sourceArgs = args) => collectPassthroughArgs(
     new Set([
         'channel',
@@ -189,7 +209,7 @@ const buildOtaArgs = (sourceArgs = args) => collectPassthroughArgs(
         'force-update-message',
         'notes',
     ]),
-    new Set(['dry-run', 'skip-latest', 'force-update', 'no-force-update', 'allow-legacy-shells']),
+    new Set(['dry-run', 'skip-latest', 'force-update', 'no-force-update']),
     sourceArgs,
 );
 
@@ -263,6 +283,7 @@ const buildOtaArgsWithExpectedVersion = (releaseVersion, sourceArgs = args) => [
 
 const runOtaRelease = async () => {
     const releaseInfo = prepareReleaseVersion();
+    ensureNoForbiddenOtaCompatibilityArgs();
     await runDoctor();
     await runSync();
     logStep(`发布 Android OTA (expectedBaseVersion=${releaseInfo.version})`);
@@ -298,6 +319,7 @@ const shouldRunPackagesInFull = () => hasFlag('with-packages', args) || Boolean(
 
 const runFullRelease = async () => {
     const nativeInfo = prepareNativeVersion();
+    ensureNoForbiddenOtaCompatibilityArgs();
     await runDoctor();
     await runSync();
     logStep(`发布 Android OTA (expectedBaseVersion=${nativeInfo.version})`);
