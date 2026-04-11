@@ -1734,9 +1734,8 @@ function elderThingPriceOfPowerSpecial(ctx: AbilityContext): AbilityResult {
 }
 
 function elderThingPriceOfPowerPodOnPlay(ctx: AbilityContext): AbilityResult {
-    // POD：平时可正常打出；若在 Me First! 窗口中打出，则改为 +2 指示物版本。
-    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
-    const perMadnessCounterAmount = windowType === 'meFirst' ? 2 : 1;
+    // POD：无论是否在 Me First! 窗口中打出，均为 +1 指示物版本。
+    const perMadnessCounterAmount = 1;
     const resolvedBaseIndex = resolvePriceOfPowerPodBaseIndex(ctx);
     if (resolvedBaseIndex === undefined) {
         return promptPriceOfPowerPodChooseBase(ctx, perMadnessCounterAmount);
@@ -1804,7 +1803,6 @@ function resolvePriceOfPowerPodBaseIndex(ctx: AbilityContext): number | undefine
 }
 
 function getPriceOfPowerPodCandidateBases(ctx: AbilityContext): Array<{ baseIndex: number; label: string }> {
-    const windowType = ctx.matchState?.sys.responseWindow?.current?.windowType;
     const candidateIndices = windowType === 'meFirst'
         ? getScoringEligibleBaseIndices(ctx.state)
         : ctx.state.bases.map((_, index) => index);
