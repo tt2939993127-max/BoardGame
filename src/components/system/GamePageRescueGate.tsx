@@ -24,6 +24,7 @@ export interface GamePageRescueSignalInput {
     elapsedMs: number;
     hasFriendlyScreen: boolean;
     hasLoadingScreen: boolean;
+    hasBootstrapLoader: boolean;
     viewportRect?: { width: number; height: number } | null;
     shellRect?: { width: number; height: number } | null;
     contentRect?: { width: number; height: number } | null;
@@ -99,6 +100,7 @@ export const detectGamePageRescueSignal = ({
     elapsedMs,
     hasFriendlyScreen,
     hasLoadingScreen,
+    hasBootstrapLoader,
     viewportRect,
     shellRect,
     contentRect,
@@ -108,7 +110,12 @@ export const detectGamePageRescueSignal = ({
         return null;
     }
 
-    if (hasFriendlyScreen || hasLoadingScreen || elapsedMs < GAME_PAGE_RESCUE_GRACE_MS) {
+    if (
+        hasFriendlyScreen
+        || hasLoadingScreen
+        || hasBootstrapLoader
+        || elapsedMs < GAME_PAGE_RESCUE_GRACE_MS
+    ) {
         return null;
     }
 
@@ -140,6 +147,7 @@ const removeInitialLoaderIfPresent = () => {
 const readRescueSnapshot = (pathname: string, enteredAt: number): RescueSnapshot => {
     const loadingScreen = document.querySelector('[data-testid="loading-screen"]');
     const friendlyScreen = document.querySelector('[data-bg-friendly-screen="true"]:not([data-bg-rescue-gate="true"])');
+    const bootstrapLoader = document.getElementById(INITIAL_LOADER_ID);
     const viewport = document.querySelector('.game-page-viewport');
     const shell = document.querySelector('.mobile-board-shell');
     const content = document.querySelector('.mobile-board-shell__content') ?? viewport;
@@ -152,6 +160,7 @@ const readRescueSnapshot = (pathname: string, enteredAt: number): RescueSnapshot
             elapsedMs,
             hasFriendlyScreen: Boolean(friendlyScreen),
             hasLoadingScreen: Boolean(loadingScreen),
+            hasBootstrapLoader: Boolean(bootstrapLoader),
             viewportRect: toRectSize(viewport),
             shellRect: toRectSize(shell),
             contentRect: toRectSize(content),
