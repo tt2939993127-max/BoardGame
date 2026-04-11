@@ -845,6 +845,25 @@ describe('食人花 ongoing 能力', () => {
             expect((playedEvents[0] as any).payload.cardUid).toBe('wl-1');
         });
 
+        test('多个嫩芽在不同基地会分别消灭自身', () => {
+            const bases = [
+                makeBase({ minions: [makeMinion({ defId: 'killer_plant_sprout', uid: 'sp-1', controller: '0', owner: '0' })] }),
+                makeBase({ minions: [makeMinion({ defId: 'killer_plant_sprout', uid: 'sp-2', controller: '0', owner: '0' })] }),
+            ];
+            const state = makeState(bases);
+
+            const { events } = fireTriggers(state, 'onTurnStart', {
+                state, playerId: '0', random: dummyRandom, now: 1000,
+            });
+
+            const destroyedEvents = events.filter(event => event.type === SU_EVENTS.MINION_DESTROYED);
+            expect(destroyedEvents).toHaveLength(2);
+            const destroyedUids = destroyedEvents
+                .map(event => (event as any).payload.minionUid)
+                .sort();
+            expect(destroyedUids).toEqual(['sp-1', 'sp-2']);
+        });
+
         test('嫩芽交互在卡已离开牌库后不会再次打出同一 UID', () => {
             const handler = getInteractionHandler('killer_plant_sprout_search');
             expect(handler).toBeDefined();

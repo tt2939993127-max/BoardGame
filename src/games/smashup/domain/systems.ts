@@ -13,7 +13,6 @@ import type { SmashUpCore, SmashUpEvent } from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
 import { addPowerCounter } from './abilityHelpers';
 import { SU_EVENT_TYPES } from './events';
-import { SU_EVENTS } from './events';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import {
     getDeferredPostScoringEvents,
@@ -125,14 +124,14 @@ function reconcilePendingBodyShopDistributions(
 
     for (const item of pending) {
         const matchedDestroy = events.find((event) =>
-            event.type === SU_EVENTS.MINION_DESTROYED
+            event.type === SU_EVENT_TYPES.MINION_DESTROYED
             && (event as any).payload?.minionUid === item.targetMinionUid,
         );
         const matchedSave = events.find((event) => {
-            if (event.type === SU_EVENTS.MINION_RETURNED || event.type === SU_EVENTS.MINION_MOVED) {
+            if (event.type === SU_EVENT_TYPES.MINION_RETURNED || event.type === SU_EVENT_TYPES.MINION_MOVED) {
                 return (event as any).payload?.minionUid === item.targetMinionUid;
             }
-            if (event.type === SU_EVENTS.CARD_TO_DECK_BOTTOM || event.type === SU_EVENTS.CARD_TO_DECK_TOP) {
+            if (event.type === SU_EVENT_TYPES.CARD_TO_DECK_BOTTOM || event.type === SU_EVENT_TYPES.CARD_TO_DECK_TOP) {
                 return (event as any).payload?.cardUid === item.targetMinionUid;
             }
             return false;
@@ -279,12 +278,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     }
                                 }
 
-                                const bodyShopFollowUp = reconcilePendingBodyShopDistributions(newState, emittedEvents, eventTimestamp);
-                                newState = bodyShopFollowUp.state;
-                                if (bodyShopFollowUp.events.length > 0) {
-                                    emittedEvents.push(...bodyShopFollowUp.events);
-                                }
-
                                 // 交互处理器返回的领域事件需要先经过与 execute() 同步的后处理，
                                 // 再统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
                                 // 这里不能手动先调用 interceptEvent，否则像 Cthulhu 这类
@@ -317,6 +310,12 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         }
                     }
                 }
+            }
+
+            const bodyShopFollowUp = reconcilePendingBodyShopDistributions(newState, events, latestTimestamp);
+            newState = bodyShopFollowUp.state;
+            if (bodyShopFollowUp.events.length > 0) {
+                nextEvents.push(...bodyShopFollowUp.events);
             }
 
             if (!newState.sys.interaction?.current) {

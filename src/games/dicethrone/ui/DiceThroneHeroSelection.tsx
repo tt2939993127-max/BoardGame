@@ -9,6 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Check, MessageSquareWarning } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
+import { CharacterSelectionBadge } from '../../../components/game/framework/CharacterSelectionBadge';
 import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
@@ -328,6 +329,35 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                                     style={getPortraitStyle(char.id, locale)} />
 
                                 <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent opacity-80" />
+
+                                {char.badges?.length ? (
+                                    <div
+                                        className="absolute left-0 z-20 flex flex-col items-start pointer-events-none"
+                                        style={{
+                                            top: '0.35vw',
+                                            left: '0.35vw',
+                                            gap: '0.24vw',
+                                            maxWidth: 'calc(100% - 2.2vw)',
+                                        }}
+                                    >
+                                        {char.badges.map((badge) => (
+                                            <CharacterSelectionBadge
+                                                key={badge.id}
+                                                badge={badge}
+                                                label={t(badge.labelKey)}
+                                                testId={`character-badge-${char.id}-${badge.id}`}
+                                                style={{
+                                                    paddingLeft: '0.42vw',
+                                                    paddingRight: '0.42vw',
+                                                    paddingTop: '0.18vw',
+                                                    paddingBottom: '0.18vw',
+                                                    fontSize: '0.38vw',
+                                                    lineHeight: 1.1,
+                                                }}
+                                            />
+                                        ))}
+                                    </div>
+                                ) : null}
 
                                 <div className="absolute bottom-[0.5vw] left-[0.5vw] right-[0.5vw]">
                                     <div className="text-[0.7vw] font-black truncate uppercase tracking-tight text-white/90">

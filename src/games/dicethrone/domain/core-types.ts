@@ -5,6 +5,7 @@
 
 import type { PlayerId } from '../../../engine/types';
 import type { CardPreviewRef } from '../../../core';
+import type { CharacterBadgeDef } from '../../../core/ui/CharacterSelection.types';
 import type { AbilityDef, AbilityEffect } from './combat';
 import type { ResourcePool } from './resourceSystem';
 import type { TokenDef, TokenState } from './tokenTypes';
@@ -77,6 +78,7 @@ export type TeamId = 'A' | 'B';
 export interface CharacterDefinition {
     id: SelectableCharacterId;
     nameKey: string;
+    badges?: CharacterBadgeDef[];
 }
 
 export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
@@ -86,8 +88,16 @@ export const DICETHRONE_CHARACTER_CATALOG: CharacterDefinition[] = [
     { id: 'shadow_thief', nameKey: 'characters.shadow_thief' },
     { id: 'moon_elf', nameKey: 'characters.moon_elf' },
     { id: 'paladin', nameKey: 'characters.paladin' },
-    { id: 'gunslinger', nameKey: 'characters.gunslinger' },
-    { id: 'samurai', nameKey: 'characters.samurai' },
+    {
+        id: 'gunslinger',
+        nameKey: 'characters.gunslinger',
+        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+    },
+    {
+        id: 'samurai',
+        nameKey: 'characters.samurai',
+        badges: [{ id: 'under_construction', labelKey: 'common:status_tags.under_construction', tone: 'warning' }],
+    },
 ];
 
 /**

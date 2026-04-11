@@ -7,7 +7,7 @@
  * 3. 弃牌后可推进
  * 4. 卖牌在弃牌阶段也可用
  * 5. 升级卡 CP 不足时无法打出
- * 6. 升级卡跳级限制
+ * 6. 升级卡允许直接从 I 升到 III
  */
 
 import { describe, it, expect } from 'vitest';
@@ -156,17 +156,22 @@ describe('卡牌系统', () => {
             expect(result.assertionErrors).toEqual([]);
         });
 
-        it('不可跳级升级（直接 I -> III）', () => {
+        it('允许直接跳级升级（直接 I -> III）', () => {
             const runner = createRunner(fixedRandom);
             const result = runner.run({
-                name: '跳级升级被拒绝',
+                name: '跳级升级成功',
                 setup: createSetupWithHand(['card-meditation-3'], { cp: 10 }),
                 commands: [
                     cmd('PLAY_UPGRADE_CARD', '0', { cardId: 'card-meditation-3', targetAbilityId: 'meditation' }),
                 ],
                 expect: {
-                    expectError: { command: 'PLAY_UPGRADE_CARD', error: 'upgradeCardSkipLevel' },
                     turnPhase: 'main1',
+                    players: {
+                        '0': {
+                            cp: 7,
+                            abilityLevels: { meditation: 3 },
+                        },
+                    },
                 },
             });
             expect(result.assertionErrors).toEqual([]);

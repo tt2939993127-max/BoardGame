@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { access, mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, extname, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
-import { AI_REPO_WORKBENCH_FLOW_HOST_CATALOG } from '../../../../../src/features/ai-repo-workbench/flowiseForkBaseline';
+import { resolveFlowHostCatalog } from '../../../../../src/features/ai-repo-workbench/flowiseForkBaseline';
 import {
     createInitialWorkbenchJournal,
     focusManagedWorktree,
@@ -63,8 +63,8 @@ export class AiRepoWorkbenchService {
         return this.loadJournal();
     }
 
-    getHostCatalog() {
-        return AI_REPO_WORKBENCH_FLOW_HOST_CATALOG;
+    async getHostCatalog() {
+        return resolveFlowHostCatalog();
     }
 
     async resetJournal(now = Date.now()): Promise<WorkbenchJournal> {

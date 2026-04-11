@@ -124,10 +124,14 @@ export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
     const events: SmashUpEvent[] = [];
     let matchState = ctx.matchState;
     const simulatedDecks = new Map<string, CardInstance[]>();
-    if (ctx.triggerMinionUid) {
-        for (let i = 0; i < ctx.state.bases.length; i++) {
+    const triggerUid = ctx.triggerMinionUid ?? ctx.sourceCardUid;
+    if (triggerUid) {
+        const baseIndices = ctx.sourceBaseIndex !== undefined
+            ? [ctx.sourceBaseIndex]
+            : ctx.state.bases.map((_base, index) => index);
+        for (const i of baseIndices) {
             const targetSprout = ctx.state.bases[i].minions.find(minion =>
-                minion.uid === ctx.triggerMinionUid && minion.defId.startsWith('killer_plant_sprout'),
+                minion.uid === triggerUid && minion.defId.startsWith('killer_plant_sprout'),
             );
             if (!targetSprout || targetSprout.controller !== ctx.playerId) continue;
 
@@ -431,8 +435,8 @@ export function registerKillerPlantAbilities(): void {
     registerTrigger('killer_plant_water_lily', 'onTurnStart', killerPlantWaterLilyTrigger);
     registerTrigger('killer_plant_water_lily_pod', 'onTurnStart', killerPlantWaterLilyTrigger);
     // sprout: 回合开始时消灭自身 + 搜索打出随从
-    registerTrigger('killer_plant_sprout', 'onTurnStart', killerPlantSproutTrigger);
-    registerTrigger('killer_plant_sprout_pod', 'onTurnStart', killerPlantSproutTrigger);
+    registerTrigger('killer_plant_sprout', 'onTurnStart', killerPlantSproutTrigger, { perInstance: true });
+    registerTrigger('killer_plant_sprout_pod', 'onTurnStart', killerPlantSproutTrigger, { perInstance: true });
     // choking_vines: 回合开始时消灭此基地上力量最低的随从
     registerTrigger('killer_plant_choking_vines', 'onTurnStart', killerPlantChokingVinesTrigger);
     // overgrowth: 回合开始时将本基地临界点降低到0（通过 tempBreakpointModifiers，回合结束自动清零）
