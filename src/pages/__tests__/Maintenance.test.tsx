@@ -661,11 +661,13 @@ describe('useGameNamespaceReady', () => {
             );
 
             await act(async () => {
-                await vi.advanceTimersByTimeAsync(
-                    GAME_NAMESPACE_LOAD_TIMEOUT_MS
-                    + GAME_NAMESPACE_AUTO_RETRY_DELAY_MS
-                    + GAME_NAMESPACE_LOAD_TIMEOUT_MS,
-                );
+                await vi.advanceTimersByTimeAsync(GAME_NAMESPACE_LOAD_TIMEOUT_MS);
+            });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(GAME_NAMESPACE_AUTO_RETRY_DELAY_MS);
+            });
+            await act(async () => {
+                await vi.advanceTimersByTimeAsync(GAME_NAMESPACE_LOAD_TIMEOUT_MS);
                 await Promise.resolve();
             });
 
