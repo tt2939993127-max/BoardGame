@@ -74,6 +74,15 @@ const resolvePlayerIdParams = (
 ): ActionLogSegment[] =>
     segments.map((seg) => {
         if (seg.type !== 'i18n' || !seg.params) return seg;
+        
+        // 调试日志
+        if (seg.key === 'actionLog.toSlot') {
+            console.log('[resolvePlayerIdParams] Before:', {
+                key: seg.key,
+                params: JSON.stringify(seg.params),
+            });
+        }
+        
         let changed = false;
         const resolved: Record<string, string | number> = {};
         for (const [key, value] of Object.entries(seg.params)) {
@@ -84,7 +93,19 @@ const resolvePlayerIdParams = (
                 resolved[key] = value;
             }
         }
-        return changed ? { ...seg, params: resolved } : seg;
+        
+        const result = changed ? { ...seg, params: resolved } : seg;
+        
+        // 调试日志
+        if (seg.key === 'actionLog.toSlot') {
+            console.log('[resolvePlayerIdParams] After:', {
+                key: seg.key,
+                changed,
+                params: JSON.stringify(result.params),
+            });
+        }
+        
+        return result;
     });
 
 export const buildActionLogRows = (

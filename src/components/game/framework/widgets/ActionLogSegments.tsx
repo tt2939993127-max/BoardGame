@@ -24,7 +24,16 @@ const I18nSegment: React.FC<{
     params?: Record<string, string | number>;
     paramI18nKeys?: string[];
 }> = ({ ns, i18nKey, params, paramI18nKeys }) => {
-    const { t } = useTranslation(ns);
+    const { t, ready, i18n } = useTranslation(ns);
+    
+    // 强制检查 namespace 是否真的加载完成
+    const nsLoaded = i18n.hasLoadedNamespace(ns);
+    
+    // 等待 namespace 加载完成
+    if (!ready || !nsLoaded) {
+        return <span>{i18nKey}</span>;
+    }
+    
     // 先翻译 paramI18nKeys 中指定的参数值（它们本身是同 ns 下的 i18n key）
     const resolvedParams = { ...params };
     if (paramI18nKeys) {
@@ -35,6 +44,17 @@ const I18nSegment: React.FC<{
             }
         }
     }
+    
+    // 调试日志
+    if (i18nKey === 'actionLog.toSlot') {
+        console.log('[I18nSegment] Rendering toSlot:', {
+            i18nKey,
+            params: JSON.stringify(params),
+            resolvedParams: JSON.stringify(resolvedParams),
+            result: t(i18nKey, resolvedParams),
+        });
+    }
+    
     return <span>{t(i18nKey, resolvedParams)}</span>;
 };
 

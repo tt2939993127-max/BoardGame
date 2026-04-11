@@ -1,4 +1,17 @@
-import { createGameEngine, createBaseSystems, createFlowSystem, createCheatSystem } from '../../engine';
+import {
+    createGameEngine,
+    createFlowSystem,
+    createCheatSystem,
+    createActionLogSystem,
+    createUndoSystem,
+    createInteractionSystem,
+    createSimpleChoiceSystem,
+    createCompareRollChoiceSystem,
+    createRematchSystem,
+    createResponseWindowSystem,
+    createTutorialSystem,
+    createEventStreamSystem,
+} from '../../engine';
 import { CardiaDomain } from './domain';
 import cardRegistry from './domain/cardRegistry';
 import type { CardiaCore, CardiaCommand, CardiaEvent } from './domain/types';
@@ -7,6 +20,12 @@ import { cardiaCheatModifier } from './domain/cheatModifier';
 import { CARDIA_COMMANDS } from './domain/commands';
 import { createCardiaEventSystem } from './domain/systems';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
+import { ACTION_ALLOWLIST, UNDO_ALLOWLIST, formatCardiaActionEntry } from './actionLog';
+
+// 注册卡牌预览函数
+import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
+import { getCardiaCardPreviewRef } from './ui/cardPreviewHelper';
+registerCardPreviewGetter('cardia', getCardiaCardPreviewRef);
 
 // 注册游戏资源（必须在游戏引擎创建前执行）
 import './assets';
@@ -44,7 +63,21 @@ registerFactionInteractionHandlers();
  */
 export const systems = [
     createFlowSystem<CardiaCore>({ hooks: cardiaFlowHooks }),
-    ...createBaseSystems<CardiaCore>(),
+    createActionLogSystem<CardiaCore>({
+        commandAllowlist: ACTION_ALLOWLIST,
+        formatEntry: formatCardiaActionEntry,
+    }),
+    createUndoSystem<CardiaCore>({
+        maxSnapshots: 3,
+        snapshotCommandAllowlist: UNDO_ALLOWLIST,
+    }),
+    createInteractionSystem(),
+    createSimpleChoiceSystem(),
+    createCompareRollChoiceSystem(),
+    createRematchSystem(),
+    createResponseWindowSystem(),
+    createTutorialSystem(),
+    createEventStreamSystem(),
     createCardiaEventSystem(),
     createCheatSystem<CardiaCore>(cardiaCheatModifier),
 ];
