@@ -920,8 +920,8 @@ function wizardArcaneProtectorTalent(ctx: AbilityContext): AbilityResult {
     return { events: [drawEvent] };
 }
 
-function vampireAncientLordSpecial(_ctx: AbilityContext): AbilityResult {
-    return { events: [] };
+function vampireAncientLordSpecial(ctx: AbilityContext): AbilityResult {
+    return playTitanFromSetAside(ctx, 'vampires_ancient_lord_special');
 }
 
 function cthulhuTitanSpecial(ctx: AbilityContext): AbilityResult {
@@ -1815,11 +1815,24 @@ function getBigFunnyGiantDiscardableHandCards(state: AbilityContext['state'], pl
     return player.hand.filter(card => card.uid !== excludeCardUid);
 }
 
+function getBigFunnyGiantTalentTargets(state: AbilityContext['state'], baseIndex: number) {
+    const base = state.bases[baseIndex];
+    if (!base) return [];
+    return base.minions
+        .filter(minion => getMinionPower(state, minion, baseIndex) <= 2)
+        .map(minion => ({
+            uid: minion.uid,
+            defId: minion.defId,
+            baseIndex,
+            label: getCardDef(minion.defId)?.name ?? minion.defId,
+        }));
+}
+
 function trickstersBigFunnyGiantOnTurnEnd(ctx: TriggerContext): SmashUpEvent[] {
     const titans = (ctx.state.titans ?? []).filter(candidate =>
         candidate.defId === 'tricksters_big_funny_giant'
         && candidate.location.zone === 'base'
-        && candidate.controllerId !== ctx.playerId,
+        && candidate.controllerId === ctx.playerId,
     );
     if (titans.length === 0) {
         return [];
@@ -1830,8 +1843,8 @@ function trickstersBigFunnyGiantOnTurnEnd(ctx: TriggerContext): SmashUpEvent[] {
         const base = ctx.state.bases[titan.location.baseIndex];
         if (!base) continue;
 
-        const endingPlayerHasMinionHere = base.minions.some(minion => minion.controller === ctx.playerId);
-        if (endingPlayerHasMinionHere) continue;
+        const opponentHasMinionHere = base.minions.some(minion => minion.controller !== titan.controllerId);
+        if (opponentHasMinionHere) continue;
 
         events.push(addTitanPowerCounter(titan.uid, 1, 'tricksters_big_funny_giant', ctx.now));
     }
@@ -1850,7 +1863,7 @@ function trickstersBigFunnyGiantOnMinionPlayed(ctx: AbilityContext): AbilityResu
         return [];
     }
 
-    const discardable = getBigFunnyGiantDiscardableHandCards(ctx.state, ctx.playerId);
+    const discardable = getBigFunnyGiantDiscardableHandCards(ctx.state, ctx.playerId, ctx.triggerMinionUid);
     if (discardable.length === 0) {
         return [];
     }
@@ -1872,19 +1885,55 @@ function trickstersBigFunnyGiantOnMinionPlayed(ctx: AbilityContext): AbilityResu
         };
     }
 
-        const interaction = createSimpleChoice(
-            `titan_tricksters_big_funny_giant_discard_${ctx.now}`,
-            ctx.playerId,
-            'Big Funny Giant: choose a card to discard so you can play this titan here',
-            discardable.map(card => ({
-                id: `discard-${card.uid}`,
-                label: getCardDef(card.defId)?.name ?? card.defId,
+    const interaction = createSimpleChoice(
+        `titan_tricksters_big_funny_giant_discard_${ctx.now}`,
+        ctx.playerId,
+        '滑稽巨人：选择要弃置的手牌',
+        discardable.map(card => ({
+            id: `discard-${card.uid}`,
+            label: getCardDef(card.defId)?.name ?? card.defId,
             value: { cardUid: card.uid, defId: card.defId },
             displayMode: 'card' as const,
             _source: 'hand' as const,
         })),
         { sourceId: 'titan_tricksters_big_funny_giant_discard_to_play', targetType: 'hand' },
     );
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
+}
+
+function trickstersBigFunnyGiantTalent(ctx: AbilityContext): AbilityResult {
+    const titan = getTitanByUid(ctx.state, ctx.cardUid);
+    if (!titan || titan.location.zone !== 'base' || titan.controllerId !== ctx.playerId || !ctx.matchState) {
+        return { events: [] };
+    }
+
+    const baseIndex = titan.location.baseIndex;
+    const minionTargets = getBigFunnyGiantTalentTargets(ctx.state, baseIndex);
+    if (minionTargets.length === 0) {
+        return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
+    }
+
+    const interaction = createSimpleChoice(
+        `titan_tricksters_big_funny_giant_choose_minion_${ctx.now}`,
+        ctx.playerId,
+        '滑稽巨人：选择力量≤2的随从',
+        buildMinionTargetOptions(minionTargets, {
+            state: ctx.state,
+            sourcePlayerId: ctx.playerId,
+            sourceDefId: 'tricksters_big_funny_giant',
+            effectType: 'destroy',
+        }),
+        { sourceId: 'titan_tricksters_big_funny_giant_choose_minion', targetType: 'minion' },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        titanUid: titan.uid,
+        titanDefId: titan.defId,
+        fromBaseIndex: baseIndex,
+    };
 
     return {
         events: [],
@@ -2172,36 +2221,10 @@ function piratesTheKrakenTalent(ctx: AbilityContext): AbilityResult {
 }
 
 function giantAntsDeathOnSixLegsSpecial(ctx: AbilityContext): AbilityResult {
-    const titan = getTitanByUid(ctx.state, ctx.cardUid);
-    const player = ctx.state.players[ctx.playerId];
-    if (!titan || titan.location.zone !== 'setaside' || !player) {
+    if (getOwnTotalMinionCounters(ctx.state, ctx.playerId) < 7) {
         return { events: [] };
     }
-    if (getOwnTotalMinionCounters(ctx.state, ctx.playerId) < 6 || player.hand.length === 0) {
-        return { events: [] };
-    }
-
-    const interaction = createSimpleChoice(
-        `titan_giant_ants_death_on_six_legs_special_${ctx.now}`,
-        ctx.playerId,
-        'Death on Six Legs锛氬純 1 寮犵墝鏉ユ墦鍑烘娉板潶',
-        player.hand.map(card => ({
-            id: `hand-${card.uid}`,
-            label: getCardDef(card.defId)?.name ?? card.defId,
-            value: { cardUid: card.uid, defId: card.defId },
-            _source: 'hand' as const,
-            displayMode: 'card' as const,
-        })),
-        { sourceId: 'titan_giant_ants_death_on_six_legs_special', targetType: 'hand' },
-    );
-    (interaction.data as { continuationContext?: unknown }).continuationContext = {
-        titanUid: titan.uid,
-        titanDefId: titan.defId,
-        baseIndex: ctx.baseIndex,
-        baseDefId: ctx.state.bases[ctx.baseIndex]?.defId,
-    };
-
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return playTitanFromSetAside(ctx, 'giant_ants_death_on_six_legs_special');
 }
 
 function giantAntsDeathOnSixLegsTalent(ctx: AbilityContext): AbilityResult {
@@ -2219,12 +2242,15 @@ function getMajorUrsaEnemyMinionTargets(state: AbilityContext['state'], playerId
     const base = state.bases[baseIndex];
     if (!base) return [];
 
+    const baseLabel = getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`;
+
     return base.minions
         .filter(minion => minion.controller !== playerId && getMinionPower(state, minion, baseIndex) <= 3)
         .map(minion => ({
             uid: minion.uid,
             defId: minion.defId,
             baseIndex,
+            label: `${getCardDef(minion.defId)?.name ?? minion.defId} (${baseLabel})`,
         }));
 }
 
@@ -2238,80 +2264,72 @@ function bearCavalryMajorUrsaTalent(ctx: AbilityContext): AbilityResult {
         return { events: [] };
     }
 
-    const base = ctx.state.bases[titan.location.baseIndex];
-    if (!base) {
-        return { events: [] };
-    }
-
-    const counterTargets = base.minions.map(minion => ({
-        uid: minion.uid,
-        defId: minion.defId,
-        baseIndex: titan.location.baseIndex,
-    }));
     const baseOptions = getOtherBaseOptions(ctx.state, titan.location.baseIndex);
-    const canAddCounter = counterTargets.length > 0;
-    const canMoveTitan = baseOptions.length > 0;
-    if (!canAddCounter && !canMoveTitan) {
+    if (baseOptions.length === 0) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
     }
 
-    if (canAddCounter && !canMoveTitan) {
-        const counterInteraction = createSimpleChoice(
-            `titan_bear_cavalry_major_ursa_choose_counter_target_${ctx.now}`,
-            ctx.playerId,
-            'Major Ursa: choose a minion here to place a +1 power counter on',
-            buildMinionTargetOptions(counterTargets, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'affect' }),
-            { sourceId: 'titan_bear_cavalry_major_ursa_choose_counter_target', targetType: 'minion' },
-        );
-        return {
-            events: [],
-            matchState: queueInteraction(ctx.matchState, counterInteraction),
-        };
-    }
-
-    if (!canAddCounter && canMoveTitan) {
-        const moveInteraction = createSimpleChoice(
-            `titan_bear_cavalry_major_ursa_choose_destination_${ctx.now}`,
-            ctx.playerId,
-            'Major Ursa: choose a base to move to',
-            buildBaseTargetOptions(baseOptions, ctx.state),
-            { sourceId: 'titan_bear_cavalry_major_ursa_choose_destination', targetType: 'base' },
-        );
-        (moveInteraction.data as { continuationContext?: unknown }).continuationContext = {
-            titanUid: titan.uid,
-            fromBaseIndex: titan.location.baseIndex,
-            titanDefId: titan.defId,
-        };
-        return {
-            events: [],
-            matchState: queueInteraction(ctx.matchState, moveInteraction),
-        };
-    }
-
-    const modeInteraction = createSimpleChoice(
-        `titan_bear_cavalry_major_ursa_choose_talent_mode_${ctx.now}`,
+    const moveInteraction = createSimpleChoice(
+        `titan_bear_cavalry_major_ursa_choose_destination_${ctx.now}`,
         ctx.playerId,
-        'Major Ursa: choose a talent effect',
-        [
-            { id: 'counter', label: 'Place a +1 counter', value: { branch: 'counter' }, displayMode: 'button' as const },
-            { id: 'move', label: 'Move this titan', value: { branch: 'move' }, displayMode: 'button' as const },
-        ],
-        { sourceId: 'titan_bear_cavalry_major_ursa_choose_talent_mode', targetType: 'generic' },
+        '大熊座：选择一个基地移动到',
+        buildBaseTargetOptions(baseOptions, ctx.state),
+        {
+            sourceId: 'titan_bear_cavalry_major_ursa_choose_destination',
+            targetType: 'base',
+            autoResolveIfSingle: false,
+        },
     );
-    (modeInteraction.data as { continuationContext?: unknown }).continuationContext = {
+    (moveInteraction.data as { continuationContext?: unknown }).continuationContext = {
         titanUid: titan.uid,
         titanDefId: titan.defId,
-        baseIndex: titan.location.baseIndex,
+        fromBaseIndex: titan.location.baseIndex,
     };
+
     return {
-        events: [],
-        matchState: queueInteraction(ctx.matchState, modeInteraction),
+        events: [addTitanPowerCounter(titan.uid, 1, 'bear_cavalry_major_ursa_talent', ctx.now)],
+        matchState: queueInteraction(ctx.matchState, moveInteraction),
     };
 }
 
-function bearCavalryMajorUrsaOnTitanMoved(ctx: AbilityContext): AbilityResult {
-    void ctx;
-    return { events: [] };
+function bearCavalryMajorUrsaOnTitanMoved(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
+    if (!ctx.matchState || ctx.baseIndex === undefined) return [];
+
+    const titan = (ctx.state.titans ?? []).find(candidate =>
+        candidate.defId === 'bear_cavalry_major_ursa'
+        && candidate.location.zone === 'base'
+        && candidate.location.baseIndex === ctx.baseIndex
+        && candidate.controllerId === ctx.playerId,
+    );
+    if (!titan) return [];
+
+    const targets = getMajorUrsaEnemyMinionTargets(ctx.state, ctx.playerId, ctx.baseIndex);
+    if (targets.length === 0) return [];
+
+    const interaction = createSimpleChoice(
+        `titan_bear_cavalry_major_ursa_choose_minion_${ctx.now}`,
+        ctx.playerId,
+        '大熊座：选择一个对手战力≤3的随从移动',
+        buildMinionTargetOptions(targets, {
+            state: ctx.state,
+            sourcePlayerId: ctx.playerId,
+            sourceDefId: titan.defId,
+            effectType: 'move',
+        }),
+        {
+            sourceId: 'titan_bear_cavalry_major_ursa_choose_minion',
+            targetType: 'minion',
+            autoResolveIfSingle: false,
+        },
+    );
+    (interaction.data as { continuationContext?: unknown }).continuationContext = {
+        fromBaseIndex: ctx.baseIndex,
+    };
+
+    return {
+        events: [],
+        matchState: queueInteraction(ctx.matchState, interaction),
+    };
 }
 
 function bearCavalryMajorUrsaOnMinionMoved(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
@@ -2561,23 +2579,19 @@ function queueDeathOnSixLegsTransferInteraction(
 }
 
 function giantAntsDeathOnSixLegsBeforeDiscard(ctx: TriggerContext): TriggerResult | SmashUpEvent[] {
-    if (!ctx.matchState || !ctx.triggerMinion || ctx.baseIndex === undefined) {
+    if (!ctx.triggerMinion || !ctx.sourceCardUid || !ctx.sourceControllerId) {
         return [];
     }
-    if (ctx.reason?.startsWith('giant_ants_death_on_six_legs_transfer')) {
+    if (ctx.triggerMinion.controller !== ctx.sourceControllerId) {
         return [];
     }
 
-    const nextState = queueDeathOnSixLegsTransferInteraction(
-        ctx.matchState,
-        ctx.state,
-        ctx.playerId,
-        ctx.triggerMinion.uid,
-        ctx.triggerMinion.defId,
-        ctx.baseIndex,
-        ctx.now,
-    );
-    return nextState ? { events: [], matchState: nextState } : [];
+    const titan = getTitanByUid(ctx.state, ctx.sourceCardUid);
+    if (!titan || titan.location.zone !== 'base') {
+        return [];
+    }
+
+    return [addTitanPowerCounter(titan.uid, 1, 'giant_ants_death_on_six_legs', ctx.now)];
 }
 
 function buildTitanMetadataUpdateEvent(
@@ -3354,7 +3368,7 @@ export function registerTitanAbilities(): void {
         if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
         return getMoonZeroThreeEligibleBases(state, playerId).some(candidate => candidate.baseIndex === baseIndex)
             ? null
-            : 'You can only play Moon Zero Three on a base with none of other players minions';
+            : '你只能将三号空间站打出到没有其他玩家随从的基地';
     });
     registerTitanTalentValidator('super_spies_moon_zero_three', ({ state, titan }) => {
         if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
@@ -3368,8 +3382,11 @@ export function registerTitanAbilities(): void {
         '浼侀箙甯濈殗鍙兘鍦ㄤ綘鐨勫洖鍚堝紑濮嬫椂閫氳繃鐗规畩鑳藉姏杩涘満');
     registerAbility('penguins_emperor_penguin', 'ongoingActivation', penguinsEmperorPenguinOngoingActivation);
     registerAbility('penguins_emperor_penguin', 'talent', penguinsEmperorPenguinTalent);
-    registerTitanOngoingActivationValidator('penguins_emperor_penguin', ({ titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+    registerTitanOngoingActivationValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
+        const player = state.players[playerId];
+        if (!player) return '玩家不存在';
+        if (player.minionsPlayed >= player.minionLimit) return '本回合随从额度已用完';
         return null;
     });
     registerTitanTalentValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {
@@ -3570,50 +3587,33 @@ export function registerTitanAbilities(): void {
     registerAbility('giant_ants_death_on_six_legs', 'special', giantAntsDeathOnSixLegsSpecial);
     registerAbility('giant_ants_death_on_six_legs', 'talent', giantAntsDeathOnSixLegsTalent);
     registerTitanSpecialValidator('giant_ants_death_on_six_legs', ({ state, playerId }) =>
-        getOwnTotalMinionCounters(state, playerId) >= 6
+        getOwnTotalMinionCounters(state, playerId) >= 7
             ? null
-            : 'Your minions need a total of at least 6 +1 power counters',
+            : 'Your minions need a total of at least 7 +1 power counters',
     );
     registerTrigger('giant_ants_death_on_six_legs', 'onMinionDestroyed', giantAntsDeathOnSixLegsBeforeDiscard, {
-        optional: true,
         playerContext: 'sourceController',
         baseScoped: false,
     });
     registerTrigger('giant_ants_death_on_six_legs', 'onMinionDiscardedFromBase', giantAntsDeathOnSixLegsBeforeDiscard, {
-        optional: true,
         playerContext: 'sourceController',
         baseScoped: false,
     });
     registerAbility('bear_cavalry_major_ursa', 'special', bearCavalryMajorUrsaSpecial);
     registerAbility('bear_cavalry_major_ursa', 'talent', bearCavalryMajorUrsaTalent);
-    registerTitanSpecialValidator('bear_cavalry_major_ursa', ({ state, playerId, baseIndex }) => {
+    registerTitanSpecialValidator('bear_cavalry_major_ursa', ({ state, playerId, baseIndex, titan }) => {
+        if (titan.location.zone !== 'setaside') return 'This titan is not set aside';
         const base = state.bases[baseIndex];
         if (!base) return 'Invalid base index';
         return base.minions.some(minion => minion.controller === playerId)
             ? null
             : 'You can only play Major Ursa on a base where you have a minion';
     });
-    registerTitanTalentValidator('bear_cavalry_major_ursa', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '鐠囥儲鍢查崸锕€缍嬮崜宥勭瑝閸︺劌婧€';
-        return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
-            ? null
-            : '濞屸剝婀侀崣顖欎簰缁夎濮╅崚鎵畱閸忔湹绮崺鍝勬勾';
-    });
     registerTrigger('bear_cavalry_major_ursa', 'onTitanMoved', bearCavalryMajorUrsaOnTitanMoved, { optional: true });
-    registerTitanSpecialValidator('bear_cavalry_major_ursa', ({ state, titan, baseIndex }) => {
-        if (titan.location.zone !== 'setaside') return 'This titan is not set aside';
-        return state.bases[baseIndex]
-            ? null
-            : 'Invalid base index';
-    });
     registerTitanTalentValidator('bear_cavalry_major_ursa', ({ state, titan }) => {
         if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
-        const base = state.bases[titan.location.baseIndex];
-        const hasMinionHere = !!base && base.minions.length > 0;
         const canMoveTitan = getOtherBaseOptions(state, titan.location.baseIndex).length > 0;
-        return (hasMinionHere || canMoveTitan)
-            ? null
-            : 'No valid talent targets';
+        return canMoveTitan ? null : '没有可移动的基地';
     });
     registerTrigger('bear_cavalry_major_ursa', 'onMinionMoved', bearCavalryMajorUrsaOnMinionMoved, {
         optional: true,
@@ -3633,14 +3633,6 @@ export function registerTitanAbilities(): void {
         return hasTarget ? null : 'There is no minion here with a +1 power counter';
     });
     registerInterceptor('vampires_ancient_lord', (state, event) => buildAncientLordBonusCounterEvents(state, event));
-    registerTitanSpecialValidator('vampires_ancient_lord', () =>
-        '姝ゆ嘲鍧﹂€氳繃鍏剁壒娈婅Е鍙戣繘鍦猴紝涓嶈兘鎵嬪姩鍙戝姩');
-    registerTitanTalentValidator('vampires_ancient_lord', ({ state, playerId }) => {
-        const hasTarget = state.bases.some(base =>
-            base.minions.some(minion => minion.controller === playerId && (minion.powerCounters ?? 0) > 0),
-        );
-        return hasTarget ? null : '浣犳病鏈夊凡鏈?+1 鎴樻枟鍔涙爣璁扮殑宸辨柟闅忎粠';
-    });
     registerTrigger('vampires_ancient_lord', 'onPowerCounterChanged', vampireAncientLordOnPowerCounterChanged, {
         global: true,
         optional: true,
@@ -3664,10 +3656,40 @@ export function registerTitanAbilities(): void {
             : '娌℃湁鍙幏寰楀姏閲忕殑宸辨柟闅忎粠';
     });
 
+    registerTrigger('werewolves_great_wolf_spirit', 'onTurnStart', werewolvesGreatWolfSpiritOnTurnStart, {
+        global: true,
+    });
+
     registerAbility('tricksters_big_funny_giant', 'special', trickstersBigFunnyGiantSpecial);
     registerTitanSpecialValidator('tricksters_big_funny_giant', ({ state, titan, baseIndex }) => {
-        if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
-        return state.bases[baseIndex] ? null : 'Invalid base index';
+        if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
+        const base = state.bases[baseIndex];
+        if (!base) return '无效的基地索引';
+        return base.minions.length === 0 ? null : '只能打到空基地';
+    });
+    registerRestriction('tricksters_big_funny_giant', 'play_minion', (ctx) => {
+        const titan = (ctx.state.titans ?? []).find(candidate =>
+            candidate.defId === 'tricksters_big_funny_giant'
+            && candidate.location.zone === 'base'
+            && candidate.location.baseIndex === ctx.baseIndex,
+        );
+        if (!titan || titan.controllerId === ctx.playerId) return false;
+        const player = ctx.state.players[ctx.playerId];
+        if (!player) return false;
+        const cardUid = ctx.extra?.cardUid as string | undefined;
+        const isFromHand = !!cardUid && player.hand.some(card => card.uid === cardUid);
+        const requiredHandSize = isFromHand ? 2 : 1;
+        return player.hand.length < requiredHandSize;
+    });
+    registerAbility('tricksters_big_funny_giant', 'talent', trickstersBigFunnyGiantTalent);
+    registerTitanTalentValidator('tricksters_big_funny_giant', ({ state, titan, baseIndex }) => {
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
+        if (titan.location.baseIndex !== baseIndex) return '必须选择泰坦所在基地';
+        const targets = getBigFunnyGiantTalentTargets(state, titan.location.baseIndex);
+        if (targets.length === 0) return '没有可选择的低战力随从';
+        return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
+            ? null
+            : '没有可移动的基地';
     });
     registerTrigger('tricksters_big_funny_giant', 'onTurnEnd', trickstersBigFunnyGiantOnTurnEnd);
     registerTrigger('tricksters_big_funny_giant', 'onMinionPlayed', trickstersBigFunnyGiantOnMinionPlayed);
@@ -5267,7 +5289,7 @@ export function registerTitanInteractionHandlers(): void {
             const interaction = createSimpleChoice(
                 `titan_bear_cavalry_major_ursa_choose_counter_target_${timestamp}`,
                 playerId,
-                'Major Ursa锛氶€夋嫨姝ゅ涓€涓殢浠庢斁缃?+1 鎴樺姏鏍囪',
+                '大熊座：选择此处一个随从放置 +1 战力标记',
                 buildMinionTargetOptions(
                     base.minions.map(minion => ({
                         uid: minion.uid,
@@ -5337,7 +5359,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_bear_cavalry_major_ursa_choose_base_${timestamp}`,
             playerId,
-            '婢堆呭敽鎼囱嶇窗闁瀚ㄧ憰浣哥殺鐠囥儵娈㈡禒搴Ｐ╅崝銊ュ煂閻ㄥ嫬鐔€閸?',
+            '大熊座：选择一个基地移动该随从',
             buildBaseTargetOptions(baseOptions, state.core),
             { sourceId: 'titan_bear_cavalry_major_ursa_choose_base', targetType: 'base' },
         );
@@ -5724,6 +5746,100 @@ export function registerTitanInteractionHandlers(): void {
         }
 
         return { state: nextState, events };
+    });
+
+    registerInteractionHandler('titan_tricksters_big_funny_giant_choose_minion', (state, playerId, value, data, _random, timestamp) => {
+        const selected = value as { minionUid?: string; defId?: string; baseIndex?: number } | undefined;
+        const continuation = (data as {
+            continuationContext?: { titanUid?: string; titanDefId?: string; fromBaseIndex?: number };
+        } | undefined)?.continuationContext;
+        if (!selected?.minionUid || !selected.defId || selected.baseIndex === undefined) {
+            return { state, events: [] };
+        }
+        if (!continuation?.titanUid || !continuation.titanDefId || continuation.fromBaseIndex === undefined) {
+            return { state, events: [] };
+        }
+
+        const baseOptions = getOtherBaseOptions(state.core, continuation.fromBaseIndex);
+        if (baseOptions.length === 0) {
+            return { state, events: [] };
+        }
+
+        const interaction = createSimpleChoice(
+            `titan_tricksters_big_funny_giant_choose_base_${timestamp}`,
+            playerId,
+            '滑稽巨人：选择要移动到的基地',
+            buildBaseTargetOptions(baseOptions, state.core),
+            { sourceId: 'titan_tricksters_big_funny_giant_choose_base', targetType: 'base' },
+        );
+        (interaction.data as { continuationContext?: unknown }).continuationContext = {
+            titanUid: continuation.titanUid,
+            titanDefId: continuation.titanDefId,
+            fromBaseIndex: continuation.fromBaseIndex,
+            minionUid: selected.minionUid,
+            minionDefId: selected.defId,
+            minionBaseIndex: selected.baseIndex,
+        };
+
+        return {
+            state: queueInteraction(state, interaction),
+            events: [],
+        };
+    });
+
+    registerInteractionHandler('titan_tricksters_big_funny_giant_choose_base', (state, playerId, value, data, _random, timestamp) => {
+        const selected = value as { baseIndex?: number; baseDefId?: string } | undefined;
+        const continuation = (data as {
+            continuationContext?: {
+                titanUid?: string;
+                titanDefId?: string;
+                fromBaseIndex?: number;
+                minionUid?: string;
+                minionDefId?: string;
+                minionBaseIndex?: number;
+            };
+        } | undefined)?.continuationContext;
+        if (
+            selected?.baseIndex === undefined
+            || !continuation?.titanUid
+            || !continuation.titanDefId
+            || continuation.fromBaseIndex === undefined
+            || !continuation.minionUid
+            || !continuation.minionDefId
+            || continuation.minionBaseIndex === undefined
+        ) {
+            return { state, events: [] };
+        }
+
+        const base = state.core.bases[continuation.minionBaseIndex];
+        const minion = base?.minions.find(candidate => candidate.uid === continuation.minionUid);
+        if (!base || !minion) {
+            return { state, events: [] };
+        }
+
+        return {
+            state,
+            events: [
+                destroyMinion(
+                    continuation.minionUid,
+                    continuation.minionDefId,
+                    continuation.minionBaseIndex,
+                    minion.owner,
+                    playerId,
+                    'tricksters_big_funny_giant_talent',
+                    timestamp,
+                ),
+                moveTitan(
+                    continuation.titanUid,
+                    continuation.titanDefId,
+                    continuation.fromBaseIndex,
+                    selected.baseIndex,
+                    'tricksters_big_funny_giant_talent',
+                    timestamp,
+                    selected.baseDefId,
+                ),
+            ],
+        };
     });
 
     registerInteractionHandler('titan_tricksters_big_funny_giant_discard_to_play', (state, playerId, value, _data, _random, timestamp) => {

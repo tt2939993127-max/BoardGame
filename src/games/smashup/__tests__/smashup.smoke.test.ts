@@ -2309,15 +2309,24 @@ describe('smashup', () => {
             timestamp: 51,
         };
 
-        const intercepted = interceptEvent(core, destroyEvent);
-        const events = Array.isArray(intercepted) ? intercepted : [intercepted ?? destroyEvent];
+        const triggerResult = fireTriggers(core, 'onMinionDestroyed', {
+            state: core,
+            playerId: '0',
+            baseIndex: 0,
+            triggerMinionUid: 'victim',
+            triggerMinionDefId: 'giant_ant_worker',
+            triggerMinion: core.bases[0].minions[0],
+            random: FIXED_RANDOM,
+            now: 51,
+            reason: 'test_destroy',
+        });
 
-        expect(events.map(event => event.type)).toEqual([
-            SU_EVENTS.MINION_DESTROYED,
+        expect(triggerResult.events.map(event => event.type)).toEqual([
             SU_EVENTS.TITAN_POWER_COUNTER_ADDED,
         ]);
 
-        const resolved = events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        const resolved = [destroyEvent, ...triggerResult.events]
+            .reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
         const titan = (resolved.titans ?? []).find(candidate => candidate.uid === 't-six-legs');
         expect(titan?.powerCounters).toBe(1);
     });
@@ -5319,7 +5328,7 @@ describe('smashup', () => {
     });
 
     it('活动泰坦静态契约与当前已接入范围保持一致', () => {
-        expect(TITAN_CARD_DEFS).toHaveLength(22);
+        expect(TITAN_CARD_DEFS).toHaveLength(26);
         expect(getTitanDef('sphinx')?.id).toBe('sphinx');
         expect(getTitanDef('sphinx')?.abilityTags).toEqual(['special', 'talent']);
         expect(getTitanDef('sphinx')?.previewRef).toEqual({ type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 29 });
