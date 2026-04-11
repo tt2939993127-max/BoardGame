@@ -71,16 +71,30 @@ export const resolveFabStoredPosition = ({
     let shouldPersist = false;
     let clearLegacyOffset = false;
 
-    const parsed = parseJson<Partial<FabPositionPercent & FabPosition & { mode?: 'percent' | 'absolute' }>>(savedPosition);
+    const parsed = parseJson<Partial<FabPositionPercent & FabPosition & {
+        leftPercent?: number;
+        topPercent?: number;
+        mode?: 'percent' | 'absolute';
+    }>>(savedPosition);
     if (parsed) {
-        if (
-            parsed.mode === 'percent'
-            || (isPercentLike(parsed.left) && isPercentLike(parsed.top))
-        ) {
+        const hasLegacyPercent = typeof parsed.leftPercent === 'number' || typeof parsed.topPercent === 'number';
+        const rawLeft = typeof parsed.left === 'number' ? parsed.left : parsed.leftPercent;
+        const rawTop = typeof parsed.top === 'number' ? parsed.top : parsed.topPercent;
+        const hasPercentValues = typeof rawLeft === 'number' && typeof rawTop === 'number';
+        const shouldUsePercent = parsed.mode === 'percent'
+            || hasLegacyPercent
+            || (hasPercentValues && isPercentLike(rawLeft) && isPercentLike(rawTop));
+
+        if (shouldUsePercent && hasPercentValues) {
+            const clampedLeft = clampPercent(rawLeft);
+            const clampedTop = clampPercent(rawTop);
             position = resolvePositionFromPercent({
-                left: clampPercent(parsed.left ?? 0),
-                top: clampPercent(parsed.top ?? 0),
+                left: clampedLeft,
+                top: clampedTop,
             }, viewportWidth, viewportHeight);
+            if (hasLegacyPercent || clampedLeft !== rawLeft || clampedTop !== rawTop) {
+                shouldPersist = true;
+            }
         } else if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
             position = { left: parsed.left, top: parsed.top };
             shouldPersist = true;

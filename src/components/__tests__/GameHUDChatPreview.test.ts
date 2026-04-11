@@ -116,7 +116,7 @@ describe('FabMenu helpers', () => {
         });
 
         expect(resolved.position).toEqual({ left: 60, top: 8 });
-        expect(resolved.percent).toEqual({ leftPercent: 0.6, topPercent: 0.08 });
+        expect(resolved.percent).toEqual({ left: 0.6, top: 0.08 });
         expect(resolved.shouldPersist).toBe(true);
         expect(resolved.clearLegacyOffset).toBe(false);
     });

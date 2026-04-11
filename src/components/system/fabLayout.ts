@@ -38,32 +38,34 @@ export const resolveExpandedFabLayout = ({
     const resolvedViewportHeight = Number.isFinite(viewportHeight) ? viewportHeight : 0;
     const topInset = Number.isFinite(safeAreaTop) ? safeAreaTop : 0;
     const bottomInset = Number.isFinite(safeAreaBottom) ? safeAreaBottom : 0;
-    const offset = resolvedButtonSize + resolvedButtonGap;
+    const maxBottom = resolvedViewportHeight - bottomInset;
 
-    let offsetY = 0;
-    if (resolvedViewportHeight > 0 && totalListHeight > 0) {
+    let resolvedTop = resolvedPosition.top;
+    if (resolvedViewportHeight > 0 && resolvedButtonSize > 0) {
         if (alignment.v === 'bottom') {
-            const listTop = resolvedPosition.top - totalListHeight;
-            if (listTop < topInset) {
-                offsetY = topInset - listTop;
-            }
+            const minTop = topInset + totalListHeight;
+            const maxTop = maxBottom - resolvedButtonSize;
+            resolvedTop = Math.min(Math.max(resolvedTop, minTop), maxTop);
         } else {
-            const listBottom = resolvedPosition.top + totalListHeight + offset + resolvedButtonSize;
-            const maxBottom = resolvedViewportHeight - bottomInset;
-            if (listBottom > maxBottom) {
-                offsetY = maxBottom - listBottom;
-            }
+            const minTop = topInset;
+            const maxTop = maxBottom - (resolvedButtonSize + totalListHeight);
+            resolvedTop = Math.min(Math.max(resolvedTop, minTop), maxTop);
         }
     }
 
+    const resolvedPositionWithOffset = {
+        left: resolvedPosition.left,
+        top: resolvedTop,
+    };
+
     const resolvedAlignment: FabAlignment = {
         v: alignment.v,
-        h: getHorizontalAlignment(resolvedPosition, resolvedButtonSize),
+        h: getHorizontalAlignment(resolvedPositionWithOffset, resolvedButtonSize),
     };
 
     return {
-        position: resolvedPosition,
+        position: resolvedPositionWithOffset,
         alignment: resolvedAlignment,
-        listOffset: { x: 0, y: offsetY },
+        listOffset: { x: 0, y: 0 },
     };
 };
