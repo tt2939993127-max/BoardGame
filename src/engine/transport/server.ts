@@ -890,41 +890,43 @@ export class GameTransportServer {
 
             let lastMarker = buildAiProgressMarker(match.state);
             let recoverySteps = 0;
-            while (recoverySteps < this.onlineAiRecoveryMaxAdvanceSteps) {
-                const followUp = resolveForceEndTurnRecoveryStep({
-                    authoritativeState: match.state,
-                    seatControllers,
-                    playerId: candidate.playerId,
-                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true
-                        ? recoverySteps === 0
-                        : true,
-                });
-                if (!followUp) {
-                    break;
-                }
+            if (candidate.reason !== 'active-turn') {
+                while (recoverySteps < this.onlineAiRecoveryMaxAdvanceSteps) {
+                    const followUp = resolveForceEndTurnRecoveryStep({
+                        authoritativeState: match.state,
+                        seatControllers,
+                        playerId: candidate.playerId,
+                        allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true
+                            ? recoverySteps === 0
+                            : true,
+                    });
+                    if (!followUp) {
+                        break;
+                    }
 
-                phaseLabel = 'follow-up-advance';
-                const nextCommandType = followUp.action.commands[0]?.type ?? 'UNKNOWN';
-                const nextSuccess = await this.executeCommandInternal(
-                    match,
-                    candidate.playerId,
-                    nextCommandType,
-                    followUp.action.commands[0]?.payload ?? {},
-                );
-                if (!nextSuccess) {
-                    await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'command_failed');
-                    return;
-                }
+                    phaseLabel = 'follow-up-advance';
+                    const nextCommandType = followUp.action.commands[0]?.type ?? 'UNKNOWN';
+                    const nextSuccess = await this.executeCommandInternal(
+                        match,
+                        candidate.playerId,
+                        nextCommandType,
+                        followUp.action.commands[0]?.payload ?? {},
+                    );
+                    if (!nextSuccess) {
+                        await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'command_failed');
+                        return;
+                    }
 
-                if (nextCommandType === 'ADVANCE_PHASE') {
-                    totalAdvanceSteps += 1;
+                    if (nextCommandType === 'ADVANCE_PHASE') {
+                        totalAdvanceSteps += 1;
+                    }
+                    recoverySteps += 1;
+                    const nextMarker = buildAiProgressMarker(match.state);
+                    if (nextMarker === lastMarker) {
+                        break;
+                    }
+                    lastMarker = nextMarker;
                 }
-                recoverySteps += 1;
-                const nextMarker = buildAiProgressMarker(match.state);
-                if (nextMarker === lastMarker) {
-                    break;
-                }
-                lastMarker = nextMarker;
             }
 
             logger.warn('[GameTransport] online-ai-watchdog recovered stalled AI', {
