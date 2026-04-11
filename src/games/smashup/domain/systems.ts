@@ -279,6 +279,12 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     }
                                 }
 
+                                const bodyShopFollowUp = reconcilePendingBodyShopDistributions(newState, emittedEvents, eventTimestamp);
+                                newState = bodyShopFollowUp.state;
+                                if (bodyShopFollowUp.events.length > 0) {
+                                    emittedEvents.push(...bodyShopFollowUp.events);
+                                }
+
                                 // 交互处理器返回的领域事件需要先经过与 execute() 同步的后处理，
                                 // 再统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
                                 // 这里不能手动先调用 interceptEvent，否则像 Cthulhu 这类
@@ -311,12 +317,6 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         }
                     }
                 }
-            }
-
-            const bodyShopFollowUp = reconcilePendingBodyShopDistributions(newState, events, latestTimestamp);
-            newState = bodyShopFollowUp.state;
-            if (bodyShopFollowUp.events.length > 0) {
-                nextEvents.push(...bodyShopFollowUp.events);
             }
 
             if (!newState.sys.interaction?.current) {

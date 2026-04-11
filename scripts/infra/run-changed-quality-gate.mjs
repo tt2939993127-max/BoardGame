@@ -9,8 +9,11 @@ import { runAssetPipelineGuard } from './asset-pipeline-guard.mjs';
 
 const repoRoot = process.cwd();
 const modeInput = (process.argv[2] || process.env.QUALITY_GATE_MODE || 'local').trim().toLowerCase();
-const mode = modeInput === 'prepush' ? 'pre-push' : modeInput;
+const mode = modeInput === 'prepush'
+  ? 'pre-push'
+  : (modeInput === 'precommit' ? 'pre-commit' : modeInput);
 const isPrePushMode = mode === 'pre-push';
+const isPreCommitMode = mode === 'pre-commit';
 const targetHeadRef = (process.env.QUALITY_GATE_HEAD || 'HEAD').trim() || 'HEAD';
 const CACHE_SCHEMA_VERSION = 2;
 
@@ -289,6 +292,23 @@ function resolveTargetHeadRef() {
 }
 
 function resolveChangeContext() {
+  if (isPreCommitMode) {
+    const headSha = runGit(['rev-parse', '--verify', 'HEAD'], { allowFailure: true }) || 'HEAD';
+    const output = runGit(['diff', '--name-status', '--find-renames', '--diff-filter=ACMR', '--cached'], { allowFailure: true });
+    const { files, baselinePathByFile } = parseDiffNameStatus(output);
+    return {
+      baseRef: 'HEAD',
+      mergeBase: 'HEAD',
+      headSha,
+      targetHeadRef: headSha,
+      aheadCount: 0,
+      effectiveBaseRef: 'HEAD',
+      effectiveScopeLabel: 'INDEX',
+      files,
+      baselinePathByFile,
+    };
+  }
+
   const resolvedTargetHead = resolveTargetHeadRef();
   const baseRef = resolveBaseRef();
   const mergeBase = runGit(['merge-base', resolvedTargetHead, baseRef], { allowFailure: true }) || baseRef;
