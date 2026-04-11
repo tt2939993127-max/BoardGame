@@ -59,7 +59,7 @@ function applyEmergencySkipFallback(core: DiceThroneCore, context: EmergencySkip
     if (isTargetingSelectionChoice(customIds, context.sourceId)) {
         return {
             ...core,
-            pendingAttack: undefined,
+            pendingAttack: null,
             pendingBonusDiceSettlement: undefined,
         };
     }

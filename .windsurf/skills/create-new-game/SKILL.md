@@ -878,7 +878,7 @@ const commandTypes = [
 
 **强制先读（权威单一来源）**：
 - `docs/ai-rules/engine-systems.md`（ActionLogSystem 使用规范）
-- `evidence/action-log-card-preview.md`（卡牌预览注册表模式 + 数据流说明）
+- `evidence/dicethrone/action-log-card-preview.md`（卡牌预览注册表模式 + 数据流说明）
 
 **你在新游戏里只需要做这些（最小闭环）**：
 1. 在 `game.ts` 配置 `createActionLogSystem({ commandAllowlist, formatEntry })`，`formatEntry` 产出包含 `segments` 的 `ActionLogEntry`。

@@ -821,6 +821,44 @@ describe('AI legal actions', () => {
         ).toEqual([0, 1]);
     });
 
+    it('targetOpponentDice 的 selectDie=2 应优先重掷对手高点骰子', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [1, 5, 6][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-select-opponent-dice-high',
+            playerId: '0',
+            sourceCardId: 'reroll-opponent-dice-test',
+            type: 'selectDie',
+            titleKey: 'interaction.selectDiceToReroll',
+            selectCount: 2,
+            selected: [],
+            diceOwnerId: '1',
+            targetOpponentDice: true,
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        expect(resolution?.action.kind).toBe('interaction-multistep');
+        expect(
+            resolution?.action.commands
+                .filter((command) => command.type === 'REROLL_DIE')
+                .map((command) => (command.payload as { dieId: number }).dieId),
+        ).toEqual([1, 2]);
+    });
+
     it('modifyDie copy 双骰交互应生成有顺序的源骰→目标骰批动作，而不是单骰确认', () => {
         const state = createInitializedState(['0', '1'], fixedRandom);
         state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
@@ -865,6 +903,116 @@ describe('AI legal actions', () => {
             '2:4,0:4',
             '2:4,1:4',
         ]);
+    });
+
+    it('targetOpponentDice 的 copy 交互应优先复制低点数压制对手骰面', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [6, 1, 4][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-copy-opponent-dice-low',
+            playerId: '0',
+            sourceCardId: 'copy-opponent-die-test',
+            type: 'modifyDie',
+            titleKey: 'interaction.selectDieToCopy',
+            selectCount: 2,
+            selected: [],
+            dieModifyConfig: { mode: 'copy' },
+            diceOwnerId: '1',
+            targetOpponentDice: true,
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        const modifyCommands = resolution?.action.commands
+            .filter((command) => command.type === 'MODIFY_DIE')
+            .map((command) => command.payload as { dieId: number; newValue: number }) ?? [];
+
+        expect(modifyCommands.length).toBeGreaterThan(0);
+        expect(modifyCommands.every((command) => command.newValue === 1)).toBe(true);
+        expect(modifyCommands.some((command) => command.dieId === 1)).toBe(true);
+    });
+
+    it('targetOpponentDice 的 set 交互应优先压低高点骰子', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [6, 2, 3][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-set-opponent-dice-low',
+            playerId: '0',
+            sourceCardId: 'set-opponent-die-test',
+            type: 'modifyDie',
+            titleKey: 'interaction.selectDieToSet',
+            selectCount: 1,
+            selected: [],
+            dieModifyConfig: { mode: 'set', targetValue: 1 },
+            diceOwnerId: '1',
+            targetOpponentDice: true,
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        const modifyCommand = resolution?.action.commands.find((command) => command.type === 'MODIFY_DIE');
+        expect(modifyCommand?.payload).toEqual({ dieId: 0, newValue: 1 });
+    });
+
+    it('targetOpponentDice 的 adjust 交互应优先处理低点骰子减少负收益', async () => {
+        const state = createInitializedState(['0', '1'], fixedRandom);
+        state.core.dice = state.core.dice.slice(0, 3).map((die, index) => ({
+            ...die,
+            id: index,
+            value: [1, 4, 6][index],
+        }));
+
+        const interaction: InteractionDescriptor = {
+            id: 'ai-adjust-opponent-dice-low',
+            playerId: '0',
+            sourceCardId: 'adjust-opponent-die-test',
+            type: 'modifyDie',
+            titleKey: 'interaction.selectDieToAdjust',
+            selectCount: 1,
+            selected: [],
+            dieModifyConfig: { mode: 'adjust' },
+            diceOwnerId: '1',
+            targetOpponentDice: true,
+        };
+        injectPendingInteraction(state, interaction);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig,
+            state,
+            matchId: 'local:test',
+            seatControllers: {
+                '0': { type: 'local-ai' },
+            },
+        });
+
+        const modifyCommand = resolution?.action.commands.find((command) => command.type === 'MODIFY_DIE');
+        expect(modifyCommand?.payload).toEqual({ dieId: 0, newValue: 2 });
     });
 
     it('simple-choice exact-multi 交互应枚举所有合法组合，而不是固定前两个选项', () => {

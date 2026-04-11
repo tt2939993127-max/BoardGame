@@ -43,6 +43,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 #### Codex 多子代理并行模式（强制）
 
 - **现状更新**：Codex 现已支持多 Agent / 多子代理并行；因此在满足下列条件时，允许把一个复杂任务拆成多个并行执行槽位，而不是强制单线程串行。
+- **使用授权口径**：默认允许按需使用子代理，无需用户逐次明确许可；若当前运行环境/平台规则要求显式授权，则以系统规则为准。
 - **允许并行的典型场景**：
   - 多个子任务之间**代码改动面天然隔离**（不同 worktree、不同目录、不同游戏、不同文件簇）。
   - 任务属于**批量但彼此独立**的工作，如多条互不冲突的 E2E rewrite、多个互不共享代码面的 review/fix、多个可独立验证的文档/数据修订。
@@ -79,7 +80,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 - `docs/audio/add-audio.md` — 导入新音效素材时必读；配套参考 `docs/tools.md`、`docs/audio/audio-usage.md`、`docs/audio/audio-catalog.md`。
 - `docs/ai-rules/engine-systems.md` — 引擎系统、框架层、游戏 `move/command` 时必读。
 - `docs/ai-rules/undo-auto-advance.md` — 排查撤回后自动推进问题时必读；引擎层已统一处理，游戏层通常无需额外代码。
-- **多 afterScoring 交互链式传递（通用方案）**：`_deferredPostScoringEvents` 必须沿交互链传递；引擎层已在 `InteractionSystem.resolveInteraction` 自动转交到下一个交互。游戏层只需在最后一个交互补发延迟事件，并在补发后立即清空，避免重复补发。详见 `evidence/smashup-multi-base-infinite-loop-fix.md` 和 `evidence/smashup-multi-base-duplicate-events-fix.md`。
+- **多 afterScoring 交互链式传递（通用方案）**：`_deferredPostScoringEvents` 必须沿交互链传递；引擎层已在 `InteractionSystem.resolveInteraction` 自动转交到下一个交互。游戏层只需在最后一个交互补发延迟事件，并在补发后立即清空，避免重复补发。详见 `evidence/smashup/smashup-multi-base-infinite-loop-fix.md` 和 `evidence/smashup/smashup-multi-base-duplicate-events-fix.md`。
 - `docs/ai-rules/testing-audit.md` — 审计、审查、审核、核对描述与代码，或规划审计类 spec 时必读；以 D1-D49 通用缺陷维度为主框架。
 - **审计证据文档强制落地（强制）**：凡是对外宣称“已审计/已审过/审计完成/已收口”的游戏、派系、模块或专项，必须在 `evidence/` 下存在对应审计文档；**无文档一律视为未审计**。文档至少要写明：审计范围、权威来源、逐项/逐卡结论、命中的审计维度、验证/测试证据、未覆盖风险。禁止只写“已核对正常”“已完成收口”这类不可复查结论。
 - **审计文档修订义务（强制）**：如果后续发现某个“已审计”对象仍有漏项、误判或错误结论，必须回写原审计文档，明确标注哪条旧结论失效、为什么失效、对应修复和新增测试是什么；禁止保留旧文档继续充当“已收口”的证明材料。

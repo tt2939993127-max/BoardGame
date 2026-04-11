@@ -22,5 +22,5 @@
   - `package-lock.json`
   - `src/features/ai-repo-workbench/flowiseForkBaseline.ts`
   - `openspec/changes/add-flowise-workbench-shell-integration/*`
-  - `evidence/flowise-ai-repo-workbench-runtime-smoke.md`
-  - `evidence/flowise-internal-chat-clear-fix.md`
+  - `evidence/_shared/flowise-ai-repo-workbench-runtime-smoke.md`
+  - `evidence/_shared/flowise-internal-chat-clear-fix.md`

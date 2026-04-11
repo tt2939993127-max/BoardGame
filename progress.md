@@ -123,7 +123,7 @@
   - Next: 补 workflow / evidence 文档并回填计划文件
 
 - **[12:50] Action**: 沉淀 workflow / contract / E2E evidence 文档
-  - Result: 已新增 `docs/workflows/smashup-faction-intake.md`、`evidence/smashup-oops-faction-intake-contract.md`、`evidence/smashup-oops-faction-intake-e2e-test.md`
+  - Result: 已新增 `docs/workflows/smashup-faction-intake.md`、`evidence/smashup/smashup-oops-faction-intake-contract.md`、`evidence/smashup/smashup-oops-faction-intake-e2e-test.md`
   - Next: 整理最终交付摘要
 
 ### Phase: gameplay proposal
@@ -222,7 +222,7 @@
   - Next: 写统一 evidence，并把真实覆盖边界回填到 planning 文件。
 
 - **[17:40] Action**: 汇总 gameplay E2E evidence 与残留风险
-  - Result: 已新增 `evidence/smashup-oops-faction-gameplay-e2e-test.md`，明确三条浏览器交互证据、截图绝对路径与限制说明；`task_plan.md`、`findings.md`、`progress.md` 已同步回填统一审计入口、`Stagecoach` MVP 范围，以及 `Ancient Egyptians / Samurai` 两条 E2E 属于“注入当前交互”而非 full-chain 的事实边界。
+  - Result: 已新增 `evidence/smashup/smashup-oops-faction-gameplay-e2e-test.md`，明确三条浏览器交互证据、截图绝对路径与限制说明；`task_plan.md`、`findings.md`、`progress.md` 已同步回填统一审计入口、`Stagecoach` MVP 范围，以及 `Ancient Egyptians / Samurai` 两条 E2E 属于“注入当前交互”而非 full-chain 的事实边界。
   - Next: 复跑最终门禁，确认本轮可交付状态。
 
 - **[17:43] Action**: 复跑最终门禁并确认收尾状态

@@ -1275,7 +1275,7 @@ describe('王权骰铸流程测试', () => {
             expect(state.core.pendingAttack?.defenderId).toBe('1');
         });
 
-        it('targetingRoll 无可选目标时 emergency skip 会清理 pendingAttack', () => {
+        it('targetingRoll 无可选目标时 emergency skip 会清理 pendingAttack 并推进到 main2', () => {
             const playerIds: PlayerId[] = ['0', '1'];
             const pipelineConfig = {
                 domain: DiceThroneDomain,
@@ -1289,6 +1289,7 @@ describe('王权骰铸流程测试', () => {
                 sys: {
                     ...state.sys,
                     phase: 'targetingRoll',
+                    flowHalted: true,
                     interaction: {
                         ...state.sys.interaction,
                         current: createSimpleChoice(
@@ -1302,6 +1303,8 @@ describe('王权骰铸流程测试', () => {
                 },
                 core: {
                     ...state.core,
+                    rollCount: 1,
+                    rollConfirmed: true,
                     pendingAttack: {
                         attackerId: '0',
                         isDefendable: true,
@@ -1327,7 +1330,89 @@ describe('王权骰铸流程测试', () => {
             expect(resolveResult.success).toBe(true);
             const nextState = resolveResult.state as MatchState<DiceThroneCore>;
             expect(nextState.sys.interaction.current).toBeUndefined();
-            expect(nextState.core.pendingAttack).toBeUndefined();
+            expect(nextState.core.pendingAttack).toBeNull();
+            expect(nextState.sys.phase).toBe('main2');
+        });
+
+        it('offensiveRollEndToken 无可选项时 emergency skip 会标记 resolved 且不重复弹窗', () => {
+            const playerIds: PlayerId[] = ['0', '1'];
+            const pipelineConfig = {
+                domain: DiceThroneDomain,
+                systems: testSystems,
+            };
+            const random = fixedRandom;
+            let state = createNoResponseSetup()(playerIds, random);
+
+            const offensiveTokenDef = {
+                id: 'test-offensive-token',
+                name: 'tokens.test-offensive-token.name',
+                colorTheme: 'bg-slate-500',
+                description: ['test'],
+                stackLimit: 99,
+                category: 'consumable' as const,
+                activeUse: {
+                    timing: ['onOffensiveRollEnd'] as const,
+                    consumeAmount: 1,
+                    effect: { type: 'modifyDamageDealt' as const, value: 1 },
+                },
+            };
+
+            state = {
+                ...state,
+                core: {
+                    ...state.core,
+                    tokenDefinitions: [...(state.core.tokenDefinitions ?? []), offensiveTokenDef],
+                    players: {
+                        ...state.core.players,
+                        '0': {
+                            ...state.core.players['0'],
+                            tokens: {
+                                ...state.core.players['0']?.tokens,
+                                [offensiveTokenDef.id]: 1,
+                            },
+                        },
+                    },
+                    pendingAttack: {
+                        attackerId: '0',
+                        defenderId: '1',
+                        isDefendable: true,
+                        offensiveRollEndTokenResolved: false,
+                    },
+                },
+                sys: {
+                    ...state.sys,
+                    phase: 'offensiveRoll',
+                    flowHalted: true,
+                    interaction: {
+                        ...state.sys.interaction,
+                        current: createSimpleChoice(
+                            'offensive-roll-end-token-emergency',
+                            '0',
+                            'offensiveRollEndToken.title',
+                            [],
+                            'offensive-roll-end-token',
+                        ),
+                    },
+                },
+            };
+
+            const resolveResult = executePipeline(
+                pipelineConfig,
+                state,
+                {
+                    type: 'SYS_INTERACTION_RESPOND',
+                    playerId: '0',
+                    payload: { optionId: '__emergency_skip__' },
+                    timestamp: Date.now(),
+                } as DiceThroneCommand,
+                random,
+                playerIds
+            );
+
+            expect(resolveResult.success).toBe(true);
+            const afterSkip = resolveResult.state as MatchState<DiceThroneCore>;
+            expect(afterSkip.sys.interaction.current).toBeUndefined();
+            expect(afterSkip.core.pendingAttack?.offensiveRollEndTokenResolved).toBe(true);
         });
 
         it('4 人模式 targetingRoll 不允许通过 mergedValue 伪造队友为目标', () => {

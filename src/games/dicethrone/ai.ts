@@ -1804,6 +1804,15 @@ const interactionValueScorer: LocalAiActionScorer = {
     id: 'interaction-value',
     score(context, action) {
         const state = context.visibleState as DiceThroneState;
+        const interactionId = typeof action.metadata?.interactionId === 'string'
+            ? action.metadata.interactionId
+            : null;
+        const currentInteraction = state.sys.interaction?.current as EngineInteractionDescriptor | undefined;
+        const targetOpponentDice = currentInteraction?.kind === 'multistep-choice'
+            && (!interactionId || currentInteraction.id === interactionId)
+            && (currentInteraction.data as DiceInteractionData | undefined)?.meta?.targetOpponentDice === true;
+        const scoreForTargetValue = (value: number) => (targetOpponentDice ? (7 - value) : value);
+        const scoreForDieValue = (value: number) => (targetOpponentDice ? value : (7 - value));
 
         if (action.kind === 'interaction-multistep') {
             const dieIds = Array.isArray(action.metadata?.dieIds)
@@ -1815,16 +1824,36 @@ const interactionValueScorer: LocalAiActionScorer = {
             const newValue = typeof action.metadata?.newValue === 'number'
                 ? action.metadata.newValue
                 : null;
+            const getDeltaScore = (values: number[], ids: number[]) => {
+                return values.reduce((sum, value, index) => {
+                    const dieId = ids[index];
+                    const die = dieId === undefined
+                        ? null
+                        : state.core.dice.find((item) => item.id === dieId) ?? null;
+                    if (!die) return sum;
+                    const delta = value - die.value;
+                    const normalized = targetOpponentDice ? -delta : delta;
+                    return sum + normalized * 12;
+                }, 0);
+            };
             if (newValues.length > 0) {
+                const deltaScore = getDeltaScore(newValues, dieIds);
                 return {
-                    score: newValues.reduce((sum, value) => sum + value * 18, 0) + newValues.length * 16,
-                    reason: `优先完成更多骰子调整，累计目标点数 ${newValues.join(', ')}`,
+                    score: newValues.reduce((sum, value) => sum + scoreForTargetValue(value) * 18, 0)
+                        + newValues.length * 16
+                        + deltaScore,
+                    reason: targetOpponentDice
+                        ? `优先让对手骰面更低，目标点数 ${newValues.join(', ')}`
+                        : `优先完成更多骰子调整，累计目标点数 ${newValues.join(', ')}`,
                 };
             }
             if (newValue !== null) {
+                const deltaScore = getDeltaScore([newValue], dieId !== null ? [dieId] : []);
                 return {
-                    score: newValue * 18,
-                    reason: `优先把骰子调整到更高点数 ${newValue}`,
+                    score: scoreForTargetValue(newValue) * 18 + deltaScore,
+                    reason: targetOpponentDice
+                        ? `优先把对手骰面压到更低点数 ${newValue}`
+                        : `优先把骰子调整到更高点数 ${newValue}`,
                 };
             }
 
@@ -1834,19 +1863,23 @@ const interactionValueScorer: LocalAiActionScorer = {
             if (dieIds.length > 0) {
                 const totalScore = dieIds.reduce((sum, currentDieId) => {
                     const die = state.core.dice.find((item) => item.id === currentDieId);
-                    return sum + (die ? (7 - die.value) * 12 : 0);
+                    return sum + (die ? scoreForDieValue(die.value) * 12 : 0);
                 }, 0);
                 return {
                     score: totalScore + dieIds.length * 18,
-                    reason: `优先一次处理更多低点骰子 ${dieIds.join(', ')}`,
+                    reason: targetOpponentDice
+                        ? `优先处理对手高点骰子 ${dieIds.join(', ')}`
+                        : `优先一次处理更多低点骰子 ${dieIds.join(', ')}`,
                 };
             }
             if (dieId !== null) {
                 const die = state.core.dice.find((item) => item.id === dieId);
                 if (die) {
                     return {
-                        score: (7 - die.value) * 12,
-                        reason: `优先重掷较低点数的骰子 ${die.value}`,
+                        score: scoreForDieValue(die.value) * 12,
+                        reason: targetOpponentDice
+                            ? `优先重掷对手高点骰子 ${die.value}`
+                            : `优先重掷较低点数的骰子 ${die.value}`,
                     };
                 }
             }
@@ -1874,9 +1907,6 @@ const interactionValueScorer: LocalAiActionScorer = {
                 : [];
             if (selectedPlayerIds.length === 0) return null;
 
-            const interactionId = typeof action.metadata?.interactionId === 'string'
-                ? action.metadata.interactionId
-                : null;
             const interaction = getCardInteractionById(state, interactionId);
 
             if (interaction) {

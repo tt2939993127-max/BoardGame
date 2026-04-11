@@ -330,8 +330,8 @@
 - D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\public\assets\i18n\zh-CN\smashup\cards\compressed\aiji.webp
 
 最终 evidence：
-- D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\evidence\smashup-oops-faction-intake-contract.md
-- D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\evidence\smashup-oops-faction-intake-e2e-test.md
+- D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\evidence\smashup\smashup-oops-faction-intake-contract.md
+- D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\evidence\smashup\smashup-oops-faction-intake-e2e-test.md
 - D:\gongzuo\webgame\BoardGame-wt-smashup-base-faction-assets\docs\workflows\smashup-faction-intake.md
 ```
 
