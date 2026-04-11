@@ -74,7 +74,7 @@ const TUTORIAL_TARGET_COMMAND_MAP: Record<string, string[]> = {
     'ability-slots': ['SELECT_ABILITY'],
     'dice-roll-button': ['ROLL_DICE'],
     'dice-confirm-button': ['CONFIRM_ROLL'],
-    'discard-pile': ['SELL_CARD', 'UNDO_SELL_CARD'],
+    'discard-pile': ['DISCARD_CARD', 'SELL_CARD', 'UNDO_SELL_CARD'],
     'hand-area': ['PLAY_CARD', 'PLAY_UPGRADE_CARD', 'SELL_CARD', 'MODIFY_DIE'],
 };
 
@@ -1375,7 +1375,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                         discardPileRef={discardPileRef}
                         discardCards={viewPlayer.discard}
                         onInspectRecentCards={(cards) => setMagnifiedCards(cards)}
-                        canUndoDiscard={canOperateView && !!G.lastSoldCardId && (currentPhase === 'main1' || currentPhase === 'main2' || currentPhase === 'discard')}
+                        canUndoDiscard={canOperateView && !!G.lastSoldCardId && (currentPhase === 'main1' || currentPhase === 'main2')}
                         onUndoDiscard={() => {
                             setLastUndoCardId(G.lastSoldCardId);
                             engineMoves.undoSellCard?.();
@@ -1451,7 +1451,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                                 isDiscardMode={isDiscardMode}
                                 onDiscardCard={(cardId) => {
                                     if (shouldBlockTutorialAction('discard-pile')) return;
-                                    engineMoves.sellCard(cardId);
+                                    engineMoves.discardCard(cardId);
                                     advanceTutorialIfNeeded('discard-pile');
                                 }}
                                 onMagnifyCard={(card) => setMagnifiedCard(card)}

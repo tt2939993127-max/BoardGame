@@ -7,7 +7,7 @@
 import { describe, it, expect } from 'vitest';
 import { executePipeline, createInitialSystemState, createSeededRandom } from '../pipeline';
 import { createEventStreamSystem, getEventStreamEntries } from '../systems/EventStreamSystem';
-import { createUndoSystem, UNDO_COMMANDS } from '../systems/UndoSystem';
+import { createUndoSystem, setUndoAiSeatIds, UNDO_COMMANDS } from '../systems/UndoSystem';
 import type { Command, DomainCore, GameEvent, MatchState, ValidationResult } from '../types';
 import { computeEventStreamDelta } from '../../games/summonerwars/ui/useGameEvents';
 
@@ -146,5 +146,22 @@ describe('撤回后 EventStream 行为', () => {
     const entriesAfter = getEventStreamEntries(state);
     expect(entriesAfter.length).toBeGreaterThan(0);
     console.log('重新执行后 entries:', entriesAfter.map(e => ({ id: e.id, type: e.event.type })));
+  });
+
+  it('AI 对局无人类审批者时，请求撤回应直接通过', () => {
+    let state = setUndoAiSeatIds(makeState(), ['1']);
+
+    const r1 = exec(state, { type: 'INCREMENT', playerId: '0', payload: {} });
+    expect(r1.success).toBe(true);
+    state = r1.state;
+    expect(state.core.counter).toBe(1);
+
+    const r2 = exec(state, { type: UNDO_COMMANDS.REQUEST_UNDO, playerId: '0', payload: {} });
+    expect(r2.success).toBe(true);
+    state = r2.state;
+
+    expect(state.core.counter).toBe(0);
+    expect(state.sys.undo.pendingRequest).toBeUndefined();
+    expect(state.sys.undo.snapshots).toHaveLength(0);
   });
 });

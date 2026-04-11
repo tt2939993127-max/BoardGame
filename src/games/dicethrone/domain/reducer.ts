@@ -573,6 +573,7 @@ const handleTurnChanged: EventHandler<Extract<DiceThroneEvent, { type: 'TURN_CHA
         lastResolvedAttackDamage: undefined,
         taijiGainedThisTurn: undefined, // 清除太极本回合获得量追踪
         offensiveRollAttemptsThisTurn: undefined,
+        lastSoldCardId: undefined,
     };
 };
 

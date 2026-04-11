@@ -831,7 +831,8 @@ export class GameTransportServer {
             }
 
             const progressMarker = buildAiProgressMarker(match.state);
-            const trackerKey = `${candidate.playerId}:${candidate.reason}:${candidate.resolution.attemptKey}:${progressMarker}`;
+            const recoveryFingerprint = this.buildOnlineAiRecoveryFingerprint(match, candidate, progressMarker);
+            const trackerKey = `${candidate.playerId}:${candidate.reason}:${recoveryFingerprint}`;
             const currentTracker = this.onlineAiRecoveryTrackers.get(match.matchID);
 
             if (!currentTracker || currentTracker.key !== trackerKey) {
@@ -889,6 +890,7 @@ export class GameTransportServer {
             }
 
             let lastMarker = buildAiProgressMarker(match.state);
+            const seenMarkers = new Set<string>([progressMarkerBeforeRecovery, lastMarker]);
             let recoverySteps = 0;
             if (candidate.reason !== 'active-turn') {
                 while (recoverySteps < this.onlineAiRecoveryMaxAdvanceSteps) {
@@ -922,11 +924,22 @@ export class GameTransportServer {
                     }
                     recoverySteps += 1;
                     const nextMarker = buildAiProgressMarker(match.state);
+                    if (seenMarkers.has(nextMarker)) {
+                        await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'loop_detected');
+                        return;
+                    }
+                    seenMarkers.add(nextMarker);
                     if (nextMarker === lastMarker) {
                         break;
                     }
                     lastMarker = nextMarker;
                 }
+            }
+
+            const markerAfterRecovery = buildAiProgressMarker(match.state);
+            if (markerAfterRecovery === progressMarkerBeforeRecovery) {
+                await this.handleOnlineAiRecoveryFailure(match, tracker, candidate, phaseLabel, progressMarkerBeforeRecovery, 'no_progress');
+                return;
             }
 
             logger.warn('[GameTransport] online-ai-watchdog recovered stalled AI', {
@@ -936,7 +949,7 @@ export class GameTransportServer {
                 reason: candidate.reason,
                 advanceSteps: totalAdvanceSteps,
                 markerBefore: progressMarkerBeforeRecovery,
-                markerAfter: buildAiProgressMarker(match.state),
+                markerAfter: markerAfterRecovery,
             });
 
             this.onlineAiRecoveryTrackers.delete(match.matchID);
@@ -1061,6 +1074,82 @@ export class GameTransportServer {
             type: entry?.event?.type,
         }));
         return JSON.stringify(tail);
+    }
+
+    private buildOnlineAiRecoveryFingerprint(
+        match: ActiveMatch,
+        candidate: ForceEndTurnStalledAiResolution,
+        progressMarker: string,
+    ): string {
+        const phase = typeof match.state.sys?.phase === 'string' ? match.state.sys?.phase : '';
+
+        if (candidate.reason === 'visible-interaction' || candidate.reason === 'hidden-interaction') {
+            const current = (match.state.sys as { interaction?: { current?: unknown } } | undefined)?.interaction?.current as {
+                id?: unknown;
+                playerId?: unknown;
+                kind?: unknown;
+                data?: {
+                    title?: unknown;
+                    sourceId?: unknown;
+                    multi?: { min?: unknown };
+                    options?: Array<{ id?: unknown }>;
+                    type?: unknown;
+                    targetPlayerIds?: unknown;
+                    requiresTargetWithStatus?: unknown;
+                    transferConfig?: { statusId?: unknown };
+                };
+            } | undefined;
+            const playerId = typeof current?.playerId === 'string' ? current.playerId : candidate.playerId;
+            const kind = typeof current?.kind === 'string' ? current.kind : 'interaction';
+
+            if (kind === 'simple-choice') {
+                const title = typeof current?.data?.title === 'string' ? current?.data?.title : '';
+                const sourceId = typeof current?.data?.sourceId === 'string' ? current?.data?.sourceId : '';
+                const minCount = typeof current?.data?.multi?.min === 'number' ? current?.data?.multi?.min : '';
+                const optionCount = Array.isArray(current?.data?.options) ? current?.data?.options?.length : '';
+                return `interaction:${playerId}:${phase}:simple-choice:${sourceId}:${title}:${minCount}:${optionCount}`;
+            }
+
+            if (kind === 'dt:card-interaction') {
+                const interactionType = typeof current?.data?.type === 'string' ? current?.data?.type : '';
+                const targetCount = Array.isArray(current?.data?.targetPlayerIds) ? current?.data?.targetPlayerIds?.length : '';
+                const requiresStatus = current?.data?.requiresTargetWithStatus ? '1' : '0';
+                const transferStatusId = typeof current?.data?.transferConfig?.statusId === 'string'
+                    ? current?.data?.transferConfig?.statusId
+                    : '';
+                return `interaction:${playerId}:${phase}:dt-card:${interactionType}:${targetCount}:${requiresStatus}:${transferStatusId}`;
+            }
+
+            const interactionId = typeof current?.id === 'string' ? current?.id : '';
+            return `interaction:${playerId}:${phase}:${kind}:${interactionId}`;
+        }
+
+        if (candidate.reason === 'response-window') {
+            const current = (match.state.sys as { responseWindow?: { current?: unknown } } | undefined)?.responseWindow?.current as {
+                windowType?: unknown;
+                sourceId?: unknown;
+                responderQueue?: unknown;
+                currentResponderIndex?: unknown;
+            } | undefined;
+            const windowType = typeof current?.windowType === 'string' ? current.windowType : '';
+            const sourceId = typeof current?.sourceId === 'string' ? current.sourceId : '';
+            const responderQueue = Array.isArray(current?.responderQueue) ? current?.responderQueue : [];
+            const responderIndex = typeof current?.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
+            const responderId = typeof responderQueue[responderIndex] === 'string'
+                ? responderQueue[responderIndex]
+                : candidate.playerId;
+            return `response-window:${responderId}:${phase}:${windowType}:${sourceId}`;
+        }
+
+        if (candidate.reason === 'pending-damage') {
+            const pendingDamage = (match.state.core as { pendingDamage?: { id?: unknown; responderId?: unknown; responseType?: unknown } } | undefined)?.pendingDamage;
+            const responderId = typeof pendingDamage?.responderId === 'string' ? pendingDamage.responderId : candidate.playerId;
+            const pendingId = typeof pendingDamage?.id === 'string' ? pendingDamage?.id : '';
+            const responseType = typeof pendingDamage?.responseType === 'string' ? pendingDamage?.responseType : '';
+            return `pending-damage:${responderId}:${phase}:${pendingId}:${responseType}`;
+        }
+
+        return progressMarker;
     }
 
     private buildUnsatisfiableInteractionStateSnapshot(args: {

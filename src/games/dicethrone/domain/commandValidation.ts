@@ -640,11 +640,11 @@ const validateSellCard = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    // 售卖仅限当前回合玩家，且仅在主要阶段与弃牌阶段
+    // 售卖仅限当前回合玩家，且仅在主要阶段
     if (!isMoveAllowed(playerId, state.activePlayerId)) {
         return fail('player_mismatch');
     }
-    if (phase !== 'main1' && phase !== 'main2' && phase !== 'discard') {
+    if (phase !== 'main1' && phase !== 'main2') {
         return fail('invalid_phase');
     }
     
@@ -675,11 +675,11 @@ const validateUndoSellCard = (
     playerId: PlayerId,
     phase: TurnPhase
 ): ValidationResult => {
-    // 撤回售卖仅限当前回合玩家，且仅在主要阶段与弃牌阶段
+    // 撤回售卖仅限当前回合玩家，且仅在主要阶段
     if (!isMoveAllowed(playerId, state.activePlayerId)) {
         return fail('player_mismatch');
     }
-    if (phase !== 'main1' && phase !== 'main2' && phase !== 'discard') {
+    if (phase !== 'main1' && phase !== 'main2') {
         return fail('invalid_phase');
     }
     

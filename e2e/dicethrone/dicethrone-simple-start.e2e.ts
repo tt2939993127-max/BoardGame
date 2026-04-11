@@ -15,6 +15,7 @@ import { COMMON_CARDS } from '../../src/games/dicethrone/domain/commonCards';
 import { GUNSLINGER_DICE_FACE_IDS, PALADIN_DICE_FACE_IDS, TOKEN_IDS } from '../../src/games/dicethrone/domain/ids';
 import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { getAvailableAbilityIds } from '../../src/games/dicethrone/domain/rules';
+import { HAND_LIMIT } from '../../src/games/dicethrone/domain/types';
 import { registerDiceThroneConditions } from '../../src/games/dicethrone/conditions';
 import { DEADEYE_2, FAN_THE_HAMMER_2 } from '../../src/games/dicethrone/heroes/gunslinger/abilities';
 import { GUNSLINGER_CARDS } from '../../src/games/dicethrone/heroes/gunslinger/cards';
@@ -605,6 +606,75 @@ const buildOnlineAiStalledMain2State = (state: any) => {
     };
 
     return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-main2-stall', next);
+};
+
+const buildDiscardOverflowState = (state: any) => {
+    const next = structuredClone(state);
+    const fallbackTurnOrder = Array.isArray(next.sys?.turnOrder)
+        ? [...next.sys.turnOrder]
+        : ['0', '1'];
+    const overflowCards = COMMON_CARDS.slice(0, HAND_LIMIT + 1).map((card) => structuredClone(card));
+    if (overflowCards.length < HAND_LIMIT + 1) {
+        throw new Error(`公共卡牌数量不足以构造弃牌溢出场景（需要 ${HAND_LIMIT + 1} 张）`);
+    }
+
+    next.core = {
+        ...next.core,
+        activePlayerId: '0',
+        currentPlayerIndex: Math.max(0, fallbackTurnOrder.indexOf('0')),
+        turnOrder: fallbackTurnOrder,
+        turnNumber: 3,
+        phase: 'discard',
+        pendingAttack: null,
+        pendingDamage: null,
+        pendingBonusDiceSettlement: undefined,
+        activatingAbilityId: undefined,
+        selectedAbilityId: undefined,
+        rollConfirmed: true,
+        rollCount: 0,
+        rollLimit: 0,
+        players: {
+            ...next.core.players,
+            '0': {
+                ...next.core.players['0'],
+                hand: overflowCards,
+                discard: [],
+                resources: {
+                    ...next.core.players['0']?.resources,
+                    [RESOURCE_IDS.CP]: next.core.players['0']?.resources?.[RESOURCE_IDS.CP] ?? 0,
+                },
+            },
+            '1': {
+                ...next.core.players['1'],
+                hand: next.core.players['1']?.hand ?? [],
+            },
+        },
+    };
+
+    next.sys = {
+        ...next.sys,
+        turnNumber: 3,
+        phase: 'discard',
+        turnOrder: fallbackTurnOrder,
+        currentPlayerIndex: Math.max(0, fallbackTurnOrder.indexOf('0')),
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            ...next.sys?.responseWindow,
+            current: undefined,
+        },
+        gameover: undefined,
+        eventStream: {
+            ...(next.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'discard-overflow', next);
 };
 
 const advanceHostTurnToMain1 = async (
@@ -2364,6 +2434,68 @@ test.describe('DiceThrone Simple Start', () => {
             await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-main2-stalled-after-watchdog');
         } finally {
             await setup.hostContext.close();
+        }
+    });
+
+    test('Online DiceThrone 弃牌超限时应可正常弃到手牌上限并自动推进下一回合（避免弃牌/撤回循环卡死）', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL, { gameServerBaseURL: getGameServerBaseURL() });
+        if (!setup) {
+            test.skip(true, 'DiceThrone 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, guestPage, matchId } = setup;
+            await selectCharacter(hostPage, 'barbarian');
+            await selectCharacter(guestPage, 'paladin');
+            await readyAndStartGame(hostPage, guestPage);
+            await waitForGameBoard(hostPage);
+            await waitForGameBoard(guestPage);
+
+            await applyOnlineMatchState(matchId, hostPage, buildDiscardOverflowState);
+            await waitForPhase(hostPage, 'discard', 20000);
+
+            const handCards = hostPage.locator('[data-testid="hand-area"] [data-card-id]');
+            await expect(handCards).toHaveCount(HAND_LIMIT + 1, { timeout: 10000 });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '21-discard-overflow-before');
+
+            while (await handCards.count() > HAND_LIMIT) {
+                await handCards.first().click();
+                await hostPage.waitForTimeout(400);
+            }
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    phase: state.sys?.phase ?? null,
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    hostHandCount: state.core?.players?.['0']?.hand?.length ?? null,
+                };
+            }, {
+                timeout: 15000,
+                message: '等待弃牌完成后自动推进到下一位玩家回合',
+            }).toMatchObject({
+                activePlayerId: '1',
+                hostHandCount: HAND_LIMIT,
+            });
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const phase = state.sys?.phase ?? null;
+                return ['upkeep', 'income', 'main1'].includes(String(phase));
+            }, {
+                timeout: 5000,
+                message: '弃牌完成后应进入下一回合的 upkeep/income/main1',
+            }).toBe(true);
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '22-discard-overflow-after');
+        } finally {
+            await cleanupDTMatch(setup);
         }
     });
 

@@ -981,7 +981,12 @@ export const canUndoSell = (
     state: DiceThroneCore,
     playerId: PlayerId
 ): boolean => {
-    return playerId === state.activePlayerId && !!state.lastSoldCardId;
+    if (playerId !== state.activePlayerId) return false;
+    const lastSoldCardId = state.lastSoldCardId;
+    if (!lastSoldCardId) return false;
+    const player = state.players[playerId];
+    if (!player) return false;
+    return player.discard.some(card => card.id === lastSoldCardId);
 };
 
 // ============================================================================

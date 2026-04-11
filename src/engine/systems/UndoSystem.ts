@@ -74,6 +74,16 @@ function clearPendingRequest<TCore>(state: MatchState<TCore>): MatchState<TCore>
     };
 }
 
+function normalizeAiSeatIds(aiSeatIds: readonly PlayerId[] | undefined): PlayerId[] {
+    if (!aiSeatIds || aiSeatIds.length === 0) {
+        return [];
+    }
+
+    return Array.from(new Set(
+        aiSeatIds.filter((playerId): playerId is PlayerId => typeof playerId === 'string' && playerId.length > 0)
+    ));
+}
+
 // ============================================================================
 // 撤销命令类型
 // ============================================================================
@@ -87,14 +97,14 @@ export const UNDO_COMMANDS = {
 
 export function setUndoAiSeatIds<TCore>(
     state: MatchState<TCore>,
-    aiSeatIds: PlayerId[],
+    aiSeatIds: readonly PlayerId[] | undefined,
 ): MatchState<TCore> {
+    const normalizedSeatIds = normalizeAiSeatIds(aiSeatIds);
     const undoState = (state.sys.undo ?? {
         snapshots: [],
         maxSnapshots: 1,
     }) as UndoState & { aiSeatIds?: PlayerId[] };
-    const normalizedSeatIds = [...aiSeatIds];
-    const previousSeatIds = Array.isArray(undoState.aiSeatIds) ? undoState.aiSeatIds : [];
+    const previousSeatIds = normalizeAiSeatIds(undoState.aiSeatIds);
     if (
         previousSeatIds.length === normalizedSeatIds.length
         && previousSeatIds.every((playerId, index) => playerId === normalizedSeatIds[index])
@@ -112,6 +122,15 @@ export function setUndoAiSeatIds<TCore>(
             },
         },
     };
+}
+
+function getEligibleHumanApproverIds(
+    playerIds: readonly PlayerId[],
+    requesterId: PlayerId,
+    undo: UndoState & { aiSeatIds?: PlayerId[] },
+): PlayerId[] {
+    const aiSeatIdSet = new Set(normalizeAiSeatIds(undo.aiSeatIds));
+    return playerIds.filter((playerId) => playerId !== requesterId && !aiSeatIdSet.has(playerId));
 }
 
 const UNDO_COMMAND_SET = new Set<string>(Object.values(UNDO_COMMANDS));
@@ -175,7 +194,7 @@ export function createUndoSystem<TCore>(
 
             // 处理撤销相关命令
             if (command.type === UNDO_COMMANDS.REQUEST_UNDO) {
-                return handleRequestUndo(state, command.playerId, requireApproval, requiredApprovals);
+                return handleRequestUndo(state, command.playerId, playerIds, requireApproval, requiredApprovals);
             }
             if (command.type === UNDO_COMMANDS.APPROVE_UNDO) {
                 return handleApproveUndo(state, command.playerId);
@@ -382,10 +401,11 @@ function appendSnapshot<TCore>(
 function handleRequestUndo<TCore>(
     state: MatchState<TCore>,
     requesterId: PlayerId,
+    playerIds: readonly PlayerId[],
     requireApproval: boolean,
     requiredApprovals: number
 ): HookResult<TCore> {
-    const { undo } = state.sys;
+    const undo = state.sys.undo as UndoState & { aiSeatIds?: PlayerId[] };
 
     // 检查是否有可撤销的快照
     if (undo.snapshots.length === 0) {
@@ -423,6 +443,43 @@ function handleRequestUndo<TCore>(
                         maxSnapshots: undo.maxSnapshots,
                         snapshots: newSnapshots,
                         snapshotCursors: newCursors,
+                        aiSeatIds: normalizeAiSeatIds(undo.aiSeatIds),
+                        pendingRequest: undefined,
+                        restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
+                    },
+                },
+            },
+        };
+    }
+
+    const eligibleHumanApproverIds = getEligibleHumanApproverIds(playerIds, requesterId, undo);
+    const effectiveRequiredApprovals = Math.min(requiredApprovals, eligibleHumanApproverIds.length);
+
+    if (effectiveRequiredApprovals === 0) {
+        const previousState = undo.snapshots[undo.snapshots.length - 1] as MatchState<TCore>;
+        const newSnapshots = undo.snapshots.slice(0, -1);
+        const cursors = undo.snapshotCursors ?? [];
+        const restoredCursor = cursors[cursors.length - 1] ?? -1;
+        const newCursors = cursors.slice(0, -1);
+
+        logUndoServer('request-approved-by-human-bypass', {
+            requesterId,
+            historyLen: undo.snapshots.length,
+            aiSeatIds: undo.aiSeatIds ?? [],
+            restoredRandomCursor: restoredCursor,
+        });
+
+        return {
+            halt: true,
+            state: {
+                ...previousState,
+                sys: {
+                    ...previousState.sys,
+                    undo: {
+                        maxSnapshots: undo.maxSnapshots,
+                        snapshots: newSnapshots,
+                        snapshotCursors: newCursors,
+                        aiSeatIds: normalizeAiSeatIds(undo.aiSeatIds),
                         pendingRequest: undefined,
                         restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
                     },
@@ -434,7 +491,8 @@ function handleRequestUndo<TCore>(
     // 创建撤销请求
     logUndoServer('request-created', {
         requesterId,
-        requiredApprovals,
+        requiredApprovals: effectiveRequiredApprovals,
+        eligibleHumanApproverIds,
         historyLen: undo.snapshots.length,
     });
     return {
@@ -448,7 +506,7 @@ function handleRequestUndo<TCore>(
                     pendingRequest: {
                         requesterId,
                         approvals: [],
-                        requiredApprovals,
+                        requiredApprovals: effectiveRequiredApprovals,
                     },
                 },
             },
@@ -460,11 +518,21 @@ function handleApproveUndo<TCore>(
     state: MatchState<TCore>,
     approverId: PlayerId
 ): HookResult<TCore> {
-    const { undo } = state.sys;
+    const undo = state.sys.undo as UndoState & { aiSeatIds?: PlayerId[] };
 
     if (!undo?.pendingRequest) {
         logUndoServer('approve-rejected', { reason: 'no-pending', approverId });
         return { halt: true, error: '没有待处理的撤销请求' };
+    }
+
+    if (undo.pendingRequest.requesterId === approverId) {
+        logUndoServer('approve-rejected', { reason: 'requester-cannot-approve', approverId });
+        return { halt: true, error: '请求者不能批准自己的撤销请求' };
+    }
+
+    if (normalizeAiSeatIds(undo.aiSeatIds).includes(approverId)) {
+        logUndoServer('approve-rejected', { reason: 'ai-does-not-vote', approverId });
+        return { halt: true, error: 'AI 玩家不参与撤销投票' };
     }
 
     if (undo.pendingRequest.approvals.includes(approverId)) {
@@ -504,6 +572,7 @@ function handleApproveUndo<TCore>(
                         maxSnapshots: undo.maxSnapshots,
                         snapshots: newSnapshots,
                         snapshotCursors: newCursors,
+                        aiSeatIds: normalizeAiSeatIds(undo.aiSeatIds),
                         pendingRequest: undefined,
                         restoredRandomCursor: restoredCursor >= 0 ? restoredCursor : undefined,
                     },

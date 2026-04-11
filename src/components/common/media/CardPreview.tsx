@@ -30,6 +30,45 @@ export type CardSvgRenderer = (props?: Record<string, string | number>) => React
 export type CardAtlasConfig = SpriteAtlasConfig;
 export type CardAtlasSource = RegistryCardAtlasSource;
 
+const isFrameAtlasConfig = (atlas: SpriteAtlasConfig): atlas is { frames: { x: number; y: number; width: number; height: number }[] } =>
+    'frames' in atlas;
+
+const scaleAtlasConfig = (
+    atlas: SpriteAtlasConfig,
+    imageW: number,
+    imageH: number,
+): SpriteAtlasConfig => {
+    if (imageW <= 0 || imageH <= 0) return atlas;
+    if (atlas.imageW === imageW && atlas.imageH === imageH) return atlas;
+
+    const scaleX = imageW / atlas.imageW;
+    const scaleY = imageH / atlas.imageH;
+
+    if (isFrameAtlasConfig(atlas)) {
+        return {
+            ...atlas,
+            imageW,
+            imageH,
+            frames: atlas.frames.map((frame) => ({
+                x: frame.x * scaleX,
+                y: frame.y * scaleY,
+                width: frame.width * scaleX,
+                height: frame.height * scaleY,
+            })),
+        };
+    }
+
+    return {
+        ...atlas,
+        imageW,
+        imageH,
+        colStarts: atlas.colStarts.map((value) => value * scaleX),
+        colWidths: atlas.colWidths.map((value) => value * scaleX),
+        rowStarts: atlas.rowStarts.map((value) => value * scaleY),
+        rowHeights: atlas.rowHeights.map((value) => value * scaleY),
+    };
+};
+
 const previewRendererRegistry = new Map<string, CardPreviewRenderer>();
 const svgRendererRegistry = new Map<string, CardSvgRenderer>();
 
@@ -440,6 +479,18 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         };
     }, [atlasId, checkKey, checkUrls, effectiveLocale, loadedCandidateUrl, retryVersion, scheduleAtlasRetry, source]);
 
+    const atlasImage = useMemo(() => {
+        if (!source) return null;
+        return (activeUrl ? getPreloadedImageElement(activeUrl) : null)
+            ?? getPreloadedImageElement(source.image, effectiveLocale);
+    }, [activeUrl, effectiveLocale, source]);
+    const atlasConfig = useMemo(
+        () => (source
+            ? scaleAtlasConfig(source.config, atlasImage?.naturalWidth ?? 0, atlasImage?.naturalHeight ?? 0)
+            : null),
+        [atlasImage?.naturalHeight, atlasImage?.naturalWidth, source],
+    );
+
     // Fallback：source 为 undefined 时（CriticalImageGate 预加载超时/失败），
     // 自行加载图片获取尺寸，触发懒解析提升
     useEffect(() => {
@@ -493,7 +544,7 @@ function AtlasCard({ atlasId, index, locale, className, style, title }: AtlasCar
         return null;
     }
 
-    const atlasStyle = computeSpriteStyle(index, source.config);
+    const atlasStyle = computeSpriteStyle(index, atlasConfig ?? source.config);
     const backgroundImage = effectiveLoaded && activeUrl ? `url("${activeUrl}")` : '';
 
     return (

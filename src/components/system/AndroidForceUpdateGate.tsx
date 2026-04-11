@@ -133,7 +133,7 @@ export const AndroidForceUpdateGate = ({
                                 <span>
                                     {hasMeasuredDownloadProgress
                                         ? t('ota.forceUpdate.progressPercent', { percent: progressPercent })
-                                        : '等待原生返回下载进度'}
+                                        : t('ota.forceUpdate.progressPending')}
                                 </span>
                             </div>
                             <div className="h-2 overflow-hidden rounded-full bg-white/10">
@@ -146,11 +146,6 @@ export const AndroidForceUpdateGate = ({
                                     <div className="h-full rounded-full bg-[repeating-linear-gradient(90deg,_rgba(249,217,137,0.16)_0px,_rgba(249,217,137,0.16)_10px,_rgba(255,255,255,0.04)_10px,_rgba(255,255,255,0.04)_20px)] opacity-80" />
                                 )}
                             </div>
-                            {!hasMeasuredDownloadProgress && (
-                                <p className="mt-2 text-left text-[11px] leading-5 text-amber-100/55">
-                                    现在还没收到原生插件返回的真实百分比，这里不再显示伪进度。
-                                </p>
-                            )}
                         </div>
                     )}
 

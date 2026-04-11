@@ -626,7 +626,7 @@ export const HandArea = ({
 
     const handleDrag = (_cardKey: string, info: { offset: { x: number; y: number } }) => {
         dragOffsetRef.current = info.offset;
-        const canSellInPhase = currentPhase === 'main1' || currentPhase === 'main2' || currentPhase === 'discard';
+        const canSellInPhase = currentPhase === 'main1' || currentPhase === 'main2';
         const nextSellHint = canSellInPhase && isOverDiscardPile();
         if (showSellHint !== nextSellHint) {
             setShowSellHint(nextSellHint);

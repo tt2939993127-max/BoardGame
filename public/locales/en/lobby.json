@@ -210,7 +210,7 @@
     "progressLabel": "Download progress",
     "progressPercent": "{{percent}}%",
     "progressPending": "Preparing",
-    "progressHint": "Waiting for native progress.",
+    "progressHint": "Fetching download progress. Please wait.",
     "openSettings": "Open install settings",
     "continueInstall": "Continue install",
     "retryAction": "Check again"
