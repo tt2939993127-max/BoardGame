@@ -132,22 +132,32 @@ export const CreateRoomModal = ({
 
     useEffect(() => {
         if (!isOpen) return;
-        const nextPreferences = normalizeLocalMatchPreferences(
-            gameManifest,
-            (initialPreferences ?? createDefaultLocalMatchPreferences(gameManifest)) as unknown as Record<string, unknown>,
-        );
-        const nextSeatControllers = forceHumanOwnerSeat(
-            Object.fromEntries(
-                Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
-            ),
-        );
+        const nextPreferences = initialPreferences
+            ? normalizeLocalMatchPreferences(
+                gameManifest,
+                initialPreferences as unknown as Record<string, unknown>,
+            )
+            : createDefaultLocalMatchPreferences(gameManifest);
+        const nextSeatControllers = initialPreferences
+            ? forceHumanOwnerSeat({ ...nextPreferences.seatControllers })
+            : forceHumanOwnerSeat(
+                Object.fromEntries(
+                    Array.from({ length: nextPreferences.numPlayers }, (_, index) => [String(index), { type: 'human' } as AiSeatController]),
+                ),
+            );
+        const inferredDifficulty = Object.values(nextSeatControllers).find((controller) => (
+            controller?.type === 'local-ai' && controller.difficulty
+        ))?.difficulty ?? DEFAULT_LOCAL_AI_DIFFICULTY;
+        const shouldEnableAi = initialPreferences
+            ? countAiSeats(nextSeatControllers, nextPreferences.numPlayers) > 0
+            : false;
 
         setRoomName('');
         setNumPlayers(nextPreferences.numPlayers);
         setTtlSeconds(0);
         setPassword('');
-        setEnableAi(false);
-        setAiDifficulty(DEFAULT_LOCAL_AI_DIFFICULTY);
+        setEnableAi(shouldEnableAi);
+        setAiDifficulty(inferredDifficulty);
         setSeatControllers(nextSeatControllers);
         setSetupSelections(nextPreferences.setupSelections);
     }, [gameManifest, initialPreferences, isOpen, playerOptions]);
