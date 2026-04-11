@@ -39,6 +39,23 @@ export interface RuntimeLayoutScaleMetrics {
     blockUnit: number;
 }
 
+const DEFAULT_INLINE_UNIT_FALLBACK = '1vw';
+
+const normalizeRuntimeUnitValue = (value: number) => {
+    if (!Number.isFinite(value)) {
+        return 0;
+    }
+    return value;
+};
+
+export const buildRuntimeInlineUnitValue = (value: number) => {
+    const safeValue = normalizeRuntimeUnitValue(value);
+    if (safeValue === 0) {
+        return '0px';
+    }
+    return `calc(var(--mobile-layout-inline-unit, ${DEFAULT_INLINE_UNIT_FALLBACK}) * ${safeValue})`;
+};
+
 const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
     'data-game-page',
     'data-game-id',
