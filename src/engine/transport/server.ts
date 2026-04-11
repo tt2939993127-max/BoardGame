@@ -983,6 +983,16 @@ export class GameTransportServer {
         const seatView = this.applyPlayerView(match, candidate.playerId) as MatchState<unknown>;
         const seatInteraction = extractAiInteractionSnapshot(seatView);
         const responseWindow = extractAiResponseWindowSnapshot(match.state);
+        const pendingDamage = (match.state.core as {
+            pendingDamage?: {
+                id?: unknown;
+                responderId?: unknown;
+                responseType?: unknown;
+                currentDamage?: unknown;
+                sourceAbilityId?: unknown;
+                tokenUsageTotals?: unknown;
+            };
+        } | undefined)?.pendingDamage;
 
         return JSON.stringify({
             matchId: match.matchID,
@@ -1001,6 +1011,14 @@ export class GameTransportServer {
                 seatSelectability: buildInteractionSelectabilityDiagnostic(seatInteraction),
             },
             responseWindow,
+            pendingDamage: pendingDamage ? {
+                id: pendingDamage.id ?? null,
+                responderId: pendingDamage.responderId ?? null,
+                responseType: pendingDamage.responseType ?? null,
+                currentDamage: pendingDamage.currentDamage ?? null,
+                sourceAbilityId: pendingDamage.sourceAbilityId ?? null,
+                tokenUsageTotals: pendingDamage.tokenUsageTotals ?? null,
+            } : null,
         });
     }
 
