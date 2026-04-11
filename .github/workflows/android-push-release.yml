@@ -34,6 +34,8 @@ jobs:
   release-on-main-push:
     if: github.actor != 'github-actions[bot]' && !contains(github.event.head_commit.message, '[skip android release]')
     runs-on: ubuntu-latest
+    env:
+      AUTO_BUMP_VERSION: ${{ vars.ANDROID_AUTO_BUMP_VERSION || 'false' }}
 
     steps:
       - name: Checkout repository
@@ -95,6 +97,7 @@ jobs:
 
       - name: Bump next patch version
         id: next_version
+        if: env.AUTO_BUMP_VERSION == 'true'
         shell: bash
         run: |
           bump_output="$(node scripts/mobile/bump-project-version.mjs --bump patch)"
@@ -103,6 +106,7 @@ jobs:
           echo "next_version=${next_version}" >> "${GITHUB_OUTPUT}"
 
       - name: Commit next development version
+        if: env.AUTO_BUMP_VERSION == 'true'
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -124,8 +128,13 @@ jobs:
             echo "| 字段 | 值 |"
             echo "|---|---|"
             echo "| 发布版本 | ${{ steps.current_version.outputs.current_version }} |"
-            echo "| 下一开发版本 | ${{ steps.next_version.outputs.next_version }} |"
             echo "| 发布内容 | stable OTA |"
             echo "| 触发方式 | push main |"
-            echo "| 版本回写 | 已提交到 main（带 [skip android release]） |"
+            if [[ "${AUTO_BUMP_VERSION}" == "true" ]]; then
+              echo "| 下一开发版本 | ${{ steps.next_version.outputs.next_version }} |"
+              echo "| 版本回写 | 已提交到 main（带 [skip android release]） |"
+            else
+              echo "| 下一开发版本 | 未回写（手动维护） |"
+              echo "| 版本回写 | 已关闭 |"
+            fi
           } >> "${GITHUB_STEP_SUMMARY}"

@@ -182,7 +182,8 @@ export const getDiceSpriteUrls = (definitionId?: string, characterId: string = '
     resolveSpriteAssetUrls(getDiceSpriteAssetPath(definitionId, characterId), locale)
 );
 
-// @atlas-contract dice.webp 3x3（上行空白），仅使用下两行 6 格；已人工查看图片并映射裁剪。
+// @atlas-contract dice.webp 3x3（上行空白），仅使用下两行 6 格；
+// 已人工查看图片：上行从左到右为 2/4/5，下行从左到右为 1/3/6。
 const DICE_ATLAS: {
     cols: number;
     rows: number;
@@ -191,11 +192,11 @@ const DICE_ATLAS: {
     cols: 3,
     rows: 3,
     faceMap: {
-        1: { col: 0, row: 1 },
-        2: { col: 1, row: 1 },
-        3: { col: 2, row: 1 },
-        4: { col: 0, row: 2 },
-        5: { col: 1, row: 2 },
+        1: { col: 0, row: 2 },
+        2: { col: 0, row: 1 },
+        3: { col: 1, row: 2 },
+        4: { col: 1, row: 1 },
+        5: { col: 2, row: 1 },
         6: { col: 2, row: 2 },
     },
 };

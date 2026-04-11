@@ -8,11 +8,11 @@ const EXPECTED_ATLAS = {
   cols: 3,
   rows: 3,
   faceMap: {
-    1: { col: 0, row: 1 },
-    2: { col: 1, row: 1 },
-    3: { col: 2, row: 1 },
-    4: { col: 0, row: 2 },
-    5: { col: 1, row: 2 },
+    1: { col: 0, row: 2 },
+    2: { col: 0, row: 1 },
+    3: { col: 1, row: 2 },
+    4: { col: 1, row: 1 },
+    5: { col: 2, row: 1 },
     6: { col: 2, row: 2 },
   },
 };
