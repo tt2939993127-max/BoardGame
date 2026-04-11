@@ -836,10 +836,10 @@ const cancelButton = banner.locator('button').filter({
 - 不要再假设“E2E 默认英文”；需要多语言兼容时，用正则同时覆盖中英文。
 
 **教训案例**：
-- 问题：`e2e/summonerwars-magic-event-choice.e2e.ts` 测试失败，横幅文本未找到
+- 问题：`e2e/summonerwars/summonerwars-magic-event-choice.e2e.ts` 测试失败，横幅文本未找到
 - 原因：代码渲染了英文横幅 "Choose: Play event card or discard for magic"，但测试查找中文 "选择：打出事件卡或弃牌换魔力"
 - 解决：使用正则表达式 `/Choose|选择/` 同时匹配中英文
-- 参考：`e2e/summonerwars-magic-event-choice.e2e.ts`
+- 参考：`e2e/summonerwars/summonerwars-magic-event-choice.e2e.ts`
 
 ### TestHarness 测试工具（推荐）
 
@@ -1103,8 +1103,8 @@ await page.evaluate(() => {
 
 - 完整设计文档：`docs/testing-infrastructure.md`
 - 快速参考：`docs/testing-tools-quick-reference.md`
-- 示例测试：`e2e/example-test-harness-usage.e2e.ts`
-- 实际案例：`e2e/dicethrone-thunder-strike.e2e.ts`
+- 示例测试：`e2e/dicethrone/example-test-harness-usage.e2e.ts`
+- 实际案例：`e2e/dicethrone/dicethrone-thunder-strike.e2e.ts`
 
 ### 运行方式
 
@@ -1258,13 +1258,13 @@ npm run clean:ports
 ### 截图与附件管理（强制）
 
 1. Playwright 自动产物目录固定为 `test-results/playwright-artifacts/`，仅保留失败用例附件（`preserveOutput: 'failures-only'`）
-2. 显式证据截图统一通过 `game.screenshot()` 或共享工具写入 `test-results/evidence-screenshots/`
-3. `game.screenshot()` 默认按“测试文件/测试用例”分目录，例如 `test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/触控窄视口下放大入口常显且可点击/10-mobile-main-board-state.png`
+2. 显式证据截图统一通过 `game.screenshot()` 或共享工具写入 `test-results/evidence-screenshots/_shared/`
+3. `game.screenshot()` 默认按“测试文件/测试用例”分目录，例如 `test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/触控窄视口下放大入口常显且可点击/10-mobile-main-board-state.png`
 4. 同一用例首次截图前会自动清理该用例旧截图，并顺带清理旧的平铺遗留文件，避免新旧图混在一起
 5. `testInfo.outputPath()` 只用于临时附件路径，不是长期证据目录
-6. 禁止把同一张图复制到多个稳定目录；禁止默认自动写入 `evidence/screenshots/`
+6. 禁止把同一张图复制到多个稳定目录；禁止默认自动写入 `evidence/_shared/screenshots/`
 7. `test-results/` 目录已被 git 忽略，测试产物不应提交
-8. 在对话、证据说明或交接里汇报截图位置时，必须直接给可复制的工作区绝对路径，例如 `F:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\...`，禁止只写相对目录、文件名或“看 test-results 下面”
+8. 在对话、证据说明或交接里汇报截图位置时，必须直接给可复制的工作区绝对路径，例如 `F:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\_shared\...`，禁止只写相对目录、文件名或“看 test-results 下面”
 9. 证据文档如果引用了 3 张截图，就必须逐张列出 3 条绝对路径；不能只在文档里放图片、相对链接，或只给目录级路径
 
 ```typescript
@@ -1313,7 +1313,7 @@ test('多玩家游戏流程', async ({ browser }, testInfo) => {
 3. 根据游戏状态动态选择对应的客户端发送命令
 4. 测试结束后必须关闭所有上下文
 
-参考：`e2e/helpers/multiPlayer.ts`、`e2e/ugc-preview.e2e.ts`
+参考：`e2e/helpers/multiPlayer.ts`、`e2e/_shared/ugc-preview.e2e.ts`
 
 ### Mock API 响应
 
@@ -1329,10 +1329,10 @@ test.beforeEach(async ({ page }) => {
 
 - `e2e/social.test.ts` - Global HUD 入口、模态框、标签页、好友列表
 - `e2e/navbar.test.ts` - 顶部导航、登录状态、游戏分类
-- `e2e/tictactoe-tutorial.e2e.ts` - 井字棋教程完整流程
-- `e2e/dicethrone.e2e.ts` - 线上房间手牌校验 + 教程完整流程 + 僧侣莲花掌选择 + 雷霆万钧奖励骰重掷
-- `e2e/dicethrone-moon-elf.e2e.ts` - 月精灵基础攻击 + Targeted 伤害结算
-- `e2e/dicethrone-shadow-thief.e2e.ts` - 暗影刺客基础攻击 + Sneak 免伤 + 双防御技能选择
+- `e2e/tictactoe/tictactoe-tutorial.e2e.ts` - 井字棋教程完整流程
+- `e2e/dicethrone/dicethrone.e2e.ts` - 线上房间手牌校验 + 教程完整流程 + 僧侣莲花掌选择 + 雷霆万钧奖励骰重掷
+- `e2e/dicethrone/dicethrone-moon-elf.e2e.ts` - 月精灵基础攻击 + Targeted 伤害结算
+- `e2e/dicethrone/dicethrone-shadow-thief.e2e.ts` - 暗影刺客基础攻击 + Sneak 免伤 + 双防御技能选择
 
 ---
 
@@ -1500,7 +1500,7 @@ await waitForStateApplied(page, (core) => core.currentPlayer === '1');
 - ✅ 清晰的错误信息（超时时显示当前状态和预期状态）
 - ✅ 提升测试速度（平均节省 50% 等待时间）
 
-**完整示例**: 见 `e2e/example-wait-for-state.e2e.ts`
+**完整示例**: 见 `e2e/_shared/example-wait-for-state.e2e.ts`
 
 #### waitForState 详细使用指南
 

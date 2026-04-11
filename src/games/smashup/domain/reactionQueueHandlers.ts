@@ -60,6 +60,7 @@ export function registerReactionQueueInteractionHandlers(): void {
       triggerMinion: lkiTriggerMinion,
       reason: t.reason,
       affectType: t.affectType,
+      triggerBaseControllersAtTrigger: (t as any).triggerBaseControllersAtTrigger,
       actionTargetBaseIndex: (t as any).actionTargetBaseIndex,
       actionTargetType: (t as any).actionTargetType,
       actionTargetMinionUid: (t as any).actionTargetMinionUid,

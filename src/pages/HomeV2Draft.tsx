@@ -180,7 +180,11 @@ type SelectionArrangeMode =
     | 'sameHeight'
     | 'sameSize';
 
-export const HomeV2Draft = () => {
+export interface HomeV2DraftProps {
+    authoringMode?: boolean;
+}
+
+export const HomeV2Draft = ({ authoringMode = true }: HomeV2DraftProps) => {
     const [searchParams] = useSearchParams();
     const { user } = useAuth();
     const [sceneState, setSceneState] = React.useState<HomeV2SceneState>('open');
@@ -188,9 +192,8 @@ export const HomeV2Draft = () => {
     const [selectedGameId, setSelectedGameId] = React.useState<string | null>(null);
     const pendingGameIdRef = React.useRef<string | null>(null);
     const debugRegions = searchParams.get('homeV2Debug') === '1';
-    const wantsAuthorMode = searchParams.get('author') === '1';
     const isAuthorAllowed = import.meta.env.DEV || user?.role === 'admin' || user?.role === 'developer';
-    const isAuthorMode = wantsAuthorMode && isAuthorAllowed;
+    const isAuthorMode = authoringMode && isAuthorAllowed;
     const [compiledContentScene, setCompiledContentScene] = React.useState<UISceneCompiledArtifact>(HOME_V2_COMPILED_SCENE);
     const [authoringDocument, setAuthoringDocument] = React.useState<UISceneAuthoringDocument | null>(null);
     const [assetRegistryYamlDraft, setAssetRegistryYamlDraft] = React.useState(assetRegistryYamlRaw);
@@ -213,7 +216,6 @@ export const HomeV2Draft = () => {
     const [inspectorWidth, setInspectorWidth] = React.useState(360);
     const [sourcePanelHeight, setSourcePanelHeight] = React.useState(320);
     const drawerResizeSessionRef = React.useRef<DrawerResizeSession | null>(null);
-    const homeVisibilityReplayArmedRef = React.useRef(typeof document !== 'undefined' ? document.hidden : false);
     const currentDraftsRef = React.useRef<AuthoringDrafts>({
         assetRegistryYaml: assetRegistryYamlRaw,
         skinYaml: homeV2SkinYamlRaw,
@@ -460,34 +462,6 @@ export const HomeV2Draft = () => {
             window.removeEventListener('pointerup', handlePointerUp);
             window.removeEventListener('mousemove', handleMouseMove);
             window.removeEventListener('mouseup', handleMouseUp);
-        };
-    }, []);
-
-    React.useEffect(() => {
-        if (typeof document === 'undefined') {
-            return;
-        }
-
-        const handleVisibilityChange = () => {
-            if (document.hidden) {
-                homeVisibilityReplayArmedRef.current = true;
-                return;
-            }
-
-            if (!homeVisibilityReplayArmedRef.current) {
-                return;
-            }
-
-            homeVisibilityReplayArmedRef.current = false;
-            pendingGameIdRef.current = null;
-            setSelectedGameId(null);
-            setSceneState('open');
-        };
-
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        return () => {
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
     }, []);
 

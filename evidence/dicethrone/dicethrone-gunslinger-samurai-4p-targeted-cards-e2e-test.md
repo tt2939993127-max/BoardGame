@@ -32,30 +32,30 @@ npm run test:e2e:ci:file -- dicethrone-simple-start.e2e.ts "Online 4-player (Wan
 ### 枪手 Wanted
 
 - 选敌界面：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-Wanted-real-hand-play-only-offers-enemies-in-2v2-and-grants-Bounty-to-selected-enemy\12-four-player-wanted-enemy-only-selection.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-Wanted-real-hand-play-only-offers-enemies-in-2v2-and-grants-Bounty-to-selected-enemy\12-four-player-wanted-enemy-only-selection.png`
 - 结算结果：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-Wanted-real-hand-play-only-offers-enemies-in-2v2-and-grants-Bounty-to-selected-enemy\13-four-player-wanted-resolved-on-selected-enemy.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-Wanted-real-hand-play-only-offers-enemies-in-2v2-and-grants-Bounty-to-selected-enemy\13-four-player-wanted-resolved-on-selected-enemy.png`
 
 ### 枪手 High Noon
 
 - 选敌界面：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-only-offers-enemies-in-2v2-and-resolves-the-rolled-branch-on-selected-enemy\16-four-player-high-noon-enemy-only-selection.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-only-offers-enemies-in-2v2-and-resolves-the-rolled-branch-on-selected-enemy\16-four-player-high-noon-enemy-only-selection.png`
 - 结算结果：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-only-offers-enemies-in-2v2-and-resolves-the-rolled-branch-on-selected-enemy\17-four-player-high-noon-resolved-on-selected-enemy.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-only-offers-enemies-in-2v2-and-resolves-the-rolled-branch-on-selected-enemy\17-four-player-high-noon-resolved-on-selected-enemy.png`
 
 ### 枪手 Pistol Whip
 
 - 选敌界面：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-Pistol-Whip-real-hand-play-only-offers-enemies-in-2v2-and-applies-knockdown-plus-undefendable-damage-to-\18-four-player-pistol-whip-enemy-only-selection.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-Pistol-Whip-real-hand-play-only-offers-enemies-in-2v2-and-applies-knockdown-plus-undefendable-damage-to-\18-four-player-pistol-whip-enemy-only-selection.png`
 - 结算结果：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-Pistol-Whip-real-hand-play-only-offers-enemies-in-2v2-and-applies-knockdown-plus-undefendable-damage-to-\19-four-player-pistol-whip-resolved-on-selected-enemy.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-Pistol-Whip-real-hand-play-only-offers-enemies-in-2v2-and-applies-knockdown-plus-undefendable-damage-to-\19-four-player-pistol-whip-resolved-on-selected-enemy.png`
 
 ### 武士耻辱牌
 
 - 选敌界面：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-Samurai-Shame-card-real-hand-play-only-offers-enemies-in-2v2-and-applies-Shame-to-selected-enemy\14-four-player-samurai-shame-enemy-only-selection.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-Samurai-Shame-card-real-hand-play-only-offers-enemies-in-2v2-and-applies-Shame-to-selected-enemy\14-four-player-samurai-shame-enemy-only-selection.png`
 - 结算结果：
-  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-Samurai-Shame-card-real-hand-play-only-offers-enemies-in-2v2-and-applies-Shame-to-selected-enemy\15-four-player-samurai-shame-resolved-on-selected-enemy.png`
+  - `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-Samurai-Shame-card-real-hand-play-only-offers-enemies-in-2v2-and-applies-Shame-to-selected-enemy\15-four-player-samurai-shame-resolved-on-selected-enemy.png`
 
 ## 断言要点
 

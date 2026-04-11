@@ -325,8 +325,8 @@ function affectsDiceThroneStyleContract(file) {
     || file === 'playwright.config.ts'
     || file.startsWith('src/games/dicethrone/ui/')
     || file === 'src/components/game/framework/presets.tsx'
-    || file === 'scripts/verify/dicethrone-style-contract.mjs'
-    || file === 'e2e/dicethrone-simple-start.e2e.ts';
+    || file === 'scripts/games/dicethrone/verify/dicethrone-style-contract.mjs'
+    || file === 'e2e/dicethrone/dicethrone-simple-start.e2e.ts';
 }
 
 function affectsI18n(file) {

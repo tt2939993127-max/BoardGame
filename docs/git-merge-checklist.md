@@ -167,11 +167,11 @@ Merge branch 'feature-x' into main
   原因：主分支的优化修复了多个 bug
 
 ## 对方删除 (UD)
-- e2e/ninja-hidden-ninja-skip-option.e2e.ts
+- e2e/smashup/ninja-hidden-ninja-skip-option.e2e.ts
   策略：保留文件
   原因：测试覆盖已修复的 bug，不应删除
 
-- docs/bugs/smashup-igor-double-trigger.md
+- docs/bugs/smashup/smashup-igor-double-trigger.md
   策略：保留文件
   原因：文档记录了重要的 bug 修复过程
 

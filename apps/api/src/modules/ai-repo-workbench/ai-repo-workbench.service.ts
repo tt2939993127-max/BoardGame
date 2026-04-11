@@ -37,7 +37,7 @@ export class AiRepoWorkbenchService {
     private readonly logger = new Logger(AiRepoWorkbenchService.name);
     private readonly repoRoot = process.cwd();
     private readonly journalPath = resolve(this.repoRoot, 'temp/ai-repo-workbench/workbench-journal.json');
-    private readonly e2eAssetDir = resolve(this.repoRoot, 'evidence/assets/ai-repo-workbench-e2e');
+    private readonly e2eAssetDir = resolve(this.repoRoot, 'evidence/_shared/assets/ai-repo-workbench-e2e');
     private readonly orchestrator: NewFactionLangGraphOrchestrator;
 
     constructor(@Inject(AiRepoWorkbenchExecutorService) private readonly executorService: AiRepoWorkbenchExecutorService) {

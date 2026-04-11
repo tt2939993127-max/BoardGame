@@ -12,45 +12,45 @@
 
 ## 执行命令
 - `node D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\node_modules\typescript\lib\tsc.js --noEmit --pretty false`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`
-- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone-simple-start.e2e.ts`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player grant tokens: Consecrate can grant four tokens to ally with stable target metadata"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player remove single status: remove-status-1 can remove enemy token with stable owner metadata"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player remove all status: remove-all-status blocks empty targets and clears enemy removable effects"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player 2v2 flow: response queue excludes teammate and defense chain reaches team victory UI"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction"`
-- `npm run test:e2e:ci -- e2e/dicethrone-simple-start.e2e.ts`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts`
+- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone/dicethrone-simple-start.e2e.ts`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player transfer token: enemy token can be transferred to ally with stable target metadata"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player grant tokens: Consecrate can grant four tokens to ally with stable target metadata"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player remove single status: remove-status-1 can remove enemy token with stable owner metadata"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player remove all status: remove-all-status blocks empty targets and clears enemy removable effects"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player 2v2 flow: response queue excludes teammate and defense chain reaches team victory UI"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction"`
+- `npm run test:e2e:ci -- e2e/dicethrone/dicethrone-simple-start.e2e.ts`
 
 ## 截图证据
 - 2 人房 host 开局：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-match-Can-start-a-game-successfully\01-host-game-started.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-match-Can-start-a-game-successfully\01-host-game-started.png`
 - 2 人 `Transfer Status` 第二阶段目标选择：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-2-player-transfer-token-transfer-phase-keeps-locked-source-card-and-target-card\01-two-player-transfer-token-target-selection.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-2-player-transfer-token-transfer-phase-keeps-locked-source-card-and-target-card\01-two-player-transfer-token-target-selection.png`
 - 4 人房 host 开局：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-room-create-claim-seat-join-and-start-successfully\02-four-player-host-game-started.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-room-create-claim-seat-join-and-start-successfully\02-four-player-host-game-started.png`
 - 4 人房站位移动：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-seating-panel-host-can-move-to-empty-slot-and-occupied-seat-is-rejected\03-four-player-seating-panel-moved.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-seating-panel-host-can-move-to-empty-slot-and-occupied-seat-is-rejected\03-four-player-seating-panel-moved.png`
 - 4 人 2v2 目标面板：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-targeting-roll-auto-targets-and-choice-owners-stay-correct-in-2v2\04-four-player-target-choice-panel-host.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-targeting-roll-auto-targets-and-choice-owners-stay-correct-in-2v2\04-four-player-target-choice-panel-host.png`
 - 4 人 2v2 团队胜利：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-2v2-flow-response-queue-excludes-teammate-and-defense-chain-reaches-team-victory-UI\05-four-player-team-victory-ui.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-2v2-flow-response-queue-excludes-teammate-and-defense-chain-reaches-team-victory-UI\05-four-player-team-victory-ui.png`
 - 4 人 `Transfer Status` 第二阶段目标选择：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-transfer-token-enemy-token-can-be-transferred-to-ally-with-stable-target-metadata\06-four-player-transfer-token-target-selection.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-transfer-token-enemy-token-can-be-transferred-to-ally-with-stable-target-metadata\06-four-player-transfer-token-target-selection.png`
 - 4 人 `Consecrate` 目标选择：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-grant-tokens-Consecrate-can-grant-four-tokens-to-ally-with-stable-target-metadata\07-four-player-consecrate-target-selection.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-grant-tokens-Consecrate-can-grant-four-tokens-to-ally-with-stable-target-metadata\07-four-player-consecrate-target-selection.png`
 - 4 人 `Vengeance II` 目标选择：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-ability-grant-token-Vengeance-II-can-grant-Retribution-to-ally-with-stable-target-metadata\10-four-player-vengeance-2-target-selection.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-ability-grant-token-Vengeance-II-can-grant-Retribution-to-ally-with-stable-target-metadata\10-four-player-vengeance-2-target-selection.png`
 - 4 人 `remove-status-1` 目标选择：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-remove-single-status-remove-status-1-can-remove-enemy-token-with-stable-owner-metadata\08-four-player-remove-single-status-selection.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-remove-single-status-remove-status-1-can-remove-enemy-token-with-stable-owner-metadata\08-four-player-remove-single-status-selection.png`
 - 4 人 `remove-all-status` 目标选择：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-remove-all-status-remove-all-status-blocks-empty-targets-and-clears-enemy-removable-effects\09-four-player-remove-all-status-selection.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-remove-all-status-remove-all-status-blocks-empty-targets-and-clears-enemy-removable-effects\09-four-player-remove-all-status-selection.png`
 - 4 人 `Meteor` enemy-set 结算：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-allOpponents-Meteor-collateral-only-hits-enemies-in-2v2\11-four-player-meteor-all-opponents-resolution.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-allOpponents-Meteor-collateral-only-hits-enemies-in-2v2\11-four-player-meteor-all-opponents-resolution.png`
 - 4 人同队 direct-dice 交互：
-  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-direct-dice-ally-teammate-stays-out-of-responder-queue-but-can-still-open-modify-interaction\12-four-player-direct-dice-ally-interaction.png`
+  `D:\gongzuo\webgame\BoardGame-wt-dicethrone-4p-team-mode\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-direct-dice-ally-teammate-stays-out-of-responder-queue-but-can-still-open-modify-interaction\12-four-player-direct-dice-ally-interaction.png`
 
 ## 截图分析
 - `01` 证明 2 人联机主链路未被 4 人 / 2v2 改动破坏，host 已进入正式棋盘并可见掷骰区。
@@ -68,12 +68,12 @@
 - `12` 证明 Batch 3 第一段共享收口已经进入真实联机链路：防守方确认骰面后，攻击方队友页虽然不进入 `responderQueue`，但仍可直接打出改骰牌并打开 `modifyDie` 交互，说明“response 只算敌对操作、队友 direct-dice 不算 response”的口径已经在页面与权威态两端闭环。
 
 ## 自动化结果
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts`：`14 passed`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata"`：`1 passed`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"`：`1 passed`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-simple-start.e2e.ts "Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction"`：`1 passed`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts`：`14 passed`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player ability grant token: Vengeance II can grant Retribution to ally with stable target metadata"`：`1 passed`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player allOpponents: Meteor collateral only hits enemies in 2v2"`：`1 passed`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player direct dice ally: teammate stays out of responder queue but can still open modify interaction"`：`1 passed`
 - `node scripts/infra/vitest-cli-safe.mjs run src/games/dicethrone/__tests__/rule-consistency.test.ts --configLoader native`：`31 passed`
-- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone-simple-start.e2e.ts`：`9 passed`
+- `$env:PW_USE_DEV_SERVERS='true'; $env:PW_START_SERVERS='false'; $env:PW_HAS_EXPLICIT_TARGET='true'; $env:NODE_OPTIONS='--max-old-space-size=4096'; $env:VITE_DEV_PORT='6174'; $env:GAME_SERVER_PORT='20000'; $env:API_SERVER_PORT='21000'; node .\node_modules\@playwright\test\cli.js test e2e/dicethrone/dicethrone-simple-start.e2e.ts`：`9 passed`
 - 覆盖用例：
   - `Online match: Can start a game successfully`
   - `Online 2-player transfer token: transfer phase keeps locked source card and target card`

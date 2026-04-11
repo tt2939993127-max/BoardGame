@@ -91,7 +91,7 @@
     "infra:budget:status": "node scripts/infra/global-heavy-budget.mjs status",
     "init:admin": "npx tsx --tsconfig tsconfig.api.json scripts/db/init_admin.ts",
     "check:arch": "node scripts/infra/check-architecture.cjs",
-    "verify:dicethrone:style-contract": "node scripts/verify/dicethrone-style-contract.mjs",
+    "verify:dicethrone:style-contract": "node scripts/games/dicethrone/verify/dicethrone-style-contract.mjs",
     "check:prod-deps": "bash scripts/deploy/verify-prod-deps.sh",
     "merge:audit": "node scripts/verify/merge-conflict-audit.mjs",
     "merge:audit:strict": "node scripts/verify/merge-conflict-audit.mjs --fail-on-single-side",

@@ -236,7 +236,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.CLOCKMAKER, (ctx: CardiaAbilityCont
 
 ### 4.1 测试文件
 
-**测试文件**: `e2e/cardia-deck1-card11-clockmaker.e2e.ts`
+**测试文件**: `e2e/cardia/cardia-deck1-card11-clockmaker.e2e.ts`
 
 **测试模式**: ✅ 联机模式 + 状态注入
 
@@ -377,7 +377,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.CLOCKMAKER, (ctx: CardiaAbilityCont
 ### 建议 2: 新增"第一个遭遇时激活钟表匠"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia-deck1-card11-clockmaker.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia/cardia-deck1-card11-clockmaker.e2e.ts` 中新增测试用例
 2. 测试场景：
    - P1 第一个遭遇打出钟表匠（`encounterIndex: 0`）
    - P2 打出高影响力卡牌
@@ -400,7 +400,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.CLOCKMAKER, (ctx: CardiaAbilityCont
 - **规则文档**: `src/games/cardia/rule/卡迪亚规则.md`
 - **能力定义**: `src/games/cardia/domain/abilityRegistry.ts`
 - **能力执行器**: `src/games/cardia/domain/abilities/group2-modifiers.ts`
-- **E2E 测试**: `e2e/cardia-deck1-card11-clockmaker.e2e.ts`
+- **E2E 测试**: `e2e/cardia/cardia-deck1-card11-clockmaker.e2e.ts`
 - **i18n 文案**: `public/locales/zh-CN/game-cardia.json`
 
 ### B. 关键代码片段

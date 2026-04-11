@@ -34,14 +34,14 @@ node scripts/infra/vitest-cli-safe.mjs run src/ugc/__tests__/runtime.test.ts --c
 ### E2E
 
 ```bash
-npm run test:e2e:ci:file -- e2e/lobby.e2e.ts "Home v2 草稿在移动横屏下显示全屏背景与逐帧书本壳"
+npm run test:e2e:ci:file -- e2e/_shared/lobby.e2e.ts "Home v2 草稿在移动横屏下显示全屏背景与逐帧书本壳"
 ```
 
 ## 证据截图
 
 ### 1. 壳体基线
 
-- 绝对路径：`D:\gongzuo\webgame\BoardGame-wt-home-v2\test-results\evidence-screenshots\lobby.e2e\Home-v2-草稿在移动横屏下显示全屏背景与逐帧书本壳\lobby-home-v2-draft-shell-mobile.png`
+- 绝对路径：`D:\gongzuo\webgame\BoardGame-wt-home-v2\test-results\evidence-screenshots\_shared\lobby.e2e\Home-v2-草稿在移动横屏下显示全屏背景与逐帧书本壳\lobby-home-v2-draft-shell-mobile.png`
 - 人工观察：
   - 背景已经铺满整个横屏视口，书本壳仍居中，没有横向溢出。
   - 左页“继续对局/游戏分类”内容保持在左页安全区内，没有再靠页面百分比单独写一套位置。

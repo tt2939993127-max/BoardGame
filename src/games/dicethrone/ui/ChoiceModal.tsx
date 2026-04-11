@@ -41,6 +41,15 @@ interface ChoiceData {
     slider?: SliderConfig;
 }
 
+function translateRuntimeKey(
+    t: (key: string, opts?: Record<string, unknown>) => string,
+    key: string,
+    opts?: Record<string, unknown>,
+): string {
+    const runtimeKey = { value: key };
+    return t(runtimeKey.value, opts);
+}
+
 export const ChoiceModal = ({
     choice,
     canResolve,
@@ -77,14 +86,14 @@ export const ChoiceModal = ({
     const skipOption = isSlider && choice!.options.length > 1 ? choice!.options[choice!.options.length - 1] : undefined;
     const maxValue = confirmOption?.value ?? 1;
 
-    const resolveOptionLabel = (label: string) => {
-        if (label.startsWith('choices.option-')) {
-            const index = Number(label.replace('choices.option-', ''));
+    const resolveOptionLabel = (option: Pick<ChoiceOption, 'label'>) => {
+        if (option.label.startsWith('choices.option-')) {
+            const index = Number(option.label.replace('choices.option-', ''));
             if (!Number.isNaN(index)) {
                 return t('choices.option', { index: index + 1 });
             }
         }
-        return t(label, { defaultValue: label });
+        return translateRuntimeKey(t, option.label, { defaultValue: option.label });
     };
 
     const handleSliderConfirm = (selectedValue: number) => {
@@ -104,8 +113,8 @@ export const ChoiceModal = ({
     };
 
     const skipLabel = choice?.slider?.skipLabelKey
-        ? t(choice.slider.skipLabelKey, { defaultValue: choice.slider.skipLabelKey })
-        : skipOption ? resolveOptionLabel(skipOption.label) : '';
+        ? translateRuntimeKey(t, choice.slider.skipLabelKey, { defaultValue: choice.slider.skipLabelKey })
+        : skipOption ? resolveOptionLabel(skipOption) : '';
     const isTargetChoice = Boolean(
         choice
         && choice.sourceAbilityId === 'targeting-roll'
@@ -212,7 +221,7 @@ export const ChoiceModal = ({
                                             variant="secondary"
                                             className="min-w-[100px]"
                                         >
-                                            {resolveOptionLabel(option.label)}
+                                            {resolveOptionLabel(option)}
                                         </GameButton>
                                     ))}
                                 </div>
@@ -232,7 +241,7 @@ export const ChoiceModal = ({
                                             variant={isCancelOption ? 'secondary' : canResolve ? 'primary' : 'secondary'}
                                             className="min-w-[120px]"
                                         >
-                                            {resolveOptionLabel(option.label)}
+                                            {resolveOptionLabel(option)}
                                         </GameButton>
                                     );
                                 })}
@@ -473,7 +482,7 @@ const SliderChoice = ({
             {/* 提示文案（由领域层配置） */}
             {hintKey && (
                 <p className="text-sm text-slate-400">
-                    {t(hintKey, { value, defaultValue: hintKey })}
+                    {translateRuntimeKey(t, hintKey, { value, defaultValue: hintKey })}
                 </p>
             )}
 
@@ -485,7 +494,7 @@ const SliderChoice = ({
                     variant="primary"
                     className="min-w-[140px]"
                 >
-                    {t(confirmLabelKey, { count: value, defaultValue: confirmLabelKey })}
+                    {translateRuntimeKey(t, confirmLabelKey, { count: value, defaultValue: confirmLabelKey })}
                 </GameButton>
                 {onSkip && skipLabel && (
                     <GameButton

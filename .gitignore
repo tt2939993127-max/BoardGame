@@ -68,7 +68,9 @@ nul
 # - public/assets/i18n/zh-CN/* 为符号链接（本地构建产物），不提交
 public/assets/**
 **/*.png
-!evidence/assets/**/*.png
+!evidence/**/assets/**/*.png
+!evidence/**/screenshots/**/*.png
+!evidence/**/_captured/**/*.png
 public/**/*.jpg
 public/**/*.jpeg
 public/**/*.gif
@@ -146,6 +148,8 @@ fix-*.md
 test-*.md
 *-summary.md
 *-analysis.md
+!docs/bugs/*/*.md
+!docs/bugs/*/*.txt
 *-report.md
 *-status.md
 

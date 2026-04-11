@@ -547,6 +547,7 @@ export interface TriggerInstance {
     reason?: string;
     affectType?: import('./ongoingEffects').AffectType;
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
+    triggerBaseControllersAtTrigger?: PlayerId[];
     actionTargetBaseIndex?: number;
     actionTargetType?: 'base' | 'minion';
     actionTargetMinionUid?: string;

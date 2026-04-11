@@ -39,18 +39,18 @@
 
 ```bash
 npm run typecheck
-npm run test:e2e:ci:file -- e2e/lobby.e2e.ts "Home v2 草稿在移动横屏下显示全屏背景与逐帧书本壳"
+npm run test:e2e:ci:file -- e2e/_shared/lobby.e2e.ts "Home v2 草稿在移动横屏下显示全屏背景与逐帧书本壳"
 ```
 
 ## 截图证据
 
 详情页：
 
-- `D:\gongzuo\webgame\BoardGame-wt-home-v2\test-results\evidence-screenshots\lobby.e2e\Home-v2-草稿在移动横屏下显示全屏背景与逐帧书本壳\lobby-home-v2-draft-detail-mobile.png`
+- `D:\gongzuo\webgame\BoardGame-wt-home-v2\test-results\evidence-screenshots\_shared\lobby.e2e\Home-v2-草稿在移动横屏下显示全屏背景与逐帧书本壳\lobby-home-v2-draft-detail-mobile.png`
 
 总览页：
 
-- `D:\gongzuo\webgame\BoardGame-wt-home-v2\test-results\evidence-screenshots\lobby.e2e\Home-v2-草稿在移动横屏下显示全屏背景与逐帧书本壳\lobby-home-v2-draft-shell-mobile.png`
+- `D:\gongzuo\webgame\BoardGame-wt-home-v2\test-results\evidence-screenshots\_shared\lobby.e2e\Home-v2-草稿在移动横屏下显示全屏背景与逐帧书本壳\lobby-home-v2-draft-shell-mobile.png`
 
 ## 肉眼观察
 

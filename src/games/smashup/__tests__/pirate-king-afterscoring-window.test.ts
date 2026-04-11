@@ -4,10 +4,11 @@ import { INTERACTION_COMMANDS, asSimpleChoice } from '../../../engine/systems/In
 import { executePipeline, createInitialSystemState } from '../../../engine/pipeline';
 import { initAllAbilities } from '../abilities';
 import { SmashUpDomain } from '../domain';
-import type { SmashUpCommand, SmashUpCore } from '../domain/types';
+import type { SmashUpCommand, SmashUpCore, TitanState } from '../domain/types';
 import { makeBase, makeMinion, makePlayer, makeCard } from './helpers';
 import { smashUpSystemsForTest } from '../game';
 import { defaultTestRandom } from './testRunner';
+import { SMASHUP_FACTION_IDS } from '../domain/ids';
 
 beforeAll(() => {
     initAllAbilities();
@@ -97,5 +98,93 @@ describe('pirate_king afterScoring window', () => {
         expect(resolvePirateKing.finalState.sys.interaction?.current).toBeFalsy();
         expect(resolvePirateKing.finalState.sys.phase).toBe('playCards');
         expect(resolvePirateKing.finalState.core.currentPlayerIndex).toBe(0);
+    });
+
+    it('大副先结算后，海怪克拉肯仍应保留替换基地登场机会', () => {
+        const state: MatchState<SmashUpCore> = {
+            core: {
+                turnOrder: ['0', '1'],
+                currentPlayerIndex: 0,
+                turnNumber: 3,
+                players: {
+                    '0': makePlayer('0', {
+                        factions: ['pirates', 'aliens'] as [string, string],
+                    }),
+                    '1': makePlayer('1', {
+                        factions: ['robots', 'wizards'] as [string, string],
+                    }),
+                },
+                bases: [
+                    makeBase('base_the_homeworld', [
+                        makeMinion('mate-0', 'pirate_first_mate_pod', '0', 2),
+                        makeMinion('big-0', 'test_big_pirate', '0', 19),
+                    ]),
+                    makeBase('base_the_mothership'),
+                ],
+                baseDeck: ['base_factory_436-1337'],
+                titans: [{
+                    uid: 't-kraken-setaside',
+                    defId: 'pirates_the_kraken',
+                    faction: SMASHUP_FACTION_IDS.PIRATES,
+                    ownerId: '0',
+                    controllerId: '0',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'setaside' },
+                } satisfies TitanState],
+                factionSelection: undefined,
+                scoringEligibleBases: undefined,
+            },
+            sys: {
+                ...createInitialSystemState(['0', '1'], smashUpSystemsForTest, undefined),
+                phase: 'playCards',
+            },
+        };
+
+        const advance = runCommandWithFullSystems(state, {
+            type: 'ADVANCE_PHASE',
+            playerId: '0',
+            payload: undefined,
+        });
+        expect(advance.success).toBe(true);
+
+        const firstChoice = asSimpleChoice(advance.finalState.sys.interaction?.current);
+        expect(firstChoice?.sourceId).toBe('reaction_queue_choose_next');
+        const firstMateTrigger = advance.finalState.core.triggerQueue?.find(trigger => trigger.sourceDefId === 'pirate_first_mate');
+        expect(firstMateTrigger).toBeTruthy();
+
+        const resolveFirstMateTrigger = runCommandWithFullSystems(advance.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: firstChoice!.playerId,
+            payload: { optionId: firstMateTrigger!.id },
+        });
+        expect(resolveFirstMateTrigger.success).toBe(true);
+
+        const firstMateChoice = asSimpleChoice(resolveFirstMateTrigger.finalState.sys.interaction?.current);
+        expect(firstMateChoice?.sourceId).toBe('pirate_first_mate_choose_base');
+        const moveToBase1 = findOption(firstMateChoice, option => option.value?.baseIndex === 1);
+
+        const resolveFirstMateMove = runCommandWithFullSystems(resolveFirstMateTrigger.finalState, {
+            type: INTERACTION_COMMANDS.RESPOND,
+            playerId: firstMateChoice!.playerId,
+            payload: { optionId: moveToBase1 },
+        });
+        expect(resolveFirstMateMove.success).toBe(true);
+
+        let postFirstMateChoice = asSimpleChoice(resolveFirstMateMove.finalState.sys.interaction?.current);
+        expect(postFirstMateChoice).toBeTruthy();
+        if (postFirstMateChoice?.sourceId === 'reaction_queue_choose_next') {
+            const krakenTrigger = resolveFirstMateMove.finalState.core.triggerQueue?.find(trigger => trigger.sourceDefId === 'pirates_the_kraken');
+            expect(krakenTrigger).toBeTruthy();
+            const resolveKrakenTrigger = runCommandWithFullSystems(resolveFirstMateMove.finalState, {
+                type: INTERACTION_COMMANDS.RESPOND,
+                playerId: postFirstMateChoice.playerId,
+                payload: { optionId: krakenTrigger!.id },
+            });
+            expect(resolveKrakenTrigger.success).toBe(true);
+            postFirstMateChoice = asSimpleChoice(resolveKrakenTrigger.finalState.sys.interaction?.current);
+        }
+
+        expect(postFirstMateChoice?.sourceId).toBe('titan_pirates_the_kraken_play_replacement');
     });
 });

@@ -10,8 +10,8 @@
 
 ## 执行命令
 
-- `npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai righteousness should resolve a valid branch against monk"`
-- `npm run test:e2e:ci:file -- e2e/dicethrone-watch-out-spotlight.e2e.ts "samurai zanshin should settle 5 bonus dice and synchronize effects against paladin"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts "samurai righteousness should resolve a valid branch against monk"`
+- `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts "samurai zanshin should settle 5 bonus dice and synchronize effects against paladin"`
 
 ## 关键发现
 
@@ -19,7 +19,7 @@
 - `LocalGameProvider` 原先直接使用 `createSeededRandom(seed)`，没有把 `TestHarness.random` / `TestHarness.dice` 接到 `executePipeline()` 使用的随机源上。
 - 结果是 `window.__BG_TEST_HARNESS__.dice.setValues([...])` 在本地 E2E 中无法稳定控制 `random.d(6)`，会让武士奖励骰分支看起来“像随机失控”。
 - 本次已在 `src/engine/transport/react.tsx` 中补齐测试环境随机桥接，让本地 provider 在测试模式下通过 `TestHarness.random.wrap(...)` 驱动 `random()` / `d()` / `range()` / `shuffle()`。
-- 在此基础上，`e2e/dicethrone-watch-out-spotlight.e2e.ts` 新增了两条武士跨角色用例，并使用固定骰值注入验证真实 UI。
+- 在此基础上，`e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts` 新增了两条武士跨角色用例，并使用固定骰值注入验证真实 UI。
 - `Masamune II` 不属于本次新增 E2E 的验证目标。
 - 当前仓库内与 `Masamune II` 相关的代码、locale、规则文档和定向回归已经形成闭环；因此这里不再把它保留为 blocker，而是把它视为“由非 E2E 证据承担”的已闭环项。
 
@@ -27,10 +27,10 @@
 
 ### 1. Righteousness 对 Monk
 
-![Righteousness 对 Monk](../test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/samurai-righteousness-should-resolve-a-valid-branch-against-monk/09-samurai-righteousness-vs-monk.png)
+![Righteousness 对 Monk](../test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/samurai-righteousness-should-resolve-a-valid-branch-against-monk/09-samurai-righteousness-vs-monk.png)
 
 截图路径：
-- `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-righteousness-should-resolve-a-valid-branch-against-monk\09-samurai-righteousness-vs-monk.png`
+- `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\samurai-righteousness-should-resolve-a-valid-branch-against-monk\09-samurai-righteousness-vs-monk.png`
 
 审查结论：
 
@@ -41,10 +41,10 @@
 
 ### 2. Zanshin 对 Paladin
 
-![Zanshin 对 Paladin](../test-results/evidence-screenshots/dicethrone-watch-out-spotlight.e2e/samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin/10-samurai-zanshin-vs-paladin.png)
+![Zanshin 对 Paladin](../test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin/10-samurai-zanshin-vs-paladin.png)
 
 截图路径：
-- `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin\10-samurai-zanshin-vs-paladin.png`
+- `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin\10-samurai-zanshin-vs-paladin.png`
 
 审查结论：
 

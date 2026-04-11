@@ -20,7 +20,7 @@ import { TITAN_CARD_DEFS } from '../data/titans';
 import { getPlayerEffectivePowerOnBase, getRegisteredModifierIds, getTitanPowerContribution } from '../domain/ongoingModifiers';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { addPowerCounter, buildPlayerTargetOptions } from '../domain/abilityHelpers';
-import { fireTriggers, interceptEvent } from '../domain/ongoingEffects';
+import { collectTriggers, fireTriggers, interceptEvent } from '../domain/ongoingEffects';
 import { filterProtectedDestroyEvents, filterProtectedMoveEvents, filterProtectedReturnEvents, processAffectTriggers, processMoveTriggers, processReturnToHandTriggers } from '../domain/reducer';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { initAllAbilities } from '../abilities';
@@ -5037,6 +5037,92 @@ describe('smashup', () => {
 
         const interactions = getInteractionsFromMS(triggerResult.matchState!);
         expect(interactions.map(interaction => interaction.data?.sourceId)).toContain('titan_pirates_the_kraken_choose_minion');
+    });
+
+    it('大副先结算移动后，海怪克拉肯仍应保留替换基地进场交互', () => {
+        const core = makeState({
+            turnOrder: ['0', '1'],
+            currentPlayerIndex: 0,
+            bases: [
+                makeBase({
+                    defId: 'base_the_homeworld',
+                    minions: [makeMinion('pirate-on-score', 'pirate_first_mate', '0', 2)],
+                }),
+                makeBase('base_the_mothership'),
+                makeBase('base_factory_436-1337'),
+            ],
+            titans: [{
+                uid: 't-kraken-setaside',
+                defId: 'pirates_the_kraken',
+                faction: SMASHUP_FACTION_IDS.PIRATES,
+                ownerId: '0',
+                controllerId: '0',
+                powerCounters: 0,
+                talentUsed: false,
+                location: { zone: 'setaside' },
+            } satisfies TitanState],
+        });
+
+        const queued = collectTriggers(core, 'afterScoring', {
+            state: core,
+            matchState: makeMatchState(core),
+            playerId: '0',
+            baseIndex: 0,
+            rankings: [{ playerId: '0', power: 10, vp: 3 }],
+            random: FIXED_RANDOM,
+            now: 75,
+        });
+
+        expect(queued).toBeDefined();
+
+        const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+        const firstPrompt = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 75);
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+
+        const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+        const firstMateOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
+            const trigger = firstQueueById.get(option.value.triggerId) as any;
+            return trigger?.sourceDefId === 'pirate_first_mate';
+        }) ?? (firstPrompt!.state.sys.interaction.current as any).data.options[0];
+
+        const afterChooseFirstMateTrigger = runCommand(
+            firstPrompt!.state,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: firstMateOption.id } } as any,
+            FIXED_RANDOM,
+        );
+
+        const firstMatePrompt = getInteractionsFromMS(afterChooseFirstMateTrigger.finalState)[0] as any;
+        expect(firstMatePrompt?.data?.sourceId).toBe('pirate_first_mate_choose_base');
+
+        const moveMateOption = firstMatePrompt.data.options.find((option: any) => option.value?.baseIndex === 1)
+            ?? firstMatePrompt.data.options.find((option: any) => option.value?.baseIndex === 2)
+            ?? firstMatePrompt.data.options[0];
+
+        const afterMoveFirstMate = runCommand(
+            afterChooseFirstMateTrigger.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: moveMateOption.id } } as any,
+            FIXED_RANDOM,
+        );
+
+        let nextPrompt = getInteractionsFromMS(afterMoveFirstMate.finalState)[0] as any;
+        let stateAfterKrakenTrigger = afterMoveFirstMate.finalState;
+        if (nextPrompt?.data?.sourceId === 'reaction_queue_choose_next') {
+            const secondQueueById = new Map(stateAfterKrakenTrigger.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const krakenOption = nextPrompt.data.options.find((option: any) => {
+                const trigger = secondQueueById.get(option.value.triggerId) as any;
+                return trigger?.sourceDefId === 'pirates_the_kraken';
+            }) ?? nextPrompt.data.options[0];
+
+            const afterChooseKrakenTrigger = runCommand(
+                stateAfterKrakenTrigger,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: krakenOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            stateAfterKrakenTrigger = afterChooseKrakenTrigger.finalState;
+            nextPrompt = getInteractionsFromMS(stateAfterKrakenTrigger)[0] as any;
+        }
+
+        expect(nextPrompt?.data?.sourceId).toBe('titan_pirates_the_kraken_play_replacement');
     });
 
     it('海怪克拉肯的替换基地进场交互在补发计分后事件时会真正把泰坦落到新基地', () => {

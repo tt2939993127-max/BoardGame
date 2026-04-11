@@ -50,7 +50,7 @@ const effectKey = face === FACE.BOW
   - 将 `Watch Out` 特写用例改为断言 `bonusDie.effect.watchOut.bow`
 - `src/games/dicethrone/__tests__/moon_elf-behavior.test.ts`
   - 为 `bow / foot / moon` 三个分支补充 `BONUS_DIE_ROLLED.payload.effectKey` 断言
-- `e2e/dicethrone-watch-out-spotlight.e2e.ts`
+- `e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts`
   - 补充 UI 文案校验，要求特写文本与实际 `effectKey` 分支一致
   - 同时断言不能再回退到通用 key
 
@@ -61,7 +61,7 @@ const effectKey = face === FACE.BOW
 ```bash
 npm run typecheck
 npx vitest run src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx src/games/dicethrone/__tests__/moon_elf-behavior.test.ts
-PW_USE_DEV_SERVERS=true npx playwright test e2e/dicethrone-watch-out-spotlight.e2e.ts
+PW_USE_DEV_SERVERS=true npx playwright test e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts
 ```
 
 结果：全部通过。

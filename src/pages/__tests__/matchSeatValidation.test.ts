@@ -11,6 +11,7 @@ import { registerGameAiRuntime, resolveNextAiAction } from '../../engine/ai';
 import { buildAiProgressMarker, LocalGameProvider, shouldRetryLocalAiAttemptAfterDispatch, useGameClient } from '../../engine/transport/react';
 import {
     applyAiAutoRecoveryRejection,
+    resolveForceAdvancePhaseAfterRecovery,
     resolveForceEndTurnForStalledAi,
     resolveForceSkippableHiddenAiInteraction,
     submitOnlineAiResolution,
@@ -1233,9 +1234,9 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('hidden-interaction');
+        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'SYS_INTERACTION_RESPOND', payload: { optionId: 'skip' } },
-            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
@@ -1271,9 +1272,9 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('visible-interaction');
+        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'SYS_INTERACTION_CANCEL', payload: {} },
-            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
@@ -1303,9 +1304,9 @@ describe('resolveForceEndTurnForStalledAi', () => {
         });
 
         expect(candidate?.reason).toBe('response-window');
+        expect(candidate?.requiresConfirmedAdvancePhase).toBe(true);
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'RESPONSE_PASS', payload: {} },
-            { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });
 
@@ -1335,6 +1336,39 @@ describe('resolveForceEndTurnForStalledAi', () => {
 
         expect(candidate?.reason).toBe('active-turn');
         expect(candidate?.resolution.action.commands).toEqual([
+            { type: 'ADVANCE_PHASE', payload: {} },
+        ]);
+    });
+
+    it('交互收口确认后，仅在 AI 仍持有回合且界面已解锁时才补发 ADVANCE_PHASE', () => {
+        const followUp = resolveForceAdvancePhaseAfterRecovery({
+            authoritativeState: {
+                core: {
+                    activePlayerId: '1',
+                },
+                sys: {
+                    interaction: {
+                        current: undefined,
+                        queue: [],
+                        isBlocked: false,
+                    },
+                    responseWindow: {
+                        current: undefined,
+                    },
+                    turnNumber: 3,
+                    phase: 'playCards',
+                    eventStream: {
+                        nextId: 12,
+                    },
+                },
+            } as MatchState<unknown>,
+            seatControllers: {
+                '1': { type: 'local-ai' },
+            },
+            playerId: '1',
+        });
+
+        expect(followUp?.action.commands).toEqual([
             { type: 'ADVANCE_PHASE', payload: {} },
         ]);
     });

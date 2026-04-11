@@ -159,6 +159,8 @@ export interface TriggerContext {
     affectType?: AffectType;
     /** 基地计分排名（仅 afterScoring） */
     rankings?: { playerId: PlayerId; power: number; vp: number }[];
+    /** 触发瞬间该基地上仍在场的控制者快照（供 afterScoring 触发器在后续交互链中使用） */
+    triggerBaseControllersAtTrigger?: PlayerId[];
     /** 埋葬/翻开相关卡牌 UID */
     buriedCardUid?: string;
     /** 埋葬/翻开相关卡牌 defId */
@@ -389,6 +391,7 @@ function buildTriggerId(
 }
 
 function createTriggerInstance(
+    state: SmashUpCore,
     entry: TriggerEntry,
     timing: TitanAwareTriggerTiming,
     now: number,
@@ -420,6 +423,9 @@ function createTriggerInstance(
         reason: ctx.reason,
         affectType: ctx.affectType,
         rankings: ctx.rankings,
+        triggerBaseControllersAtTrigger: ctx.baseIndex === undefined
+            ? undefined
+            : Array.from(new Set((state.bases[ctx.baseIndex]?.minions ?? []).map(minion => minion.controller))),
         buriedCardUid: (ctx as any).buriedCardUid,
         buriedCardDefId: (ctx as any).buriedCardDefId,
         buriedCardControllerId: (ctx as any).buriedCardControllerId,
@@ -478,7 +484,7 @@ export function collectTriggers(
         if (entry.phase === 'replacement') continue;
         if (entry.global) {
             if (!isSourceInZones(state, entry.sourceDefId, entry.globalZones ?? ['hand', 'discard'])) continue;
-            triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, {}, ctx));
+            triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, {}, ctx));
             continue;
         }
 
@@ -494,7 +500,7 @@ export function collectTriggers(
             for (const located of locatedSources) {
                 if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
                 if (shouldSkipTriggerInstance(state, entry, timing, located)) continue;
-                triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
+                triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, located, ctx));
             }
             continue;
         }
@@ -502,7 +508,7 @@ export function collectTriggers(
         const located = locatedSources[0];
         if (!isTriggerSourceEligible(entry, timing, located, ctx.baseIndex)) continue;
         if (shouldSkipTriggerInstance(state, entry, timing, located)) continue;
-        triggers.push(createTriggerInstance(entry, timing, now, triggers.length, pid, located, ctx));
+        triggers.push(createTriggerInstance(state, entry, timing, now, triggers.length, pid, located, ctx));
     }
 
     if (triggers.length === 0) return undefined;

@@ -568,7 +568,7 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {}, e
         const playwrightArgs = ['test'];
 
         if (mode === 'critical') {
-            playwrightArgs.push('e2e/smashup.e2e.ts', 'e2e/tictactoe-rematch.e2e.ts');
+            playwrightArgs.push('e2e/smashup/smashup.e2e.ts', 'e2e/tictactoe/tictactoe-rematch.e2e.ts');
         }
 
         if (mode === 'parallel') {

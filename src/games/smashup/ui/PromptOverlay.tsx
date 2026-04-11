@@ -87,9 +87,18 @@ function extractContextPreview(prompt: any): CardPreviewRef | undefined {
     return buildRendererPreviewRef(ctx.defId);
 }
 
+function translateRuntimeKey(
+    t: (key: string, opts?: Record<string, unknown>) => string,
+    key: string,
+    opts?: Record<string, unknown>,
+): string {
+    const runtimeKey = { value: key };
+    return t(runtimeKey.value, opts);
+}
+
 /** 解析文本中嵌入的 i18n key（如 cards.xxx.name / cards.xxx.abilityText） */
 export function resolveI18nKeys(text: string, t: (key: string, opts?: any) => string): string {
-    const directResolved = t(text, { defaultValue: '' });
+    const directResolved = translateRuntimeKey(t, text, { defaultValue: '' });
     if (directResolved && directResolved !== text) {
         return directResolved;
     }
@@ -102,12 +111,12 @@ export function resolveI18nKeys(text: string, t: (key: string, opts?: any) => st
             const def = defId ? (getCardDef(defId) ?? getBaseDef(defId)) : undefined;
 
             if (def && field === 'name') {
-                const resolvedName = resolveCardName(def, (localeKey: string) => t(localeKey, { defaultValue: localeKey }));
+                const resolvedName = resolveCardName(def, (localeKey: string) => translateRuntimeKey(t, localeKey, { defaultValue: localeKey }));
                 return resolvedName || key;
             }
         }
 
-        const resolved = t(key, { defaultValue: '' });
+        const resolved = translateRuntimeKey(t, key, { defaultValue: '' });
         return resolved || key;
     });
 }

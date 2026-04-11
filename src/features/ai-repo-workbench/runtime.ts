@@ -303,7 +303,7 @@ const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefi
 export const AI_REPO_WORKBENCH_STORAGE_KEY = 'ai-repo-workbench:mvp-journal';
 export const AI_REPO_WORKBENCH_REPO_PATH = (metaEnv.VITE_AI_REPO_WORKBENCH_DEFAULT_PROJECT_PATH as string | undefined)
     || 'D:\\gongzuo\\webgame\\BoardGame-wt-ai-repo-workbench';
-const AI_REPO_WORKBENCH_E2E_ASSET_DIR = `${AI_REPO_WORKBENCH_REPO_PATH}\\evidence\\assets\\ai-repo-workbench-e2e`;
+const AI_REPO_WORKBENCH_E2E_ASSET_DIR = `${AI_REPO_WORKBENCH_REPO_PATH}\\evidence\\_shared\\assets\\ai-repo-workbench-e2e`;
 const AI_REPO_WORKBENCH_E2E_ASSET_ROUTE = '/devtools/ai-repo-workbench/assets/e2e';
 const AI_REPO_WORKBENCH_BRANCH = (metaEnv.VITE_AI_REPO_WORKBENCH_DEFAULT_BRANCH as string | undefined)
     || 'feat/ai-repo-workbench';

@@ -17,7 +17,7 @@
 
 ### 2. 前端界面
 
-- 文件：`e2e/admin-feedback.e2e.ts`
+- 文件：`e2e/smashup/admin-feedback.e2e.ts`
 - 已验证的界面要点：
   - 开发者侧边栏出现“反馈管理”入口
   - 反馈页标题旁显示“只读”标记

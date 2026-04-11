@@ -1635,13 +1635,20 @@ function buildCthulhuTitanCounterEvents(
     return undefined;
 }
 
-function getEligibleKrakenSetAsideTitans(state: AbilityContext['state'], scoringBaseIndex: number) {
+function getEligibleKrakenSetAsideTitans(
+    state: AbilityContext['state'],
+    scoringBaseIndex: number,
+    triggerBaseControllersAtTrigger?: readonly string[],
+) {
     const base = state.bases[scoringBaseIndex];
     if (!base) return [];
+    const eligibleControllers = triggerBaseControllersAtTrigger?.length
+        ? new Set(triggerBaseControllersAtTrigger)
+        : new Set(base.minions.map(minion => minion.controller));
     return (state.titans ?? []).filter(titan =>
         titan.defId === 'pirates_the_kraken'
         && titan.location.zone === 'setaside'
-        && base.minions.some(minion => minion.controller === titan.ownerId)
+        && eligibleControllers.has(titan.ownerId)
         && !getTitanByController(state, titan.ownerId),
     );
 }
@@ -2074,13 +2081,14 @@ function piratesTheKrakenAfterScoring(ctx: {
     state: AbilityContext['state'];
     matchState?: AbilityContext['matchState'];
     baseIndex?: number;
+    triggerBaseControllersAtTrigger?: string[];
     now: number;
 }): AbilityResult | SmashUpEvent[] {
     if (ctx.baseIndex === undefined || !ctx.matchState) return [];
 
     let nextMatchState = ctx.matchState;
 
-    for (const titan of getEligibleKrakenSetAsideTitans(ctx.state, ctx.baseIndex)) {
+    for (const titan of getEligibleKrakenSetAsideTitans(ctx.state, ctx.baseIndex, ctx.triggerBaseControllersAtTrigger)) {
         const interaction = createSimpleChoice(
             `titan_pirates_the_kraken_play_replacement_${titan.uid}_${ctx.now}`,
             titan.ownerId,

@@ -8,11 +8,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { registerGameAiRuntime, resolveNextLocalAiAction } from '../../../engine/ai';
+import { asSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import { smashUpFlowHooks } from '../domain/index';
 import { buildSmashUpAiLegalActions, smashUpAiRuntime } from '../ai';
 import type { MatchState } from '../../../core/types';
 import type { SmashUpCore, PlayerState, BaseInPlay, MinionOnBase } from '../types';
-import { runCommand } from './testRunner';
+import { defaultTestRandom, runCommand } from './testRunner';
 import { SU_COMMANDS } from '../domain/types';
 import { initAllAbilities } from '../abilities';
 import { buildMinionTargetOptions, buildPlayerTargetOptions } from '../domain/abilityHelpers';
@@ -1266,6 +1267,67 @@ describe('scoreBases 阶段自动推进', () => {
         expect(resolution?.action.kind).toBe('interaction-choice');
         expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
             .toBe(enemyAction?.metadata?.optionId);
+    });
+
+    it('multi_base_scoring 交互应注入基地评分 hints，且 AI 优先选择收益更高的基地', async () => {
+        registerGameAiRuntime(smashUpAiRuntime);
+
+        const core = makeMinimalCore({
+            bases: [
+                makeBase('base_pirate_cove', [
+                    makeMinion('0', 'robot_warbot', 4),
+                    makeMinion('1', 'pirate_first_mate', 2),
+                ]),
+                makeBase('base_egg_chamber', [
+                    makeMinion('0', 'robot_microbot_alpha', 1),
+                    makeMinion('1', 'pirate_king', 5),
+                ]),
+            ],
+            scoringEligibleBaseIndices: [0, 1],
+        });
+
+        const state: MatchState<SmashUpCore> = {
+            core,
+            sys: {
+                phase: 'scoreBases',
+                turnNumber: 1,
+                interaction: { current: null, queue: [] },
+                responseWindow: { current: null, history: [] },
+                flowHalted: false,
+            } as any,
+        };
+
+        const exitResult = smashUpFlowHooks.onPhaseExit?.({
+            state,
+            from: 'scoreBases',
+            command: { type: 'ADVANCE_PHASE', playerId: '0', payload: {}, timestamp: 1 } as any,
+            random: defaultTestRandom,
+        });
+
+        const updatedState = Array.isArray(exitResult)
+            ? state
+            : ((exitResult as { updatedState?: MatchState<SmashUpCore> } | undefined)?.updatedState ?? state);
+
+        const choice = asSimpleChoice(updatedState.sys.interaction?.current);
+        expect(choice?.sourceId).toBe('multi_base_scoring');
+
+        const option0 = choice?.options.find((option: any) => option.value?.baseIndex === 0);
+        const option1 = choice?.options.find((option: any) => option.value?.baseIndex === 1);
+        expect(option0?._ai).toBeDefined();
+        expect(option1?._ai).toBeDefined();
+        expect((option0?._ai?.estimatedSwing ?? 0)).toBeGreaterThan(option1?._ai?.estimatedSwing ?? 0);
+
+        const resolution = await resolveNextLocalAiAction({
+            engineConfig: smashUpAiEngineConfig,
+            state: updatedState as any,
+            matchId: 'smashup-ai-multi-base-scoring',
+            seatControllers: { '0': { type: 'local-ai' } },
+        });
+
+        expect(resolution?.playerId).toBe('0');
+        expect(resolution?.action.kind).toBe('interaction-choice');
+        expect((resolution?.action.commands[0]?.payload as { optionId?: string } | undefined)?.optionId)
+            .toBe(option0?.id);
     });
 
     it('两个基地都接近爆点时，AI 应优先把随从投到自己能拿第一的基地', async () => {

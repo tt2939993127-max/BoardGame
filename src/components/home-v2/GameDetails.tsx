@@ -43,6 +43,10 @@ function getRoomTitle(matchID: string, roomName?: string) {
     return roomName?.trim() || `房间 ${matchID.slice(0, 4).toUpperCase()}`;
 }
 
+function showLockedRoomToast(toast: ReturnType<typeof useToast>) {
+    toast.warning('密码房间暂时请从原大厅进入。');
+}
+
 function getRoomSeatLine(
     match: {
         players: Array<{ name?: string }>;
@@ -322,7 +326,7 @@ export const Right = ({ game }: RightProps) => {
         try {
             const summary = matches.find((item) => item.matchID === matchID);
             if (summary?.isLocked) {
-                toast.warning({ kind: 'text', text: '密码房间暂时请从原大厅进入。' });
+                showLockedRoomToast(toast);
                 return;
             }
 

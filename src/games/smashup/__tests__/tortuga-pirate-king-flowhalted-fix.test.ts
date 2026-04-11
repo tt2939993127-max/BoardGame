@@ -7,7 +7,7 @@
  * 修复: onPhaseExit('scoreBases') 的 flowHalted 守卫增加交互状态检查:
  * `if (state.sys.flowHalted && state.sys.interaction.current)`
  * 
- * 相关文档: docs/bugs/smashup-tortuga-pirate-king-卡住-2026-02-28-16-53.md
+ * 相关文档: docs/bugs/smashup/smashup-tortuga-pirate-king-卡住-2026-02-28-16-53.md
  */
 
 import { describe, it, expect } from 'vitest';

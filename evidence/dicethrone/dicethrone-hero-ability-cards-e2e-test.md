@@ -21,7 +21,7 @@
 ### 1. 枪手手牌预览显示整张复合物理牌
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\preview-gunslinger-hand.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\preview-gunslinger-hand.png`
 
 我实际看到：
 - 手牌中的 `左轮速射 II`、`掩护射击 II`、`对决 II` 都显示完整卡面。
@@ -34,7 +34,7 @@
 ### 2. 武士手牌预览显示整张复合物理牌
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\preview-samurai-hand.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\preview-samurai-hand.png`
 
 我实际看到：
 - 手牌中的 `肃穆之仪 II`、`武道 II`、`正宗 II` 都显示完整卡面。
@@ -47,7 +47,7 @@
 ### 3. 枪手打出 `死亡之眼 II` 后进入玩家面板，不进弃牌堆
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\gunslinger-upgrade-deadeye-after-play.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\gunslinger-upgrade-deadeye-after-play.png`
 
 我实际看到：
 - 玩家面板右上技能槽叠加的是整张 `死亡之眼 II` 物理牌，且下半区 `执法者` 仍可见。
@@ -60,7 +60,7 @@
 ### 4. 枪手 ActionLog 正确记录“打出升级卡：死亡之眼 II”
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\gunslinger-upgrade-deadeye-action-log.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\gunslinger-upgrade-deadeye-action-log.png`
 
 我实际看到：
 - 日志里有 `打出升级卡死亡之眼 II`。
@@ -73,7 +73,7 @@
 ### 5. 枪手 `死亡之眼 II` 主效果结算为 8 点不可防御伤害
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\gunslinger-deadeye-attack-resolved.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\gunslinger-deadeye-attack-resolved.png`
 
 我实际看到：
 - 对手 HP 从 `50` 变成 `42`。
@@ -86,7 +86,7 @@
 ### 6. 枪手 `执法者` 作为技能变体发动，而不是独立手牌打出
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\gunslinger-the-law-action-log.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\gunslinger-the-law-action-log.png`
 
 我实际看到：
 - 日志里明确写的是 `发动技能：执法者`，不是 `打出卡牌执法者`。
@@ -99,7 +99,7 @@
 ### 7. 枪手 `枪托击打` 作为技能变体发动，而不是独立手牌打出
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\gunslinger-pistol-whip-action-log.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\gunslinger-pistol-whip-action-log.png`
 
 我实际看到：
 - 日志里明确写的是 `发动技能：枪托击打`，不是 `打出卡牌枪托击打`。
@@ -112,7 +112,7 @@
 ### 8. 枪手复合升级主链结束后，玩家面板保留整张升级牌
 
 截图：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone-hero-ability-cards-e2e\gunslinger-main-cards-end-to-end.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-hero-ability-cards-e2e\gunslinger-main-cards-end-to-end.png`
 
 我实际看到：
 - `死亡之眼 II` 仍以整张复合物理牌形式留在技能槽。
@@ -125,7 +125,7 @@
 ## 自动化验证
 
 已实际运行并通过：
-- `npm run test:e2e:ci -- e2e/temp-dicethrone-ability-atlas-regression.e2e.ts`
+- `npm run test:e2e:ci -- e2e/dicethrone/temp-dicethrone-ability-atlas-regression.e2e.ts`
 - `npx vitest run --config vitest.config.audit.ts --configLoader native src/games/dicethrone/__tests__/card-cross-audit.test.ts`
 - `npx vitest run src/games/dicethrone/__tests__/cross-hero.test.ts -t "执法者|枪托击打|标记目标|左轮速射应造成 8 点伤害|masamune ii power up"`
 - `npx vitest run src/games/dicethrone/__tests__/basic-commands-coverage.test.ts`

@@ -79,10 +79,10 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
-const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1280;
-const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.08;
+const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1920;
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
-const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.05;
+const PHONE_LANDSCAPE_MAP_SIDE_RATIO = 0.067;
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
@@ -99,9 +99,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const isLandscapeRuntimeViewport = viewport.width > viewport.height;
   // 手机横屏高度过短，默认完整塞入整张地图会让主战区比 PC 明显更瘦。
   // 这里仅调整移动横屏的默认 framing，地图本身仍保持等比，且保留拖拽/双指缩放。
-  const shouldUseMobileLandscapeMapFraming = isMobileViewport && isLandscapeRuntimeViewport;
-  const mapInitialScale = shouldUseMobileLandscapeMapFraming ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
-  const mapSideRatio = shouldUseMobileLandscapeMapFraming
+  const isPhoneLandscapeViewport = isMobileViewport && isLandscapeRuntimeViewport;
+  const mapInitialScale = MOBILE_LANDSCAPE_MAP_INITIAL_SCALE;
+  const mapSideRatio = isPhoneLandscapeViewport
     ? PHONE_LANDSCAPE_MAP_SIDE_RATIO
     : DEFAULT_MAP_SIDE_RATIO;
   const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
@@ -115,19 +115,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     height: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.004)`,
   };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
-  const isPhoneLandscapeViewport = shouldUseMobileLandscapeMapFraming;
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
   const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
-  const phaseTrackerClass = isPhoneLandscapeViewport
-    ? 'bg-slate-900/46 backdrop-blur-sm px-2.5 py-2 rounded-lg border border-slate-700/20 min-w-[6.75rem] max-w-[6.75rem]'
-    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
-  const phaseTrackerWrapperClass = isPhoneLandscapeViewport
-    ? 'absolute top-[35%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
-    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardShellVars = isPhoneLandscapeViewport
     ? {
-      '--sw-hand-card-width-ratio': '0.105',
+      '--sw-hand-card-width-ratio': '0.1067',
     } as React.CSSProperties
     : undefined;
 
@@ -1086,7 +1081,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
                     interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
-                    compactLayout={isPhoneLandscapeViewport}
+                    compactLayout={false}
                   />
                   </div>
                 </div>

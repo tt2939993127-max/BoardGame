@@ -264,7 +264,7 @@ const factionCards = opponentPlayer.hand.filter(card => card.faction === selecte
 
 ### 4.1 测试文件
 
-**测试文件**: `e2e/cardia-deck1-card09-ambusher.e2e.ts`
+**测试文件**: `e2e/cardia/cardia-deck1-card09-ambusher.e2e.ts`
 
 **测试模式**: ✅ 联机模式 + 状态注入
 
@@ -406,7 +406,7 @@ const factionCards = opponentPlayer.hand.filter(card => card.faction === selecte
 ### 建议 1: 补充"对手没有该派系手牌"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia-deck1-card09-ambusher.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia/cardia-deck1-card09-ambusher.e2e.ts` 中新增测试用例
 2. 测试场景：
    - P1 打出伏击者（影响力9），P2 打出高影响力卡牌
    - P2 手牌只有 Guild 和 Dynasty 派系（没有 Academy）
@@ -422,7 +422,7 @@ const factionCards = opponentPlayer.hand.filter(card => card.faction === selecte
 ### 建议 2: 补充"对手有多张该派系手牌"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia-deck1-card09-ambusher.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia/cardia-deck1-card09-ambusher.e2e.ts` 中新增测试用例
 2. 测试场景：
    - P1 打出伏击者（影响力9），P2 打出高影响力卡牌
    - P2 手牌有 3 张 Academy 派系卡牌
@@ -438,7 +438,7 @@ const factionCards = opponentPlayer.hand.filter(card => card.faction === selecte
 ### 建议 3: 补充"选择不同派系"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia-deck1-card09-ambusher.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia/cardia-deck1-card09-ambusher.e2e.ts` 中新增测试用例
 2. 测试场景：
    - P1 打出伏击者（影响力9），P2 打出高影响力卡牌
    - P2 手牌有 Academy 和 Guild 派系卡牌
@@ -459,7 +459,7 @@ const factionCards = opponentPlayer.hand.filter(card => card.faction === selecte
 - **能力定义**: `src/games/cardia/domain/abilityRegistry.ts`
 - **能力执行器**: `src/games/cardia/domain/abilities/group7-faction.ts`
 - **交互处理器注册**: `src/games/cardia/game.ts`
-- **E2E 测试**: `e2e/cardia-deck1-card09-ambusher.e2e.ts`
+- **E2E 测试**: `e2e/cardia/cardia-deck1-card09-ambusher.e2e.ts`
 - **i18n 文案**: `public/locales/zh-CN/game-cardia.json`
 
 ### B. 关键代码片段

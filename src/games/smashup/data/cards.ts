@@ -1353,16 +1353,13 @@ export function getBaseDef(defId: string): BaseCardDef | undefined {
     return _baseRegistry.get(defId);
 }
 
-function resolveLocaleValue(t: (key: string) => string, keys: string[]): string | undefined {
-    for (const key of keys) {
-        const resolved = t(key);
-        if (resolved && resolved !== key) return resolved;
-    }
-    return undefined;
-}
-
 function getPodFallbackKeyId(defId: string): string | undefined {
     return defId.endsWith('_pod') ? defId.replace(/_pod$/, '') : undefined;
+}
+
+function translateRuntimeKey(t: (key: string) => string, key: string): string {
+    const runtimeKey = { value: key };
+    return t(runtimeKey.value);
 }
 
 /**
@@ -1375,23 +1372,24 @@ function getPodFallbackKeyId(defId: string): string | undefined {
 export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key: string) => string): string {
     if (!def) return '';
     // 1) 优先尝试完整 ID（POD 版应优先命中 cards.xxx_pod.name）
-    const primaryKey = `cards.${def.id}.name`;
-    const resolvedPrimary = t(primaryKey);
-    if (resolvedPrimary && resolvedPrimary !== primaryKey) return resolvedPrimary;
+    const resolvedPrimary = t(`cards.${def.id}.name`);
+    if (resolvedPrimary && resolvedPrimary !== `cards.${def.id}.name`) return resolvedPrimary;
 
     // 2) 若未命中且是 POD 版，回退到基础版本 cards.xxx.name
     const fallbackLocaleKeyId = getPodFallbackKeyId(def.id);
     if (fallbackLocaleKeyId) {
-        const fallbackKey = `cards.${fallbackLocaleKeyId}.name`;
-        const resolvedFallback = t(fallbackKey);
-        if (resolvedFallback && resolvedFallback !== fallbackKey) return resolvedFallback;
+        const resolvedFallback = t(`cards.${fallbackLocaleKeyId}.name`);
+        if (resolvedFallback && resolvedFallback !== `cards.${fallbackLocaleKeyId}.name`) return resolvedFallback;
     }
 
     // 3) 若 def.name 已是 i18n key，则继续尝试；否则用 cards.<baseId>.name
     const baseId = def.id.replace(/_pod$/, '');
-    const key = def.name.startsWith('cards.') ? def.name : `cards.${baseId}.name`;
-    const resolved = t(key);
-    return (resolved && resolved !== key) ? resolved : def.name;
+    if (def.name.startsWith('cards.')) {
+        const resolved = translateRuntimeKey(t, def.name);
+        return (resolved && resolved !== def.name) ? resolved : def.name;
+    }
+    const resolved = t(`cards.${baseId}.name`);
+    return (resolved && resolved !== `cards.${baseId}.name`) ? resolved : def.name;
 }
 
 /**
@@ -1403,34 +1401,30 @@ export function resolveCardName(def: CardDef | BaseCardDef | undefined, t: (key:
  */
 export function resolveCardText(def: CardDef | BaseCardDef | undefined, t: (key: string) => string): string {
     if (!def) return '';
-    const textField = ('type' in def && (def.type === 'action' || def.type === 'titan')) ? 'effectText' : 'abilityText';
-    const localeKeys = [`cards.${def.id}.${textField}`];
     const fallbackLocaleKeyId = getPodFallbackKeyId(def.id);
-    if (fallbackLocaleKeyId) {
-        localeKeys.push(`cards.${fallbackLocaleKeyId}.${textField}`);
+    const usesEffectText = 'type' in def && (def.type === 'action' || def.type === 'titan');
+
+    if (usesEffectText) {
+        const resolvedPrimary = t(`cards.${def.id}.effectText`);
+        if (resolvedPrimary && resolvedPrimary !== `cards.${def.id}.effectText`) return resolvedPrimary;
+
+        if (fallbackLocaleKeyId) {
+            const resolvedFallback = t(`cards.${fallbackLocaleKeyId}.effectText`);
+            if (resolvedFallback && resolvedFallback !== `cards.${fallbackLocaleKeyId}.effectText`) return resolvedFallback;
+        }
+    } else {
+        const resolvedPrimary = t(`cards.${def.id}.abilityText`);
+        if (resolvedPrimary && resolvedPrimary !== `cards.${def.id}.abilityText`) return resolvedPrimary;
+
+        if (fallbackLocaleKeyId) {
+            const resolvedFallback = t(`cards.${fallbackLocaleKeyId}.abilityText`);
+            if (resolvedFallback && resolvedFallback !== `cards.${fallbackLocaleKeyId}.abilityText`) return resolvedFallback;
+        }
     }
-
-    const localeValue = resolveLocaleValue(t, localeKeys);
-    if (localeValue) return localeValue;
-    // 随从用 abilityText，行动卡用 effectText，基地用 abilityText
-    const field = ('type' in def && (def.type === 'action' || def.type === 'titan')) ? 'effectText' : 'abilityText';
-
-    // 1. 优先尝试完整 ID (如果是 POD 版，这将匹配 cards.xxx_pod.xxxText)
-    const podKey = `cards.${def.id}.${field}`;
-    const resolvedPod = t(podKey);
-    if (resolvedPod && resolvedPod !== podKey) return resolvedPod;
-
-    // 2. 如果未命中，且 ID 含有 _pod，尝试去掉后缀的基础版本
-    const keyId = def.id.replace(/_pod$/, '');
-    const key = `cards.${keyId}.${field}`;
-    const resolved = t(key);
-
-    // 如果找到了翻译，返回翻译
-    if (resolved && resolved !== key) return resolved;
 
     // 未命中则查找原始对象中的属性 fallback
     // @ts-ignore
-    const fallbackAttr = def[field];
+    const fallbackAttr = def[usesEffectText ? 'effectText' : 'abilityText'];
     return typeof fallbackAttr === 'string' ? fallbackAttr : '';
 }
 

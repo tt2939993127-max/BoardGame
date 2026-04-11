@@ -30,7 +30,7 @@ node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\00-pc-reference-board.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\00-pc-reference-board.png`
 
 采集分辨率：
 
@@ -50,7 +50,7 @@ node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\10-phone-landscape-board.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\10-phone-landscape-board.png`
 
 采集分辨率：
 
@@ -70,7 +70,7 @@ node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\20-tablet-landscape-board.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\20-tablet-landscape-board.png`
 
 我实际看到：
 
@@ -85,7 +85,7 @@ node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\12-phone-phase-detail-open.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\12-phone-phase-detail-open.png`
 
 我实际看到：
 
@@ -101,7 +101,7 @@ node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长
 
 完整路径：
 
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\13-phone-action-log-open.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\summonerwars\summonerwars.e2e\移动横屏：长按放大与阶段说明在手机和平板都可达\13-phone-action-log-open.png`
 
 我实际看到：
 
@@ -134,7 +134,7 @@ node scripts/infra/run-e2e-single.mjs ci summonerwars.e2e.ts "移动横屏：长
   - 手机横屏下同步压缩手牌宽度并抬高阶段条锚点，让阶段说明与右下控制区重新分层。
 - `D:\gongzuo\webgame\BoardGame\src\games\summonerwars\ui\PhaseTracker.tsx`
   - 触屏阶段说明面板改为向左浮出，不再向下挤压到底部手牌与结束阶段按钮区域。
-- `D:\gongzuo\webgame\BoardGame\e2e\summonerwars.e2e.ts`
+- `D:\gongzuo\webgame\BoardGame\e2e\summonerwars\summonerwars.e2e.ts`
   - 补拍 `00-pc-reference-board.png`
   - `PC` 参考视口固定为 `1920x1080`
   - 手机横屏参考视口固定为 `936x432`，对应真实设备基线 `2340x1080`

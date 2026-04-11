@@ -9,8 +9,8 @@
 - 项目内默认优先通过 `.windsurf/skills/data-entry-workflow/SKILL.md` 进入录入流程。
 - 这个 skill 只负责通用门禁和 workflow 路由，不替代本文件。
 - 目前已接入的专用 workflow：
-  - `docs/workflows/dicethrone-hero-intake.md`
-  - `docs/workflows/smashup-faction-intake.md`
+  - `docs/games/dicethrone/workflows/dicethrone-hero-intake.md`
+  - `docs/games/smashup/workflows/smashup-faction-intake.md`
 
 ## 一、通用原则
 

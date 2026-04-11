@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import type { SmashUpCore, SmashUpEvent, TriggerInstance } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { makeMatchState, makeMinion, makeState, makeBase } from './helpers';
+import { buildSmashUpAiLegalActions } from '../ai';
+import { scoreAiHints } from '../../../engine/ai';
 import { clearOngoingEffectRegistry, registerTrigger, collectTriggers } from '../domain/ongoingEffects';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { getInteractionHandler, clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
@@ -166,6 +168,80 @@ describe('Reaction queue ordering (Wiki-style)', () => {
     expect(triggers.map(t => t.sourceCardUid)).toEqual(['a1', 'a2']);
     expect(new Set(triggers.map(t => t.id)).size).toBe(2);
     expect(triggers.every(t => t.sourceBaseIndex === 0)).toBe(true);
+  });
+
+  it('reaction queue 选项会附带 AI hint，且优先己方触发', () => {
+    const triggerSelf = {
+      id: 'afterScoring:self_trigger:0:0',
+      timing: 'afterScoring',
+      sourceDefId: 'test_source_self',
+      sourceControllerId: '0',
+      sourceBaseIndex: 0,
+      mandatory: true,
+      ownerPlayerId: '0',
+      witnessRequirement: 'inPlayAtTriggerTime',
+      witnessed: true,
+      baseIndex: 0,
+      rankings: [
+        { playerId: '0', power: 10, vp: 3 },
+        { playerId: '1', power: 6, vp: 2 },
+      ],
+    } as TriggerInstance;
+
+    const triggerEnemy = {
+      id: 'afterScoring:enemy_trigger:0:0',
+      timing: 'afterScoring',
+      sourceDefId: 'test_source_enemy',
+      sourceControllerId: '1',
+      sourceBaseIndex: 0,
+      mandatory: true,
+      ownerPlayerId: '1',
+      witnessRequirement: 'inPlayAtTriggerTime',
+      witnessed: true,
+      baseIndex: 0,
+      rankings: [
+        { playerId: '1', power: 11, vp: 3 },
+        { playerId: '0', power: 6, vp: 1 },
+      ],
+    } as TriggerInstance;
+
+    const core = baseCore({
+      triggerQueue: [triggerSelf, triggerEnemy],
+    });
+    const ms0 = makeMatchState(core);
+    const rq = maybeResolveReactionQueue(
+      ms0,
+      { shuffle: (a: any[]) => a, random: () => 0.5, d: () => 1, range: (m: number) => m } as any,
+      1,
+    );
+    expect(rq).toBeDefined();
+
+    const interaction = rq!.state.sys.interaction.current as any;
+    const selfOption = interaction.data.options.find((o: any) => o.value?.triggerId === triggerSelf.id);
+    const enemyOption = interaction.data.options.find((o: any) => o.value?.triggerId === triggerEnemy.id);
+
+    expect(selfOption?._ai).toBeDefined();
+    expect(enemyOption?._ai).toBeDefined();
+
+    const actions = buildSmashUpAiLegalActions({
+      playerId: '0',
+      state: rq!.state as any,
+    });
+
+    const findAction = (triggerId: string) => actions.find((action) => {
+      const payload = (action.commands[0] as any)?.payload;
+      return payload?.mergedValue?.triggerId === triggerId;
+    });
+
+    const selfAction = findAction(triggerSelf.id);
+    const enemyAction = findAction(triggerEnemy.id);
+
+    expect(selfAction).toBeDefined();
+    expect(enemyAction).toBeDefined();
+
+    const selfScore = scoreAiHints(selfAction?.aiHints ?? []);
+    const enemyScore = scoreAiHints(enemyAction?.aiHints ?? []);
+    expect(selfScore).toBeGreaterThan(enemyScore);
   });
 });
 

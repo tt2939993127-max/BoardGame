@@ -44,6 +44,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 - **现状更新**：Codex 现已支持多 Agent / 多子代理并行；因此在满足下列条件时，允许把一个复杂任务拆成多个并行执行槽位，而不是强制单线程串行。
 - **使用授权口径**：默认允许按需使用子代理，无需用户逐次明确许可；若当前运行环境/平台规则要求显式授权，则以系统规则为准。
+- **长期默认授权（补充）**：允许主 agent 按需派生子 agent 进行代码分析/设计/实现/修复/测试/审查；子 agent **必须**使用与主 agent 相同模型配置（`gpt-5.4` + `high`）。若用户当轮明确禁止，则以当轮为准。
 - **允许并行的典型场景**：
   - 多个子任务之间**代码改动面天然隔离**（不同 worktree、不同目录、不同游戏、不同文件簇）。
   - 任务属于**批量但彼此独立**的工作，如多条互不冲突的 E2E rewrite、多个互不共享代码面的 review/fix、多个可独立验证的文档/数据修订。
@@ -116,7 +117,7 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 #### E2E 测试强制要求（UI 交互必须用 E2E）
 1. **UI 交互必须用 E2E**：必须使用三板斧（新框架 + 专用测试模式 + 状态注入）；UI 交互、多玩家协作、动画特效都不能用单元测试代替。
 2. **必须实际运行并通过**：AI 编写后立即运行 E2E；单文件/单用例优先用 `npm run test:e2e:ci:file -- <测试文件名> "<用例名>"`，整文件复跑用 `npm run test:e2e:ci -- <测试文件名>`，禁止交给用户。
-3. **必须实际打开截图验收**：优先看 `test-results/evidence-screenshots/`，失败用例再补看 `test-results/playwright-artifacts/`；验收标准不是“页面出现了”，而是“本轮问题位点已按要求修好”。
+3. **必须实际打开截图验收**：优先看 `test-results/evidence-screenshots/_shared/`，失败用例再补看 `test-results/playwright-artifacts/`；验收标准不是“页面出现了”，而是“本轮问题位点已按要求修好”。
 3.1. **只要最终回复里提到“已跑 E2E / E2E 通过”就必须附截图绝对路径**：至少提供 1 张本轮实际核对过的关键截图完整绝对路径；没有路径不得以 E2E 结果作为收口口径。
 4. **看图必须直击问题位点**：不能只扫整页，必须逐项核对用户这轮指出的具体区域、具体现象和具体目标；如果是展开类/浮层类问题，主截图必须同时包含触发控件、展开内容完整边界、关键参照物。主截图收不全或看不清边界细节时，默认“未证明修复”，必须补局部放大图。
 5. **截图必须来自真实问题场景和真实业务链路**：游戏内问题优先保留从真实入口进入后的完整链路截图；禁止用大厅页、独立预览页、资源诊断页、兄弟入口截图或自造代理场景，代替问题本身已修复的证据。
@@ -568,7 +569,7 @@ React 19 + TypeScript / Vite 7 / Tailwind CSS 4 / framer-motion / Canvas 2D 粒�
 - **E2E 测试必须由 AI 自主运行（强制）**：
   - **禁止交给用户手动运行**：AI 完成编写后必须立即运行。
   - **运行命令**：单文件/单用例优先 `npm run test:e2e:ci:file -- <测试文件名> "<用例名>"`；整文件运行用 `npm run test:e2e:ci -- <测试文件名>` 或 `npm run test:e2e -- <测试文件名>`。
-  - **证据保留**：证据文档放 `evidence/`；主截图优先引用 `test-results/evidence-screenshots/`，失败排障再看 `test-results/playwright-artifacts/`。写证据前必须先实际查看截图，用户上传截图直接看对话附件。
+  - **证据保留**：证据文档放 `evidence/`；主截图优先引用 `test-results/evidence-screenshots/_shared/`，失败排障再看 `test-results/playwright-artifacts/`。写证据前必须先实际查看截图，用户上传截图直接看对话附件。
   - **测试文件命名规范**：E2E 测试文件必须以 `.e2e.ts` 结尾
 - **GameTestRunner 优先**：行为测试是最优先、最可靠的测试手段。审计工厂是补充，用于批量覆盖注册表引用完整性和交互链完整性
 - **测试触发条件**：新增/修改业务逻辑、引擎代码、领域层代码、数据结构、API 接口、修复逻辑错误类 bug。不需要测试：纯样式、文案、文档、资源文件、格式化、重命名

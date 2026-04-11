@@ -17,7 +17,7 @@ npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The La
 ## 结果
 
 - 结果：2 passed
-- 文件：`e2e/dicethrone-watch-out-spotlight.e2e.ts`
+- 文件：`e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts`
 - 用例：
   - `should allow confirming after selecting only one target`
   - `should resolve two selected targets in one confirmation`
@@ -25,15 +25,15 @@ npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The La
 ## 截图证据
 
 1. 单目标已选择，确认按钮可用：
-   [14-the-law-single-target-selected.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-allow-confirming-after-selecting-only-one-target\14-the-law-single-target-selected.png)
+   [14-the-law-single-target-selected.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-allow-confirming-after-selecting-only-one-target\14-the-law-single-target-selected.png)
    - 说明：交互标题已出现，两个目标卡可见；仅选择 `僧侣-A` 后，确认按钮由禁用变为可点击。
 
 2. 双目标已选择：
-   [15-the-law-two-targets-selected.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-resolve-two-selected-targets-in-one-confirmation\15-the-law-two-targets-selected.png)
+   [15-the-law-two-targets-selected.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-resolve-two-selected-targets-in-one-confirmation\15-the-law-two-targets-selected.png)
    - 说明：`僧侣-A` 与 `圣骑士-B` 同时被选中，满足“至多 2 名目标玩家”的 UI 语义。
 
 3. 双目标结算后：
-   [16-the-law-two-targets-resolved.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-resolve-two-selected-targets-in-one-confirmation\16-the-law-two-targets-resolved.png)
+   [16-the-law-two-targets-resolved.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-resolve-two-selected-targets-in-one-confirmation\16-the-law-two-targets-resolved.png)
    - 说明：确认后交互关闭；测试断言同时验证两名目标玩家各获得 `1 bounty` 与 `1 knockdown`。
 
 ## 结论
@@ -53,13 +53,13 @@ npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The La
   - `should open multi-target interaction after playing from hand in 3-player scene`
 - 新增截图：
   1. `1v1` 从手牌点击前：
-     [22-the-law-from-hand-1v1-before-play.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-resolve-immediately-in-1v1-after-clicking-the-hand-card\22-the-law-from-hand-1v1-before-play.png)
+     [22-the-law-from-hand-1v1-before-play.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-resolve-immediately-in-1v1-after-clicking-the-hand-card\22-the-law-from-hand-1v1-before-play.png)
   2. `1v1` 点击后直结算：
-     [23-the-law-from-hand-1v1-after-play.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-resolve-immediately-in-1v1-after-clicking-the-hand-card\23-the-law-from-hand-1v1-after-play.png)
+     [23-the-law-from-hand-1v1-after-play.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-resolve-immediately-in-1v1-after-clicking-the-hand-card\23-the-law-from-hand-1v1-after-play.png)
   3. `3` 人局从手牌点击后，多目标已选择：
-     [24-the-law-from-hand-3p-selected-targets.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-open-multi-target-interaction-after-playing-from-hand-in-3-player-scene\24-the-law-from-hand-3p-selected-targets.png)
+     [24-the-law-from-hand-3p-selected-targets.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-open-multi-target-interaction-after-playing-from-hand-in-3-player-scene\24-the-law-from-hand-3p-selected-targets.png)
   4. `3` 人局从手牌点击后，多目标结算完成：
-     [25-the-law-from-hand-3p-resolved.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-watch-out-spotlight.e2e\should-open-multi-target-interaction-after-playing-from-hand-in-3-player-scene\25-the-law-from-hand-3p-resolved.png)
+     [25-the-law-from-hand-3p-resolved.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-open-multi-target-interaction-after-playing-from-hand-in-3-player-scene\25-the-law-from-hand-3p-resolved.png)
 - 这意味着 `The Law` 当前已经同时完成了：
   - 从手牌点击打出；
   - `1v1` 直结算；
@@ -73,7 +73,7 @@ npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The La
 - 已落实修正：
   - `src/games/dicethrone/domain/customActions/gunslinger.ts` 改为复用 `getOpponents(state, attackerId)`，只保留敌方目标。
   - `src/games/dicethrone/__tests__/cross-hero.test.ts` 新增 `the law should only target enemies in 4-player team mode`，断言交互只暴露 `['1', '3']`，并验证结算只命中两名敌方。
-  - `e2e/dicethrone-simple-start.e2e.ts` 新增四人联机真实点击用例：
+  - `e2e/dicethrone/dicethrone-simple-start.e2e.ts` 新增四人联机真实点击用例：
     - `Online 4-player The Law: real hand play only offers enemies in 2v2 and resolves on both`
 - 执行命令：
   ```bash
@@ -87,9 +87,9 @@ npm run test:e2e:ci:file -- dicethrone-watch-out-spotlight.e2e.ts "枪手 The La
   - `既有 The Law E2E 回归`: `4 passed`
 - 新增截图：
   1. 四人 2v2 下，真实从手牌点击后只出现两名敌方目标：
-     [10-four-player-the-law-enemy-only-selection.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-The-Law-real-hand-play-only-offers-enemies-in-2v2-and-resolves-on-both\10-four-player-the-law-enemy-only-selection.png)
+     [10-four-player-the-law-enemy-only-selection.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-The-Law-real-hand-play-only-offers-enemies-in-2v2-and-resolves-on-both\10-four-player-the-law-enemy-only-selection.png)
   2. 四人 2v2 下，确认后仅两名敌方拿到 `bounty + knockdown`：
-     [11-four-player-the-law-resolved-on-enemies.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone-simple-start.e2e\Online-4-player-The-Law-real-hand-play-only-offers-enemies-in-2v2-and-resolves-on-both\11-four-player-the-law-resolved-on-enemies.png)
+     [11-four-player-the-law-resolved-on-enemies.png](D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-The-Law-real-hand-play-only-offers-enemies-in-2v2-and-resolves-on-both\11-four-player-the-law-resolved-on-enemies.png)
 - 裁决：
   - `The Law` 现在已经同时覆盖：
     - `1v1` 直结算；

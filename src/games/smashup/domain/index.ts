@@ -53,7 +53,8 @@ import {
 } from './abilityHelpers';
 import { triggerAllBaseAbilities, triggerBaseAbility, triggerExtendedBaseAbility, hasBaseAbility } from './baseAbilities';
 import { collectBaseAbilityTriggers, collectExtendedBaseAbilityTriggers } from './baseAbilityQueue';
-import { openMeFirstWindow, openAfterScoringWindow, buildBaseTargetOptions, isSpecialLimitBlocked } from './abilityHelpers';
+import { openMeFirstWindow, openAfterScoringWindow, isSpecialLimitBlocked } from './abilityHelpers';
+import { buildTargetAiHint } from '../../../engine/ai';
 import type { PhaseExitResult } from '../../../engine/systems/FlowSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -245,22 +246,58 @@ function buildMultiBaseScoringInteraction(
             if (!base) return null;
             const baseDef = getBaseDef(base.defId);
             const totalPower = getTotalEffectivePowerOnBase(state.core, base, baseIndex);
+            const breakpoint = getEffectiveBreakpoint(state.core, baseIndex);
+            const playerPowers = baseDef ? collectQualifiedPlayerPowers(state.core, base, baseIndex) : new Map<PlayerId, number>();
+            const rankings = baseDef ? buildBaseRankings(baseDef, playerPowers) : [];
+            const ownAward = rankings.find((entry) => entry.playerId === playerId)?.vp ?? 0;
+            const bestOpponentAward = rankings
+                .filter((entry) => entry.playerId !== playerId)
+                .reduce((best, entry) => Math.max(best, entry.vp), 0);
+            const gapBefore = breakpoint - totalPower;
+            const breakNow = totalPower >= breakpoint;
+            const estimatedSwing = ownAward - bestOpponentAward;
+            const priorityHint = (
+                ownAward * 42
+                - bestOpponentAward * 30
+                + (breakNow ? 18 : 0)
+                - Math.max(0, gapBefore) * 2
+            );
             return {
                 baseIndex,
                 label: `${baseDef?.name ?? `基地 ${baseIndex + 1}`} (力量 ${totalPower}/${baseDef?.breakpoint ?? '?'})`,
+                _ai: buildTargetAiHint({
+                    actorPlayerId: playerId,
+                    targetKind: 'base',
+                    effectIntent: 'resource',
+                    estimatedSwing,
+                    priorityHint,
+                    tags: ['score-base', breakNow ? 'break-now' : 'break-later'],
+                    derivedFrom: 'explicit',
+                }),
             };
         })
-        .filter(Boolean) as Array<{ baseIndex: number; label: string }>;
+        .filter(Boolean) as Array<{ baseIndex: number; label: string; _ai?: ReturnType<typeof buildTargetAiHint> }>;
 
     if (candidates.length === 0) {
         return undefined;
     }
 
+    const options = candidates.map((candidate, index) => {
+        const baseDefId = state.core.bases[candidate.baseIndex]?.defId;
+        return {
+            id: `base-${index}`,
+            label: candidate.label,
+            value: { baseIndex: candidate.baseIndex, ...(baseDefId ? { baseDefId } : {}) },
+            _source: 'base' as const,
+            ...(candidate._ai ? { _ai: candidate._ai } : {}),
+        };
+    });
+
     return createSimpleChoice(
         `multi_base_scoring_${now}`,
         playerId,
         candidates.length === 1 ? '计分最后一个基地' : '选择先计分的基地',
-        buildBaseTargetOptions(candidates, state.core) as any[],
+        options as any[],
         { sourceId: 'multi_base_scoring', targetType: 'base' },
     );
 }

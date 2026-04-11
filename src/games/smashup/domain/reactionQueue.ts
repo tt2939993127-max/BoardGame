@@ -1,4 +1,6 @@
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
+import type { AiHint } from '../../../engine/ai';
+import { buildTargetAiHint } from '../../../engine/ai';
 import type { SmashUpCore, SmashUpEvent, TriggerConsumedEvent, TriggerInstance } from './types';
 import { SU_EVENTS } from './types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -59,6 +61,56 @@ function buildReactionQueueOptionLabel(trigger: TriggerInstance): string {
   const sourceDef = getCardDef(trigger.sourceDefId) ?? getBaseDef(trigger.sourceDefId);
   const sourceLabel = sourceDef ? `cards.${trigger.sourceDefId}.name` : trigger.sourceDefId;
   return `${sourceLabel} · ${getReactionTimingLabelKey(trigger.timing)}`;
+}
+
+function buildReactionQueueAiHint(
+  core: SmashUpCore,
+  decider: PlayerId,
+  trigger: TriggerInstance,
+): AiHint {
+  const ownerIsActor = trigger.ownerPlayerId === decider;
+  const scoringTiming = trigger.timing === 'beforeScoring'
+    || trigger.timing === 'whenScoring'
+    || trigger.timing === 'afterScoring';
+  const tags = [
+    'reaction-queue',
+    `timing:${trigger.timing}`,
+    ownerIsActor ? 'owner:self' : 'owner:enemy',
+    ...(trigger.mandatory ? ['mandatory'] : []),
+    ...(scoringTiming ? ['scoring'] : []),
+  ];
+
+  let priorityHint = ownerIsActor ? 18 : -14;
+  if (scoringTiming) priorityHint += 8;
+
+  let estimatedSwing: number | undefined;
+  if (trigger.rankings && trigger.rankings.length > 0) {
+    const ownVp = trigger.rankings.find(r => r.playerId === decider)?.vp ?? 0;
+    const bestOpponentVp = trigger.rankings
+      .filter(r => r.playerId !== decider)
+      .reduce((best, r) => Math.max(best, r.vp), 0);
+    estimatedSwing = ownVp - bestOpponentVp;
+    priorityHint += estimatedSwing * 6;
+    if (estimatedSwing > 0) tags.push('vp-advantage');
+    if (estimatedSwing < 0) tags.push('vp-disadvantage');
+  }
+
+  const targetKind = trigger.actionTargetType === 'minion'
+    ? 'minion'
+    : trigger.actionTargetType === 'base'
+      ? 'base'
+      : typeof trigger.baseIndex === 'number'
+        ? 'base'
+        : undefined;
+
+  return buildTargetAiHint({
+    actorPlayerId: decider,
+    ...(targetKind ? { targetKind } : {}),
+    ...(estimatedSwing !== undefined ? { estimatedSwing } : {}),
+    priorityHint,
+    tags,
+    derivedFrom: 'explicit',
+  });
 }
 
 export function maybeResolveReactionQueue(
@@ -151,6 +203,7 @@ export function maybeResolveReactionQueue(
       label: buildReactionQueueOptionLabel(t),
       value: { triggerId: t.id },
       displayMode: 'button' as const,
+      _ai: buildReactionQueueAiHint(core, decider, t),
     }));
   if (options.length === 0) return undefined;
 

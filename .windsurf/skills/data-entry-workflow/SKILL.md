@@ -33,14 +33,14 @@ description: "用于本项目里基于图片、规则书、Wiki、PDF、截图�
 ### Smash Up
 
 - 新派系图片、卡牌、基地、atlas、locale intake：
-  读 `docs/workflows/smashup-faction-intake.md`
+  读 `docs/games/smashup/workflows/smashup-faction-intake.md`
 - 额外硬规则：
   涉及 Wiki 核对时，必须按仓库根 `AGENTS.md` 使用项目爬虫，不能凭记忆。
 
 ### Dice Throne
 
 - 单角色 / 新英雄的图片、骰面、Token、卡牌、裁图、资源上传、规则文档录入：
-  读 `docs/workflows/dicethrone-hero-intake.md`
+  读 `docs/games/dicethrone/workflows/dicethrone-hero-intake.md`
 
 ### 其他游戏
 
