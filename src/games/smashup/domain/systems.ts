@@ -6,10 +6,18 @@
  * - 对交互解决产生的事件应用保护过滤和触发链（与 execute() 后处理对齐）
  */
 
-import type { GameEvent, MatchState } from '../../../engine/types';
+import type { GameEvent, MatchState, SystemState } from '../../../engine/types';
 import type { EngineSystem, HookResult } from '../../../engine/systems/types';
 import { createSimpleChoice, INTERACTION_EVENTS, queueInteraction, resolveInteraction } from '../../../engine/systems/InteractionSystem';
-import type { SmashUpCore, SmashUpEvent } from './types';
+import type {
+    SmashUpCore,
+    SmashUpEvent,
+    MinionDestroyedEvent,
+    MinionMovedEvent,
+    MinionReturnedEvent,
+    CardToDeckBottomEvent,
+    CardToDeckTopEvent,
+} from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
 import { addPowerCounter } from './abilityHelpers';
 import { SU_EVENT_TYPES } from './events';
@@ -31,6 +39,31 @@ interface BodyShopPendingDistribution {
     targetMinionUid: string;
     totalCounters: number;
 }
+
+type SmashUpSystemState = SystemState & {
+    _waitForStartTurnInteractionReduce?: boolean;
+    _smashupStartTurnWindowActive?: boolean;
+};
+
+const isMinionDestroyedEvent = (event: GameEvent): event is MinionDestroyedEvent => (
+    event.type === SU_EVENT_TYPES.MINION_DESTROYED
+);
+
+const isMinionMovedEvent = (event: GameEvent): event is MinionMovedEvent => (
+    event.type === SU_EVENT_TYPES.MINION_MOVED
+);
+
+const isMinionReturnedEvent = (event: GameEvent): event is MinionReturnedEvent => (
+    event.type === SU_EVENT_TYPES.MINION_RETURNED
+);
+
+const isCardToDeckBottomEvent = (event: GameEvent): event is CardToDeckBottomEvent => (
+    event.type === SU_EVENT_TYPES.CARD_TO_DECK_BOTTOM
+);
+
+const isCardToDeckTopEvent = (event: GameEvent): event is CardToDeckTopEvent => (
+    event.type === SU_EVENT_TYPES.CARD_TO_DECK_TOP
+);
 
 function getPendingBodyShopDistributions(state: { sys: Record<string, unknown> }): BodyShopPendingDistribution[] {
     const raw = state.sys[BODY_SHOP_PENDING_DISTRIBUTIONS_KEY];
@@ -124,15 +157,14 @@ function reconcilePendingBodyShopDistributions(
 
     for (const item of pending) {
         const matchedDestroy = events.find((event) =>
-            event.type === SU_EVENT_TYPES.MINION_DESTROYED
-            && (event as any).payload?.minionUid === item.targetMinionUid,
+            isMinionDestroyedEvent(event) && event.payload.minionUid === item.targetMinionUid,
         );
         const matchedSave = events.find((event) => {
-            if (event.type === SU_EVENT_TYPES.MINION_RETURNED || event.type === SU_EVENT_TYPES.MINION_MOVED) {
-                return (event as any).payload?.minionUid === item.targetMinionUid;
+            if (isMinionReturnedEvent(event) || isMinionMovedEvent(event)) {
+                return event.payload.minionUid === item.targetMinionUid;
             }
-            if (event.type === SU_EVENT_TYPES.CARD_TO_DECK_BOTTOM || event.type === SU_EVENT_TYPES.CARD_TO_DECK_TOP) {
-                return (event as any).payload?.cardUid === item.targetMinionUid;
+            if (isCardToDeckBottomEvent(event) || isCardToDeckTopEvent(event)) {
+                return event.payload.cardUid === item.targetMinionUid;
             }
             return false;
         });
@@ -188,13 +220,14 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                 } : session);
             }
 
-            if ((newState.sys as any)[pendingStartTurnInteractionReduceFlag]) {
+            const sysState = newState.sys as SmashUpSystemState;
+            if (sysState[pendingStartTurnInteractionReduceFlag]) {
                 newState = {
                     ...newState,
                     sys: {
-                        ...newState.sys,
+                        ...sysState,
                         [pendingStartTurnInteractionReduceFlag]: undefined,
-                    } as typeof newState.sys,
+                    },
                 };
             }
 
@@ -216,9 +249,10 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);
                         if (handler) {
+                            const activeSys = newState.sys as SmashUpSystemState;
                             const startTurnWindowActive =
                                 newState.sys.phase === 'startTurn'
-                                || Boolean((newState.sys as any)._smashupStartTurnWindowActive);
+                                || Boolean(activeSys._smashupStartTurnWindowActive);
 
                             const result = handler(
                                 newState,

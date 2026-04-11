@@ -14,14 +14,37 @@ import { SU_EVENTS } from '../domain/types';
 import type {
     SmashUpEvent, CardsDrawnEvent,
     DeckReorderedEvent, MinionCardDef, OngoingDetachedEvent,
-    MinionPlayedEvent, BreakpointModifiedEvent,
+    MinionPlayedEvent, BreakpointModifiedEvent, MinionMetadataUpdatedEvent,
 } from '../domain/types';
 import { registerPowerModifier } from '../domain/ongoingModifiers';
 import { isMinionProtectedNonConsumable, registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionCheckContext, TriggerContext, TriggerResult } from '../domain/ongoingEffects';
 import { getCardDef, getMinionDef, getBaseDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
+import type { PromptOption, SimpleChoiceData } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
+
+type DeckSearchOptionValue = { cardUid: string; defId: string } | { skip: true };
+type DeckSearchChoiceData = SimpleChoiceData<DeckSearchOptionValue> & { continuationContext?: { baseIndex: number } };
+
+const isSkipSelection = (value: unknown): value is { skip: true } => (
+    typeof value === 'object' && value !== null && 'skip' in value
+);
+
+const isCancelSelection = (value: unknown): value is { __cancel__: true } => (
+    typeof value === 'object' && value !== null && '__cancel__' in value
+);
+
+const getDeckSearchSelection = (value: unknown): { cardUid: string; defId: string } | null => {
+    if (typeof value !== 'object' || value === null) {
+        return null;
+    }
+    const record = value as { cardUid?: unknown; defId?: unknown };
+    if (typeof record.cardUid !== 'string' || typeof record.defId !== 'string') {
+        return null;
+    }
+    return { cardUid: record.cardUid, defId: record.defId };
+};
 
 /** 急速生长?onPlay：额外打出一个随从*/
 function killerPlantInstaGrow(ctx: AbilityContext): AbilityResult {
@@ -169,7 +192,7 @@ export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                 return { events, matchState };
             }
             if (matchState) {
-                const options = eligible.map((c, idx) => {
+                const options: PromptOption<DeckSearchOptionValue>[] = eligible.map((c, idx) => {
                     const def = getMinionDef(c.defId);
                     return {
                         id: `minion-${idx}`,
@@ -178,12 +201,12 @@ export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                         displayMode: 'card' as const
                     };
                 });
-                options.push({ id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const } as any);
-                const interaction = createSimpleChoice(
+                options.push({ id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const });
+                const interaction = createSimpleChoice<DeckSearchOptionValue>(
                     `killer_plant_sprout_search_${targetSprout.uid}_${ctx.now}`, targetSprout.controller,
-                    '嫩芽：从牌库中选择一个力量3或更低的随从打出（可跳过）', options as any[], { sourceId: 'killer_plant_sprout_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
+                    '嫩芽：从牌库中选择一个力量3或更低的随从打出（可跳过）', options, { sourceId: 'killer_plant_sprout_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
                 );
-                (interaction.data as any).continuationContext = { baseIndex: sproutBaseIndex };
+                (interaction.data as DeckSearchChoiceData).continuationContext = { baseIndex: sproutBaseIndex };
                 matchState = queueInteraction(matchState, interaction);
                 return { events, matchState };
             }
@@ -251,7 +274,7 @@ export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                 events.push(buildDeckReshuffle(player, m.controller, [card.uid], ctx.now));
             } else if (matchState) {
                 // 多候选：创建交互让玩家选择
-                const options = eligible.map((c, idx) => {
+                const options: PromptOption<DeckSearchOptionValue>[] = eligible.map((c, idx) => {
                     const def = getMinionDef(c.defId);
                     return {
                         id: `minion-${idx}`,
@@ -260,13 +283,13 @@ export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
                         displayMode: 'card' as const
                     };
                 });
-                options.push({ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const } as any);
-                const interaction = createSimpleChoice(
+                options.push({ id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const });
+                const interaction = createSimpleChoice<DeckSearchOptionValue>(
                     `killer_plant_sprout_search_${m.uid}_${ctx.now}`, m.controller,
-                    '嫩芽：从牌库中选择一个力量3或更低的随从打出（可跳过）', options as any[], { sourceId: 'killer_plant_sprout_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
+                    '嫩芽：从牌库中选择一个力量3或更低的随从打出（可跳过）', options, { sourceId: 'killer_plant_sprout_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
                 );
                 // 传递 sprout 所在基地索引，交互处理器需要用它来锁定目标基地
-                (interaction.data as any).continuationContext = { baseIndex: sproutBaseIndex };
+                (interaction.data as DeckSearchChoiceData).continuationContext = { baseIndex: sproutBaseIndex };
                 matchState = queueInteraction(matchState, interaction);
             } else {
                 // 无 matchState 回退：自动选第一个（测试环境等）
@@ -354,7 +377,7 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
         };
     }
     // 多个候选，Prompt 选择
-    const options = eligible.map((c, idx) => {
+    const options: PromptOption<DeckSearchOptionValue>[] = eligible.map((c, idx) => {
         const def = getMinionDef(c.defId);
         return {
             id: `minion-${idx}`,
@@ -363,11 +386,11 @@ function killerPlantVenusManTrap(ctx: AbilityContext): AbilityResult {
             displayMode: 'card' as const
         };
     });
-    const interaction = createSimpleChoice(
+    const interaction = createSimpleChoice<DeckSearchOptionValue>(
         `killer_plant_venus_man_trap_search_${ctx.now}`, ctx.playerId,
-        '维纳斯捕食者：从牌库中选择一个力量2或更低的随从打出', options as any[], { sourceId: 'killer_plant_venus_man_trap_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
+        '维纳斯捕食者：从牌库中选择一个力量2或更低的随从打出', options, { sourceId: 'killer_plant_venus_man_trap_search', targetType: 'generic', autoRefresh: 'deck', responseValidationMode: 'live' },
     );
-    (interaction.data as any).continuationContext = { baseIndex: ctx.baseIndex };
+    (interaction.data as DeckSearchChoiceData).continuationContext = { baseIndex: ctx.baseIndex };
     return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
@@ -475,7 +498,7 @@ function killerPlantWeedEaterPodTrigger(ctx: TriggerContext): SmashUpEvent[] {
                     reason: 'killer_plant_weed_eater_pod',
                 },
                 timestamp: ctx.now,
-            } as any];
+            } as MinionMetadataUpdatedEvent];
         }
         return [];
     }
@@ -495,7 +518,7 @@ function killerPlantWeedEaterPodTrigger(ctx: TriggerContext): SmashUpEvent[] {
                     reason: 'killer_plant_weed_eater_pod',
                 },
                 timestamp: ctx.now,
-            } as any);
+            } as MinionMetadataUpdatedEvent);
         }
     }
     return events;
@@ -541,7 +564,11 @@ function buildDeckReshuffle(
 /** 注册食人花派系的交互解决处理函数 */
 export function registerKillerPlantInteractionHandlers(): void {
     registerInteractionHandler('killer_plant_venus_man_trap_search', (state, playerId, value, iData, _random, timestamp) => {
-        const { cardUid, defId } = value as { cardUid: string; defId: string };
+        const selection = getDeckSearchSelection(value);
+        if (!selection) {
+            return { state, events: [] };
+        }
+        const { cardUid, defId } = selection;
         const player = state.core.players[playerId];
         // 防御：若所选随从已不在牌库（已被其他效果抽走/打出），则不再重复打出，但仍按规则重洗
         const inDeck = player.deck.some(c => c.uid === cardUid);
@@ -555,7 +582,7 @@ export function registerKillerPlantInteractionHandlers(): void {
             };
         }
         // 从 continuationContext 获取锁定的目标基地
-        const contCtx = (iData as any)?.continuationContext as { baseIndex: number } | undefined;
+        const contCtx = (iData as { continuationContext?: { baseIndex: number } } | undefined)?.continuationContext;
         const baseIndex = contCtx?.baseIndex ?? 0;
         const def = getMinionDef(defId);
         const power = def?.power ?? 0;
@@ -575,7 +602,7 @@ export function registerKillerPlantInteractionHandlers(): void {
     });
 
     registerInteractionHandler('killer_plant_sprout_search', (state, playerId, value, iData, _random, timestamp) => {
-        if (value && (value as any).skip) {
+        if (isSkipSelection(value)) {
             // 跳过选择，规则仍要求重洗牌库
             const player = state.core.players[playerId];
             return {
@@ -585,7 +612,11 @@ export function registerKillerPlantInteractionHandlers(): void {
                 ]
             };
         }
-        const { cardUid, defId } = value as { cardUid: string; defId: string };
+        const selection = getDeckSearchSelection(value);
+        if (!selection) {
+            return { state, events: [] };
+        }
+        const { cardUid, defId } = selection;
         const player = state.core.players[playerId];
         // 防御：若所选随从已不在牌库（已被其他嫩芽打出/抽走），则不再重复打出
         const inDeck = player.deck.some(c => c.uid === cardUid);
@@ -599,7 +630,7 @@ export function registerKillerPlantInteractionHandlers(): void {
             };
         }
         // 从 continuationContext 获取 sprout 所在基地索引
-        const contCtx = (iData as any)?.continuationContext as { baseIndex: number } | undefined;
+        const contCtx = (iData as { continuationContext?: { baseIndex: number } } | undefined)?.continuationContext;
         const baseIndex = contCtx?.baseIndex ?? 0;
         const def = getMinionDef(defId);
         const power = def?.power ?? 0;
@@ -620,9 +651,12 @@ export function registerKillerPlantInteractionHandlers(): void {
 
     registerInteractionHandler('killer_plant_budding_choose', (state, playerId, value, _iData, _random, timestamp) => {
         // 检查取消标记
-        if ((value as any).__cancel__) return { state, events: [] };
+        if (isCancelSelection(value)) return { state, events: [] };
 
-        const { minionUid } = value as { minionUid: string; baseIndex: number };
+        if (typeof value !== 'object' || value === null || !('minionUid' in value)) {
+            return { state, events: [] };
+        }
+        const { minionUid } = value as { minionUid: string };
         let chosenDefId = '';
         for (const base of state.core.bases) {
             const found = base.minions.find(m => m.uid === minionUid);
