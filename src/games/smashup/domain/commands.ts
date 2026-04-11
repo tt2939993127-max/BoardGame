@@ -13,7 +13,7 @@ import {
 } from './ongoingModifiers';
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
-import { validateActionPlaySemantics } from './playLegality';
+import { getActionPlayRestrictionError, getMinionPlayRestrictionError, validateActionPlaySemantics } from './playLegality';
 import { getTitanByUid } from './abilityHelpers';
 import {
     actionLikeNeedsResponseWindowBase,
@@ -168,6 +168,10 @@ export function validate(
             // meFirst 响应窗口期间：允许从手牌打出 beforeScoringPlayable 随从到即将计分的基地
             const minionResponseWindow = state.sys.responseWindow?.current;
             if (minionResponseWindow && minionResponseWindow.windowType === 'meFirst') {
+                const restrictionError = getMinionPlayRestrictionError(core, command.playerId);
+                if (restrictionError) {
+                    return { valid: false, error: restrictionError };
+                }
                 const responderQueue = minionResponseWindow.responderQueue;
                 const currentResponderId = responderQueue[minionResponseWindow.currentResponderIndex];
                 if (command.playerId !== currentResponderId) {
@@ -403,6 +407,16 @@ export function validate(
                         windowType: responseWindow.windowType,
                     });
                     return { valid: false, error: '该卡牌只能在计分前打出' };
+                }
+
+                const restrictionError = getActionPlayRestrictionError(core, command.playerId);
+                if (restrictionError) {
+                    console.log('[DEBUG] PLAY_ACTION validation: BLOCKED - player restricted from actions', {
+                        playerId: command.playerId,
+                        windowType: responseWindow.windowType,
+                        restrictionError,
+                    });
+                    return { valid: false, error: restrictionError };
                 }
 
                 const targetBase = command.payload.targetBaseIndex;

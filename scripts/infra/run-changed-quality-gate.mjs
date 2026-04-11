@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { ESLint } from 'eslint';
 import { acquireGlobalHeavyBudget } from './global-heavy-budget.mjs';
 import { acquireTaskGuard } from './heavy-task-guard.mjs';
 
@@ -121,6 +122,14 @@ function hasAny(files, predicate) {
 
 function dedupeValues(values) {
   return [...new Set(values)];
+}
+
+function chunkValues(values, size) {
+  const chunks = [];
+  for (let index = 0; index < values.length; index += size) {
+    chunks.push(values.slice(index, index + size));
+  }
+  return chunks;
 }
 
 function fileExistsInWorkspace(file) {
@@ -267,9 +276,76 @@ function resolveChangeContext() {
   const baseRef = resolveBaseRef();
   const mergeBase = runGit(['merge-base', 'HEAD', baseRef], { allowFailure: true }) || baseRef;
   const headSha = runGit(['rev-parse', 'HEAD']);
-  const output = runGit(['diff', '--name-only', '--diff-filter=ACMR', `${baseRef}...HEAD`], { allowFailure: true });
-  const files = output.split(/\r?\n/).map(normalizeFile).filter(Boolean);
-  return { baseRef, mergeBase, headSha, files };
+  const aheadCountRaw = runGit(['rev-list', '--count', `${baseRef}..HEAD`], { allowFailure: true });
+  const aheadCount = Number.parseInt(aheadCountRaw, 10);
+  const previousHead = isPrePushMode && Number.isFinite(aheadCount) && aheadCount > 1
+    ? runGit(['rev-parse', 'HEAD^'], { allowFailure: true })
+    : '';
+  const effectiveBaseRef = previousHead || baseRef;
+  const effectiveScopeLabel = `${effectiveBaseRef}...HEAD`;
+  const output = runGit(['diff', '--name-status', '--find-renames', '--diff-filter=ACMR', effectiveScopeLabel], { allowFailure: true });
+  const { files, baselinePathByFile } = parseDiffNameStatus(output);
+
+  return {
+    baseRef,
+    mergeBase,
+    headSha,
+    aheadCount: Number.isFinite(aheadCount) ? aheadCount : 0,
+    effectiveBaseRef,
+    effectiveScopeLabel,
+    files,
+    baselinePathByFile,
+  };
+}
+
+function parseDiffNameStatus(output) {
+  const files = [];
+  const baselinePathByFile = {};
+
+  for (const rawLine of output.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    const parts = line.split('\t');
+    const status = parts[0] ?? '';
+    if ((status.startsWith('R') || status.startsWith('C')) && parts.length >= 3) {
+      const previousPath = normalizeFile(parts[1]);
+      const nextPath = normalizeFile(parts[2]);
+      if (!nextPath) continue;
+      files.push(nextPath);
+      if (previousPath) {
+        baselinePathByFile[nextPath] = previousPath;
+      }
+      continue;
+    }
+
+    const nextPath = normalizeFile(parts[1] ?? '');
+    if (!nextPath) continue;
+    files.push(nextPath);
+    if (!status.startsWith('A')) {
+      baselinePathByFile[nextPath] = nextPath;
+    }
+  }
+
+  return {
+    files: dedupeValues(files),
+    baselinePathByFile,
+  };
+}
+
+function resolvePrePushLintContext() {
+  if (!isPrePushMode) {
+    return {
+      files: [],
+      baselinePathByFile: {},
+      scopeLabel: '',
+    };
+  }
+  return {
+    files,
+    baselinePathByFile,
+    scopeLabel: effectiveScopeLabel,
+  };
 }
 
 function buildPackageJsonTypecheckFingerprint(content) {
@@ -468,7 +544,10 @@ function createVitestCommands({ label, reason, target, vitestArgs }) {
 
 function collectCommands(files, baseRef, affectsTypecheck) {
   const commands = [];
-  const lintFiles = files.filter((file) => isLintTarget(file) && fileExistsInWorkspace(file));
+  const lintCandidateFiles = isPrePushMode
+    ? prePushLintFiles.filter(isLintTarget)
+    : files.filter(isLintTarget);
+  const lintFiles = lintCandidateFiles.filter(fileExistsInWorkspace);
   const coreSourceChanged = hasAny(
     files,
     isPrePushMode ? affectsPrePushGlobalVitest : isCoreSourceFile,
@@ -486,7 +565,14 @@ function collectCommands(files, baseRef, affectsTypecheck) {
     });
   }
 
-  if (lintFiles.length > 0) {
+  if (isPrePushMode && lintCandidateFiles.length > 0) {
+    commands.push({
+      label: 'ESLint warning delta',
+      reason: 'pre-push 模式下仅阻止新增 warning，同时继续阻止当前 errors',
+      command: 'internal:eslint-warning-delta',
+      args: lintCandidateFiles,
+    });
+  } else if (lintFiles.length > 0) {
     const eslintBaseArgs = ['eslint', '--max-warnings', '999'];
     const lintChunks = splitFilesForCommand(eslintBaseArgs, lintFiles);
     lintChunks.forEach((chunk, index) => {
@@ -761,7 +847,130 @@ function shouldDirectSpawnOnWindows(command) {
     || normalized.endsWith('.com');
 }
 
-function runCommand({ label, reason, command, args }) {
+function summarizeEslintResults(results) {
+  return results.reduce((summary, result) => {
+    summary.warningCount += result.warningCount ?? 0;
+    summary.errorCount += result.errorCount ?? 0;
+    summary.fatalErrorCount += result.fatalErrorCount ?? 0;
+    return summary;
+  }, {
+    warningCount: 0,
+    errorCount: 0,
+    fatalErrorCount: 0,
+  });
+}
+
+async function summarizeCurrentLint(filesToCheck) {
+  const summary = {
+    warningCount: 0,
+    errorCount: 0,
+    fatalErrorCount: 0,
+  };
+  const chunks = chunkValues(filesToCheck, 40);
+
+  for (const chunk of chunks) {
+    const eslint = new ESLint({
+      cwd: repoRoot,
+    });
+    const results = await eslint.lintFiles(chunk);
+    const chunkSummary = summarizeEslintResults(results);
+    summary.warningCount += chunkSummary.warningCount;
+    summary.errorCount += chunkSummary.errorCount;
+    summary.fatalErrorCount += chunkSummary.fatalErrorCount;
+    if (chunkSummary.errorCount > 0 || chunkSummary.fatalErrorCount > 0) {
+      const formatter = await eslint.loadFormatter('stylish');
+      const output = formatter.format(results).trim();
+      if (output) {
+        console.error(output);
+      }
+      process.exit(1);
+    }
+  }
+
+  return summary;
+}
+
+async function summarizeBaselineLint(filesToCheck, baselineFileMap) {
+  const summary = {
+    warningCount: 0,
+    errorCount: 0,
+    fatalErrorCount: 0,
+  };
+  const eslint = new ESLint({
+    cwd: repoRoot,
+  });
+  const queue = filesToCheck
+    .map((file) => ({
+      file,
+      baselineFile: baselineFileMap[file] ?? '',
+    }))
+    .filter((item) => item.baselineFile);
+
+  const concurrency = 12;
+  for (let index = 0; index < queue.length; index += concurrency) {
+    const slice = queue.slice(index, index + concurrency);
+    const batchResults = await Promise.all(slice.map(async ({ baselineFile }) => {
+      const baselineText = readGitFile(mergeBase, baselineFile);
+      if (baselineText === '') {
+        return [];
+      }
+      return eslint.lintText(baselineText, {
+        filePath: path.resolve(repoRoot, baselineFile),
+      });
+    }));
+    const batchSummary = summarizeEslintResults(batchResults.flat());
+    summary.warningCount += batchSummary.warningCount;
+    summary.errorCount += batchSummary.errorCount;
+    summary.fatalErrorCount += batchSummary.fatalErrorCount;
+  }
+
+  return summary;
+}
+
+async function runEslintWarningDeltaCommand({ label, reason, args }) {
+  console.log(`\n[changed-quality-gate] ${label}`);
+  console.log(`[changed-quality-gate] 原因: ${reason}`);
+  console.log(`[changed-quality-gate] lint 文件数: ${args.length}`);
+  console.log(`[changed-quality-gate] lint 对比范围: ${prePushLintScopeLabel}`);
+
+  const startAt = Date.now();
+  const currentFiles = args.filter(fileExistsInWorkspace);
+  const currentSummary = currentFiles.length > 0
+    ? await summarizeCurrentLint(currentFiles)
+    : { warningCount: 0, errorCount: 0, fatalErrorCount: 0 };
+  const baselineSummary = await summarizeBaselineLint(args, prePushLintBaselinePathByFile);
+
+  console.log(`[changed-quality-gate] ESLint warning baseline: ${baselineSummary.warningCount}`);
+  console.log(`[changed-quality-gate] ESLint warning current: ${currentSummary.warningCount}`);
+
+  if (currentSummary.warningCount > baselineSummary.warningCount) {
+    const eslint = new ESLint({
+      cwd: repoRoot,
+    });
+    const formatter = await eslint.loadFormatter('stylish');
+    const currentResults = await eslint.lintFiles(currentFiles);
+    const output = formatter.format(currentResults).trim();
+    if (output) {
+      console.error(output);
+    }
+    console.error(
+      `[changed-quality-gate] 新增 ESLint warning：${currentSummary.warningCount - baselineSummary.warningCount} `
+      + `(baseline=${baselineSummary.warningCount}, current=${currentSummary.warningCount})`,
+    );
+    process.exit(1);
+  }
+
+  console.log(
+    `[changed-quality-gate] ESLint warning 未新增（baseline=${baselineSummary.warningCount}, current=${currentSummary.warningCount}）。`,
+  );
+  return Date.now() - startAt;
+}
+
+async function runCommand({ label, reason, command, args }) {
+  if (command === 'internal:eslint-warning-delta') {
+    return runEslintWarningDeltaCommand({ label, reason, args });
+  }
+
   console.log(`\n[changed-quality-gate] ${label}`);
   console.log(`[changed-quality-gate] 原因: ${reason}`);
   console.log(`[changed-quality-gate] 命令: ${commandToLine(command, args)}`);
@@ -819,12 +1028,31 @@ function shouldUsePrePushCache() {
   return isPrePushMode && process.env.QUALITY_GATE_NO_CACHE !== '1';
 }
 
-const { baseRef, mergeBase, headSha, files } = resolveChangeContext();
-const affectsTypecheck = createTypecheckPredicate(baseRef, headSha);
+const {
+  baseRef,
+  mergeBase,
+  headSha,
+  aheadCount,
+  effectiveBaseRef,
+  effectiveScopeLabel,
+  files,
+  baselinePathByFile,
+} = resolveChangeContext();
+const {
+  files: prePushLintFiles,
+  baselinePathByFile: prePushLintBaselinePathByFile,
+  scopeLabel: prePushLintScopeLabel,
+} = resolvePrePushLintContext();
+const affectsTypecheck = createTypecheckPredicate(effectiveBaseRef, headSha);
 console.log(`[changed-quality-gate] 模式: ${mode}`);
 console.log(`[changed-quality-gate] 基线: ${baseRef}`);
 console.log(`[changed-quality-gate] merge-base: ${mergeBase}`);
 console.log(`[changed-quality-gate] head: ${headSha}`);
+if (isPrePushMode && aheadCount > 1 && effectiveBaseRef !== baseRef) {
+  console.log(`[changed-quality-gate] pre-push 检测到当前分支领先 ${aheadCount} 个提交，当前仅校验最新提交范围: ${effectiveScopeLabel}`);
+} else {
+  console.log(`[changed-quality-gate] 当前校验范围: ${effectiveScopeLabel}`);
+}
 
 if (files.length === 0) {
   console.log('[changed-quality-gate] 未检测到已提交改动，跳过。');
@@ -908,7 +1136,7 @@ try {
       continue;
     }
 
-    const durationMs = runCommand(command);
+    const durationMs = await runCommand(command);
     durations.push({ label: command.label, durationMs });
     if (shouldUsePrePushCache()) {
       commandCache.entries[commandCacheKey] = {

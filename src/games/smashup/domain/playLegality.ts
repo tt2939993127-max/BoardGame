@@ -11,6 +11,26 @@ function isCurrentTurnPlayer(core: SmashUpCore, playerId: string): boolean {
     return core.turnOrder[core.currentPlayerIndex] === playerId;
 }
 
+export function getMinionPlayRestrictionError(core: SmashUpCore, playerId: string): string | null {
+    if (
+        hasPlayerTurnRestriction(core, playerId, 'play_minion')
+        || (isCurrentTurnPlayer(core, playerId) && core.sleepMarkedPlayers?.includes(playerId))
+    ) {
+        return '当前效果禁止你打出随从';
+    }
+    return null;
+}
+
+export function getActionPlayRestrictionError(core: SmashUpCore, playerId: string): string | null {
+    if (
+        hasPlayerTurnRestriction(core, playerId, 'play_action')
+        || (isCurrentTurnPlayer(core, playerId) && core.sleepMarkedPlayers?.includes(playerId))
+    ) {
+        return '当前效果禁止你打出战术';
+    }
+    return null;
+}
+
 export function validateDiscardMinionPlaySemantics(
     core: SmashUpCore,
     playerId: string,
@@ -61,11 +81,9 @@ export function validateDeckTopRegularMinionPlaySemantics(
         defId: string;
     },
 ): ValidationResult {
-    if (
-        hasPlayerTurnRestriction(core, playerId, 'play_minion')
-        || (isCurrentTurnPlayer(core, playerId) && core.sleepMarkedPlayers?.includes(playerId))
-    ) {
-        return { valid: false, error: '当前效果禁止你打出随从' };
+    const restrictionError = getMinionPlayRestrictionError(core, playerId);
+    if (restrictionError) {
+        return { valid: false, error: restrictionError };
     }
 
     const player = core.players[playerId];
@@ -124,11 +142,9 @@ export function validateActionPlaySemantics(
         effectiveHandSize?: number;
     },
 ): ValidationResult {
-    if (
-        hasPlayerTurnRestriction(core, playerId, 'play_action')
-        || (isCurrentTurnPlayer(core, playerId) && core.sleepMarkedPlayers?.includes(playerId))
-    ) {
-        return { valid: false, error: '当前效果禁止你打出战术' };
+    const restrictionError = getActionPlayRestrictionError(core, playerId);
+    if (restrictionError) {
+        return { valid: false, error: restrictionError };
     }
 
     const def = getCardDef(params.defId) as ActionCardDef | FusionCardDef | undefined;

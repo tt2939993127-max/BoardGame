@@ -48,7 +48,7 @@
     "i18n:check": "npx tsx scripts/verify/i18n-check.ts",
     "check:all": "npm run typecheck && npm run lint",
     "quality:changed": "node scripts/infra/run-changed-quality-gate.mjs",
-    "quality:changed:pre-push": "node scripts/infra/run-changed-quality-gate.mjs pre-push",
+    "quality:changed:pre-push": "cross-env NODE_OPTIONS=--max-old-space-size=8192 node scripts/infra/run-changed-quality-gate.mjs pre-push",
     "check:full": "npm run check:all && npm run test:games:core:full",
     "test": "node scripts/infra/vitest-cli-safe.mjs run --configLoader native",
     "test:watch": "node scripts/infra/vitest-cli-safe.mjs --configLoader native",

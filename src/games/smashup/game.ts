@@ -21,6 +21,7 @@ import { SmashUpDomain, SU_COMMANDS, type SmashUpCommand, type SmashUpCore, type
 import type { ActionCardDef, FusionCardDef } from './domain/types';
 import { getCardDef } from './data/cards';
 import { actionLikeNeedsResponseWindowBase, getMeFirstPlayableBaseIndicesForCard, isActionLikeRespondableInWindow, isCardActionLike, isCardMinionLike } from './domain/utils';
+import { getActionPlayRestrictionError, getMinionPlayRestrictionError } from './domain/playLegality';
 import { smashUpFlowHooks } from './domain/index';
 import { initAllAbilities } from './abilities';
 import { createSmashUpEventSystem } from './domain/systems';
@@ -73,9 +74,11 @@ const systems: EngineSystem<SmashUpCore>[] = [
             const core = state as SmashUpCore;
             const player = core.players[playerId];
             if (!player) return false;
+            const actionRestrictionError = getActionPlayRestrictionError(core, playerId);
+            const minionRestrictionError = getMinionPlayRestrictionError(core, playerId);
             
             // 检查响应窗口可打出的行动卡（special 或显式标记了 responseWindowTiming 的普通行动卡）
-            const hasRespondableAction = player.hand.some(c => {
+            const hasRespondableAction = !actionRestrictionError && player.hand.some(c => {
                 if (!isCardActionLike(c)) return false;
                 const def = getCardDef(c.defId) as ActionCardDef | FusionCardDef | undefined;
                 if (!def) return false;
@@ -97,7 +100,7 @@ const systems: EngineSystem<SmashUpCore>[] = [
             });
             
             // 检查 beforeScoringPlayable 随从（如影舞者）- 只在 meFirst 窗口可用
-            const hasBeforeScoringMinion = windowType === 'meFirst' && player.hand.some(c => {
+            const hasBeforeScoringMinion = windowType === 'meFirst' && !minionRestrictionError && player.hand.some(c => {
                 if (!isCardMinionLike(c)) return false;
                 if (getMeFirstPlayableBaseIndicesForCard(core, c.defId).length > 0) {
                     return true;
