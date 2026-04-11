@@ -1072,7 +1072,11 @@ export function createInteractionSystem<TCore>(
             // ---- 交互取消（通用，所有 kind 都能用） ----
             if (command.type === INTERACTION_COMMANDS.CANCEL) {
                 const ts = resolveCommandTimestamp(command);
-                return handleInteractionCancel(state, command.playerId, ts);
+                const reason = (() => {
+                    const payload = command.payload as { reason?: unknown } | undefined;
+                    return typeof payload?.reason === 'string' ? payload.reason : undefined;
+                })();
+                return handleInteractionCancel(state, command.playerId, ts, reason);
             }
 
             // ---- 通用阻塞：有交互时阻塞 ADVANCE_PHASE ----
@@ -1135,6 +1139,7 @@ function handleInteractionCancel<TCore>(
     state: MatchState<TCore>,
     playerId: PlayerId,
     timestamp: number,
+    reason?: string,
 ): HookResult<TCore> {
     const current = state.sys.interaction.current;
 
@@ -1159,6 +1164,7 @@ function handleInteractionCancel<TCore>(
             playerId,
             sourceId,
             interactionData: stripNonSerializableFromData(current.data),
+            ...(reason ? { reason } : {}),
         },
         timestamp,
     };

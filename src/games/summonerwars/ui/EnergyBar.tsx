@@ -19,22 +19,22 @@ interface EnergyBarSizing {
 
 const ENERGY_BAR_SIZES: Record<EnergyBarSize, EnergyBarSizing> = {
   normal: {
-    rootGap: 'clamp(0.4rem, 0.8vw, 0.55rem)',
-    iconSize: 'clamp(1rem, 2vw, 1.25rem)',
-    segmentGap: 'clamp(1px, 0.18vw, 2px)',
-    segmentWidth: 'clamp(0.38rem, 0.78vw, 0.75rem)',
-    segmentHeight: 'clamp(0.58rem, 1vw, 1rem)',
-    textSize: 'clamp(0.82rem, 1.2vw, 1rem)',
-    valueWidth: 'clamp(1.35rem, 2vw, 1.75rem)',
+    rootGap: 'calc(var(--sw-board-reference-width, 1280px) * 0.006875)',
+    iconSize: 'calc(var(--sw-board-reference-width, 1280px) * 0.015625)',
+    segmentGap: 'calc(var(--sw-board-reference-width, 1280px) * 0.0015625)',
+    segmentWidth: 'calc(var(--sw-board-reference-width, 1280px) * 0.009375)',
+    segmentHeight: 'calc(var(--sw-board-reference-width, 1280px) * 0.0125)',
+    textSize: 'calc(var(--sw-board-reference-width, 1280px) * 0.0125)',
+    valueWidth: 'calc(var(--sw-board-reference-width, 1280px) * 0.021875)',
   },
   compact: {
-    rootGap: 'clamp(0.3rem, 0.65vw, 0.45rem)',
-    iconSize: 'clamp(0.9rem, 1.7vw, 1.05rem)',
-    segmentGap: 'clamp(1px, 0.16vw, 2px)',
-    segmentWidth: 'clamp(0.3rem, 0.6vw, 0.56rem)',
-    segmentHeight: 'clamp(0.48rem, 0.82vw, 0.76rem)',
-    textSize: 'clamp(0.75rem, 1vw, 0.92rem)',
-    valueWidth: 'clamp(1.15rem, 1.6vw, 1.45rem)',
+    rootGap: 'calc(var(--sw-board-reference-width, 1280px) * 0.005625)',
+    iconSize: 'calc(var(--sw-board-reference-width, 1280px) * 0.013125)',
+    segmentGap: 'calc(var(--sw-board-reference-width, 1280px) * 0.0015625)',
+    segmentWidth: 'calc(var(--sw-board-reference-width, 1280px) * 0.007)',
+    segmentHeight: 'calc(var(--sw-board-reference-width, 1280px) * 0.0095)',
+    textSize: 'calc(var(--sw-board-reference-width, 1280px) * 0.0115)',
+    valueWidth: 'calc(var(--sw-board-reference-width, 1280px) * 0.018125)',
   },
 };
 

@@ -20,6 +20,7 @@ import {
     mirrorDeferredPostScoringToFirstInteraction,
     updateScoringSession,
 } from './scoringSession';
+import { postProcessSystemEvents } from './index';
 
 // ============================================================================
 // SmashUp 事件处理系统
@@ -128,9 +129,23 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     }
                                 }
                                 
-                                // 交互处理器返回的领域事件统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
-                                // 这里如果手动先调用 interceptEvent，会让同一批事件在轮末 reduce 时再次被拦截，
-                                // 导致像 Cthulhu 这类“交互返回 MADNESS_DRAWN，再由拦截器补标记”的链路被重复处理。
+                                if (emittedEvents.length > 0) {
+                                    const postProcessed = postProcessSystemEvents(
+                                        newState.core,
+                                        emittedEvents,
+                                        random,
+                                        newState,
+                                    );
+                                    emittedEvents = postProcessed.events;
+                                    if (postProcessed.matchState) {
+                                        newState = postProcessed.matchState;
+                                    }
+                                }
+
+                                // 交互处理器返回的领域事件需要先经过与 execute() 同步的后处理，
+                                // 再统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
+                                // 这里不能手动先调用 interceptEvent，否则像 Cthulhu 这类
+                                // “交互返回 MADNESS_DRAWN，再由拦截器补标记”的链路会被重复处理。
                                 nextEvents.push(...emittedEvents);
 
                                 const producedMinionPlayed = emittedEvents.some(

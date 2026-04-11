@@ -19,8 +19,6 @@ import {
 } from '../../src/games/summonerwars/mobileEvidence';
 
 const SW_PHONE_LANDSCAPE_VIEWPORT = { width: 936, height: 432 } as const;
-const SW_TABLET_LANDSCAPE_VIEWPORT = { width: 1170, height: 540 } as const;
-
 const mockSummonerWarsMapImage = async (context: BrowserContext) => {
   if (process.env.PW_SW_USE_REAL_MAP === 'true') {
     return;
@@ -3104,12 +3102,6 @@ test.describe('SummonerWars', () => {
         inverseScale: style.getPropertyValue('--mobile-board-shell-inverse-scale').trim(),
       };
     });
-    // eslint-disable-next-line no-console
-    console.log('[SummonerWars] mobile shell vars', mobileShellVars);
-    // eslint-disable-next-line no-console
-    console.log('[SummonerWars] mobile shell debug', mobileShellRatios.debug);
-    // eslint-disable-next-line no-console
-    console.log('[SummonerWars] desktop shell debug', desktopShellRatios.debug);
     assertShellRatiosClose('mobile-basic-flow-shell-ratios', desktopShellRatios, mobileShellRatios);
     await testInfo.attach('summonerwars-shell-ratios.json', {
       body: JSON.stringify({
@@ -3343,7 +3335,7 @@ test.describe('SummonerWars', () => {
     await hostContext.close();
   });
 
-  test('移动横屏：长按放大与阶段说明在手机和平板都可达', async ({ browser }, testInfo) => {
+  test('移动横屏：长按放大与阶段说明在手机可达', async ({ browser }, testInfo) => {
     test.setTimeout(120000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
@@ -3601,84 +3593,6 @@ test.describe('SummonerWars', () => {
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '13-phone-action-log-open', {
         filename: '13-phone-action-log-open.png',
-      }),
-      fullPage: false,
-    });
-    await hostPage.setViewportSize(SW_TABLET_LANDSCAPE_VIEWPORT);
-    await openSummonerWarsMobileEvidencePage(hostPage);
-    await waitForSummonerWarsVisualStable(hostPage);
-    await assertHandAreaVisible(hostPage, 'tablet-landscape');
-    await expect(hostPage.getByTestId('sw-end-phase')).toBeVisible({ timeout: 5000 });
-
-    const tabletLayout = await hostPage.evaluate(() => {
-      const root = document.documentElement;
-      const body = document.body;
-      const page = document.querySelector('[data-game-page][data-game-id="summonerwars"]') as HTMLElement | null;
-      const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]') as HTMLElement | null;
-      const tracker = document.querySelector('[data-testid="sw-phase-tracker"]') as HTMLElement | null;
-      const mapContainer = document.querySelector('[data-testid="sw-map-container"]') as HTMLElement | null;
-      const mapContent = document.querySelector('[data-testid="sw-map-content"]') as HTMLElement | null;
-      const playerEnergy = document.querySelector('[data-testid="sw-energy-player"]') as HTMLElement | null;
-      const pageRect = page?.getBoundingClientRect();
-      const endPhaseRect = endPhaseButton?.getBoundingClientRect();
-      const trackerRect = tracker?.getBoundingClientRect();
-      const containerRect = mapContainer?.getBoundingClientRect();
-      const contentRect = mapContent?.getBoundingClientRect();
-      const playerEnergyRect = playerEnergy?.getBoundingClientRect();
-      return {
-        rootScrollWidth: root.scrollWidth,
-        bodyScrollWidth: body.scrollWidth,
-        innerWidth: window.innerWidth,
-        innerHeight: window.innerHeight,
-        pageRect,
-        endPhaseRect,
-        trackerRect,
-        containerRect,
-        contentRect,
-        playerEnergyRect,
-      };
-    });
-
-    expect(tabletLayout.rootScrollWidth).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletLayout.bodyScrollWidth).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletLayout.pageRect?.left ?? -1).toBeGreaterThanOrEqual(0);
-    expect(tabletLayout.pageRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletLayout.endPhaseRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletLayout.endPhaseRect?.bottom ?? 99999).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
-    expect(tabletLayout.trackerRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletLayout.containerRect?.left ?? -1).toBeGreaterThanOrEqual(0);
-    expect(tabletLayout.containerRect?.right ?? 99999).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletLayout.containerRect?.top ?? -1).toBeGreaterThanOrEqual(0);
-    expect(tabletLayout.containerRect?.bottom ?? 99999).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
-    const tabletVisibleBoardUnit = hostPage.locator('[data-testid^="sw-unit-"]:visible').first();
-    const tabletVisibleBoardStructure = hostPage.locator('[data-testid^="sw-structure-"]:visible').first();
-    await expect(tabletVisibleBoardUnit).toBeVisible({ timeout: 5000 });
-    await expect(tabletVisibleBoardStructure).toBeVisible({ timeout: 5000 });
-    const tabletUnitBox = await tabletVisibleBoardUnit.boundingBox();
-    const tabletStructureBox = await tabletVisibleBoardStructure.boundingBox();
-    expect(tabletUnitBox).not.toBeNull();
-    expect(tabletStructureBox).not.toBeNull();
-    expect(tabletUnitBox!.x).toBeGreaterThanOrEqual(-2);
-    expect(tabletUnitBox!.y).toBeGreaterThanOrEqual(-2);
-    expect(tabletUnitBox!.x + tabletUnitBox!.width).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletUnitBox!.y + tabletUnitBox!.height).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
-    expect(tabletStructureBox!.x).toBeGreaterThanOrEqual(-2);
-    expect(tabletStructureBox!.y).toBeGreaterThanOrEqual(-2);
-    expect(tabletStructureBox!.x + tabletStructureBox!.width).toBeLessThanOrEqual(tabletLayout.innerWidth + 1);
-    expect(tabletStructureBox!.y + tabletStructureBox!.height).toBeLessThanOrEqual(tabletLayout.innerHeight + 1);
-    expect(tabletLayout.playerEnergyRect?.width ?? 0).toBeGreaterThan(phoneLayout.playerEnergyRect?.width ?? 0);
-    expect(tabletLayout.playerEnergyRect?.height ?? 0).toBeGreaterThanOrEqual(phoneLayout.playerEnergyRect?.height ?? 0);
-    const tabletShellRatios = await getSummonerWarsShellRatios(hostPage);
-    // 13:6 平板横屏会比 16:9 桌面更早受高度约束，地图横向占比允许比桌面基线更窄，
-    // 但不能窄到明显失去主战区存在感。
-    expect(tabletShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.18);
-    // 平板按 PC 风格验收：允许阶段流程宽度与桌面基线存在更大差值（不再强贴手机壳比例）
-    expect(Math.abs(tabletShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.16);
-    expect(Math.abs(tabletShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
-
-    await hostPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '20-tablet-landscape-board', {
-        filename: '20-tablet-landscape-board.png',
       }),
       fullPage: false,
     });

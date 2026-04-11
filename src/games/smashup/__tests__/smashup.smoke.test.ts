@@ -4711,6 +4711,79 @@ describe('smashup', () => {
         });
     });
 
+    it('滑稽巨人通过交互移动到已有其他泰坦的标准基地时，会触发泰坦冲突并移除败者', () => {
+        const state = makeMatchState(makeState({
+            bases: [
+                makeBase({
+                    minions: [makeMinion('target-low-power', 'ghosts_spectre', '1', 2)],
+                }),
+                makeBase(),
+            ],
+            titans: [
+                {
+                    uid: 't-bfg',
+                    defId: 'tricksters_big_funny_giant',
+                    faction: SMASHUP_FACTION_IDS.TRICKSTERS,
+                    ownerId: '0',
+                    controllerId: '0',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'base', baseIndex: 0, enteredAt: 1 },
+                } satisfies TitanState,
+                {
+                    uid: 't-kraken',
+                    defId: 'pirates_the_kraken',
+                    faction: SMASHUP_FACTION_IDS.PIRATES,
+                    ownerId: '1',
+                    controllerId: '1',
+                    powerCounters: 0,
+                    talentUsed: false,
+                    location: { zone: 'base', baseIndex: 1, enteredAt: 2 },
+                } satisfies TitanState,
+            ],
+        }));
+
+        const useTalent = runCommand(state, {
+            type: SU_COMMANDS.USE_TALENT,
+            playerId: '0',
+            payload: { titanUid: 't-bfg', baseIndex: 0 },
+            timestamp: 69,
+        }, FIXED_RANDOM);
+        expect(useTalent.success).toBe(true);
+
+        const chooseMinionPrompt = getInteractionsFromMS(useTalent.finalState)[0] as any;
+        expect(chooseMinionPrompt?.data?.sourceId).toBe('titan_tricksters_big_funny_giant_choose_minion');
+        const chooseMinionOption = chooseMinionPrompt.data.options.find((option: any) => option.value?.minionUid === 'target-low-power')
+            ?? chooseMinionPrompt.data.options[0];
+
+        const afterChooseMinion = runCommand(useTalent.finalState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: chooseMinionOption.id },
+            timestamp: 70,
+        } as any, FIXED_RANDOM);
+        expect(afterChooseMinion.success).toBe(true);
+
+        const chooseBasePrompt = getInteractionsFromMS(afterChooseMinion.finalState)[0] as any;
+        expect(chooseBasePrompt?.data?.sourceId).toBe('titan_tricksters_big_funny_giant_choose_base');
+        const chooseBaseOption = chooseBasePrompt.data.options.find((option: any) => option.value?.baseIndex === 1)
+            ?? chooseBasePrompt.data.options[0];
+
+        const afterChooseBase = runCommand(afterChooseMinion.finalState, {
+            type: 'SYS_INTERACTION_RESPOND',
+            playerId: '0',
+            payload: { optionId: chooseBaseOption.id },
+            timestamp: 71,
+        } as any, FIXED_RANDOM);
+        expect(afterChooseBase.success).toBe(true);
+        expect(afterChooseBase.events.some(event => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
+
+        const titansOnBaseOne = (afterChooseBase.finalState.core.titans ?? [])
+            .filter(candidate => candidate.location.zone === 'base' && candidate.location.baseIndex === 1);
+        expect(titansOnBaseOne.map(candidate => candidate.uid)).toEqual(['t-bfg']);
+        expect((afterChooseBase.finalState.core.titans ?? []).find(candidate => candidate.uid === 't-kraken')?.location.zone).toBe('setaside');
+    });
+
     it('巨狼之灵满足你在 2 个或更多基地拥有最高战力后可通过 special 从牌库旁进场', () => {
         const core = makeState({
             bases: [
