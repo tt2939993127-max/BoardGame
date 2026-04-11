@@ -228,7 +228,8 @@
     "three": "^0.182.0",
     "uuid": "^10.0.0",
     "winston": "^3.19.0",
-    "winston-daily-rotate-file": "^5.0.0"
+    "winston-daily-rotate-file": "^5.0.0",
+    "yaml": "^2.8.3"
   },
   "overrides": {
     "is-generator-function": "1.0.10",
