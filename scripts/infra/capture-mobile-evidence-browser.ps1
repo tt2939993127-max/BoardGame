@@ -14,8 +14,8 @@ param(
     [string]$UserDataDir = '',
     [int]$ReadyTimeoutSec = 30,
     [int]$CaptureTimeoutSec = 90,
-    [int]$WindowWidth = 812,
-    [int]$WindowHeight = 375,
+    [int]$WindowWidth = 936,
+    [int]$WindowHeight = 432,
     [int]$RemoteDebuggingPort = 9223,
     [switch]$ForceCoarsePointer
 )

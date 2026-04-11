@@ -28,6 +28,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
+$phoneLandscapeWidth = 936
+$phoneLandscapeHeight = 432
+$tabletLandscapeWidth = 1024
+$tabletLandscapeHeight = 768
 
 # Reuse existing E2E evidence roots. For scenarios without any prior screenshots,
 # fall back to stable ASCII case directories so the helper can still write files.
@@ -38,8 +42,8 @@ $scenarioMap = @{
         CaseDirName = 'smashup-tutorial-mobile-landscape'
         FileName = 'tutorial-mobile-landscape.png'
         FolderLocatorFileName = ''
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'summonerwars-tutorial-phone-landscape' = @{
@@ -48,8 +52,8 @@ $scenarioMap = @{
         CaseDirName = 'summonerwars-mobile-phone-landscape'
         FileName = '10-phone-landscape-board.png'
         FolderLocatorFileName = ''
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'summonerwars-mobile-10-phone-landscape-board' = @{
@@ -58,8 +62,8 @@ $scenarioMap = @{
         CaseDirName = 'summonerwars-mobile-phone-landscape'
         FileName = '10-phone-landscape-board.png'
         FolderLocatorFileName = ''
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'summonerwars-mobile-11-hand-magnify-open' = @{
@@ -68,8 +72,8 @@ $scenarioMap = @{
         CaseDirName = 'summonerwars-mobile-phone-landscape'
         FileName = '11-phone-hand-magnify-open.png'
         FolderLocatorFileName = '10-phone-landscape-board.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'summonerwars-mobile-12-phase-detail-open' = @{
@@ -78,8 +82,8 @@ $scenarioMap = @{
         CaseDirName = 'summonerwars-mobile-phone-landscape'
         FileName = '12-phone-phase-detail-open.png'
         FolderLocatorFileName = '10-phone-landscape-board.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'summonerwars-mobile-13-action-log-open' = @{
@@ -88,8 +92,8 @@ $scenarioMap = @{
         CaseDirName = 'summonerwars-mobile-phone-landscape'
         FileName = '13-phone-action-log-open.png'
         FolderLocatorFileName = '10-phone-landscape-board.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'summonerwars-mobile-20-tablet-landscape-board' = @{
@@ -98,8 +102,8 @@ $scenarioMap = @{
         CaseDirName = 'summonerwars-mobile-phone-landscape'
         FileName = '20-tablet-landscape-board.png'
         FolderLocatorFileName = '10-phone-landscape-board.png'
-        Width = 1024
-        Height = 768
+        Width = $tabletLandscapeWidth
+        Height = $tabletLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-attached-actions' = @{
@@ -108,8 +112,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '05-mobile-single-tap-expands-attached-actions.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-05-attached-actions' = @{
@@ -118,8 +122,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '05-mobile-single-tap-expands-attached-actions.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-07-minion-long-press' = @{
@@ -128,8 +132,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '07-mobile-minion-long-press-magnify.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-08-base-long-press' = @{
@@ -138,8 +142,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '08-mobile-base-long-press-magnify.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-09-base-ongoing-long-press' = @{
@@ -148,8 +152,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '09-mobile-base-ongoing-long-press-magnify.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-10-attached-action-long-press' = @{
@@ -158,8 +162,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '10-mobile-attached-action-long-press-magnify.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-11-hand-long-press' = @{
@@ -168,8 +172,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '11-mobile-hand-long-press-magnify.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 812
-        Height = 375
+        Width = $phoneLandscapeWidth
+        Height = $phoneLandscapeHeight
         ForceCoarsePointer = $true
     }
     'smashup-4p-mobile-12-tablet-landscape' = @{
@@ -178,8 +182,8 @@ $scenarioMap = @{
         CaseDirName = ''
         FileName = '12-tablet-landscape-layout.png'
         FolderLocatorFileName = '04-mobile-landscape-layout.png'
-        Width = 1024
-        Height = 768
+        Width = $tabletLandscapeWidth
+        Height = $tabletLandscapeHeight
         ForceCoarsePointer = $true
     }
 }
