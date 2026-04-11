@@ -29,7 +29,7 @@ import { useEndgame } from '../../hooks/game/useEndgame';
 import { useGameAudio, playSound } from '../../lib/audio/useGameAudio';
 import { OptimizedImage } from '../../components/common/media/OptimizedImage';
 import { BoardLayoutEditor } from '../../components/game/framework/BoardLayoutEditor';
-import { MobileBoardShell, TutorialSelectionGate } from '../../components/game/framework';
+import { TutorialSelectionGate } from '../../components/game/framework';
 import { saveSummonerWarsLayout } from '../../api/layout';
 import type { BoardLayoutConfig, GridConfig } from '../../core/ui/board-layout.types';
 import { initSpriteAtlases, resolveCardAtlasId } from './ui/cardAtlas';
@@ -82,6 +82,9 @@ const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1920;
 const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT = 1080;
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
+const MAP_INTERNAL_TARGETS = new Set([
+  'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
+]);
 
 const resolveSummonerWarsShellMetrics = (viewport: { width: number; height: number }) => {
   const safeWidth = Number.isFinite(viewport.width) && viewport.width > 0
@@ -217,13 +220,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 教程自动平移：当高亮目标在地图内部时，传给 MapContainer 让其自动居中并放大
   // 地图内部的 tutorial-id：sw-my-summoner, sw-enemy-summoner, sw-my-gate, sw-start-archer（在 BoardGrid 内）
-  const MAP_INTERNAL_TARGETS = useMemo(() => new Set([
-    'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
-  ]), []);
-  const mapPanTarget = useMemo(() => {
-    if (!isTutorialActive || !tutorialStep?.highlightTarget) return null;
-    return MAP_INTERNAL_TARGETS.has(tutorialStep.highlightTarget) ? tutorialStep.highlightTarget : null;
-  }, [isTutorialActive, tutorialStep?.highlightTarget, MAP_INTERNAL_TARGETS]);
+  const mapPanTarget = (isTutorialActive && tutorialStep?.highlightTarget && MAP_INTERNAL_TARGETS.has(tutorialStep.highlightTarget))
+    ? tutorialStep.highlightTarget
+    : null;
   // 聚焦到单个单位/建筑时放大到 1.8x，让卡牌清晰可见
   const MAP_PAN_SCALE = 1.8;
 
@@ -409,7 +408,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   }, [withdrawTrigger, setWithdrawMode, setWithdrawTrigger]);
 
   // 关闭骰子结果 → 播放攻击动画
-  const handleCloseDiceResult = useCallback(() => {
+  const handleCloseDiceResult = () => {
     const pending = rawCloseDiceResult();
     if (!pending) return;
 
@@ -440,10 +439,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       // 近战攻击：启动卡牌本体碰撞动画
       setAttackAnimState({ attacker: pending.attacker, target: pending.target, hits: pending.hits });
     }
-  }, [rawCloseDiceResult, clearPendingAttack, flushPendingDestroys, fxBus]);
+  };
 
   // 近战攻击命中回调（卡牌冲到目标时触发，播放伤害特效）
-  const handleAttackHit = useCallback(() => {
+  const handleAttackHit = () => {
     const pending = pendingAttackRef.current;
     if (!pending) return;
 
@@ -462,14 +461,14 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       const damageSoundKey = resolveDamageSoundKey(dmg.damage);
       fxBus.push(SW_FX.COMBAT_DAMAGE, { cell: dmg.position, intensity: dmg.damage >= 3 ? 'strong' : 'normal' }, { damageAmount: dmg.damage, soundKey: damageSoundKey });
     }
-  }, [pendingAttackRef, fxBus, releaseDamageSnapshot]);
+  };
 
   // 近战攻击回弹完成回调（卡牌回到原位后触发，flush 摧毁效果）
-  const handleAttackReturn = useCallback(() => {
+  const handleAttackReturn = () => {
     clearPendingAttack();
     flushPendingDestroys();
     setAttackAnimState(null);
-  }, [clearPendingAttack, flushPendingDestroys]);
+  };
 
   // FX 特效完成回调：远程气浪到达目标时播放伤害特效 + flush 摧毁
   const handleFxComplete = useCallback((id: string, cue: string) => {
@@ -735,9 +734,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         data-mobile-profile={SUMMONER_WARS_MANIFEST.mobileProfile}
         data-mobile-layout-preset={SUMMONER_WARS_MANIFEST.mobileLayoutPreset}
         data-preferred-orientation={SUMMONER_WARS_MANIFEST.preferredOrientation}
+        style={{ '--sw-board-reference-width': `${SUMMONERWARS_BOARD_REFERENCE_WIDTH}px` } as React.CSSProperties}
       >
-        <MobileBoardShell>
-          <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900">
+        <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900">
           {/* 阵营选择阶段 */}
           {isInFactionSelection ? (
             <TutorialSelectionGate
@@ -1199,8 +1198,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
               {debugPanel}
             </div>
           )}
-          </div>
-        </MobileBoardShell>
+        </div>
       </div>
     </UndoProvider>
   );

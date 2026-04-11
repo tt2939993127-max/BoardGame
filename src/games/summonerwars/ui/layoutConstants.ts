@@ -1,1 +1,1 @@
-export const BOARD_SHELL_REFERENCE_WIDTH = 'var(--mobile-board-shell-design-width, 100vw)';
+export const BOARD_SHELL_REFERENCE_WIDTH = 'var(--sw-board-reference-width, 1280px)';
