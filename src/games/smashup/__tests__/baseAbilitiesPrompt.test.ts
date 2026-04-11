@@ -43,6 +43,25 @@ beforeAll(() => {
     initAllAbilities();
 });
 
+describe('base extra timing regression coverage', () => {
+    it('base_the_homeworld marks off-phase extra minions as immediate', () => {
+        const core = makeState({ bases: [makeBase('base_the_homeworld')] });
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'startTurn';
+
+        const result = triggerBaseAbilityWithMS('base_the_homeworld', 'onMinionPlayed', makeCtx({
+            state: core,
+            matchState: ms,
+            baseDefId: 'base_the_homeworld',
+            minionUid: 'm1',
+            minionDefId: 'alien_collector',
+            minionPower: 2,
+        }));
+
+        expect((result.events[0] as any).payload.playTiming).toBe('immediate');
+    });
+});
+
 const dummyRandom: RandomFn = {
     shuffle: (arr: any[]) => [...arr],
     random: () => 0.5,

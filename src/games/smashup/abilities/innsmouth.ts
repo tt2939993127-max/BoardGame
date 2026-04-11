@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { addTempPower, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck, buildAbilityFeedback, buildValidatedReturnEvents } from '../domain/abilityHelpers';
+import { addTempPower, grantContextualExtraMinion, grantExtraMinion, drawMadnessCards, getMinionPower, revealAndPickFromDeck, buildAbilityFeedback, buildValidatedReturnEvents } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, DeckReorderedEvent, CardsDrawnEvent } from '../domain/types';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
@@ -414,7 +414,7 @@ function innsmouthSpreadingTheWord(ctx: AbilityContext): AbilityResult {
         const grantCount = Math.min(2, matchCount);
         const events: SmashUpEvent[] = [];
         for (let i = 0; i < grantCount; i++) {
-            events.push(grantExtraMinion(ctx.playerId, 'innsmouth_spreading_the_word', ctx.now, undefined, { sameNameOnly: true, sameNameDefId: chosenDefId }));
+            events.push(grantContextualExtraMinion(ctx, 'innsmouth_spreading_the_word', undefined, { sameNameOnly: true, sameNameDefId: chosenDefId }));
         }
         return { events };
     }
@@ -448,7 +448,7 @@ export function registerInnsmouthInteractionHandlers(): void {
         const grantCount = Math.min(2, matchCount);
         const events: SmashUpEvent[] = [];
         for (let i = 0; i < grantCount; i++) {
-            events.push(grantExtraMinion(playerId, 'innsmouth_spreading_the_word', timestamp, undefined, { sameNameOnly: true, sameNameDefId: defId }));
+            events.push(grantContextualExtraMinion({ playerId, now: timestamp, matchState: state }, 'innsmouth_spreading_the_word', undefined, { sameNameOnly: true, sameNameDefId: defId }));
         }
         return { state, events };
     });
@@ -463,7 +463,7 @@ export function registerInnsmouthInteractionHandlers(): void {
             events.push(madnessEvt);
             const actualDrawn = madnessEvt.payload.cardUids.length;
             for (let i = 0; i < actualDrawn; i++) {
-                events.push(grantExtraMinion(playerId, 'innsmouth_recruitment', timestamp));
+                events.push(grantContextualExtraMinion({ playerId, now: timestamp, matchState: state }, 'innsmouth_recruitment'));
             }
         }
         return { state, events };

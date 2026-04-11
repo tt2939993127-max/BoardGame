@@ -6,8 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { recoverCardsFromDiscard, grantExtraAction, moveMinion, resolveOrPrompt, buildAbilityFeedback, buildMinionTargetOptions, buildBaseTargetOptions, getMinionPower } from '../domain/abilityHelpers';
-import { getExternalActionEffectiveHandSize } from '../domain/externalActionPlay';
+import { recoverCardsFromDiscard, grantContextualExtraAction, grantExtraAction, moveMinion, resolveExtraPlayTiming, resolveOrPrompt, buildAbilityFeedback, buildMinionTargetOptions, buildBaseTargetOptions, getMinionPower } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { SmashUpEvent, SmashUpCore, CardsDrawnEvent, MinionReturnedEvent, OngoingDetachedEvent, ActionCardDef } from '../domain/types';
 import { registerProtection, registerRestriction, registerTrigger, registerInterceptor } from '../domain/ongoingEffects';
@@ -19,6 +18,7 @@ import { resolveOnPlay } from '../domain/abilityRegistry';
 import { reduce } from '../domain/reduce';
 import { validateActionPlaySemantics } from '../domain/playLegality';
 import { buildAffectRecords } from '../domain/affect';
+import { buildActionPlayedEvent } from '../domain/actionPlayEvent';
 
 /** 注册蒸汽朋克派系所有能力*/
 export function registerSteampunkAbilities(): void {
@@ -159,19 +159,19 @@ export function steampunkOrnateDomeOnPlay(ctx: AbilityContext): AbilityResult {
             if (a.ownerId === ctx.playerId) continue;
             events.push({
                 type: SU_EVENTS.ONGOING_DETACHED,
-                payload: {
-                    cardUid: a.uid,
-                    defId: a.defId,
-                    ownerId: a.ownerId,
-                    reason: 'steampunk_ornate_dome_destroy',
-                    sourcePlayerId: ctx.playerId,
-                    sourceCardUid: ctx.cardUid,
-                    sourceDefId: ctx.defId,
-                    sourceControllerId: ctx.playerId,
-                    sourceBaseIndex: ctx.baseIndex,
-                },
-                timestamp: ctx.now,
-            } as OngoingDetachedEvent);
+            payload: {
+                cardUid: a.uid,
+                defId: a.defId,
+                ownerId: a.ownerId,
+                reason: 'steampunk_ornate_dome_destroy',
+                sourcePlayerId: ctx.playerId,
+                sourceCardUid: ctx.cardUid,
+                sourceDefId: ctx.defId,
+                sourceControllerId: ctx.playerId,
+                sourceBaseIndex: ctx.baseIndex,
+            },
+            timestamp: ctx.now,
+        } as OngoingDetachedEvent);
         }
     }
 
@@ -302,7 +302,7 @@ function steampunkChangeOfVenue(ctx: AbilityContext): AbilityResult {
     }
     if (myOngoings.length === 0) {
         // 没有 ongoing 行动卡，仍给额外行动
-        return { events: [grantExtraAction(ctx.playerId, 'steampunk_change_of_venue', ctx.now)] };
+        return { events: [grantContextualExtraAction(ctx, 'steampunk_change_of_venue')] };
     }
     const options = myOngoings.map((o, i) => ({
         id: `ongoing-${i}`, label: o.label, value: { cardUid: o.uid, defId: o.defId, ownerId: o.ownerId }, _source: 'ongoing' as const, displayMode: 'card' as const,
@@ -522,8 +522,10 @@ export function registerSteampunkInteractionHandlers(): void {
         // standard 行动卡：恢复到手牌→立刻打出（不消耗行动额度）
         const events: SmashUpEvent[] = [
             recoverCardsFromDiscard(playerId, [cardUid], 'steampunk_mechanic', timestamp),
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId: cardDefId }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId: cardDefId, timestamp }),
+            grantExtraAction(playerId, 'steampunk_mechanic_replay_refund', timestamp, {
+                playTiming: resolveExtraPlayTiming(state),
+            }),
         ];
         // 执行 onPlay 能力
         const executor = resolveOnPlay(cardDefId);
@@ -565,7 +567,10 @@ export function registerSteampunkInteractionHandlers(): void {
                 }
                 if (minionOptions.length === 0) {
                     // 没有可附着的随从，仍给额外行动
-                    return { state, events: [detachEvt as SmashUpEvent, recoverEvt, grantExtraAction(playerId, 'steampunk_change_of_venue', timestamp)] };
+                    return {
+                        state,
+                        events: [detachEvt as SmashUpEvent, recoverEvt, grantContextualExtraAction({ playerId, now: timestamp, matchState: state }, 'steampunk_change_of_venue')],
+                    };
                 }
                 const interaction = createSimpleChoice(
                     `steampunk_cov_target_${timestamp}`, playerId,
@@ -591,8 +596,10 @@ export function registerSteampunkInteractionHandlers(): void {
         const events: SmashUpEvent[] = [
             detachEvt as SmashUpEvent,
             recoverEvt,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid: ongoingUid, defId }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid: ongoingUid, defId, timestamp }),
+            grantExtraAction(playerId, 'steampunk_change_of_venue_replay_refund', timestamp, {
+                playTiming: resolveExtraPlayTiming(state),
+            }),
         ];
         const executor = resolveOnPlay(defId);
         if (executor) {
@@ -633,9 +640,11 @@ export function registerSteampunkInteractionHandlers(): void {
         });
         if (!ok.valid) return { state, events: [] };
         const events: SmashUpEvent[] = [
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, targetBaseIndex: baseIndex, timestamp }),
             { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'base', targetBaseIndex: baseIndex }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+            grantExtraAction(playerId, 'steampunk_mechanic_replay_refund', timestamp, {
+                playTiming: resolveExtraPlayTiming(state),
+            }),
         ];
         // 执行 ongoing 卡的 onPlay 能力（如果有）
         const executor = resolveOnPlay(defId);
@@ -663,9 +672,11 @@ export function registerSteampunkInteractionHandlers(): void {
         const { cardUid, defId } = ctx;
         const targetType = minionUid ? 'minion' : 'base';
         const events: SmashUpEvent[] = [
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, targetBaseIndex: baseIndex, targetMinionUid: minionUid, timestamp }),
             { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType, targetBaseIndex: baseIndex, ...(minionUid ? { targetMinionUid: minionUid } : {}) }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+            grantExtraAction(playerId, 'steampunk_change_of_venue_replay_refund', timestamp, {
+                playTiming: resolveExtraPlayTiming(state),
+            }),
         ];
         const executor = resolveOnPlay(defId);
         if (executor) {
@@ -700,9 +711,11 @@ export function registerSteampunkInteractionHandlers(): void {
 
         // 与 steampunk_change_of_venue_target 同逻辑（base 目标）
         const events: SmashUpEvent[] = [
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, targetBaseIndex: baseIndex, timestamp }),
             { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'base', targetBaseIndex: baseIndex }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.LIMIT_MODIFIED, payload: { playerId, limitType: 'action', delta: 1 }, timestamp } as SmashUpEvent,
+            grantExtraAction(playerId, 'steampunk_change_of_venue_replay_refund', timestamp, {
+                playTiming: resolveExtraPlayTiming(state),
+            }),
         ];
         const executor = resolveOnPlay(defId);
         if (executor) {

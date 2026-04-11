@@ -20,9 +20,9 @@ import type {
 import { getCardDef, getBaseDef } from '../data/cards';
 import { matchesDefId } from '../domain/utils';
 import {
-    drawMadnessCards, grantExtraAction, destroyMinion,
-    returnMadnessCard, getMinionPower, buildActionMinionTargetOptions,
-    addTempPower, revealAndPickFromDeck, buildPlayerTargetOptions,
+    drawMadnessCards, grantContextualExtraAction, destroyMinion,
+    returnMadnessCard, getMinionPower, buildMinionTargetOptions,
+    addTempPower, revealAndPickFromDeck,
     buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { registerTrigger } from '../domain/ongoingEffects';
@@ -168,8 +168,8 @@ function cthulhuWhispersInDarkness(ctx: AbilityContext): AbilityResult {
     const events: SmashUpEvent[] = [];
     const madnessEvt = drawMadnessCards(ctx.playerId, 1, ctx.state, 'cthulhu_whispers_in_darkness', ctx.now);
     if (madnessEvt) events.push(madnessEvt);
-    events.push(grantExtraAction(ctx.playerId, 'cthulhu_whispers_in_darkness', ctx.now));
-    events.push(grantExtraAction(ctx.playerId, 'cthulhu_whispers_in_darkness', ctx.now));
+    events.push(grantContextualExtraAction(ctx, 'cthulhu_whispers_in_darkness'));
+    events.push(grantContextualExtraAction(ctx, 'cthulhu_whispers_in_darkness'));
     return { events };
 }
 
@@ -489,7 +489,7 @@ function cthulhuAltarTrigger(ctx: TriggerContext): SmashUpEvent[] {
         const isPod = ongoing.defId.endsWith('_pod');
         if (isPod && usedUids.includes(ongoing.uid)) continue;
 
-        events.push(grantExtraAction(ctx.playerId, 'cthulhu_altar', ctx.now));
+        events.push(grantContextualExtraAction(ctx, 'cthulhu_altar'));
 
         if (isPod && !newUsedUids.includes(ongoing.uid)) {
             newUsedUids.push(ongoing.uid);
@@ -766,8 +766,8 @@ export function registerCthulhuInteractionHandlers(): void {
             } as CardsDrawnEvent);
         }
 
-        for (let i = 0; i < madnessUids.length; i++) {
-            events.push(grantExtraAction(playerId, 'cthulhu_madness_unleashed', timestamp));
+        for (let i = 0; i < count; i++) {
+            events.push(grantContextualExtraAction({ playerId, now: timestamp, matchState: state }, 'cthulhu_madness_unleashed'));
         }
 
         return { state, events };

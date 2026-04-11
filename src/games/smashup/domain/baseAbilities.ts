@@ -25,6 +25,8 @@ import { SU_EVENTS } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import {
     drawMadnessCards,
+    grantContextualExtraAction,
+    grantContextualExtraMinion,
     destroyMinion,
     buildBaseTargetOptions,
     buildMinionTargetOptions,
@@ -835,16 +837,7 @@ export function registerBaseAbilities(): void {
         const actionTargetType = ctx.actionTargetType ?? (ctx.actionTargetMinionUid ? 'minion' : 'base');
         if (actionTargetType !== 'base') return { events: [] };
         return {
-            events: [{
-                type: SU_EVENTS.LIMIT_MODIFIED,
-                payload: {
-                    playerId: ctx.playerId,
-                    limitType: 'action',
-                    delta: 1,
-                    reason: '工坊：额外打出一张战斗牌',
-                },
-                timestamp: ctx.now,
-            } as LimitModifiedEvent],
+            events: [grantContextualExtraAction(ctx, '工坊：额外打出一张战斗牌')],
         };
     });
 
@@ -1116,17 +1109,7 @@ export function registerBaseAbilities(): void {
     // 力量≤2 限制通过 LIMIT_MODIFIED 事件的 powerMax 字段全局生效
     registerBaseAbility('base_the_homeworld', 'onMinionPlayed', (ctx) => {
         return {
-            events: [{
-                type: SU_EVENTS.LIMIT_MODIFIED,
-                payload: {
-                    playerId: ctx.playerId,
-                    limitType: 'minion',
-                    delta: 1,
-                    reason: '母星：额外打出力量≤2的随从',
-                    powerMax: 2,
-                },
-                timestamp: ctx.now,
-            } as LimitModifiedEvent],
+            events: [grantContextualExtraMinion(ctx, '母星：额外打出力量≤2的随从', undefined, { powerMax: 2 })],
         };
     });
 

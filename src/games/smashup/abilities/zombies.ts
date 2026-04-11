@@ -14,7 +14,7 @@ import type {
     MinionPlayedEvent,
     CardsMilledEvent,
 } from '../domain/types';
-import { recoverCardsFromDiscard, grantExtraMinion, buildBaseTargetOptions, buildAbilityFeedback, peekDeckTop } from '../domain/abilityHelpers';
+import { recoverCardsFromDiscard, grantContextualExtraMinion, grantExtraMinion, buildBaseTargetOptions, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerRestriction, registerTrigger } from '../domain/ongoingEffects';
@@ -279,7 +279,7 @@ function zombieOutbreak(ctx: AbilityContext): AbilityResult {
     
     // 只有一个空基地时，直接授予额度
     if (emptyBases.length === 1) {
-        return { events: [grantExtraMinion(ctx.playerId, 'zombie_outbreak', ctx.now, emptyBases[0].baseIndex)] };
+        return { events: [grantContextualExtraMinion(ctx, 'zombie_outbreak', emptyBases[0].baseIndex)] };
     }
     
     // 多个空基地时，让玩家选择基地后授予额度
@@ -583,7 +583,7 @@ export function registerZombieInteractionHandlers(): void {
         const { baseIndex } = value as { baseIndex: number };
         return {
             state,
-            events: [grantExtraMinion(playerId, 'zombie_outbreak', timestamp, baseIndex)],
+            events: [grantContextualExtraMinion({ playerId, now: timestamp, matchState: state }, 'zombie_outbreak', baseIndex)],
         };
     });
 

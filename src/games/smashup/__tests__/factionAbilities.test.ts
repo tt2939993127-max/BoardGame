@@ -31,6 +31,39 @@ beforeAll(() => {
     initAllAbilities();
 });
 
+describe('ghost extra timing audit', () => {
+    it('ghost_ghostly_arrival marks off-phase extras as immediate', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const matchState = makeMatchState(state);
+        matchState.sys.phase = 'startTurn';
+
+        const executor = resolveAbility('ghost_ghostly_arrival', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const result = executor!({
+            state,
+            matchState,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'ghost_ghostly_arrival',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 1000,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(2);
+        expect(limitEvents.every(e => (e as any).payload.playTiming === 'immediate')).toBe(true);
+    });
+});
+
 describe('trickster interaction regressions', () => {
     it('trickster_gnome resolves selected target', () => {
         const state = makeState({

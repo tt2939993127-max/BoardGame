@@ -44,32 +44,31 @@ beforeAll(() => {
     initAllAbilities();
 });
 
-function resolveDuelChain(initialState: MatchState<SmashUpCore>) {
-    return resolveInteractionChain(initialState, (prompt) => {
-        const sourceId = prompt?.data?.sourceId as string | undefined;
-        if (sourceId === 'smashup_duel_pinkerton') {
-            const option = findInteractionOption(prompt, entry => entry?.value?.amount === 0);
-            if (!option) throw new Error('未找到 Pinkerton 的 0 指示物选项');
-            return { optionId: option.id };
-        }
-        if (sourceId === 'smashup_duel_card' || sourceId === 'smashup_duel_deputy_card') {
-            const option = findInteractionOption(prompt, entry => entry?.value?.skip === true);
-            if (!option) throw new Error(`未找到 ${sourceId} 的跳过选项`);
-            return { optionId: option.id };
-        }
-        if (sourceId === 'smashup_duel_run_em_off_move') {
-            return { optionId: prompt.data.options[0].id };
-        }
-        throw new Error(`未处理的决斗交互 sourceId: ${sourceId ?? 'unknown'}`);
-    });
-}
+describe('new base extra timing regression coverage', () => {
+    it('base_the_workshop marks off-phase extra actions as immediate', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_the_workshop',
+                minions: [],
+                ongoingActions: [],
+            }],
+        });
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'startTurn';
 
-const dummyRandom: RandomFn = {
-    random: () => 0.5,
-    d: () => 1,
-    range: (min: number) => min,
-    shuffle: <T>(arr: T[]) => [...arr],
-};
+        const result = triggerBaseAbilityWithMS('base_the_workshop', 'onActionPlayed', {
+            state: core,
+            matchState: ms,
+            baseIndex: 0,
+            baseDefId: 'base_the_workshop',
+            playerId: '0',
+            actionTargetBaseIndex: 0,
+            now: 1000,
+        } as BaseAbilityContext);
+
+        expect((result.events[0] as any).payload.playTiming).toBe('immediate');
+    });
+});
 
 /** 构造最小测试状态 */
 function makeState(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
