@@ -1,7 +1,7 @@
 /**
  * 统一管理 socket.io 的握手策略。
  * 生产环境默认优先 websocket，避免慢链路上重连风暴。
- * 开发/测试环境优先 polling，再升级 websocket，减少本地代理链路先报一轮 websocket 失败的噪声。
+ * 开发/测试环境允许 polling 回退，但仍优先 websocket，避免不必要的长轮询延迟。
  */
 export const SOCKET_CONNECT_TIMEOUT_MS = 30_000;
 export const SOCKET_COMPATIBILITY_MODE_STORAGE_KEY = 'boardgame.socketCompatibilityMode';
@@ -10,7 +10,7 @@ export type SocketIoTransport = 'websocket' | 'polling';
 
 const SOCKET_IO_TRANSPORTS_DEFAULT: SocketIoTransport[] = ['websocket'];
 const SOCKET_IO_TRANSPORTS_COMPATIBILITY: SocketIoTransport[] = ['websocket', 'polling'];
-const SOCKET_IO_TRANSPORTS_DEV_FALLBACK: SocketIoTransport[] = ['polling', 'websocket'];
+const SOCKET_IO_TRANSPORTS_DEV_FALLBACK: SocketIoTransport[] = ['websocket', 'polling'];
 
 const metaEnv = (import.meta as { env?: Record<string, string | boolean | undefined> }).env ?? {};
 const isDev = metaEnv.DEV === true;
