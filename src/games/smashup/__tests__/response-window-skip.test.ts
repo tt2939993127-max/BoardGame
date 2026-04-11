@@ -424,4 +424,5 @@ describe('响应窗口跳过逻辑', () => {
         expect(resolveResult.finalState.sys.responseWindow?.current?.pendingInteractionId).toBeUndefined();
         expect(resolveResult.finalState.sys.responseWindow?.current?.currentResponderIndex).toBe(0);
     });
+
 });

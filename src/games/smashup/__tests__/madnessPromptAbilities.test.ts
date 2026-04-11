@@ -795,6 +795,51 @@ describe('米斯卡塔尼克大学 - miskatonic_thing_on_the_doorstep（老詹�
         expect((i.data as any).options.length).toBe(2);
     });
 
+    it('多个并列最高力量时，交互解决后会真正发出消灭事件', () => {
+        const state = makeStateWithMadness({
+            bases: [{
+                defId: 'base_test', ongoingActions: [],
+                minions: [
+                    makeMinion('tie1', 'test_a', '0', 5),
+                    makeMinion('tie2', 'test_b', '1', 5),
+                    makeMinion('weak', 'test_c', '1', 2),
+                ],
+            }],
+        });
+
+        const result = execSpecial(state, '0', 0);
+        const interaction = result.matchState!.sys.interaction.current;
+        expect(interaction).toBeDefined();
+        expect((interaction!.data as any).sourceId).toBe('miskatonic_thing_on_the_doorstep');
+
+        const handler = getInteractionHandler('miskatonic_thing_on_the_doorstep');
+        expect(handler).toBeDefined();
+
+        const tie2Option = (interaction!.data as any).options.find((option: any) => option.value?.minionUid === 'tie2');
+        expect(tie2Option).toBeDefined();
+
+        const resolved = handler!(
+            result.matchState!,
+            '0',
+            tie2Option.value,
+            interaction!.data as any,
+            defaultRandom,
+            456,
+        );
+
+        const destroyEvts = resolved.events.filter((event: any) => event.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvts).toHaveLength(1);
+        expect((destroyEvts[0] as any).payload).toMatchObject({
+            minionUid: 'tie2',
+            minionDefId: 'test_b',
+            fromBaseIndex: 0,
+            reason: 'miskatonic_thing_on_the_doorstep',
+        });
+
+        const newState = applyEvents(state, resolved.events);
+        expect(newState.bases[0].minions.map(minion => minion.uid)).toEqual(['tie1', 'weak']);
+    });
+
     it('基地无随从时无效果', () => {
         const state = makeStateWithMadness({
             bases: [{ defId: 'base_test', ongoingActions: [], minions: [] }],

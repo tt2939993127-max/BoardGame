@@ -298,6 +298,9 @@ describe('elder_things_pod: The Price of Power POD', () => {
         expect(revealEvt.payload.targetPlayerId).toBe('1');
 
         const counters = res.events.filter(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED) as any[];
+        // DEBUG
+        // eslint-disable-next-line no-console
+        console.log('[price_of_power_pod] counters', counters.map(c => ({ amount: c.payload.amount, reason: c.payload.reason })));
         expect(counters.length).toBe(2);
         expect(counters.every(e => e.payload.amount === 1)).toBe(true);
         expect(counters.every(e => e.payload.reason === 'elder_thing_the_price_of_power_pod')).toBe(true);

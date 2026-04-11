@@ -473,6 +473,14 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
   const shell = document.querySelector('.mobile-board-shell');
   const shellRect = shell instanceof HTMLElement ? shell.getBoundingClientRect() : null;
   const shellStyle = shell instanceof HTMLElement ? window.getComputedStyle(shell) : null;
+  const shellOffsets = shell instanceof HTMLElement
+    ? {
+      offsetWidth: shell.offsetWidth,
+      offsetHeight: shell.offsetHeight,
+      clientWidth: shell.clientWidth,
+      clientHeight: shell.clientHeight,
+    }
+    : null;
   const parsePx = (value: string) => {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : 0;
@@ -513,6 +521,8 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
   };
 
   const mapContent = document.querySelector('[data-testid="sw-map-content"]');
+  const mapContainer = document.querySelector('[data-testid="sw-map-container"]');
+  const mapContentStyle = mapContent instanceof HTMLElement ? window.getComputedStyle(mapContent) : null;
   const handArea = document.querySelector('[data-testid="sw-hand-area"]');
   const phaseTracker = document.querySelector('[data-testid="sw-phase-tracker"]');
   const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]');
@@ -523,6 +533,22 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
   const actionBanner = document.querySelector('[data-testid="sw-action-banner"]');
 
   const mapRect = toRect(mapContent);
+  const mapContentOffsets = mapContent instanceof HTMLElement
+    ? {
+      offsetWidth: mapContent.offsetWidth,
+      offsetHeight: mapContent.offsetHeight,
+      clientWidth: mapContent.clientWidth,
+      clientHeight: mapContent.clientHeight,
+    }
+    : null;
+  const mapContainerOffsets = mapContainer instanceof HTMLElement
+    ? {
+      offsetWidth: mapContainer.offsetWidth,
+      offsetHeight: mapContainer.offsetHeight,
+      clientWidth: mapContainer.clientWidth,
+      clientHeight: mapContainer.clientHeight,
+    }
+    : null;
   const handRect = toRect(handArea);
   const trackerRect = toRect(phaseTracker);
   const endPhaseRect = toRect(endPhaseButton);
@@ -552,6 +578,10 @@ const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
       rawDesignHeight,
       offsetX,
       offsetY,
+      shellOffsets,
+      mapContentOffsets,
+      mapContainerOffsets,
+      mapContentTransform: mapContentStyle?.transform ?? '',
       shell: shellRect
         ? {
           width: shellRect.width,
@@ -3076,6 +3106,10 @@ test.describe('SummonerWars', () => {
     });
     // eslint-disable-next-line no-console
     console.log('[SummonerWars] mobile shell vars', mobileShellVars);
+    // eslint-disable-next-line no-console
+    console.log('[SummonerWars] mobile shell debug', mobileShellRatios.debug);
+    // eslint-disable-next-line no-console
+    console.log('[SummonerWars] desktop shell debug', desktopShellRatios.debug);
     assertShellRatiosClose('mobile-basic-flow-shell-ratios', desktopShellRatios, mobileShellRatios);
     await testInfo.attach('summonerwars-shell-ratios.json', {
       body: JSON.stringify({

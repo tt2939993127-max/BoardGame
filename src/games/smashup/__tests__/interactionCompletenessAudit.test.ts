@@ -131,6 +131,5 @@ createInteractionCompletenessAuditSuite({
   // TODO: 考虑让 resolveOrPrompt 自动注册 handler
   handlerWhitelist: new Set([
     'miskatonic_mandatory_reading',
-    'miskatonic_thing_on_the_doorstep',
   ]),
 });

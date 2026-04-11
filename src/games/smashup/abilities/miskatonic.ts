@@ -994,7 +994,32 @@ export function registerMiskatonicInteractionHandlers(): void {
         return { state, events };
     });
 
-    // 老詹金斯!?的交互处理器已移除（改为 special，resolveOrPrompt 自动处理）
+    // 老詹金斯!?：并列最高力量时，交互解决后真正发出消灭事件
+    registerInteractionHandler('miskatonic_thing_on_the_doorstep', (state, _playerId, value, _iData, _random, timestamp) => {
+        const selected = value as { minionUid?: string; baseIndex?: number; defId?: string };
+        if (!selected.minionUid || selected.baseIndex === undefined || !selected.defId) {
+            return { state, events: [] };
+        }
+        const base = state.core.bases[selected.baseIndex];
+        const target = base?.minions.find(m => m.uid === selected.minionUid && m.defId === selected.defId);
+        if (!target) {
+            return { state, events: [] };
+        }
+        return {
+            state,
+            events: [
+                destroyMinion(
+                    target.uid,
+                    target.defId,
+                    selected.baseIndex,
+                    target.owner,
+                    undefined,
+                    'miskatonic_thing_on_the_doorstep',
+                    timestamp,
+                ),
+            ],
+        };
+    });
 
     // 心理学家：选择疯狂卡返回疯狂牌库（可跳过）
     registerInteractionHandler('miskatonic_psychologist', (state, playerId, value, _iData, _random, timestamp) => {

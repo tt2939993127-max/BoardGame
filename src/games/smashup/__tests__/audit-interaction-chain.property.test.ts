@@ -32,11 +32,9 @@ beforeAll(() => {
 /**
  * 已知白名单：这些 sourceId 通过特殊机制处理，不需要标准 handler 注册。
  * - miskatonic_mandatory_reading: resolveOrPrompt 内联回调处理
- * - miskatonic_thing_on_the_doorstep: resolveOrPrompt 内联回调处理
  */
 const HANDLER_WHITELIST = new Set<string>([
     'miskatonic_mandatory_reading',
-    'miskatonic_thing_on_the_doorstep',
 ]);
 
 // ============================================================================

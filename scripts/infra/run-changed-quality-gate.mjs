@@ -10,6 +10,7 @@ const repoRoot = process.cwd();
 const modeInput = (process.argv[2] || process.env.QUALITY_GATE_MODE || 'local').trim().toLowerCase();
 const mode = modeInput === 'prepush' ? 'pre-push' : modeInput;
 const isPrePushMode = mode === 'pre-push';
+const targetHeadRef = (process.env.QUALITY_GATE_HEAD || 'HEAD').trim() || 'HEAD';
 const CACHE_SCHEMA_VERSION = 2;
 
 // pre-push changed test runs touch a large cross-section of suites and can emit
@@ -272,17 +273,24 @@ function resolveBaseRef() {
   throw new Error('[changed-quality-gate] 无法解析对比基线');
 }
 
+function resolveTargetHeadRef() {
+  const resolved = runGit(['rev-parse', '--verify', targetHeadRef], { allowFailure: true });
+  if (resolved) return resolved;
+  throw new Error(`[changed-quality-gate] 无法解析目标提交: ${targetHeadRef}`);
+}
+
 function resolveChangeContext() {
+  const resolvedTargetHead = resolveTargetHeadRef();
   const baseRef = resolveBaseRef();
-  const mergeBase = runGit(['merge-base', 'HEAD', baseRef], { allowFailure: true }) || baseRef;
-  const headSha = runGit(['rev-parse', 'HEAD']);
-  const aheadCountRaw = runGit(['rev-list', '--count', `${baseRef}..HEAD`], { allowFailure: true });
+  const mergeBase = runGit(['merge-base', resolvedTargetHead, baseRef], { allowFailure: true }) || baseRef;
+  const headSha = resolvedTargetHead;
+  const aheadCountRaw = runGit(['rev-list', '--count', `${baseRef}..${resolvedTargetHead}`], { allowFailure: true });
   const aheadCount = Number.parseInt(aheadCountRaw, 10);
   const previousHead = isPrePushMode && Number.isFinite(aheadCount) && aheadCount > 1
-    ? runGit(['rev-parse', 'HEAD^'], { allowFailure: true })
+    ? runGit(['rev-parse', `${resolvedTargetHead}^`], { allowFailure: true })
     : '';
   const effectiveBaseRef = previousHead || baseRef;
-  const effectiveScopeLabel = `${effectiveBaseRef}...HEAD`;
+  const effectiveScopeLabel = `${effectiveBaseRef}...${resolvedTargetHead}`;
   const output = runGit(['diff', '--name-status', '--find-renames', '--diff-filter=ACMR', effectiveScopeLabel], { allowFailure: true });
   const { files, baselinePathByFile } = parseDiffNameStatus(output);
 
@@ -290,6 +298,7 @@ function resolveChangeContext() {
     baseRef,
     mergeBase,
     headSha,
+    targetHeadRef: resolvedTargetHead,
     aheadCount: Number.isFinite(aheadCount) ? aheadCount : 0,
     effectiveBaseRef,
     effectiveScopeLabel,
@@ -1036,6 +1045,7 @@ const {
   baseRef,
   mergeBase,
   headSha,
+  targetHeadRef: resolvedTargetHead,
   aheadCount,
   effectiveBaseRef,
   effectiveScopeLabel,
@@ -1052,6 +1062,7 @@ const affectsTypecheck = createTypecheckPredicate(effectiveBaseRef, headSha);
 console.log(`[changed-quality-gate] 模式: ${mode}`);
 console.log(`[changed-quality-gate] 基线: ${baseRef}`);
 console.log(`[changed-quality-gate] merge-base: ${mergeBase}`);
+console.log(`[changed-quality-gate] 目标提交: ${resolvedTargetHead}`);
 console.log(`[changed-quality-gate] head: ${headSha}`);
 if (isPrePushMode && aheadCount > 1 && effectiveBaseRef !== baseRef) {
   console.log(`[changed-quality-gate] pre-push 检测到当前分支领先 ${aheadCount} 个提交，当前仅校验最新提交范围: ${effectiveScopeLabel}`);
