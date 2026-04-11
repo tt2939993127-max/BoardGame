@@ -635,10 +635,14 @@ describe('useGameNamespaceReady', () => {
         expect(mockLoggerError).not.toHaveBeenCalled();
     });
 
-    it('namespace 请求长期 pending 时会在 4000ms 后显式报超时', async () => {
+    it('namespace 请求长期 pending 时会在重试后显式报超时', async () => {
         vi.useFakeTimers();
         try {
-            const { GAME_NAMESPACE_LOAD_TIMEOUT_MS, useGameNamespaceReady } = await import('../../hooks/useGameNamespaceReady');
+            const {
+                GAME_NAMESPACE_LOAD_TIMEOUT_MS,
+                GAME_NAMESPACE_AUTO_RETRY_DELAY_MS,
+                useGameNamespaceReady,
+            } = await import('../../hooks/useGameNamespaceReady');
             const i18n = {
                 language: 'zh-CN',
                 resolvedLanguage: 'zh-CN',
@@ -657,13 +661,17 @@ describe('useGameNamespaceReady', () => {
             );
 
             await act(async () => {
-                await vi.advanceTimersByTimeAsync(GAME_NAMESPACE_LOAD_TIMEOUT_MS);
+                await vi.advanceTimersByTimeAsync(
+                    GAME_NAMESPACE_LOAD_TIMEOUT_MS
+                    + GAME_NAMESPACE_AUTO_RETRY_DELAY_MS
+                    + GAME_NAMESPACE_LOAD_TIMEOUT_MS,
+                );
                 await Promise.resolve();
             });
 
             expect(result.current.gameNamespaceError).toContain('游戏文案加载超时');
             expect(result.current.isGameNamespaceReady).toBe(false);
-            expect(mockLoggerError).toHaveBeenCalledTimes(1);
+            expect(mockLoggerError).toHaveBeenCalledTimes(2);
         } finally {
             vi.useRealTimers();
         }

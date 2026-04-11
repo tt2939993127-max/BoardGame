@@ -12,7 +12,9 @@ interface UseGameNamespaceReadyOptions {
     required?: boolean;
 }
 
-export const GAME_NAMESPACE_LOAD_TIMEOUT_MS = 4000;
+export const GAME_NAMESPACE_LOAD_TIMEOUT_MS = 8000;
+export const GAME_NAMESPACE_AUTO_RETRY_LIMIT = 1;
+export const GAME_NAMESPACE_AUTO_RETRY_DELAY_MS = 1200;
 
 const createGameNamespaceTimeoutMessage = (gameId: string, namespace: string) => (
     `游戏文案加载超时：${gameId}/${namespace}（${GAME_NAMESPACE_LOAD_TIMEOUT_MS}ms）`
@@ -46,6 +48,7 @@ export function useGameNamespaceReady(
     options: UseGameNamespaceReadyOptions = {},
 ) {
     const [retryTick, setRetryTick] = useState(0);
+    const [autoRetryCount, setAutoRetryCount] = useState(0);
     const languageKey = i18n.resolvedLanguage ?? i18n.language;
     const required = options.required ?? true;
     const [state, setState] = useState<GameNamespaceState>(() => {
@@ -67,6 +70,9 @@ export function useGameNamespaceReady(
             queueMicrotask(() => {
                 setState({ isReady: true, error: null });
             });
+            queueMicrotask(() => {
+                setAutoRetryCount(0);
+            });
             return;
         }
 
@@ -81,13 +87,20 @@ export function useGameNamespaceReady(
             queueMicrotask(() => {
                 setState({ isReady: true, error: null });
             });
+            queueMicrotask(() => {
+                setAutoRetryCount(0);
+            });
             return;
         }
 
         let isActive = true;
+        let retryTimer: ReturnType<typeof setTimeout> | null = null;
         const startedAt = Date.now();
         const timeoutMessage = createGameNamespaceTimeoutMessage(gameId, namespace);
-        setState({ isReady: false, error: null });
+        queueMicrotask(() => {
+            if (!isActive) return;
+            setState({ isReady: false, error: null });
+        });
         logMobileRuntime('GameNamespace', 'load-start', {
             gameId,
             namespace,
@@ -132,13 +145,25 @@ export function useGameNamespaceReady(
                     logMobileRuntimeCritical('GameNamespace', 'load-timeout', payload);
                 }
                 if (!isActive) return;
+                if (isTimeout && autoRetryCount < GAME_NAMESPACE_AUTO_RETRY_LIMIT) {
+                    setAutoRetryCount((count) => count + 1);
+                    setState({ isReady: false, error: null });
+                    retryTimer = setTimeout(() => {
+                        if (!isActive) return;
+                        setRetryTick((tick) => tick + 1);
+                    }, GAME_NAMESPACE_AUTO_RETRY_DELAY_MS);
+                    return;
+                }
                 setState({ isReady: false, error: message });
             });
 
         return () => {
             isActive = false;
+            if (retryTimer) {
+                clearTimeout(retryTimer);
+            }
         };
-    }, [gameId, i18n, languageKey, required, retryTick]);
+    }, [autoRetryCount, gameId, i18n, languageKey, required, retryTick]);
 
     return {
         isGameNamespaceReady: state.isReady,
