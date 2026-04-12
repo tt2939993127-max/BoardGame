@@ -1266,7 +1266,7 @@ function getBaseDefIdsForFactionsLegacy(factionIds: string[]): string[] {
 
 
 /** 查找卡牌定义 */
-/** 鏍规嵁鎵€閫夋淳绯昏幏鍙栧熀鍦板畾涔?ID锛堝悓鍙樹綋琛ュ厖锛欿OD 鍙ˉ POD锛屽熀纭€鍙ˉ鍩虹锛?*/
+/** 根据所选派系获取基地定义 ID（同变体补充：POD 只补 POD，基础只补基础） */
 export function getBaseDefIdsForFactions(factionIds: string[]): string[] {
     const selectedFactionIds = [...new Set(factionIds)];
     const selectedOriginalFactions = new Set(

@@ -1,7 +1,7 @@
 /**
- * 澶ф潃鍥涙柟 (Smash Up) - 棰嗗煙鍐呮牳缁勮
+ * 大杀四方 (Smash Up) - 领域内核组装
  *
- * 鑱岃矗锛歴etup 鍒濆鍖栥€丗lowSystem 閽╁瓙銆乸layerView銆乮sGameOver
+
  */
 
 import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn, MatchState } from '../../../engine/types';
@@ -86,7 +86,7 @@ import {
 } from './scoringSession';
 
 // ============================================================================
-// 鍩哄湴璁板垎杈呭姪鍑芥暟锛堜緵 FlowHooks 鍜?Prompt 缁х画鍑芥暟鍏辩敤锛?
+
 // ============================================================================
 
 function collectQualifiedPlayerPowers(
@@ -441,9 +441,9 @@ function finalizeCurrentScoringBase(
 }
 
 /**
- * 瀵规寚瀹氬熀鍦版墽琛岃鍒嗛€昏緫锛岃繑鍥炴墍鏈夌浉鍏充簨浠?
+
  * 
- * 鍖呭惈锛歜eforeScoring 鍩哄湴鑳藉姏 鈫?鎺掑悕璁＄畻 鈫?BASE_SCORED 鈫?afterScoring 鍩哄湴鑳藉姏 鈫?BASE_REPLACED
+
  */
 export function scoreOneBase(
     core: SmashUpCore,
@@ -460,7 +460,6 @@ export function scoreOneBase(
         core = matchState.core;
     }
 
-    // 榛樿 random锛堢‘瀹氭€у洖閫€锛岃鍒嗕腑澶у鏁?trigger 涓嶉渶瑕侀殢鏈猴級
     const rng: RandomFn = random ?? {
         random: () => 0.5,
         d: () => 1,
@@ -483,15 +482,10 @@ export function scoreOneBase(
             : session,
         );
     }
-    
-    // 銆愪慨澶嶃€憂ewBaseDeck 蹇呴』鍦ㄥ嚱鏁伴《閮ㄥ０鏄庯紝閬垮厤 TDZ 閿欒
-    // 闂锛氫箣鍓嶅湪涓や釜涓嶅悓鐨勪綔鐢ㄥ煙涓０鏄庝簡 newBaseDeck锛坙ine 454 鍜?line 476锛?
-    // 褰撳嚱鏁板湪 afterScoring 绐楀彛鎵撳紑鍚庢彁鍓嶈繑鍥烇紝鍐嶆璋冪敤鏃朵細璁块棶鏈垵濮嬪寲鐨勫灞?newBaseDeck
     let newBaseDeck = baseDeck;
-    // 瑙﹀彂 ongoing beforeScoring锛堝 pirate_king 绉诲姩鍒拌鍩哄湴銆乧thulhu_chosen +2鍔涢噺锛?
-    // 鍏堜簬鍩哄湴鑳藉姏鎵ц锛岀‘淇濆熀鍦拌兘鍔涜兘鐪嬪埌 ongoing 鏁堟灉鐨勭粨鏋?
+
     
-    // 妫€鏌ユ槸鍚﹀凡缁忚Е鍙戣繃 beforeScoring锛堥槻姝氦浜掕В鍐冲悗閲嶅瑙﹀彂锛?
+
     const alreadyTriggeredBeforeScoring = core.beforeScoringTriggeredBases?.includes(baseIndex) ?? false;
     
     
@@ -517,7 +511,7 @@ export function scoreOneBase(
             core = rq0.state.core;
         }
         
-        // 鍙戝皠浜嬩欢鏍囪姝ゅ熀鍦板凡瑙﹀彂杩?beforeScoring
+
         const markEvent = {
             type: SU_EVENT_TYPES.BEFORE_SCORING_TRIGGERED,
             payload: { baseIndex },
@@ -525,36 +519,29 @@ export function scoreOneBase(
         };
         events.push(markEvent as unknown as SmashUpEvent);
         
-        // 鉁?鍏抽敭淇锛氱珛鍗冲皢鏍囪浜嬩欢 reduce 鍒版湰鍦?core 鍓湰
+
         // 
-        // 闂锛氫簨浠堕┍鍔ㄦ灦鏋勪腑锛屼簨浠剁殑鍙戝皠锛坋mit锛夊拰褰掔害锛坮educe锛夋槸鍒嗙鐨勶細
-        // 1. scoreOneBase 鍙戝皠浜嬩欢鍚庣珛鍗宠繑鍥?
+
         // 2. 杩欎簺浜嬩欢瑕佺瓑鍒版暣涓?onPhaseExit 杩斿洖鍚庯紝鎵嶄細琚?pipeline 閫愪釜 reduce
-        // 3. 浣?FlowSystem 鍦ㄤ氦浜掕В鍐冲悗浼氶噸鏂拌繘鍏?onPhaseExit锛屾鏃朵娇鐢ㄧ殑 core 杩樻病鏈夊寘鍚涓€娆″彂灏勭殑鏍囪浜嬩欢
+
         // 
-        // 瑙ｅ喅鏂规锛氬彂灏勬爣璁颁簨浠跺悗绔嬪嵆 reduce 鍒版湰鍦?core 鍓湰锛岀‘淇濆悗缁皟鐢?scoreOneBase 鏃惰兘鐪嬪埌"宸茶Е鍙?鏍囪
+
         // 
-        // 绀轰緥鍦烘櫙锛堟捣鐩楃帇绉诲姩 bug锛夛細
+
         // - 绗竴娆¤皟鐢細妫€鏌?beforeScoringTriggeredBases 鈫?undefined 鈫?瑙﹀彂 beforeScoring 鈫?鍒涘缓娴风洍鐜嬩氦浜?鈫?halt
-        // - 鐢ㄦ埛鐐瑰嚮"绉诲姩鍒拌鍩哄湴" 鈫?浜や簰瑙ｅ喅
-        // - 绗簩娆¤皟鐢細濡傛灉娌℃湁绔嬪嵆 reduce锛宐eforeScoringTriggeredBases 浠嶆槸 undefined 鈫?鍙堝垱寤虹浉鍚?ID 鐨勪氦浜?鈫?UI 鍗′綇
+
         core = reduce(core, markEvent as unknown as SmashUpEvent);
 
-        // beforeScoring 鍙兘鍒涘缓浜嗕氦浜掞紙濡傛捣鐩楃帇绉诲姩纭锛?
-        // 蹇呴』鍏?halt 绛変氦浜掕В鍐炽€佷簨浠?reduce 鍒?core 鍚庯紝鍐嶇户缁?
         if (ms?.sys?.interaction?.current) {
             return { events, newBaseDeck: baseDeck, matchState: ms };
         }
     }
 
-    // 灏?ongoing beforeScoring 浜х敓鐨勪簨浠讹紙濡?TEMP_POWER_ADDED銆丮INION_MOVED锛塺educe 鍒?core锛?
-    // 纭繚鍚庣画鍩哄湴鑳藉姏鍜屾帓鍚嶈绠椾娇鐢ㄦ渶鏂扮姸鎬?
     let updatedCore = core;
     for (const evt of events) {
         updatedCore = reduce(updatedCore, evt as SmashUpEvent);
     }
 
-    // 瑙﹀彂 beforeScoring 鍩哄湴鑳藉姏锛堝叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
     const queuedBeforeBase = collectBaseAbilityTriggers({
         core: updatedCore,
         timing: 'beforeScoring',
@@ -577,7 +564,6 @@ export function scoreOneBase(
         }
     }
 
-    // 璁＄畻鎺掑悕锛堜娇鐢?reduce 鍚庣殑 core锛屽寘鍚?beforeScoring 鐨勪复鏃跺姏閲忎慨姝?+ ongoing 鍗″姏閲忚础鐚級
     const updatedBaseAfterBefore = updatedCore.bases[baseIndex];
     // beforeScoring 处理后，如果该基地已不再达标，则本次计分直接跳过
     // （例如 pirate_king 移走随从导致基地力量降到 breakpoint 以下）
@@ -639,7 +625,6 @@ export function scoreOneBase(
     const finalPlayerPowers = collectQualifiedPlayerPowers(updatedCore, scoringBase, baseIndex);
     const rankings = buildBaseRankings(baseDef, finalPlayerPowers);
 
-    // 鏀堕泦姣忎綅鐜╁鐨勯殢浠庡姏閲?breakdown锛堢敤浜?ActionLog 灞曠ず锛?
     const minionBreakdowns: Record<PlayerId, MinionPowerBreakdown[]> = {};
     for (const m of scoringBase.minions) {
         const bd = getEffectivePowerBreakdown(updatedCore, m, baseIndex);
@@ -663,8 +648,6 @@ export function scoreOneBase(
     };
     events.push(scoreEvt);
 
-    // 瑙﹀彂 onMinionDiscardedFromBase锛堝熀鍦扮粨绠楀純缃紝闈炴秷鐏級
-    // 鍦?BASE_SCORED 鍚庛€乤fterScoring 鍓嶈Е鍙戯紝姝ゆ椂闅忎粠浠嶅湪 core 涓紙reducer 灏氭湭鎵ц锛?
     for (const m of scoringBase.minions) {
         const queued = collectTriggers(core, 'onMinionDiscardedFromBase', {
             state: core,
@@ -695,7 +678,6 @@ export function scoreOneBase(
     const interactionBeforeAfterScoring = ms?.sys?.interaction?.current?.id ?? null;
     const queueLenBeforeAfterScoring = ms?.sys?.interaction?.queue?.length ?? 0;
 
-    // 妫€鏌ユ槸鍚﹀凡缁忚Е鍙戣繃 afterScoring锛堥槻姝氦浜掕В鍐冲悗閲嶅瑙﹀彂锛?
     const alreadyTriggeredAfterScoring = updatedCore.afterScoringTriggeredBases?.includes(baseIndex) ?? false;
 
     if (!alreadyTriggeredAfterScoring) {
@@ -794,14 +776,6 @@ export function scoreOneBase(
         (interactionAfter !== null && interactionAfter !== interactionBeforeAfterScoring) ||
         (queueLenAfter > queueLenBeforeAfterScoring);
 
-    // 銆愭柊澧炪€戞鏌ユ槸鍚﹂渶瑕佹墦寮€ afterScoring 鍝嶅簲绐楀彛
-    // 娉ㄦ剰锛歛fterScoring 鍝嶅簲绐楀彛鍦?BASE_SCORED 涔嬪悗銆丅ASE_CLEARED 涔嬪墠鎵撳紑
-    // 杩欐牱鐜╁鎵撳嚭鐨?afterScoring 鍗＄墝鍙互褰卞搷璇ュ熀鍦扮殑鍔涢噺锛屽苟鍙兘瀵艰嚧閲嶆柊璁″垎
-    // 
-    // 鈿狅笍 銆愬叧閿慨澶嶃€戞棤璁哄熀鍦拌兘鍔涙槸鍚﹀垱寤轰簡浜や簰锛岄兘瑕佹鏌ユ槸鍚︽湁 afterScoring 鍗＄墝
-    // 鍘熷洜锛氬熀鍦拌兘鍔涘垱寤轰氦浜掞紙濡傛捣鐩楁咕绉诲姩闅忎粠锛夊拰鍝嶅簲绐楀彛锛堣鐜╁鎵撳嚭 afterScoring 鍗＄墝锛?
-    // 鏄袱涓嫭绔嬬殑鏈哄埗锛屽簲璇ュ悓鏃跺瓨鍦?
-    // 妫€鏌ユ槸鍚︽湁鐜╁鎵嬬墝涓湁 afterScoring 鍗＄墝
     const playersWithAfterScoringCards = ms
         ? getPlayersWithPlayableAfterScoringResponses({ ...ms, core: afterScoringCore }, now)
         : [];
@@ -905,7 +879,6 @@ export function scoreOneBase(
     return { events, newBaseDeck, matchState: ms };
 }
 
-/** 娉ㄥ唽澶氬熀鍦拌鍒嗙殑浜や簰瑙ｅ喅澶勭悊鍑芥暟 */
 export function registerMultiBaseScoringInteractionHandler(): void {
     registerInteractionHandler('multi_base_scoring', (state, _playerId, value) => {
         const { baseIndex } = value as { baseIndex?: number };
@@ -1164,7 +1137,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
     getNextPhase({ from }): string {
         const idx = PHASE_ORDER.indexOf(from as GamePhase);
         if (idx === -1 || idx >= PHASE_ORDER.length - 1) {
-            // endTurn 鍚庡洖鍒?startTurn锛堣烦杩?factionSelect锛屽畠鍙湪娓告垙寮€濮嬫椂浣跨敤涓€娆★級
+
             return 'startTurn';
         }
         return PHASE_ORDER[idx + 1];
@@ -1182,7 +1155,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         if (from === 'endTurn') {
             const events: SmashUpEvent[] = [];
 
-            // 瑙﹀彂 ongoing 鏁堟灉 onTurnEnd锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
             const queuedTurnEnd = collectTriggers(core, 'onTurnEnd', {
                 state: core,
                 matchState: state,
@@ -1197,7 +1169,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 const msForQueue = { ...state, core: coreForQueue };
                 const rq = maybeResolveReactionQueue(msForQueue, random, now);
                 if (rq) {
-                    // 鍏抽敭锛歰nTurnEnd 瑙﹀彂鍣ㄥ彲鑳戒骇鐢?MINION_DESTROYED 绛夛紝闇€瑕佺粡杩?destroy鈫抦ove 寰幆鍚庡鐞?
+
                     const afterDestroyMove = processDestroyMoveCycle(rq.events, rq.state, pid, random, now);
                     events.push(...afterDestroyMove.events);
                 }
@@ -1359,7 +1331,7 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
         const pid = getCurrentPlayerId(core);
         const now = typeof command.timestamp === 'number' ? command.timestamp : 0;
         const events: GameEvent[] = [];
-        // 杩借釜 sys 鍙樻洿锛堝熀鍦拌兘鍔?ongoing 鍙兘鍒涘缓 Interaction锛?
+
         let currentMatchState: MatchState<SmashUpCore> = state;
         let hasSysUpdate = false;
 
@@ -1405,7 +1377,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 
             const startTurnTriggeredEvents: SmashUpEvent[] = [];
 
-            // 瑙﹀彂鍩哄湴 onTurnStart 鑳藉姏锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
             const baseResult = triggerAllBaseAbilities('onTurnStart', startTurnCore, nextPlayerId, now, undefined, currentMatchState, random);
             startTurnTriggeredEvents.push(...baseResult.events);
             if (baseResult.matchState) {
@@ -1413,7 +1384,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 currentMatchState = { ...baseResult.matchState, core: startTurnCore };
             }
 
-            // 瑙﹀彂 ongoing 鏁堟灉 onTurnStart锛堟敼涓哄叆闃燂紝鎸?Wiki 鍚屾椂瑙﹀彂鎺掑簭瑙ｅ喅锛?
             const onTurnStartEvents = fireTriggers(startTurnCore, 'onTurnStart', {
                 state: startTurnCore,
                 matchState: currentMatchState,
@@ -1454,7 +1424,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 events.push(...immediateStartTurn.events);
             }
 
-            // Wiki: Start Turn 鏃跺彲鍏嶈垂鎻紑涓€寮犺嚜宸辨帶鍒剁殑鍩嬭懍鍗★紙鍙€夛紝涓旀瘡鍥炲悎浠呬竴娆★級
             const coreForUncover = currentMatchState.core;
             const buriedChoices: { cardUid: string; baseIndex: number; label: string }[] = [];
             for (let bi = 0; bi < coreForUncover.bases.length; bi++) {
@@ -1488,7 +1457,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
                 hasSysUpdate = true;
             }
 
-            // 鏈?sys 鍙樻洿鏃惰繑鍥?PhaseEnterResult锛屽惁鍒欒繑鍥炵函浜嬩欢鏁扮粍
             if (hasSysUpdate) {
                 return { events, updatedState: currentMatchState } as PhaseEnterResult;
             }
@@ -1603,15 +1571,13 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             return { autoContinue: true, playerId: pid };
         }
 
-        // 閫氱敤瀹堝崼锛氫换浣曢樁娈垫湁寰呭鐞嗙殑 Interaction 鏃堕兘涓嶈嚜鍔ㄦ帹杩?
-        // 锛堝熀鍦拌兘鍔涘鎷夎幈鑰?onTurnStart銆佹墭灏斿浘鍔?afterScoring 绛夊彲鑳藉湪浠绘剰闃舵鍒涘缓 Interaction锛?
         if (state.sys.interaction?.current) {
             return undefined;
         }
 
         // factionSelect 鑷姩鎺ㄨ繘 check
         if (phase === 'factionSelect') {
-            // 濡傛灉鎵€鏈変汉閮介€夊畬浜嗭紙reducer鎶妔election缃┖浜嗭級锛屽垯鑷姩杩涘叆涓嬩竴闃舵
+
             if (!core.factionSelection) {
                 return { autoContinue: true, playerId: pid };
             }
@@ -1625,15 +1591,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             return { autoContinue: true, playerId: pid };
         }
 
-        // scoreBases 闃舵锛氭潯浠舵€ц嚜鍔ㄦ帹杩?
-        // 
-        // 銆愪慨澶嶉€昏緫銆?
-        // 1. 濡傛灉 flowHalted=true 涓斾氦浜掑凡瑙ｅ喅 鈫?鑷姩鎺ㄨ繘锛堟竻鐞?halt 鐘舵€侊級
-        // 2. 濡傛灉娌℃湁 eligible 鍩哄湴 鈫?鑷姩鎺ㄨ繘锛堟棤闇€璁″垎锛?
-        // 3. 濡傛灉鏈?eligible 鍩哄湴涓斿搷搴旂獥鍙ｅ凡鍏抽棴 鈫?鑷姩鎺ㄨ繘锛堣Е鍙戣鍒嗭級
-        // 4. 鍏朵粬鎯呭喌锛堝搷搴旂獥鍙ｄ粛鎵撳紑锛夆啋 涓嶈嚜鍔ㄦ帹杩涳紙绛夊緟鍝嶅簲锛?
-        // 
-        // 杩欐牱鍙互閬垮厤鏃犻檺寰幆锛屽悓鏃跺湪鍝嶅簲绐楀彛鍏抽棴鍚庤嚜鍔ㄦ帹杩涜Е鍙戣鍒嗐€?
         if (phase === 'scoreBases') {
             if (state.sys.responseWindow?.current) {
                 return undefined;
@@ -1679,7 +1636,6 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
             }
         }
 
-        // endTurn 鑷姩鎺ㄨ繘鍒?startTurn锛堝垏鎹㈢帺瀹跺悗锛?
         if (phase === 'endTurn') {
             return { autoContinue: true, playerId: pid };
         }
@@ -1687,12 +1643,11 @@ export const smashUpFlowHooks: FlowHooks<SmashUpCore> = {
 };
 
 // ============================================================================
-// playerView锛氫笉鍐嶉殣钘忔墜鐗?鐗屽簱锛岀洿鎺ュ彂閫佸畬鏁存暟鎹紙涓嶉渶瑕侀槻浣滃紛锛?
+
 // ============================================================================
 
 function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore> {
-    // 榛樿涓嶉殣钘忎换浣曚俊鎭紙椤圭洰鍐呬笉闃蹭綔寮婏級锛屼絾鍩嬭懍鍗￠渶瑕侀伒寰?Wiki锛氫粠鎵嬬墝鍩嬭懍榛樿涓嶅叕寮€銆?
-    // 鍥犳瀵归潪鎺у埗鑰呴殣钘?buriedCards 鐨?defId 绛変俊鎭紝浠呬繚鐣欌€滄湁澶氬皯寮犮€佺敱璋佹帶鍒躲€佸湪鍝釜鍩哄湴鈥濈殑鍙鎬с€?
+
     const maskedBases = state.bases.map(b => {
         if (!b.buriedCards || b.buriedCards.length === 0) return b;
         return {
@@ -1712,7 +1667,6 @@ function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore
     return { bases: maskedBases };
 }
 
-
 // ============================================================================
 // isGameOver
 // ============================================================================
@@ -1720,7 +1674,6 @@ function playerView(state: SmashUpCore, playerId: PlayerId): Partial<SmashUpCore
 function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     if (state.gameResult) return state.gameResult;
 
-    // 鍥炲悎缁撴潫鏃舵鏌ワ細鏈夌帺瀹?>= 15 VP锛堝師濮?VP锛屾儵缃氬湪鏈€缁堝垎鏁颁腑浣撶幇锛?
     const winners = state.turnOrder.filter(pid => state.players[pid]?.vp >= VP_TO_WIN);
     if (winners.length === 0) return undefined;
 
@@ -1730,12 +1683,12 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
     if (winners.length === 1) {
         return { winner: winners[0], scores };
     }
-    // 澶氫汉杈炬爣锛氭渶缁堝垎鏁版渶楂樿€呰儨
+
     const sorted = winners.sort((a, b) => scores[b] - scores[a]);
     if (scores[sorted[0]] > scores[sorted[1]]) {
         return { winner: sorted[0], scores };
     }
-    // 骞冲眬锛氱柉鐙傚崱杈冨皯鑰呰儨锛堝厠鑻忛瞾鎵╁睍瑙勫垯锛?
+
     if (state.madnessDeck !== undefined) {
         const madnessA = countMadnessCardsForPlayer(state, sorted[0]);
         const madnessB = countMadnessCardsForPlayer(state, sorted[1]);
@@ -1743,7 +1696,7 @@ function isGameOver(state: SmashUpCore): GameOverResult | undefined {
             return { winner: madnessA < madnessB ? sorted[0] : sorted[1], scores };
         }
     }
-    // 浠嶇劧骞冲眬锛氱户缁父鎴?
+
     return undefined;
 }
 
@@ -1753,7 +1706,7 @@ export function getScores(state: SmashUpCore): Record<PlayerId, number> {
         const player = state.players[pid];
         if (!player) continue;
         let vp = player.vp;
-        // P19: 鐤媯鍗?VP 鎯╃綒锛堟瘡 2 寮犳墸 1 VP锛?
+
         if (state.madnessDeck !== undefined) {
             vp -= madnessVpPenalty(countMadnessCardsForPlayer(state, pid));
         }
@@ -1763,17 +1716,16 @@ export function getScores(state: SmashUpCore): Record<PlayerId, number> {
 }
 
 // ============================================================================
-// 浜嬩欢鎷︽埅锛氭浛浠ｆ晥鏋滐紙Replacement Effects锛?
+
 // ============================================================================
 
-/** 灏嗛鍩熷眰鎷︽埅鍣ㄦ敞鍐岃〃濮旀墭缁欏紩鎿?interceptEvent 閽╁瓙 */
 function domainInterceptEvent(
     state: SmashUpCore,
     event: SmashUpEvent
 ): SmashUpEvent | SmashUpEvent[] | null {
     const result = ongoingInterceptEvent(state, event);
     if (result !== undefined) return result;
-    return event; // 鏃犳嫤鎴櫒鍖归厤锛岃繑鍥炲師浜嬩欢
+    return event;
 }
 
 function resolveTitanClashEventsOnBase(
@@ -1887,7 +1839,7 @@ function resolveDeferredPecosBillClashEvents(
 }
 
 // ============================================================================
-// 绯荤粺浜嬩欢鍚庡鐞嗭細Prompt bridge 绛夌郴缁熶骇鐢熺殑棰嗗煙浜嬩欢闇€瑕佽Е鍙?ongoing trigger
+
 // ============================================================================
 
 function postProcessSystemEvents(
@@ -1897,11 +1849,11 @@ function postProcessSystemEvents(
     matchState?: MatchState<SmashUpCore>,
     options?: { skipImmediateStartTurnMinionTriggers?: boolean },
 ): { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } {
-    // 鎻愬彇鏃堕棿鎴筹紙鍙栫涓€涓簨浠剁殑 timestamp锛?
+
     const now = events.length > 0 && typeof events[0].timestamp === 'number' ? events[0].timestamp : 0;
-    // 褰撳墠鐜╁浣滀负 trigger 鐨?sourcePlayerId
+    // 当前玩家作为 trigger 的 sourcePlayerId
     const pid = getCurrentPlayerId(state);
-    // 浣跨敤 pipeline 浼犲叆鐨?matchState锛堝寘鍚湡瀹?sys锛夛紝鎴栨瀯閫犳渶灏忓寘瑁?
+
     let ms = matchState ?? { core: state, sys: { interaction: { current: undefined, queue: [] } } } as unknown as MatchState<SmashUpCore>;
     const inputEventsAlreadyReduced = !!(ms.sys as any)?._ppseInputEventsReduced;
     if (inputEventsAlreadyReduced) {
@@ -1954,23 +1906,11 @@ function postProcessSystemEvents(
         processedDestroyEventKeys.add(key);
     }
 
-    // 妫€娴?MINION_PLAYED 浜嬩欢锛岃嚜鍔ㄨ拷鍔犺Е鍙戦摼锛坥nPlay + 鍩哄湴鑳藉姏 + ongoing锛?
-    // 鍏抽敭锛氬繀椤诲厛鎶?MINION_PLAYED 涔嬪墠鐨勪簨浠?reduce 鍒?core 涓紝
-    // 鍚﹀垯 onPlay 澶╄祴璇诲彇鐨勭墝搴?鎵嬬墝绛夌姸鎬佹槸鏃х殑锛堝缁寸撼鏂崟椋熻€呬粠鐗屽簱鎼滅储鎵撳嚭琛屽案锛?
-    // 琛屽案 onPlay 璇诲彇 deck[0] 鏃?CARDS_DRAWN 杩樻病 reduce锛岀墝搴撴湭鏇存柊锛夈€?
-    //
-    // 淇绛栫暐锛氬湪閬囧埌 MINION_PLAYED 鏃讹紝鍏堟妸瀹冧箣鍓嶇殑闈?MINION_PLAYED 浜嬩欢
-    // reduce 鍒颁复鏃?core 涓紝璁?fireMinionPlayedTriggers 鎷垮埌鏈€鏂扮殑鐗屽簱/鎵嬬墝鐘舵€併€?
-    // 涓?reduce MINION_PLAYED 鏈韩锛屽洜涓哄湪 execute 璺緞锛堟楠?4.5锛変腑 state 宸茬粡
-    // 鍖呭惈浜嗘墍鏈変簨浠剁殑 reduce 缁撴灉锛屽啀 reduce 浼氬鑷?minionsPlayed 绛夊瓧娈甸噸澶嶈绠椼€?
-    //
-    // 鍘婚噸閫昏緫锛圖45 缁村害锛夛細postProcessSystemEvents 鍦?pipeline 涓璋冪敤涓ゆ锛堟楠?4.5 鍜屾楠?5锛夛紝
-    // 蹇呴』闃叉鍚屼竴涓?MINION_PLAYED 浜嬩欢琚噸澶嶅鐞嗐€傚幓閲嶇瓥鐣ワ細
-    // 1. 浼樺厛妫€鏌?sourceCommandType锛氭潵鑷懡浠ょ殑浜嬩欢锛堟湁 sourceCommandType锛夊彧鍦ㄦ楠?4.5 澶勭悊
-    // 2. 瀵逛簬娲剧敓浜嬩欢锛堟棤 sourceCommandType锛夛紝閫氳繃 cardUid+baseIndex 鍘婚噸锛岄伩鍏嶉噸澶嶅鐞?
-    // 3. 浣跨敤 matchState.sys._processedMinionPlayed 闆嗗悎璁板綍宸插鐞嗙殑浜嬩欢锛堟牸寮忥細`${cardUid}@${baseIndex}`锛?
+    // 先 reduce 到临时 core 中，让 fireMinionPlayedTriggers 拿到最新的牌库/手牌状态。
+    // 必须防止同一 MINION_PLAYED 事件被重复处理。去重策略：
+
     const derivedEvents: SmashUpEvent[] = [];
-    // 鏀堕泦 MINION_PLAYED 涔嬪墠鐨勯潪 MINION_PLAYED 浜嬩欢锛岀敤浜庝复鏃?reduce
+
     const prePlayEvents: SmashUpEvent[] = [];
     
     // 鍒濆鍖栧凡澶勭悊浜嬩欢闆嗗悎锛堝鏋滀笉瀛樺湪锛?
@@ -2015,27 +1955,25 @@ function postProcessSystemEvents(
         } else if (event.type === SU_EVENTS.MINION_PLAYED) {
             const playedEvt = event as MinionPlayedEvent;
             
-            // 鍘婚噸妫€鏌ワ細鏋勯€犱簨浠跺敮涓€鏍囪瘑锛圡INION: + cardUid + baseIndex锛?
+
             const eventKey = `MINION:${playedEvt.payload.cardUid}@${playedEvt.payload.baseIndex}`;
             
-            // 濡傛灉宸插鐞嗚繃锛岃烦杩囷紙闃叉姝ラ 4.5 鍜屾楠?5 閲嶅澶勭悊锛?
+
             if (processedSet.has(eventKey)) {
                 prePlayEvents.push(event);
                 continue;
             }
             
-            // 鏍囪涓哄凡澶勭悊
+            // 标记为已处理
             processedSet.add(eventKey);
             
-            // 灏嗕箣鍓嶇Н绱殑浜嬩欢 reduce 鍒颁复鏃?core
-            // 纭繚 onPlay 瑙﹀彂鏃剁湅鍒扮殑鏄渶鏂扮姸鎬侊紙闅忎粠宸插湪鍦轰笂锛岀墝搴?鎵嬬墝宸叉洿鏂帮級
+            // 将之前积累的事件 reduce 到临时 core
+
             let tempCore = state;
             for (const preEvt of prePlayEvents) {
                 tempCore = reduce(tempCore, preEvt);
             }
-            // 銆愰噸瑕併€戝浜庝粠闈炴墜鐗屾潵婧愨€滈澶栨墦鍑衡€濈殑闅忎粠锛坒romDeck / fromDiscard / fromBuried锛夛紝
-            // 蹇呴』鍦ㄨ繖閲?reduce 褰撳墠 MINION_PLAYED 浜嬩欢锛岀‘淇?onPlay 瑙﹀彂鍣ㄨ兘鍦?core 涓壘鍒拌闅忎粠锛?
-            // 骞惰鍒版纭殑 metadata.playedFrom锛堜緥濡傜炕鍑哄煁钁墝鏃讹級銆?
+
             const payload = event.payload;
             if (payload.fromDeck || payload.fromDiscard || payload.fromBuried) {
                 tempCore = reduce(tempCore, event);
@@ -2056,31 +1994,28 @@ function postProcessSystemEvents(
             derivedEvents.push(...triggers.events);
             if (triggers.matchState) ms = triggers.matchState;
         } else if (event.type === SU_EVENTS.ACTION_PLAYED) {
-            // 銆怐45 淇銆慉CTION_PLAYED 浜嬩欢涔熼渶瑕佸幓閲嶏紝闃叉琛屽姩鍗?onPlay 鑳藉姏琚Е鍙戜袱娆?
-            // 鍏稿瀷鍦烘櫙锛氫紶閫侀棬鍒涘缓浜や簰锛屼氦浜掕В鍐冲悗 pipeline 閲嶆柊杩涘叆 postProcessSystemEvents
+
             const playedEvt = event as { type: string; payload: { playerId: string; cardUid: string; defId: string }; timestamp: number };
             
-            // 鍘婚噸妫€鏌ワ細鏋勯€犱簨浠跺敮涓€鏍囪瘑锛圓CTION: + cardUid + playerId锛?
+
             const eventKey = `ACTION:${playedEvt.payload.cardUid}@${playedEvt.payload.playerId}`;
             
-            // 濡傛灉宸插鐞嗚繃锛岃烦杩囷紙闃叉姝ラ 4.5 鍜屾楠?5 閲嶅澶勭悊锛?
+
             if (processedSet.has(eventKey)) {
                 prePlayEvents.push(event);
                 continue;
             }
             
-            // 鏍囪涓哄凡澶勭悊
+            // 标记为已处理
             processedSet.add(eventKey);
             
-            // ACTION_PLAYED 鐨?onPlay 瑙﹀彂宸插湪 execute() 涓鐞嗭紝杩欓噷鍙渶瑕佹爣璁板幓閲?
-            // 涓嶉渶瑕侀澶栬Е鍙戦€昏緫锛堜笌 MINION_PLAYED 涓嶅悓锛?
+
             prePlayEvents.push(event);
         } else {
             prePlayEvents.push(event);
         }
     }
 
-    // 瀵?derived events 閫掑綊鎵ц trigger 鍚庡鐞嗭紙onPlay 浜х敓鐨?MINION_DESTROYED 绛夐渶瑕佽Е鍙?onDestroy 閾撅級
     let finalDerived = derivedEvents;
     if (derivedEvents.length > 0) {
         for (const event of derivedEvents) {

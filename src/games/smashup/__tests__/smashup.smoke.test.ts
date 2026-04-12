@@ -1998,7 +1998,7 @@ describe('smashup', () => {
         }
     });
 
-    it('alien_terraform 绗笁姝ュ厑璁搁€夋嫨鍙浣滈殢浠庢墦鍑虹殑 set-aside 娉板潶', () => {
+    it('alien_terraform 第三步允许选择可视作随从打出的 set-aside 泰坦', () => {
         const tricksterTitan: TitanState = {
             uid: 't1',
             defId: 'tricksters_big_funny_giant',
@@ -2445,7 +2445,7 @@ describe('smashup', () => {
         expect(resolved.players['0'].baseLimitedMinionQuota?.[0]).toBe(1);
     });
 
-    it('鍏冻姝荤鍦ㄥ繁鏂归殢浠庢嫢鏈?7 鏋?+1 鎴樺姏鏍囪鏃跺彲浠?special 浠庣墝搴撴梺杩涘満', () => {
+    it('六足死神在你的随从上共有 6 枚或更多 +1 标记时可弃 1 张牌进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.GIANT_ANTS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -2455,7 +2455,7 @@ describe('smashup', () => {
 
         const runner = createRunner();
         const result = runner.run({
-            name: '鍏冻姝荤杩涘満',
+            name: '六足死神进场',
             commands: titanDraft,
         });
 
@@ -2492,7 +2492,7 @@ describe('smashup', () => {
             .toBe('titan_giant_ants_death_on_six_legs_special');
     });
 
-    it('鍏冻姝荤浼氬湪鏈夐殢浠庤繘鍏ュ純鐗屽爢鏃惰幏寰?1 鏋?+1 鎴樺姏鏍囪', () => {
+    it('六足死神在随从将被消灭进弃牌堆前可选择转移 1 枚 +1 标记', () => {
         const core = makeState({
             bases: [
                 makeBase({
@@ -2547,7 +2547,7 @@ describe('smashup', () => {
         expect(interactions[0]?.data?.sourceId).toBe('titan_giant_ants_death_on_six_legs_transfer');
     });
 
-    it('鍏冻姝荤浼氬湪鍩哄湴璁″垎娓呭満寮冪疆闅忎粠鏃惰幏寰?1 鏋?+1 鎴樺姏鏍囪', () => {
+    it('六足死神在基地计分弃置随从前也可选择转移 1 枚 +1 标记', () => {
         const scoredMinion = makeMinion('scored-ant', 'giant_ant_worker', '0', 2, { powerCounters: 3 });
         const core = makeState({
             bases: [
@@ -2585,7 +2585,7 @@ describe('smashup', () => {
         expect(interactions[0]?.data?.sourceId).toBe('titan_giant_ants_death_on_six_legs_transfer');
     });
 
-    it('鍏冻姝荤澶╄祴浼氭巿浜堥澶栬鍔ㄩ搴?', () => {
+    it('六足死神天赋会授予额外行动额度', () => {
         const core = makeState({
             bases: [makeBase()],
             players: {
@@ -2630,7 +2630,7 @@ describe('smashup', () => {
         const resolved = events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
         expect(resolved.players['0'].actionLimit).toBe(2);
     });
-    it('澶х唺搴ф弧瓒虫潯浠跺悗鍙€氳繃 special 浠庣墝搴撴梺杩涘満', () => {
+    it('黑熊骑兵泰坦满足条件后可通过 special 从牌库旁进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.BEAR_CAVALRY } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -2640,7 +2640,7 @@ describe('smashup', () => {
 
         const runner = createRunner();
         const result = runner.run({
-            name: '澶х唺搴ц繘鍦?',
+            name: '黑熊骑兵进场',
             commands: titanDraft,
         });
 
@@ -2680,7 +2680,7 @@ describe('smashup', () => {
         });
     });
 
-    it('澶х唺搴уぉ璧嬩細鍏堝姞 1 鏋?+1 鏍囪鍐嶈姹傞€夋嫨鏂板熀鍦?', () => {
+    it('黑熊骑兵泰坦天赋在两个分支都可用时会先创建模式选择交互', () => {
         const core = makeState({
             bases: [makeBase(), makeBase()],
             titans: [{
@@ -2716,7 +2716,7 @@ describe('smashup', () => {
         expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_destination');
     });
 
-    it('澶х唺搴хЩ鍔ㄥ悗鍙户缁€夋嫨瀵规墜 3 鎴栨洿浣庨殢浠庡苟绉诲姩鍒板叾浠栧熀鍦?', () => {
+    it('黑熊骑兵移动后可继续选择对手 3 或更低随从并移动到其他基地', () => {
         const core = makeState({
             bases: [
                 makeBase(),
@@ -6039,10 +6039,6 @@ describe('smashup', () => {
         expect(finalPecos?.metadata?.deferClashUntilDuelEnds).toBe(false);
         expect(finalArcane?.location.zone).toBe('setaside');
     });
-    /*
-
-    it('宸ㄧ嫾涔嬬伒浼氬湪浣犵殑鍥炲悎寮€濮嬫椂鍒涘缓绉诲姩浜や簰锛屽苟鍙兘绉诲姩鍒颁綘涓ユ牸棰嗗厛鐨勫熀鍦?, () => {
-    */
     it('Great Wolf Spirit creates a start-of-turn move interaction and only offers bases where you are strictly ahead', () => {
         const core = makeState({
             bases: [

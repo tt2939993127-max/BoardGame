@@ -1,11 +1,11 @@
 /**
- * 澶ф潃鍥涙柟 - 娉板潶鑳藉姏鎺ュ叆
+ * 大杀四方 - 泰坦能力接入
  *
- * 褰撳墠宸叉寮忔墦閫氾細
- * - 濂舵补娉¤姍缇庝汉
- * - 澶ц‘
- * - 濂ユ湳瀹堟姢鑰?
- * - 椴滆棰嗕富
+ * 当前已正式打通：
+ * - 奶油泡芙美人
+ * - 大衮
+ * - 奥术守护者
+ * - 鲜血领主
  */
 
 import type { MatchState } from '../../../engine/types';
@@ -108,7 +108,7 @@ function getOtherBaseOptions(state: AbilityContext['state'], excludedBaseIndex: 
         .filter(({ index }) => index !== excludedBaseIndex)
         .map(({ base, index }) => ({
             baseIndex: index,
-            label: getBaseDef(base.defId)?.name ?? `閸╁搫婀?${index + 1}`,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${index + 1}`,
         }));
 }
 
@@ -159,7 +159,7 @@ function getHillOwnedMinionsControlledByOthers(
                 defId: minion.defId,
                 baseIndex: index,
                 controllerId: minion.controller,
-                label: `${getCardDef(minion.defId)?.name ?? minion.defId} @ ${getBaseDef(base.defId)?.name ?? `鍩哄湴 ${index + 1}`}`,
+                label: `${getCardDef(minion.defId)?.name ?? minion.defId} @ ${getBaseDef(base.defId)?.name ?? `基地 ${index + 1}`}`,
             })));
 }
 
@@ -172,7 +172,7 @@ function getHillGiveControlTargets(state: AbilityContext['state'], playerId: str
                 defId: minion.defId,
                 baseIndex,
                 controllerId: minion.controller,
-                label: `${getCardDef(minion.defId)?.name ?? minion.defId} @ ${getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`}`,
+                label: `${getCardDef(minion.defId)?.name ?? minion.defId} @ ${getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`}`,
             })));
 }
 
@@ -337,10 +337,10 @@ function kaijuGorgodzollaOnActionPlayed(ctx: TriggerContext): TriggerResult | Sm
     const interaction = createSimpleChoice(
         `titan_kaiju_gorgodzolla_draw_${titan.uid}_${ctx.now}`,
         ctx.playerId,
-        '鍝ヤ綈鎷夛細浣犲彲浠ユ娊 1 寮犵墝',
+        'Gorgodzolla：你可以抽 1 张牌',
         [
-            { id: 'draw', label: '鎶?1 寮犵墝', value: { draw: true }, displayMode: 'button' as const },
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'draw', label: '抽 1 张牌', value: { draw: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_kaiju_gorgodzolla_draw', targetType: 'button' },
     );
@@ -617,8 +617,8 @@ function ignoblesTheHillThatStrollsOnMinionAffected(ctx: TriggerContext): Trigge
         ctx.playerId,
         'The Hill That Strolls: place a +1 power counter on that minion?',
         [
-            { id: 'place', label: '鏀剧疆鏍囪', value: { place: true }, displayMode: 'button' as const },
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'place', label: '放置标记', value: { place: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_ignobles_the_hill_that_strolls_counter', targetType: 'button' },
     );
@@ -843,7 +843,7 @@ function ghostsCreampuffManTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_ghosts_creampuff_man_discard_${ctx.now}`,
         ctx.playerId,
-        '濂舵补娉¤姍缇庝汉锛氬純缃?1 寮犵墝',
+        '奶油泡芙美人：弃置 1 张牌',
         discardOptions,
         { sourceId: 'titan_ghosts_creampuff_man_discard', targetType: 'hand' },
     );
@@ -955,7 +955,7 @@ function getMergaconEligibleBases(state: AbilityContext['state'], playerId: stri
         .map((base, baseIndex) => ({
             baseIndex,
             ownMinionCount: base.minions.filter(minion => minion.controller === playerId).length,
-            label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
         }))
         .filter(candidate => candidate.ownMinionCount >= 2)
         .map(({ baseIndex, label }) => ({ baseIndex, label }));
@@ -966,7 +966,7 @@ function getEmperorPenguinEligibleBases(state: AbilityContext['state'], playerId
         .map((base, baseIndex) => ({
             baseIndex,
             ownMinionCount: base.minions.filter(minion => minion.controller === playerId).length,
-            label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
         }))
         .filter(candidate => candidate.ownMinionCount >= 3)
         .map(({ baseIndex, label }) => ({ baseIndex, label }));
@@ -977,7 +977,7 @@ function getMoonZeroThreeEligibleBases(state: AbilityContext['state'], playerId:
         .map((base, baseIndex) => ({
             baseIndex,
             hasOnlyOwnMinions: base.minions.every(minion => minion.controller === playerId),
-            label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
         }))
         .filter(candidate => candidate.hasOnlyOwnMinions)
         .map(({ baseIndex, label }) => ({ baseIndex, label }));
@@ -1023,7 +1023,7 @@ function queueTimeBoxPlayInteraction(
     const baseOptions = buildBaseTargetOptions(
         state.bases.map((base, baseIndex) => ({
             baseIndex,
-            label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
         })),
         state,
     );
@@ -1035,7 +1035,7 @@ function queueTimeBoxPlayInteraction(
         prompt,
         [
             ...baseOptions,
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_time_travelers_time_box_play', targetType: 'base', autoResolveIfSingle: false },
     );
@@ -1069,7 +1069,7 @@ function buildTimeBoxCounterProgress(ctx: TriggerContext, reason: string): Trigg
             ctx.playerId,
             titan,
             ctx.now,
-            '鏃堕棿鐩掑瓙锛氭槸鍚︾Щ闄ゅ叏閮ㄨ鏁板櫒骞舵墦鍑哄埌涓€涓熀鍦帮紵',
+            '时间盒子：是否移除全部计数器并打出到一个基地？',
         );
         return nextMatchState ? { events, matchState: nextMatchState } : { events };
     }
@@ -1140,7 +1140,7 @@ function pecosBillOnDuelStarted(ctx: TriggerContext): TriggerResult | SmashUpEve
                 _source: 'hand' as const,
                 displayMode: 'card' as const,
             })),
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_pecos_bill_duel_start', targetType: 'hand', autoRefresh: 'hand' },
     );
@@ -1204,7 +1204,7 @@ function sphinxOnTurnStart(ctx: TriggerContext) {
                 value: choice,
                 displayMode: 'card' as const,
             })),
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_sphinx_start_turn', targetType: 'generic', autoResolveIfSingle: false },
     );
@@ -1238,7 +1238,7 @@ function sphinxAfterScoring(ctx: {
         const interaction = createSimpleChoice(
             `titan_sphinx_after_scoring_${titan.uid}_${ctx.now}`,
             titan.controllerId,
-            '鐙韩浜洪潰鍍忥細浣犲彲浠ュ皢姝ゅ涓€寮犱綘鐨勫煁钁墝绉诲洖鎵嬬墝',
+            '狮身人面像：你可以将此处一张你的埋葬牌移回手牌',
             [
                 ...buriedChoices.map((choice) => ({
                     id: `buried-${choice.cardUid}`,
@@ -1246,7 +1246,7 @@ function sphinxAfterScoring(ctx: {
                     value: choice,
                     displayMode: 'card' as const,
                 })),
-                { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+                { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ],
             { sourceId: 'titan_sphinx_after_scoring', targetType: 'generic' },
         );
@@ -1272,7 +1272,7 @@ function sphinxTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_sphinx_talent_${ctx.now}`,
         ctx.playerId,
-        '鐙韩浜洪潰鍍忥細閫夋嫨涓€寮犳墜鐗屽煁钁湪姝ゅ',
+        '狮身人面像：选择一张手牌埋葬在此处',
         player.hand.map((card) => ({
             id: `hand-${card.uid}`,
             label: getCardDef(card.defId)?.name ?? card.defId,
@@ -1366,10 +1366,10 @@ function penguinsEmperorPenguinOnTurnStart(ctx: TriggerContext) {
     const interaction = createSimpleChoice(
         `titan_penguins_emperor_penguin_play_${ctx.now}`,
         ctx.playerId,
-        '浼侀箙甯濈殗锛氶€夋嫨瑕佽繘鍦虹殑鍩哄湴',
+        '帝企鹅：选择要进场的基地',
         [
             ...baseOptions,
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_penguins_emperor_penguin_play', targetType: 'base', autoResolveIfSingle: false },
     );
@@ -1482,10 +1482,10 @@ function changerbotsMergaconOnTurnStart(ctx: TriggerContext) {
     const interaction = createSimpleChoice(
         `titan_changerbots_mergacon_play_${ctx.now}`,
         ctx.playerId,
-        '鍚堜綋鏈哄櫒浜猴細閫夋嫨瑕佽繘鍦虹殑鍩哄湴',
+        '合体机器人：选择要进场的基地',
         [
             ...baseOptions,
-            { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+            { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
         ],
         { sourceId: 'titan_changerbots_mergacon_play', targetType: 'base', autoResolveIfSingle: false },
     );
@@ -1572,17 +1572,17 @@ function cthulhuTitanTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice<CthulhuTitanTalentChoiceValue>(
         `titan_cthulhu_cthulhu_titan_talent_choice_${ctx.now}`,
         ctx.playerId,
-        '鍏嬭嫃椴侊細閫夋嫨瑕佹墽琛岀殑澶╄祴鏁堟灉',
+        '克苏鲁：选择要执行的天赋效果',
         [
             {
                 id: 'draw',
-                label: '鎶戒竴寮犵柉鐙傚崱',
+                label: '抽一张疯狂卡',
                 value: { choice: 'draw' },
                 displayMode: 'button' as const,
             },
             {
                 id: 'give',
-                label: '缁欏彟涓€浣嶇帺瀹朵竴寮犵柉鐙傚崱',
+                label: '给另一位玩家一张疯狂卡',
                 value: { choice: 'give' },
                 displayMode: 'button' as const,
             },
@@ -1669,7 +1669,7 @@ function getGreatWolfSpiritEligibleBases(state: AbilityContext['state'], playerI
             if (!hasHighestPower) return null;
             return {
                 baseIndex,
-                label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`,
+                label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
             };
         })
         .filter((value): value is { baseIndex: number; label: string } => value !== null);
@@ -1683,7 +1683,7 @@ function getGreatWolfSpiritTalentTargets(state: AbilityContext['state'], playerI
                 uid: minion.uid,
                 defId: minion.defId,
                 baseIndex,
-                label: `${getCardDef(minion.defId)?.name ?? minion.defId} (${getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`})`,
+                label: `${getCardDef(minion.defId)?.name ?? minion.defId} (${getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`})`,
             })),
     );
 }
@@ -2058,7 +2058,7 @@ function ittyCrittersRainborocTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_itty_critters_rainboroc_choose_discard_${ctx.now}`,
         ctx.playerId,
-        '褰╄櫣楦燂細閫夋嫨寮冪墝鍫嗕腑涓€涓垬鍔?2 鎴栨洿浣庣殑闅忎粠娲楀洖鐗屽簱',
+        '彩虹鸟：选择弃牌堆中一个战力 2 或更低的随从洗回牌库',
         discardable.map(card => ({
             id: `rainboroc-discard-${card.uid}`,
             label: getCardDef(card.defId)?.name ?? card.defId,
@@ -2095,10 +2095,10 @@ function piratesTheKrakenAfterScoring(ctx: {
         const interaction = createSimpleChoice(
             `titan_pirates_the_kraken_play_replacement_${titan.uid}_${ctx.now}`,
             titan.ownerId,
-            '娴锋€厠鎷夎偗锛氭槸鍚﹀皢鍏舵墦鍑哄埌鏇挎崲鐨勫熀鍦帮紵',
+            '海怪克拉肯：是否将其打出到替换的基地？',
             [
-                { id: 'play', label: '鎵撳嚭娴锋€厠鎷夎偗', value: { play: true }, displayMode: 'button' as const },
-                { id: 'skip', label: '璺宠繃', value: { skip: true }, displayMode: 'button' as const },
+                { id: 'play', label: '打出海怪克拉肯', value: { play: true }, displayMode: 'button' as const },
+                { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
             ],
             { sourceId: 'titan_pirates_the_kraken_play_replacement', targetType: 'button' },
         );
@@ -2184,7 +2184,7 @@ function giantAntsDeathOnSixLegsSpecial(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_giant_ants_death_on_six_legs_special_${ctx.now}`,
         ctx.playerId,
-        'Death on Six Legs锛氬純 1 寮犵墝鏉ユ墦鍑烘娉板潶',
+        '六足死神：弃 1 张牌来打出此泰坦',
         player.hand.map(card => ({
             id: `hand-${card.uid}`,
             label: getCardDef(card.defId)?.name ?? card.defId,
@@ -2383,7 +2383,7 @@ function queueVampireAncientLordSpecialInteraction(
     const options = [
         {
             id: 'skip',
-            label: '淇濈暀鍦ㄩ殢浠庝笂',
+            label: '保留在随从上',
             value: { mode: 'skip', minionUid, baseIndex, titanUid: titan.uid },
             displayMode: 'button' as const,
         },
@@ -2407,7 +2407,7 @@ function queueVampireAncientLordSpecialInteraction(
     const interaction = createSimpleChoice(
         `titan_vampires_ancient_lord_special_${now}`,
         playerId,
-        '椴滆棰嗕富锛氶€夋嫨鏄惁鎶婂叾涓?1 鏋?+1 鎴樻枟鍔涙爣璁版敼鏀惧埌姝ゆ嘲鍧︿笂',
+        '鲜血领主：选择是否把其中 1 枚 +1 战力标记改放到此泰坦上',
         options,
         { sourceId: 'titan_vampires_ancient_lord_special', targetType: 'generic' },
     );
@@ -2533,7 +2533,7 @@ function queueDeathOnSixLegsTransferInteraction(
             },
             {
                 id: 'skip',
-                label: '璺宠繃',
+                label: '跳过',
                 value: { skip: true, titanUid: titan.uid, minionUid, baseIndex },
                 displayMode: 'button' as const,
             },
@@ -2584,7 +2584,7 @@ function getAllBaseOptions(state: AbilityContext['state']) {
     return buildBaseTargetOptions(
         state.bases.map((base, baseIndex) => ({
             baseIndex,
-            label: getBaseDef(base.defId)?.name ?? `鍩哄湴 ${baseIndex + 1}`,
+            label: getBaseDef(base.defId)?.name ?? `基地 ${baseIndex + 1}`,
         })),
         state,
     );
@@ -2666,7 +2666,7 @@ function fortTitanosaurusOnActionPlayed(ctx: TriggerContext): TriggerResult | Sm
         const minionName = getCardDef(target.minion.defId)?.name ?? target.minion.defId;
         options.unshift({
             id: 'minion-only',
-            label: `鍙粰 ${minionName} 鏀剧疆`,
+            label: `只给 ${minionName} 放置`,
             value: { mode: 'minion' },
             displayMode: 'button' as const,
         });
@@ -2764,7 +2764,7 @@ function invisibleNinjaOnTurnStart(ctx: TriggerContext): TriggerResult | SmashUp
     const interaction = createSimpleChoice(
         `titan_ninjas_invisible_ninja_start_turn_${ctx.now}`,
         ctx.playerId,
-        'Invisible Ninja锛氫綘鍙互娑堢伃姝ゆ嘲鍧︼紝棰濆鎵撳嚭 1 寮犳垬鏂楀姏 3 鎴栦互涓嬬殑闅忎粠',
+        'Invisible Ninja：你可以消灭此泰坦，额外打出 1 张战斗力 3 或以下的随从',
         [
             { id: 'destroy', label: 'Destroy it and gain the extra minion play', value: { destroyTitan: true }, displayMode: 'button' as const },
             { id: 'skip', label: 'Skip', value: { skip: true }, displayMode: 'button' as const },
@@ -2789,7 +2789,7 @@ function invisibleNinjaSpecial(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_ninjas_invisible_ninja_special_${ctx.now}`,
         ctx.playerId,
-        'Invisible Ninja锛氬純 1 寮犵墝鏉ユ墦鍑烘娉板潶',
+        'Invisible Ninja：弃 1 张牌来打出此泰坦',
         player.hand.map(card => ({
             id: `hand-${card.uid}`,
             label: getCardDef(card.defId)?.name ?? card.defId,
@@ -2837,7 +2837,7 @@ function invisibleNinjaTriggered(ctx: TriggerContext): TriggerResult | SmashUpEv
     const interaction = createSimpleChoice(
         `titan_ninjas_invisible_ninja_ongoing_${ctx.now}`,
         ctx.playerId,
-        'Invisible Ninja锛氶€夋嫨瑕佹娊鐨勭墝',
+        'Invisible Ninja：选择要抽的牌',
         peek.cards.map(card => ({
             id: `deck-${card.uid}`,
             label: getCardDef(card.defId)?.name ?? card.defId,
@@ -2908,7 +2908,7 @@ function queueKillerKudzuRecycleInteraction(
     const interaction = createSimpleChoice(
         `titan_killer_plants_killer_kudzu_recycle_${now}`,
         playerId,
-        'Killer Kudzu锛氶€夋嫨鑷冲 2 寮犲純鐗屽爢涓殑闅忎粠娲楀洖鐗屽簱',
+        'Killer Kudzu：选择至多 2 张弃牌堆中的随从洗回牌库',
         options,
         {
             sourceId: 'titan_killer_plants_killer_kudzu_recycle',
@@ -2940,7 +2940,7 @@ function killerKudzuOnTitanRemovedFromPlay(ctx: TriggerContext): TriggerResult |
     const interaction = createSimpleChoice(
         `titan_killer_plants_killer_kudzu_removed_${ctx.now}`,
         ctx.playerId,
-        'Killer Kudzu锛氶€夋嫨鏁堟灉',
+        'Killer Kudzu：选择效果',
         [
             { id: 'recycle', label: 'Shuffle up to 2 minions back', value: { recycle: true }, displayMode: 'button' as const },
             { id: 'draw', label: 'Draw 2 cards', value: { draw: true }, displayMode: 'button' as const },
@@ -2979,7 +2979,7 @@ function killerKudzuTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_killer_plants_killer_kudzu_talent_${ctx.now}`,
         ctx.playerId,
-        'Killer Kudzu锛氶€夋嫨瑕佷粠寮冪墝鍫嗘墦鍑虹殑闅忎粠',
+        'Killer Kudzu：选择要从弃牌堆打出的随从',
         candidates,
         { sourceId: 'titan_killer_plants_killer_kudzu_talent', targetType: 'generic', autoRefresh: 'discard', responseValidationMode: 'live' },
     );
@@ -3004,7 +3004,7 @@ function getTheBrideBoxTargets(state: AbilityContext['state'], playerId: string,
                 uid: card.uid,
                 defId: card.defId,
                 from: 'hand' as const,
-                label: `${getCardDef(card.defId)?.name ?? card.defId}锛堟墜鐗岋級`,
+                label: `${getCardDef(card.defId)?.name ?? card.defId}（手牌）`,
             })),
         ...player.discard
             .filter(card => card.type === 'minion' && card.uid !== excludedUid)
@@ -3066,13 +3066,13 @@ function buildTheBrideStartBranchOptions(
     const options: Array<{ id: string; label: string; value: { kind: BrideEffectKind }; displayMode: 'button' }> = [];
     const requireSecondChoice = usedKinds.length === 0;
     if (!usedKinds.includes('box') && buildTheBrideStartTargetOptions(state, playerId, 'box', excludedUid, requireSecondChoice).length > 0) {
-        options.push({ id: 'box', label: '鏀捐繘鐩掍腑', value: { kind: 'box' }, displayMode: 'button' });
+        options.push({ id: 'box', label: '放进盒中', value: { kind: 'box' }, displayMode: 'button' });
     }
     if (!usedKinds.includes('destroy') && buildTheBrideStartTargetOptions(state, playerId, 'destroy', excludedUid, requireSecondChoice).length > 0) {
-        options.push({ id: 'destroy', label: '娑堢伃宸辨柟闅忎粠', value: { kind: 'destroy' }, displayMode: 'button' });
+        options.push({ id: 'destroy', label: '消灭己方随从', value: { kind: 'destroy' }, displayMode: 'button' });
     }
     if (!usedKinds.includes('removeCounter') && buildTheBrideStartTargetOptions(state, playerId, 'removeCounter', excludedUid, requireSecondChoice).length > 0) {
-        options.push({ id: 'removeCounter', label: '绉婚櫎 +1 鏍囪', value: { kind: 'removeCounter' }, displayMode: 'button' });
+        options.push({ id: 'removeCounter', label: '移除 +1 标记', value: { kind: 'removeCounter' }, displayMode: 'button' });
     }
     return options;
 }
@@ -3278,7 +3278,7 @@ export function registerTitanAbilities(): void {
             : 'You must play it on a base where you have a minion and destroy one of your minions there';
     });
     registerTitanTalentValidator('dinosaurs_fort_titanosaurus', ({ titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return titan.powerCounters >= 4 ? null : 'This titan needs at least 4 +1 power counters';
     });
     registerTrigger('dinosaurs_fort_titanosaurus', 'onActionPlayed', fortTitanosaurusOnActionPlayed, { optional: true, baseScoped: false });
@@ -3292,11 +3292,11 @@ export function registerTitanAbilities(): void {
             return 'This titan must not have been in play at the start of your turn';
         }
         if ((state.players[playerId]?.hand.length ?? 0) === 0) {
-            return '浣犻渶瑕佸純 1 寮犵墝鏉ユ墦鍑烘娉板潶';
+            return '你需要弃 1 张牌来打出此泰坦';
         }
         return getBaseIndicesWithOwnMinions(state, playerId).includes(baseIndex)
             ? null
-            : '浣犲彧鑳藉皢鍏舵墦鍒版湁浣犻殢浠庣殑鍩哄湴';
+            : '你只能将其打到有你随从的基地';
     });
     registerTrigger('ninjas_invisible_ninja', 'onTurnStart', invisibleNinjaOnTurnStart, { global: true });
     registerTrigger('ninjas_invisible_ninja', 'onMinionDestroyed', invisibleNinjaTriggered, { optional: true, baseScoped: false });
@@ -3307,21 +3307,21 @@ export function registerTitanAbilities(): void {
     registerTitanSpecialValidator('killer_plants_killer_kudzu', ({ titan }) =>
         titan.location.zone === 'setaside' && titan.powerCounters >= 3 ? null : 'This titan must be set aside with at least 3 counters');
     registerTitanTalentValidator('killer_plants_killer_kudzu', ({ state, playerId, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         const player = state.players[playerId];
         const hasCandidate = player?.discard.some(card => {
             if (card.type !== 'minion') return false;
             const def = getCardDef(card.defId) as MinionCardDef | undefined;
             return (def?.power ?? 0) <= titan.powerCounters;
         }) ?? false;
-        return hasCandidate ? null : '浣犵殑寮冪墝鍫嗕腑娌℃湁绗﹀悎鎴樻枟鍔涙潯浠剁殑闅忎粠';
+        return hasCandidate ? null : '你的弃牌堆中没有符合战斗力条件的随从';
     });
     registerTrigger('killer_plants_killer_kudzu', 'onTurnStart', killerKudzuOnTurnStart, { global: true });
     registerTrigger('killer_plants_killer_kudzu', 'onTitanRemovedFromPlay', killerKudzuOnTitanRemovedFromPlay, { optional: true, global: true });
 
     registerAbility('frankenstein_the_bride', 'talent', theBrideTalent);
     registerTitanTalentValidator('frankenstein_the_bride', ({ state, playerId, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         const addCounterTargets = getTheBrideDestroyTargets(state, playerId).filter(target => target.baseIndex === titan.location.baseIndex);
         const extraActionOptions = buildTheBrideExtraActionOptions(state, playerId);
         return (addCounterTargets.length > 0 || extraActionOptions.length > 0)
@@ -3334,21 +3334,21 @@ export function registerTitanAbilities(): void {
     registerAbility('super_spies_moon_zero_three', 'special', superSpiesMoonZeroThreeSpecial);
     registerAbility('super_spies_moon_zero_three', 'talent', superSpiesMoonZeroThreeTalent);
     registerTitanSpecialValidator('super_spies_moon_zero_three', ({ state, playerId, baseIndex, titan }) => {
-        if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
+        if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
         return getMoonZeroThreeEligibleBases(state, playerId).some(candidate => candidate.baseIndex === baseIndex)
             ? null
             : 'You can only play Moon Zero Three on a base with none of other players minions';
     });
     registerTitanTalentValidator('super_spies_moon_zero_three', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getMoonZeroThreeInspectablePlayers(state).length > 0
             ? null
-            : '娌℃湁鍙煡鐪嬬殑鐗屽簱';
+            : '没有可查看的牌库';
     });
     registerTrigger('super_spies_moon_zero_three', 'onDeckInspected', superSpiesMoonZeroThreeOnDeckInspected);
 
     registerTitanSpecialValidator('penguins_emperor_penguin', () =>
-        '浼侀箙甯濈殗鍙兘鍦ㄤ綘鐨勫洖鍚堝紑濮嬫椂閫氳繃鐗规畩鑳藉姏杩涘満');
+        '帝企鹅只能在你的回合开始时通过特殊能力进场');
     registerAbility('penguins_emperor_penguin', 'ongoingActivation', penguinsEmperorPenguinOngoingActivation);
     registerAbility('penguins_emperor_penguin', 'talent', penguinsEmperorPenguinTalent);
     registerTitanOngoingActivationValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {
@@ -3365,18 +3365,18 @@ export function registerTitanAbilities(): void {
         return null;
     });
     registerTitanTalentValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getEmperorPenguinTalentCandidates(state, playerId).length > 0
             ? null
-            : '浣犵殑鎵嬬墝涓庡純鐗屽爢涓病鏈夋垬鍔?3 鎴栨洿浣庣殑闅忎粠';
+            : '你的手牌与弃牌堆中没有战斗力 3 或更低的随从';
     });
     registerTrigger('penguins_emperor_penguin', 'onTurnStart', penguinsEmperorPenguinOnTurnStart, { global: true });
 
     registerTitanSpecialValidator('changerbots_mergacon', () =>
-        '鍚堜綋鏈哄櫒浜哄彧鑳藉湪浣犵殑鍥炲悎寮€濮嬫椂閫氳繃鐗规畩鑳藉姏杩涘満');
+        '合体机器人只能在你的回合开始时通过特殊能力进场');
     registerAbility('changerbots_mergacon', 'talent', changerbotsMergaconTalent);
     registerTitanTalentValidator('changerbots_mergacon', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
             ? null
             : 'There is no other base to move to';
@@ -3386,13 +3386,13 @@ export function registerTitanAbilities(): void {
         (state.titanOngoingSuppressedUntilTurnEnd ?? []).includes(titan.uid) ? 0 : 3);
 
     registerTitanSpecialValidator('itty_critters_rainboroc', () =>
-        '褰╄櫣楦熷彧鑳藉湪鍩哄湴璁″垎鍚庨€氳繃鐗规畩鑳藉姏杩涘満');
+        '彩虹鸟只能在基地计分后通过特殊能力进场');
     registerAbility('itty_critters_rainboroc', 'talent', ittyCrittersRainborocTalent);
     registerTitanTalentValidator('itty_critters_rainboroc', ({ state, playerId, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getRainborocLowPowerDiscardCards(state, playerId).length > 0
             ? null
-            : '浣犵殑寮冪墝鍫嗕腑娌℃湁鎴樺姏 2 鎴栨洿浣庣殑闅忎粠';
+            : '你的弃牌堆中没有战力 2 或更低的随从';
     });
     registerTrigger('itty_critters_rainboroc', 'afterScoring', (ctx) => ittyCrittersRainborocAfterScoring({
         state: ctx.state,
@@ -3414,12 +3414,12 @@ export function registerTitanAbilities(): void {
     registerAbility('explorers_very_large_boulder', 'special', explorersVeryLargeBoulderSpecial);
     registerTitanSpecialValidator('explorers_very_large_boulder', ({ state, baseIndex, titan }) => {
         const base = state.bases[baseIndex];
-        if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
+        if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
         if (titan.location.zone !== 'setaside') return 'This titan is not set aside';
         if (!base) return 'Invalid base index';
         return base.minions.length === 0
             ? null
-            : '浣犲彧鑳藉皢纭曞ぇ鍦嗙煶鎵撳嚭鍒版病鏈夌帺瀹堕殢浠庣殑鍩哄湴';
+            : '你只能将硕大圆石打出到没有玩家随从的基地';
     });
     registerTrigger('explorers_very_large_boulder', 'onMinionMoved', explorersVeryLargeBoulderOnMinionMoved, {
         playerContext: 'sourceController',
@@ -3431,9 +3431,9 @@ export function registerTitanAbilities(): void {
     registerTitanSpecialValidator('ignobles_the_hill_that_strolls', ({ state, playerId }) =>
         getHillOwnedMinionsControlledByOthers(state, playerId).length >= 2
             ? null
-            : '鍙湁鑷冲皯 2 涓綘鎷ユ湁鐨勯殢浠庢琚叾浠栫帺瀹舵帶鍒舵椂锛屼綘鎵嶈兘鎵撳嚭婕父灞卞箔宸ㄤ汉');
+            : '只有至少 2 个你拥有的随从正被其他玩家控制时，你才能打出漫游山丘巨人');
     registerTitanTalentValidator('ignobles_the_hill_that_strolls', ({ state, playerId, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         const canGive = getHillGiveControlTargets(state, playerId).length > 0;
         const canReclaim = getHillOwnedMinionsControlledByOthers(state, playerId, titan.location.baseIndex).length > 0;
         return (canGive || canReclaim)
@@ -3449,9 +3449,9 @@ export function registerTitanAbilities(): void {
     registerAbility('time_travelers_time_box', 'special', timeTravelersTimeBoxSpecial);
     registerAbility('time_travelers_time_box', 'talent', timeTravelersTimeBoxTalent);
     registerTitanSpecialValidator('time_travelers_time_box', ({ titan }) =>
-        getTimeBoxCounter(titan) >= 5 ? null : '鏃堕棿鐩掑瓙鐨勮鏁拌繕鏈揪鍒?5');
+        getTimeBoxCounter(titan) >= 5 ? null : '时间盒子的计数还未达到 5');
     registerTitanTalentValidator('time_travelers_time_box', ({ titan }) =>
-        titan.location.zone === 'base' ? null : '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満');
+        titan.location.zone === 'base' ? null : '该泰坦当前不在场');
     registerTrigger('time_travelers_time_box', 'onTurnStart', timeTravelersTimeBoxOnTurnStart, { global: true, optional: true });
     registerTrigger('time_travelers_time_box', 'onCardReturnedToHand', timeTravelersTimeBoxOnCardReturnedToHand, { global: true, optional: true });
 
@@ -3461,7 +3461,7 @@ export function registerTitanAbilities(): void {
 
     registerAbility('sphinx', 'talent', sphinxTalent);
     registerTitanTalentValidator('sphinx', ({ state, playerId, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return (state.players[playerId]?.hand.length ?? 0) > 0
             ? null
             : 'You have no card in hand to bury';
@@ -3476,14 +3476,14 @@ export function registerTitanAbilities(): void {
 
     registerAbility('magical_girls_walking_castle', 'special', magicalGirlsWalkingCastleSpecial);
     registerTitanSpecialValidator('magical_girls_walking_castle', ({ state, playerId, baseIndex, titan }) => {
-        if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
+        if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
         return getOwnMinionCountOnBase(state, baseIndex, playerId) >= 2
             ? null
-            : '浣犲彧鑳藉皢绉诲姩鍩庡牎鎵撳嚭鍒版湁浣犺嚦灏?2 涓殢浠庣殑鍩哄湴';
+            : '你只能将移动城堡打出到有你至少 2 个随从的基地';
     });
     registerAbility('magical_girls_walking_castle', 'talent', magicalGirlsWalkingCastleTalent);
     registerTitanTalentValidator('magical_girls_walking_castle', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
             ? null
             : 'There is no other base to move to';
@@ -3494,7 +3494,7 @@ export function registerTitanAbilities(): void {
     registerTitanSpecialValidator('mega_troopers_megabot', ({ state, playerId, baseIndex }) =>
         getOwnMinionCountOnBase(state, baseIndex, playerId) >= 3
             ? null
-            : '浣犲彧鑳藉皢瓒呯骇浣愬痉鎵撳嚭鍒版湁浣犺嚦灏?3 涓殢浠庣殑鍩哄湴');
+            : '你只能将超级佐德打出到有你至少 3 个随从的基地');
     registerTrigger('mega_troopers_megabot', 'beforeScoring', megaTroopersMegabotBeforeScoring);
     registerTitanPowerModifier('mega_troopers_megabot', ({ state, baseIndex, playerId }) =>
         getOwnMinionCountOnBase(state, baseIndex, playerId));
@@ -3511,7 +3511,7 @@ export function registerTitanAbilities(): void {
             playerId,
             effectiveHandSize: player.hand.length,
         }).length > 0;
-        return hasPlayableAction ? null : '寮冪墝鍚庝篃娌℃湁鍙澶栨墦鍑虹殑鏍囧噯鎴樻湳';
+        return hasPlayableAction ? null : '弃牌后也没有可额外打出的标准战术';
     });
     registerTitanPowerModifier('ghosts_creampuff_man', ({ state, playerId }) => {
         const handSize = state.players[playerId]?.hand.length ?? 0;
@@ -3523,7 +3523,7 @@ export function registerTitanAbilities(): void {
     registerTitanSpecialValidator('innsmouth_dagon', ({ state, playerId, baseIndex }) =>
         getDagonMatchingMinionCount(state, baseIndex, playerId) >= 2
             ? null
-            : '浣犲彧鑳藉皢澶ц‘鎵撳嚭鍒版湁浣犺嚦灏戜袱涓悓鍚嶉殢浠庣殑鍩哄湴');
+            : '你只能将大衮打出到有你至少两个同名随从的基地');
     registerTitanTalentValidator('innsmouth_dagon', ({ state, playerId }) => {
         const player = state.players[playerId];
         const hasMinionInHand = player?.hand.some(card => card.type === 'minion') ?? false;
@@ -3535,7 +3535,7 @@ export function registerTitanAbilities(): void {
     registerAbility('wizards_arcane_protector', 'special', wizardArcaneProtectorSpecial);
     registerAbility('wizards_arcane_protector', 'talent', wizardArcaneProtectorTalent);
     registerTitanSpecialValidator('wizards_arcane_protector', ({ state }) =>
-        (state.cardsPlayedThisTurn ?? 0) >= 5 ? null : '浣犳湰鍥炲悎杩樻病鏈夋墦鍑?5 寮犵墝');
+        (state.cardsPlayedThisTurn ?? 0) >= 5 ? null : '你本回合还没有打出 5 张牌');
 
     registerTitanPowerModifier('wizards_arcane_protector', ({ state, playerId }) => {
         const handSize = state.players[playerId]?.hand.length ?? 0;
@@ -3555,7 +3555,7 @@ export function registerTitanAbilities(): void {
         const canTransferMadness = buildCthulhuTitanTransferOptions(state, playerId).length > 0;
         return (canDrawMadness || canTransferMadness)
             ? null
-            : '浣犳棦涓嶈兘鎶界柉鐙傚崱锛屼篃娌℃湁鍙浆浜ょ粰鍏朵粬鐜╁鐨勭柉鐙傚崱';
+            : '你既不能抽疯狂卡，也没有可转交给其他玩家的疯狂卡';
     });
     registerInterceptor('cthulhu_cthulhu_titan', (state, event) => buildCthulhuTitanCounterEvents(state, event));
 
@@ -3586,10 +3586,10 @@ export function registerTitanAbilities(): void {
             : 'You can only play Major Ursa on a base where you have a minion';
     });
     registerTitanTalentValidator('bear_cavalry_major_ursa', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '鐠囥儲鍢查崸锕€缍嬮崜宥勭瑝閸︺劌婧€';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
             ? null
-            : '濞屸剝婀侀崣顖欎簰缁夎濮╅崚鎵畱閸忔湹绮崺鍝勬勾';
+            : '没有其他可移动到的基地';
     });
     registerTrigger('bear_cavalry_major_ursa', 'onTitanMoved', bearCavalryMajorUrsaOnTitanMoved, { optional: true });
     registerTitanSpecialValidator('bear_cavalry_major_ursa', ({ state, titan, baseIndex }) => {
@@ -3599,7 +3599,7 @@ export function registerTitanAbilities(): void {
             : 'Invalid base index';
     });
     registerTitanTalentValidator('bear_cavalry_major_ursa', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         const base = state.bases[titan.location.baseIndex];
         const hasMinionHere = !!base && base.minions.length > 0;
         const canMoveTitan = getOtherBaseOptions(state, titan.location.baseIndex).length > 0;
@@ -3615,7 +3615,7 @@ export function registerTitanAbilities(): void {
     registerAbility('vampires_ancient_lord', 'special', vampireAncientLordSpecial);
     registerAbility('vampires_ancient_lord', 'talent', vampireAncientLordTalent);
     registerTitanSpecialValidator('vampires_ancient_lord', ({ state }) =>
-        (state.powerCountersPlacedOnMinionsThisTurn ?? 0) >= 2 ? null : '浣犳湰鍥炲悎杩樻病鏈変负闅忎粠鏀剧疆 2 鏋?+1 鍔涢噺鏍囪');
+        (state.powerCountersPlacedOnMinionsThisTurn ?? 0) >= 2 ? null : '你本回合还没有为随从放置 2 枚 +1 力量标记');
     registerTitanTalentValidator('vampires_ancient_lord', ({ state, playerId, baseIndex }) => {
         const base = state.bases[baseIndex];
         if (!base) return 'Invalid base index';
@@ -3626,12 +3626,12 @@ export function registerTitanAbilities(): void {
     });
     registerInterceptor('vampires_ancient_lord', (state, event) => buildAncientLordBonusCounterEvents(state, event));
     registerTitanSpecialValidator('vampires_ancient_lord', () =>
-        '姝ゆ嘲鍧﹂€氳繃鍏剁壒娈婅Е鍙戣繘鍦猴紝涓嶈兘鎵嬪姩鍙戝姩');
+        '此泰坦通过其特殊触发进场，不能手动发动');
     registerTitanTalentValidator('vampires_ancient_lord', ({ state, playerId }) => {
         const hasTarget = state.bases.some(base =>
             base.minions.some(minion => minion.controller === playerId && (minion.powerCounters ?? 0) > 0),
         );
-        return hasTarget ? null : '浣犳病鏈夊凡鏈?+1 鎴樻枟鍔涙爣璁扮殑宸辨柟闅忎粠';
+        return hasTarget ? null : '你没有已有 +1 战力标记的己方随从';
     });
     registerTrigger('vampires_ancient_lord', 'onPowerCounterChanged', vampireAncientLordOnPowerCounterChanged, {
         global: true,
@@ -3641,7 +3641,7 @@ export function registerTitanAbilities(): void {
 
     registerAbility('werewolves_great_wolf_spirit', 'special', werewolvesGreatWolfSpiritSpecial);
     registerTitanSpecialValidator('werewolves_great_wolf_spirit', ({ state, playerId, baseIndex, titan }) => {
-        if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
+        if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
         const eligibleBases = getGreatWolfSpiritEligibleBases(state, playerId);
         if (eligibleBases.length < 2) return 'You must be tied for highest power on at least 2 bases';
         return eligibleBases.some(option => option.baseIndex === baseIndex)
@@ -3651,15 +3651,15 @@ export function registerTitanAbilities(): void {
     registerAbility('werewolves_great_wolf_spirit', 'talent', werewolvesGreatWolfSpiritTalent);
     registerTrigger('werewolves_great_wolf_spirit', 'onTurnStart', werewolvesGreatWolfSpiritOnTurnStart, { global: true, optional: true });
     registerTitanTalentValidator('werewolves_great_wolf_spirit', ({ state, titan, playerId }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getGreatWolfSpiritTalentTargets(state, playerId).length > 0
             ? null
-            : '娌℃湁鍙幏寰楀姏閲忕殑宸辨柟闅忎粠';
+            : '没有可获得力量的己方随从';
     });
 
     registerAbility('tricksters_big_funny_giant', 'special', trickstersBigFunnyGiantSpecial);
     registerTitanSpecialValidator('tricksters_big_funny_giant', ({ state, titan, baseIndex }) => {
-        if (titan.location.zone !== 'setaside') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄧ墝搴撴梺';
+        if (titan.location.zone !== 'setaside') return '该泰坦当前不在牌库旁';
         return state.bases[baseIndex] ? null : 'Invalid base index';
     });
     registerTrigger('tricksters_big_funny_giant', 'onTurnEnd', trickstersBigFunnyGiantOnTurnEnd);
@@ -3673,7 +3673,7 @@ export function registerTitanAbilities(): void {
 
     registerAbility('pirates_the_kraken', 'talent', piratesTheKrakenTalent);
     registerTitanTalentValidator('pirates_the_kraken', ({ state, titan }) => {
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
             ? null
             : 'There is no other base to move to';
@@ -4036,7 +4036,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_frankenstein_the_bride_start_choose_target_${timestamp}`,
             playerId,
-            'The Bride锛氶€夋嫨鏁堟灉鐩爣',
+            'The Bride：选择效果目标',
             options,
             { sourceId: 'titan_frankenstein_the_bride_start_choose_target', targetType: 'generic' },
         );
@@ -4103,7 +4103,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_frankenstein_the_bride_start_choose_base_${timestamp}`,
             playerId,
-            'The Bride锛氶€夋嫨瑕佹墦鍑虹殑鍩哄湴',
+            'The Bride：选择要打出的基地',
             getAllBaseOptions(state.core),
             { sourceId: 'titan_frankenstein_the_bride_start_choose_base', targetType: 'base' },
         );
@@ -4157,7 +4157,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_frankenstein_the_bride_talent_extra_action_${timestamp}`,
             playerId,
-            'The Bride锛氶€夋嫨瑕佺Щ闄ょ殑鏍囪缁勫悎',
+            'The Bride：选择要移除的标记组合',
             buildTheBrideExtraActionOptions(state.core, playerId),
             { sourceId: 'titan_frankenstein_the_bride_talent_extra_action', targetType: 'generic' },
         );
@@ -4564,7 +4564,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_explorers_very_large_boulder_destroy_${timestamp}`,
             playerId,
-            '纭曞ぇ鍦嗙煶锛氶€夋嫨瑕佹秷鐏殑闅忎粠',
+            '硕大圆石：选择要消灭的随从',
             buildMinionTargetOptions(destroyTargets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' }),
             { sourceId: 'titan_explorers_very_large_boulder_destroy', targetType: 'minion' },
         );
@@ -4657,7 +4657,7 @@ export function registerTitanInteractionHandlers(): void {
             next.controllerId,
             `Megabot: move to ${getBaseDef(continuation.scoringBaseDefId)?.name ?? `Base ${continuation.scoringBaseIndex + 1}`} before it scores?`,
             [
-                { id: 'move', label: '绉诲姩鍒拌鍩哄湴', value: { move: true }, displayMode: 'button' as const },
+                { id: 'move', label: '移动到该基地', value: { move: true }, displayMode: 'button' as const },
                 { id: 'stay', label: '鐣欏湪鍘熷湴', value: { move: false }, displayMode: 'button' as const },
             ],
             { sourceId: 'titan_mega_troopers_megabot_move', targetType: 'button' },
@@ -5260,7 +5260,7 @@ export function registerTitanInteractionHandlers(): void {
             const interaction = createSimpleChoice(
                 `titan_bear_cavalry_major_ursa_choose_counter_target_${timestamp}`,
                 playerId,
-                'Major Ursa锛氶€夋嫨姝ゅ涓€涓殢浠庢斁缃?+1 鎴樺姏鏍囪',
+                'Major Ursa：选择此处一个随从放置 +1 战力标记',
                 buildMinionTargetOptions(
                     base.minions.map(minion => ({
                         uid: minion.uid,
@@ -5330,7 +5330,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_bear_cavalry_major_ursa_choose_base_${timestamp}`,
             playerId,
-            '婢堆呭敽鎼囱嶇窗闁瀚ㄧ憰浣哥殺鐠囥儵娈㈡禒搴Ｐ╅崝銊ュ煂閻ㄥ嫬鐔€閸?',
+            'Major Ursa：选择要将该随从移动到的基地',
             buildBaseTargetOptions(baseOptions, state.core),
             { sourceId: 'titan_bear_cavalry_major_ursa_choose_base', targetType: 'base' },
         );
@@ -5397,7 +5397,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_ghosts_creampuff_man_play_${timestamp}`,
             playerId,
-            '濂舵补娉¤姍缇庝汉锛氶€夋嫨瑕佷粠寮冪墝鍫嗛澶栨墦鍑虹殑鏍囧噯鎴樻湳',
+            '奶油泡芙美人：选择要从弃牌堆额外打出的标准战术',
             actionOptions,
             { sourceId: 'titan_ghosts_creampuff_man_play', targetType: 'generic' },
         );

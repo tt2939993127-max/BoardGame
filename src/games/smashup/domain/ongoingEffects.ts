@@ -255,7 +255,7 @@ interface InterceptorEntry {
 }
 
 // ============================================================================
-// 濠电偛顦崝宀勫船閻ｅ本鍋?
+
 // ============================================================================
 
 const protectionRegistry: ProtectionEntry[] = [];
@@ -287,7 +287,6 @@ export function registerRestriction(
     restrictionRegistry.push({ sourceDefId, restrictionType, checker });
 }
 
-/** 濠电偛顦崝宀勫船閻ｅ本鍠嗛柨鏇楀亾鐟滄澘鍊块獮蹇涙晜閽樺鍔甸梺?*/
 export function registerTrigger(
     sourceDefId: string,
     timing: TitanAwareTriggerTiming,
@@ -710,7 +709,6 @@ export function getRegisteredOngoingEffectIds(): {
 
     return { protectionIds, restrictionIds, triggerIds, interceptorIds, baseAbilitySuppressionIds };
 }
-
 
 // ============================================================================
 
