@@ -1,5 +1,6 @@
-import type { MatchState } from '../types';
+import type { MatchState, ResponseWindowState } from '../types';
 import type { AiHint, AiInteractionSnapshot, AiResponseWindowSnapshot } from './types';
+import { buildResponseWindowFingerprint } from '../systems/ResponseWindowSystem';
 
 const toJsonSafe = <T>(value: T): T => {
     if (value === undefined) return value;
@@ -65,18 +66,20 @@ export function extractAiInteractionSnapshot(viewState: unknown): AiInteractionS
 
 export function extractAiResponseWindowSnapshot(viewState: unknown): AiResponseWindowSnapshot | null {
     const state = viewState as MatchState<unknown> | undefined;
-    const current = state?.sys?.responseWindow?.current as {
-        windowType?: unknown;
-        currentResponderIndex?: unknown;
-        responderQueue?: unknown;
-        allowedCommands?: unknown;
-    } | null | undefined;
+    const current = state?.sys?.responseWindow?.current as ResponseWindowState['current'] | null | undefined;
 
     if (!current) return null;
 
     const snapshot: AiResponseWindowSnapshot = {};
     if (typeof current.windowType === 'string') {
         snapshot.windowType = current.windowType;
+    }
+    if (typeof current.sourceId === 'string') {
+        snapshot.sourceId = current.sourceId;
+    }
+    const fingerprint = buildResponseWindowFingerprint(current);
+    if (fingerprint) {
+        snapshot.fingerprint = fingerprint;
     }
     if (typeof current.currentResponderIndex === 'number') {
         snapshot.currentResponderIndex = current.currentResponderIndex;

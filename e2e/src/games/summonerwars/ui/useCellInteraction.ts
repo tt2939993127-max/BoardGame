@@ -29,6 +29,8 @@ import { useEventCardModes } from './useEventCardModes';
 import type { PendingBeforeAttack } from './modeTypes';
 import { abilityRegistry } from '../domain/abilities';
 import type { BoardUnit } from '../domain/types';
+import type { InteractionDescriptor, PromptOption } from '../../../engine/systems/InteractionSystem';
+import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 
 // 从 modeTypes 重新导出类型（保持 StatusBanners 等消费方的导入路径兼容）
 export type {
@@ -81,6 +83,8 @@ interface UseCellInteractionParams {
   fromViewCoord: (coord: CellCoord) => CellCoord;
   /** undo 快照数量（通过 getUndoSnapshotCount 获取），框架层撤回保护必传 */
   undoSnapshotCount: number;
+  /** 当前系统交互（来自 sys.interaction.current） */
+  interaction?: InteractionDescriptor | null;
   // 外部模式状态
   abilityMode: AbilityModeState | null;
   setAbilityMode: (mode: AbilityModeState | null) => void;
@@ -102,6 +106,7 @@ export function useCellInteraction({
   core, dispatch, currentPhase, isMyTurn, isGameOver,
   myPlayerId, activePlayerId, myHand, fromViewCoord,
   undoSnapshotCount,
+  interaction,
   abilityMode, setAbilityMode, soulTransferMode,
   mindCaptureMode, setMindCaptureMode,
   afterAttackAbilityMode, setAfterAttackAbilityMode,
@@ -136,6 +141,36 @@ export function useCellInteraction({
     soulTransferMode, mindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
   });
+
+  // ---------- InteractionSystem（SummonerWars） ----------
+  const swInteraction = useMemo(() => {
+    if (!interaction || interaction.kind !== 'simple-choice') return null;
+    if (interaction.playerId !== (myPlayerId as '0' | '1')) return null;
+    const data = interaction.data as { sw?: { type?: string }; options?: PromptOption[] };
+    if (!data?.sw || typeof data.sw !== 'object') return null;
+    return {
+      id: interaction.id,
+      type: (data.sw as { type?: string }).type ?? '',
+      options: (data.options ?? []) as PromptOption[],
+    };
+  }, [interaction, myPlayerId]);
+
+  const interactionPositionOptions = useMemo(() => {
+    if (!swInteraction) return [];
+    if (swInteraction.type !== 'grab_follow' && swInteraction.type !== 'feed_beast') return [];
+    return swInteraction.options.filter((opt) => {
+      const val = opt.value as { targetPosition?: CellCoord; choice?: string } | undefined;
+      if (!val?.targetPosition) return false;
+      if (swInteraction.type === 'feed_beast' && val.choice !== 'destroy_adjacent') return false;
+      return true;
+    });
+  }, [swInteraction]);
+
+  const interactionPositions = useMemo(() => (
+    interactionPositionOptions
+      .map((opt) => (opt.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
+      .filter((pos): pos is CellCoord => !!pos)
+  ), [interactionPositionOptions]);
 
   // ---------- 核心阶段高亮 ----------
 
@@ -195,6 +230,7 @@ export function useCellInteraction({
 
   // 技能目标位置（复活死灵、感染、结构变换推拉方向、抓附跟随）
   const validAbilityPositions = useMemo(() => {
+    if (interactionPositions.length > 0) return interactionPositions;
     // 抓附跟随：移动后的单位相邻的空格
     if (grabFollowMode) {
       const adj = getAdjacentCells(grabFollowMode.movedTo);
@@ -227,7 +263,7 @@ export function useCellInteraction({
       return [abilityMode.targetPosition];
     }
     return [];
-  }, [abilityMode, core, grabFollowMode]);
+  }, [abilityMode, core, grabFollowMode, interactionPositions]);
 
   // 技能可选单位（火祀召唤、吸取生命、幻化、结构变换等）
   const validAbilityUnits = useMemo(() => {
@@ -481,6 +517,21 @@ export function useCellInteraction({
     // 任何格子交互都重置结束阶段确认状态
      
     setEndPhaseConfirmPending(false);
+
+    // InteractionSystem：抓附跟随 / 喂养巨食兽（相邻吞噬）
+    if (swInteraction && (swInteraction.type === 'grab_follow' || swInteraction.type === 'feed_beast')) {
+      const option = interactionPositionOptions.find((opt) => {
+        const pos = (opt.value as { targetPosition?: CellCoord } | undefined)?.targetPosition;
+        return pos?.row === gameRow && pos?.col === gameCol;
+      });
+      if (option) {
+        dispatch(INTERACTION_COMMANDS.RESPOND, {
+          interactionId: swInteraction.id,
+          optionId: option.id,
+        });
+      }
+      return;
+    }
 
     // 事件卡/多步骤模式优先处理
     if (eventCardModes.handleEventModeClick(gameRow, gameCol)) return;
@@ -973,7 +1024,7 @@ export function useCellInteraction({
   useEffect(() => { queueMicrotask(() => setEndPhaseConfirmPending(false)); }, [currentPhase]);
 
   // 强制技能模式：这些技能没有"跳过"选项，必须完成后才能推进阶段
-  const isMandatoryAbilityActive = !!abilityMode && ['blood_rune', 'feed_beast'].includes(abilityMode.abilityId);
+  const isMandatoryAbilityActive = !!abilityMode && ['blood_rune'].includes(abilityMode.abilityId);
 
   const handleEndPhase = () => {
     // 强制技能激活时禁止推进阶段（如鲜血符文必须二选一）
@@ -1102,7 +1153,8 @@ export function useCellInteraction({
     || !!afterAttackAbilityMode
     || !!abilityMode
     || !!rapidFireMode
-    || !!magicEventChoiceMode;
+    || !!magicEventChoiceMode
+    || !!swInteraction;
 
   // 全局禁用开关（调试用）
   const debugDisabled = typeof window !== 'undefined'
@@ -1204,5 +1256,6 @@ export function useCellInteraction({
     clearAllEventModes: eventCardModes.clearAllEventModes,
     hasActiveEventMode: eventCardModes.hasActiveEventMode,
     isMandatoryAbilityActive,
+    hasSystemInteraction: !!swInteraction,
   };
 }

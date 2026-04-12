@@ -1,5 +1,6 @@
 import type { AiResolution, AiSeatController } from '../ai';
 import type { MatchState } from '../types';
+import { buildResponseWindowFingerprint } from '../systems/ResponseWindowSystem';
 
 type HiddenSimpleChoiceOption = {
     id?: unknown;
@@ -154,17 +155,12 @@ export function buildAiProgressMarker(state: MatchState<unknown>): string {
     const interactionId = typeof state.sys?.interaction?.current?.id === 'string'
         ? state.sys.interaction.current.id
         : '';
-    const responseWindowId = typeof state.sys?.responseWindow?.current?.id === 'string'
-        ? state.sys.responseWindow.current.id
-        : '';
-    const responseWindowType = typeof state.sys?.responseWindow?.current?.windowType === 'string'
-        ? state.sys.responseWindow.current.windowType
-        : '';
-    const responseWindowSourceId = typeof state.sys?.responseWindow?.current?.sourceId === 'string'
-        ? state.sys.responseWindow.current.sourceId
+    const responseWindow = state.sys?.responseWindow?.current;
+    const responseWindowFingerprint = responseWindow
+        ? buildResponseWindowFingerprint(responseWindow)
         : '';
     const responseResponderId = (() => {
-        const currentWindow = state.sys?.responseWindow?.current;
+        const currentWindow = responseWindow;
         if (!currentWindow || !Array.isArray(currentWindow.responderQueue)) {
             return '';
         }
@@ -172,19 +168,18 @@ export function buildAiProgressMarker(state: MatchState<unknown>): string {
         const responderId = currentWindow.responderQueue[index];
         return typeof responderId === 'string' ? responderId : '';
     })();
-    const responderIndex = typeof state.sys?.responseWindow?.current?.currentResponderIndex === 'number'
-        ? state.sys.responseWindow.current.currentResponderIndex
+    const responderIndex = typeof responseWindow?.currentResponderIndex === 'number'
+        ? responseWindow.currentResponderIndex
         : '';
     const currentPlayerId = resolveCurrentPlayerId(state) ?? '';
+    const eventMarker = responseWindowFingerprint ? '' : eventStreamNextId;
 
     return [
         turnNumber,
         phase,
-        eventStreamNextId,
+        eventMarker,
         interactionId,
-        responseWindowId,
-        responseWindowType,
-        responseWindowSourceId,
+        responseWindowFingerprint,
         responseResponderId,
         responderIndex,
         currentPlayerId,
@@ -742,10 +737,8 @@ export function resolveForceEndTurnForStalledAi(args: {
         const responseWindowType = typeof (responseWindow?.current as { windowType?: unknown } | undefined)?.windowType === 'string'
             ? (responseWindow?.current as { windowType?: string }).windowType
             : 'unknown-window';
-        const responseWindowSourceId = typeof (responseWindow?.current as { sourceId?: unknown } | undefined)?.sourceId === 'string'
-            ? (responseWindow?.current as { sourceId?: string }).sourceId
-            : 'no-source';
-        const fingerprintHint = `response-window:${responderId}:${responseWindowType}:${responseWindowSourceId}:${responderQueue.join('|')}`;
+        const phase = typeof args.sharedState?.sys?.phase === 'string' ? args.sharedState.sys.phase : 'unknown-phase';
+        const fingerprintHint = `response-window:${responderId}:${phase}:${responseWindowType}:${responderQueue.join('|')}`;
         return {
             playerId: responderId,
             reason: 'response-window',

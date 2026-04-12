@@ -54,7 +54,7 @@
 - [24-the-law-variant-3p-selected-targets.png](D:/gongzuo/webgame/BoardGame/test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/should-open-multi-target-interaction-after-selecting-the-upgraded-variant-in-3-player-scene/24-the-law-variant-3p-selected-targets.png)
 
 肉眼观察：
-- 弹窗标题为“选择至多 2 名目标玩家”，当前只出现两名敌方，不出现己方。
+- 弹窗标题为“选择至多 2 名目标玩家”，该 3 人场景仅有 2 名“非自己”的玩家，因此面板仅显示 2 项，且两项都标记为敌方。
 - 左侧目标已被选中，确认按钮处于可点击状态，说明多目标交互链路完整。
 - 该界面是交互层目标选择，不是 `targetingRoll` 的单目标面板。
 
@@ -67,7 +67,7 @@
 npm run i18n:check
 $env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player The Law variant"
 $env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player Pistol Whip variant"
-$env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player Wanted: real hand play only offers enemies in 2v2 and grants Bounty to selected enemy"
+$env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player Wanted: real hand play offers all target players in 2v2 and grants Bounty to selected target"
 $env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-simple-start.e2e.ts "Online 4-player Samurai Shame card: real hand play only offers enemies in 2v2 and applies Shame to selected enemy"
 $env:BG_ALLOW_HEAVY_TASK_CONCURRENCY='1'; node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts "枪手 The Law 升级变体真实触发"
 ```

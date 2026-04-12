@@ -126,8 +126,9 @@ describe('Igor: 场上有两个 Igor，一个被消灭', () => {
         expect(result3.success).toBe(true);
         if (!result3.success) return;
 
-        // 最终状态：不应该有任何待处理的交互
-        expect(result3.finalState.sys.interaction.current).toBeUndefined();
+        // 最终状态：Igor 交互已被解决
+        const finalInteraction = result3.finalState.sys.interaction.current as any;
+        expect(finalInteraction).toBeUndefined();
         expect(result3.finalState.sys.interaction.queue.length).toBe(0);
 
         // 验证最终状态：igor1 被消灭，igor2 得到 +1 力量

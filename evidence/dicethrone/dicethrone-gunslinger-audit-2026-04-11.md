@@ -81,12 +81,13 @@
 | `card-wanted` | 通缉逮捕！/ 行动 | 选择 1 名玩家，给予赏金；4 人组队局可选任意目标玩家 | `cards.ts` + `customActions/gunslinger.ts` | D1/D5/D34 | ✅ 一致 |
 | `card-spin-the-chamber` | 转动弹槽！/ 行动 | 获得 1 个装填 | `cards.ts` | D1/D7 | ✅ 一致 |
 | `card-high-noon` | 赌命轮盘！/ 行动 | 选择 1 名目标玩家，掷 1 颗奖励骰并按结果触发 2 不可防御伤害 / 击倒 / 赏金；1v1 自动退化为唯一对手 | `cards.ts` + `customActions/gunslinger.ts` | D1/D5/D10/D15 | ✅ 一致（E2E 已验证） |
-| `card-wild-west` | 荒野西部！/ 攻击修正 | 花费 1 装填 → 奖励骰可重掷一次，总伤害 +1，不改主骰盘 | `cards.ts` + `customActions/gunslinger.ts` | D1/D5/D7/D15 | ✅ 一致（E2E 已验证） |
+| `card-wild-west` | 荒野西部！/ 攻击修正 | **打出后仅挂载**；当你**花费 1 装填**时触发奖励骰（可重掷一次），结算后总伤害 +1，不改主骰盘 | `cards.ts` + `customActions/gunslinger.ts` | D1/D5/D7/D15/D18 | ✅ 一致（E2E 已验证） |
 | `card-eat-my-lead` | 吃我的铅弹！/ 攻击修正 | 额外掷 5 骰；每个子弹令本次攻击 +1；若加伤 >4，再施加击倒 | `cards.ts` + `customActions/gunslinger.ts` | D1/D3/D8 | ✅ 一致 |
 
 ## 验证证据
 - Wild West E2E：`evidence/dicethrone/dicethrone-wild-west-e2e-test.md`
 - High Noon E2E：`evidence/dicethrone/dicethrone-high-noon-branches-e2e-test.md`
+- 4 人目标集合（Wanted / High Noon / Pistol Whip）：`evidence/dicethrone/dicethrone-gunslinger-samurai-4p-targeted-cards-e2e-test.md`
 - 静态实现核对：
   - `src/games/dicethrone/domain/customActions/gunslinger.ts:200-260,471-641,747-766`
   - `src/games/dicethrone/heroes/gunslinger/cards.ts:60-235`
@@ -116,10 +117,10 @@
 - **D4 查询一致性**：✅ 未发现可变属性直读绕过统一入口。
 - **D5 交互完整**：✅ `Wanted / The Law / High Noon / mark-the-target` 均有对应交互入口；`The Law` 支持最多 2 人选择，1v1 可自动退化。
 - **D6 副作用传播**：✅ 赏金与装填的额外收益可触发既有资源机制。
-- **D7 资源守恒**：✅ `Wild West` 消耗装填并固定 +1 伤害；`spin-the-chamber` 正确授予装填；装填消耗不越界。
+- **D7 资源守恒**：✅ `Wild West` 在**花费 Loaded 时**消耗装填并追加 +1；`spin-the-chamber` 正确授予装填；装填消耗不越界。
 - **D8 时序正确**：✅ 奖励骰结算在攻击修正阶段，不影响主骰盘；`showdown / duel` 的比点结算顺序正确。
 - **D9 幂等与重入**：⚠️ 已覆盖 Wild West/High Noon 特写链路，但未新增专项重入回归。
-- **D10 元数据一致**：✅ `High Noon / duel / pistol-whip / the-law` 等 handler categories 与实际事件类型一致；`Wild West` 只产生 bonusDamage，不误报为直接伤害 handler。
+- **D10 元数据一致**：✅ `High Noon / duel / pistol-whip / the-law` 等 handler categories 与实际事件类型一致；`Wild West` 现为“挂载触发条件 → Loaded 花费时生效”，未误报为直接伤害 handler。
 - **D11 Reducer 消耗路径**：✅ 攻击修正伤害走 `attackModifierBonusDamage`。
 - **D12 写入-消耗对称**：✅ 赏金/装填写入与消耗对称。
 - **D13 多来源竞争**：⚠️ 装填与其他攻击修正叠加未做组合回归。
@@ -164,9 +165,14 @@
 ## 未覆盖风险 / 待确认
 1. **（已修订）枪手规则文档 merge conflict 风险**：此前风险描述已失效；本轮已清理并确认 `src/games/dicethrone/rule/枪手*.md` 无冲突标记。
 2. **复合升级下半区变体尚无真实 UI/E2E 截图链**：`pistol-whip / mark-the-target / the-law` 目前只有静态与 GameTestRunner 证据。
-3. **否定路径仍缺动态验证**：例如 `Wild West` 在无装填时不能进入奖励骰重掷、`The Law` 多人局“只选 1 人/跳过第 2 人”的 UI 链路尚未做 E2E。
+3. **否定路径仍缺动态验证**：`The Law` 多人局“只选 1 人/跳过第 2 人”的 UI 链路尚未做 E2E。
 
 ## 修订记录
 - 2026-04-11：补审枪手派系并记录已修复项（Revolver II 四同点、Wanted/The Law 目标范围、High Noon 骰面归属）。
 - 2026-04-12：补齐 High Noon 特写 E2E 证据链，并回写审计结论为“✅ 一致”。
 - 2026-04-12（补审回写）：补录 `spin-the-chamber` 与三张复合升级卡下半区变体（`pistol-whip / mark-the-target / the-law`），修正“专属卡区已全覆盖”的失效结论，并把复合升级合同与静态证据补回审计文档。
+- 2026-04-12（Wild West 触发时机修订）：
+  - 旧结论：`card-wild-west` 打出即消耗装填并触发奖励骰。
+  - 失效原因：权威描述为“**当你花费装填时触发**”，先前把触发时机误写成“打出即触发”，属于触发语义漏审（D1/D5/D18）。
+  - 新证据路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-die-reroll.e2e\card-wild-west-应触发弹药特写奖励骰，不改攻击骰盘\gunslinger-wild-west-bonus-die-overlay.png`
+  - 新结论：**打出仅挂载**，当你花费 Loaded 时触发奖励骰与后续 +1；命中 D1/D5/D7/D18。

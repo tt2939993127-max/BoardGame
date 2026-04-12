@@ -645,7 +645,7 @@ describe('完整流程验证 (Section 9)', () => {
     });
 
     function exec(cmd: string, payload: Record<string, unknown>, overrideRandom?: RandomFn) {
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         return executeCommand(state, { type: cmd, payload, timestamp: 0 }, overrideRandom ?? random);
     }
 
@@ -980,7 +980,7 @@ describe('完整流程验证 (Section 9)', () => {
         putUnit(core, { row: 4, col: 3 }, guide, '1');
         core.players['1' as PlayerId].deck = [mkUnit('deck-card-1', {}), mkUnit('deck-card-2', {})];
 
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         const events = summonerWarsFlowHooks.onPhaseEnter!({
             state,
             from: 'draw',

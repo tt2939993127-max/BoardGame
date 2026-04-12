@@ -132,6 +132,8 @@ describe('preloadCriticalImages', () => {
 
         // 推进单张图片的 30s 超时
         await vi.advanceTimersByTimeAsync(30_001);
+        // 确保所有计时器与微任务都被清空，避免 Promise 挂起
+        await vi.runAllTimersAsync();
 
         const warm = await promise;
         expect(warm).toEqual([]);

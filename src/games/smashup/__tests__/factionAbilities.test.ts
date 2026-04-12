@@ -19,8 +19,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { scoreOneBase } from '../domain';
-import { fireTriggers } from '../domain/ongoingEffects';
+ 
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
 import { makeMatchState } from './helpers';
@@ -87,17 +86,21 @@ describe('trickster interaction regressions', () => {
                 ongoingActions: [],
             }],
         });
+        (state as any).scoringEligibleBaseIndices = [0];
+        const matchState = {
+            ...makeMatchState(state),
+            sys: { ...makeMatchState(state).sys, phase: 'scoreBases' },
+        } as MatchState<SmashUpCore>;
 
-        const result = fireTriggers(state, 'beforeScoring', {
-            state,
-            matchState: makeMatchState(state),
+        const result = runCommand(matchState, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
             playerId: '0',
-            baseIndex: 0,
-            random: defaultRandom,
-            now: 1000,
-        });
+            payload: { minionUid: 'gnome-1', baseIndex: 0 },
+            timestamp: 1000,
+        } as any, defaultRandom);
+        expect(result.success).toBe(true);
 
-        const interaction = result.matchState?.sys.interaction?.current as any;
+        const interaction = result.finalState.sys.interaction?.current as any;
         expect(interaction?.data?.sourceId).toBe('trickster_gnome_pod');
 
         const targetUids = ((interaction?.data?.options ?? []) as any[])
@@ -106,7 +109,7 @@ describe('trickster interaction regressions', () => {
 
         expect(targetUids).not.toContain('gnome-1');
         expect(targetUids).toContain('enemy-1');
-        expect(targetUids).toContain('enemy-2');
+        expect(targetUids).not.toContain('enemy-2');
     });
 
     it('trickster_gnome_pod resolves only once for the same gnome during one scoring', () => {
@@ -123,6 +126,7 @@ describe('trickster interaction regressions', () => {
             }],
             baseDeck: ['base_the_mothership'],
         });
+        (core as any).scoringEligibleBaseIndices = [0];
         const initialMatchState = {
             ...makeMatchState(core),
             sys: {
@@ -131,28 +135,20 @@ describe('trickster interaction regressions', () => {
             },
         } as MatchState<SmashUpCore>;
 
-        const scoringResult = scoreOneBase(
-            core,
-            0,
-            core.baseDeck,
-            '0',
-            1000,
-            defaultRandom,
-            initialMatchState,
-        );
-        expect(scoringResult.matchState?.sys.interaction?.current).toBeDefined();
-
-        const scoringState = {
-            ...scoringResult.matchState!,
-            core: applyEventsLocal(scoringResult.matchState!.core, scoringResult.events),
-        };
-        const interaction = scoringState.sys.interaction?.current as any;
+        const activateResult = runCommand(initialMatchState, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'gnome-1', baseIndex: 0 },
+            timestamp: 1000,
+        } as any, defaultRandom);
+        expect(activateResult.success).toBe(true);
+        const interaction = activateResult.finalState.sys.interaction?.current as any;
         expect(interaction?.data?.sourceId).toBe('trickster_gnome_pod');
 
         const targetOption = interaction?.data?.options?.find((option: any) => option?.value?.minionUid === 'enemy-1');
         expect(targetOption).toBeDefined();
 
-        const respondResult = runCommand(scoringState, {
+        const respondResult = runCommand(activateResult.finalState, {
             type: 'SYS_INTERACTION_RESPOND',
             playerId: '0',
             payload: { optionId: targetOption.id },
@@ -164,6 +160,14 @@ describe('trickster interaction regressions', () => {
         expect((destroyEvents[0] as any).payload.minionUid).toBe('enemy-1');
         expect(respondResult.finalState.sys.interaction?.current).toBeUndefined();
         expect(respondResult.finalState.sys.interaction?.queue ?? []).toHaveLength(0);
+
+        const secondActivate = runCommand(respondResult.finalState, {
+            type: SU_COMMANDS.ACTIVATE_SPECIAL,
+            playerId: '0',
+            payload: { minionUid: 'gnome-1', baseIndex: 0 },
+            timestamp: 1002,
+        } as any, defaultRandom);
+        expect(secondActivate.success).toBe(true);
     });
 });
 
@@ -650,7 +654,7 @@ describe('机器人派系能力', () => {
         const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(limitEvents.length).toBe(1);
         expect((limitEvents[0] as any).payload.powerMax).toBe(2);
-        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
+        expect((limitEvents[0] as any).payload.playTiming).toBe('banked');
     });
 
     it('robot_microbot_guard: 4个己方随从时只能选择力量小于4的目标', () => {

@@ -28,6 +28,7 @@ function hasConfirmablePhaseEndAbility(
   core: SummonerWarsCore,
   playerId: PlayerId,
   phase: GamePhase,
+  resolvedMap?: Record<string, true>,
 ): boolean {
   const abilityIds = PHASE_END_ABILITIES[phase] ?? [];
   if (abilityIds.length === 0) return false;
@@ -40,6 +41,8 @@ function hasConfirmablePhaseEndAbility(
       for (const abilityId of abilityIds) {
         if (!CONFIRMABLE_PHASE_END_ABILITIES.has(abilityId)) continue;
         if (!unitAbilityList.includes(abilityId)) continue;
+        const resolutionKey = `${core.turnNumber}:${phase}:${abilityId}:${unit.instanceId}`;
+        if (resolvedMap?.[resolutionKey]) continue;
         if (canActivateAbility(core, unit, abilityId, playerId)) {
           return true;
         }
@@ -211,7 +214,12 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
     // 有需要玩家确认的阶段结束技能时，halt 阶段推进
     // 即使 flowHalted 已为 true，仍需检查是否还有技能需要确认
     // 只有当所有技能都确认/跳过后，才允许阶段推进
-    const needsConfirmation = hasConfirmablePhaseEndAbility(core, playerId, from as GamePhase);
+    const needsConfirmation = hasConfirmablePhaseEndAbility(
+      core,
+      playerId,
+      from as GamePhase,
+      state.sys.summonerWars?.phaseEndAbilityResolved,
+    );
     if (needsConfirmation) {
       return { events, halt: true };
     }
@@ -295,7 +303,7 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
     const phase = core.phase;
     const playerId = core.currentPlayer;
     // 仍有需要确认的技能 → 不自动推进
-    if (hasConfirmablePhaseEndAbility(core, playerId, phase)) return;
+    if (hasConfirmablePhaseEndAbility(core, playerId, phase, state.sys.summonerWars?.phaseEndAbilityResolved)) return;
     return { autoContinue: true, playerId };
   },
 };

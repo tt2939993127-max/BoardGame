@@ -230,6 +230,7 @@ CARD_BG: 'dicethrone/images/Common/compressed/card-background'
 3. **裁切图也必须满足 `compressed/` 约定**：凡是运行时通过 `OptimizedImage` / `CardPreview` / `getOptimizedImageUrls()` 加载的裁切图，实际可访问文件必须位于对应目录的 `compressed/` 子目录；仅有 `crops/foo.webp` 而没有 `crops/compressed/foo.webp`，视为资源不完整。
 4. **上传前先重建清单**：资源目录有新增/移动后，先执行 `npm run assets:manifest` 或定向执行 `node scripts/assets/generate_asset_manifests.js --root public/assets/i18n/zh-CN --id <gameId>`，再上传到 R2。
 5. **上传脚本环境变量位置**：`scripts/assets/upload-to-r2.js` 会优先读取仓库根目录 `.env`；如果不存在 `.env`，会自动回退读取 `.env.example`。排查“为什么本机能传/不能传”时，必须先确认当前 worktree 根目录这两个文件的实际情况。
+6. **出现“多叠一层整图/四角异常”先查叠层来源（通用规则）**：优先用 DevTools 选中异常区域，检查上层元素是否存在整图覆盖；查看 **计算后** `opacity/visibility/filter/transform` 是否被脚本改写；必要时用 `elementsFromPoint()` 或逐层禁用 DOM 来定位真正的上层来源。该步骤必须在调整裁剪/圆角/纹理之前完成。
 
 ---
 

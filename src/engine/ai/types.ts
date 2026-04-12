@@ -93,6 +93,8 @@ export interface AiInteractionSnapshot {
 
 export interface AiResponseWindowSnapshot {
     windowType?: string;
+    sourceId?: string;
+    fingerprint?: string;
     currentResponderIndex?: number;
     responderQueue?: string[];
     allowedCommands?: string[];

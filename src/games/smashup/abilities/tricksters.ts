@@ -172,7 +172,9 @@ function tricksterGnomePodSpecial(ctx: AbilityContext): AbilityResult {
     const myCount = base.minions.filter(m => m.controller === ctx.playerId).length;
     if (myCount <= 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
 
-    const targets = base.minions.filter(m => getMinionPower(ctx.state, m, ctx.baseIndex) < myCount);
+    const targets = base.minions.filter(
+        m => m.uid !== ctx.cardUid && getMinionPower(ctx.state, m, ctx.baseIndex) < myCount,
+    );
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
     const options = targets.map(t => {
@@ -1207,7 +1209,7 @@ function registerTricksterPodOngoingEffects(): void {
         const options = combos.map((c, i) => ({
             id: `combo-${i}`,
             label: c.label,
-            value: { blocked },
+            value: { blocked: c.blocked },
         }));
         const interaction = createSimpleChoice(
             `trickster_block_the_path_pod_${ctx.now}`,

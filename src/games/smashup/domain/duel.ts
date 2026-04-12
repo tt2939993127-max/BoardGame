@@ -587,8 +587,9 @@ function buildRunEmOffTieMovePrompts(
 
     let nextState = state;
     for (const mover of orderedPlayers) {
-        const loserUid = mover === duel.challengerPlayerId ? duel.challengedMinionUid : duel.challengerMinionUid;
-        const found = findMinionOnBases(nextState.core, loserUid);
+        // 平局时双方都要“跑”：每位玩家为自己参与决斗的随从选择逃跑的基地
+        const moveUid = mover === duel.challengerPlayerId ? duel.challengerMinionUid : duel.challengedMinionUid;
+        const found = findMinionOnBases(nextState.core, moveUid);
         if (!found) continue;
         const destinationOptions = nextState.core.bases
             .map((base, baseIndex) => ({
@@ -600,7 +601,7 @@ function buildRunEmOffTieMovePrompts(
         if (destinationOptions.length === 0) continue;
         if (destinationOptions.length === 1) {
             const moveEvents = buildValidatedMoveEvents(nextState, {
-                minionUid: loserUid,
+                minionUid: moveUid,
                 minionDefId: found.minion.defId,
                 fromBaseIndex: found.baseIndex,
                 toBaseIndex: destinationOptions[0].baseIndex,
@@ -620,7 +621,7 @@ function buildRunEmOffTieMovePrompts(
         );
         (interaction.data as any).continuationContext = {
             duel,
-            loserUid,
+            loserUid: moveUid,
             loserDefId: found.minion.defId,
             fromBaseIndex: found.baseIndex,
         };
@@ -771,9 +772,10 @@ function resolveDuelResult(
                     now,
                 }));
             } else if (destinationOptions.length > 1) {
+                const mover = loser.controller;
                 const interaction = createSimpleChoice(
-                    `smashup_duel_run_em_off_move_${duel.id}_${winner.controller}_${now}`,
-                    winner.controller,
+                    `smashup_duel_run_em_off_move_${duel.id}_${mover}_${now}`,
+                    mover,
                     'ui.duel_prompt_run_em_off_title',
                     buildBaseTargetOptions(destinationOptions, state.core),
                     { sourceId: 'smashup_duel_run_em_off_move', targetType: 'base' },

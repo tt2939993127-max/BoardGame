@@ -69,6 +69,8 @@ import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey
 import { SUMMONER_WARS_MANIFEST } from './manifest';
 import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
+import type { InteractionDescriptor, PromptOption } from '../../engine/systems/InteractionSystem';
+import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
 
 type Props = GameBoardProps<SummonerWarsCore>;
 
@@ -367,11 +369,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     damageBuffer,
     isVisualBusy,
     abilityMode, setAbilityMode,
-    soulTransferMode, setSoulTransferMode,
-    mindCaptureMode, setMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode, setRapidFireMode,
-    grabFollowMode, setGrabFollowMode,
     withdrawTrigger, setWithdrawTrigger,
     pendingAttackRef, handleCloseDiceResult: rawCloseDiceResult,
     clearPendingAttack, flushPendingDestroys,
@@ -386,17 +385,85 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     gate,
   });
 
+  const currentInteraction = G.sys.interaction?.current as InteractionDescriptor | undefined;
+  const swInteraction = useMemo(() => {
+    if (!currentInteraction || currentInteraction.kind !== 'simple-choice') return null;
+    if (currentInteraction.playerId !== (myPlayerId as PlayerId)) return null;
+    const data = currentInteraction.data as { sw?: { type?: string }; options?: PromptOption[] };
+    if (!data?.sw || typeof data.sw !== 'object') return null;
+    return {
+      id: currentInteraction.id,
+      type: (data.sw as { type?: string }).type ?? '',
+      meta: data.sw as Record<string, unknown>,
+      options: (data.options ?? []) as PromptOption[],
+    };
+  }, [currentInteraction, myPlayerId]);
+
+  const findInteractionOptionId = useCallback(
+    (matcher: (option: PromptOption) => boolean): string | null => {
+      if (!swInteraction) return null;
+      const option = swInteraction.options.find(matcher);
+      return typeof option?.id === 'string' ? option.id : null;
+    },
+    [swInteraction],
+  );
+
+  const respondInteractionOption = useCallback((optionId: string | null) => {
+    if (!swInteraction || !optionId) return;
+    dispatch(INTERACTION_COMMANDS.RESPOND, { interactionId: swInteraction.id, optionId });
+  }, [dispatch, swInteraction]);
+
+  const cancelInteraction = useCallback(() => {
+    if (!swInteraction) return;
+    dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+  }, [dispatch, swInteraction]);
+
+  const soulTransferMode = useMemo(() => {
+    if (!swInteraction || swInteraction.type !== 'soul_transfer') return null;
+    const meta = swInteraction.meta as { sourceUnitId?: string; sourcePosition?: CellCoord; victimPosition?: CellCoord };
+    if (!meta.sourceUnitId || !meta.sourcePosition || !meta.victimPosition) return null;
+    return {
+      sourceUnitId: meta.sourceUnitId,
+      sourcePosition: meta.sourcePosition,
+      victimPosition: meta.victimPosition,
+    };
+  }, [swInteraction]);
+
+  const mindCaptureMode = useMemo(() => {
+    if (!swInteraction || swInteraction.type !== 'mind_capture') return null;
+    const meta = swInteraction.meta as {
+      sourceUnitId?: string;
+      sourcePosition?: CellCoord;
+      targetPosition?: CellCoord;
+      targetUnitId?: string;
+      hits?: number;
+    };
+    if (!meta.sourceUnitId || !meta.sourcePosition || !meta.targetPosition || !meta.targetUnitId || !meta.hits) return null;
+    return {
+      sourceUnitId: meta.sourceUnitId,
+      sourcePosition: meta.sourcePosition,
+      targetPosition: meta.targetPosition,
+      targetUnitId: meta.targetUnitId,
+      hits: meta.hits,
+    };
+  }, [swInteraction]);
+
+  const noopSetGrabFollowMode = useCallback(() => {}, []);
+  const noopSetMindCaptureMode = useCallback(() => {}, []);
+
   // 格子交互 Hook
   const interaction = useCellInteraction({
     core, dispatch,
     currentPhase, isMyTurn, isGameOver: !!isGameOver,
     myPlayerId, activePlayerId, myHand, fromViewCoord,
     undoSnapshotCount: getUndoSnapshotCount(G.sys?.undo),
+    interaction: currentInteraction,
     abilityMode, setAbilityMode, soulTransferMode,
-    mindCaptureMode, setMindCaptureMode,
+    mindCaptureMode, setMindCaptureMode: noopSetMindCaptureMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode,
-    grabFollowMode, setGrabFollowMode,
+    grabFollowMode: null,
+    setGrabFollowMode: noopSetGrabFollowMode,
   });
 
   // 桥接：useGameEvents 检测到 afterAttack 触发 withdraw → 设置 useEventCardModes 的 withdrawMode

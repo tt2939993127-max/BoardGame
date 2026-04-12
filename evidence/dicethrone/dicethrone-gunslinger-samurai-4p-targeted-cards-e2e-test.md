@@ -41,9 +41,9 @@ npm run test:e2e:ci:file -- dicethrone-simple-start.e2e.ts "Online 4-player (Wan
 ### 枪手 High Noon
 
 - 选目标界面：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-offers-all-target-players-in-2v2-and-resolves-the-rolled-branch-on-selected-target\16-four-player-high-noon-all-target-selection.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-offers-all-target-players-in-2v2-and-resolves-the-rolled-branch-on-selected-tar\16-four-player-high-noon-all-target-selection.png`
 - 结算结果：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-offers-all-target-players-in-2v2-and-resolves-the-rolled-branch-on-selected-target\17-four-player-high-noon-resolved-on-selected-target.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-simple-start.e2e\Online-4-player-High-Noon-real-hand-play-offers-all-target-players-in-2v2-and-resolves-the-rolled-branch-on-selected-tar\17-four-player-high-noon-resolved-on-selected-target.png`
 
 ### 枪手 Pistol Whip
 

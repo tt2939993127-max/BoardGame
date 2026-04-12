@@ -44,7 +44,7 @@
 ### 3. 局内窄屏第二版玩家板放大成功截图
 
 - 路径：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\11-mobile-player-board-magnify-open.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\11-mobile-player-board-surface-magnify-open.png`
 - 人工观察：
   - 武士第二版玩家板在局内放大后仍然完整显示，顶部缺口、左右技能卡列和底部终极技区域都在框内，没有被裁出屏幕。
   - 放大层打开后，左侧 `回合顺序`、右侧骰子列和确认按钮仍在后景可见，但没有遮住放大内容，说明 overlay 层级正确。
@@ -53,7 +53,7 @@
 ### 4. 局内窄屏弃牌堆预览成功截图
 
 - 路径：
-  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\12-mobile-discard-pile-inspect-open.png`
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\mobile-narrow-viewport-should-keep-magnify-entries-visible-and-clickable\14-mobile-discard-pile-inspect-open.png`
 - 人工观察：
   - 右侧弃牌堆卡牌 `666!` 已经正常放大到前景中央，证明在第二版玩家板改宽之后，其他放大入口没有被兼容性改坏。
   - 中央大图和底部缩略卡能同时看到，对应的关闭返回链路仍然保留，说明预览层布局没有因为第二版玩家板调宽而发生错位。

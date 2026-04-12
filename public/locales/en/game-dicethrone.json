@@ -2121,7 +2121,7 @@
     },
     "card-wild-west": {
       "name": "Wild West!",
-      "description": "When you spend 1 Loaded, you may reroll that die once, then increase your total attack value by 1."
+      "description": "When you spend 1 Loaded and roll your Reload bonus die, you may reroll that bonus die once, then increase your total attack value by 1."
     },
     "card-eat-my-lead": {
       "name": "Eat My Lead!",

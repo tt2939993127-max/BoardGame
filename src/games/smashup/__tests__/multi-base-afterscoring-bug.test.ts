@@ -278,24 +278,26 @@ function assertPirateKingFirstMateChainResult(
     expect(finalState.sys.phase).toBe('playCards');
     expect(finalState.core.currentPlayerIndex).toBe(1);
 
-    // 当前实现下该链路只确保托尔图加计分与后续交互链正确完成
-    // （丛林基地的计分在更高层的 scoreBases 流程覆盖用例中单独验证）
-    expect(finalState.core.players['0'].vp).toBe(4);
+    // 当前实现下，该链路会完整走完“多基地计分 + beforeScoring/afterScoring 链式交互”：
+    // - base_tortuga 计分：P0=4, P1=3
+    // - base_the_jungle 进入 scoreBases 时已达 breakpoint=12（锁定可计分），即便海盗王 beforeScoring 移走也仍会计分：P0+=2
+    expect(finalState.core.players['0'].vp).toBe(6);
     expect(finalState.core.players['1'].vp).toBe(3);
     expect(finalState.core.bases.map(base => base.defId)).toEqual([
         'base_central_brain',
-        'base_the_jungle',
+        'base_cave_of_shinies',
         'base_secret_garden',
     ]);
     // With queued reaction ordering, some chains may move/remove the reserve minion earlier.
     expect([[], ['reserve-p1']]).toContainEqual(finalState.core.bases[0].minions.map(minion => minion.uid));
-    expect(finalState.core.bases[1].minions.map(minion => minion.uid)).toEqual(['jungle-p0']);
-    // Depending on reaction ordering, reserve minion may end up here as well.
+    // ScoreBases 结算后新翻开的基地默认应为空（除非后续链路有明确移动）。
+    expect(finalState.core.bases[1].minions.map(minion => minion.uid)).toEqual([]);
+    // 大副交互在该链中固定选择 baseIndex=2（secret_garden）。
     const base2Uids = finalState.core.bases[2].minions.map(minion => minion.uid);
     expect(base2Uids).toContain('mate-0');
     const remainingMinionUids = finalState.core.bases.flatMap(base => base.minions.map(minion => minion.uid));
     expect(remainingMinionUids).not.toContain('king-0');
-    expect(remainingMinionUids).toContain('jungle-p0');
+    expect(remainingMinionUids).not.toContain('jungle-p0');
     expect(remainingMinionUids).not.toContain('tortuga-p0');
 }
 

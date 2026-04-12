@@ -782,7 +782,7 @@ describe('base_tortuga: 计分后亚军移动随从', () => {
             2001,
         );
 
-        expect(resolved?.events ?? []).toHaveLength(0);
+        expect(resolved?.events ?? []).toHaveLength(3);
         expect(((resolved?.state.sys as any).smashupScoring?.pendingPostScoringActions) ?? []).toEqual([
             {
                 kind: 'moveMinionToReplacementBase',

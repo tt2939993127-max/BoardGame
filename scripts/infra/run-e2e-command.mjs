@@ -425,16 +425,6 @@ export async function runE2ECommand({ mode, extraArgs = [], envOverrides = {}, e
         modeEnv.PW_ALLOW_LEGACY_GLOBAL_BOOTSTRAP = 'true';
     }
 
-    if (
-        shouldUseManagedSingleRuntime
-        && !preferSharedSingleRun
-        && !modeEnv.PW_RUNTIME_SCOPE
-        && explicitTargetPath
-    ) {
-        modeEnv.PW_RUNTIME_SCOPE = deriveManagedRuntimeScope(mode, explicitTargetPath);
-        console.log(`♻️ 单文件 E2E 将复用稳定 runtime scope: ${modeEnv.PW_RUNTIME_SCOPE}`);
-    }
-
     if (!modeEnv.PW_RUNTIME_SCOPE) {
         modeEnv.PW_RUNTIME_SCOPE = `pw-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     }

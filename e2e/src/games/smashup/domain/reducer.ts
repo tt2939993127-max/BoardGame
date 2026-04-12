@@ -64,7 +64,7 @@ import { autoMulligan } from '../../../engine/primitives/mulligan';
 import { maybeQueueStartingHandMulliganPrompt } from './mulliganHandlers';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy, resolveOngoingActivation } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
-import { triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
+import { triggerActiveBaseAbility, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
 import { fireTriggers, collectTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import { canPlayFromDiscard } from './discardPlayability';
@@ -96,8 +96,9 @@ export function execute(
     if (updatedState) {
         state.sys = updatedState.sys;
     }
-    
+
     // 后处理：onDestroy 触发 → onMove 触发（循环直到稳定）→ onAffected 触发
+    // 注意：postProcessSystemEvents 只用于“系统事件”（afterEvents 轮中产生、不会经过 execute 的领域事件）。
     const afterDestroyMove = processDestroyMoveCycle(events, state, command.playerId, random, now);
     
     if (afterDestroyMove.matchState) {
@@ -514,6 +515,53 @@ function executeCommand(
                 return { events, updatedState: updated };
             }
 
+            return { events };
+        }
+
+        case SU_COMMANDS.DESELECT_FACTION: {
+            const { factionId } = command.payload;
+            const deselectedEvt: FactionDeselectedEvent = {
+                type: SU_EVENTS.FACTION_DESELECTED,
+                payload: { playerId: command.playerId, factionId },
+                sourceCommandType: command.type,
+                timestamp: now,
+            };
+            return { events: [deselectedEvt] };
+        }
+
+        case SU_COMMANDS.USE_BASE_ABILITY: {
+            const { baseIndex } = command.payload;
+            const base = core.bases[baseIndex];
+            if (!base) return { events: [] };
+
+            const events: SmashUpEvent[] = [];
+
+            // 记录“本回合已使用”，用于 oncePerTurn 门禁（与 USE_TALENT 的语义对齐：一旦发动即消耗次数）
+            const usedEvt: BaseAbilityUsedEvent = {
+                type: SU_EVENTS.BASE_ABILITY_USED,
+                payload: {
+                    playerId: command.playerId,
+                    baseIndex,
+                    baseDefId: base.defId,
+                },
+                sourceCommandType: command.type,
+                timestamp: now,
+            };
+            events.push(usedEvt);
+
+            const result = triggerActiveBaseAbility(base.defId, {
+                state: core,
+                matchState: state,
+                baseIndex,
+                baseDefId: base.defId,
+                playerId: command.playerId,
+                now,
+            });
+            events.push(...result.events);
+
+            if (result.matchState) {
+                return { events, updatedState: result.matchState };
+            }
             return { events };
         }
 
@@ -938,16 +986,25 @@ export function filterProtectedAffectEvents(
     return result;
 }
 
+export function buildDestroyEventKey(event: MinionDestroyedEvent): string {
+    const payload = event.payload;
+    const timestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
+    const destroyerId = payload.destroyerId ?? 'unknown';
+    return `${payload.minionUid}@${payload.fromBaseIndex}@${destroyerId}@${timestamp}`;
+}
+
 export function processDestroyTriggers(
     events: SmashUpEvent[],
     state: MatchState<SmashUpCore>,
     playerId: PlayerId,
     random: RandomFn,
-    now: number
+    now: number,
+    options?: { skipDestroyEventKeys?: Set<string> }
 ): PostProcessResult {
     const core = state.core;
     // 保护检查：过滤掉受保护的随从的消灭事件
     const filteredEvents = filterProtectedDestroyEvents(events, core, playerId);
+    const skipDestroyEventKeys = options?.skipDestroyEventKeys;
 
     // ✅ 去重：同一个 minionUid 只处理一次（防止重复触发 onDestroy）
     const destroyEventsRaw = filteredEvents.filter(e => e.type === SU_EVENTS.MINION_DESTROYED) as MinionDestroyedEvent[];
@@ -956,6 +1013,11 @@ export function processDestroyTriggers(
         const uid = e.payload.minionUid;
         if (seenUids.has(uid)) {
             // 跳过重复的消灭事件
+            return false;
+        }
+        if (skipDestroyEventKeys?.has(buildDestroyEventKey(e))) {
+            // 跳过已处理过的消灭事件（防止重复触发）
+            seenUids.add(uid);
             return false;
         }
         seenUids.add(uid);
@@ -1422,7 +1484,8 @@ export function processDestroyMoveCycle(
     state: MatchState<SmashUpCore>,
     playerId: PlayerId,
     random: RandomFn,
-    now: number
+    now: number,
+    options?: { skipDestroyEventKeys?: Set<string> }
 ): PostProcessResult {
     let currentEvents = events;
     let ms: MatchState<SmashUpCore> | undefined;
@@ -1439,7 +1502,7 @@ export function processDestroyMoveCycle(
         }
     }
     
-    const afterDestroy = processDestroyTriggers(currentEvents, ms ?? state, playerId, random, now);
+    const afterDestroy = processDestroyTriggers(currentEvents, ms ?? state, playerId, random, now, options);
     if (afterDestroy.matchState) ms = afterDestroy.matchState;
     const afterMove = processMoveTriggers(afterDestroy.events, ms ?? state, playerId, random, now);
     if (afterMove.matchState) ms = afterMove.matchState;
@@ -1462,7 +1525,7 @@ export function processDestroyMoveCycle(
         }
         
         // 只对新的 MINION_DESTROYED 事件运行 destroy 触发器
-        const extraDestroy = processDestroyTriggers(newDestroyEvents, ms ?? state, playerId, random, now);
+        const extraDestroy = processDestroyTriggers(newDestroyEvents, ms ?? state, playerId, random, now, options);
         if (extraDestroy.matchState) ms = extraDestroy.matchState;
 
         // 替换原事件中的新 MINION_DESTROYED 为处理后的结果

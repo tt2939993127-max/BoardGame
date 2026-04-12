@@ -367,18 +367,14 @@ function runAfterEventsRounds<TCore, TCommand extends Command, TEvent extends Ga
             const validEvents = roundEvents.filter((e) => e && e.type);
             const domainEvents = validEvents.filter((e) => !e.type.startsWith('SYS_'));
             if (domainEvents.length > 0) {
-                const processResult = domain.postProcessSystemEvents(
-                    currentState.core,
-                    domainEvents as unknown as TEvent[],
-                    random,
-                    {
-                        ...currentState,
-                        sys: {
-                            ...currentState.sys,
-                            _ppseInputEventsReduced: true,
-                        } as typeof currentState.sys,
-                    },
-                );
+                 const processResult = domain.postProcessSystemEvents(
+                     currentState.core,
+                     domainEvents as unknown as TEvent[],
+                     random,
+                    // afterEvents 轮产生的“系统事件”尚未 reduce 进 core，
+                    // 不应标记为“已 reduce”（否则领域层后处理会跳过必要的 destroy/move/affect 触发链）。
+                    currentState,
+                 );
                 const processed = Array.isArray(processResult)
                     ? processResult as unknown as GameEvent[]
                     : processResult.events as unknown as GameEvent[];

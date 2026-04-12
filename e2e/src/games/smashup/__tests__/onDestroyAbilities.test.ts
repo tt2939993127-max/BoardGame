@@ -9,8 +9,7 @@
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { execute } from '../domain/reducer';
-import { postProcessSystemEvents } from '../domain';
+import { runCommand } from './testRunner';
 import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import type {
     SmashUpCore,
@@ -52,11 +51,11 @@ describe('trickster_gremlin_pod onDestroy', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         const drawEvents = events.filter(
             e => e.type === SU_EVENTS.CARDS_DRAWN && (e as any).payload.playerId === '1'
@@ -88,6 +87,12 @@ const defaultRandom: RandomFn = {
     range: (_min: number, _max: number) => _min,
 };
 
+function runAction(core: SmashUpCore, command: { type: string; playerId: string; payload: any }) {
+    const result = runCommand(makeMatchState(core), command as any);
+    expect(result.success).toBe(true);
+    return result.events;
+}
+
 // ============================================================================
 // onDestroy 基础设施
 // ============================================================================
@@ -112,11 +117,11 @@ describe('onDestroy 基础设施', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.ACTION_PLAYED);
@@ -150,11 +155,11 @@ describe('onDestroy 基础设施', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.MINION_DESTROYED);
@@ -196,11 +201,11 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         // 核弹机器人被消灭
         const nukebotDestroy = events.find(
@@ -235,11 +240,11 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         // 单目标自动消灭核弹
         const nukebotDestroy = events.find(
@@ -273,11 +278,11 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         const nukebotDestroy = events.find(
             e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.minionUid === 'nukebot'
@@ -310,11 +315,11 @@ describe('robot_nukebot（核弹机器人 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         const destroyedByNukebot = events.filter(
             e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.reason === 'robot_nukebot'
@@ -352,11 +357,11 @@ describe('trickster_gremlin（小妖精 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         const types = events.map(e => e.type);
         expect(types).toContain(SU_EVENTS.MINION_DESTROYED);
@@ -397,11 +402,11 @@ describe('trickster_gremlin（小妖精 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED)).toBe(true);
 
@@ -436,11 +441,11 @@ describe('trickster_gremlin（小妖精 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         // 小妖精 onDestroy：抽牌（玩家1有牌可抽）
         const drawEvents = events.filter(
@@ -485,11 +490,11 @@ describe('trickster_gremlin（小妖精 onDestroy）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'c1' },
-        }, defaultRandom);
+        });
 
         // 小妖精 onDestroy：抽牌
         const drawEvents = events.filter(
@@ -534,11 +539,11 @@ describe('bear_cavalry_general_ivan（伊万将军 destroy 保护）', () => {
         });
 
         // 玩家0 用自己的 Bear Necessities 指向己方 ally
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'a1', target: { type: 'minion', uid: 'ally', defId: 'test_minion', baseIndex: 0, owner: '0' } },
-        } as any, defaultRandom);
+        } as any);
 
         // ally 不会被真正消灭
         expect(events.some(e => e.type === SU_EVENTS.MINION_DESTROYED && (e as any).payload.minionUid === 'ally')).toBe(
@@ -562,11 +567,11 @@ describe('bear_cavalry_general_ivan（伊万将军 destroy 保护）', () => {
             }],
         });
 
-        const events = execute(makeMatchState(core), {
+        const events = runAction(core, {
             type: SU_COMMANDS.PLAY_ACTION,
             playerId: '0',
             payload: { cardUid: 'a1', target: { type: 'minion', uid: 'ally', defId: 'test_minion', baseIndex: 0, owner: '0' } },
-        } as any, defaultRandom);
+        } as any);
 
         // Bear Necessities 新实现只会选择对手随从/行动卡作为目标，
         // 这里没有 General Ivan 时不会人为触发额外保护逻辑，

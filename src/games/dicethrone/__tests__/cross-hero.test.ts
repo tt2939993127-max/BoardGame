@@ -503,12 +503,13 @@ describe('cross hero battles', () => {
                     cmd('RESPONSE_PASS', '1'),
                     cmd('SELECT_ABILITY', '0', { abilityId: 'revolver-3' }),
                     cmd('PLAY_CARD', '0', { cardId: 'card-wild-west' }),
-                    cmd('RESOLVE_CHOICE', '0', { tokenId: TOKEN_IDS.LOADED, customId: 'use-loaded', value: 1 }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-0' }),
                     cmd('REROLL_BONUS_DIE', '0', { dieIndex: 0 }),
                     cmd('SKIP_BONUS_DICE_REROLL', '0'),
                 ],
                 expect: {
-                    turnPhase: 'offensiveRoll',
+                    turnPhase: 'defensiveRoll',
                     pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 1, discardSize: 1 },

@@ -18,7 +18,7 @@ export { createLogSystem, getCommands, getEvents, getEventsByType, getRecentLogs
 export { createEventStreamSystem, getEventStreamEntries } from './EventStreamSystem';
 export { createActionLogSystem, type ActionLogSystemConfig } from './ActionLogSystem';
 export { createRematchSystem, resetRematchState, getPlayerVote, isRematchReady, getVotedPlayers, REMATCH_COMMANDS } from './RematchSystem';
-export { createResponseWindowSystem, createResponseWindow, openResponseWindow, closeResponseWindow, hasActiveResponseWindow, getResponseWindowResponderId, RESPONSE_WINDOW_COMMANDS, RESPONSE_WINDOW_EVENTS } from './ResponseWindowSystem';
+export { createResponseWindowSystem, createResponseWindow, openResponseWindow, closeResponseWindow, hasActiveResponseWindow, getResponseWindowResponderId, buildResponseWindowFingerprint, RESPONSE_WINDOW_COMMANDS, RESPONSE_WINDOW_EVENTS } from './ResponseWindowSystem';
 export { getResolutionState, getActiveResolutionFrame, upsertActiveResolutionFrame, updateActiveResolutionFrame, clearResolutionFrame, setActiveResolutionBlock, clearActiveResolutionBlock, syncActiveResolutionWithInteraction, syncActiveResolutionWithResponseWindow, hasBlockingResolutionFrame } from './resolutionStack';
 export { createCheatSystem, CHEAT_COMMANDS, type CheatResourceModifier, type AddResourcePayload, type SetResourcePayload, type SetPhasePayload, type SetDicePayload } from './CheatSystem';
 export { createTutorialSystem, TUTORIAL_COMMANDS, TUTORIAL_EVENTS, TUTORIAL_ERRORS } from './TutorialSystem';

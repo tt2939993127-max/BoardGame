@@ -14,7 +14,7 @@ import { SU_EVENTS } from '../domain/types';
 import type {
     SmashUpEvent, CardsDrawnEvent,
     DeckReorderedEvent, MinionCardDef, OngoingDetachedEvent,
-    MinionPlayedEvent, BreakpointModifiedEvent, MinionMetadataUpdatedEvent,
+    MinionPlayedEvent, BreakpointModifiedEvent, MinionMetadataUpdatedEvent, CardInstance,
 } from '../domain/types';
 import { registerPowerModifier } from '../domain/ongoingModifiers';
 import { isMinionProtectedNonConsumable, registerProtection, registerTrigger } from '../domain/ongoingEffects';
@@ -26,6 +26,18 @@ import { registerInteractionHandler } from '../domain/abilityInteractionHandlers
 
 type DeckSearchOptionValue = { cardUid: string; defId: string } | { skip: true };
 type DeckSearchChoiceData = SimpleChoiceData<DeckSearchOptionValue> & { continuationContext?: { baseIndex: number } };
+
+const getSproutSharedDecks = (ctx: TriggerContext): Map<string, CardInstance[]> => {
+    const holder = ctx.triggerSharedState ?? {};
+    if (!ctx.triggerSharedState) {
+        ctx.triggerSharedState = holder;
+    }
+    const existing = (holder as { killerPlantSproutDecks?: Map<string, CardInstance[]> }).killerPlantSproutDecks;
+    if (existing) return existing;
+    const deckMap = new Map<string, CardInstance[]>();
+    (holder as { killerPlantSproutDecks?: Map<string, CardInstance[]> }).killerPlantSproutDecks = deckMap;
+    return deckMap;
+};
 
 const isSkipSelection = (value: unknown): value is { skip: true } => (
     typeof value === 'object' && value !== null && 'skip' in value
@@ -146,7 +158,7 @@ function killerPlantWaterLilyTrigger(ctx: TriggerContext): SmashUpEvent[] {
 export function killerPlantSproutTrigger(ctx: TriggerContext): TriggerResult {
     const events: SmashUpEvent[] = [];
     let matchState = ctx.matchState;
-    const simulatedDecks = new Map<string, CardInstance[]>();
+    const simulatedDecks = getSproutSharedDecks(ctx);
     const triggerUid = ctx.triggerMinionUid ?? ctx.sourceCardUid;
     if (triggerUid) {
         const baseIndices = ctx.sourceBaseIndex !== undefined

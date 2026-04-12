@@ -1,239 +1,260 @@
-# 大杀四方 AI 交互链路强口径审计（2026-04-12）
+# Smash Up AI 交互审计（2026-04-12）
 
-## 1. 审计范围
-- `src/games/smashup/ai.ts`
-- `src/games/smashup/domain/**`
-- `src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
-- 对照引擎 watchdog：`src/engine/transport/onlineAiRecovery.ts`
+## 审计范围
 
-目标：
-- 逐类确认 Smash Up AI 是否能为当前交互产出合法命令；
-- 确认是否存在“弃牌↔撤回弃牌”或其他重复交互/无解交互导致卡死的风险；
-- 明确哪些由游戏层保证，哪些依赖引擎层 watchdog 兜底。
+本轮仅做**静态全链路审计**，不改代码、不跑测试，聚焦会导致 AI 卡死/重复交互/响应窗口失控的链路：
 
-## 2. 权威实现入口
-- AI 合法动作生成：`src/games/smashup/ai.ts`
-- 交互原语：`src/engine/systems/InteractionSystem.ts`
-- 响应窗口推进：`src/engine/systems/ResponseWindowSystem.ts`
-- Smash Up 计分/afterScoring 链：`src/games/smashup/domain/scoringSession.ts`
-- 反应队列：`src/games/smashup/domain/reactionQueue.ts`
-- 在线卡死兜底：`src/engine/transport/onlineAiRecovery.ts`
+- AI 动作生成：`src/games/smashup/ai.ts`
+- 游戏系统编排：`src/games/smashup/game.ts`
+- 计分/自动推进/流程阻塞：`src/games/smashup/domain/index.ts`
+- 交互桥接系统：`src/games/smashup/domain/systems.ts`
+- 同时触发排序：`src/games/smashup/domain/reactionQueue.ts`、`src/games/smashup/domain/reactionQueueHandlers.ts`
+- destroy→move 后处理去重：`src/games/smashup/domain/reducer.ts`
+- 引擎 pipeline / 交互取消语义：`src/engine/pipeline.ts`、`src/engine/systems/InteractionSystem.ts`、`src/engine/systems/SimpleChoiceSystem.ts`
+- 既有覆盖线索（本轮未重跑）：
+  - `src/games/smashup/__tests__/promptSystem.test.ts`
+  - `src/games/smashup/__tests__/reactionQueueOrdering.test.ts`
+  - `src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
+  - `src/games/smashup/__tests__/meFirst.test.ts`
+  - `src/games/smashup/__tests__/smashup.smoke.test.ts`
+  - `evidence/smashup/smashup-online-ai-timeout-recovery-e2e-test.md`
+  - `docs/bugs/smashup/smashup-igor-fix-summary.md`
 
-## 3. 逐类结论
+## 权威来源
 
-### A. 交互种类结论
-- **Smash Up 当前 AI 面向的阻塞交互只有 `simple-choice`**。本轮 grep 未发现本游戏自定义 `slider-choice` / `compare-roll-choice` / `multistep-choice` 落点。
-- **AI 优先级正确**：`buildSmashUpAiLegalActions()` 会先处理 `sys.interaction.current`，再处理 `sys.responseWindow.current`，最后才处理普通阶段动作。
-  - 结论：当 `afterScoring` 响应窗口与主动选择链并存时，AI 不会越过当前交互直接点响应或结束阶段。
+1. `docs/ai-rules/testing-audit.md`
+2. `docs/bugs/smashup/smashup-igor-fix-summary.md`
+3. `evidence/smashup/smashup-online-ai-timeout-recovery-e2e-test.md`
+4. 上述源码与测试文件
 
-### B. 无解交互结论
-- `createSimpleChoice()` 已通过 `ensureResolvableSimpleChoiceOptions()` 注入 `__emergency_skip__`，用于：
-  - `empty-options`
-  - `all-options-disabled`
-  - `min-selection-unreachable`
-- `buildInteractionActions()` 会基于 `getFreshSimpleChoiceOptions()` 读取刷新后的选项，因此：
-  - **可选交互**：AI 可走空选择 `optionIds: []`
-  - **必选但无解交互**：AI 可走 `__emergency_skip__`
-- 现有证据：
-  - `scoreBases-auto-continue.test.ts`：`required 动态交互在刷新后无合法选项时，AI 仍应拿到紧急跳过动作`
-  - `promptSystem.test.ts`：空选项交互时 AI 至少会走 `__emergency_skip__` 或 cancel fallback
+## 选择的审计维度与理由
 
-### C. afterScoring / reaction queue 结论
-- `scoreBases` 阶段中，AI 会先看：
-  1. 当前 `simple-choice`
-  2. 当前 `responseWindow`
-  3. `activate-special`
-  4. `advance-phase`
-- `canAdvancePhase()` 明确阻止以下错误推进：
-  - 当前仍有 `sys.interaction.current`
-  - 当前仍有 `sys.responseWindow.current`
-  - `scoreBases` 阶段仍存在可激活的 special/talent
-- 结论：**Smash Up AI 在 afterScoring 链上已有“先解交互、后推进阶段”的基本门禁，不是靠 UI 禁按钮硬挡。**
+- **D8 时序正确**：AI 卡死、响应窗口与交互链错序、交互后不恢复流程都属于核心时序问题。
+- **D9 幂等与重入**：重复弹窗、重复触发、弃牌/撤回循环、反复响应都与重入/重复处理直接相关。
+- **D39 流程控制标志清除完整性**：`flowHalted`、计分 session、startTurn 特殊标志如果清不干净，会直接导致“操作后卡住”。
+- **D40 后处理循环事件去重完整性**：Smash Up 历史上已有 Igor 双触发教训，必须复核 destroy/move 循环去重。
+- **D41 系统职责重叠检测**：交互系统、SmashUpEventSystem、`postProcessSystemEvents` 都在处理同批事件，最容易复发双重处理。
+- **D45 Pipeline 多阶段调用去重**：当前 pipeline 在 4.5 和 afterEvents 轮次都会调用 `postProcessSystemEvents`，必须确认不会重复消费同一批事件。
 
-### D. “弃牌↔撤回弃牌”风险结论
-- 本轮直接审 `src/games/smashup/ai.ts`，**未发现 Smash Up AI 暴露任何 undo / 撤回类动作**：
-  - 无 `UNDO`
-  - 无 `undo-sell`
-  - 无“撤回弃牌”动作生成
-- `draw` 阶段只暴露：
-  - `discard-to-limit`
-  - `advance-phase`
-- 结论：**用户此前遇到的“弃牌↔撤回弃牌”循环不是 Smash Up 当前 AI 合法动作集里的原生模式。**
+## 结论总览
 
-### E. 真正命中的设计风险
-- **命中问题：watchdog 的 action-loop 阶段白名单之前漏掉了 Smash Up。**
-- 旧实现只覆盖：
-  - 通用 `main1/main2/discard/income/upkeep`
-  - DiceThrone 掷骰阶段
-  - Summoner Wars 阶段
-- 结果：
-  - 即使 Smash Up AI 在 `playCards / scoreBases / draw` 阶段出现重复动作日志，
-  - watchdog 也只会按普通 `active-turn` 看待，而不会提升为 `action-loop`。
-- 这不是 Smash Up AI 本身“没有动作”，而是**底层 loop 检测做成了硬编码 phase 白名单，却没把 Smash Up 接进去**。
-
-## 4. 本轮最小修复
-- 文件：`src/engine/transport/onlineAiRecovery.ts`
-- 修复：把 Smash Up 的以下阶段加入 `AI_LOOP_PHASES`
-  - `playCards`
-  - `scoreBases`
-  - `draw`
-
-效果：
-- 若未来 Smash Up 回归出“重复弃牌”“重复 recover”“重复交互解完又重开”的循环，只要它反映到 actionLog 的近期动作模式里，就能被 watchdog 识别为 `action-loop`，优先触发强制推进兜底。
-
-## 5. 新增验证
-- 新增测试：`src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
-  - 用例：`Smash Up 若未来回归出弃牌↔回收交替循环，watchdog 也应在本游戏阶段识别为 action-loop`
-- 断言：
-  - `resolveForceEndTurnForStalledAi(...).reason === 'action-loop'`
-  - `loopInfo.pattern === 'alternating'`
-  - 恢复命令为 `ADVANCE_PHASE`
-
-## 6. 审计结论
-- **结论 1**：Smash Up AI 当前没有暴露“撤回弃牌”类动作，用户描述的那种循环不属于本游戏当前 AI 合法动作集的直接产物。
-- **结论 2**：Smash Up 的 `simple-choice / responseWindow / afterScoring` 现有门禁基本完整，AI 先交互、后响应、最后才推进阶段，链路方向正确。
-- **结论 3**：本轮真正补到的底层缺口是 **watchdog 对 Smash Up phase 漏挂**；这会削弱“重复动作=卡死”的兜底判定。
-- **结论 4**：最小风险修复不是重写 Smash Up AI，而是先把 Smash Up phase 接入现有 `action-loop` 检测。
-
-## 7. 未覆盖风险
-- `detectAiActionLoop()` 仍是**全局硬编码 phase 集合**，这说明底层设计仍偏脆弱；后续新增游戏/新阶段时，仍可能再次漏挂。
-- 当前 loop 检测只识别：
-  - 单动作重复
-  - 两动作交替
-- 三步以上循环（A→B→C→A）仍可能漏检。
-
-## 8. 后续建议
-- 长期正确方案：把“哪些 phase 允许 action-loop 检测”下沉为 **game AI runtime 配置**，不要继续硬编码在 `onlineAiRecovery.ts`。
-- 若后续在 Smash Up 看到“同一 interaction/sourceId 连续 reopen”，应再补：
-  - `interaction/sourceId` 级别的 reopen 指纹
-  - 或 `responseWindow + interaction` 联合循环检测
-
-## 9. 本轮证据路径
-- 审计文档：`D:\\gongzuo\\webgame\\BoardGame\\evidence\\smashup\\smashup-ai-interaction-audit-2026-04-12.md`
-- 代码修复：`D:\\gongzuo\\webgame\\BoardGame\\src\\engine\\transport\\onlineAiRecovery.ts`
-- 测试：`D:\\gongzuo\\webgame\\BoardGame\\src\\games\\smashup\\__tests__\\scoreBases-auto-continue.test.ts`
-
-## 10. 2026-04-12 补充修复：Hoverbot（盘旋机器人）过期 deck-top 选项必须自动失效
-
-**症状**：盘旋机器人揭示牌库顶后，如果在玩家/AI 响应交互前牌库顶发生变化，旧实现仍会继续提供“打出已揭示随从”的选项，导致：  
-- validate 失败 / 重复提示；  
-- AI legalActions 里出现“stale play”与“skip”并存，增加循环/卡死风险。
-
-**修复**：`src/games/smashup/abilities/robots.ts`  
-`robotHoverbot` 的 `optionsGenerator` 现在会检查当前牌库顶 `uid` 是否仍等于 `continuationContext.cardUid`；若不一致，则只返回 `skip` 选项。
-
-**验证**：`src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`  
-用例：`盘旋机器人揭示的牌已不再位于牌库顶时，AI 应只保留 skip，不再尝试 stale play`（本轮已通过）。
+| 维度 | 结论 | 说明 |
+|---|---|---|
+| D8 | ⚠️ 部分通过 | AI 动作优先级和阶段推进门禁总体正确，但交互桥接链仍有重复后处理风险 |
+| D9 | ⚠️ 部分通过 | 候选刷新、skip/cancel 兜底已做；但重复后处理会把幂等重新打穿 |
+| D39 | ✅ 基本通过 | `flowHalted`/auto-continue 主链路大体自洽，未见明显“只看标志不看状态”的老问题回归 |
+| D40 | ✅ 通过 | `processDestroyMoveCycle` 已从输入事件构建去重集合，旧 Igor 根因在 reducer 层已修正 |
+| D41 | ❌ 未通过 | `SmashUpEventSystem.afterEvents()` 仍手动调用 `postProcessSystemEvents()`，与 pipeline 统一后处理职责重叠 |
+| D45 | ❌ 未通过 | 同一批“交互处理器产出的领域事件”会先在系统层做一次后处理，再在 pipeline 中继续后处理 |
 
 ---
 
-## 11. 2026-04-12 二次续审：Smash Up AI 交互全链路枚举结果
+## 逐项结论
 
-### 11.1 交互入口枚举
-- **AI 主入口**：`src/games/smashup/ai.ts`
-  - `buildSmashUpAiLegalActions()`：固定顺序为 `interaction.current → responseWindow.current → phase actions`
-  - `buildInteractionActions()`：负责 `simple-choice` 的 live refresh、多选组合、空选/跳过动作
-  - `buildResponseWindowActions()`：`response-pass + 可在窗口中打出的牌`
-- **afterScoring / auto-continue 主链**：
-  - `src/games/smashup/domain/scoringSession.ts`
-  - `src/games/smashup/domain/reactionQueue.ts`
-  - `src/games/smashup/domain/baseAbilities.ts`
-  - `src/games/smashup/domain/ongoingEffects.ts`
-- **会进入动态选项刷新的能力簇（grep `optionsGenerator/autoRefresh`）**：
-  - `abilities/aliens.ts`
-  - `abilities/cthulhu.ts`
-  - `abilities/frankenstein.ts`
-  - `abilities/cowboys.ts`
-  - `abilities/ghosts.ts`
-  - `abilities/giant_ants.ts`
-  - `abilities/robots.ts`
-  - `abilities/miskatonic.ts`
-  - `abilities/titans.ts`
-  - `abilities/vampires.ts`
-  - `abilities/vikings.ts`
-  - `abilities/zombies.ts`
-  - `abilities/wizards.ts`
-  - `domain/baseAbilities.ts`
-  - `domain/extraPlay.ts`
+### 1. AI 动作层的正向防卡死设计（通过项）
 
-### 11.2 静态审计重点结论
-- **已做动态刷新的高风险链**：Hoverbot、Cast the Runes、Raiding Party、大量 discard/hand 多选交互，整体方向正确。
-- **afterScoring 主链方向正确**：Smash Up AI 不会绕过当前交互直接去点 response-window 或 `advance-phase`。
-- **真实新增命中点不在引擎层，而在 Smash Up 自身 AI/提示数据契约**：`multi + min=0 + skip按钮 + 动态来源` 的组合，仍可能制造冗余/过期/混合动作。
+#### 1.1 交互优先级正确，AI 不会在 prompt 还活着时先去点响应或结束阶段
+- 证据：`src/games/smashup/ai.ts:1434-1442`
+- 观察：`buildSmashUpAiLegalActions()` 先取 `interactionActions`，再取 `responseActions`，最后才回到普通阶段动作。
+- 判定：**D8 ✅**。这能避免“响应窗口还在，但 AI 先 `response-pass` / `advance-phase` 抢跑”的明显错序。
 
-## 12. 本轮新命中的具体问题
+#### 1.2 AI 不会在有交互/响应窗口/计分前 special 可激活时暴露 ADVANCE_PHASE
+- 证据：`src/games/smashup/ai.ts:264-271`
+- 观察：`canAdvancePhase()` 显式拦截 `sys.interaction.current`、`sys.responseWindow.current`，以及计分阶段仍有可激活 special 的场景。
+- 判定：**D8 ✅ / D39 ✅**。这说明 Smash Up AI 本身不是“什么都不看就强行结束阶段”。
 
-### A. `robot_microbot_reclaimer` 的 discard 多选交互仍有 AI 风险
-- 文件：`src/games/smashup/abilities/robots.ts`
-- 旧实现问题：
-  1. `multi.min = 0` 时仍手工塞了 `skip` 按钮，AI 会把它当普通选项参与组合。
-  2. 没有 `optionsGenerator/autoRefresh`，弃牌堆若发生变化，交互候选会陈旧。
-  3. `responseValidationMode` 未显式 live，AI 只能依赖旧 options 快照。
-- 风险表现：
-  - 产生 `skip + card` 这种语义错误的组合动作；
-  - 产生已不在弃牌堆中的过期微型机选项；
-  - 给“AI 卡死/无效动作”制造噪音空间。
+#### 1.3 AI 对 simple-choice 会刷新候选，并有空选择/紧急取消兜底
+- 证据：`src/games/smashup/ai.ts:899-946`
+- 观察：
+  - 先用 `getFreshSimpleChoiceOptions()` 刷新候选；
+  - `min=0` 时会生成空选择；
+  - 无有效候选时会生成 `SYS_INTERACTION_CANCEL` 的 emergency-cancel。
+- 判定：**D9 ✅（动作生成层）**。AI 侧不是完全裸奔，已有“过期候选”和“无选项”兜底。
 
-### B. `buildInteractionActions()` 对 `optional multi` 交互存在通用 AI 冗余
-- 文件：`src/games/smashup/ai.ts`
-- 旧实现问题：
-  1. 对 `min=0` prompt 先手工塞一条空选择动作；
-  2. 再用组合枚举把空组合重复枚举一次；
-  3. 对显式 `skip/done/cancel` 控制按钮没有做“不可与实体牌共选”的裁决。
-- 风险表现：
-  - 同一 prompt 出现重复“空选择”动作；
-  - 出现 `skip + card` / `cancel + card` 这类根本不该给 AI 的混合动作；
-  - 动作空间膨胀，增加错误评分与循环概率。
+#### 1.4 响应窗口系统配置与 AI 语义一致
+- 证据：`src/games/smashup/game.ts:57-72`
+- 观察：
+  - `loopUntilAllPass: true`
+  - `interactionLock.requestEvent = 'SYS_INTERACTION_REQUESTED'`
+  - `hasRespondableContent()` 会按 `meFirst/afterScoring` 重新检查手牌是否真有可响应内容
+- 判定：**D8 ✅ / D39 ✅**。配置上是在防“窗口还在但其实没人能响应”的死锁。
 
-## 13. 本轮最小修复
+### 2. D39：流程控制标志清除主链路（基本通过）
 
-### 修复 1：`robot_microbot_reclaimer` 改成真正的 optional multi live prompt
-- 文件：`src/games/smashup/abilities/robots.ts`
-- 调整：
-  - 删除显式 `skip` 按钮
-  - `multi.min=0` 保留，改为“可不选”
-  - 增加 `autoRefresh: 'discard'`
-  - 增加 `responseValidationMode: 'live'`
-  - 增加 `optionsGenerator`，按最新弃牌堆 + `isDiscardMicrobot()` 重新生成选项
-- 结果：
-  - AI 与真人都只看到“当前仍合法”的微型机列表
-  - 不再出现 `skip + card` 这种多选混合语义
+#### 2.1 scoreBases 的 halt 清理条件已经和交互/响应窗口绑定
+- 证据：`src/games/smashup/domain/index.ts:1213-1236`
+- 观察：`flowHalted` 时若 `interaction.current` 仍存在就继续 halt；只有交互已经没了，才会清 `flowHalted=false`。
+- 判定：**D39 ✅**。这符合“看背后状态，不只看标志”的规范。
 
-### 修复 2：Smash Up AI 层统一收紧 optional multi 组合
-- 文件：`src/games/smashup/ai.ts`
-- 调整：
-  - `min=0` 且已显式提供 `skip/done/cancel` 控制按钮时，不再额外注入空选择动作
-  - 多选组合枚举时，禁止把 `skip/done/cancel` 与实体牌混在同一组合
-  - 组合阶段不再重复生成空组合
-- 结果：
-  - `optional multi` AI 动作集变得稳定、去重、语义正确
-  - 对其它 Smash Up 多选 prompt 也产生正向收敛效果
+#### 2.2 auto-continue 不会在交互/响应窗口仍存在时乱推进
+- 证据：`src/games/smashup/domain/index.ts:1589-1644`
+- 观察：
+  - 任意阶段只要 `interaction.current` 存在就不 auto-continue；
+  - `scoreBases` 下只要 `responseWindow.current` 存在也不 auto-continue；
+  - 仅在 `flowHalted && !interaction && !responseWindow` 时恢复推进。
+- 判定：**D39 ✅ / D8 ✅**。老式“交互结束后还永久 halt”路径目前静态上看已经被修过。
 
-## 14. 新增/更新验证
+#### 2.3 但存在一个未落地的死代码标志
+- 证据：全文搜索 `_waitForPostScoringReduce` 仅命中 `src/games/smashup/domain/index.ts:1634`
+- 观察：这个标志只读不写，说明当前流程控制里仍有未完成/遗留分支。
+- 判定：**D39 ⚠️ 技术债**。它不是已确认 bug，但说明 scoreBases 流控仍有“计划中的保护分支没有真正接线”。
 
-### 14.1 `src/games/smashup/__tests__/robotAbilities.test.ts`
-- 新断言：
-  - `robot_microbot_reclaimer` 在 `min=0` 下**不再带显式 skip**
-  - refresh 后 AI 不再拿到过期微型机
-  - AI 不再生成 `skip + card` 混合动作
-- 命令：
-  - `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/robotAbilities.test.ts --configLoader native --environment node`
-- 结果：`11 passed`
+### 3. D40：destroy→move 循环去重（通过）
 
-### 14.2 `src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
-- 新断言：
-  - 对显式带 `skip` 的 `optional multi` prompt，AI 不再重复生成空选择，也不再生成 `skip + card` 混合组合
-- 命令：
-  - `node scripts/infra/vitest-cli-safe.mjs run src/games/smashup/__tests__/scoreBases-auto-continue.test.ts --configLoader native --environment node`
-- 结果：`23 passed`
+#### 3.1 destroy 去重集合已经从输入事件构建
+- 证据：`src/games/smashup/domain/reducer.ts:1467-1538`
+- 观察：
+  - 第一轮直接遍历 `currentEvents` 建 `processedDestroyUids`；
+  - 后续只对未进集合的新 `MINION_DESTROYED` 再跑 destroy 触发；
+  - 不再依赖 `afterDestroy.events` 反推“已处理输入”。
+- 判定：**D40 ✅**。Igor 老问题的 reducer 级根因目前是修过的。
 
-### 14.3 静态校验
-- `node .\\node_modules\\eslint\\bin\\eslint.js src/games/smashup/abilities/robots.ts src/games/smashup/ai.ts src/games/smashup/__tests__/robotAbilities.test.ts src/games/smashup/__tests__/scoreBases-auto-continue.test.ts`
-- 结果：`0 error / 6 warnings`
-- `node .\\node_modules\\typescript\\bin\\tsc --noEmit --pretty false`
-- 结果：通过
+### 4. D41 / D45：系统职责重叠与 pipeline 双处理（核心失败项）
 
-## 15. 当前未覆盖/后续风险
-- 仍存在大量历史 `any` 警告，但本轮新增改动未引入 eslint error。
-- Smash Up 内仍有少量 `multi.min=0 + 显式 skip` 设计残留；本轮 AI 组合层已兜底，但从**能力定义本身**继续清理冗余 skip，仍是更正确方向。
-- 本轮未把所有 sourceId 逐一改成“无 skip + 纯空选择”；只先修了命中真实风险的 `robot_microbot_reclaimer`，并在 AI 层加统一裁决，属于“先止卡死、再逐能力清债”的策略。
+#### 4.1 交互桥接系统仍在手动调用 `postProcessSystemEvents`
+- 证据：`src/games/smashup/domain/systems.ts:319-329`
+- 观察：当 `SYS_INTERACTION_RESOLVED` 命中 handler 后，`createSmashUpEventSystem.afterEvents()` 会对 `emittedEvents` 立即执行一次 `postProcessSystemEvents()`。
+- 判定：**D41 ❌ / D45 ❌**。
+
+#### 4.2 pipeline 本身也会对同一批领域事件继续调用 `postProcessSystemEvents`
+- 证据：
+  - `src/engine/pipeline.ts:667-705`（命令执行后的 4.5）
+  - `src/engine/pipeline.ts:364-390`（afterEvents rounds）
+- 观察：pipeline 已经把 `domain.postProcessSystemEvents` 作为统一后处理入口；afterEvents 产出的 `roundEvents` 进入 pipeline 后仍会再走一次。
+- 判定：**D41 ❌ / D45 ❌**。这与 `docs/bugs/smashup/smashup-igor-fix-summary.md` 里“SmashUpEventSystem 不应再手动后处理”的口径相冲突。
+
+#### 4.3 为什么这对 AI 尤其危险
+- 证据链：
+  - AI 的隐藏交互/自动决策主要走 `SYS_INTERACTION_RESOLVED` → `SmashUpEventSystem.afterEvents()` → handler；
+  - 也就是说，**AI 最常走的链路正好就是当前重叠职责链路**。
+- 风险：
+  - 同一批 `MINION_DESTROYED`/`ACTION_PLAYED`/trigger queue 事件可能先被系统层处理一次，再被 pipeline 统一入口处理一次；
+  - 即使部分去重集合能挡住 `MINION_PLAYED`/`ACTION_PLAYED`，destroy/affect/deck-inspection/reaction-queue 仍可能被重复推进；
+  - 这正是“AI 响应后立刻又触发一遍”“弹窗/提示音反复出现”“跳过后立刻再开一次交互”的结构性土壤。
+- 判定：**高优先级结构性 finding**。
+
+#### 4.4 该问题与历史结论自相矛盾
+- 证据：`docs/bugs/smashup/smashup-igor-fix-summary.md`
+- 观察：文档明确写过“已采用方案 A：移除 SmashUpEventSystem 的后处理”；但当前 `systems.ts` 实际仍保留 `postProcessSystemEvents()` 调用。
+- 判定：**D41 ❌ / D43 ⚠️（顺带命中）**。这不是单纯文档过期，而是“历史已裁决的职责边界”与现状代码不一致。
+
+### 5. CANCELLED / emergency-cancel 路径存在未消费风险（中优先级 finding）
+
+#### 5.1 AI 的无选项兜底会发 `SYS_INTERACTION_CANCEL`
+- 证据：`src/games/smashup/ai.ts:928-946`
+- 观察：当 `options.length === 0` 或小于 `minCount` 时，Smash Up AI 直接生成 `interaction-cancel`，命令是 `SYS_INTERACTION_CANCEL`。
+
+#### 5.2 引擎会把取消交互转换成 `SYS_INTERACTION_CANCELLED`
+- 证据：`src/engine/systems/InteractionSystem.ts:1193-1200`
+- 观察：取消当前交互会 resolve 当前 prompt，并发出 `INTERACTION_EVENTS.CANCELLED`。
+
+#### 5.3 但 Smash Up 域内只消费 `RESOLVED`，没有消费 `CANCELLED`
+- 证据：
+  - `src/games/smashup/domain/systems.ts:255-330` 只分支处理 `INTERACTION_EVENTS.RESOLVED`
+  - 全文搜索 `src/games/smashup` 未命中 `INTERACTION_EVENTS.CANCELLED` / `SYS_INTERACTION_CANCELLED`
+- 观察：这意味着 emergency-cancel 能把 prompt 关掉，但**不会触发 source-specific cleanup / skip branch / 补偿事件**。
+- 风险：
+  - 若某个交互本应在 skip/cancel 时补发恢复事件，AI 的 emergency-cancel 只会“关窗”，不会“善后”；
+  - 当前仓库里 `promptSystem.test.ts` 只验证“能生成 cancel action”，**没有覆盖 cancel 后流程是否完整恢复**。
+- 判定：**D8 ⚠️ / D39 ⚠️ / D3 ⚠️**。这是直接关联 AI 兜底的未闭环点。
+
+### 6. reaction queue 与多交互链本身设计基本健康（通过项）
+
+#### 6.1 同时触发排序会显式落到 interaction，而不是隐式自动乱跑
+- 证据：`src/games/smashup/domain/reactionQueue.ts:192-217`
+- 观察：
+  - 若已有 `interaction.current`，reaction queue 不会抢着再插入；
+  - 多个 trigger 同时存在时，会生成 `reaction_queue_choose_next` 的 simple-choice；
+  - 选项附带 `_ai` hint。
+- 判定：**D8 ✅ / D9 ✅**。这是正确的“显式排序 prompt”路线，不是隐藏 if/else 自动乱选。
+
+#### 6.2 仓库内已有较多 AI/交互回归覆盖线索，但本轮未重跑
+- 现有覆盖线索（仅引用，不代表本轮动态验证）：
+  - `reactionQueueOrdering.test.ts`：同时触发排序 + AI hint
+  - `scoreBases-auto-continue.test.ts`：stale option、reaction queue、responseWindow 穿插多段交互
+  - `meFirst.test.ts`：response window 内带 interaction 的 special 及 skip 分支
+  - `smashup.smoke.test.ts`：高压响应窗口 vs response-pass 决策
+  - `evidence/smashup/smashup-online-ai-timeout-recovery-e2e-test.md`：隐藏 AI 交互超时自动收口
+- 判定：**现有测试面不算薄，但仍未覆盖本轮发现的 CANCELLED 善后缺口，也无法替代对 D41/D45 结构冲突的修复。**
+
+---
+
+## 问题清单（按优先级）
+
+### P1（必须优先处理）
+
+#### Finding 1：交互桥接系统与 pipeline 统一后处理职责重叠
+- 文件：
+  - `src/games/smashup/domain/systems.ts:319-329`
+  - `src/engine/pipeline.ts:364-390`
+  - `src/engine/pipeline.ts:667-705`
+  - `src/games/smashup/domain/index.ts:1885-2179`
+- 影响：
+  - 交互解决后重复触发后处理；
+  - 容易再现“重复交互/重复响应/重复提示音/跳过后又弹一次”；
+  - AI 因为更多依赖隐藏 interaction，更容易踩中。
+- 建议：
+  - 回到 Igor 修复口径：**SmashUpEventSystem 只做“交互 resolved → 原始领域事件”桥接，不在系统里再次跑 `postProcessSystemEvents()`**；
+  - 统一把后处理权威入口收敛到 pipeline。
+
+### P2（中高优先级）
+
+#### Finding 2：AI emergency-cancel 没有 Smash Up 域内善后消费链
+- 文件：
+  - `src/games/smashup/ai.ts:928-946`
+  - `src/engine/systems/InteractionSystem.ts:1193-1200`
+  - `src/games/smashup/domain/systems.ts:255-330`
+- 影响：
+  - AI 在“空候选/过期候选”场景下虽然能把交互关掉，但 source-specific cancel/skip cleanup 不一定会执行；
+  - 若交互依赖取消时补偿事件，可能留下流程残态。
+- 建议：
+  - 要么在 SmashUp 域内补 `INTERACTION_EVENTS.CANCELLED` 消费；
+  - 要么把 AI 的空候选兜底统一改成**语义化 skip option**，避免 domain 完全收不到善后信号。
+
+### P3（技术债）
+
+#### Finding 3：`_waitForPostScoringReduce` 是只读不写的死标志
+- 文件：`src/games/smashup/domain/index.ts:1634`
+- 影响：
+  - 当前不一定直接出 bug；
+  - 但说明 scoreBases 流控里还有未完成的保护方案，未来继续补丁时容易造成误判。
+- 建议：
+  - 要么补齐真正写入/清除链；
+  - 要么删除死分支，避免给后续排障制造假线索。
+
+---
+
+## 与“AI 卡死”直接相关的裁决
+
+### 已确认不是 Smash Up 当前主因的点
+- AI 动作生成层**不是**完全没有兜底：有候选刷新、空选择、response-pass、advance-phase 门禁。
+- `flowHalted` 主链路**不是**明显老式坏状态：静态上看已与 `interaction` / `responseWindow` 绑定。
+- destroy/move 循环**不是**沿用旧版 D40 根因：去重逻辑已修正。
+
+### 当前最像“AI 反复交互 / 反复响应 / 隐藏 prompt 卡住”的结构性根因
+1. **系统层 + pipeline 双后处理仍并存**（P1）
+2. **AI emergency-cancel 没有域内善后闭环**（P2）
+
+这两条都不是“单个卡牌 AI 权重不对”的问题，而是**底层交互处理职责边界还不够干净**。
+
+---
+
+## 本轮未覆盖风险
+
+1. **未动态重跑测试/E2E**：本轮只做静态审计，因此不能替代真正的回归验证。
+2. **未逐张卡牌穷举 sourceId→handler cancel 语义**：只确认了“resolved 有桥、cancel 没桥”的结构事实，没逐张盘点哪些卡会因此漏善后。
+3. **未审计 UI 声音/提示层去重**：若提示音重复还有前端 EventStream 消费层问题，本轮未继续展开。
+
+## 建议给主线任务的下一步
+
+1. **先修 P1：移除/收敛 `systems.ts` 里的手动 `postProcessSystemEvents()`**。
+2. **再补 P2：给 Smash Up 加上 `INTERACTION_EVENTS.CANCELLED` 善后链或统一 skip 语义**。
+3. 修完后优先回归：
+   - `scoreBases-auto-continue.test.ts`
+   - `meFirst.test.ts`
+   - `reactionQueueOrdering.test.ts`
+   - 与隐藏 AI 交互相关的 Smash Up E2E（复用已有 timeout recovery 场景）
+
+## 修订记录
+
+- 2026-04-12：首次形成《Smash Up AI 交互审计》；结论为**存在 2 个直接影响 AI 卡死/重复交互的结构性 finding（P1/P2）**，不可视为“已收口”。

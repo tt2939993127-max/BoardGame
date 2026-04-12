@@ -157,13 +157,7 @@ describe('StatusEffectsIcons', () => {
         expect(fetchMock).not.toHaveBeenCalled();
     });
 
-    it('本地骰图应像手牌一样先走同源 fetch/blob 再渲染', async () => {
-        const OriginalURL = URL;
-        class MockUrl extends OriginalURL {
-            static createObjectURL = vi.fn(() => 'blob:dicethrone-dice');
-            static revokeObjectURL = vi.fn();
-        }
-
+    it('本地骰图应直接使用 AssetLoader 候选 URL，并在 Image onload 后标记就绪', async () => {
         class MockImage {
             onload: null | (() => void) = null;
             onerror: null | (() => void) = null;
@@ -179,16 +173,14 @@ describe('StatusEffectsIcons', () => {
             }
         }
 
-        const fetchMock = vi.fn(async () => ({
-            ok: true,
-            blob: async () => new Blob(['dice-sprite']),
-        }));
+        const fetchMock = vi.fn(async () => {
+            throw new Error('local dice sprite should not fetch/blob in this path');
+        });
 
-        vi.stubGlobal('URL', MockUrl);
         vi.stubGlobal('Image', MockImage as unknown as typeof Image);
         vi.stubGlobal('fetch', fetchMock);
 
-        const { getByTestId, container } = render(
+        const { getByTestId } = render(
             <Dice3D
                 value={6}
                 isRolling={false}
@@ -199,19 +191,16 @@ describe('StatusEffectsIcons', () => {
             />
         );
 
-        const sprite = container.querySelector('img');
-        if (sprite) {
-            await waitFor(() => {
-                expect(sprite).toHaveAttribute('data-debug-object-url', 'blob:dicethrone-dice');
-            });
-            fireEvent.load(sprite);
-        }
         await waitFor(() => {
             expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-ready', 'true');
         });
-        expect(fetchMock).toHaveBeenCalled();
-        expect(MockUrl.createObjectURL).toHaveBeenCalled();
-        expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-url', 'blob:dicethrone-dice');
+        expect(fetchMock).not.toHaveBeenCalled();
+        const expectedUrl = getDiceSpriteUrls('moon_elf-dice', 'moon_elf', 'zh-CN')[0];
+        if (expectedUrl) {
+            expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-url', expectedUrl);
+        } else {
+            expect(getByTestId('dice-3d')).toHaveAttribute('data-sprite-url', '');
+        }
     });
 
     it('状态图集 JSON 在远程资源模式下应优先走官方资源域名', async () => {

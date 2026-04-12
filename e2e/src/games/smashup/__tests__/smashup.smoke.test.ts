@@ -853,7 +853,7 @@ describe('smashup', () => {
         expect(finalCore.bases[0].buriedCards?.some(card => card.uid === 'sphinx-hand-card')).toBe(true);
     });
 
-    it('翻开埋葬的远古诅咒会跨基地选择目标随从并附着，不会直接消失', () => {
+    it('翻开埋葬的远古诅咒在仅有一个跨基地合法目标时会自动附着，并进入远古诅咒确认交互', () => {
         const core = makeState({
             players: {
                 '0': makePlayer('0'),
@@ -867,7 +867,8 @@ describe('smashup', () => {
             bases: [
                 makeBase({
                     defId: 'base_ninja_dojo',
-                    minions: [makeMinion('target-minion', 'killer_plant_water_lily_pod', '0', 3)],
+                    // 远古诅咒：只有目标随从存在 +1 力量指示物时才会进入确认交互
+                    minions: [makeMinion('target-minion', 'killer_plant_water_lily_pod', '0', 3, { powerCounters: 1, tempPowerModifier: 0 })],
                 }),
                 makeBase({
                     defId: 'base_greenhouse',
@@ -894,24 +895,28 @@ describe('smashup', () => {
 
         const prompt = (uncovered.state.sys.interaction?.current
             ?? uncovered.state.sys.interaction?.queue?.[0]) as any;
-        expect(prompt?.data?.sourceId).toBe('bury_uncover_ongoing_target');
-        const option = prompt.data.options.find((entry: any) => entry?.value?.minionUid === 'target-minion');
-        expect(option?.value?.baseIndex).toBe(0);
+        expect(prompt?.data?.sourceId).toBe('ancient_egyptians_ancient_curse_confirm');
+        const applyOption = prompt?.data?.options?.find((entry: any) => entry.id === 'apply');
+        expect(applyOption?.value).toMatchObject({
+            targetMinionUid: 'target-minion',
+            baseIndex: 0,
+            baseDefId: 'base_ninja_dojo',
+        });
+        expect(uncovered.events.map(event => event.type)).toContain(SU_EVENTS.ONGOING_ATTACHED);
+        expect(uncovered.events).toContainEqual(expect.objectContaining({
+            type: SU_EVENTS.ONGOING_ATTACHED,
+            payload: expect.objectContaining({
+                cardUid: 'buried-curse',
+                defId: 'ancient_egyptians_ancient_curse_pod',
+                targetType: 'minion',
+                targetBaseIndex: 0,
+                targetMinionUid: 'target-minion',
+            }),
+        }));
 
-        const handler = getInteractionHandler('bury_uncover_ongoing_target');
-        expect(handler).toBeDefined();
-        const resolved = handler!(
-            uncovered.state,
-            '1',
-            option.value,
-            prompt.data,
-            FIXED_RANDOM,
-            102,
-        );
-
-        const finalCore = (resolved?.events ?? []).reduce(
+        const finalCore = uncovered.events.reduce(
             (acc, event) => SmashUpDomain.reduce(acc, event),
-            resolved?.state.core ?? uncovered.state.core,
+            uncovered.state.core,
         );
 
         expect(finalCore.bases[1].buriedCards?.some(card => card.uid === 'buried-curse') ?? false).toBe(false);

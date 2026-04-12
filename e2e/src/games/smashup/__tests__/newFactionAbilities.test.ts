@@ -3799,7 +3799,7 @@ describe('巨蚁派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
+                        makeMinion('d1', 'giant_ant_drone', '0', 3, { powerCounters: 1 }),
                         makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],
@@ -3969,7 +3969,7 @@ describe('巨蚁派系能力', () => {
                 {
                     defId: 'base_a',
                     minions: [
-                        makeMinion('d1', 'giant_ant_drone', '0', 3, { powerModifier: 1 }),
+                        makeMinion('d1', 'giant_ant_drone', '0', 3, { powerCounters: 1 }),
                         makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
                     ],
                     ongoingActions: [],

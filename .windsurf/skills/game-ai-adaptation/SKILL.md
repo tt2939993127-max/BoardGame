@@ -25,11 +25,12 @@ description: 给游戏添加或修改 AI/机器人/自动玩家/ai.ts/自动响�
    - `references/checklist.md`
    - `references/vitest-templates.md`
 4. 真实审计样例（优先复用旧结论并回写）：
-   - `evidence/engine/online-ai-watchdog-strong-audit-2026-04-12.md`
-   - `evidence/engine/ai-stall-loop-full-chain-audit-2026-04-12.md`
-   - `evidence/dicethrone/dicethrone-ai-interaction-audit-2026-04-11.md`
-   - `evidence/dicethrone/dicethrone-response-window-retrigger-audit-2026-04-12.md`
-   - `evidence/dicethrone/dicethrone-discard-undo-loop-audit-2026-04-11.md`
+- `evidence/engine/online-ai-watchdog-strong-audit-2026-04-12.md`
+- `evidence/engine/ai-stall-loop-full-chain-audit-2026-04-12.md`
+- `evidence/dicethrone/dicethrone-ai-interaction-audit-2026-04-11.md`
+- `evidence/dicethrone/dicethrone-ai-interaction-audit-2026-04-12.md`
+- `evidence/dicethrone/dicethrone-response-window-retrigger-audit-2026-04-12.md`
+- `evidence/dicethrone/dicethrone-discard-undo-loop-audit-2026-04-11.md`
 
 ---
 

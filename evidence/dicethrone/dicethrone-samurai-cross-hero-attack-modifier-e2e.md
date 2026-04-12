@@ -30,7 +30,7 @@
 ![Righteousness 对 Monk](../test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/samurai-righteousness-should-resolve-a-valid-branch-against-monk/09-samurai-righteousness-vs-monk.png)
 
 截图路径：
-- `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\samurai-righteousness-should-resolve-a-valid-branch-against-monk\09-samurai-righteousness-vs-monk.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\samurai-righteousness-should-resolve-a-valid-branch-against-monk\09-samurai-righteousness-vs-monk.png`
 
 审查结论：
 
@@ -44,7 +44,7 @@
 ![Zanshin 对 Paladin](../test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin/10-samurai-zanshin-vs-paladin.png)
 
 截图路径：
-- `D:\gongzuo\webgame\BoardGame-wt-dicethrone-gunslinger-samurai\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin\10-samurai-zanshin-vs-paladin.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\samurai-zanshin-should-settle-5-bonus-dice-and-synchronize-effects-against-paladin\10-samurai-zanshin-vs-paladin.png`
 
 审查结论：
 

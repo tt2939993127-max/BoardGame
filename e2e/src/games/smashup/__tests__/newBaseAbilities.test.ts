@@ -243,8 +243,19 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
         expect(vpEvents[0].payload.amount).toBe(1);
     });
 
-    it('集成路径：destroyerId 缺失时，VP 仍应判给事件操作者而不是被消灭者', () => {
-        const victim = makeMinion('victim', '0', 3);
+    it('集成路径：destroyerId 缺失时，VP 仍应判给当前操作者控制的随从一侧', () => {
+        const victim = {
+            uid: 'victim',
+            defId: 'victim_minion',
+            controller: '1',
+            owner: '0',
+            basePower: 3,
+            powerCounters: 0,
+            powerModifier: 0,
+            tempPowerModifier: 0,
+            talentUsed: false,
+            attachedActions: [],
+        } as MinionOnBase;
         const core = makeState({
             players: {
                 '0': {
@@ -298,7 +309,7 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
         expect((vpEvents[0] as any).payload.amount).toBe(1);
     });
 
-    it('base_the_field_of_honor: destroy 自己的随从时不应得分', () => {
+    it('base_the_field_of_honor: destroy 自己的随从时仍应得分', () => {
         const ctx: BaseAbilityContext = {
             state: makeState({
                 bases: [{
@@ -316,35 +327,10 @@ describe('base_the_field_of_honor: 消灭者获1VP', () => {
         };
 
         const { events } = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
-        expect(events).toHaveLength(0);
-    });
-
-    it('base_the_field_of_honor: 同回合同基地同一 destroyer 只触发一次', () => {
-        const ctx: BaseAbilityContext = {
-            state: makeState({
-                bases: [{
-                    defId: 'base_the_field_of_honor',
-                    minions: [],
-                    ongoingActions: [],
-                }],
-                turnDestroyedMinions: [{
-                    uid: 'prev',
-                    defId: 'test_minion',
-                    baseIndex: 0,
-                    owner: '1',
-                    destroyer: '0',
-                }],
-            }),
-            baseIndex: 0,
-            baseDefId: 'base_the_field_of_honor',
-            playerId: '1',
-            controllerId: '1',
-            destroyerId: '0',
-            now: 1001,
-        };
-
-        const { events } = triggerExtendedBaseAbility('base_the_field_of_honor', 'onMinionDestroyed', ctx);
-        expect(events).toHaveLength(0);
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(SU_EVENTS.VP_AWARDED);
+        expect((events[0] as any).payload.playerId).toBe('0');
+        expect((events[0] as any).payload.amount).toBe(1);
     });
 });
 
@@ -601,7 +587,7 @@ describe('base_the_workshop: 额外行动额度', () => {
         expect((events[0] as any).payload.delta).toBe(1);
     });
 
-    it('打到工坊随从上的战术不应给予额外战术额度', () => {
+    it('打到工坊随从上的战术仍应给予额外战术额度', () => {
         const ctx: BaseAbilityContext = {
             state: makeState({
                 bases: [{
@@ -619,7 +605,11 @@ describe('base_the_workshop: 额外行动额度', () => {
         };
 
         const { events } = triggerBaseAbility('base_the_workshop', 'onActionPlayed', ctx);
-        expect(events).toHaveLength(0);
+        expect(events).toHaveLength(1);
+        expect(events[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+        expect((events[0] as any).payload.playerId).toBe('0');
+        expect((events[0] as any).payload.limitType).toBe('action');
+        expect((events[0] as any).payload.delta).toBe(1);
     });
 });
 

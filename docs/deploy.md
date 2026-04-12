@@ -48,6 +48,9 @@ bash deploy-image.sh update
 bash deploy-image.sh update v1.2.3  # 部署指定 tag
 ```
 
+**强制规则**：生产环境更新必须**等待 CI 镜像构建完成**后再执行（对应 commit/tag 的镜像已推送到仓库）。  
+未确认 CI 构建完成时禁止执行 `update`，避免拉取到旧镜像或半成品镜像。
+
 ### 回滚 / 状态 / 日志
 
 ```bash

@@ -485,6 +485,132 @@ describe('ResponseWindowSystem（重复打开去重）', () => {
             responderQueue: ['0'],
         });
     });
+
+    it('冷却期内即使出现业务事件，语义等价窗口也不应重复 reopen', () => {
+        const system = createResponseWindowSystem({ reopenDedupeCooldownMs: 5 });
+        const state = createResponseWindowState({
+            current: {
+                id: 'rw-before-close',
+                windowType: 'afterRollConfirmed',
+                responderQueue: ['0'],
+            },
+        });
+
+        const result = system.afterEvents?.({
+            state: state as any,
+            events: [
+                {
+                    type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                    payload: {
+                        windowId: 'rw-before-close',
+                        allPassed: true,
+                    },
+                    timestamp: 10,
+                },
+                {
+                    type: 'ROLL_CONFIRMED',
+                    payload: { playerId: '1' },
+                    timestamp: 11,
+                },
+                {
+                    type: RESPONSE_WINDOW_EVENTS.OPENED,
+                    payload: {
+                        windowId: 'rw-reopen-cooled',
+                        responderQueue: ['0'],
+                        windowType: 'afterRollConfirmed',
+                    },
+                    timestamp: 12,
+                },
+            ],
+        });
+
+        expect(result).toBeTruthy();
+        expect((result as { state: typeof state }).state.sys.responseWindow.current).toBeUndefined();
+    });
+
+    it('冷却期结束后应允许语义等价窗口重新打开', () => {
+        const system = createResponseWindowSystem({ reopenDedupeCooldownMs: 5 });
+        const state = createResponseWindowState({
+            current: {
+                id: 'rw-before-close',
+                windowType: 'afterRollConfirmed',
+                responderQueue: ['0'],
+            },
+        });
+
+        const result = system.afterEvents?.({
+            state: state as any,
+            events: [
+                {
+                    type: RESPONSE_WINDOW_EVENTS.CLOSED,
+                    payload: {
+                        windowId: 'rw-before-close',
+                        allPassed: true,
+                    },
+                    timestamp: 10,
+                },
+                {
+                    type: 'ROLL_CONFIRMED',
+                    payload: { playerId: '1' },
+                    timestamp: 11,
+                },
+                {
+                    type: RESPONSE_WINDOW_EVENTS.OPENED,
+                    payload: {
+                        windowId: 'rw-reopen-after-cooldown',
+                        responderQueue: ['0'],
+                        windowType: 'afterRollConfirmed',
+                    },
+                    timestamp: 20,
+                },
+            ],
+        });
+
+        expect(result).toBeTruthy();
+        expect((result as { state: typeof state }).state.sys.responseWindow.current).toMatchObject({
+            id: 'rw-reopen-after-cooldown',
+            windowType: 'afterRollConfirmed',
+            responderQueue: ['0'],
+        });
+    });
+});
+
+describe('buildAiProgressMarker（响应窗口语义指纹）', () => {
+    it('响应窗口 id 变化不应被视为进展', () => {
+        const baseState = createOnlineAiRecoveryState({
+            responseWindow: {
+                current: {
+                    id: 'rw-1',
+                    windowType: 'afterRollConfirmed',
+                    responderQueue: ['1'],
+                    currentResponderIndex: 0,
+                    passedPlayers: [],
+                },
+            },
+        });
+        const reopenedState = {
+            ...baseState,
+            G: {
+                ...baseState.G,
+                sys: {
+                    ...baseState.G.sys,
+                    eventStream: { nextId: 99 },
+                    responseWindow: {
+                        current: {
+                            id: 'rw-2',
+                            windowType: 'afterRollConfirmed',
+                            responderQueue: ['1'],
+                            currentResponderIndex: 0,
+                            passedPlayers: [],
+                        },
+                    },
+                },
+            },
+        };
+
+        expect(buildAiProgressMarker(baseState as any))
+            .toBe(buildAiProgressMarker(reopenedState as any));
+    });
 });
 
 describe('GameTransportServer（离座与重连）', () => {

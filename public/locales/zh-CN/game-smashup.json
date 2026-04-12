@@ -2943,7 +2943,7 @@
     },
     "ancient_egyptians_plague_of_locusts": {
       "name": "蝗灾",
-      "effectText": "选择一个基地。该处所馘其 他玩家的随从-1战力直至 回结束。 特殊= 可基地计爷前打出。"
+      "effectText": "选择一个基地。该处所有其他玩家的随从-1战力，直到回合结束。特殊：你可以在一个基地计分前打出此牌。"
     },
     "ancient_egyptians_mummy_strength": {
       "name": "木乃伊之力",
@@ -2951,7 +2951,7 @@
     },
     "ancient_egyptians_lost_knowledge": {
       "name": "失落知识",
-      "effectText": "埋葬你的-张手牌或 发掘你埋葬的一张牌。 特殊： 可在基地计爷 前打出"
+      "effectText": "埋葬你的一张手牌或发掘你埋葬的一张牌。特殊：你可以在一个基地计分前打出此牌。"
     },
     "ancient_egyptians_blessing_of_anubis": {
       "name": "阿努比斯的祝福",
@@ -2979,7 +2979,7 @@
     },
     "ancient_egyptians_lost_knowledge_pod": {
       "name": "失落知识",
-      "effectText": "埋葬你的-张手牌或 发掘你埋葬的一张牌。 特殊： 可在基地计爷 前打出"
+      "effectText": "埋葬你的一张手牌或发掘你埋葬的一张牌。特殊：你可以在一个基地计分前打出此牌。"
     },
     "ancient_egyptians_you_can_take_it_with_you_pod": {
       "name": "随身带走",
@@ -2987,7 +2987,7 @@
     },
     "ancient_egyptians_plague_of_locusts_pod": {
       "name": "蝗灾",
-      "effectText": "选择一个基地。该处所馘其 他玩家的随从-1战力直至 回结束。 特殊= 可基地计爷前打出。"
+      "effectText": "选择一个基地。该处所有其他玩家的随从-1战力，直到回合结束。特殊：你可以在一个基地计分前打出此牌。"
     },
     "ancient_egyptians_mummy_strength_pod": {
       "name": "木乃伊之力",
@@ -3095,7 +3095,7 @@
     },
     "samurai_heart_of_the_battle": {
       "name": "战斗之心",
-      "effectText": "特殊：基地计爷前打出。该 处你的一 个随从与该她另一 位玩家的随从央斗。消灭失 败的随从。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。该处你的一个随从与该处另一位玩家的随从对斗。消灭失败的随从。"
     },
     "samurai_final_haiku": {
       "name": "终曲俳句",
@@ -3143,7 +3143,7 @@
     },
     "samurai_heart_of_the_battle_pod": {
       "name": "战斗之心",
-      "effectText": "特殊：基地计爷前打出。该 处你的一 个随从与该她另一 位玩家的随从央斗。消灭失 败的随从。"
+      "effectText": "特殊：你可以在一个基地计分前打出此牌。该处你的一个随从与该处另一位玩家的随从对斗。消灭失败的随从。"
     },
     "samurai_final_haiku_pod": {
       "name": "终曲俳句",

@@ -122,15 +122,22 @@ const buildSimpleChoicePayload = (
     multi: PromptMultiConfig | undefined,
     optionValue?: unknown,
 ): Record<string, unknown> => {
+    const shouldUseMergedValue = (value: unknown): boolean => {
+        if (!value || typeof value !== 'object') return false;
+        return (value as { __useMergedValue?: boolean }).__useMergedValue === true;
+    };
+
     if (optionIds.length <= 1 && !multi) {
-        return optionValue === undefined
-            ? { interactionId, optionId: optionIds[0] }
-            : { interactionId, optionId: optionIds[0], mergedValue: optionValue };
+        if (optionValue !== undefined && shouldUseMergedValue(optionValue)) {
+            return { interactionId, optionId: optionIds[0], mergedValue: optionValue };
+        }
+        return { interactionId, optionId: optionIds[0] };
     }
     if (optionIds.length <= 1 && (multi?.min ?? 0) <= 1) {
-        return optionValue === undefined
-            ? { interactionId, optionId: optionIds[0] }
-            : { interactionId, optionId: optionIds[0], mergedValue: optionValue };
+        if (optionValue !== undefined && shouldUseMergedValue(optionValue)) {
+            return { interactionId, optionId: optionIds[0], mergedValue: optionValue };
+        }
+        return { interactionId, optionId: optionIds[0] };
     }
     return { interactionId, optionIds };
 };

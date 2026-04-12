@@ -153,6 +153,12 @@ test.describe('DiceThrone - 选择骰子重投', () => {
         await expect(wildWestCard).toBeVisible({ timeout: 5000 });
         await wildWestCard.click();
 
+        // 断言：攻击修正徽章应在“打出卡牌后”立即出现（徽章是效果提示，不代表数值已生效）
+        const modifierBadgeEarly = page.locator('[data-testid="active-modifier-badge"]').first();
+        await expect(modifierBadgeEarly).toBeVisible({ timeout: 5000 });
+        await expect(modifierBadgeEarly).toHaveAttribute('data-bonus-damage', '0');
+        await game.screenshot('gunslinger-wild-west-attack-modifier-badge-pending', testInfo);
+
         await expect.poll(async () => {
             const state = await game.getState();
             const settlement = state?.core?.pendingBonusDiceSettlement ?? null;
@@ -171,11 +177,8 @@ test.describe('DiceThrone - 选择骰子重投', () => {
         await expect(resolveAttackButton).toBeEnabled({ timeout: 5000 });
         await resolveAttackButton.click();
 
-        const choiceModal = page
-            .getByRole('dialog')
-            .filter({ has: page.getByRole('heading', { name: /技能结算选择/i }) });
-        await expect(choiceModal).toBeVisible({ timeout: 5000 });
-        const loadedOption = choiceModal.getByText(/^装填$/).first();
+        await expect(page.getByText(/技能结算选择/i)).toBeVisible({ timeout: 5000 });
+        const loadedOption = page.getByText(/^装填$/).first();
         await expect(loadedOption).toBeVisible({ timeout: 5000 });
         await loadedOption.click({ force: true });
 
@@ -201,7 +204,7 @@ test.describe('DiceThrone - 选择骰子重投', () => {
         const finalDiceValues = (finalState?.core?.dice ?? []).map((die: any) => die.value);
         expect(finalDiceValues).toEqual(initialDiceValues);
 
-        // 断言：奖励骰来自 Loaded token；Wild West 的“然后 +1”应在奖励骰收口后才计入攻击修正汇总
+        // 断言：奖励骰来自 Loaded token；Wild West 的“然后 +1”应在奖励骰收口后才计入攻击修正汇总（徽章提前出现不等于数值提前生效）
         await expect.poll(async () => {
             const state = await game.getState();
             return state?.core?.pendingAttack?.attackModifierBonusDamage ?? null;

@@ -9,15 +9,14 @@
 ## 关键截图
 - D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\selected-attack-should-show-visible-attack-modifier-ui-above-the-dice-tray\08-attack-modifier-ui-visible.png
 - D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\selected-attack-should-show-visible-attack-modifier-ui-above-the-dice-tray\08-attack-modifier-ui-visible-crop.png
-- D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\selected-attack-should-show-visible-attack-modifier-ui-above-the-dice-tray\08-attack-modifier-ui-visible-zoom.png
 - D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\selected-attack-should-show-visible-attack-modifier-ui-above-the-dice-tray\08-attack-modifier-ui-rolling.png
 
 ## 目视结论
 1. 右侧骰盘上方可见“攻击修正 +2”徽章，徽章主体位于骰子列正上方，没有再偏向右侧按钮区。
 2. 截图里徽章与五颗骰子的纵向列保持同一中心线；同时 E2E 已用 DOM `boundingBox()` 约束该中心偏差不得超过 `2px`。
-3. 骰子列近景与放大图中，骰面贴图四角为轻度圆角（较上一版更接近原始圆角幅度），外侧露出深色框体背景，不再是黄色直角；骰子外框仍保持立体边缘与阴影。
+3. 骰子列近景（crop）里，骰面四角为原始圆角幅度，外框为深色立体边缘；未再出现黄色直角或叠加方形底图。
 4. 旋转截图中骰子仍为 3D 立体框体（边缘与阴影仍在），滚动动画正常显示。
-5. 本截图未展示 hover 提示条，仅验证徽章与骰盘列的相对位置和视觉形态。
+5. 本截图未展示 hover 提示条，仅验证徽章与骰盘列的相对位置和骰面外观。
 
 ## 结论
 - E2E 用例通过；攻击修正徽章既有目视证据，也有 DOM 盒模型中心线校验，同时骰面四角黄边已在截图中消失。

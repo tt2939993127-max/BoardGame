@@ -957,6 +957,8 @@ const systems = [
             CommandCategory.UI_INTERACTION,
             CommandCategory.STATE_MANAGEMENT,
         ],
+        // 语义去重冷却：避免响应窗口在短时间内重复 reopen
+        reopenDedupeCooldownMs: 1200,
         getCommandCategory,
         
         // 保留旧的白名单配置作为补充（可选）

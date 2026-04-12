@@ -25,6 +25,19 @@ export interface ResponseWindowSystemConfig {
     hasRespondableContent?: (state: unknown, playerId: PlayerId, windowType: ResponseWindowType, sourceId?: string) => boolean;
 
     /**
+     * 构建响应窗口语义指纹（用于去重与冷却）。
+     * 默认使用 windowType + sourceId + responderQueue。
+     */
+    buildWindowFingerprint?: (window: ResponseWindowState['current']) => string;
+
+    /**
+     * 语义冷却窗口（单位：事件时间戳间隔；时间戳缺失时使用内部序号）。
+     * 在冷却期内收到语义等价 OPENED 事件将被忽略。
+     * 默认 0（不启用冷却）。
+     */
+    reopenDedupeCooldownMs?: number;
+
+    /**
      * 响应窗口期间允许执行的额外游戏命令（白名单模式）
      * 引擎自动包含 RESPONSE_PASS + SYS_INTERACTION_* + SYS_ 前缀系统命令，无需重复列出
      * 
@@ -129,6 +142,20 @@ export const RESPONSE_WINDOW_EVENTS = {
 // 响应窗口辅助函数
 // ============================================================================
 
+export const buildResponseWindowFingerprint = (
+    window: ResponseWindowState['current'],
+    options?: { includeSourceId?: boolean },
+): string => {
+    if (!window) return '';
+    const includeSourceId = options?.includeSourceId !== false;
+    const sourcePart = includeSourceId ? (window.sourceId ?? '') : '';
+    return [
+        window.windowType ?? '',
+        sourcePart,
+        ...(Array.isArray(window.responderQueue) ? window.responderQueue : []),
+    ].join('|');
+};
+
 /**
  * 创建响应窗口（多响应者队列）
  */
@@ -198,23 +225,12 @@ export function closeResponseWindow<TCore>(
     return syncActiveResolutionWithInteraction(nextState);
 }
 
-function areResponderQueuesEqual(
-    left: PlayerId[] | undefined,
-    right: PlayerId[] | undefined,
-): boolean {
-    if (!left || !right) return left === right;
-    if (left.length !== right.length) return false;
-    return left.every((playerId, index) => playerId === right[index]);
-}
-
 function isSemanticallyEquivalentWindow(
     left: ResponseWindowState['current'],
     right: ResponseWindowState['current'],
 ): boolean {
     if (!left || !right) return false;
-    return left.windowType === right.windowType
-        && (left.sourceId ?? '') === (right.sourceId ?? '')
-        && areResponderQueuesEqual(left.responderQueue, right.responderQueue);
+    return buildResponseWindowFingerprint(left) === buildResponseWindowFingerprint(right);
 }
 
 /**
@@ -414,6 +430,10 @@ export function createResponseWindowSystem<TCore>(
     config: ResponseWindowSystemConfig = {}
 ): EngineSystem<TCore> {
     const { hasRespondableContent, getCommandCategory } = config;
+    const buildWindowFingerprint = config.buildWindowFingerprint ?? buildResponseWindowFingerprint;
+    const reopenDedupeCooldownMs = Math.max(0, config.reopenDedupeCooldownMs ?? 0);
+    let lastClosedFingerprint: string | null = null;
+    let lastClosedAt = 0;
 
     // 合并引擎级 + 游戏级允许命令
     const gameAllowedCommands = config.allowedCommands ?? [];
@@ -594,6 +614,7 @@ export function createResponseWindowSystem<TCore>(
             const additionalEvents: GameEvent[] = [];
             let recentClosedWindow: ResponseWindowState['current'] | undefined;
             let sawNonResponseWindowEventSinceClose = false;
+            let dedupeFallbackClock = 0;
             
             // 检查本轮事件中是否有 INTERACTION_EVENTS.RESOLVED
             // 如果有，说明本轮可能有更高优先级的系统（如 SmashUpEventSystem priority=50）
@@ -610,6 +631,7 @@ export function createResponseWindowSystem<TCore>(
             
             for (const event of events) {
                 const eventTimestamp = resolveEventTimestamp(event);
+                const dedupeClock = eventTimestamp > 0 ? eventTimestamp : (dedupeFallbackClock += 1);
                 const isResponseWindowControlEvent =
                     event.type === RESPONSE_WINDOW_EVENTS.OPENED
                     || event.type === RESPONSE_WINDOW_EVENTS.CLOSED
@@ -636,6 +658,7 @@ export function createResponseWindowSystem<TCore>(
                     );
                     
                     if (window) {
+                        const fingerprint = buildWindowFingerprint(window);
                         const currentWindow = newState.sys.responseWindow?.current;
                         if (currentWindow && isSemanticallyEquivalentWindow(currentWindow, window)) {
                             console.log('[ResponseWindowSystem] 忽略重复 OPENED：当前窗口已存在语义等价窗口', {
@@ -661,6 +684,22 @@ export function createResponseWindowSystem<TCore>(
                             });
                             continue;
                         }
+                        if (reopenDedupeCooldownMs > 0
+                            && lastClosedFingerprint
+                            && lastClosedFingerprint === fingerprint
+                            && (dedupeClock - lastClosedAt) <= reopenDedupeCooldownMs
+                        ) {
+                            console.log('[ResponseWindowSystem] 忽略重复 OPENED：冷却期内语义等价窗口重开', {
+                                duplicateWindowId: window.id,
+                                windowType: window.windowType,
+                                sourceId: window.sourceId,
+                                responderQueue: window.responderQueue,
+                                cooldownMs: reopenDedupeCooldownMs,
+                                lastClosedAt,
+                                reopenAt: dedupeClock,
+                            });
+                            continue;
+                        }
                         const nextWindow = skipToNextRespondableResponder(newState, window, hasRespondableContent, loopUntilAllPass);
                         if (nextWindow) {
                             newState = openResponseWindow(newState, nextWindow);
@@ -680,6 +719,11 @@ export function createResponseWindowSystem<TCore>(
                 
                 // 处理响应窗口关闭事件
                 if (event.type === RESPONSE_WINDOW_EVENTS.CLOSED) {
+                    const closingWindow = newState.sys.responseWindow?.current;
+                    if (closingWindow) {
+                        lastClosedFingerprint = buildWindowFingerprint(closingWindow);
+                        lastClosedAt = dedupeClock;
+                    }
                     recentClosedWindow = newState.sys.responseWindow?.current;
                     sawNonResponseWindowEventSinceClose = false;
                     newState = closeResponseWindow(newState);

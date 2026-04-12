@@ -34,7 +34,9 @@ export function registerAlienAbilities(): void {
     registerAbility('alien_supreme_overlord', 'onPlay', alienSupremeOverlord);
     registerAbility('alien_collector', 'onPlay', alienCollector);
     registerAbility('alien_invader', 'onPlay', alienInvader);
-    registerTrigger('alien_scout', 'afterScoring', alienScoutAfterScoring, {
+    // afterScoring：按每个侦察兵实例单独触发（perInstance），否则在同一基地多个侦察兵时
+    // 若处理函数再“扫描全基地侦察兵”会导致重复创建交互/重复回手。
+    registerTrigger('alien_scout', 'afterScoring', alienScoutAfterScoringPerInstance, {
         perInstance: true,
         sourceScope: 'triggerBase',
     });

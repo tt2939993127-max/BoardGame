@@ -3,22 +3,31 @@
 ## 覆盖范围
 - 卡牌：`card-wild-west`
 - 目标：
-  - 打出后出现弹药特写奖励骰（可重掷一次），且不改主攻击骰盘
+  - **触发时机**：打出卡牌后不会立即出现奖励骰；**当你花费 Loaded 时才触发**弹药特写奖励骰（可重掷一次）
+  - 特写触发后不改主攻击骰盘
   - 结算后应在“攻击修正”UI 区域体现最终加伤
   - 无装填（Loaded=0）时应被出牌门禁阻止（requireLoaded）
-- 流程（成功链路）：特写出现 → 点击重掷 → 特写更新 → 关闭结算 → 攻击修正 UI 可见（仅 Wild West 的 +1）
+- 流程（成功链路）：打出卡牌 → 花费 Loaded → 特写出现 → 点击重掷 → 特写更新 → 关闭结算 → 攻击修正 UI 可见（仅 Wild West 的 +1）
 - 流程（否定链路）：Loaded=0 → 尝试打出 → toast 提示 requireLoaded → 不进入特写
 
 ## 运行命令
 - `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-wild-west 应触发弹药特写奖励骰，不改攻击骰盘"`
 
 ## 关键截图与观察
+### 0) 打出卡牌后：攻击修正徽章应立即出现（效果提示，不代表数值已生效）
+- 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-die-reroll.e2e\card-wild-west-应触发弹药特写奖励骰，不改攻击骰盘\gunslinger-wild-west-attack-modifier-badge-pending.png`
+- 观察：
+  1. 徽章在“打出 Wild West”后即出现，说明 UI 已提示该攻击修正已激活。
+  2. 徽章此时不显示 `+1`（`data-bonus-damage=0`），符合“徽章是效果提示，但数值只能在实际生效时写入”的口径。
+- 结论：满足“攻击修正 UI 打出牌就出现”的规范要求。
+
 ### 1) 弹药奖励骰特写（可重掷提示）
 - 路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-die-reroll.e2e\card-wild-west-应触发弹药特写奖励骰，不改攻击骰盘\gunslinger-wild-west-bonus-die-overlay.png`
 - 观察：
-  1. 画面中央出现弹药奖励骰特写，提示“点击骰子花费0装填重掷”，说明当前可重掷。
-  2. 右侧主攻击骰盘仍显示 1/2/3/4/5 原骰值，未进入主骰盘改骰交互。
-  3. 此时未出现“攻击修正 +1”，并且 E2E 断言 `pendingAttack.attackModifierBonusDamage === null`：说明**Wild West 的“然后 +1”不会在特写阶段提前生效**（必须等奖励骰收口）。
+  1. **触发时机核对**：E2E 先断言 `pendingBonusDiceSettlement === null`，随后通过“花费 Loaded”才出现本特写，证明特写**不是打出卡牌即触发**。
+  2. 画面中央出现弹药奖励骰特写，提示“点击骰子花费0装填重掷”，说明当前可重掷。
+  3. 右侧主攻击骰盘仍显示 1/2/3/4/5 原骰值，未进入主骰盘改骰交互。
+  4. **徽章语义澄清**：攻击修正徽章可以在“打出卡牌后”作为**效果提示**出现，但 E2E 断言 `pendingAttack.attackModifierBonusDamage === null`，说明**Wild West 的“然后 +1”不会在特写阶段提前生效**（必须等奖励骰收口后才写入权威数值）。
 - 结论：满足“触发特写且不改主骰盘”的阶段要求。
 
 ### 2) 重掷后特写更新
@@ -26,7 +35,7 @@
 - 观察：
   1. 特写仍停留在奖励骰视图，提示变为“已达到本次重掷上限”，表明已完成一次重掷（可重掷次数用尽）。
   2. 主攻击骰盘仍保持原骰值序列，未触发主骰盘改骰。
-  3. E2E 同时断言：特写仍打开时 `pendingAttack.attackModifierBonusDamage === null`，证明 Wild West 的“然后 +1”不会在特写阶段提前生效（必须等收口结算）。
+  3. E2E 同时断言：特写仍打开时 `pendingAttack.attackModifierBonusDamage === null`，证明 Wild West 的“然后 +1”不会在特写阶段提前写入数值（必须等收口结算）。
 - 结论：满足“改投后特写更新且不改主骰盘”的阶段要求。
 
 ### 3) 成功改投后可关闭特写

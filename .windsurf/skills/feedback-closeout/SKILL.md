@@ -234,6 +234,12 @@ node .windsurf/skills/feedback-closeout/scripts/finalize-feedback-group.mjs temp
 - 哪些是真 bug，改了什么，验证了什么，状态已改为 `resolved`
 - 哪些还未处理，以及为什么不能并行
 
+### 6. 提交规范（新增）
+
+- **同一批次反馈默认合并为一个提交**，除非用户明确要求拆分提交。
+- 禁止把“单条小修复”拆成多个琐碎提交。
+- 若同批包含多个反馈修复与对应测试，**优先一个提交**统一落盘。
+
 ## 资源
 
 ### scripts/

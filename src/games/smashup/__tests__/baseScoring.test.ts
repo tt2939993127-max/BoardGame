@@ -168,10 +168,14 @@ describe('基地记分与力量计算', () => {
                 baseDeck: [],
                 turnNumber: 1,
                 nextUid: 10,
+                beforeScoringTriggeredBases: [0],
+                scoringEligibleBaseIndices: [0],
             };
 
             const updatedState: SmashUpCore = {
                 ...staleState,
+                beforeScoringTriggeredBases: [0],
+                scoringEligibleBaseIndices: [0],
                 bases: [{
                     ...staleState.bases[0],
                     minions: staleState.bases[0].minions.filter((minion) => minion.uid !== 'p1-top'),

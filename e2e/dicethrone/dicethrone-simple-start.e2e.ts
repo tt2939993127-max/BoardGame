@@ -1708,6 +1708,40 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
+    test('Online match: Gunslinger can be selected and start a game successfully', async ({ browser }, testInfo) => {
+        test.setTimeout(90000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineMatch(browser, baseURL);
+        if (!setup) {
+            test.skip(true, '游戏服务器不可用或创建房间失败');
+            return;
+        }
+
+        const { hostPage, guestPage } = setup;
+
+        await selectCharacter(hostPage, 'gunslinger');
+        await selectCharacter(guestPage, 'barbarian');
+
+        await clearEvidenceScreenshotsForTest(testInfo);
+        await saveEvidenceScreenshot(hostPage, testInfo, '01-gunslinger-selection');
+
+        await readyAndStartGame(hostPage, guestPage);
+
+        await waitForGameBoard(hostPage);
+        await waitForGameBoard(guestPage);
+
+        await saveEvidenceScreenshot(hostPage, testInfo, '02-gunslinger-game-started');
+
+        const hostState = await readHarnessState<any>(hostPage);
+        expect(hostState.core?.selectedCharacters?.['0']).toBe('gunslinger');
+
+        await expect(hostPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 5000 });
+        await expect(guestPage.locator('[data-tutorial-id="dice-roll-button"]')).toBeVisible({ timeout: 5000 });
+
+        await cleanupDTMatch(setup);
+    });
+
     test('Local match: HUD 样式合同应保留生命条渐变与下一阶段按钮实体外观', async ({ page }, testInfo) => {
         test.setTimeout(60000);
 
@@ -2634,6 +2668,85 @@ test.describe('DiceThrone Simple Start', () => {
             }).toBe(false);
 
             await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-reopen-after');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI 响应窗口在 sourceId 变化的重复 reopen 下仍应被 watchdog 收口', async ({ browser }, testInfo) => {
+        test.setTimeout(180000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForTestHarness(hostPage, 15000);
+
+            await applyOnlineMatchState(matchId, hostPage, (state) => {
+                const next = buildTwoPlayerResponseLoopState(state, {
+                    windowId: 'after-card-2p',
+                    pendingInteractionId: 'loop-pending-interaction',
+                });
+                next.sys.responseWindow = {
+                    ...next.sys.responseWindow,
+                    current: {
+                        ...(next.sys.responseWindow?.current ?? {}),
+                        sourceId: 'card-transfer-status',
+                    },
+                };
+                return next;
+            });
+            await waitForGameBoard(hostPage, 30000);
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return state.sys?.responseWindow?.current?.windowType ?? null;
+            }, {
+                timeout: 10000,
+                message: '等待响应窗口注入完成',
+            }).toBe('afterCardPlayed');
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-reopen-sourceid-before');
+
+            const reopenSources = [
+                { id: 'after-card-2p-reopen-1', sourceId: 'card-transfer-status-1' },
+                { id: 'after-card-2p-reopen-2', sourceId: 'card-transfer-status-2' },
+                { id: 'after-card-2p-reopen-3', sourceId: 'card-transfer-status-3' },
+            ];
+            for (const reopen of reopenSources) {
+                await applyOnlineMatchState(matchId, hostPage, (state) => {
+                    const next = structuredClone(state);
+                    next.sys = {
+                        ...next.sys,
+                        responseWindow: {
+                            ...(next.sys?.responseWindow ?? {}),
+                            current: {
+                                ...(next.sys?.responseWindow?.current ?? {}),
+                                id: reopen.id,
+                                sourceId: reopen.sourceId,
+                                pendingInteractionId: `loop-pending-interaction-${reopen.id}`,
+                            },
+                        },
+                    };
+                    return next;
+                });
+                await hostPage.waitForTimeout(800);
+            }
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return Boolean(state.sys?.responseWindow?.current);
+            }, {
+                timeout: 45000,
+                message: '等待 watchdog 在 sourceId 反复变化下仍强制关闭响应窗口',
+            }).toBe(false);
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-reopen-sourceid-after');
         } finally {
             await setup.hostContext.close();
         }

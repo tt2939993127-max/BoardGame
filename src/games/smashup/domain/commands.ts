@@ -13,6 +13,7 @@ import {
 } from './ongoingModifiers';
 import { canPlayFromDiscard } from './discardPlayability';
 import { isSpecialLimitBlocked } from './abilityHelpers';
+import { canUseActiveBaseAbility, getActiveBaseAbilityOptions, hasActiveBaseAbility } from './baseAbilities';
 import { getActionPlayRestrictionError, getMinionPlayRestrictionError, validateActionPlaySemantics } from './playLegality';
 import { getTitanByUid } from './abilityHelpers';
 import {
@@ -544,6 +545,62 @@ export function validate(
             const playerSelections = selection.playerSelections[command.playerId] || [];
             if (playerSelections.length >= 2) {
                 return { valid: false, error: '你已选择了两个派系' };
+            }
+
+            return { valid: true };
+        }
+
+        case SU_COMMANDS.DESELECT_FACTION: {
+            if (phase !== 'factionSelect') {
+                return { valid: false, error: '只能在派系选择阶段取消派系' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: 'player_mismatch' };
+            }
+            const selection = core.factionSelection;
+            if (!selection) return { valid: false, error: '派系选择状态未初始化' };
+
+            const factionId = command.payload.factionId;
+            const playerSelections = selection.playerSelections[command.playerId] || [];
+            if (!playerSelections.includes(factionId)) {
+                return { valid: false, error: '尚未选择该派系' };
+            }
+            return { valid: true };
+        }
+
+        case SU_COMMANDS.USE_BASE_ABILITY: {
+            if (phase !== 'playCards') {
+                return { valid: false, error: '只能在出牌阶段使用基地能力' };
+            }
+            if (command.playerId !== currentPlayerId) {
+                return { valid: false, error: 'player_mismatch' };
+            }
+            const { baseIndex } = command.payload;
+            const base = core.bases[baseIndex];
+            if (!base) return { valid: false, error: '无效的基地索引' };
+
+            if (!hasActiveBaseAbility(base.defId)) {
+                return { valid: false, error: '该基地没有可主动使用的能力' };
+            }
+
+            const activeOptions = getActiveBaseAbilityOptions(base.defId);
+            if (activeOptions?.oncePerTurn) {
+                const used = core.usedBaseAbilitiesThisTurn ?? [];
+                if (used.some(entry => entry.playerId === command.playerId && entry.baseIndex === baseIndex && entry.baseDefId === base.defId)) {
+                    return { valid: false, error: '该基地能力本回合已使用' };
+                }
+            }
+
+            const canUse = canUseActiveBaseAbility(base.defId, {
+                state: core,
+                matchState: state,
+                baseIndex,
+                baseDefId: base.defId,
+                playerId: command.playerId,
+                now: core.turnNumber ?? 0,
+            } as any);
+            if (!canUse) {
+                return { valid: false, error: '当前不能使用该基地能力' };
             }
 
             return { valid: true };

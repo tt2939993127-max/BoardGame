@@ -911,8 +911,11 @@ export class GameTransportServer {
                         : candidate.playerId;
                     const phase = typeof match.state.sys?.phase === 'string' ? match.state.sys.phase : '';
                     const windowType = typeof currentWindow?.windowType === 'string' ? currentWindow.windowType : '';
-                    const sourceId = typeof currentWindow?.sourceId === 'string' ? currentWindow.sourceId : '';
-                    const suffix = `response-loop:${responderId}:${phase}:${windowType}:${sourceId}`;
+                    const queueSignature = responderQueue
+                        .map((value) => (typeof value === 'string' ? value : ''))
+                        .filter((value) => value.length > 0)
+                        .join('|');
+                    const suffix = `response-loop:${responderId}:${phase}:${windowType}:${queueSignature}`;
                     effectiveCandidate = {
                         ...candidate,
                         reason: 'response-loop',
@@ -1283,24 +1286,26 @@ export class GameTransportServer {
         }
 
         if (candidate.reason === 'response-window' || candidate.reason === 'response-loop') {
-            if (candidate.fingerprintHint) {
-                return candidate.fingerprintHint;
-            }
             const current = (match.state.sys as { responseWindow?: { current?: unknown } } | undefined)?.responseWindow?.current as {
                 id?: unknown;
                 windowType?: unknown;
-                sourceId?: unknown;
                 responderQueue?: unknown;
                 currentResponderIndex?: unknown;
             } | undefined;
-            const windowType = typeof current?.windowType === 'string' ? current.windowType : '';
-            const sourceId = typeof current?.sourceId === 'string' ? current.sourceId : '';
-            const responderQueue = Array.isArray(current?.responderQueue) ? current?.responderQueue : [];
-            const responderIndex = typeof current?.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
-            const responderId = typeof responderQueue[responderIndex] === 'string'
-                ? responderQueue[responderIndex]
-                : candidate.playerId;
-            return `${candidate.reason}:${responderId}:${phase}:${windowType}:${sourceId}`;
+            if (current) {
+                const windowType = typeof current?.windowType === 'string' ? current.windowType : '';
+                const responderQueue = Array.isArray(current?.responderQueue) ? current?.responderQueue : [];
+                const responderIndex = typeof current?.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
+                const responderId = typeof responderQueue[responderIndex] === 'string'
+                    ? responderQueue[responderIndex]
+                    : candidate.playerId;
+                const queueSignature = responderQueue
+                    .map((value) => (typeof value === 'string' ? value : ''))
+                    .filter((value) => value.length > 0)
+                    .join('|');
+                return `${candidate.reason}:${responderId}:${phase}:${windowType}:${queueSignature}`;
+            }
+            return candidate.fingerprintHint ?? progressMarker;
         }
 
         if (candidate.reason === 'pending-damage') {

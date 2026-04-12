@@ -5,7 +5,14 @@
  */
 
 import type { DomainCore, GameEvent, GameOverResult, PlayerId, RandomFn, MatchState } from '../../../engine/types';
-import { processDestroyMoveCycle, processAffectTriggers, processDeckInspectionTriggers, filterProtectedAffectEvents } from './reducer';
+import {
+    processDestroyMoveCycle,
+    processReturnToHandTriggers,
+    processAffectTriggers,
+    processDeckInspectionTriggers,
+    filterProtectedAffectEvents,
+    buildDestroyEventKey,
+} from './reducer';
 import type { FlowHooks, PhaseEnterResult } from '../../../engine/systems/FlowSystem';
 import type {
     SmashUpCommand,
@@ -24,6 +31,7 @@ import type {
     DeckReshuffledEvent,
     LimitModifiedEvent,
     MinionPlayedEvent,
+    MinionDestroyedEvent,
     MinionPowerBreakdown,
     MinionOnBase,
 } from './types';
@@ -1906,16 +1914,45 @@ function postProcessSystemEvents(
         };
     }
 
-    // 渚濇鎵ц淇濇姢杩囨护 + trigger 鍚庡鐞嗭紙閾惧紡浼犻€?matchState锛?
-    // destroy 鈫?move 寰幆鐩村埌绋冲畾锛坢ove 瑙﹀彂鍣ㄥ彲鑳戒骇鐢熸柊鐨?MINION_DESTROYED锛?
-    const afterDestroyMove = processDestroyMoveCycle(events, ms, pid, random, now);
-    if (afterDestroyMove.matchState) ms = afterDestroyMove.matchState;
-    // 杩斿洖鎵嬬墝/鏀剧墝搴撳簳淇濇姢杩囨护锛堜笌 execute() 鍚庡鐞嗗榻愶級
-    const afterProtectedAffect = filterProtectedAffectEvents(afterDestroyMove.events, ms.core, pid);
-    const afterAffect = processAffectTriggers(afterProtectedAffect, ms, pid, random, now);
-    if (afterAffect.matchState) ms = afterAffect.matchState;
-    const afterDeckInspection = processDeckInspectionTriggers(afterAffect.events, ms, pid, random, now);
-    if (afterDeckInspection.matchState) ms = afterDeckInspection.matchState;
+    const sysAny = ms.sys as any;
+    if (!sysAny._processedDestroyEvents || !(sysAny._processedDestroyEvents instanceof Set)) {
+        sysAny._processedDestroyEvents = new Set<string>();
+    }
+    const processedDestroyEventKeys = sysAny._processedDestroyEvents as Set<string>;
+    const destroyEventKeysInBatch = new Set<string>();
+    for (const event of events) {
+        if (event.type === SU_EVENTS.MINION_DESTROYED) {
+            destroyEventKeysInBatch.add(buildDestroyEventKey(event as MinionDestroyedEvent));
+        }
+    }
+
+    // 依次执行保护过滤 + trigger 后处理（链式传递 matchState）
+    //
+    // ⚠️ 关键：pipeline step 4.5 调用 postProcessSystemEvents 时，输入 events 已经来自 execute()
+    // 且已包含 execute 内部的 destroy/move/affect 后处理结果。此时如果再跑一遍会造成重复触发（D41/D42）。
+    // 对“系统事件”（afterEvents 轮产生、不会经过 execute）才需要在这里补做 destroy/move/affect 后处理。
+    let afterDeckInspection: { events: SmashUpEvent[]; matchState?: MatchState<SmashUpCore> } = { events };
+    if (!inputEventsAlreadyReduced) {
+        // destroy → move 循环直到稳定（move 触发器可能产生新的 MINION_DESTROYED）
+        const afterDestroyMove = processDestroyMoveCycle(events, ms, pid, random, now, {
+            skipDestroyEventKeys: processedDestroyEventKeys,
+        });
+        if (afterDestroyMove.matchState) ms = afterDestroyMove.matchState;
+        // 返回手牌/影响保护过滤（deep_roots / entangled / ghost_incorporeal 等）
+        const afterProtectedAffect = filterProtectedAffectEvents(afterDestroyMove.events, ms.core, pid);
+        // 返回手牌触发器（onCardReturnedToHand 等）
+        const afterReturnTriggers = processReturnToHandTriggers(afterProtectedAffect, ms, pid, random, now);
+        if (afterReturnTriggers.matchState) ms = afterReturnTriggers.matchState;
+        const afterAffect = processAffectTriggers(afterReturnTriggers.events, ms, pid, random, now);
+        if (afterAffect.matchState) ms = afterAffect.matchState;
+        afterDeckInspection = processDeckInspectionTriggers(afterAffect.events, ms, pid, random, now);
+        if (afterDeckInspection.matchState) ms = afterDeckInspection.matchState;
+    }
+
+    // 标记本轮已处理的 MINION_DESTROYED（避免 pipeline 多次调用导致重复触发 onDestroy）
+    for (const key of destroyEventKeysInBatch) {
+        processedDestroyEventKeys.add(key);
+    }
 
     // 妫€娴?MINION_PLAYED 浜嬩欢锛岃嚜鍔ㄨ拷鍔犺Е鍙戦摼锛坥nPlay + 鍩哄湴鑳藉姏 + ongoing锛?
     // 鍏抽敭锛氬繀椤诲厛鎶?MINION_PLAYED 涔嬪墠鐨勪簨浠?reduce 鍒?core 涓紝
@@ -1939,11 +1976,11 @@ function postProcessSystemEvents(
     // 鍒濆鍖栧凡澶勭悊浜嬩欢闆嗗悎锛堝鏋滀笉瀛樺湪锛?
     // 浣跨敤 any 绫诲瀷鏂█缁曡繃 SystemState 绫诲瀷闄愬埗锛堣繖鏄父鎴忕壒瀹氱殑涓存椂鐘舵€侊級
     // 銆怐45 淇銆戠粺涓€澶勭悊 MINION_PLAYED 鍜?ACTION_PLAYED 鐨勫幓閲?
-    const sysAny = ms.sys as any;
-    if (!sysAny._processedPlayedEvents || !(sysAny._processedPlayedEvents instanceof Set)) {
-        sysAny._processedPlayedEvents = new Set<string>();
+    const playedSysAny = ms.sys as any;
+    if (!playedSysAny._processedPlayedEvents || !(playedSysAny._processedPlayedEvents instanceof Set)) {
+        playedSysAny._processedPlayedEvents = new Set<string>();
     }
-    const processedSet = sysAny._processedPlayedEvents as Set<string>;
+    const processedSet = playedSysAny._processedPlayedEvents as Set<string>;
     
     // 【修复】清理返回手牌的随从的去重标记
     // 当随从返回手牌后再次打出时，应该重新触发 onPlay 能力
@@ -2048,9 +2085,11 @@ function postProcessSystemEvents(
     if (derivedEvents.length > 0) {
         const afterDerivedDestroyMove = processDestroyMoveCycle(derivedEvents, ms, pid, random, now);
         if (afterDerivedDestroyMove.matchState) ms = afterDerivedDestroyMove.matchState;
-        // 杩斿洖鎵嬬墝/鏀剧墝搴撳簳淇濇姢杩囨护锛堜笌 execute() 鍚庡鐞嗗榻愶級
+        // 返回手牌/影响保护过滤（与 execute() 后处理对齐）
         const afterDerivedProtectedAffect = filterProtectedAffectEvents(afterDerivedDestroyMove.events, ms.core, pid);
-        const afterDerivedAffect = processAffectTriggers(afterDerivedProtectedAffect, ms, pid, random, now);
+        const afterDerivedReturnTriggers = processReturnToHandTriggers(afterDerivedProtectedAffect, ms, pid, random, now);
+        if (afterDerivedReturnTriggers.matchState) ms = afterDerivedReturnTriggers.matchState;
+        const afterDerivedAffect = processAffectTriggers(afterDerivedReturnTriggers.events, ms, pid, random, now);
         if (afterDerivedAffect.matchState) ms = afterDerivedAffect.matchState;
         const afterDerivedDeckInspection = processDeckInspectionTriggers(afterDerivedAffect.events, ms, pid, random, now);
         if (afterDerivedDeckInspection.matchState) ms = afterDerivedDeckInspection.matchState;

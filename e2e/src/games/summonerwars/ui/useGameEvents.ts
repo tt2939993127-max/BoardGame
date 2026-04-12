@@ -21,7 +21,6 @@ import { resolveDamageSoundKey, resolveDestroySoundKey } from '../audio.config';
 import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
-import { isPlagueZombieCard } from '../domain/ids';
 import type { RapidFireModeState, WithdrawModeState } from './modeTypes';
 import { useEventStreamCursor } from '../../../engine/hooks';
 
@@ -191,17 +190,8 @@ export function useGameEvents({
   // 技能模式
   const [abilityMode, setAbilityMode] = useState<AbilityModeState | null>(null);
 
-  // 灵魂转移确认模式
-  const [soulTransferMode, setSoulTransferMode] = useState<SoulTransferModeState | null>(null);
-
-  // 心灵捕获选择模式
-  const [mindCaptureMode, setMindCaptureMode] = useState<MindCaptureModeState | null>(null);
-
   // 攻击后技能模式（念力/高阶念力/读心传念）
   const [afterAttackAbilityMode, setAfterAttackAbilityMode] = useState<AfterAttackAbilityModeState | null>(null);
-
-  // 抓附跟随确认模式
-  const [grabFollowMode, setGrabFollowMode] = useState<GrabFollowModeState | null>(null);
 
   // 连续射击确认模式
   const [rapidFireMode, setRapidFireMode] = useState<RapidFireModeState | null>(null);
@@ -342,12 +332,9 @@ export function useGameEvents({
       // 撤回导致 EventStream 回退时，清理所有 UI 交互状态
       // 防止撤回后残留的技能按钮仍可点击（如锻造师 frost_axe 充能）
       setAbilityMode(null);
-      setSoulTransferMode(null);
-      setMindCaptureMode(null);
       setAfterAttackAbilityMode(null);
       setRapidFireMode(null);
       setWithdrawTrigger(null);
-      setGrabFollowMode(null);
       gateRef.current.reset();
     }
 
@@ -480,85 +467,6 @@ export function useGameEvents({
         }
       }
 
-      // 感染触发（交互类：通过 gate 调度，攻击动画期间延迟）
-      if (event.type === SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED) {
-        const p = event.payload as {
-          playerId: string; cardType: string; position: CellCoord;
-          sourceAbilityId: string; sourceUnitId?: string;
-        };
-        if (p.playerId === myPlayerId) {
-          const player = core.players[myPlayerId as PlayerId];
-          const hasValidCard = player?.discard.some(c => {
-            if (p.cardType === 'plagueZombie') {
-              return c.cardType === 'unit' && isPlagueZombieCard(c);
-            }
-            return false;
-          });
-          if (hasValidCard) {
-            const captured = { sourceUnitId: p.sourceUnitId ?? '', targetPosition: p.position };
-            gateRef.current.scheduleInteraction(() => {
-              setAbilityMode({
-                abilityId: 'infection', step: 'selectCard',
-                sourceUnitId: captured.sourceUnitId, targetPosition: captured.targetPosition,
-              });
-            });
-          }
-        }
-      }
-
-      // 抓附跟随请求（交互类：通过 gate 调度）
-      if (event.type === SW_EVENTS.GRAB_FOLLOW_REQUESTED) {
-        const p = event.payload as {
-          grabberUnitId: string; grabberPosition: CellCoord;
-          movedUnitId: string; movedTo: CellCoord;
-        };
-        // 检查抓附手是否是我的单位
-        const grabberUnit = core.board[p.grabberPosition.row]?.[p.grabberPosition.col]?.unit;
-        if (grabberUnit && grabberUnit.owner === myPlayerId) {
-          const captured = {
-            grabberUnitId: p.grabberUnitId,
-            grabberPosition: p.grabberPosition,
-            movedUnitId: p.movedUnitId,
-            movedTo: p.movedTo,
-          };
-          gateRef.current.scheduleInteraction(() => {
-            setGrabFollowMode(captured);
-          });
-        }
-      }
-
-      // 灵魂转移请求（交互类：通过 gate 调度）
-      if (event.type === SW_EVENTS.SOUL_TRANSFER_REQUESTED) {
-        const p = event.payload as {
-          sourceUnitId: string; sourcePosition: CellCoord;
-          victimPosition: CellCoord; ownerId: string;
-        };
-        if (p.ownerId === myPlayerId) {
-          const captured = { sourceUnitId: p.sourceUnitId, sourcePosition: p.sourcePosition, victimPosition: p.victimPosition };
-          gateRef.current.scheduleInteraction(() => {
-            setSoulTransferMode(captured);
-          });
-        }
-      }
-
-      // 心灵捕获请求（交互类：通过 gate 调度）
-      if (event.type === SW_EVENTS.MIND_CAPTURE_REQUESTED) {
-        const p = event.payload as {
-          sourceUnitId: string; sourcePosition: CellCoord;
-          targetPosition: CellCoord; targetUnitId: string;
-          ownerId: string; hits: number;
-        };
-        if (p.ownerId === myPlayerId) {
-          const captured = {
-            sourceUnitId: p.sourceUnitId, sourcePosition: p.sourcePosition,
-            targetPosition: p.targetPosition, targetUnitId: p.targetUnitId, hits: p.hits,
-          };
-          gateRef.current.scheduleInteraction(() => {
-            setMindCaptureMode(captured);
-          });
-        }
-      }
-
       // 攻击后技能触发（念力/高阶念力/读心传念）
       if (event.type === SW_EVENTS.ABILITY_TRIGGERED) {
         const p = event.payload as {
@@ -631,34 +539,6 @@ export function useGameEvents({
               setAbilityMode({
                 abilityId: 'blood_rune',
                 step: 'selectUnit', // 复用 selectUnit 步骤表示等待选择
-                sourceUnitId: captured.sourceUnitId,
-              });
-            });
-          }
-        }
-        // 寒冰碎屑：建造阶段结束时进入确认模式
-        if (matchId === 'ice_shards_damage') {
-          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
-          if (unit && unit.owner === myPlayerId) {
-            const captured = { sourceUnitId: p.sourceUnitId };
-            gateRef.current.scheduleInteraction(() => {
-              setAbilityMode({
-                abilityId: 'ice_shards',
-                step: 'selectUnit', // 复用表示等待确认
-                sourceUnitId: captured.sourceUnitId,
-              });
-            });
-          }
-        }
-        // 喟养巨食兽：攻击阶段结束时进入选择模式
-        if (matchId === 'feed_beast_check') {
-          const unit = core.board[p.sourcePosition?.row]?.[p.sourcePosition?.col]?.unit;
-          if (unit && unit.owner === myPlayerId) {
-            const captured = { sourceUnitId: p.sourceUnitId };
-            gateRef.current.scheduleInteraction(() => {
-              setAbilityMode({
-                abilityId: 'feed_beast',
-                step: 'selectUnit', // 选择相邻友方单位或自毁
                 sourceUnitId: captured.sourceUnitId,
               });
             });
@@ -853,16 +733,10 @@ export function useGameEvents({
     isVisualBusy: gate.isVisualBusy,
     abilityMode,
     setAbilityMode,
-    soulTransferMode,
-    setSoulTransferMode,
-    mindCaptureMode,
-    setMindCaptureMode,
     afterAttackAbilityMode,
     setAfterAttackAbilityMode,
     rapidFireMode,
     setRapidFireMode,
-    grabFollowMode,
-    setGrabFollowMode,
     withdrawTrigger,
     setWithdrawTrigger,
     pendingAttackRef,

@@ -195,6 +195,10 @@ function bearCavalryCommission(ctx: AbilityContext): AbilityResult {
         return { events: [] };
     }
 
+    // 给予 1 点“额外随从额度”（banked），保证后续链式交互打出的随从不会被额度门禁拦住
+    // （交互链中真正打出的随从会消费这次额度，详见 interactionChainE2E 相关用例）
+    const events: SmashUpEvent[] = [grantExtraMinion(ctx.playerId, 'bear_cavalry_commission', ctx.now)];
+
     // 让玩家选择要打出的手牌随从
     const options = handMinions.map((c, i) => {
         const def = getCardDef(c.defId) as MinionCardDef | undefined;
@@ -209,7 +213,7 @@ function bearCavalryCommission(ctx: AbilityContext): AbilityResult {
     );
     // 标记是否为 POD 版本，用于后续交互链区分“必须移动”与“可以跳过”
     (interaction.data as any).isPod = ctx.defId === 'bear_cavalry_commission_pod';
-    return { events: [], matchState: queueInteraction(ctx.matchState, interaction) };
+    return { events, matchState: queueInteraction(ctx.matchState, interaction) };
 }
 
 
@@ -350,12 +354,11 @@ function bearCavalryPolarCommandoPodTalent(ctx: AbilityContext): AbilityResult {
     const commandoPower = getMinionPower(ctx.state, commando, ctx.baseIndex);
 
     // POD 文本：this minion 或 “a minion with less power than this minion”
-    // 目标范围：任意基地上的己方随从（不限同基地）
+    // 目标范围：任意基地上的任意随从（不限定己方；满足“更低战力”即可）
     const targets: Array<{ minion: MinionOnBase; baseIndex: number; power: number }> = [];
     for (let i = 0; i < ctx.state.bases.length; i++) {
         const b = ctx.state.bases[i];
         for (const m of b.minions) {
-            if (m.controller !== ctx.playerId) continue;
             if (m.uid === ctx.cardUid) {
                 targets.push({ minion: m, baseIndex: i, power: commandoPower });
                 continue;
@@ -599,7 +602,7 @@ function bearCavalryHighGroundTrigger(ctx: TriggerContext): SmashUpEvent[] {
                 movedMinion.defId,
                 destBaseIndex,
                 movedMinion.owner,
-                undefined,
+                ongoing.ownerId,
                 'bear_cavalry_high_ground',
                 ctx.now,
             ),
@@ -1083,7 +1086,9 @@ export function registerBearCavalryInteractionHandlers(): void {
             const baseIndex = baseCandidates[0].baseIndex;
             const playedEvt: MinionPlayedEvent = {
                 type: SU_EVENTS.MINION_PLAYED,
-                payload: { playerId, cardUid, defId, baseIndex, baseDefId: state.core.bases[baseIndex].defId, power, consumesNormalLimit: false },
+                // 委任属于“授予额外随从额度 + 消耗该额度打出随从”
+                // 因此此处应消耗出牌额度（由 grantExtraMinion 提前增加 minionLimit），不能标记为 consumesNormalLimit=false
+                payload: { playerId, cardUid, defId, baseIndex, baseDefId: state.core.bases[baseIndex].defId, power },
                 timestamp,
             };
             // 检查该基地是否有对手随从可移动（保护检查在 buildMinionTargetOptions 中）
@@ -1145,7 +1150,7 @@ export function registerBearCavalryInteractionHandlers(): void {
         if (!ctx) return undefined;
         const playedEvt: MinionPlayedEvent = {
             type: SU_EVENTS.MINION_PLAYED,
-            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, baseDefId: state.core.bases[baseIndex].defId, power: ctx.power, consumesNormalLimit: false },
+            payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, baseIndex, baseDefId: state.core.bases[baseIndex].defId, power: ctx.power },
             timestamp,
         };
         // 检查该基地是否有对手随从可移动（保护检查在 buildMinionTargetOptions 中）

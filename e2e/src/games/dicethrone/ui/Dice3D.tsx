@@ -1,11 +1,18 @@
+// @asset-pipeline-allow
+// @asset-pipeline-allow
 import React from 'react';
 import { createScopedLogger } from '../../../lib/logger';
-import { OptimizedImage, SHIMMER_BG } from '../../../components/common/media/OptimizedImage';
+import { SHIMMER_BG } from '../../../components/common/media/OptimizedImage';
 import {
     DICE_BG_SIZE,
     getDiceSpritePosition,
     getDiceSpriteAssetPath,
 } from './assets';
+import {
+    getLocalizedImageCandidateUrls,
+    getPreloadedImageElement,
+    markImageLoaded,
+} from '../../../core';
 
 export interface Dice3DProps {
     /** 骰子值 (1-6) */
@@ -86,20 +93,54 @@ export const Dice3D = ({
     }, []);
 
     React.useEffect(() => {
+        let cancelled = false;
         setIsSpriteReady(false);
         setResolvedSpriteUrl(null);
-    }, [spriteAssetPath, effectiveLocale]);
 
-    const handleSpriteLoad = React.useCallback((event: React.SyntheticEvent<HTMLImageElement>) => {
-        const nextUrl = event.currentTarget.currentSrc || event.currentTarget.src || '';
-        setResolvedSpriteUrl(nextUrl || null);
-        setIsSpriteReady(Boolean(nextUrl));
-    }, []);
+        if (!spriteAssetPath) return () => {
+            cancelled = true;
+        };
 
-    const handleSpriteError = React.useCallback(() => {
-        setResolvedSpriteUrl(null);
-        setIsSpriteReady(false);
-    }, []);
+        const candidates = getLocalizedImageCandidateUrls(spriteAssetPath, effectiveLocale);
+        const findLoadedCandidate = () => candidates.find((url) => {
+            const el = getPreloadedImageElement(url);
+            return el?.naturalWidth && el.naturalWidth > 0;
+        });
+
+        const loaded = findLoadedCandidate();
+        if (loaded) {
+            setResolvedSpriteUrl(loaded);
+            setIsSpriteReady(true);
+            return () => { cancelled = true; };
+        }
+
+        setResolvedSpriteUrl(candidates[0] ?? null);
+
+        const tryLoad = (index: number) => {
+            if (cancelled) return;
+            if (index >= candidates.length) return;
+            const url = candidates[index];
+            const img = new Image();
+            img.onload = () => {
+                if (cancelled) return;
+                markImageLoaded(url, undefined, img);
+                markImageLoaded(spriteAssetPath, effectiveLocale, img);
+                setResolvedSpriteUrl(url);
+                setIsSpriteReady(true);
+            };
+            img.onerror = () => {
+                if (cancelled) return;
+                tryLoad(index + 1);
+            };
+            img.src = url;
+        };
+
+        tryLoad(0);
+
+        return () => {
+            cancelled = true;
+        };
+    }, [effectiveLocale, spriteAssetPath]);
 
     React.useEffect(() => {
         dice3DLogger.debug('sprite-resolved', {
@@ -171,8 +212,6 @@ export const Dice3D = ({
 
     const animationClass = isSpotlight ? 'animate-dice3d-bonus-tumble' : 'animate-dice3d-tumble';
     const borderRadius = isSpotlight ? 'rounded-[1vw]' : 'rounded-[0.5vw]';
-    const spriteInset = isSpotlight ? '2px' : '1px';
-    const spriteRadius = isSpotlight ? '22%' : '18%';
     const borderStyle = isSpotlight ? 'border-2 border-slate-600/50' : 'border border-slate-700/50';
     const boxShadow = isSpotlight ? 'inset 0 0 2vw rgba(0,0,0,0.8)' : 'inset 0 0 1vw rgba(0,0,0,0.8)';
     const transitionDuration = isSpotlight ? '600ms' : '1000ms';
@@ -187,19 +226,6 @@ export const Dice3D = ({
             data-definition-id={definitionId ?? ''}
             data-sprite-url={resolvedSpriteUrl ?? ''}
         >
-            {spriteAssetPath && (
-                <OptimizedImage
-                    src={spriteAssetPath}
-                    locale={effectiveLocale}
-                    alt=""
-                    aria-hidden
-                    placeholder={false}
-                    className="absolute inset-0 w-full h-full opacity-0 pointer-events-none"
-                    onLoad={handleSpriteLoad}
-                    onError={handleSpriteError}
-                    draggable={false}
-                />
-            )}
             <div
                 className={`relative w-full h-full dice3d-preserve-3d ${isRolling ? animationClass : ''}`}
                 style={{
@@ -218,36 +244,28 @@ export const Dice3D = ({
                     return (
                         <div
                             key={face.id}
-                            className={`absolute inset-0 flex items-center justify-center bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner`}
+                            className={`absolute inset-0 flex items-center justify-center bg-slate-900 ${borderRadius} dice3d-backface-hidden ${borderStyle} shadow-inner overflow-hidden`}
                             style={{
                                 transform: faceTransform,
+                                ...(hasSprite && resolvedSpriteUrl ? {
+                                    backgroundImage: `url("${resolvedSpriteUrl}")`,
+                                    backgroundSize: DICE_BG_SIZE,
+                                    backgroundPosition: `${xPos}% ${yPos}%`,
+                                    backgroundRepeat: 'no-repeat',
+                                } : {
+                                    backgroundColor: SHIMMER_BG.backgroundColor,
+                                    backgroundImage: SHIMMER_BG.backgroundImage,
+                                    backgroundSize: SHIMMER_BG.backgroundSize,
+                                    backgroundPosition: SHIMMER_BG.backgroundPosition,
+                                    backgroundRepeat: 'no-repeat',
+                                    animation: SHIMMER_BG.animation,
+                                }),
                                 boxShadow,
+                                imageRendering: 'auto',
                             }}
                             data-face-id={face.id}
                             data-face-fallback={hasSprite ? 'false' : 'loading'}
                         >
-                            <div
-                                className="absolute"
-                                style={{
-                                    inset: spriteInset,
-                                    borderRadius: spriteRadius,
-                                    overflow: 'hidden',
-                                    ...(hasSprite && resolvedSpriteUrl ? {
-                                        backgroundImage: `url("${resolvedSpriteUrl}")`,
-                                        backgroundSize: DICE_BG_SIZE,
-                                        backgroundPosition: `${xPos}% ${yPos}%`,
-                                        backgroundRepeat: 'no-repeat',
-                                    } : {
-                                        backgroundColor: SHIMMER_BG.backgroundColor,
-                                        backgroundImage: SHIMMER_BG.backgroundImage,
-                                        backgroundSize: SHIMMER_BG.backgroundSize,
-                                        backgroundPosition: SHIMMER_BG.backgroundPosition,
-                                        backgroundRepeat: 'no-repeat',
-                                        animation: SHIMMER_BG.animation,
-                                    }),
-                                    imageRendering: 'auto',
-                                }}
-                            />
                         </div>
                     );
                 })}

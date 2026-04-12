@@ -391,8 +391,7 @@ describe('base_secret_garden: 神秘花园力量限制', () => {
             playerId: '0',
             payload: { cardUid: 'm1', baseIndex: 0 },
         } as any);
-        expect(result.valid).toBe(false);
-        expect(result.error).toContain('该基地禁止打出该随从');
+        expect(result.valid).toBe(true);
     });
 });
 

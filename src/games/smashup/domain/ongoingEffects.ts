@@ -188,6 +188,8 @@ export interface TriggerContext {
     inspectionCausePlayerId?: PlayerId;
     random: RandomFn;
     now: number;
+    /** 同一次 fireTriggers 调用内共享的临时状态（用于跨实例去重等） */
+    triggerSharedState?: Record<string, unknown>;
 }
 
 
@@ -1064,7 +1066,8 @@ export function fireTriggers(
 
     const events: SmashUpEvent[] = [];
     let matchState = ctx.matchState;
-    const fullCtx: TriggerContext = { ...ctx, timing };
+    const triggerSharedState: Record<string, unknown> = {};
+    const fullCtx: TriggerContext = { ...ctx, timing, triggerSharedState };
 
     for (const entry of triggerRegistry) {
         if (entry.timing !== timing) continue;
@@ -1163,7 +1166,8 @@ export function fireTriggerForSource(
 
     const events: SmashUpEvent[] = [];
     let matchState = ctx.matchState;
-    const fullCtx: TriggerContext = { ...ctx, timing };
+    const triggerSharedState: Record<string, unknown> = {};
+    const fullCtx: TriggerContext = { ...ctx, timing, triggerSharedState };
 
     for (const entry of triggerRegistry) {
         if (entry.sourceDefId !== sourceDefId) continue;

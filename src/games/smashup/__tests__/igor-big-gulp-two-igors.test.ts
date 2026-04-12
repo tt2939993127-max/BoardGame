@@ -101,11 +101,7 @@ describe('Igor + Big Gulp: 一个 Igor 被消灭', () => {
         console.log('Howler powerCounters:', howler?.powerCounters);
         console.log('Expected: 2 (initial 1 + Igor onDestroy +1), Got:', howler?.powerCounters);
         
-        // Igor onDestroy 应该只触发一次：
-        // - 初始值：1
-        // - Igor onDestroy 自动选择 howler（唯一候选）：+1
-        // - 最终值：2
-        // 如果 onDestroy 被触发两次，howler 会有 3 个指示物（初始1 + 两次触发各加1）
+        // Igor onDestroy 只触发一次
         expect(howler?.powerCounters).toBe(2);
         
         // 收集所有交互（current + queue）
@@ -128,8 +124,5 @@ describe('Igor + Big Gulp: 一个 Igor 被消灭', () => {
         
         // 因为只有一个候选，Igor onDestroy 自动执行了（没有创建交互）
         expect(igorInteractions.length).toBe(0);
-        
-        // 验证 onDestroy 只触发了一次（不是两次）
-        expect(howler?.powerCounters).not.toBe(3);
     });
 });

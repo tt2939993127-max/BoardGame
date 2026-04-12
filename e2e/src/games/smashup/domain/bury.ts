@@ -225,19 +225,6 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
             if (uncoverTriggers) events.push(uncoverTriggers);
             return { state: matchState, events };
         }
-        if (subtype === 'ongoing') {
-            const ongoingTarget = actionDef.ongoingTarget ?? 'base';
-            if (ongoingTarget === 'minion' && base.minions.length === 0) {
-                const events: SmashUpEvent[] = [{
-                    type: SU_EVENTS.BURIED_CARD_UNCOVERED,
-                    payload: { playerId, cardUid, baseIndex, reason, discardWithoutPlay: true },
-                    timestamp: now,
-                } as SmashUpEvent];
-                if (uncoverTriggers) events.push(uncoverTriggers);
-                return { state: matchState, events };
-            }
-        }
-
         const executeResult = executeUncoveredAction({
             matchState,
             playerId,

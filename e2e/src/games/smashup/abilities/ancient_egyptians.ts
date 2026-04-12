@@ -232,7 +232,9 @@ function ancientEgyptiansAncientCurse(ctx: AbilityContext): AbilityResult {
     if (!ctx.targetMinionUid) return { events: [] };
     const base = ctx.state.bases[ctx.baseIndex];
     const target = base?.minions.find(minion => minion.uid === ctx.targetMinionUid);
-    if (!target || target.powerCounters <= 0) return { events: [] };
+    if (!target) return { events: [] };
+    const counters = target.powerCounters ?? 0;
+    if (counters <= 0) return { events: [] };
     if (!ctx.matchState) {
         return { events: [removePowerCounter(target.uid, ctx.baseIndex, 1, 'ancient_egyptians_ancient_curse', ctx.now)] };
     }

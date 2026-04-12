@@ -1,177 +1,332 @@
-# Summoner Wars AI 交互链路审计（2026-04-12）
+# Summoner Wars AI 交互静态审计（2026-04-12）
 
 ## 审计范围
+- `src/games/summonerwars/game.ts`
 - `src/games/summonerwars/ai.ts`
-- `src/games/summonerwars/domain/**`
+- `src/games/summonerwars/domain/index.ts`
+- `src/games/summonerwars/domain/flowHooks.ts`
+- `src/games/summonerwars/domain/abilityResolver.ts`
+- `src/games/summonerwars/domain/customActionHandlers.ts`
+- `src/games/summonerwars/domain/execute.ts`
+- `src/games/summonerwars/domain/events.ts`
+- `src/games/summonerwars/domain/types.ts`
 - `src/games/summonerwars/ui/useGameEvents.ts`
-- `src/games/summonerwars/audio.config.ts`
-- `src/games/summonerwars/__tests__/flow.test.ts`
-- `src/games/summonerwars/__tests__/flowHooks.test.ts`
+- `src/games/summonerwars/ui/useCellInteraction.ts`
+- `src/games/summonerwars/ui/useEventCardModes.ts`
+- `docs/ai-rules/testing-audit.md`
+
+## 权威来源
+1. 当前仓库实现（以上源码文件）
+2. 审计规范：`docs/ai-rules/testing-audit.md`
+
+## 审计方法与限制
+- 本轮仅做**静态代码审计**。
+- **未改代码、未跑测试、未创建/切换分支**。
+- 重点按 D8 / D9 / D39 / D40 / D41 / D45 评估“AI 是否能看见等待态、是否会重入循环、是否可能卡死”。
 
 ## 结论摘要
-1. **Summoner Wars 当前没有游戏层 response-window 打开源。**
-   - `game.ts` 虽挂了 `createResponseWindowSystem()`，但 `src/games/summonerwars/domain/**` 中没有 `RESPONSE_WINDOW_OPENED / RESPONSE_PASS / responderQueue` 等事件源。
-   - 因此用户感知到的“响应反复弹/音效循环”，在 Summoner Wars 里**更像是 phase-halted 技能提示或 UI 本地交互被重复重建**，而不是 Dice Throne 那种真正的 response-window 重触发。
 
-2. **已确认一个会制造“像 response-window 一样反复响”的根因：**
-   - 链路：`flowHooks.onPhaseExit` → `resolveAbilityEffects` → `ABILITY_TRIGGERED(actionId=ice_shards_damage/feed_beast_check)` → `useGameEvents` → `setAbilityMode(...)`/本地提示 → `audio.config.ts` 中 `ABILITY_TRIGGERED` 即时音效。
-   - 问题点：当 `sys.flowHalted === true` 时，如果 AI / watchdog / 非 UI 限制路径重复发 `ADVANCE_PHASE`（服务端还会把 Summoner Wars 的恢复推进映射成 `sw:end_phase`），`onPhaseExit` 之前会**再次发同一批 phase-end 提示事件**。
-   - 结果：同一个 `ice_shards` / `feed_beast` 提示被重复推入 EventStream，表现为：
-     - 提示像“又弹了一次”
-     - `ABILITY_TRIGGERED` 音效重复响
-     - 看起来像 AI 在不停重试同一个交互
+### 总裁决
+**Summoner Wars 当前最核心的问题，不是 response-window 真正重开，而是“等待态大量停留在本地 UI mode，而不是服务端 `sys.interaction`/`sys.responseWindow`”。**
 
-3. **已做最小修复：**
-   - 文件：`src/games/summonerwars/domain/flowHooks.ts`
-   - 修复：当 `state.sys.flowHalted === true` 时，`onPhaseExit` 仍然重新判断“是否还需要确认”，**但不再重复发射 phase-end 的提示事件**。
-   - 影响：
-     - 不改变真人正常首次触发语义
-     - 不改变 AI 真正可执行动作集合
-     - 只消除“重复推进时再次重放提示/音效”的噪音与循环感
+这会直接带来三类风险：
+1. **AI 看不见交互**：很多链路只发 EventStream 通知，AI 无法在 `ai.ts` 里生成后续合法动作。
+2. **自动反馈无法携带精确“为什么不能选”**：因为根本没有服务端 options/disabled reason 可读，只剩 UI 本地 toast/本地 mode。
+3. **重复事件会重建本地提示并重复响音效**：请求事件和 `ABILITY_TRIGGERED` 都被配置成 immediate 音效，重复发事件就会重复提示、重复响。
 
-## 全链路审计
-
-### A. response-window 链路
-- 结论：**游戏层未使用**。
-- 证据：`src/games/summonerwars/domain/**` 中未发现 `RESPONSE_WINDOW_OPENED / RESPONSE_PASS / responderQueue / windowType` 事件源。
-- 推断：若线上看到“响应”类提示，根因更可能在：
-  1. 共享 watchdog / 共享提示文案；或
-  2. Summoner Wars 的 phase-halted / UI 本地提示链被误认为 response-window。
-
-### B. phase-halted 技能链（本轮命中根因）
-- 入口：`src/games/summonerwars/domain/flowHooks.ts`
-- 触发技能：`ice_shards`、`feed_beast`
-- 事件源：
-  - `ice_shards` → `ABILITY_TRIGGERED(actionId=ice_shards_damage)`
-  - `feed_beast` → `ABILITY_TRIGGERED(actionId=feed_beast_check)`
-- UI 消费：`src/games/summonerwars/ui/useGameEvents.ts`
-  - `matchId === 'ice_shards_damage'` → `setAbilityMode({ abilityId: 'ice_shards', ... })`
-  - `matchId === 'feed_beast_check'` → `setAbilityMode({ abilityId: 'feed_beast', ... })`
-- 音频消费：`src/games/summonerwars/audio.config.ts`
-  - `ABILITY_TRIGGERED` 为 immediate 音效，重复事件就会重复响。
-- AI 为什么会放大这个问题：
-  - AI 没有真人 UI 上的“按钮已禁用/提示已显示”的视觉门禁；
-  - watchdog 的兜底推进如果命中这个阶段，会继续推 `ADVANCE_PHASE/sw:end_phase`；
-  - 在修复前，重复推进会再次发同一批提示事件，形成“像在不停点击”的表象。
-
-### C. engine interaction 链（AI 可见）
-- `ai.ts` 已覆盖 `simple-choice` / `multistep-choice`：
-  - 带 `interactionId` 的合法响应
-  - exact-multi 组合枚举
-  - 无选项时 emergency cancel
-  - 其他玩家交互存在时不回落普通 phase actions
-- 现有证据：`src/games/summonerwars/__tests__/flow.test.ts`
-
-### D. UI 本地请求链（**重要未收口风险**）
-以下事件目前是“领域事件 → `useGameEvents` 本地 mode → 人类 UI 继续操作”的模式：
-- `SUMMON_FROM_DISCARD_REQUESTED`
-- `GRAB_FOLLOW_REQUESTED`
-- `SOUL_TRANSFER_REQUESTED`
-- `MIND_CAPTURE_REQUESTED`
-- 以及 `ice_shards_damage` / `feed_beast_check` 这类 `ABILITY_TRIGGERED(actionId=...)`
-
-这些链路的共同问题：
-- reduce 基本不落可供 AI 消费的持久状态；
-- 不进入 `sys.interaction.current`；
-- AI `buildLegalActions()` 默认看不到这些“本地 mode 请求”。
-
-**判定：这是结构性风险，不一定卡死，但会导致 AI 看不见某些可选/必选后续交互。**
-本轮未把这类 UI 本地交互整体迁到引擎 `InteractionSystem`，仅先止血重复提示/音效问题。
-
-## 本轮修复文件
-- `src/games/summonerwars/domain/flowHooks.ts`
-- `src/games/summonerwars/__tests__/flowHooks.test.ts`
-
-## 新增/更新测试
-1. `src/games/summonerwars/__tests__/flowHooks.test.ts`
-   - `flowHalted=true 时重复结束阶段不应重复发射 ice_shards 提示事件`
-   - 证明：首次 `onPhaseExit` 会发提示；`flowHalted=true` 后重复推进仍然 `halt`，但**不再重复发 ABILITY_TRIGGERED**。
-
-## 已运行验证
-- `npx eslint src/games/summonerwars/domain/flowHooks.ts src/games/summonerwars/__tests__/flowHooks.test.ts`
-- `node .\scripts\infra\vitest-cli-safe.mjs run src/games/summonerwars/__tests__/flowHooks.test.ts --configLoader native`
-- `node .\scripts\infra\vitest-cli-safe.mjs run src/games/summonerwars/__tests__/flowHooks.test.ts src/games/summonerwars/__tests__/flow.test.ts --configLoader native`
-
-## 审计裁决
-- **已修复**：phase-halted 重复推进导致的重复提示/重复音效/像 response-window 一样反复弹的问题。
-- **仍需后续架构收口**：把 UI 本地请求链（请求事件 → `useGameEvents` mode）逐步迁到引擎可见的 `InteractionSystem` 或等价持久状态，否则 AI 仍可能“看不见交互”，只是这类问题更多体现为漏操作，而非本轮这种重复弹/重复响。
+### 这轮静态审计的关键判断
+- **D8：高风险** —— 事件写入发生在服务端，但消费窗口主要在客户端本地 state；多数等待态不是持久化状态机。
+- **D9：高风险** —— 存在清空本地 mode 后只恢复少数 phase 技能的逻辑，其他等待链在 reset/刷新后容易丢失或重建。
+- **D39：中风险** —— `flowHalted` 这条链已有一定保护，但“进入 halt / 退出 halt / 人类 skip / AI 直出命令”由不同层分别负责，所有权并不统一。
+- **D40：低风险/本轮未命中** —— 当前未发现 Summoner Wars 自己存在“后处理循环从输出构建去重集合”这类典型问题。
+- **D41：高风险** —— 引擎 Interaction/ResponseWindow 已挂载，但游戏真实等待态主要由 `useGameEvents`/`useCellInteraction`/`useEventCardModes` 承担，职责重叠且真相源分裂。
+- **D45：低风险/本轮未命中** —— 当前未发现 Summoner Wars 存在类似 SmashUp 的 `postProcessSystemEvents` 多阶段重复调用同一后处理函数的问题。
 
 ---
 
-## 2026-04-12 补充扩审：服务端可见性 / AI 可解性矩阵
+## 全链路观察
 
-> 本段对应本轮新增要求：逐条标注“服务端可见”与“AI 可解”，并补记最小修复后的状态。
+### 1. 引擎层已挂系统，但游戏层几乎没把等待态交给它们
+- `src/games/summonerwars/game.ts:149-153` 挂了：
+  - `createInteractionSystem()`
+  - `createSimpleChoiceSystem()`
+  - `createMultistepChoiceSystem()`
+  - `createResponseWindowSystem()`
+- 但在 `src/games/summonerwars/domain` 里，审计未发现：
+  - `createSimpleChoice`
+  - `queueInteraction`
+  - `resolveInteraction`
+  - `postProcessSystemEvents`
+  - 任何 `RESPONSE_WINDOW_*` 事件源
+- `src/games/summonerwars/domain/index.ts` 也只暴露了 `setup/execute/reduce/validate/isGameOver`，没有游戏层 interaction system bridge。
 
-### 一、当前**服务端可见且 AI 可解**的等待链
+**结论**：系统虽然“装上了”，但 Summoner Wars 自己的大部分等待链并没有接到这些系统上。
 
-| 链路 | 实现入口 | 服务端可见 | AI 可解 | 说明 |
+### 2. AI 层能处理 `sys.interaction`，但游戏层很少真正喂给它
+- `src/games/summonerwars/ai.ts:950-1072` 明确支持：
+  - `simple-choice`
+  - `multistep-choice`
+  - emergency cancel / empty selection
+- 但这套支持只有在 `state.sys.interaction.current` 存在时才会生效。
+- 当前 Summoner Wars 游戏层并未把绝大多数请求链写入 `sys.interaction.current`。
+
+**结论**：AI 基础能力在，Summoner Wars 接线不足。
+
+### 3. Summoner Wars 没有真正的 response-window 打开源
+- 审计 `src/games/summonerwars/domain`、`src/games/summonerwars/ui`、`src/games/summonerwars/Board.tsx`，未发现任何 `RESPONSE_WINDOW` / `RESPONSE_PASS` / responder queue 相关实现。
+- `src/games/summonerwars/ai.ts:1716-1717` 还明确规定：如果不是当前玩家且没有活动 interaction，AI 直接返回空动作。
+
+**结论**：Summoner Wars 里用户感知到的“响应类重复触发”，更可能是**本地交互提示/本地音效重放**，不是 Dice Throne 那种真正的 response-window reopen。
+
+---
+
+## 交互链可见性 / AI 可解性矩阵
+
+| 链路 | 入口 | 服务端是否有持久等待态 | AI 当前是否能解 | 审计结论 |
 | --- | --- | --- | --- | --- |
-| `sys.interaction.current.kind === simple-choice` | `InteractionSystem` | 是 | 是 | `ai.ts` 已生成 `SYS_INTERACTION_RESPOND/CANCEL`，含 `interactionId`、multi 组合与 emergency cancel。 |
-| `sys.interaction.current.kind === multistep-choice` | `InteractionSystem` | 是 | 是 | `ai.ts` 已覆盖 confirm/继续链。 |
-| `flowHalted + ice_shards` | `domain/flowHooks.ts` + `ai.ts` | 是（`sys.flowHalted`） | 是 | AI 直接生成 `ACTIVATE_ABILITY(ice_shards)`，不会依赖 UI 横幅。 |
-| `flowHalted + feed_beast` | `domain/flowHooks.ts` + `ai.ts` | 是（`sys.flowHalted`） | 是 | AI 直接生成喂食相邻单位/自毁动作。 |
-| `FUNERAL_PYRE_HEAL`（殉葬火堆） | `players[].activeEvents` + `SW_COMMANDS.FUNERAL_PYRE_HEAL` | 是 | **是（本轮补齐）** | 之前只有人类 UI `funeralPyreMode`；现在 AI 会直接生成治疗或 `skip` 命令，不再悬空等待本地横幅。 |
+| `sys.interaction.current` | `ai.ts:950-1072` | 是 | 是 | 这条链本身没问题，但 Summoner Wars 游戏层很少真正使用。 |
+| `flowHalted + ice_shards/feed_beast` | `flowHooks.ts:206-214, 292-298` + `ai.ts:1583-1689` | 是（`sys.flowHalted`） | 是 | 这是少数已做游戏层兜底的等待链。 |
+| `FUNERAL_PYRE_HEAL` | `ai.ts:352-421` | 是（`activeEvents`） | 是 | 这也是已被 AI 特判覆盖的例外。 |
+| `SUMMON_FROM_DISCARD_REQUESTED` → infection | `abilityResolver.ts:452-460` → `useGameEvents.ts:484-507` | 否 | 否 | 高风险，本地选卡+选位。 |
+| `GRAB_FOLLOW_REQUESTED` | `execute.ts:249-263` → `useGameEvents.ts:510-528` | 否 | 否 | 高风险，本地跟随确认。 |
+| `SOUL_TRANSFER_REQUESTED` | `customActionHandlers.ts:48-55` → `useGameEvents.ts:531-542` | 否 | 否 | 高风险，本地确认。 |
+| `MIND_CAPTURE_REQUESTED` | `customActionHandlers.ts:60-68` / `execute.ts:570-588` → `useGameEvents.ts:545-560` | 否 | 否 | 高风险，本地二选一。 |
+| `ABILITY_TRIGGERED(actionId=rapid_fire_extra_attack)` | `execute.ts:699` → `useGameEvents.ts:584-595` | 否 | 否 | 高风险，本地额外攻击确认。 |
+| `ABILITY_TRIGGERED(actionId=withdraw)` | `useGameEvents.ts:597-610` | 否 | 否 | 高风险，本地先选代价再选位置。 |
+| `ABILITY_TRIGGERED(afterMove:spirit_bond / ancestral_bond / structure_shift / frost_axe)` | `execute.ts:291-307` → `useGameEvents.ts:671-720` | 否 | 否 | 高风险，全部依赖本地 mode。 |
+| `ABILITY_TRIGGERED(ice_ram_trigger)` | `execute.ts:993-1053` → `useGameEvents.ts:727-739` | 否 | 否 | 高风险，本地目标/推拉选择。 |
+| 事件卡多步交互（`bloodSummon` / `annihilate` / `mindControl` / `stun` / `hypnoticLure` / `chant_*` / `glacial_shift` / `sneak` 等） | `useEventCardModes.ts:57-93` | 否 | 否 | 高风险，几乎全部是本地状态机。 |
+| 魔力阶段“打出事件卡还是弃牌” | `useCellInteraction.ts:118, 868, 986-995, 1127-1139` | 否 | 否 | 中高风险，本地二选一。 |
 
-### 二、当前**UI 本地驱动、服务端看不到等待态**的链路
+---
 
-| 链路 | 本地驱动入口 | 服务端可见 | AI 可解 | 风险判断 |
-| --- | --- | --- | --- | --- |
-| `SUMMON_FROM_DISCARD_REQUESTED → infection` | `useGameEvents.ts -> setAbilityMode(infection)` | 否 | 否 | 高：事件只进 EventStream，本地选卡/落点 AI 看不到。 |
-| `GRAB_FOLLOW_REQUESTED` | `useGameEvents.ts -> setGrabFollowMode` | 否 | 否 | 高：需要本地确认是否跟随。 |
-| `SOUL_TRANSFER_REQUESTED` | `useGameEvents.ts -> setSoulTransferMode` | 否 | 否 | 高：需要本地确认是否转移。 |
-| `MIND_CAPTURE_REQUESTED` | `useGameEvents.ts -> setMindCaptureMode` | 否 | 否 | 高：需要本地二选一决策。 |
-| `ABILITY_TRIGGERED -> telekinesis/high_telekinesis/mind_transmission` | `useGameEvents.ts -> setAfterAttackAbilityMode / telekinesisTargetMode` | 否 | 否 | 高：攻击后目标/终点选择全在本地。 |
-| `ABILITY_TRIGGERED -> rapid_fire_extra_attack` | `useGameEvents.ts -> setRapidFireMode` | 否 | 否 | 中高：本地确认额外攻击；若事件重复，会重复响提示音。 |
-| `ABILITY_TRIGGERED -> withdraw` | `useGameEvents.ts -> setWithdrawTrigger / setWithdrawMode` | 否 | 否 | 中高：本地先选代价再选位置。 |
-| `ABILITY_TRIGGERED -> illusion_copy` | `useGameEvents.ts -> setAbilityMode(illusion)` | 否 | 否 | 中：移动阶段开始技能，本地选目标。 |
-| `ABILITY_TRIGGERED -> blood_rune_choice` | `useGameEvents.ts -> setAbilityMode(blood_rune)` | 否 | 否 | 中：攻击阶段开始本地二选一。 |
-| `ABILITY_TRIGGERED -> afterMove:spirit_bond / ancestral_bond / structure_shift / frost_axe` | `useGameEvents.ts -> setAbilityMode(...)` | 否 | 否 | 中高：移动后追加技能全靠本地 mode。 |
-| `ABILITY_TRIGGERED -> ice_ram_trigger` | `useGameEvents.ts -> setAbilityMode(ice_ram)` | 否 | 否 | 中高：建筑位移后的目标/推拉选择全在本地。 |
-| `ABILITY_TRIGGERED -> ice_shards_damage / feed_beast_check` | `useGameEvents.ts -> setAbilityMode(...)` | **部分** | **部分** | 真人仍走本地横幅；AI 已有游戏层直出动作，不再依赖该本地 mode。 |
+## 按审计维度逐项结论
 
-### 三、当前**只有最终命令可见、但中间选择链仍是本地 UI**的链路
+### D8 时序正确 —— **高风险**
 
-| 链路 | 本地驱动入口 | 服务端可见 | AI 可解 | 说明 |
-| --- | --- | --- | --- | --- |
-| `PLAY_EVENT` 多步骤事件卡：`blood_summon / annihilate / mind_control / stun / hypnotic_lure / chant_of_* / glacial_shift / sneak / hellfire_blade` | `useEventCardModes.handlePlayEvent()` | 否（仅最终 `PLAY_EVENT` payload 可见） | 否 | 人类通过本地 mode 组装 payload；AI 当前不会生成这些 `PLAY_EVENT` 多目标/多步骤命令。 |
-| `magicEventChoiceMode`（魔力阶段事件卡“打出还是弃牌”） | `useCellInteraction.ts` | 否 | 否 | AI 当前 `buildMagicActions()` 只会弃牌换魔力，不会处理“先弹横幅再决定打出事件卡”。 |
-| `funeralPyreMode`（UI 横幅） | `useEventCardModes.ts` | **是（activeEvents + `FUNERAL_PYRE_HEAL`）** | **是（本轮补齐）** | UI 仍可用，但 AI 已不依赖该横幅。 |
+#### 事实
+1. `useGameEvents.ts:484-739` 把请求事件/`ABILITY_TRIGGERED` 直接翻译成本地 `setAbilityMode` / `setGrabFollowMode` / `setSoulTransferMode` / `setMindCaptureMode` / `setRapidFireMode` / `setWithdrawTrigger`。
+2. 这些等待态没有进入 `sys.interaction.current`。
+3. `useGameEvents.ts:268-309` 的“刷新恢复”只覆盖 4 个 phase 技能：
+   - `illusion_copy`
+   - `blood_rune_choice`
+   - `ice_shards_damage`
+   - `feed_beast_check`
+4. infection / grab / soul_transfer / mind_capture / rapid_fire / withdraw / 大量 afterMove 技能都**不在恢复名单里**。
 
-### 四、对已修 `flowHalted` 重复 `end_phase` 的扩审结论
+#### 判定
+- **服务端写入**的是“提示事件”。
+- **客户端消费**的是“本地 mode”。
+- 中间没有统一持久等待态。
 
-1. **SummonerWars 游戏层没有真正的 response-window reopen 源。**
-   - `game.ts` 虽挂 `createResponseWindowSystem()`，但领域层未打开 `RESPONSE_WINDOW_OPENED/RESPONSE_PASS` 等链路。
-   - 因此“响应不停弹/不停响”在 SummonerWars 里不是 DiceThrone 那种 response-window 重开。
+这意味着：
+- 一旦 UI 没接住、刷新、reset、重复推进、共享 watchdog 介入，等待链就可能**丢失**或**被再次重建**。
+- 这类问题不是单个 ability 的小 bug，而是**写入-消费窗口分裂**。
 
-2. **当前确认过的重复提示/音效源，仍然集中在“重复发相同 `ABILITY_TRIGGERED` 事件”。**
-   - 已修：`flowHooks.onPhaseExit` 在 `flowHalted=true` 时不再重复发 `ice_shards_damage/feed_beast_check`。
-   - `useGameEvents` 的刷新恢复逻辑有 `hasRecoveredRef` 一次性门禁，不会每次 render 都重复恢复。
-   - 未发现第二条“同类必现”的服务端 reopen 源。
+#### 对 AI / 自动反馈的影响
+- AI 无法直接知道“当前必须选什么”。
+- 自动反馈也无法从服务端状态携带“为什么不能选”，因为没有服务端 options/disabled reason 结构。
 
-3. **剩余潜在循环风险仍然存在于所有本地 mode 依赖的 `ABILITY_TRIGGERED` 链。**
-   - 只要领域层未来又重复发同一个 `ABILITY_TRIGGERED(actionId=...)`，`useGameEvents` 仍会再次 `setAbilityMode` / 再播 immediate 音效。
-   - 这不是当前已命中的具体 bug，但属于结构性脆弱点；根因仍是“等待态只存在于客户端，不存在于服务端状态机”。 
+**D8 裁决：❌ 未满足统一时序要求。**
 
-### 五、本轮最小修复与新增验证
+---
 
-#### 最小修复
-- `src/games/summonerwars/ai.ts`
-  - 新增 `buildPendingActiveEventActions()`：
-    - 有充能的殉葬火堆 + 有受伤友军 → 生成 `FUNERAL_PYRE_HEAL { targetPosition }`
-    - 有充能但无合法目标 → 生成 `FUNERAL_PYRE_HEAL { skip: true }`
-  - 该链路优先于普通 phase action 返回，避免 AI 无视待处理主动事件继续推进流程。
+### D9 幂等与重入 —— **高风险**
 
-#### 新增验证
-- `src/games/summonerwars/__tests__/flow.test.ts`
-  - `殉葬火堆有受伤友军时，AI 应优先生成并选择 FUNERAL_PYRE_HEAL，而不是回落普通阶段动作`
-  - `殉葬火堆无可治疗目标时，AI 应只生成 skip 以避免悬空等待 UI`
+#### 事实
+1. `useGameEvents.ts:334-350` 在 `didReset` 时会清空：
+   - `abilityMode`
+   - `soulTransferMode`
+   - `mindCaptureMode`
+   - `afterAttackAbilityMode`
+   - `rapidFireMode`
+   - `withdrawTrigger`
+   - `grabFollowMode`
+2. 但 `useGameEvents.ts:268-309` 的恢复只恢复前述 4 个 phase 技能。
+3. 请求事件 payload（如 `SUMMON_FROM_DISCARD_REQUESTED`、`SOUL_TRANSFER_REQUESTED`、`MIND_CAPTURE_REQUESTED`、`GRAB_FOLLOW_REQUESTED`）没有统一的 `requestId` / `interactionId`。
+4. `src/games/summonerwars/domain/events.ts:85,103-106` 把 `ABILITY_TRIGGERED` 和各类 request 事件都配置成 `audio: 'immediate'`。
 
-### 六、当前裁决
+#### 判定
+- 对同一个请求，当前系统缺少“跨 reset / 跨重复事件”的稳定去重键。
+- 一旦同类事件重复出现，UI 会再次建 mode，音效也会再次播。
+- 已有的一次性 `hasRecoveredRef` 只能防“首次挂载历史回放”，防不了“领域层真的又发了一次同类事件”。
 
-- **本轮已收口**
-  - `flowHalted` 重复 `end_phase` 导致的重复提示/重复音效。
-  - 殉葬火堆 `FUNERAL_PYRE_HEAL`：从“只有 UI 横幅能处理”提升为“服务端可见 + AI 可解”。
+#### 正面项
+- `ai.ts` 中未发现 `UNDO` / `undo` 指令生成；Summoner Wars AI 本身不会制造“AI 自己反复撤回”的循环。
 
-- **仍属结构性风险，需后续迁移**
-  - `useGameEvents` / `useEventCardModes` / `useCellInteraction` 中所有“本地 mode 才知道下一步”的链路。
-  - 这些链路如果不迁到 `InteractionSystem` 或等价服务端等待态，AI 仍会继续存在“看不见交互”的系统性缺口。 
+**D9 裁决：❌ 本地请求链缺少稳定幂等边界。**
+
+---
+
+### D39 流程控制标志清除完整性 —— **中风险**
+
+#### 事实
+1. `flowHooks.ts:206-214`：phase-end 技能会在需要确认时返回 `halt: true`。
+2. `flowHooks.ts:292-298`：`onAutoContinueCheck` 会在 `flowHalted` 且不再需要确认时自动推进。
+3. `ai.ts:1583-1689`：AI 对 `flowHalted + ice_shards/feed_beast` 有专门动作生成。
+4. 但人类 UI 的 skip / cancel 又部分落在组件层：
+   - `Board.tsx:528-547` 的 `handleCancelAbility` 对 `ice_shards` 通过本地清 mode + 手动 `ADVANCE_PHASE` 收口。
+   - `useCellInteraction.ts:976-1000` 的 `handleEndPhase` 又维护 `endPhaseConfirmPending` 这种纯 UI flag。
+
+#### 判定
+- phase-end 这条链**比其他本地 mode 更安全**，因为至少有 `flowHalted` 和 `onAutoContinueCheck`。
+- 但它的“进入阻塞 / AI 继续 / 人类 skip / UI 确认提示”仍分散在 FlowSystem、AI、Board 三层。
+- **所有权不统一**，只是目前这条链已有补丁式护栏，不是当前最危险的死锁点。
+
+**D39 裁决：⚠️ 部分满足，但仍有多层共同维护同一流程标志的问题。**
+
+---
+
+### D40 后处理循环事件去重完整性 —— **低风险 / 本轮未命中**
+
+#### 事实
+- Summoner Wars 当前未实现：
+  - `postProcessSystemEvents`
+  - 游戏层 `afterEvents` 系统
+  - `queueInteraction` + 交互后再回流的游戏层后处理系统
+- `execute.ts:957-1060` 有若干命令尾部后处理，但本轮未发现“从输出事件构建去重集合再进入循环”的典型模式。
+
+#### 判定
+- 当前用户感知到的“重复弹/重复响”，在 Summoner Wars 里**更像重复请求事件 + 本地 mode 重建**，而不是 D40 典型 bug。
+
+**D40 裁决：✅ 本轮未发现命中证据，但后续若引入游戏层 systems.ts / postProcessSystemEvents，必须重审。**
+
+---
+
+### D41 系统职责重叠检测 —— **高风险**
+
+#### 事实
+1. 引擎层已经挂了 Interaction / ResponseWindow 系统（`game.ts:149-153`）。
+2. 游戏层真实等待态却主要在：
+   - `useGameEvents.ts`
+   - `useCellInteraction.ts`
+   - `useEventCardModes.ts`
+3. `ai.ts` 又只会读取：
+   - `sys.interaction.current`
+   - `sys.flowHalted`
+   - `activeEvents`
+4. 这导致“引擎层说自己支持交互”“游戏 UI 也自己维护交互”“AI 只认识引擎层那套”，三者不一致。
+
+#### 判定
+这不是“功能点多所以复杂”，而是**同类职责被两套系统分摊**：
+- 引擎系统：可见、可序列化、AI 可消费
+- 本地 UI mode：即时、隐式、AI 看不见
+
+结果就是：
+- 真人能点，AI 看不见；
+- UI 有提示，服务端不知道；
+- 自动反馈拿不到真正等待原因；
+- 以后再加 watchdog / 重试 / 自动跳过时，很容易误把“本地 mode 丢失”当成“AI 卡死”。
+
+**D41 裁决：❌ 职责重叠且真相源分裂，是当前 Summoner Wars AI 交互问题的主根因。**
+
+---
+
+### D45 Pipeline 多阶段调用去重 —— **低风险 / 本轮未命中**
+
+#### 事实
+- 当前未发现 Summoner Wars 像 SmashUp 那样：
+  - 在多个 pipeline 阶段重复调用同一个游戏层后处理函数；
+  - 再由该函数重复创建交互/重复触发能力。
+- `src/games/summonerwars/domain` 里也没有 `systems.ts` 这类游戏层 bridge 来重复消费同一批事件。
+
+#### 判定
+- 当前 Summoner Wars 的重复交互风险，核心不在 pipeline 多阶段重复调用。
+- 真正的问题是：**同一个请求根本没进 pipeline 可见的等待态，只在 UI 本地停留。**
+
+**D45 裁决：✅ 本轮未命中。**
+
+---
+
+## 自动反馈“为什么无法选择”能力审计
+
+### 当前能不能自动带上原因？
+**大多数 Summoner Wars 本地交互，不能。**
+
+### 原因
+- `sys.interaction` 未承载这些请求时，服务端没有“选项列表 / disabled 原因 / min/max / 当前步骤”。
+- 当前“不能选”的信息大多散落在：
+  - 本地高亮计算
+  - 本地 `showToast.warning(...)`
+  - `validate` 报错（只有真的发命令后才知道）
+
+### 直接后果
+自动反馈最多只能说：
+- “当前没有进入服务端可见交互”
+- “AI 没有合法动作”
+- “validate 返回错误 XXX”
+
+但很难精确说出：
+- 为什么这一步没有可选项
+- 是资源不足 / 目标缺失 / 路径阻挡 / 本地 mode 丢失 / 重复提示重建
+
+**结论**：只要继续使用 UI 本地 mode 作为主等待态，自动反馈就很难做到真正可修复的“带原因上报”。
+
+---
+
+## 已确认的正面项
+1. **Summoner Wars 当前没有真正的 response-window reopen 源。**
+2. **AI 不会在非自己回合乱出动作。**
+   - 证据：`ai.ts:1716-1717`。
+3. **AI 当前不会自己制造 undo 循环。**
+   - 审计 `src/games/summonerwars/ai.ts`，未发现 `UNDO` / `undo` 指令生成。
+4. **phase-end 的 `flowHalted` 链已有一定兜底。**
+   - 证据：`flowHooks.ts:292-298`、`ai.ts:1583-1689`。
+5. **殉葬火堆是少数已服务端可见且 AI 可解的等待链。**
+   - 证据：`ai.ts:352-421`。
+
+## 未收口风险清单（按严重度）
+
+### P0：所有 UI 本地请求链仍然是 AI 盲区
+- infection
+- grab follow
+- soul transfer
+- mind capture
+- rapid fire
+- withdraw
+- afterMove 一组追加技能
+- ice ram trigger
+- 事件卡多步交互
+- 魔力阶段事件卡二选一
+
+### P1：reset / 刷新后只恢复少数 phase 技能
+- 其余本地等待态可能直接丢失，或下一次重复事件来时被重新建出来。
+
+### P1：自动反馈缺少“不能选原因”
+- 因为没有服务端 options/disabled reason 真相源。
+
+### P2：phase-end 流程所有权仍分裂
+- FlowSystem / AI / Board 各管一段，虽然能跑，但不够干净。
+
+---
+
+## 本轮审计裁决
+
+### 可以明确说“没命中”的
+- **不是**真正的 Summoner Wars response-window reopen 链。
+- **不是** Summoner Wars AI 自己发 undo 导致的循环。
+- **不是**当前 pipeline 多阶段重复后处理的典型 D45 问题。
+
+### 可以明确说“命中根因”的
+- **是**本地 UI mode 与引擎交互系统并存造成的职责分裂。
+- **是**大量等待态没有进入服务端可见状态机，导致 AI/自动反馈/兜底推进都拿不到同一份真相源。
+- **是**请求事件缺少稳定 requestId / interactionId，重复事件会直接重建本地提示并重复播音效。
+
+### 架构判断
+**这是设计问题，不是单点补丁问题。**
+
+如果目标是“AI 不能卡死、自动反馈要带原因、强制跳过要真能兜底”，那么 Summoner Wars 最终仍应把这些本地等待链迁到：
+- `sys.interaction`（首选）或
+- 等价的服务端持久等待态
+
+否则只能持续靠：
+- 本地 mode 补丁
+- 特判 AI 动作
+- 特判 watchdog
+- 特判重复音效/重复弹窗
+
+来止血，但很难一次审计后真正收口。
+
+## 本轮验证记录
+- 本轮**未执行测试**（按任务要求：只做审计，不跑测试）。
+- 本文所有结论均来自静态代码链路审查。

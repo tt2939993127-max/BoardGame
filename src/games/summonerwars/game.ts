@@ -23,6 +23,7 @@ import { createGameEngine } from '../../engine/adapter';
 import { SummonerWarsDomain, SW_COMMANDS } from './domain';
 import type { GamePhase, PlayerId, SummonerWarsCore } from './domain/types';
 import { summonerWarsFlowHooks } from './domain/flowHooks';
+import { createSummonerWarsInteractionSystem } from './domain/systems';
 import { registerCardPreviewGetter } from '../../components/game/registry/cardPreviewRegistry';
 import { registerCriticalImageResolver } from '../../core';
 import { getSummonerWarsCardPreviewRef } from './ui/cardPreviewHelper';
@@ -148,6 +149,7 @@ const systems = [
     }),
     createInteractionSystem(),
     createSimpleChoiceSystem(),
+    createSummonerWarsInteractionSystem(),
     createMultistepChoiceSystem(),
     createRematchSystem(),
     createResponseWindowSystem(),

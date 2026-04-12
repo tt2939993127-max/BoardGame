@@ -240,7 +240,8 @@ node scripts/infra/run-e2e-single.mjs ci e2e/dicethrone/dicethrone-watch-out-spo
 ### 2. 枪手 Loaded 单骰特写
 
 路径：
-- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\gunslinger-loaded-token-should-open-single-die-spotlight-after-real-choice-click\21-gunslinger-loaded-single-die-spotlight.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\gunslinger-loaded-token-should-open-single-die-spotlight-after-real-choice-click\21-gunslinger-loaded-after-choice-click.png`
+- `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\gunslinger-loaded-token-should-open-single-die-spotlight-after-real-choice-click\22-gunslinger-loaded-single-die-spotlight.png`
 
 我实际看到：
 - 画面中央出现 bonus die 特写，不再停留在普通 choice 弹窗

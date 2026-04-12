@@ -457,6 +457,14 @@ export interface SystemState {
     scoredBaseIndices?: number[];
     /** SmashUp: postProcessSystemEvents 去重标记（防止 MINION_PLAYED/ACTION_PLAYED 被处理两次） */
     _processedPlayedEvents?: Set<string>;
+    /** SmashUp: postProcessSystemEvents 去重标记（防止 MINION_DESTROYED 被处理两次） */
+    _processedDestroyEvents?: Set<string>;
+    /** SmashUp: postProcessSystemEvents 去重标记（防止 MINION_DESTROYED 被处理两次） */
+    _processedDestroyEvents?: Set<string>;
+    /** SummonerWars: 交互辅助缓存（阶段结束技能已处理标记） */
+    summonerWars?: {
+        phaseEndAbilityResolved?: Record<string, true>;
+    };
 }
 
 // ============================================================================
