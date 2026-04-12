@@ -169,13 +169,6 @@ export function resolveForceAdvancePhaseAfterRecovery(args: {
     if (!authoritativeState) {
         return null;
     }
-    
-    // ⚠️ 关键修复：如果游戏已经结束，不再尝试推进阶段
-    const gameOver = authoritativeState.sys?.gameover;
-    if (gameOver) {
-        return null;
-    }
-    
     if (seatControllers[playerId]?.type === 'human') {
         return null;
     }
@@ -347,13 +340,6 @@ export function resolveForceEndTurnForStalledAi(args: {
     seatControllers: Record<string, AiSeatController>;
     seatStates: Record<string, MatchState<unknown> | null | undefined>;
 }): ForceEndTurnStalledAiResolution | null {
-    // ⚠️ 关键修复：如果游戏已经结束，不再尝试强制推进 AI
-    // 这样可以避免游戏结束后 AI 恢复机制继续尝试推进阶段，导致游戏无法正常结束
-    const gameOver = args.sharedState?.sys?.gameover;
-    if (gameOver) {
-        return null;
-    }
-    
     const currentInteraction = args.sharedState?.sys?.interaction as { current?: unknown; isBlocked?: unknown } | undefined;
     const visibleCurrent = currentInteraction?.current as HiddenSimpleChoiceInteraction | undefined;
     if (visibleCurrent?.playerId && args.seatControllers[String(visibleCurrent.playerId)]?.type !== 'human') {

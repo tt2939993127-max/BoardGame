@@ -163,19 +163,10 @@ export function EndgameOverlay({
 
     // 仅在 isGameOver 从 false → true 时触发显示，并冻结 result
     useEffect(() => {
-        console.log('[EndgameOverlay] useEffect triggered', {
-            isGameOver,
-            prevGameOver: prevGameOverRef.current,
-            result,
-            shouldShow,
-        });
-        
         if (isGameOver && !prevGameOverRef.current) {
-            console.log('[EndgameOverlay] Game over detected, showing overlay');
             let cancelled = false;
             queueMicrotask(() => {
                 if (cancelled) return;
-                console.log('[EndgameOverlay] Setting shouldShow=true');
                 setShouldShow(true);
                 setFrozenResult(result);
             });
@@ -220,13 +211,6 @@ export function EndgameOverlay({
     const showVictoryParticles = shouldShowVictoryParticles(frozenResult, playerID, {
         isLocalMode: gameMode?.mode === 'local',
         isSpectator: gameMode?.isSpectator === true,
-    });
-
-    console.log('[EndgameOverlay] Render', {
-        shouldShow,
-        frozenResult,
-        showVictoryParticles,
-        contentReady,
     });
 
     const overlayContent = (
