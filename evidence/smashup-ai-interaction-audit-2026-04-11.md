@@ -16,11 +16,13 @@
 - `src/games/smashup/rule/*.md`
 
 ## 本轮新增修订
+> 续审说明：本轮持续审计阶段 **未复跑任何测试**，下文的 E2E/截图为历史记录的证据清单（非本轮新增复跑）。若需复跑，将另起“本轮验证”记录并补新时间戳。
+
 1. `e2e/smashup/smashup-phase-transition-simple.e2e.ts`
    - 在线 AI 房间创建显式带 `enableAi: true`，避免 `seatControllers` 因不被信任而失效。
    - `force-skip` 用例补断言：**跳过隐藏交互后仍停留在 AI 回合**，不会误推进到真人。
    - `force-skip` / `force-end-turn` 两条用例都补断言：**不存在 `AI 强制结束失败` 提示**。
-2. 本轮实际重跑：
+2. 历史曾重跑（非本轮）：
    - `在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动跳过并恢复对局`
    - `在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束当前回合`
 
@@ -51,11 +53,11 @@
 
 ---
 
-## 本轮实际 E2E 证据（已重跑 + 已看图）
+## 历史 E2E 证据（非本轮复跑）
 
 ### A. 4 秒 force-skip：隐藏交互卡住时只跳过 AI 当前隐藏交互，不误推进真人
 
-#### 运行命令
+#### 历史运行命令（非本轮复跑）
 ```bash
 node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-simple.e2e.ts "在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动跳过并恢复对局"
 ```
@@ -69,7 +71,7 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
 - 右上角出现 `AI 响应超时` / `AI 自动跳过` toast，没有出现 `AI 强制结束失败` 文案。
 - 画面中央棋盘正常、无遮挡、没有 loading 蒙层。
 
-验收判断：
+验收判断（历史记录）：
 - **达到验收标准**：说明 watchdog 先走的是“只跳过当前隐藏交互”的收口，而不是错误地结束真人回合。
 
 #### 截图 2：跳过后恢复对局
@@ -81,12 +83,12 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
 - 右上角超时 toast 已消失，棋盘恢复正常可见状态，没有“强制结束失败”提示残留。
 - 右下角结束回合主按钮没有错误切到真人主回合态。
 
-验收判断：
+验收判断（历史记录）：
 - **达到验收标准**：证明当前修复满足“超时就跳过，但别推进到玩家”的要求。
 
 ### B. 8 秒 force-end-turn：持续无进展时必须直接收口到真人回合
 
-#### 运行命令
+#### 历史运行命令（非本轮复跑）
 ```bash
 node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-simple.e2e.ts "在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束当前回合"
 ```
@@ -100,7 +102,7 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
 - 右下角结束回合按钮为灰暗不可操作态，符合“房主被隐藏交互阻塞”的前置状态。
 - 没有出现真人自己的回合提示。
 
-验收判断：
+验收判断（历史记录）：
 - **达到验收标准**：这是“AI 已卡死但尚未收口”的有效前态截图。
 
 #### 截图 4：强制结束后切回真人
@@ -112,7 +114,7 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
 - 画面中央出现 `轮到你了！` 提示，右上角 toast 为 `AI 强制结束回合 / AI 已强制结束回合。`，没有任何 `AI 强制结束失败` 文案。
 - 右下角结束回合主按钮恢复正常可见，说明真人已重新拿回操作权。
 
-验收判断：
+验收判断（历史记录）：
 - **达到验收标准**：证明“持续无进展 → 必须强制推进，而且直接推进到真人回合”已生效。
 
 ---
@@ -129,13 +131,13 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
 
 ---
 
-## 已验证命令与结果
+## 历史验证记录（非本轮复跑）
 - `node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-simple.e2e.ts "在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动跳过并恢复对局"`  
-  - 结果：**通过**
+  - 历史记录：该命令曾通过（非本轮复跑）
 - `node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-simple.e2e.ts "在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束当前回合"`  
-  - 结果：**通过**
+  - 历史记录：该命令曾通过（非本轮复跑）
 - `npx eslint e2e/smashup/smashup-phase-transition-simple.e2e.ts`  
-  - 结果：**0 errors / 49 warnings（仓库既有 any 警告，非本轮新增阻塞）**
+  - 结果：**0 errors / 49 warnings（历史记录，仓库既有 any 警告，非本轮新增阻塞）**
 
 ---
 
@@ -152,8 +154,8 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
    - 当前状态：⚠️ **未覆盖**
    - 补测计划：优先恢复“隐藏交互 + afterScoring 链式传递 + 最后基地换基地”三条。
 
-2. **本轮 E2E 只重跑了最容易卡死的两条 watchdog 主链**
-   - 已跑：hidden interaction `force-skip`、no-progress `force-end-turn`
+2. **历史 E2E 曾重跑最容易卡死的两条 watchdog 主链（本轮未复跑）**
+   - 历史已跑：hidden interaction `force-skip`、no-progress `force-end-turn`
    - 未重跑：`在线 AI 持有隐藏交互时应自动 batch 响应并推进状态`、`在线 AI 结束回合切回我方时不应出现整板重挂载或 loading 闪屏`
    - 当前状态：⚠️ **依赖现有测试与历史证据，不算本轮动态新增证明**
    - 补测计划：在整批三游戏 AI 审计收口阶段重跑这两条补齐最新时间戳。
@@ -168,20 +170,20 @@ node scripts/infra/run-e2e-single.mjs ci e2e/smashup/smashup-phase-transition-si
 
 ---
 
-## 最终结论（仅针对 Smash Up 当前主链）
+## 最终结论（仅针对 Smash Up 当前主链，历史证据）
 
-- **结论 1：当前最容易把真人卡死的两条 Smash Up 在线 AI 主链，已经拿到新的运行时证据。**
+- **结论 1：当前最容易把真人卡死的两条 Smash Up 在线 AI 主链，已有历史运行时证据支撑。**
   - 隐藏交互卡住 → **4 秒 force-skip，仅跳过 AI 当前隐藏交互，不误推进到真人**
   - 持续无进展 → **8 秒 force-end-turn，直接切回真人回合**
 
-- **结论 2：当前 watchdog 的“不会影响真人”口径，Smash Up 已有直接证据。**
+- **结论 2：当前 watchdog 的“不会影响真人”口径，Smash Up 已有历史直接证据。**
   - `force-skip` 后仍停留 AI 回合
   - `force-end-turn` 后明确切到真人回合
-  - 本轮重跑截图中均**未出现 `AI 强制结束失败` 提示**
+  - 历史截图中均**未出现 `AI 强制结束失败` 提示**
 
 - **结论 3：Smash Up 主链可宣称“已拿到强证据”，但不能宣称“所有历史交互都已 100% 审完”。**
   - 原因：仍有 skipped 历史回归链未恢复，必须保留为未覆盖项。
 
 ## 修订记录
 - 2026-04-11：建立初版 Smash Up AI 交互审计。
-- 2026-04-12：升级为强口径版本；补记 `enableAi: true`、`force-skip` 不误推进真人、`force-end-turn` 无失败弹窗；重跑两条最容易卡死的在线 AI E2E 并补截图结论。
+- 2026-04-12：升级为强口径版本；补记 `enableAi: true`、`force-skip` 不误推进真人、`force-end-turn` 无失败弹窗；历史记录显示曾重跑两条最容易卡死的在线 AI E2E 并补截图结论。

@@ -702,6 +702,12 @@ export function executeCommand(
       break;
     }
 
+    case SW_COMMANDS.CONFIRM_ATTACK: {
+      // 兼容旧客户端缓存：
+      // 当前攻击已在 DECLARE_ATTACK 中一次性完成，旧的确认命令不再执行业务逻辑。
+      break;
+    }
+
     case SW_COMMANDS.DISCARD_FOR_MAGIC: {
       const cardIds = payload.cardIds as string[];
       const player = core.players[playerId];
@@ -719,6 +725,18 @@ export function executeCommand(
             timestamp,
           });
         }
+      }
+      break;
+    }
+
+    case SW_COMMANDS.REQUEST_EVENT_INTERACTION: {
+      const cardId = payload.cardId as string;
+      if (cardId) {
+        events.push({
+          type: SW_EVENTS.EVENT_INTERACTION_REQUESTED,
+          payload: { playerId, cardId },
+          timestamp,
+        });
       }
       break;
     }

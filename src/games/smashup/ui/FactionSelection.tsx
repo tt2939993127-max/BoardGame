@@ -81,6 +81,7 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
     }, [activeFactionId, focusedFactionGroup, locale, mySelections]);
 
     const isMobileLandscape = viewportSize.width < 1024 && viewportSize.width > viewportSize.height;
+    const isCompactLandscape = isMobileLandscape && viewportSize.width <= 900;
     const focusedFactionMeta = resolvedActiveFactionId ? getFactionMeta(resolvedActiveFactionId) ?? null : null;
     const focusedMechanicTutorial = focusedFactionGroup
         ? getFactionMechanicTutorial(focusedFactionGroup.groupId)
@@ -115,10 +116,12 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         handleCloseDetails();
     };
 
-    const useDesktopLikeLandscapeLayout = isMobileLandscape;
-    const selectionGridClassName = useDesktopLikeLandscapeLayout
-        ? 'mx-auto grid w-fit max-w-none grid-cols-[repeat(5,160px)] justify-center gap-x-6 gap-y-3.5 pb-28'
-        : 'mx-auto grid w-full max-w-[920px] grid-cols-4 justify-items-center gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
+    const useDesktopLikeLandscapeLayout = isMobileLandscape && !isCompactLandscape;
+    const selectionGridClassName = isCompactLandscape
+        ? 'mx-auto grid w-full max-w-[560px] grid-cols-2 justify-items-center gap-x-4 gap-y-3 pb-24'
+        : useDesktopLikeLandscapeLayout
+            ? 'mx-auto grid w-fit max-w-none grid-cols-[repeat(5,160px)] justify-center gap-x-6 gap-y-3.5 pb-28'
+            : 'mx-auto grid w-full max-w-[920px] grid-cols-4 justify-items-center gap-3 lg:max-w-none xl:grid-cols-4 2xl:grid-cols-5 lg:gap-6 pb-24 lg:pb-28';
     const selectionCardFrameClassName = useDesktopLikeLandscapeLayout
         ? 'relative mb-1.5 w-[160px] aspect-[0.727]'
         : 'relative mb-2.5 w-full max-w-[148px] lg:max-w-[192px] aspect-[0.727] xl:max-w-[208px]';
@@ -282,7 +285,9 @@ export const FactionSelection: React.FC<Props> = ({ core, dispatch, playerID }) 
         );
     });
     const selectionGrid = (
-        <div className={useDesktopLikeLandscapeLayout ? 'flex-1 w-full overflow-y-auto px-5 py-2 relative z-10 custom-scrollbar' : 'flex-1 w-full max-w-7xl mx-auto overflow-y-auto px-3 py-3 lg:px-6 lg:py-4 relative z-10 custom-scrollbar'}>
+        <div className={useDesktopLikeLandscapeLayout
+            ? 'flex-1 w-full overflow-y-auto px-5 py-2 relative z-10 custom-scrollbar'
+            : 'flex-1 w-full max-w-7xl mx-auto overflow-y-auto px-3 py-3 lg:px-6 lg:py-4 relative z-10 custom-scrollbar'}>
             <div className={selectionGridClassName}>{factionOptionNodes}</div>
         </div>
     );

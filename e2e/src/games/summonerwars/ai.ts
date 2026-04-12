@@ -80,6 +80,21 @@ const FACTION_PRIORITY: FactionId[] = [
     'trickster',
 ];
 
+const INTERACTIVE_EVENT_BASE_IDS = new Set<string>([
+    CARD_IDS.NECRO_HELLFIRE_BLADE,
+    CARD_IDS.NECRO_BLOOD_SUMMON,
+    CARD_IDS.NECRO_ANNIHILATE,
+    CARD_IDS.TRICKSTER_MIND_CONTROL,
+    CARD_IDS.TRICKSTER_STUN,
+    CARD_IDS.TRICKSTER_HYPNOTIC_LURE,
+    CARD_IDS.BARBARIC_CHANT_OF_POWER,
+    CARD_IDS.BARBARIC_CHANT_OF_GROWTH,
+    CARD_IDS.BARBARIC_CHANT_OF_WEAVING,
+    CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT,
+    CARD_IDS.FROST_GLACIAL_SHIFT,
+    CARD_IDS.GOBLIN_SNEAK,
+]);
+
 const SUPPORTED_DIRECT_TARGET_PAYLOAD_FIELDS = new Set(['targetPosition']);
 
 const createCommand = (playerId: PlayerId, type: string, payload: unknown = {}): Command => ({
@@ -972,7 +987,10 @@ const buildInteractionActions = (
             return typeof option?.id === 'string' && option.disabled !== true;
         });
         const minCount = typeof data.multi?.min === 'number' ? data.multi.min : 1;
-        const maxCount = typeof data.multi?.max === 'number' ? Math.max(minCount, data.multi.max) : minCount;
+        const rawMaxCount = typeof data.multi?.max === 'number'
+            ? data.multi.max
+            : availableOptions.length;
+        const maxCount = Math.max(minCount, Math.min(rawMaxCount, availableOptions.length));
         const actions: AiLegalAction[] = [];
 
         if (data.multi) {
@@ -1702,6 +1720,40 @@ const buildFlowHaltedPhaseEndAbilityActions = (
     return actions;
 };
 
+const buildEventCardActions = (
+    state: SummonerWarsState,
+    playerId: PlayerId,
+): AiLegalAction[] => {
+    const actions: AiLegalAction[] = [];
+    const player = state.core.players[playerId];
+
+    for (const card of player.hand) {
+        if (card.cardType !== 'event') continue;
+        const baseId = getBaseCardId(card.id);
+        const commandType = INTERACTIVE_EVENT_BASE_IDS.has(baseId)
+            ? SW_COMMANDS.REQUEST_EVENT_INTERACTION
+            : SW_COMMANDS.PLAY_EVENT;
+
+        appendAction(actions, state, playerId, {
+            actionId: createAiLegalActionId('play-event', commandType, card.id),
+            kind: 'play-event',
+            label: `打出事件 ${card.name}`,
+            commands: [{
+                type: commandType,
+                payload: { cardId: card.id },
+            }],
+            metadata: withAiActionStrategyTags({
+                cardId: card.id,
+                baseId,
+                playPhase: card.playPhase,
+                interaction: commandType === SW_COMMANDS.REQUEST_EVENT_INTERACTION,
+            }),
+        });
+    }
+
+    return actions;
+};
+
 export function buildSummonerWarsAiLegalActions(args: {
     playerId: PlayerId;
     state: MatchState<unknown>;
@@ -1738,29 +1790,34 @@ export function buildSummonerWarsAiLegalActions(args: {
         case 'summon':
             return [
                 ...buildActivatedAbilityActions(state, playerId, phase),
+                ...buildEventCardActions(state, playerId),
                 ...buildSummonActions(state, playerId),
                 buildEndPhaseAction(state, playerId),
             ];
         case 'move':
             return [
                 ...buildActivatedAbilityActions(state, playerId, phase),
+                ...buildEventCardActions(state, playerId),
                 ...buildMoveActions(state, playerId),
                 buildEndPhaseAction(state, playerId),
             ];
         case 'build':
             return [
                 ...buildActivatedAbilityActions(state, playerId, phase),
+                ...buildEventCardActions(state, playerId),
                 ...buildStructureActions(state, playerId),
                 buildEndPhaseAction(state, playerId),
             ];
         case 'attack':
             return [
                 ...buildActivatedAbilityActions(state, playerId, phase),
+                ...buildEventCardActions(state, playerId),
                 ...buildAttackActions(state, playerId),
                 buildEndPhaseAction(state, playerId),
             ];
         case 'magic':
             return [
+                ...buildEventCardActions(state, playerId),
                 ...buildMagicActions(state, playerId),
                 buildEndPhaseAction(state, playerId),
             ];
@@ -1781,6 +1838,7 @@ const actionKindScorer = createActionKindScorer('action-kind', {
     'move-unit': 90,
     'build-structure': 55,
     'declare-attack': 210,
+    'play-event': 85,
     'activate-ability': 110,
     'discard-for-magic': 25,
     'advance-phase': -80,

@@ -1,61 +1,14 @@
 export type FabPosition = { left: number; top: number };
-export type FabPositionPercent = { left: number; top: number };
-
-type ResolveFabStoredPositionInput = {
-    savedPosition?: string | null;
-    legacyOffset?: string | null;
-    viewportWidth: number;
-    viewportHeight: number;
-    basePosition: FabPosition;
-    normalizePosition: (target: FabPosition) => FabPosition;
-    clampPosition: (target: FabPosition, options?: { allowOverflow?: boolean; resolvedButtonSize?: number }) => FabPosition;
-    resolvedButtonSize: number;
-};
-
-type ResolveFabStoredPositionResult = {
-    position: FabPosition;
-    percent: FabPositionPercent;
-    shouldPersist: boolean;
-    clearLegacyOffset: boolean;
-};
-
-const clampPercent = (value: number) => Math.min(1, Math.max(0, value));
-
-const parseJson = <T,>(value?: string | null): T | null => {
-    if (!value) return null;
-    try {
-        return JSON.parse(value) as T;
-    } catch {
-        return null;
-    }
-};
-
-const isPercentLike = (value: number | undefined) => (
-    typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1
-);
-
-const resolvePositionFromPercent = (
-    percent: FabPositionPercent,
-    viewportWidth: number,
-    viewportHeight: number,
-): FabPosition => ({
-    left: percent.left * viewportWidth,
-    top: percent.top * viewportHeight,
-});
+export type FabPercentPosition = { leftPercent: number; topPercent: number };
 
 export const serializeFabPositionPercent = (
-    position: FabPosition,
+    target: FabPosition,
     viewportWidth: number,
     viewportHeight: number,
-): FabPositionPercent => {
-    if (viewportWidth <= 0 || viewportHeight <= 0) {
-        return { left: 0, top: 0 };
-    }
-    return {
-        left: clampPercent(position.left / viewportWidth),
-        top: clampPercent(position.top / viewportHeight),
-    };
-};
+): FabPercentPosition => ({
+    leftPercent: viewportWidth > 0 ? target.left / viewportWidth : 0,
+    topPercent: viewportHeight > 0 ? target.top / viewportHeight : 0,
+});
 
 export const resolveFabStoredPosition = ({
     savedPosition,
@@ -66,69 +19,62 @@ export const resolveFabStoredPosition = ({
     normalizePosition,
     clampPosition,
     resolvedButtonSize,
-}: ResolveFabStoredPositionInput): ResolveFabStoredPositionResult => {
-    let position = normalizePosition(basePosition);
-    let shouldPersist = false;
-    let clearLegacyOffset = false;
-
-    const parsed = parseJson<Partial<FabPositionPercent & FabPosition & {
-        leftPercent?: number;
-        topPercent?: number;
-        mode?: 'percent' | 'absolute';
-    }>>(savedPosition);
-    if (parsed) {
-        const hasLegacyPercent = typeof parsed.leftPercent === 'number' || typeof parsed.topPercent === 'number';
-        const rawLeft = typeof parsed.left === 'number' ? parsed.left : parsed.leftPercent;
-        const rawTop = typeof parsed.top === 'number' ? parsed.top : parsed.topPercent;
-        const hasPercentValues = typeof rawLeft === 'number' && typeof rawTop === 'number';
-        const shouldUsePercent = parsed.mode === 'percent'
-            || hasLegacyPercent
-            || (hasPercentValues && isPercentLike(rawLeft) && isPercentLike(rawTop));
-
-        if (shouldUsePercent && hasPercentValues) {
-            const clampedLeft = clampPercent(rawLeft);
-            const clampedTop = clampPercent(rawTop);
-            position = resolvePositionFromPercent({
-                left: clampedLeft,
-                top: clampedTop,
-            }, viewportWidth, viewportHeight);
-            if (hasLegacyPercent || clampedLeft !== rawLeft || clampedTop !== rawTop) {
-                shouldPersist = true;
-            }
-        } else if (typeof parsed.left === 'number' && typeof parsed.top === 'number') {
-            position = { left: parsed.left, top: parsed.top };
-            shouldPersist = true;
-        }
-    } else {
-        const legacy = parseJson<{ x?: number; y?: number; left?: number; top?: number }>(legacyOffset);
-        if (legacy && (typeof legacy.x === 'number' || typeof legacy.left === 'number')) {
-            const offsetX = Number.isFinite(legacy.x ?? legacy.left) ? (legacy.x ?? legacy.left ?? 0) : 0;
-            const offsetY = Number.isFinite(legacy.y ?? legacy.top) ? (legacy.y ?? legacy.top ?? 0) : 0;
-            position = {
-                left: basePosition.left + offsetX,
-                top: basePosition.top + offsetY,
-            };
-            shouldPersist = true;
-            clearLegacyOffset = true;
-        }
-    }
-
-    const normalized = normalizePosition(position);
-    const clamped = clampPosition(normalized, {
+}: {
+    savedPosition: string | null;
+    legacyOffset: string | null;
+    viewportWidth: number;
+    viewportHeight: number;
+    basePosition: FabPosition;
+    normalizePosition: (target: FabPosition) => FabPosition;
+    clampPosition: (
+        target: FabPosition,
+        options?: { allowOverflow?: boolean; resolvedButtonSize?: number },
+    ) => FabPosition;
+    resolvedButtonSize: number;
+}) => {
+    const clampRestoredPosition = (target: FabPosition) => clampPosition(normalizePosition(target), {
         allowOverflow: false,
         resolvedButtonSize,
     });
-    const percent = serializeFabPositionPercent(clamped, viewportWidth, viewportHeight);
 
+    if (savedPosition) {
+        const parsed = JSON.parse(savedPosition);
+        const isPercentFormat = parsed && typeof parsed === 'object' && 'leftPercent' in parsed && 'topPercent' in parsed;
+        const rawPosition = isPercentFormat
+            ? {
+                left: Number(parsed.leftPercent) * viewportWidth,
+                top: Number(parsed.topPercent) * viewportHeight,
+            }
+            : parsed;
+        const position = clampRestoredPosition(rawPosition);
+        return {
+            position,
+            percent: serializeFabPositionPercent(position, viewportWidth, viewportHeight),
+            shouldPersist: !isPercentFormat || position.left !== rawPosition.left || position.top !== rawPosition.top,
+            clearLegacyOffset: false,
+        };
+    }
+
+    if (legacyOffset) {
+        const parsed = JSON.parse(legacyOffset);
+        const rawPosition = {
+            left: basePosition.left + (Number(parsed?.x) || 0),
+            top: basePosition.top + (Number(parsed?.y) || 0),
+        };
+        const position = clampRestoredPosition(rawPosition);
+        return {
+            position,
+            percent: serializeFabPositionPercent(position, viewportWidth, viewportHeight),
+            shouldPersist: true,
+            clearLegacyOffset: true,
+        };
+    }
+
+    const position = clampRestoredPosition(basePosition);
     return {
-        position: clamped,
-        percent,
-        shouldPersist,
-        clearLegacyOffset,
+        position,
+        percent: serializeFabPositionPercent(position, viewportWidth, viewportHeight),
+        shouldPersist: false,
+        clearLegacyOffset: false,
     };
-};
-
-export default {
-    resolveFabStoredPosition,
-    serializeFabPositionPercent,
 };

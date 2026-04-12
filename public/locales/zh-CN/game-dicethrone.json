@@ -541,9 +541,9 @@
       "thunderStrike2Reroll": "重掷：{{value}}（总和≥12 施加倒地）",
       "gunslingerLoadedDie": "装填投掷：{{value}}（本次伤害 +{{bonusDamage}}）",
       "gunslingerLoadedReroll": "装填重掷：{{value}}（本次伤害 +{{bonusDamage}}）",
-      "gunslingerHighNoonBullet": "子弹：造成 2 点伤害",
-      "gunslingerHighNoonDash": "靴刺：施加击倒",
-      "gunslingerHighNoonBullseye": "准心：施加赏金",
+      "gunslingerHighNoonBullet": "子弹：造成 2 点不可防御伤害",
+      "gunslingerHighNoonDash": "靴刺：使目标获得击倒",
+      "gunslingerHighNoonBullseye": "准心：使目标获得 1 个赏金",
       "gunslingerEatMyLeadDie": "吃我的铅弹！投掷：{{value}}",
       "gunslingerEatMyLead.result": "{{bulletCount}} 个子弹面：本次攻击伤害 +{{bonusDamage}}",
       "gunslingerEatMyLead.resultKnockdown": "{{bulletCount}} 个子弹面：本次攻击伤害 +{{bonusDamage}}，并施加击倒",
@@ -626,9 +626,9 @@
       "infernalEmbrace.fire": "烈焰: 获得 2 烈焰精通",
       "samuraiBackStrikeDie": "反击投掷：{{value}}（对原攻击者造成{{damage}}伤害）",
       "samuraiRighteousnessKatana": "武士刀：+2 伤害",
-      "samuraiRighteousnessHelm": "头盔：施加 2 层耻辱",
+      "samuraiRighteousnessHelm": "头盔：使对手获得 2 层耻辱",
       "samuraiRighteousnessRisingSun": "旭日：获得 1 个反击指示物",
-      "samuraiMasamune.result": "{{katanaCount}} 个武士刀：+{{katanaCount}} 伤害；{{shameCount}} 个头盔：施加 {{shameCount}} 层耻辱；{{retributionCount}} 个旭日：获得 {{retributionCount}} 个反击",
+      "samuraiMasamune.result": "{{katanaCount}} 个武士刀：+{{katanaCount}} 伤害；{{shameCount}} 个头盔：施加 {{shameCount}} 层耻辱；{{retributionCount}} 个旭日：获得 {{retributionCount}} 个反击（若已达堆叠上限则多余部分无效）",
       "godsGrace.other": "抽 1 张牌"
     },
     "selectToReroll": "点击骰子花费{{cost}}{{token}}重掷",
@@ -2153,7 +2153,7 @@
     },
     "card-high-noon": {
       "name": "正午时分！",
-      "description": "掷 1 颗骰子：子弹造成 2 点伤害；靴刺施加击倒；准心施加赏金。"
+      "description": "选择 1 位目标玩家（1v1 自动为唯一对手）。掷 1 颗骰子：子弹对该目标造成 2 点不可防御伤害；靴刺使其获得击倒；准心使其获得 1 个赏金。"
     },
     "card-wild-west": {
       "name": "荒野西部！",

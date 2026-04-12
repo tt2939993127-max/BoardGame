@@ -7,6 +7,8 @@
 > - AI 出现“弃牌↔撤回弃牌”“卖↔撤回卖牌”等重复交互行为  
 >
 > 本文目标：不把问题当成单点 bug，而是把“全链路”拆成可审计的责任边界与可验证的兜底策略。
+>
+> 补记：**active-turn 连续推进**修复已在「### 4) watchdog 推进策略升级」中明示记录。
 
 ## 审计范围（全链路分层）
 
@@ -85,7 +87,7 @@
 
 **验证（单测）**：`src/engine/transport/__tests__/server.test.ts`  
 用例：`online AI watchdog 在 active-turn 卡死时应持续推进直到交还给真人回合（或遇到 blocker/步数上限）`  
-（本轮未运行测试）
+本轮未运行测试（历史有对应用例）：`npm test -- src/engine/transport/__tests__/server.test.ts`
 
 ### 7) 自动反馈携带“无法选择原因”与选项诊断
 **实现**：`src/engine/transport/server.ts`  
@@ -133,9 +135,9 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 如果队列里 currentResponder 被错误保留为 human，watchdog 现在会刻意不接管；这类 bug 必须在 ResponseWindowSystem 或领域事件源头修复。  
 
 3) **Summoner Wars 的“响应重触发/音效循环”**：  
-已完成专项审计与最小修复（`flowHalted` 重复提示/音效回放），并把 6 条核心交互迁到 `InteractionSystem`（infection / grab follow / soul transfer / mind capture / ice_shards / feed_beast），详见 `evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`。  
-本轮未运行 E2E。  
-**仍保留的结构性风险**：Summoner Wars 仍有多条“领域事件 → UI 本地 mode”链路未落到 `InteractionSystem`（Phase B 范围），AI 仍看不到这类交互，存在“AI 看不见但真人能操作”的隐性分叉风险，需要后续继续治理。  
+已完成专项审计与最小修复（`flowHalted` 重复提示/音效回放），并完成 Phase B 事件卡交互迁移（含除灭/血契召唤/心灵操控/震慑/潜行/冰川位移等），详见 `evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`。  
+本轮已运行 E2E：`evidence/summonerwars/summonerwars-event-annihilate-e2e-test.md`。  
+**仍保留的结构性风险**：Summoner Wars 仍有多条“领域事件 → UI 本地 mode”链路未落到 `InteractionSystem`（rapid_fire / withdraw / afterMove / magic 二选一等），AI 仍看不到这类交互，存在“AI 看不见但真人能操作”的隐性分叉风险，需要后续继续治理。  
 
 4) **AI 循环动作的检测覆盖面**：  
 `onlineAiRecovery.ts` 的 action-loop detector 只覆盖部分 phase 且仅 repeat/alternating；三步以上循环仍可能漏检。  
@@ -149,6 +151,7 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 - DiceThrone response-window 重触发专项：`evidence/dicethrone/dicethrone-response-window-retrigger-audit-2026-04-12.md`
 - Smash Up AI 强口径审计：`evidence/smashup-ai-interaction-audit-2026-04-11.md`
 - Summoner Wars watchdog 链审计：`evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`
+- Summoner Wars 事件卡 E2E 证据：`evidence/summonerwars/summonerwars-event-annihilate-e2e-test.md`
 
 ## 补充专项：AI action-loop detector 覆盖面审计（2026-04-12）
 
@@ -198,3 +201,115 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 - 对 DiceThrone 来说，当前最大漏检面就是 **ActionLog 未覆盖的经济动作循环**；用户此前提到的“弃牌↔撤回、卖牌↔撤回”类卡死，静态审计上完全成立为高风险盲区。
 - `buildOnlineAiRecoveryActionLog()` 上报给反馈接口的也只是尾部 5 条摘要，因此**线上反馈包本身也不能当作完整循环轨迹**；它更适合辅助定位，不足以证明“没有发生动作循环”。
 - 若后续要把“AI 不允许卡死”做成真正强口径，动作循环检测不能再只绑在 ActionLog allowlist 上，也不能只识别 repeat / 严格 alternating 两种模式；否则它仍然只是“部分 case 能挡住”的有限兜底。
+
+---
+
+## 修复优先级建议清单（仅方案，不改代码）
+
+> 目的：在“真人绝不被卡死/误伤”的硬目标下，先收口最容易导致死锁与误报的根因。  
+> 本清单仅提供**优先级与方向**，本轮不改代码、不跑测试。
+
+### P0（必须先做）
+1. **Summoner Wars：把本地 UI mode 等待态迁入 `sys.interaction`（真相源统一）**  
+   - 风险：AI 看不见、本地提示/音效重复、自动反馈无“不能选原因”。  
+   - 对应文档：`evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`（D41 根因）。  
+2. **action-loop detector 数据源补齐或替代**  
+   - 当前严重盲区：`SELL_CARD / DISCARD_CARD / UNDO_SELL_CARD` 不进 ActionLog → 经济动作循环不可见。  
+   - 方向：扩充 ActionLog allowlist 或新增“动作序列”独立信号源。  
+3. **response-window reopen 与 rollConfirmed 重置链闭环**  
+   - 必须明确“哪些命令重置 rollConfirmed → 何时可再次开启窗口”的边界；  
+   - 防止“确认骰面后仍可被卡牌/交互重置导致重复开窗”。
+
+### P1（次高优先级）
+4. **自动反馈“无法选择原因”的一致化**  
+   - 目标：不只在 `sys.interaction` 里有 reason，也要覆盖关键本地路径或迁移到服务端。  
+5. **watchdog 推进策略的可解释性与抑噪**  
+   - 目标：避免 human responder 时误触发、“失败提示噪音”重复弹窗。  
+6. **response-window 的“重复 open”统一去重策略（系统层 + 领域层）**  
+   - 方向：系统层已做语义去重，但领域层仍需保持序列/签名一致性。
+
+### P2（后续治理）
+7. **循环检测模式扩展（>2 步、含噪音、长窗口）**  
+8. **统一记录“动作循环轨迹”以便线上反馈可复盘**  
+9. **按游戏维度建立“AI 交互可解矩阵”与最小回归集**
+
+---
+
+## AI 交互可解矩阵：最小回归集（建议清单，仅方案）
+
+> 目的：用“最少且关键的代表性用例”保证 AI 交互链路不会再次卡死。  
+> 这是**建议清单**，非本轮测试执行记录。
+
+### 全游戏通用（必须至少 1 条覆盖）
+1. **response-window 当前 responder 为 human 时，watchdog 不得出手**  
+2. **隐藏交互卡住 → force-skip 只跳过 AI 当前交互，不误推进真人**  
+3. **无进展超时 → force-end-turn 必须切回真人回合**  
+4. **交互取消/空选项必须携带 reason（可诊断原因）**  
+5. **action-loop 触发与不触发的边界**（至少 repeat / alternating 各一条）
+
+### DiceThrone（最小代表集合）
+1. `afterRollConfirmed` 响应窗口：确认骰面 → responderQueue 打开 → 关闭后不重复 reopen  
+2. `afterCardPlayed` 响应窗口：对手生效卡牌 → responderQueue 打开 → 关闭后不重复 reopen  
+3. `afterAttackResolved` 响应窗口：伤害结算触发 → responderQueue 打开 → 关闭后不重复 reopen  
+4. **经济动作循环**：卖牌↔撤回卖牌 / 弃牌↔卖牌 的循环边界（防 action‑loop 盲区）  
+5. **rollConfirmed 重置链**：骰面已确认后被修改/重掷 → 是否允许 reopen，边界明确
+
+### Summoner Wars（最小代表集合）
+1. **迁移后的 sys.interaction 交互**：infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast  
+2. **仍为本地 mode 的高风险链**：rapid_fire / withdraw / afterMove / event card 多步骤  
+3. **flowHalted 结束阶段**：确认/跳过后能够继续推进，不遗留等待态  
+4. **自动反馈原因**：本地 mode 迁移后能输出“无法选择原因”
+
+### Smash Up（最小代表集合）
+1. **隐藏交互卡住 force-skip**（仍在 AI 回合）  
+2. **no-progress force-end-turn**（切回真人回合）  
+3. **afterScoring 链式交互**：窗口/交互并存 → 关闭后只结算一次  
+4. **responseWindow + interaction 并存**：交互未完成时窗口不应错误关闭
+
+---
+
+## 未覆盖风险汇总（跨游戏一致口径）
+
+> 仅汇总当前仍未收口的高风险点，避免“单文档遗漏导致整体误判已收口”。
+
+### DiceThrone
+- 经济动作循环（弃牌/卖牌/撤回）目前 ActionLog 不可见，action-loop detector **可能完全漏检**。  
+- rollConfirmed 被其他链路重置后再 confirm 的 reopen 边界仍需明确验证。  
+
+### Summoner Wars
+- 大量等待态仍停留在本地 UI mode（rapid_fire / withdraw / afterMove / event card 多步骤 / magic 二选一）。  
+- AI 无法读取本地 mode 的“不可选原因”，自动反馈仍不完整。  
+
+### Smash Up
+- 仍存在历史高风险用例未复跑（skipped 测试清单需恢复）。  
+- 响应窗口与 afterScoring 组合虽有历史证据，但需在统一审计收口阶段再补新时间戳验证。
+
+---
+
+## 行动项 → 责任链建议清单（仅方案）
+
+> 目的：把“要修什么”明确到“谁负责 + 交付物是什么”。本轮仅提出责任链建议，不改代码。
+
+### 引擎 / 传输层（Platform）
+1. **action-loop detector 数据源补齐或替代**  
+   - 责任：引擎/传输  
+   - 交付：ActionLog allowlist 扩展或新增“动作序列追踪”信号源；更新检测逻辑说明文档。  
+2. **watchdog 误报/噪音抑制**  
+   - 责任：传输层  
+   - 交付：确保 human responder 时不触发兜底；反馈上报含“不可选原因 + 最终动作轨迹”。  
+
+### 游戏层（DiceThrone / SummonerWars / SmashUp）
+1. **Summoner Wars：迁移本地 UI mode → sys.interaction**  
+   - 责任：SummonerWars 游戏层  
+   - 交付：rapid_fire / withdraw / afterMove / event card 多步骤 / magic 二选一迁移完成；AI 可解性矩阵更新。  
+2. **DiceThrone：response-window reopen 边界收口**  
+   - 责任：DiceThrone 游戏层  
+   - 交付：明确 rollConfirmed 重置链与 reopen 条件；补“经济动作循环”最小回归。  
+3. **Smash Up：历史 skipped 高风险用例恢复**  
+   - 责任：SmashUp 游戏层  
+   - 交付：恢复并标注关键 E2E/单测，补最新时间戳证据。  
+
+### 前端 / 体验层
+1. **失败提示与恢复提示口径统一**  
+   - 责任：UI/体验  
+   - 交付：区分“等待真人响应”与“AI 无解卡死”提示，避免误导。  

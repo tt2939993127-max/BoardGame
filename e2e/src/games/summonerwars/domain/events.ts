@@ -76,6 +76,7 @@ export const SW_EVENTS = defineEvents({
   CARD_DRAWN: { audio: 'immediate', sound: CARD_DRAW_KEY },
   CARD_DISCARDED: { audio: 'immediate', sound: CARD_DISCARD_KEY },
   EVENT_PLAYED: { audio: 'immediate', sound: EVENT_PLAY_KEY },
+  EVENT_INTERACTION_REQUESTED: 'silent',
   ACTIVE_EVENT_DISCARDED: { audio: 'immediate', sound: CARD_DISCARD_KEY },
   CARD_RETRIEVED: { audio: 'immediate', sound: CARD_RETRIEVE_KEY },
   

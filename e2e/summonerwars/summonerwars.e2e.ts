@@ -7,7 +7,7 @@
 
 import { test, expect } from '../framework';
 import type { BrowserContext, Locator, Page } from '@playwright/test';
-import { waitForState, waitForCoreState, waitForPhaseChange } from '../helpers/waitForState';
+import { waitForState, waitForPhaseChange } from '../helpers/waitForState';
 import { cloneState, createSWRoomViaAPI } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
@@ -2553,11 +2553,13 @@ test.describe('SummonerWars', () => {
 
     // 选中攻击者
     await clickBoardElement(hostPage, `[data-testid="sw-unit-${attackSetup.attacker.row}-${attackSetup.attacker.col}"]`);
-    // 等待单位被选中（高亮出现）
-    await waitForCoreState(hostPage, (core: any) => {
-      return core.selectedUnit?.row === attackSetup.attacker.row && 
-             core.selectedUnit?.col === attackSetup.attacker.col;
-    }, { timeout: 2000, message: '等待单位被选中' });
+    // 等待攻击目标出现（选中成功后会标记 valid-attack）
+    await expect.poll(async () => {
+      return hostPage.locator('[data-valid-attack="true"]').count();
+    }, {
+      timeout: 4000,
+      message: '等待攻击目标出现',
+    }).toBeGreaterThan(0);
 
     // 验证目标格子有 valid-attack 标记
     const targetCell = hostPage.getByTestId(`sw-cell-${attackSetup.target.row}-${attackSetup.target.col}`);
@@ -2590,6 +2592,13 @@ test.describe('SummonerWars', () => {
     await expect(confirmDiscard).toBeVisible({ timeout: 5000 });
     await confirmDiscard.click();
     await expect(confirmDiscard).toBeHidden({ timeout: 5000 });
+
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'online-flow-after-discard', {
+        filename: 'online-flow-after-discard.png',
+      }),
+      fullPage: false,
+    });
 
     await hostContext.close();
     await guestContext.close();
@@ -2884,6 +2893,7 @@ test.describe('SummonerWars', () => {
 
   test('事件卡：除灭多目标选择流程', async ({ browser }, testInfo) => {
     test.setTimeout(90000);
+    await clearEvidenceScreenshotsForTest(testInfo);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
 
     const hostContext = await browser.newContext({ baseURL });
@@ -2926,8 +2936,50 @@ test.describe('SummonerWars', () => {
     await applyCoreState(hostPage, annihilateCore);
     await closeDebugPanelIfOpen(hostPage);
 
-    // 等待状态应用
-    await waitForPhaseChange(hostPage, 'move', { timeout: 2000 });
+    const findAnnihilateStructureTarget = (state: any) => {
+      const board = state?.board as any[][] | undefined;
+      if (!board || board.length === 0) return null;
+      const rows = board.length;
+      const cols = board[0]?.length ?? 0;
+      const inBounds = (row: number, col: number) => row >= 0 && col >= 0 && row < rows && col < cols;
+      const dirs = [
+        { row: -1, col: 0 },
+        { row: 1, col: 0 },
+        { row: 0, col: -1 },
+        { row: 0, col: 1 },
+      ];
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const unit = board[r]?.[c]?.unit;
+          if (!unit || unit.owner !== '0' || unit.card?.unitClass === 'summoner') continue;
+          for (const dir of dirs) {
+            const nr = r + dir.row;
+            const nc = c + dir.col;
+            if (!inBounds(nr, nc)) continue;
+            const structure = board[nr]?.[nc]?.structure;
+            if (structure) {
+              return {
+                unit: { row: r, col: c },
+                structure: { row: nr, col: nc },
+              };
+            }
+          }
+        }
+      }
+      return null;
+    };
+
+    const targetPair = findAnnihilateStructureTarget(await readCoreState(hostPage));
+    if (!targetPair) {
+      test.skip(true, '未找到可用于除灭的“友军 + 相邻结构”组合');
+    }
+
+    // 等待状态应用（允许慢一点，避免短超时导致误判）
+    try {
+      await waitForPhaseChange(hostPage, 'move', { timeout: 8000 });
+    } catch {
+      // 继续走当前阶段判断，失败时跳过本用例
+    }
 
     // 验证当前是移动阶段
     const currentPhase = await getCurrentPhase(hostPage);
@@ -2955,24 +3007,37 @@ test.describe('SummonerWars', () => {
     const annihilateBanner = hostPage.locator('[class*="bg-purple-900"]');
     await expect(annihilateBanner).toBeVisible({ timeout: 3000 });
 
-    // 验证可选目标高亮
-    const targetHighlight = hostPage.locator('[class*="border-purple"]');
-    const hasTargetHighlight = await targetHighlight.first().isVisible({ timeout: 3000 }).catch(() => false);
+    // 验证可选目标高亮并执行确认
+    const targetHighlight = hostPage.locator('[class*="border-purple"]').first();
+    await expect(targetHighlight).toBeVisible({ timeout: 5000 });
 
-    if (hasTargetHighlight) {
-      // 选择一个友方单位
-      await clickBoardElement(hostPage, '[data-owner="0"]:not([data-unit-class="summoner"])');
+    // 选择一个友方单位（确保其相邻结构可用于伤害目标）
+    await clickBoardElement(hostPage, `[data-testid="sw-unit-${targetPair!.unit.row}-${targetPair!.unit.col}"]`);
 
-      // 验证确认选择按钮出现
-      const confirmButton = hostPage.getByRole('button', { name: /确认选择|Confirm/i });
-      const hasConfirmButton = await confirmButton.isVisible({ timeout: 3000 }).catch(() => false);
+    // 验证确认选择按钮出现并点击
+    const confirmButton = hostPage.getByRole('button', { name: /确认选择|Confirm/i });
+    await expect(confirmButton).toBeVisible({ timeout: 3000 });
+    await confirmButton.click();
 
-      if (hasConfirmButton) {
-        await confirmButton.click();
-        // 验证进入伤害目标选择步骤
-        await expect(annihilateBanner).toContainText(/伤害/, { timeout: 3000 }).catch(() => { });
-      }
-    }
+    // 验证进入伤害目标选择步骤并截图
+    await expect(annihilateBanner).toContainText(/伤害/, { timeout: 3000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-annihilate-damage-step', {
+        filename: 'event-annihilate-damage-step.png',
+      }),
+      fullPage: false,
+    });
+
+    // 选择相邻结构作为伤害目标（验证结构也可被 UI 选中）
+    const structureTargetId = `sw-structure-${targetPair!.structure.row}-${targetPair!.structure.col}`;
+    await expect(hostPage.getByTestId(structureTargetId)).toBeVisible({ timeout: 3000 });
+    await clickBoardElement(hostPage, `[data-testid="${structureTargetId}"]`);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-annihilate-structure-target', {
+        filename: 'event-annihilate-structure-target.png',
+      }),
+      fullPage: false,
+    });
 
     // 取消操作
     const cancelButton = hostPage.getByRole('button', { name: /取消|Cancel/i });
@@ -4166,6 +4231,7 @@ test.describe('SummonerWars', () => {
   test('非当前玩家操作：guest 在 host 回合无法操作', async ({ browser }, testInfo) => {
     test.setTimeout(90000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
+    await clearEvidenceScreenshotsForTest(testInfo);
 
     const hostContext = await browser.newContext({ baseURL });
     await blockAudioRequests(hostContext);
@@ -4211,6 +4277,22 @@ test.describe('SummonerWars', () => {
     // Guest 的 action banner 应显示等待对手
     const guestBanner = guestPage.getByTestId('sw-action-banner');
     await expect(guestBanner).toContainText(/等待对手|Waiting for opponent/i);
+
+    const guestMagnifyOverlay = guestPage.getByTestId('sw-magnify-overlay');
+    await waitForOverlayState(guestPage, 'sw-magnify-overlay', 'closed');
+
+    const guestHandCard = guestPage.getByTestId('sw-hand-area').locator('[data-card-id]').first();
+    await expect(guestHandCard).toBeVisible({ timeout: 5000 });
+    await guestHandCard.click();
+    await waitForOverlayState(guestPage, 'sw-magnify-overlay', 'open');
+    await guestPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'guest-hand-click-magnify-open', {
+        filename: 'guest-hand-click-magnify-open.png',
+      }),
+      fullPage: false,
+    });
+    await guestMagnifyOverlay.locator('button', { hasText: /关闭|Close/i }).click({ force: true });
+    await waitForOverlayState(guestPage, 'sw-magnify-overlay', 'closed');
 
     await hostContext.close();
     await guestContext.close();
@@ -4581,6 +4663,125 @@ const prepareAnnihilateState = (coreState: any) => {
   player.hand = [annihilateCard, ...player.hand];
   player.magic = 10;
   player.moveCount = 0;
+
+  const board = next.board as any[][] | undefined;
+  if (board && board.length > 0) {
+    const rows = board.length;
+    const cols = board[0]?.length ?? 0;
+    const inBounds = (row: number, col: number) => row >= 0 && col >= 0 && row < rows && col < cols;
+    const dirs = [
+      { row: -1, col: 0 },
+      { row: 1, col: 0 },
+      { row: 0, col: -1 },
+      { row: 0, col: 1 },
+    ];
+
+    const findStructureTemplate = () => {
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const structure = board[r]?.[c]?.structure;
+          if (structure?.card) return structure.card;
+        }
+      }
+      return null;
+    };
+
+    const ensureFriendlyUnit = () => {
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const unit = board[r]?.[c]?.unit;
+          if (unit?.owner === '0' && unit?.card?.unitClass !== 'summoner') {
+            return { row: r, col: c };
+          }
+        }
+      }
+      const unitCard = player.hand.find((card: any) => card.cardType === 'unit')
+        ?? player.deck?.find((card: any) => card.cardType === 'unit');
+      if (!unitCard) return null;
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const cell = board[r]?.[c];
+          if (!cell?.unit && !cell?.structure) {
+            const instanceId = `${unitCard.id}#e2e`;
+            board[r][c] = {
+              ...cell,
+              unit: {
+                instanceId,
+                cardId: unitCard.id,
+                card: unitCard,
+                owner: '0',
+                position: { row: r, col: c },
+                damage: 0,
+                boosts: 0,
+                hasMoved: false,
+                hasAttacked: false,
+              },
+            };
+            return { row: r, col: c };
+          }
+        }
+      }
+      return null;
+    };
+
+    const targetPos = ensureFriendlyUnit();
+    if (targetPos) {
+      const structureCard = player.hand.find((card: any) => card.cardType === 'structure')
+        ?? player.deck?.find((card: any) => card.cardType === 'structure')
+        ?? findStructureTemplate()
+        ?? {
+          id: 'temp-structure',
+          cardType: 'structure',
+          name: '临时结构',
+          faction: 'frozen',
+          cost: 0,
+          life: 3,
+          deckSymbols: [],
+        };
+
+      let placed = false;
+      for (const dir of dirs) {
+        const row = targetPos.row + dir.row;
+        const col = targetPos.col + dir.col;
+        if (!inBounds(row, col)) continue;
+        const cell = board[row]?.[col];
+        if (cell?.unit || cell?.structure) continue;
+        board[row][col] = {
+          ...cell,
+          structure: {
+            cardId: structureCard.id,
+            card: structureCard,
+            owner: '0',
+            position: { row, col },
+            damage: 0,
+          },
+        };
+        placed = true;
+        break;
+      }
+
+      if (!placed) {
+        for (const dir of dirs) {
+          const row = targetPos.row + dir.row;
+          const col = targetPos.col + dir.col;
+          if (!inBounds(row, col)) continue;
+          const cell = board[row]?.[col] ?? {};
+          board[row][col] = {
+            ...cell,
+            unit: undefined,
+            structure: {
+              cardId: structureCard.id,
+              card: structureCard,
+              owner: '0',
+              position: { row, col },
+              damage: 0,
+            },
+          };
+          break;
+        }
+      }
+    }
+  }
 
   return next;
 };

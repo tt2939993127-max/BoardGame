@@ -243,6 +243,12 @@ test.describe('DiceThrone - 选择骰子重投', () => {
             return state?.core?.pendingBonusDiceSettlement ?? null;
         }, { timeout: 5000 }).toBeNull();
 
+        // 断言：Wild West 绑定的 Loaded 奖励骰增强应在收口后清空，避免下次 Loaded 被错误复用（防回归）。
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state?.core?.pendingAttack?.loadedBonusDieBoost ?? null;
+        }, { timeout: 5000 }).toBeNull();
+
         // 断言：收口后，总 bonusDamage 应包含 Loaded 半值加伤（6 -> +3）以及 Wild West 的“然后 +1”，合计 4；
         // 但攻击修正汇总只应包含 Wild West 的 +1（Loaded 属于 token 效果，不应混入攻击修正卡汇总）。
         await expect.poll(async () => {

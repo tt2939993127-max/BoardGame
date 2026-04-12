@@ -88,6 +88,14 @@ DiceThrone 的响应窗口来源（领域事件）主要有：
    - 已有 sequence/signature 去重，但若出现 **Undo/回滚后序列重置** 或 **同一事件被重新发射**，仍可能复现。  
 3) 音效循环是否来自 UI 侧事件消费指针问题（需要单独对 audio/eventStream consumer 做审计）。
 
+## 本轮收口裁决（明确结论）
+- **结论：未收口。**
+- 原因：
+  1. rollConfirmed 重置链仍可能触发 reopen，边界未完全闭环；
+  2. responseWindow 去重在 Undo/回滚/重放场景下仍可能失效；
+  3. 音效循环是否源于 UI 侧消费指针仍未审计。
+- 口径：**本轮未复跑测试，仅引用历史证据与静态审计结论。**
+
 ## 关联证据
 - 引擎层统一审计：`evidence/engine/online-ai-watchdog-strong-audit-2026-04-12.md`
 - DiceThrone AI 总审计：`evidence/dicethrone/dicethrone-ai-interaction-audit-2026-04-11.md`

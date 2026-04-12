@@ -242,11 +242,13 @@ export const SW_COMMANDS = {
   BUILD_STRUCTURE: 'sw:build_structure',
   // 攻击阶段
   DECLARE_ATTACK: 'sw:declare_attack',
+  CONFIRM_ATTACK: 'sw:confirm_attack',
   // 魔力阶段
   DISCARD_FOR_MAGIC: 'sw:discard_for_magic',
   // 通用
   END_PHASE: 'sw:end_phase',
   PLAY_EVENT: 'sw:play_event',
+  REQUEST_EVENT_INTERACTION: 'sw:request_event_interaction',
   BLOOD_SUMMON_STEP: 'sw:blood_summon_step',
   ACTIVATE_ABILITY: 'sw:activate_ability',
   FUNERAL_PYRE_HEAL: 'sw:funeral_pyre_heal',
@@ -286,6 +288,17 @@ export interface DeclareAttackCommand {
   target: CellCoord;
 }
 
+/**
+ * 确认攻击命令（旧客户端兼容）
+ *
+ * 当前攻击流程已由 DECLARE_ATTACK 一步完成。
+ * 保留该命令仅用于兼容旧缓存/旧客户端，领域层会将其视为 no-op。
+ */
+export interface ConfirmAttackCommand {
+  type: typeof SW_COMMANDS.CONFIRM_ATTACK;
+  diceResults: ('melee' | 'ranged' | 'special')[];
+}
+
 /** 弃牌换魔力命令 */
 export interface DiscardForMagicCommand {
   type: typeof SW_COMMANDS.DISCARD_FOR_MAGIC;
@@ -303,6 +316,12 @@ export interface PlayEventCommand {
   cardId: string;
   targets?: CellCoord[];
   damageTargets?: (CellCoord | null)[];
+}
+
+/** 请求事件卡交互命令 */
+export interface RequestEventInteractionCommand {
+  type: typeof SW_COMMANDS.REQUEST_EVENT_INTERACTION;
+  cardId: string;
 }
 
 /** 血契召唤步骤命令 */
@@ -347,9 +366,11 @@ export type SWCommand =
   | MoveUnitCommand
   | BuildStructureCommand
   | DeclareAttackCommand
+  | ConfirmAttackCommand
   | DiscardForMagicCommand
   | EndPhaseCommand
   | PlayEventCommand
+  | RequestEventInteractionCommand
   | BloodSummonStepCommand
   | ActivateAbilityCommand
   | FuneralPyreHealCommand
@@ -385,6 +406,7 @@ export const SW_EVENTS = {
   CARD_DRAWN: 'sw:card_drawn',
   CARD_DISCARDED: 'sw:card_discarded',
   EVENT_PLAYED: 'sw:event_played',
+  EVENT_INTERACTION_REQUESTED: 'sw:event_interaction_requested',
   ACTIVE_EVENT_DISCARDED: 'sw:active_event_discarded',
   // 阶段/回合事件
   PHASE_CHANGED: 'sw:phase_changed',

@@ -1,9 +1,10 @@
 /**
  * 召唤师战争 - 未覆盖命令测试
  *
- * 覆盖以下零覆盖命令：
+ * 覆盖以下低覆盖/兼容命令：
  * 1. SELECT_UNIT — 选择单位（设置 core.selectedUnit）
  * 2. SELECT_CUSTOM_DECK — 选择自定义牌组
+ * 3. CONFIRM_ATTACK — 旧客户端攻击确认兼容 no-op
  */
 
 import { describe, it, expect } from 'vitest';
@@ -155,6 +156,29 @@ describe('SELECT_CUSTOM_DECK 选择自定义牌组', () => {
             deckData: { name: '测试', summonerFaction: 'necromancer', cards: [] },
         });
         expect(result.success).toBe(false);
+    });
+});
+
+// ============================================================================
+// 3. CONFIRM_ATTACK — 旧客户端兼容 no-op
+// ============================================================================
+
+describe('CONFIRM_ATTACK 旧攻击确认兼容', () => {
+    it('旧客户端发送 CONFIRM_ATTACK 时不报错且不改变核心状态', () => {
+        const state = createMatchState(['0', '1'], fixedRandom);
+        state.core.phase = 'attack';
+        const beforeCore = structuredClone(state.core);
+
+        const result = execCmd(state, SW_COMMANDS.CONFIRM_ATTACK, '0', {
+            diceResults: ['melee', 'melee', 'special'],
+        });
+
+        expect(result.success).toBe(true);
+        expect(result.events).toEqual([]);
+        if (result.success) {
+            const newState = result.state as MatchState<SummonerWarsCore>;
+            expect(newState.core).toEqual(beforeCore);
+        }
     });
 });
 

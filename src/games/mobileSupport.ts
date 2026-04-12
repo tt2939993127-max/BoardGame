@@ -1,5 +1,4 @@
 import type {
-    GameMobileBattlefieldZoom,
     GameManifestMobileDelivery,
     GameManifestEntry,
     GameMobileLayoutPreset,
@@ -20,7 +19,6 @@ export interface ResolvedGameMobileSupport {
     mobileProfile: GameMobileProfile;
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
-    mobileBattlefieldZoom: GameMobileBattlefieldZoom;
     shellTargets: GameShellTarget[];
     mobileDelivery: GameManifestMobileDelivery;
 }
@@ -28,6 +26,15 @@ export interface ResolvedGameMobileSupport {
 export interface RuntimeViewportSize {
     width: number;
     height: number;
+}
+
+export interface MobileLayoutEngineCapabilities {
+    chromiumMajorVersion: number | null;
+    layoutMode: 'legacy' | 'modern';
+    supportsCalcDivision: boolean;
+    supportsDynamicViewportUnits: boolean;
+    requiresJsScaleFallback: boolean;
+    requiresLegacyViewportFallback: boolean;
 }
 
 export interface RuntimeLayoutScaleMetrics {
@@ -39,21 +46,13 @@ export interface RuntimeLayoutScaleMetrics {
     blockUnit: number;
 }
 
-const DEFAULT_INLINE_UNIT_FALLBACK = '1vw';
-
-const normalizeRuntimeUnitValue = (value: number) => {
+const formatRuntimeUnitMultiplier = (value: number) => {
     if (!Number.isFinite(value)) {
-        return 0;
+        return '0';
     }
-    return value;
-};
 
-export const buildRuntimeInlineUnitValue = (value: number) => {
-    const safeValue = normalizeRuntimeUnitValue(value);
-    if (safeValue === 0) {
-        return '0px';
-    }
-    return `calc(var(--mobile-layout-inline-unit, ${DEFAULT_INLINE_UNIT_FALLBACK}) * ${safeValue})`;
+    const normalized = Number.parseFloat(value.toFixed(4));
+    return Number.isInteger(normalized) ? String(normalized) : String(normalized);
 };
 
 const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
@@ -62,7 +61,6 @@ const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
     'data-mobile-profile',
     'data-preferred-orientation',
     'data-mobile-layout-preset',
-    'data-mobile-battlefield-zoom',
     'data-shell-targets',
 ] as const;
 
@@ -84,10 +82,74 @@ export const extractGameIdFromPlayPath = (pathname: string) => {
     return segments[1];
 };
 
+const DEFAULT_LAYOUT_SUPPORTS = (property: string, value: string) => {
+    if (typeof CSS === 'undefined' || typeof CSS.supports !== 'function') {
+        return true;
+    }
+    return CSS.supports(property, value);
+};
+
+export const parseChromiumMajorVersion = (userAgent?: string | null) => {
+    if (!userAgent) return null;
+    const match = userAgent.match(/(?:Chrome|Chromium|CriOS)\/(\d+)/i);
+    if (!match) return null;
+    const major = Number.parseInt(match[1], 10);
+    return Number.isFinite(major) ? major : null;
+};
+
+export const detectMobileLayoutEngineCapabilities = ({
+    userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '',
+    cssSupports = DEFAULT_LAYOUT_SUPPORTS,
+}: {
+    userAgent?: string | null;
+    cssSupports?: (property: string, value: string) => boolean;
+} = {}): MobileLayoutEngineCapabilities => {
+    const chromiumMajorVersion = parseChromiumMajorVersion(userAgent);
+    const supportsCalcDivision = cssSupports('transform', 'scale(calc(100px / 50px))');
+    const supportsDynamicViewportUnits = cssSupports('height', '100dvh');
+    const isLegacyChromium = chromiumMajorVersion !== null && chromiumMajorVersion < 100;
+    const requiresJsScaleFallback = isLegacyChromium || !supportsCalcDivision;
+    const requiresLegacyViewportFallback = isLegacyChromium || !supportsDynamicViewportUnits;
+
+    return {
+        chromiumMajorVersion,
+        layoutMode: requiresJsScaleFallback || requiresLegacyViewportFallback ? 'legacy' : 'modern',
+        supportsCalcDivision,
+        supportsDynamicViewportUnits,
+        requiresJsScaleFallback,
+        requiresLegacyViewportFallback,
+    };
+};
+
+export const resolveRuntimeLayoutScaleMetrics = (
+    viewport: RuntimeViewportSize,
+    designWidth: number,
+): RuntimeLayoutScaleMetrics => {
+    const safeDesignWidth = Math.max(1, designWidth);
+    const scale = Math.max(0.01, viewport.width / safeDesignWidth);
+    const inverseScale = 1 / scale;
+    const logicalHeight = viewport.height * inverseScale;
+
+    return {
+        designWidth: safeDesignWidth,
+        scale,
+        inverseScale,
+        logicalHeight,
+        inlineUnit: safeDesignWidth / 100,
+        blockUnit: logicalHeight / 100,
+    };
+};
+
+export const buildRuntimeInlineUnitValue = (multiplier: number, fallback = '1vw') =>
+    `calc(var(--mobile-layout-inline-unit, ${fallback}) * ${formatRuntimeUnitMultiplier(multiplier)})`;
+
+export const buildRuntimeBlockUnitValue = (multiplier: number, fallback = '1vh') =>
+    `calc(var(--mobile-layout-block-unit, ${fallback}) * ${formatRuntimeUnitMultiplier(multiplier)})`;
+
 export const resolveGameMobileSupport = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
     > | null,
 ): ResolvedGameMobileSupport => {
     const mobileProfile = entry?.mobileProfile ?? 'none';
@@ -103,7 +165,6 @@ export const resolveGameMobileSupport = (
             : mobileProfile === 'portrait-adapted'
                 ? 'portrait-simple'
                 : undefined);
-    const mobileBattlefieldZoom = entry?.mobileBattlefieldZoom ?? 'none';
     const shellTargets = entry?.shellTargets?.length
         ? [...entry.shellTargets]
         : [...DEFAULT_SHELL_TARGETS];
@@ -130,7 +191,6 @@ export const resolveGameMobileSupport = (
         mobileProfile,
         preferredOrientation,
         mobileLayoutPreset,
-        mobileBattlefieldZoom,
         shellTargets,
         mobileDelivery,
     };
@@ -148,7 +208,7 @@ export const getGamePageDataAttributes = (
     gameId?: string,
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
     > | null,
 ) => {
     const attributes: Record<string, string> = {
@@ -164,7 +224,6 @@ export const getGamePageDataAttributes = (
 
     const support = resolveGameMobileSupport(entry);
     attributes['data-mobile-profile'] = support.mobileProfile;
-    attributes['data-mobile-battlefield-zoom'] = support.mobileBattlefieldZoom;
     attributes['data-shell-targets'] = support.shellTargets.join(',');
     if (support.preferredOrientation) {
         attributes['data-preferred-orientation'] = support.preferredOrientation;
@@ -221,7 +280,7 @@ export const syncGamePageDocumentAttributes = (
 export const getGameMobileBannerKind = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets'
         | 'mobileDelivery'
     > | null,
     width = 0,
@@ -249,7 +308,7 @@ export const getGameMobileBannerKind = (
 export const shouldUseBoardShellScale = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'mobileBattlefieldZoom' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
     > | null,
     width = 0,
     height = 0,
@@ -278,33 +337,5 @@ export const resolveStableViewportSize = (
     return {
         width: pickDimension('width'),
         height: pickDimension('height'),
-    };
-};
-
-export const resolveRuntimeLayoutScaleMetrics = (
-    viewport: RuntimeViewportSize,
-    designWidth: number,
-): RuntimeLayoutScaleMetrics => {
-    const resolvedDesignWidth = isUsableViewportDimension(designWidth)
-        ? designWidth
-        : isUsableViewportDimension(viewport.width)
-            ? viewport.width
-            : 1;
-    const safeViewportWidth = isUsableViewportDimension(viewport.width) ? viewport.width : resolvedDesignWidth;
-    const safeViewportHeight = isUsableViewportDimension(viewport.height) ? viewport.height : 0;
-    const scale = resolvedDesignWidth > 0 ? safeViewportWidth / resolvedDesignWidth : 1;
-    const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-    const inverseScale = 1 / safeScale;
-    const logicalHeight = safeViewportHeight > 0 ? safeViewportHeight / safeScale : 0;
-    const inlineUnit = resolvedDesignWidth / 100;
-    const blockUnit = logicalHeight / 100;
-
-    return {
-        designWidth: resolvedDesignWidth,
-        scale: safeScale,
-        inverseScale,
-        logicalHeight,
-        inlineUnit,
-        blockUnit,
     };
 };

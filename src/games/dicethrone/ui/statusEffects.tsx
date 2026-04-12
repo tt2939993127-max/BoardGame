@@ -362,6 +362,8 @@ export const TokenBadge = ({
             hasSprite = Object.values(atlas).some(config => Boolean(config.frames[meta.frameId!]));
         }
     }
+    const hasIcon = hasSprite || Boolean(meta.iconPath);
+    const shouldShowShimmer = !hasIcon;
     const description = resolveI18nList(
         t(`tokens.${tokenId}.description`, { returnObjects: true })
     );
@@ -386,6 +388,7 @@ export const TokenBadge = ({
             <div
                 className={`
                     ${sizeClass} rounded-full flex items-center justify-center overflow-hidden
+                    ${shouldShowShimmer ? 'atlas-shimmer' : ''}
                     ${hasSprite
                         ? 'bg-transparent border-0 shadow-none'
                         : `bg-gradient-to-br ${info.color ?? 'from-gray-500 to-gray-600'} shadow-lg border border-white/30`}

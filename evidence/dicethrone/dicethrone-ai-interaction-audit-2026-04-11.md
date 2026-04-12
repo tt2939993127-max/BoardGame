@@ -118,6 +118,7 @@
 | D39 流程/交互卡死 | ⚠️观察 | watchdog 覆盖 pending-damage/interaction/response-window/active-turn + action-loop，但 action-loop 有响应循环盲区
 
 ## 已验证证据（现有测试）
+> 续审说明：本轮仅做静态审计与口径对齐，**未复跑任何测试**。下列为历史证据清单，非本轮新增验证。
 - `src/games/dicethrone/__tests__/basic-commands-coverage.test.ts`（AI action 构建覆盖）
 - `src/games/dicethrone/__tests__/token-response-window.test.ts`
 - `src/games/dicethrone/__tests__/response-window-interaction-lock.test.ts`
@@ -134,6 +135,8 @@
 6. `action-loop` 只覆盖 repeat/alternating，未覆盖响应循环/三步循环；且依赖 actionLog.kind。
 7. MatchRoom 前端自动恢复只 toast 不上报；feedback 缺 AI 决策解释（legalActions/chosenAction/reasoningSummary）。
 8. 若需要“全仓库 AI 交互审计”（非 DiceThrone），需追加其他游戏与 engine/ai 的专项审计。
+9. **经济动作循环盲区**：`SELL_CARD / DISCARD_CARD / UNDO_SELL_CARD` 不在 ActionLog allowlist 时，action-loop detector 很可能完全看不到这类循环（需依赖独立动作轨迹或扩充日志源）。
+10. **response-window reopen 边界**：rollConfirmed 被重置后再次确认导致的 reopen 条件需与专项审计一致（见 `dicethrone-response-window-retrigger-audit-2026-04-12.md` 的未覆盖项）。
 
 ## 建议（不强制变更）
 - 为 `simple-choice` 和 `multistep-choice` 添加“无选项 emergency cancel”兜底，避免异常状态下 AI 无动作可选。

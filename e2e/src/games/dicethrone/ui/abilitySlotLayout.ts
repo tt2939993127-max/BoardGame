@@ -103,7 +103,7 @@ export const DICETHRONE_PLAYER_BOARD_UI_TUNING: DiceThroneBoardShellTuningMap = 
         shellTranslateX: 1.10,
         playerBoardTranslateY: -1.45,
         magnifyButtonTop: 1.85,
-        playerBoardBaseHeightVw: 35,
+        playerBoardBaseHeightVw: 31,
         tipBoardHeightVw: 29.60,
         centerBoardGapVw: 0.24,
     },

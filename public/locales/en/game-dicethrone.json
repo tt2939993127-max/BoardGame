@@ -508,9 +508,9 @@
       "thunderStrike2Reroll": "Reroll: {{value}} (total ≥12: Knockdown)",
       "gunslingerLoadedDie": "Loaded Roll: {{value}} (damage +{{bonusDamage}})",
       "gunslingerLoadedReroll": "Loaded Reroll: {{value}} (damage +{{bonusDamage}})",
-      "gunslingerHighNoonBullet": "Bullet: deal 2 damage",
-      "gunslingerHighNoonDash": "Spur: inflict Knockdown",
-      "gunslingerHighNoonBullseye": "Bullseye: inflict Bounty",
+      "gunslingerHighNoonBullet": "Bullet: deal 2 undefendable damage",
+      "gunslingerHighNoonDash": "Spur: inflict Knockdown on the target",
+      "gunslingerHighNoonBullseye": "Bullseye: give the target 1 Bounty",
       "gunslingerEatMyLeadDie": "Eat My Lead! Roll: {{value}}",
       "gunslingerEatMyLead.result": "{{bulletCount}} Bullet: +{{bonusDamage}} damage this attack",
       "gunslingerEatMyLead.resultKnockdown": "{{bulletCount}} Bullet: +{{bonusDamage}} damage this attack and inflict Knockdown",
@@ -593,9 +593,9 @@
       "infernalEmbrace.fire": "Fire: Gain 2 Fire Mastery",
       "samuraiBackStrikeDie": "Back Strike Roll: {{value}} (deal {{damage}} to the original attacker)",
       "samuraiRighteousnessKatana": "Katana: +2 damage",
-      "samuraiRighteousnessHelm": "Helm: inflict 2 Shame",
+      "samuraiRighteousnessHelm": "Helm: inflict 2 Shame on your opponent",
       "samuraiRighteousnessRisingSun": "Rising Sun: gain 1 Back Strike",
-      "samuraiMasamune.result": "{{katanaCount}} Katana: +{{katanaCount}} damage; {{shameCount}} Helm: inflict {{shameCount}} Shame; {{retributionCount}} Rising Sun: gain {{retributionCount}} Back Strike",
+      "samuraiMasamune.result": "{{katanaCount}} Katana: +{{katanaCount}} damage; {{shameCount}} Helm: inflict {{shameCount}} Shame; {{retributionCount}} Rising Sun: gain {{retributionCount}} Back Strike (extra gains are ignored if you are at the stack limit)",
       "godsGrace.other": "Draw 1 card"
     },
     "selectToReroll": "Click a die to spend {{cost}} {{token}} to reroll",
@@ -2117,7 +2117,7 @@
     },
     "card-high-noon": {
       "name": "High Noon!",
-      "description": "Roll 1 die: Bullet deals 2 damage; Spur inflicts Knockdown; Bullseye inflicts Bounty."
+      "description": "Choose a target player (in 1v1, your only opponent). Roll 1 die: Bullet deals 2 undefendable damage to that target; Spur inflicts Knockdown; Bullseye gives the target 1 Bounty."
     },
     "card-wild-west": {
       "name": "Wild West!",

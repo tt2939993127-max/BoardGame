@@ -10,7 +10,7 @@ import { Check, MessageSquareWarning } from 'lucide-react';
 import { OptimizedImage } from '../../../components/common/media/OptimizedImage';
 import { MagnifyOverlay } from '../../../components/common/overlays/MagnifyOverlay';
 import { CharacterSelectionBadge } from '../../../components/game/framework/CharacterSelectionBadge';
-import { buildLocalizedImageSet, UI_Z_INDEX, HudPortal } from '../../../core';
+import { buildLocalizedImageSet, UI_Z_INDEX } from '../../../core';
 import { playSound } from '../../../lib/audio/useGameAudio';
 import { getPortraitStyle, ASSETS } from './assets';
 import { getPlayerBoardAspectRatio } from './abilitySlotLayout';
@@ -326,15 +326,14 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
     if (!isOpen) return null;
 
     return (
-        <HudPortal>
-            <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                data-testid="character-selection-overlay"
-                className="fixed inset-0 flex h-full w-full max-h-full max-w-full overflow-hidden bg-[#050510] select-none text-white font-sans"
-                style={{ zIndex: UI_Z_INDEX.overlay }}
-            >
+        <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            data-testid="character-selection-overlay"
+            className="absolute inset-0 flex h-full w-full max-h-full max-w-full overflow-hidden bg-[#050510] select-none text-white font-sans"
+            style={{ zIndex: UI_Z_INDEX.overlay }}
+        >
             {/* 动态氛围背景（铺满整个 overlay） */}
             <div
                 className="absolute inset-0 pointer-events-none"
@@ -856,7 +855,6 @@ export const DiceThroneHeroSelection: React.FC<DiceThroneHeroSelectionProps> = (
                     </div>
                 )}
             </MagnifyOverlay>
-            </motion.div>
-        </HudPortal>
+        </motion.div>
     );
 };

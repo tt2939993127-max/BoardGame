@@ -2322,7 +2322,8 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.pendingAttack?.bonusDamage).toBe(2);
             expect(result.finalState.core.pendingAttack?.attackModifierBonusDamage).toBe(2);
             expect(result.finalState.core.players['1'].tokens[TOKEN_IDS.SHAME]).toBe(1);
-            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(2);
+            // 真相源（tip.webp）标注反击（samurai_retribution）堆叠上限为 1，授予时应被 clamp
+            expect(result.finalState.core.players['0'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION]).toBe(1);
         });
 
         it('upgrade-masamune-2 large straight variant rolls 6 extra dice', () => {

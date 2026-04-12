@@ -1637,7 +1637,8 @@ test.describe('DiceThrone hand card preview regression', () => {
         attackModifierBonusDamage: 2,
         totalBonusDamage: 2,
         shame: 1,
-        samuraiRetribution: 2,
+        // 真相源（tip.webp）标注反击（samurai_retribution）堆叠上限为 1；授予时应被 clamp
+        samuraiRetribution: 1,
       });
 
       await closeVisibleBonusDieOverlay(page);
@@ -1839,7 +1840,8 @@ test.describe('DiceThrone hand card preview regression', () => {
               ...state.core.players['0'],
               tokens: {
                 ...samuraiTokens,
-                samurai_retribution: 2,
+                // 真相源（tip.webp）标注反击（samurai_retribution）堆叠上限为 1；注入场景保持“真实可达状态”
+                samurai_retribution: 1,
               },
             },
             '1': {
@@ -1885,7 +1887,7 @@ test.describe('DiceThrone hand card preview regression', () => {
       settlementFaces: ['katana', 'helm', 'rising_sun', 'katana', 'rising_sun', 'helm'],
       summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
       paladinShame: 2,
-      samuraiRetribution: 2,
+      samuraiRetribution: 1,
     });
 
     await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-bonus-die-overlay.png'), fullPage: true });

@@ -1,5 +1,7 @@
 import { useLayoutEffect, useState } from 'react';
 import {
+    detectMobileLayoutEngineCapabilities,
+    resolveRuntimeLayoutScaleMetrics,
     resolveStableViewportSize,
     type RuntimeViewportSize,
 } from '../../games/mobileSupport';
@@ -14,56 +16,22 @@ export interface RuntimeSafeAreaInsets {
 
 export interface RuntimeViewportMetrics extends RuntimeViewportSize {
     safeArea: RuntimeSafeAreaInsets;
+    keyboardInsetBottom: number;
 }
 
 const EMPTY_SAFE_AREA: RuntimeSafeAreaInsets = { top: 0, right: 0, bottom: 0, left: 0 };
-const EMPTY_VIEWPORT: RuntimeViewportMetrics = { width: 0, height: 0, safeArea: EMPTY_SAFE_AREA };
+const EMPTY_VIEWPORT: RuntimeViewportMetrics = { width: 0, height: 0, safeArea: EMPTY_SAFE_AREA, keyboardInsetBottom: 0 };
+const MIN_KEYBOARD_INSET_PX = 72;
 const DEFAULT_ROOT_DESIGN_WIDTH = 1280;
-const BOARD_SHELL_DESIGN_WIDTH_MAP: Record<string, number> = {
+const DEFAULT_BOARD_SHELL_DESIGN_WIDTH = 1280;
+const BOARD_SHELL_DESIGN_WIDTH_BY_GAME: Record<string, number> = {
     dicethrone: 940,
     smashup: 1160,
-    summonerwars: 1280,
-    cardia: 1280,
 };
 
 const parseCssPixels = (value: string) => {
     const parsed = Number.parseFloat(value);
     return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const readCssPixelVar = (root: HTMLElement, key: string, fallback: number) => {
-    const value = window.getComputedStyle(root).getPropertyValue(key);
-    const parsed = parseCssPixels(value);
-    return parsed > 0 ? parsed : fallback;
-};
-
-export interface LayoutEngineCapabilities {
-    chromiumMajorVersion?: number;
-    layoutMode?: 'legacy' | 'modern' | string;
-    supportsCalcDivision?: boolean;
-    supportsDynamicViewportUnits?: boolean;
-    requiresJsScaleFallback?: boolean;
-    requiresLegacyViewportFallback?: boolean;
-}
-
-interface ApplyRuntimeViewportOptions {
-    layoutEngineCapabilities?: LayoutEngineCapabilities;
-}
-
-export const resolveRuntimeKeyboardInsetBottom = (args: {
-    visualViewportHeight: number;
-    visualViewportOffsetTop: number;
-    innerHeight: number;
-    documentClientHeight: number;
-    hasFocusedTextEntry: boolean;
-}): number => {
-    if (!args.hasFocusedTextEntry) {
-        return 0;
-    }
-    const baseHeight = Math.max(args.innerHeight, args.documentClientHeight);
-    const visualHeight = Math.max(0, args.visualViewportHeight + args.visualViewportOffsetTop);
-    const inset = baseHeight - visualHeight;
-    return Math.max(0, Math.round(inset));
 };
 
 export const readRuntimeSafeAreaInsets = (): RuntimeSafeAreaInsets => {
@@ -78,6 +46,43 @@ export const readRuntimeSafeAreaInsets = (): RuntimeSafeAreaInsets => {
         bottom: parseCssPixels(rootStyles.getPropertyValue('--safe-area-bottom')),
         left: parseCssPixels(rootStyles.getPropertyValue('--safe-area-left')),
     };
+};
+
+interface RuntimeKeyboardInsetInput {
+    visualViewportHeight?: number | null;
+    visualViewportOffsetTop?: number | null;
+    innerHeight?: number | null;
+    documentClientHeight?: number | null;
+    hasFocusedTextEntry?: boolean;
+}
+
+export const resolveRuntimeKeyboardInsetBottom = ({
+    visualViewportHeight,
+    visualViewportOffsetTop,
+    innerHeight,
+    documentClientHeight,
+    hasFocusedTextEntry = false,
+}: RuntimeKeyboardInsetInput): number => {
+    if (!hasFocusedTextEntry) {
+        return 0;
+    }
+
+    const resolvedVisualViewportHeight = typeof visualViewportHeight === 'number' && Number.isFinite(visualViewportHeight)
+        ? visualViewportHeight
+        : 0;
+    const resolvedLayoutViewportHeight = Math.max(
+        typeof innerHeight === 'number' && Number.isFinite(innerHeight) ? innerHeight : 0,
+        typeof documentClientHeight === 'number' && Number.isFinite(documentClientHeight) ? documentClientHeight : 0,
+    );
+    if (resolvedVisualViewportHeight <= 0 || resolvedLayoutViewportHeight <= 0) {
+        return 0;
+    }
+
+    const offsetTop = typeof visualViewportOffsetTop === 'number' && Number.isFinite(visualViewportOffsetTop)
+        ? Math.max(0, visualViewportOffsetTop)
+        : 0;
+    const inset = Math.round(resolvedLayoutViewportHeight - (resolvedVisualViewportHeight + offsetTop));
+    return inset >= MIN_KEYBOARD_INSET_PX ? inset : 0;
 };
 
 export const readRuntimeViewportMetrics = (
@@ -97,78 +102,113 @@ export const readRuntimeViewportMetrics = (
             height: document.documentElement.clientHeight,
         },
     );
+    const keyboardInsetBottom = resolveRuntimeKeyboardInsetBottom({
+        visualViewportHeight: visualViewport?.height,
+        visualViewportOffsetTop: visualViewport?.offsetTop,
+        innerHeight: window.innerHeight,
+        documentClientHeight: document.documentElement.clientHeight,
+        hasFocusedTextEntry: isTextEntryElement(document.activeElement),
+    });
 
     return {
         ...viewport,
         safeArea: readRuntimeSafeAreaInsets(),
+        keyboardInsetBottom,
     };
 };
 
+const setLayoutEngineDataset = (layoutMode: 'legacy' | 'modern', enabled: boolean) => {
+    if (typeof document === 'undefined') return;
+    [document.documentElement, document.body].forEach((target) => {
+        if (!target) return;
+        if (!enabled) {
+            target.removeAttribute('data-mobile-layout-engine');
+            return;
+        }
+        target.dataset.mobileLayoutEngine = layoutMode;
+    });
+};
+
+const clearRuntimeScaleVars = (root: HTMLElement) => {
+    root.style.removeProperty('--mobile-root-design-width');
+    root.style.removeProperty('--mobile-root-scale');
+    root.style.removeProperty('--mobile-root-inverse-scale');
+    root.style.removeProperty('--mobile-root-logical-height');
+    root.style.removeProperty('--mobile-layout-inline-unit');
+    root.style.removeProperty('--mobile-layout-block-unit');
+};
+
+const clearBoardShellVars = (root: HTMLElement) => {
+    root.style.removeProperty('--mobile-board-shell-design-width');
+    root.style.removeProperty('--mobile-board-shell-scale');
+    root.style.removeProperty('--mobile-board-shell-inverse-scale');
+    root.style.removeProperty('--mobile-board-shell-logical-height');
+    root.style.removeProperty('--mobile-board-shell-inline-unit');
+    root.style.removeProperty('--mobile-board-shell-block-unit');
+};
+
 export const applyRuntimeViewportCssVars = (
-    viewport: RuntimeViewportSize,
-    options: ApplyRuntimeViewportOptions = {},
+    viewport: RuntimeViewportSize | RuntimeViewportMetrics,
+    options: {
+        layoutEngineCapabilities?: ReturnType<typeof detectMobileLayoutEngineCapabilities>;
+    } = {},
 ) => {
     if (typeof document === 'undefined') return;
     if (viewport.width <= 0 || viewport.height <= 0) return;
 
     const root = document.documentElement;
+    const layoutEngineCapabilities = options.layoutEngineCapabilities ?? detectMobileLayoutEngineCapabilities();
+    const keyboardInsetBottom = 'keyboardInsetBottom' in viewport
+        ? Math.max(0, viewport.keyboardInsetBottom)
+        : 0;
     root.style.setProperty('--runtime-viewport-width', `${viewport.width}px`);
     root.style.setProperty('--runtime-viewport-height', `${viewport.height}px`);
-
-    // 键盘 inset：只在真实聚焦文本输入时才写入，避免无输入焦点时因为浏览器 UI 抖动误判。
-    // 该变量主要用于：modal scroll-padding / scrollIntoView 可见区估算。
-    const visualViewport = window.visualViewport;
-    const keyboardInsetBottom = resolveRuntimeKeyboardInsetBottom({
-        visualViewportHeight: visualViewport?.height ?? viewport.height,
-        visualViewportOffsetTop: visualViewport?.offsetTop ?? 0,
-        innerHeight: window.innerHeight,
-        documentClientHeight: root.clientHeight,
-        hasFocusedTextEntry: isTextEntryElement(document.activeElement),
-    });
     root.style.setProperty('--keyboard-inset-height', `${keyboardInsetBottom}px`);
+    root.dataset.keyboardVisible = keyboardInsetBottom > 0 ? 'true' : 'false';
 
-    const { layoutEngineCapabilities } = options;
-    if (layoutEngineCapabilities?.layoutMode) {
-        root.dataset.mobileLayoutEngine = layoutEngineCapabilities.layoutMode;
+    const gamePageTarget = document.body?.dataset.gamePage === 'true'
+        ? document.body
+        : document.documentElement.dataset.gamePage === 'true'
+            ? document.documentElement
+            : null;
+    setLayoutEngineDataset(layoutEngineCapabilities.layoutMode, Boolean(gamePageTarget));
+    const isLandscapeMobileViewport = viewport.width <= 1023 && viewport.width > viewport.height;
+
+    if (gamePageTarget && isLandscapeMobileViewport) {
+        const rootScaleMetrics = resolveRuntimeLayoutScaleMetrics(viewport, DEFAULT_ROOT_DESIGN_WIDTH);
+        root.style.setProperty('--mobile-root-design-width', `${rootScaleMetrics.designWidth}px`);
+        root.style.setProperty('--mobile-root-scale', rootScaleMetrics.scale.toFixed(6));
+        root.style.setProperty('--mobile-root-inverse-scale', rootScaleMetrics.inverseScale.toFixed(6));
+        root.style.setProperty('--mobile-root-logical-height', `${rootScaleMetrics.logicalHeight.toFixed(3)}px`);
+        root.style.setProperty('--mobile-layout-inline-unit', `${rootScaleMetrics.inlineUnit.toFixed(4)}px`);
+        root.style.setProperty('--mobile-layout-block-unit', `${rootScaleMetrics.blockUnit.toFixed(4)}px`);
     } else {
-        delete root.dataset.mobileLayoutEngine;
+        clearRuntimeScaleVars(root);
     }
 
-    if (!layoutEngineCapabilities?.requiresLegacyViewportFallback) {
+    const mobileLayoutPreset = gamePageTarget?.dataset.mobileLayoutPreset;
+    const mobileProfile = gamePageTarget?.dataset.mobileProfile;
+    const gameId = gamePageTarget?.dataset.gameId?.trim().toLowerCase() ?? '';
+    const shouldUseBoardShellScale = mobileLayoutPreset === 'board-shell'
+        && mobileProfile === 'landscape-adapted'
+        && viewport.width <= 1023
+        && isLandscapeMobileViewport;
+
+    if (!shouldUseBoardShellScale) {
+        clearBoardShellVars(root);
         return;
     }
 
-    const rootDesignWidth = readCssPixelVar(root, '--mobile-root-design-width', DEFAULT_ROOT_DESIGN_WIDTH);
-    const rootScale = rootDesignWidth > 0 ? viewport.width / rootDesignWidth : 1;
-    const safeRootScale = Number.isFinite(rootScale) && rootScale > 0 ? rootScale : 1;
-    root.style.setProperty('--mobile-root-scale', safeRootScale.toFixed(6));
-    root.style.setProperty('--mobile-root-inverse-scale', (1 / safeRootScale).toFixed(6));
-
-    const layoutPreset = root.getAttribute('data-mobile-layout-preset');
-    const mobileProfile = root.getAttribute('data-mobile-profile');
-    if (layoutPreset !== 'board-shell' || mobileProfile !== 'landscape-adapted') {
-        return;
-    }
-
-    const gameId = root.getAttribute('data-game-id') ?? '';
-    const mappedDesignWidth = BOARD_SHELL_DESIGN_WIDTH_MAP[gameId];
-    const boardShellDesignWidth = mappedDesignWidth
-        ?? readCssPixelVar(root, '--mobile-board-shell-design-width', rootDesignWidth);
-    const boardScale = boardShellDesignWidth > 0 ? viewport.width / boardShellDesignWidth : 1;
-    const safeBoardScale = Number.isFinite(boardScale) && boardScale > 0 ? boardScale : 1;
-    const inverseBoardScale = 1 / safeBoardScale;
-    const logicalHeight = viewport.height / safeBoardScale;
-    const inlineUnit = boardShellDesignWidth / 100;
-    const blockUnit = logicalHeight / 100;
-
-    root.style.setProperty('--mobile-board-shell-design-width', `${boardShellDesignWidth}px`);
-    root.style.setProperty('--mobile-board-shell-scale', safeBoardScale.toFixed(6));
-    root.style.setProperty('--mobile-board-shell-inverse-scale', inverseBoardScale.toFixed(6));
-    root.style.setProperty('--mobile-board-shell-logical-height', `${logicalHeight.toFixed(3)}px`);
-    root.style.setProperty('--mobile-board-shell-inline-unit', `${inlineUnit.toFixed(4)}px`);
-    root.style.setProperty('--mobile-board-shell-block-unit', `${blockUnit.toFixed(4)}px`);
-    root.style.setProperty('--mobile-layout-inline-unit', `${inlineUnit.toFixed(4)}px`);
-    root.style.setProperty('--mobile-layout-block-unit', `${blockUnit.toFixed(4)}px`);
+    const designWidth = BOARD_SHELL_DESIGN_WIDTH_BY_GAME[gameId] ?? DEFAULT_BOARD_SHELL_DESIGN_WIDTH;
+    const shellScaleMetrics = resolveRuntimeLayoutScaleMetrics(viewport, designWidth);
+    root.style.setProperty('--mobile-board-shell-design-width', `${shellScaleMetrics.designWidth}px`);
+    root.style.setProperty('--mobile-board-shell-scale', shellScaleMetrics.scale.toFixed(6));
+    root.style.setProperty('--mobile-board-shell-inverse-scale', shellScaleMetrics.inverseScale.toFixed(6));
+    root.style.setProperty('--mobile-board-shell-logical-height', `${shellScaleMetrics.logicalHeight.toFixed(3)}px`);
+    root.style.setProperty('--mobile-board-shell-inline-unit', `${shellScaleMetrics.inlineUnit.toFixed(4)}px`);
+    root.style.setProperty('--mobile-board-shell-block-unit', `${shellScaleMetrics.blockUnit.toFixed(4)}px`);
+    root.style.setProperty('--mobile-layout-inline-unit', `${shellScaleMetrics.inlineUnit.toFixed(4)}px`);
+    root.style.setProperty('--mobile-layout-block-unit', `${shellScaleMetrics.blockUnit.toFixed(4)}px`);
 };
 
 interface UseRuntimeViewportOptions {
@@ -201,6 +241,7 @@ export const useRuntimeViewport = (
                     && next.safeArea.right === previous.safeArea.right
                     && next.safeArea.bottom === previous.safeArea.bottom
                     && next.safeArea.left === previous.safeArea.left
+                    && next.keyboardInsetBottom === previous.keyboardInsetBottom
                 ) {
                     return previous;
                 }

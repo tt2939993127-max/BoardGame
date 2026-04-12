@@ -609,6 +609,7 @@ export function reduceEvent(core: SummonerWarsCore, event: GameEvent): SummonerW
     case SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED:
     case SW_EVENTS.SOUL_TRANSFER_REQUESTED:
     case SW_EVENTS.MIND_CAPTURE_REQUESTED:
+    case SW_EVENTS.EVENT_INTERACTION_REQUESTED:
     case SW_EVENTS.DAMAGE_REDUCED:
     case SW_EVENTS.GRAB_FOLLOW_REQUESTED: {
       // 通知事件，不修改状态（由 UI 消费）

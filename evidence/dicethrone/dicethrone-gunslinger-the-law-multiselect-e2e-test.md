@@ -2,7 +2,7 @@
 
 ## 范围
 
-- 目标：验证 `card-the-law` 对应的 `selectPlayer + selectCount = 2` 新交互链路已经从 UI 到领域结算闭环。
+- 目标：验证 `upgrade-deadeye-2` 的升级变体 **`the-law`** 对应的 `selectPlayer + selectCount = 2` 多目标交互链路，已经从 UI 到领域结算闭环。
 - 重点：
   - 只选 1 名目标时允许确认；
   - 选择 2 名目标时单次确认即可原子结算两名玩家的 `bounty + knockdown`；
@@ -22,10 +22,20 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Onlin
 > - `4 人 2v2`：同样进入多目标交互，目标集合覆盖 **全部座次玩家**（含 self / ally / enemies），并可一次确认原子化结算两名被选目标的 `bounty + knockdown`。
 
 ### 1) 1v1：选择升级变体后应直接结算（无多目标弹窗）
-> 待补证据：需要复跑 `e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts` 中对应 1v1 用例并回填截图路径（避免引用已不存在的旧产物）。
+
+截图（成功路径连续证据链）：
+- `22` 选择变体前：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-resolve-immediately-in-1v1-after-selecting-the-upgraded-variant\22-the-law-variant-1v1-before-select.png`
+- `23` 选择变体后自动结算（无多目标弹窗）：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-resolve-immediately-in-1v1-after-selecting-the-upgraded-variant\23-the-law-variant-1v1-after-resolve.png`
 
 ### 2) 3 人：多目标弹窗可选至多 2 名目标玩家并完成结算
-> 待补证据：需要复跑 `e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts` 中对应 3 人用例并回填截图路径（避免引用已不存在的旧产物）。
+
+截图（成功路径连续证据链）：
+- `24` 已选 2 名目标（确认按钮 enabled）：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-open-multi-target-interaction-after-selecting-the-upgraded-variant-in-3-player-scene\24-the-law-variant-3p-selected-targets.png`
+- `25` 确认后原子化结算（交互关闭）：
+  - `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\should-open-multi-target-interaction-after-selecting-the-upgraded-variant-in-3-player-scene\25-the-law-variant-3p-resolved.png`
 
 ### 3) 4 人 2v2：目标集合覆盖全部座次玩家（含 self / ally / enemies）
 - `10` 选目标弹窗：

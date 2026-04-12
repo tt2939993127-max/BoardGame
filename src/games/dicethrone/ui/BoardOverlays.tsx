@@ -204,15 +204,28 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
         });
     }, [props.bonusDie]);
 
+    const shouldRenderTokenResponseModal = Boolean(
+        props.pendingDamage
+        && props.tokenResponsePhase
+        && props.isTokenResponder
+        && (
+            (props.usableTokens?.length ?? 0) > 0
+            || !!props.pendingDamage.lastEvasionRoll
+            || Object.keys(props.pendingDamage.tokenUsageTotals ?? {}).length > 0
+        )
+    );
+
     React.useEffect(() => {
         boardOverlaysLogger.info('token-modal-check', {
             hasPendingDamage: !!props.pendingDamage,
             hasTokenResponsePhase: !!props.tokenResponsePhase,
             isTokenResponder: props.isTokenResponder,
-            shouldRender: !!(props.pendingDamage && props.tokenResponsePhase && props.isTokenResponder),
+            shouldRender: shouldRenderTokenResponseModal,
             usableTokensCount: props.usableTokens?.length ?? 0,
+            hasLastEvasionRoll: !!props.pendingDamage?.lastEvasionRoll,
+            tokenUsageTotalsCount: Object.keys(props.pendingDamage?.tokenUsageTotals ?? {}).length,
         });
-    }, [props.pendingDamage, props.tokenResponsePhase, props.isTokenResponder, props.usableTokens]);
+    }, [props.pendingDamage, props.tokenResponsePhase, props.isTokenResponder, props.usableTokens, shouldRenderTokenResponseModal]);
 
     const isPlayerBoardPreview = Boolean(props.magnifiedImage?.includes('player-board'));
     const isMultiCardPreview = props.magnifiedCards.length > 0;
@@ -303,10 +316,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
 
                 {/* Token 响应窗口 */}
                 {(() => {
-                    const shouldRender = props.pendingDamage
-                        && props.tokenResponsePhase
-                        && props.isTokenResponder;
-                    return shouldRender ? (
+                    return shouldRenderTokenResponseModal ? (
                         <TokenResponseModal
                             key="token-response"
                             pendingDamage={props.pendingDamage!}

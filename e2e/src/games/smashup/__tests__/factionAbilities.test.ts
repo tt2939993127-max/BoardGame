@@ -19,10 +19,11 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { queueImmediateExtraPlayInteractions } from '../domain/extraPlay';
  
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
-import { makeMatchState } from './helpers';
+import { makeMatchState, resolveInteractionChain } from './helpers';
 
 beforeAll(() => {
     clearRegistry();
@@ -810,6 +811,134 @@ describe('巫师派系能力', () => {
         const { events, matchState } = execPlayMinion(state, '0', 'm1', 0);
         const drawEvents = events.filter(e => e.type === SU_EVENTS.CARDS_DRAWN);
         expect(drawEvents.length).toBe(0);
+    });
+});
+
+// ============================================================================
+// 立即额外行动交互
+// ============================================================================
+
+describe('立即额外行动交互', () => {
+    function queueImmediateExtraAction(matchState: MatchState<SmashUpCore>) {
+        const immediateEvent = {
+            type: SU_EVENTS.LIMIT_MODIFIED,
+            payload: {
+                playerId: '0',
+                limitType: 'action',
+                delta: 1,
+                reason: 'test_immediate_extra_action',
+                playTiming: 'immediate',
+            },
+            timestamp: 1000,
+        } as const;
+
+        return queueImmediateExtraPlayInteractions(matchState, [immediateEvent as any]);
+    }
+
+    it('立即额外行动应包含需要基地目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'ancient_egyptians_you_can_take_it_with_you', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const queuedState = queueImmediateExtraAction(makeMatchState(state));
+        const interaction = queuedState.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('smashup_immediate_extra_action');
+
+        const optionsGenerator = interaction?.data?.optionsGenerator as any;
+        expect(typeof optionsGenerator).toBe('function');
+
+        const options = optionsGenerator(queuedState, interaction?.data);
+        const hasCardOption = options.some((option: any) => option?.value?.defId === 'ancient_egyptians_you_can_take_it_with_you');
+        expect(hasCardOption).toBe(true);
+    });
+
+    it('立即额外行动应包含需要随从目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'samurai_way_of_the_warrior', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('m1', 'test_enemy', '1', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const queuedState = queueImmediateExtraAction(makeMatchState(state));
+        const interaction = queuedState.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('smashup_immediate_extra_action');
+
+        const optionsGenerator = interaction?.data?.optionsGenerator as any;
+        expect(typeof optionsGenerator).toBe('function');
+
+        const options = optionsGenerator(queuedState, interaction?.data);
+        const hasCardOption = options.some((option: any) => option?.value?.defId === 'samurai_way_of_the_warrior');
+        expect(hasCardOption).toBe(true);
+    });
+
+    it('立即额外行动应能实际打出需要基地目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'ancient_egyptians_you_can_take_it_with_you', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const result = resolveInteractionChain(
+            queueImmediateExtraAction(makeMatchState(state)),
+            (prompt) => {
+                const option = prompt?.data?.options?.find(
+                    (candidate: any) => candidate?.value?.defId === 'ancient_egyptians_you_can_take_it_with_you',
+                );
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            },
+        );
+
+        expect(result.finalState.core.players['0'].hand.some(card => card.uid === 'a1')).toBe(false);
+        expect(result.finalState.core.bases[0].buriedCards?.some(card => card.uid === 'a1')).toBe(true);
+    });
+
+    it('立即额外行动应能实际打出需要随从目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'samurai_way_of_the_warrior', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('enemy-1', 'test_enemy', '1', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const result = resolveInteractionChain(
+            queueImmediateExtraAction(makeMatchState(state)),
+            (prompt) => {
+                const option = prompt?.data?.options?.find(
+                    (candidate: any) => candidate?.value?.defId === 'samurai_way_of_the_warrior',
+                );
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            },
+        );
+
+        expect(result.finalState.core.players['0'].hand.some(card => card.uid === 'a1')).toBe(false);
+        expect(result.finalState.core.bases[0].minions.find(minion => minion.uid === 'enemy-1')?.tempPowerModifier).toBe(3);
     });
 });
 
