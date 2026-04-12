@@ -7,8 +7,8 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
-    addTempPower, destroyMinion,
-    grantExtraAction, buildMinionTargetOptions, buildActionMinionTargetOptions,
+    addTempPower,
+    grantExtraAction, buildActionMinionTargetOptions,
     resolveOrPrompt, findMinionOnBases, findMinionByAttachedCard, buildAbilityFeedback,
     modifyBreakpoint,
     buildValidatedDestroyEvents,
@@ -188,15 +188,20 @@ function buildLetTheDogOutTargetInteraction(
     state: SmashUpCore, playerId: string, now: number, matchState: any,
     budget: number, sourceUid: string,
 ): AbilityResult {
-    const targets = buildMinionTargetOptions(
-        collectLetTheDogOutTargets(state, budget, sourceUid),
+    const rawTargets = collectLetTheDogOutTargets(state, budget, sourceUid);
+    const targets = buildActionMinionTargetOptions(
+        rawTargets,
         { state, sourcePlayerId: playerId, effectType: 'destroy' },
     ).map(o => ({
         ...o,
         value: { ...o.value, budget, sourceUid },
     }));
 
-    if (targets.length === 0) return { events: [] };
+    if (targets.length === 0) {
+        return rawTargets.length === 0
+            ? { events: [] }
+            : { events: [buildAbilityFeedback(playerId, 'feedback.all_protected', now)] };
+    }
     const options = [...targets];
     options.push({ id: 'done', label: `完成选择（剩余预算 ${budget}）`, value: { done: true, budget, sourceUid }, displayMode: 'button' as const } as any);
     const interaction = createSimpleChoice(
@@ -251,8 +256,10 @@ const handleChewToyChooseMinion: IH = (state, playerId, value, _data, _random, n
         }
     }
     if (targets.length === 0) return { state, events: [] };
-    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
-    if (options.length === 0) return { state, events: [] };
+    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' });
+    if (options.length === 0) {
+        return { state, events: [buildAbilityFeedback(playerId, 'feedback.all_protected', now)] };
+    }
 
     const interaction = createSimpleChoice(
         `werewolf_chew_toy_target_${now}`, playerId,
@@ -285,12 +292,14 @@ const handleLetTheDogOutChooseMinion: IH = (state, playerId, value, _data, _rand
     const myPower = getEffectivePower(state.core, minion, v.baseIndex);
     const targets = collectLetTheDogOutTargets(state.core, myPower, v.minionUid);
     if (targets.length === 0) return { state, events: [] };
-    const options = buildMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
+    const options = buildActionMinionTargetOptions(targets, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
         .map(o => ({
             ...o,
             value: { ...o.value, budget: myPower, sourceUid: v.minionUid },
         }));
-    if (options.length === 0) return { state, events: [] };
+    if (options.length === 0) {
+        return { state, events: [buildAbilityFeedback(playerId, 'feedback.all_protected', now)] };
+    }
     const allOptions = [...options];
     allOptions.push({ id: 'done', label: `完成选择（剩余预算 ${myPower}）`, value: { done: true, budget: myPower, sourceUid: v.minionUid }, displayMode: 'button' as const } as any);
     const interaction = createSimpleChoice(
@@ -324,12 +333,14 @@ const handleLetTheDogOutChooseTarget: IH = (state, playerId, value, _data, _rand
     const remaining = collectLetTheDogOutTargets(state.core, newBudget, v.sourceUid)
         .filter(t => t.uid !== v.minionUid);
     if (remaining.length === 0) return { state, events };
-    const options = buildMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
+    const options = buildActionMinionTargetOptions(remaining, { state: state.core, sourcePlayerId: playerId, effectType: 'destroy' })
         .map(o => ({
             ...o,
             value: { ...o.value, budget: newBudget, sourceUid: v.sourceUid },
         }));
-    if (options.length === 0) return { state, events };
+    if (options.length === 0) {
+        return { state, events: [...events, buildAbilityFeedback(playerId, 'feedback.all_protected', now)] };
+    }
     const allOptions = [...options];
     allOptions.push({ id: 'done', label: `完成选择（剩余预算 ${newBudget}）`, value: { done: true, budget: newBudget, sourceUid: v.sourceUid }, displayMode: 'button' as const } as any);
     const interaction = createSimpleChoice(
