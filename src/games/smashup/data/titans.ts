@@ -154,7 +154,7 @@ export const TITAN_CARD_DEFS: TitanCardDef[] = [
         type: 'titan',
         name: '滑稽巨人',
         faction: SMASHUP_FACTION_IDS.TRICKSTERS,
-        abilityTags: ['special', 'ongoing'],
+        abilityTags: ['special', 'ongoing', 'talent'],
         summonMode: 'insteadOfRegularMinion',
         playAsKinds: ['minion'],
         previewRef: { type: 'atlas', atlasId: SMASHUP_ATLAS_IDS.TITANS, index: 17 },

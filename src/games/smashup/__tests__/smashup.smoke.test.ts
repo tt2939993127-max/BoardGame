@@ -985,7 +985,7 @@ describe('smashup', () => {
         expect(finalCore.bases.every(base => !base.minions.some(minion => minion.attachedActions.some(card => card.uid === 'buried-curse-no-target')))).toBe(true);
     });
 
-    it('鲜血领主不应被当成可手动发动的泰坦 special（通过触发链进场）', () => {
+    it('鲜血领主满足条件可手动发动 special 进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -1014,12 +1014,10 @@ describe('smashup', () => {
         };
 
         const validation = SmashUpDomain.validate({ ...result.finalState, core }, command);
-        expect(validation.valid).toBe(false);
-        expect(validation.error).toBeTruthy();
+        expect(validation.valid).toBe(true);
 
-        // 兜底：即便强行执行，也不应产生任何进场事件（该泰坦由触发链路进场）
         const events = SmashUpDomain.execute({ ...result.finalState, core }, command, FIXED_RANDOM);
-        expect(events).toHaveLength(0);
+        expect(events.map(event => event.type)).toContain(SU_EVENTS.TITAN_PLAYED);
     });
 
     it('鲜血领主在你给无标记目标放置力量标记后会额外再放 1 枚', () => {
@@ -2541,10 +2539,14 @@ describe('smashup', () => {
             now: 51,
         });
 
-        // PR64+：该时机会创建“是否转移 1 枚力量指示物到泰坦”的交互，不直接加泰坦指示物
-        expect(triggerResult.events.map(event => event.type)).toEqual([]);
-        const interactions = getInteractionsFromMS(triggerResult.matchState!);
-        expect(interactions[0]?.data?.sourceId).toBe('titan_giant_ants_death_on_six_legs_transfer');
+        expect(triggerResult.events.map(event => event.type)).toEqual([
+            SU_EVENTS.TITAN_POWER_COUNTER_ADDED,
+        ]);
+
+        const resolved = [destroyEvent, ...triggerResult.events]
+            .reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        const titan = (resolved.titans ?? []).find(candidate => candidate.uid === 't-six-legs');
+        expect(titan?.powerCounters).toBe(1);
     });
 
     it('六足死神在基地计分弃置随从前也可选择转移 1 枚 +1 标记', () => {
@@ -2579,10 +2581,12 @@ describe('smashup', () => {
             now: 52,
         });
 
-        // PR64+：该时机会创建“是否转移 1 枚力量指示物到泰坦”的交互，不直接加泰坦指示物
-        expect(triggerResult.events.map(event => event.type)).toEqual([]);
-        const interactions = getInteractionsFromMS(triggerResult.matchState!);
-        expect(interactions[0]?.data?.sourceId).toBe('titan_giant_ants_death_on_six_legs_transfer');
+        expect(triggerResult.events.map(event => event.type)).toEqual([
+            SU_EVENTS.TITAN_POWER_COUNTER_ADDED,
+        ]);
+        const resolved = triggerResult.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        const titan = (resolved.titans ?? []).find(candidate => candidate.uid === 't-six-legs');
+        expect(titan?.powerCounters).toBe(1);
     });
 
     it('六足死神天赋会授予额外行动额度', () => {
@@ -4705,7 +4709,7 @@ describe('smashup', () => {
         });
     });
 
-    it('滑稽巨人当前可通过 special 进任意有效基地，不再要求目标基地为空', () => {
+    it('滑稽巨人 special 只能进空基地', () => {
         const core = makeState({
             bases: [
                 makeBase(),
@@ -4740,7 +4744,7 @@ describe('smashup', () => {
         };
 
         expect(SmashUpDomain.validate(state, validCommand).valid).toBe(true);
-        expect(SmashUpDomain.validate(state, occupiedBaseCommand).valid).toBe(true);
+        expect(SmashUpDomain.validate(state, occupiedBaseCommand).valid).toBe(false);
 
         const events = SmashUpDomain.execute(state, validCommand, FIXED_RANDOM);
         expect(events.map(event => event.type)).toContain(SU_EVENTS.TITAN_PLAYED);
@@ -4752,17 +4756,9 @@ describe('smashup', () => {
             enteredAt: 64,
         });
 
-        const occupiedBaseEvents = SmashUpDomain.execute(state, occupiedBaseCommand, FIXED_RANDOM);
-        expect(occupiedBaseEvents.map(event => event.type)).toContain(SU_EVENTS.TITAN_PLAYED);
-        const occupiedResolved = occupiedBaseEvents.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
-        expect((occupiedResolved.titans ?? []).find(candidate => candidate.uid === 't-bfg')?.location).toEqual({
-            zone: 'base',
-            baseIndex: 1,
-            enteredAt: 65,
-        });
     });
 
-    it('滑稽巨人在场时不会预先阻止对手打出最后一张手牌；若没有剩余手牌则不会追加弃牌事件', () => {
+    it('滑稽巨人在场时，对手没有额外手牌则不能打出随从到此基地', () => {
         const core = makeState({
             currentPlayerIndex: 1,
             players: {
@@ -4792,14 +4788,7 @@ describe('smashup', () => {
             timestamp: 66,
         };
 
-        expect(SmashUpDomain.validate(state, command).valid).toBe(true);
-
-        const result = runCommand(state, command, FIXED_RANDOM);
-        expect(result.success).toBe(true);
-        expect(result.events.map(event => event.type)).not.toContain(SU_EVENTS.CARDS_DISCARDED);
-        expect(result.finalState.core.players['1'].hand).toEqual([]);
-        expect(result.finalState.core.players['1'].discard).toEqual([]);
-        expect(result.finalState.core.bases[0].minions.map(minion => minion.uid)).toContain('enemy-only-minion');
+        expect(SmashUpDomain.validate(state, command).valid).toBe(false);
     });
 
     it('滑稽巨人在场时，对手把随从打到此基地后会被迫弃置 1 张剩余手牌', () => {
@@ -4845,7 +4834,7 @@ describe('smashup', () => {
         expect(result.finalState.core.bases[0].minions.map(minion => minion.uid)).toContain('enemy-played-minion');
     });
 
-    it('滑稽巨人会在对手回合结束且该对手在此基地没有随从时获得 1 枚力量指示物', () => {
+    it('滑稽巨人在拥有者回合结束且此基地没有其他玩家随从时获得 1 枚力量指示物', () => {
         const core = makeState({
             bases: [
                 makeBase({
@@ -4866,7 +4855,7 @@ describe('smashup', () => {
 
         const triggerResult = fireTriggers(core, 'onTurnEnd', {
             state: core,
-            playerId: '1',
+            playerId: '0',
             random: FIXED_RANDOM,
             now: 68,
         });
@@ -4876,7 +4865,7 @@ describe('smashup', () => {
         expect((resolved.titans ?? []).find(candidate => candidate.uid === 't-bfg')?.powerCounters).toBe(1);
     });
 
-    it('滑稽巨人当前不提供手动 talent，静态契约应避免暴露 USE_TALENT 入口', () => {
+    it('滑稽巨人提供 talent 入口并暴露对应交互处理器', () => {
         const core = makeState({
             bases: [
                 makeBase({
@@ -4908,10 +4897,10 @@ describe('smashup', () => {
         };
 
         const validation = SmashUpDomain.validate(state, command);
-        expect(validation.valid).toBe(false);
-        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing']);
-        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_minion')).toBeUndefined();
-        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_base')).toBeUndefined();
+        expect(validation.valid).toBe(true);
+        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing', 'talent']);
+        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_minion')).toBeDefined();
+        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_base')).toBeDefined();
     });
 
     it('交互解决产生的泰坦移动进入已有其他泰坦的标准基地时，会继续触发泰坦冲突', () => {
@@ -5574,7 +5563,7 @@ describe('smashup', () => {
         expect(getTitanDef('pecos_bill')?.id).toBe('pecos_bill');
         expect(getTitanDef('pecos_bill')?.abilityTags).toEqual(['special', 'ongoing']);
         expect(getTitanDef('pecos_bill')?.previewRef).toEqual({ type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 30 });
-        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing']);
+        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing', 'talent']);
         expect(getTitanDef('time_travelers_time_box')?.abilityTags).toEqual(['special', 'talent']);
         expect(getSmashUpCardPreviewMeta('sphinx')).toEqual({
             name: getTitanDef('sphinx')?.name,
