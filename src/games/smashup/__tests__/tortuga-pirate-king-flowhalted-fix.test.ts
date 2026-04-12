@@ -102,8 +102,8 @@ describe('托尔图加计分 - 海盗王移动后 flowHalted 清除', () => {
 
         if (typeof result === 'object' && result && 'updatedState' in result && result.updatedState) {
             expect(result.updatedState.sys.flowHalted).toBe(false);
-            expect(result.updatedState.sys.interaction?.current).toBeNull();
-            expect(result.updatedState.sys.responseWindow?.current).toBeNull();
+            expect(result.updatedState.sys.interaction?.current).toBeUndefined();
+            expect(result.updatedState.sys.responseWindow?.current).toBeUndefined();
             expect((result.updatedState.sys as any).smashupScoring).toMatchObject({
                 currentStep: 'awaiting-post-reduce',
                 lockedBaseRefs: [{ slotIndex: 0, baseDefId: 'base_tortuga' }],

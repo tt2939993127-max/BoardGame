@@ -32,7 +32,7 @@ describe('Reaction queue: extended base timing onBaseRevealed', () => {
     const ms0 = makeMatchState({ ...core, triggerQueue: triggers });
     const rq = maybeResolveReactionQueue(ms0 as any, { shuffle: (a: any[]) => a, random: () => 0.5, d: () => 1, range: (m: number) => m } as any, 1)!;
     const current = rq.state.sys.interaction.current as any;
-    expect(current.data.sourceId).toBe('reaction_queue_choose_next');
+    expect(current.data.sourceId).toBe('smashup_reaction_choose');
     expect(current.playerId).toBe('1');
   });
 });

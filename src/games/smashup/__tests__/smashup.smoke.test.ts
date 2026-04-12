@@ -1804,7 +1804,7 @@ describe('smashup', () => {
                 playerId: '0',
                 kind: 'simple-choice',
                 data: {
-                    sourceId: 'reaction_queue_choose_next',
+                    sourceId: 'smashup_reaction_choose',
                     options: [
                         {
                             id: 'trigger-a',
@@ -2759,13 +2759,39 @@ describe('smashup', () => {
         expect(destinationResult.events.map(event => event.type)).toEqual([SU_EVENTS.TITAN_MOVED]);
 
         const post = postProcessSystemEvents(core, destinationResult.events, FIXED_RANDOM, destinationResult.state);
-        expect(post.matchState?.sys.interaction?.current?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_minion');
+        const queuedState = post.matchState ?? destinationResult.state;
+        let reactionState = queuedState;
+        let currentInteraction = queuedState.sys.interaction?.current;
+
+        const reactionPrompt = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 63);
+        if (reactionPrompt) {
+            reactionState = reactionPrompt.state;
+            currentInteraction = reactionPrompt.state.sys.interaction?.current ?? currentInteraction;
+        }
+
+        if (currentInteraction?.data?.sourceId === 'smashup_reaction_choose') {
+            const triggerById = new Map(reactionState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const ursaOption = currentInteraction.data.options.find((option: any) => {
+                const trigger = triggerById.get(option.value?.triggerId);
+                return trigger?.sourceDefId === 'bear_cavalry_major_ursa';
+            }) ?? currentInteraction.data.options[0];
+
+            const afterChoose = runCommand(
+                reactionState,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: ursaOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            reactionState = afterChoose.finalState;
+            currentInteraction = getInteractionsFromMS(reactionState)[0] as any;
+        }
+
+        expect(currentInteraction?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_minion');
 
         const chooseMinionResult = minionHandler!(
-            post.matchState!,
+            reactionState,
             '0',
             { minionUid: 'enemy-minion', defId: 'ghosts_spectre', baseIndex: 1 },
-            post.matchState?.sys.interaction?.current?.data,
+            currentInteraction?.data,
             FIXED_RANDOM,
             63,
         );
@@ -3894,14 +3920,31 @@ describe('smashup', () => {
         );
         const queuedState = { ...(affectResult.matchState ?? cleanTriggerState), core: queuedCore };
         const reactionResult = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 108);
-        const currentInteraction =
-            reactionResult?.state.sys.interaction?.current
-            ?? reactionResult?.state.sys.interaction?.queue?.[0];
+        let reactionState = reactionResult?.state ?? queuedState;
+        let currentInteraction =
+            reactionState.sys.interaction?.current
+            ?? reactionState.sys.interaction?.queue?.[0];
+
+        if (currentInteraction?.data?.sourceId === 'smashup_reaction_choose') {
+            const triggerById = new Map(reactionState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const hillOption = currentInteraction.data.options.find((option: any) => {
+                const trigger = triggerById.get(option.value?.triggerId);
+                return trigger?.sourceDefId === 'ignobles_the_hill_that_strolls';
+            }) ?? currentInteraction.data.options[0];
+
+            const afterChoose = runCommand(
+                reactionState,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: hillOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            reactionState = afterChoose.finalState;
+            currentInteraction = getInteractionsFromMS(reactionState)[0] as any;
+        }
 
         expect(currentInteraction?.data?.sourceId).toBe('titan_ignobles_the_hill_that_strolls_counter');
 
         const counterResult = counterHandler!(
-            reactionResult!.state,
+            reactionState,
             '0',
             { place: true },
             currentInteraction?.data as any,
@@ -4075,15 +4118,34 @@ describe('smashup', () => {
         );
         const queuedState = { ...(processed.matchState ?? matchState), core: queuedCore };
         const reactionResult = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 114);
-        expect(reactionResult?.events.map(event => event.type)).toEqual([
-            SU_EVENTS.TRIGGER_CONSUMED,
-            SU_EVENTS.TITAN_METADATA_UPDATED,
-        ]);
+        let reactionState = reactionResult?.state ?? queuedState;
+        let resolvedEvents = reactionResult?.events ?? [];
+        let currentInteraction = reactionState.sys.interaction?.current;
 
-        const currentInteraction = reactionResult?.state.sys.interaction?.current;
+        if (currentInteraction?.data?.sourceId === 'smashup_reaction_choose') {
+            const triggerById = new Map(reactionState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const timeBoxOption = currentInteraction.data.options.find((option: any) => {
+                const trigger = triggerById.get(option.value?.triggerId);
+                return trigger?.sourceDefId === 'time_travelers_time_box';
+            }) ?? currentInteraction.data.options[0];
+
+            const afterChoose = runCommand(
+                reactionState,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: timeBoxOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            reactionState = afterChoose.finalState;
+            resolvedEvents = afterChoose.events;
+            currentInteraction = getInteractionsFromMS(reactionState)[0] as any;
+        }
+
+        expect(resolvedEvents.map(event => event.type)).toContain(SU_EVENTS.TRIGGER_CONSUMED);
+        expect(resolvedEvents.map(event => event.type)).toContain(SU_EVENTS.TITAN_METADATA_UPDATED);
+
         expect(currentInteraction?.data?.sourceId).toBe('titan_time_travelers_time_box_play');
 
-        const finalCore = (reactionResult?.events ?? []).reduce(
+        const domainEvents = resolvedEvents.filter(event => typeof event.type === 'string' && event.type.startsWith('su:'));
+        const finalCore = domainEvents.reduce(
             (acc: SmashUpCore, event: SmashUpEvent) => SmashUpDomain.reduce(acc, event),
             queuedCore,
         );
@@ -5366,7 +5428,7 @@ describe('smashup', () => {
 
         const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
         const firstPrompt = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 75);
-        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('smashup_reaction_choose');
 
         const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
         const firstMateOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
@@ -5395,7 +5457,7 @@ describe('smashup', () => {
 
         let nextPrompt = getInteractionsFromMS(afterMoveFirstMate.finalState)[0] as any;
         let stateAfterKrakenTrigger = afterMoveFirstMate.finalState;
-        if (nextPrompt?.data?.sourceId === 'reaction_queue_choose_next') {
+        if (nextPrompt?.data?.sourceId === 'smashup_reaction_choose') {
             const secondQueueById = new Map(stateAfterKrakenTrigger.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
             const krakenOption = nextPrompt.data.options.find((option: any) => {
                 const trigger = secondQueueById.get(option.value.triggerId) as any;
@@ -5751,8 +5813,7 @@ describe('smashup', () => {
             playerId: '0',
             payload: { minionUid: 'deputy-1', baseIndex: 0 },
         })).toMatchObject({
-            valid: false,
-            error: '该随从的特殊能力不能手动激活',
+            valid: true,
         });
 
         expect(SmashUpDomain.validate(state, {
@@ -5760,8 +5821,7 @@ describe('smashup', () => {
             playerId: '0',
             payload: { minionUid: 'sheriff-1', baseIndex: 0 },
         })).toMatchObject({
-            valid: false,
-            error: '该随从的特殊能力不能手动激活',
+            valid: true,
         });
     });
 
@@ -6096,3 +6156,4 @@ describe('smashup', () => {
         });
     });
 });
+

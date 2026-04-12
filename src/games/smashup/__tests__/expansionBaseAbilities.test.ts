@@ -49,6 +49,61 @@ beforeAll(() => {
     initAllAbilities();
 });
 
+describe('expansion base extra timing regression coverage', () => {
+    it('base_plateau_of_leng marks off-phase extras as immediate', () => {
+        const core = makeState({
+            bases: [makeBase('base_plateau_of_leng')],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayedPerBase: { 0: 1 },
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'startTurn';
+
+        const result = triggerBaseAbilityWithMS('base_plateau_of_leng', 'onMinionPlayed', makeCtx({
+            state: core,
+            matchState: ms,
+            baseDefId: 'base_plateau_of_leng',
+            baseIndex: 0,
+            minionUid: 'm1',
+            minionDefId: 'alien_collector',
+        }));
+
+        expect((result.events[0] as any).payload.playTiming).toBe('immediate');
+    });
+
+    it('base_fairy_ring marks off-phase extras as immediate', () => {
+        const core = makeState({
+            bases: [makeBase('base_fairy_ring', {
+                minions: [makeMinion('m1', '0', 3)],
+            })],
+            players: {
+                '0': makePlayer('0', {
+                    minionsPlayedPerBase: { 0: 1 },
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'startTurn';
+
+        const result = triggerBaseAbilityWithMS('base_fairy_ring', 'onMinionPlayed', makeCtx({
+            state: core,
+            matchState: ms,
+            baseDefId: 'base_fairy_ring',
+            baseIndex: 0,
+            minionUid: 'm1',
+        }));
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(2);
+        expect(limitEvents.every(e => (e as any).payload.playTiming === 'immediate')).toBe(true);
+    });
+});
+
 const dummyRandom: RandomFn = {
     shuffle: (arr: any[]) => [...arr],
     random: () => 0.5,

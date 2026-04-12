@@ -8,6 +8,7 @@ import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
     grantContextualExtraMinion,
+    grantExtraMinion,
     destroyMinion,
     getMinionPower,
     buildMinionTargetOptions,
@@ -206,10 +207,7 @@ export function resetRobotHoverbotCounter(): void {
 
 /** 盘旋机器人 onPlay：展示牌库顶，如果是随从“你可以”将其作为额外随从打出 */
 function robotHoverbot(ctx: AbilityContext): AbilityResult {
-    const peek = peekDeckTop(
-        ctx.state, ctx.random, ctx.playerId,
-        'all', 'robot_hoverbot', ctx.now,
-    );
+    const peek = peekDeckTop(ctx.state, ctx.random, ctx.playerId, 'all', 'robot_hoverbot', ctx.now);
     if (!peek) {
         return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.deck_empty', ctx.now)] };
     }

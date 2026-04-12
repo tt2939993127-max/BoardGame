@@ -16,7 +16,7 @@ import type {
     CardInstance,
 } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
-import { clearRegistry } from '../domain/abilityRegistry';
+import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { applyEvents } from './helpers';
@@ -545,6 +545,36 @@ describe('僵尸派系能力', () => {
 // ============================================================================
 
 describe('巫师派系能力（新增）', () => {
+    it('wizard_time_loop: off-phase 额外行动必须标记为 immediate', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const executor = resolveAbility('wizard_time_loop', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const matchState = makeMatchState(state);
+        matchState.sys.phase = 'startTurn';
+
+        const result = executor!({
+            state,
+            matchState,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'wizard_time_loop',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 0,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(2);
+        expect(limitEvents.every(e => (e as any).payload.playTiming === 'immediate')).toBe(true);
+    });
+
     it('wizard_winds_of_change: 洗手牌回牌库抽5张，额外行动', () => {
         const handCards = Array.from({ length: 3 }, (_, i) =>
             makeCard(`h${i}`, 'test_card', 'minion', '0')

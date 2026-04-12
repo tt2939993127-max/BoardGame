@@ -7,7 +7,7 @@
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
 import {
-    grantExtraMinion, destroyMinion,
+    grantContextualExtraMinion, grantExtraMinion, destroyMinion,
     buildMinionTargetOptions, buildAbilityFeedback,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
@@ -60,7 +60,7 @@ const getDeckSearchSelection = (value: unknown): { cardUid: string; defId: strin
 
 /** 急速生长?onPlay：额外打出一个随从*/
 function killerPlantInstaGrow(ctx: AbilityContext): AbilityResult {
-    return { events: [grantExtraMinion(ctx.playerId, 'killer_plant_insta_grow', ctx.now)] };
+    return { events: [grantContextualExtraMinion(ctx, 'killer_plant_insta_grow')] };
 }
 
 /** 野生食人花 onPlay：打出回合 -2 力量（回合结束自动清零） */
@@ -438,9 +438,9 @@ function killerPlantBudding(ctx: AbilityContext): AbilityResult {
 function killerPlantBlossom(ctx: AbilityContext): AbilityResult {
     return {
         events: [
-            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now, undefined, { sameNameOnly: true }),
-            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now, undefined, { sameNameOnly: true }),
-            grantExtraMinion(ctx.playerId, 'killer_plant_blossom', ctx.now, undefined, { sameNameOnly: true }),
+            grantContextualExtraMinion(ctx, 'killer_plant_blossom', undefined, { sameNameOnly: true }),
+            grantContextualExtraMinion(ctx, 'killer_plant_blossom', undefined, { sameNameOnly: true }),
+            grantContextualExtraMinion(ctx, 'killer_plant_blossom', undefined, { sameNameOnly: true }),
         ],
     };
 }

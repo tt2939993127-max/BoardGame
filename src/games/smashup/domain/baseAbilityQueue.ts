@@ -53,6 +53,8 @@ export function collectBaseAbilityTriggers(params: {
   actionTargetBaseIndex?: number;
   actionTargetType?: 'base' | 'minion';
   actionTargetMinionUid?: string;
+  frameId?: string;
+  sourceEventId?: string;
   now: number;
 }): TriggerQueuedEvent | undefined {
   const {
@@ -67,6 +69,8 @@ export function collectBaseAbilityTriggers(params: {
     actionTargetBaseIndex,
     actionTargetType,
     actionTargetMinionUid,
+    frameId,
+    sourceEventId,
     now,
   } = params;
 
@@ -78,13 +82,17 @@ export function collectBaseAbilityTriggers(params: {
   // Witness rule (base as source): it must still be in play when the trigger is queued.
   // Since we are queueing from the live bases array, this is satisfied here.
 
+  const mandatory = options?.mandatory ?? true;
   const t: TriggerInstance = {
     id: `${timing}:${base.defId}:${now}:0`,
     timing: timingToTriggerTiming(timing),
     sourceDefId: base.defId,
     sourceControllerId: undefined,
     sourceBaseIndex: baseIndex,
-    mandatory: options?.mandatory ?? true,
+    mandatory,
+    resolutionClass: mandatory ? 'mandatory' : 'optional',
+    frameId: frameId ?? `${timing}:${sourceEventId ?? now}`,
+    sourceEventId: sourceEventId ?? `${timing}:${now}`,
     ownerPlayerId,
     witnessRequirement: 'inPlayAtTriggerTime',
     witnessed: true,
@@ -138,9 +146,11 @@ export function collectExtendedBaseAbilityTriggers(params: {
   timing: string;
   ownerPlayerId: PlayerId;
   baseIndex: number;
+  frameId?: string;
+  sourceEventId?: string;
   now: number;
 }): TriggerQueuedEvent | undefined {
-  const { core, timing, ownerPlayerId, baseIndex, now } = params;
+  const { core, timing, ownerPlayerId, baseIndex, frameId, sourceEventId, now } = params;
   const base = core.bases[baseIndex];
   if (!base) return undefined;
   const opts = getExtendedBaseAbilityOptions(base.defId, timing);
@@ -149,13 +159,17 @@ export function collectExtendedBaseAbilityTriggers(params: {
   // Ensure executor exists for queue consumption.
   registerExtendedBaseAbilityAsQueuedTrigger(base.defId, timing);
 
+  const mandatory = opts.mandatory ?? true;
   const t: TriggerInstance = {
     id: `${timing}:${base.defId}:${now}:0`,
     timing: timingToTriggerTiming(timing as any),
     sourceDefId: base.defId,
     sourceControllerId: undefined,
     sourceBaseIndex: baseIndex,
-    mandatory: opts.mandatory ?? true,
+    mandatory,
+    resolutionClass: mandatory ? 'mandatory' : 'optional',
+    frameId: frameId ?? `${timing}:${sourceEventId ?? now}`,
+    sourceEventId: sourceEventId ?? `${timing}:${now}`,
     ownerPlayerId,
     witnessRequirement: 'inPlayAtTriggerTime',
     witnessed: true,

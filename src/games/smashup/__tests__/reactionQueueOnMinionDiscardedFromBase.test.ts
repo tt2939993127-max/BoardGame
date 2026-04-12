@@ -46,7 +46,7 @@ describe('reaction queue: onMinionDiscardedFromBase ordering', () => {
     const rq = maybeResolveReactionQueue(ms0, { shuffle: (a: any[]) => a } as any, 1);
     expect(rq).toBeDefined();
     const current = rq!.state.sys.interaction.current as any;
-    expect(current?.data?.sourceId).toBe('reaction_queue_choose_next');
+    expect(current?.data?.sourceId).toBe('smashup_reaction_choose');
   });
 });
 

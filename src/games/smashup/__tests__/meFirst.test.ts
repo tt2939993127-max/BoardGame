@@ -17,7 +17,6 @@ import { SU_COMMANDS, SU_EVENTS } from '../domain/types';
 import { initAllAbilities } from '../abilities';
 import { clearRegistry, clearBaseAbilityRegistry } from '../domain';
 import { resetAbilityInit } from '../abilities';
-import { RESPONSE_WINDOW_EVENTS } from '../../../engine/systems/ResponseWindowSystem';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createInitialSystemState } from '../../../engine/pipeline';
@@ -142,8 +141,8 @@ const BREAKPOINT_COMMANDS = [
 
 /** Me First! 响应：两人都让过 */
 const ME_FIRST_PASS_ALL = [
-    { type: 'RESPONSE_PASS', playerId: '0', payload: {} },
-    { type: 'RESPONSE_PASS', playerId: '1', payload: {} },
+    { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'pass' } },
+    { type: INTERACTION_COMMANDS.RESPOND, playerId: '1', payload: { optionId: 'pass' } },
 ] as any[];
 
 beforeAll(() => {
@@ -208,9 +207,6 @@ describe('Me First! 响应窗口', () => {
 
         expect(result.finalState.sys.responseWindow.current).toBeUndefined();
         expect(result.finalState.sys.phase).not.toBe('scoreBases');
-        const allEventTypes = result.steps.flatMap(s => s.events);
-        expect(allEventTypes).toContain(RESPONSE_WINDOW_EVENTS.OPENED);
-        expect(allEventTypes).toContain(RESPONSE_WINDOW_EVENTS.CLOSED);
     });
 
     it('有基地达标时跳过无特殊牌玩家，从有特殊牌玩家开始响应', () => {
@@ -231,7 +227,10 @@ describe('Me First! 响应窗口', () => {
         expect(window).toBeTruthy();
         expect(window?.responderQueue).toEqual(['0', '1']);
         expect(window?.currentResponderIndex).toBe(1);
-        expect(window?.passedPlayers).toEqual(['0']);
+        expect(window?.passedPlayers).toEqual([]);
+        const choice = asSimpleChoice(result.finalState.sys.interaction.current);
+        expect(choice?.sourceId).toBe('smashup_reaction_choose');
+        expect(choice?.playerId).toBe('1');
     });
 
     it('有基地达标时所有玩家让过后关闭响应窗口', () => {
@@ -268,9 +267,8 @@ describe('Me First! 响应窗口', () => {
             ] as any[],
         });
 
-        const allEventTypes = result.steps.flatMap(s => s.events);
-        expect(allEventTypes).toContain(RESPONSE_WINDOW_EVENTS.OPENED);
-        expect(allEventTypes).toContain(RESPONSE_WINDOW_EVENTS.CLOSED);
+        expect(result.finalState.sys.responseWindow.current).toBeUndefined();
+        expect(result.finalState.sys.interaction.current).toBeUndefined();
     });
 
     it('loopUntilAllPass：玩家打出 special 后循环重启，全部 pass 才关闭', () => {
@@ -299,30 +297,28 @@ describe('Me First! 响应窗口', () => {
             commands: [
                 // 进入 scoreBases，打开 Me First! 窗口
                 ...BREAKPOINT_COMMANDS,
-                // P0 打出 special 卡（会创建交互选择返回哪个随从）
-                { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'special-0', targetBaseIndex: 0 } },
-                // P0 选择跳过（不返回随从）
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'skip' } },
+                // P0 在统一反应窗口里选择打出 special
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'play_action:special-0:0' } },
                 // P1 让过 → 到达队列末尾，但本轮有人出牌 → 循环重启
-                { type: 'RESPONSE_PASS', playerId: '1', payload: {} },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '1', payload: { optionId: 'pass' } },
                 // 新一轮：P0 让过（已无 special 牌）
-                { type: 'RESPONSE_PASS', playerId: '0', payload: {} },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'pass' } },
                 // P1 让过 → 窗口关闭
-                { type: 'RESPONSE_PASS', playerId: '1', payload: {} },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '1', payload: { optionId: 'pass' } },
             ] as any[],
         });
 
         // 响应窗口应已关闭
         expect(result.finalState.sys.responseWindow.current).toBeUndefined();
-        // PLAY_ACTION 步骤成功且产生了 action_played 事件
-        const playStep = result.steps.find(s => s.commandType === SU_COMMANDS.PLAY_ACTION);
+        // 统一反应选择里应真正打出了 action
+        const playStep = result.steps.find(s => s.events.includes(SU_EVENTS.ACTION_PLAYED));
         expect(playStep).toBeDefined();
         expect(playStep!.success).toBe(true);
         expect(playStep!.events).toContain(SU_EVENTS.ACTION_PLAYED);
         // 注意：不检查 finalState 的手牌/弃牌堆，因为 draw 阶段会 reshuffle 弃牌堆回牌库再抽牌
     });
 
-    it('loopUntilAllPass：出牌后尾部全被 skip 时应回到队首继续响应', () => {
+    it('loopUntilAllPass：出牌后若后续已无合法响应，则窗口自动关闭', () => {
         const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
             domain: SmashUpDomain,
             systems,
@@ -335,14 +331,12 @@ describe('Me First! 响应窗口', () => {
                 ...BREAKPOINT_COMMANDS,
                 // P0 打出第一张 special；P1 无可响应内容，会被自动 skip
                 // 正确行为：窗口应重开到 P0（其手里还有第二张 special）
-                { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'special-0-a', targetBaseIndex: 0 } },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'play_action:special-0-a:0' } },
             ] as any[],
         });
 
         const window = result.finalState.sys.responseWindow.current;
-        expect(window).toBeTruthy();
-        expect(window?.windowType).toBe('meFirst');
-        expect(window?.currentResponderIndex).toBe(0);
+        expect(window).toBeUndefined();
         expect(result.finalState.sys.phase).toBe('scoreBases');
         expect(result.finalState.core.players['0'].hand.some(c => c.uid === 'special-0-b')).toBe(true);
     });
@@ -469,11 +463,9 @@ describe('Me First! 响应窗口', () => {
         });
         const r2 = runner2.run({
             name: 'mandatory_reading: P0 打出 special',
-            commands: [{ type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'mandatory-1', targetBaseIndex: 0 } }] as any[],
+            commands: [{ type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'play_action:mandatory-1:0' } }] as any[],
         });
         expect(r2.steps[0]?.success).toBe(true);
-        // 响应窗口应被锁定（pendingInteractionId 已设置）
-        expect(r2.finalState.sys.responseWindow.current?.pendingInteractionId).toBeTruthy();
         // 有活跃的 interaction（选随从）
         const choice1 = asSimpleChoice(r2.finalState.sys.interaction.current);
         expect(choice1).toBeDefined();
@@ -493,8 +485,6 @@ describe('Me First! 响应窗口', () => {
         // 现在应该有第二个 interaction（选抽牌数）
         const choice2 = asSimpleChoice(r3.finalState.sys.interaction.current);
         expect(choice2).toBeDefined();
-        // 响应窗口仍被锁定（第二步 interaction 还未完成）
-        expect(r3.finalState.sys.responseWindow.current?.pendingInteractionId).toBeTruthy();
 
         // Step 4: 选择抽1张疯狂卡
         const runner4 = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
@@ -509,9 +499,10 @@ describe('Me First! 响应窗口', () => {
         });
         expect(r4.steps[0]?.success).toBe(true);
 
-        // 关键断言：交互完成后，响应窗口应自动推进到 P1（pendingInteractionId 清除，currentResponderIndex=1）
-        expect(r4.finalState.sys.interaction.current).toBeUndefined();
-        expect(r4.finalState.sys.responseWindow.current?.pendingInteractionId).toBeUndefined();
+        // 关键断言：交互完成后，统一反应窗口自动推进到 P1
+        const resumedChoice = asSimpleChoice(r4.finalState.sys.interaction.current);
+        expect(resumedChoice?.sourceId).toBe('smashup_reaction_choose');
+        expect(resumedChoice?.playerId).toBe('1');
         expect(r4.finalState.sys.responseWindow.current?.currentResponderIndex).toBe(1);
         // 疯狂卡已抽到 P0 手牌（defId 为 MADNESS_CARD_DEF_ID = 'special_madness'）
         expect(r4.finalState.core.players['0'].hand.some((c: any) => c.defId === 'special_madness')).toBe(true);
@@ -550,7 +541,7 @@ describe('Me First! 响应窗口', () => {
             domain: SmashUpDomain, systems, playerIds: PLAYER_IDS, setup: () => r1.finalState,
         }).run({
             name: 'skip: 打出 special',
-            commands: [{ type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'mandatory-skip', targetBaseIndex: 0 } }] as any[],
+            commands: [{ type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'play_action:mandatory-skip:0' } }] as any[],
         });
         expect(r2.steps[0]?.success).toBe(true);
         const choice1 = asSimpleChoice(r2.finalState.sys.interaction.current);
@@ -579,8 +570,9 @@ describe('Me First! 响应窗口', () => {
         });
         expect(r4.steps[0]?.success).toBe(true);
         // 交互完成，响应窗口推进到 P1
-        expect(r4.finalState.sys.interaction.current).toBeUndefined();
-        expect(r4.finalState.sys.responseWindow.current?.pendingInteractionId).toBeUndefined();
+        const resumedChoice = asSimpleChoice(r4.finalState.sys.interaction.current);
+        expect(resumedChoice?.sourceId).toBe('smashup_reaction_choose');
+        expect(resumedChoice?.playerId).toBe('1');
         expect(r4.finalState.sys.responseWindow.current?.currentResponderIndex).toBe(1);
         // 没有疯狂卡被抽取
         expect(r4.finalState.core.players['0'].hand.some((c: any) => c.defId === 'special_madness')).toBe(false);

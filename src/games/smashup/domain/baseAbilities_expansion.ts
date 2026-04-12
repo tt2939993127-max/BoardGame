@@ -17,16 +17,17 @@ import type {
 import { SU_EVENTS, MADNESS_CARD_DEF_ID } from './types';
 import { getEffectivePower } from './ongoingModifiers';
 import {
+    grantContextualExtraAction,
     grantContextualExtraMinion,
-    grantExtraMinion,
     grantExtraAction,
-    drawMadnessCards,
-    findMinionOnBases,
+    returnMadnessCard,
     recoverCardsFromDiscard,
     buildValidatedMoveEvents,
     buildValidatedDestroyEvents,
     buildValidatedCardToDeckBottomEvents,
     buildStandardDrawEvents,
+    drawMadnessCards,
+    findMinionOnBases,
 } from './abilityHelpers';
 import { createSimpleChoice, queueInteraction, type PromptOption } from '../../../engine/systems/InteractionSystem';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
@@ -196,13 +197,10 @@ export function registerExpansionBaseAbilities(): void {
         // 直接授予1个同名随从额度，限定到此基地
         return {
             events: [
-                grantExtraMinion(
-                    ctx.playerId,
-                    'base_plateau_of_leng',
-                    ctx.now,
-                    ctx.baseIndex, // 限定到此基地
-                    { sameNameOnly: true, sameNameDefId: ctx.minionDefId }, // 同名约束
-                ),
+                grantContextualExtraMinion(ctx, 'base_plateau_of_leng', ctx.baseIndex, {
+                    sameNameOnly: true,
+                    sameNameDefId: ctx.minionDefId,
+                }),
             ],
         };
     });
@@ -365,8 +363,8 @@ export function registerExpansionBaseAbilities(): void {
 
         return {
             events: [
-                grantExtraMinion(ctx.playerId, '仙灵之环：首次打出随从后额外随从机会', ctx.now, ctx.baseIndex),
-                grantExtraAction(ctx.playerId, '仙灵之环：首次打出随从后额外行动机会', ctx.now),
+                grantContextualExtraMinion(ctx, '仙灵之环：首次打出随从后额外随从机会', ctx.baseIndex),
+                grantContextualExtraAction(ctx, '仙灵之环：首次打出随从后额外行动机会'),
             ],
         };
     });
