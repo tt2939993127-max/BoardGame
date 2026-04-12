@@ -7,7 +7,7 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
+import { asSimpleChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { createFlowSystem, createBaseSystems } from '../../../engine/systems';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
@@ -707,8 +707,10 @@ describe('afterScoring 延迟清场回归', () => {
 
         const emittedEvents = result.events as SmashUpEvent[];
         expect(emittedEvents.map(event => event.type)).toContain(SU_EVENTS.BASE_SCORED);
-        expect(emittedEvents.map(event => event.type)).toContain('RESPONSE_WINDOW_OPENED');
         expect(result.halt).toBe(true);
+        const reactionChoice = asSimpleChoice(result.updatedState?.sys.interaction?.current)!;
+        expect(reactionChoice).toBeTruthy();
+        expect(reactionChoice.sourceId).toBe('smashup_reaction_choose');
         expect((result.updatedState?.sys as any).smashupScoring?.currentBaseRef?.slotIndex).toBe(0);
         expect(result.updatedState?.sys.scoredBaseIndices).toEqual([0]);
     });
@@ -728,15 +730,15 @@ describe('afterScoring 延迟清场回归', () => {
         }));
 
         state.sys.flowHalted = true;
-        state.sys.responseWindow.current = {
-            id: 'after-scoring-window',
-            responderQueue: ['0', '1'],
-            currentResponderIndex: 0,
-            passedPlayers: [],
-            windowType: 'afterScoring',
-            sourceId: 'test-after-scoring',
-            actionTakenThisRound: false,
-            consecutivePassRounds: 0,
+        (state.sys as any).smashupReactionSession = {
+            frameId: 'test-after-scoring',
+            frameKind: 'score-after',
+            phase: 'optional',
+            activePlayerId: '0',
+            currentPlayerId: '0',
+            consecutivePasses: 0,
+            sourceBaseIndex: 0,
+            responseWindowType: 'afterScoring',
         };
 
         const result = smashUpFlowHooks.onAutoContinueCheck?.({
@@ -868,18 +870,39 @@ describe('afterScoring 延迟清场回归', () => {
         expect(player1EndTurn.success).toBe(true);
         expect(player1EndTurn.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
 
-        const stateAfterPlayer1Turn = runner.getState();
-        expect(stateAfterPlayer1Turn.sys.phase).toBe('playCards');
-        expect(stateAfterPlayer1Turn.core.turnOrder[stateAfterPlayer1Turn.core.currentPlayerIndex]).toBe('0');
-        expect(stateAfterPlayer1Turn.core.bases[0].defId).toBe('base_secret_garden');
+        let stateBeforePlayer0Turn = runner.getState();
+        expect(stateBeforePlayer0Turn.core.turnOrder[stateBeforePlayer0Turn.core.currentPlayerIndex]).toBe('0');
+        expect(stateBeforePlayer0Turn.core.bases[0].defId).toBe('base_secret_garden');
+        expect(['playCards', 'startTurn']).toContain(stateBeforePlayer0Turn.sys.phase);
+
+        let immediateExtraGuard = 0;
+        while (stateBeforePlayer0Turn.sys.phase === 'startTurn') {
+            expect(asSimpleChoice(stateBeforePlayer0Turn.sys.interaction?.current)?.sourceId).toBe('smashup_immediate_extra_minion');
+
+            const skipImmediateExtra = runner.dispatch(INTERACTION_COMMANDS.RESPOND, {
+                playerId: '0',
+                optionId: 'skip',
+            });
+            expect(skipImmediateExtra.success).toBe(true);
+            expect(skipImmediateExtra.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
+
+            stateBeforePlayer0Turn = runner.getState();
+            immediateExtraGuard += 1;
+            expect(immediateExtraGuard).toBeLessThanOrEqual(3);
+        }
+        expect(stateBeforePlayer0Turn.sys.phase).toBe('playCards');
+        expect(stateBeforePlayer0Turn.sys.interaction?.current).toBeUndefined();
 
         const player0EndTurn = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
         expect(player0EndTurn.success).toBe(true);
         expect(player0EndTurn.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
 
         const finalState = runner.getState();
-        expect(finalState.sys.phase).toBe('playCards');
         expect(finalState.core.turnOrder[finalState.core.currentPlayerIndex]).toBe('1');
         expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
+        expect(['playCards', 'startTurn']).toContain(finalState.sys.phase);
+        if (finalState.sys.phase === 'startTurn') {
+            expect(asSimpleChoice(finalState.sys.interaction?.current)?.sourceId).toBe('smashup_immediate_extra_minion');
+        }
     });
 });

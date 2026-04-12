@@ -65,18 +65,19 @@ describe('afterScoring 响应窗口中打出卡牌的执行', () => {
                 ];
                 core.players['1'].hand = [];
                 
-                // 打开 afterScoring 响应窗口
+                (sys as any).smashupReactionSession = {
+                    frameId: 'score-after:0:test',
+                    frameKind: 'score-after',
+                    phase: 'optional',
+                    activePlayerId: '0',
+                    currentPlayerId: '0',
+                    consecutivePasses: 0,
+                    sourceBaseIndex: 0,
+                    responseWindowType: 'afterScoring',
+                };
                 sys.responseWindow = {
-                    current: {
-                        id: 'test-afterscoring',
-                        responderQueue: ['0', '1'],
-                        currentResponderIndex: 0,
-                        passedPlayers: [],
-                        windowType: 'afterScoring',
-                        sourceId: 'test',
-                        actionTakenThisRound: false,
-                        consecutivePassRounds: 0,
-                    },
+                    ...(sys.responseWindow ?? {}),
+                    current: undefined,
                 };
                 
                 return { core, sys };
@@ -170,18 +171,19 @@ describe('afterScoring 响应窗口中打出卡牌的执行', () => {
                 ];
                 core.players['1'].hand = [];
                 
-                // 打开 afterScoring 响应窗口
+                (sys as any).smashupReactionSession = {
+                    frameId: 'score-after:0:test',
+                    frameKind: 'score-after',
+                    phase: 'optional',
+                    activePlayerId: '0',
+                    currentPlayerId: '0',
+                    consecutivePasses: 0,
+                    sourceBaseIndex: 0,
+                    responseWindowType: 'afterScoring',
+                };
                 sys.responseWindow = {
-                    current: {
-                        id: 'test-afterscoring',
-                        responderQueue: ['0', '1'],
-                        currentResponderIndex: 0,
-                        passedPlayers: [],
-                        windowType: 'afterScoring',
-                        sourceId: 'test',
-                        actionTakenThisRound: false,
-                        consecutivePassRounds: 0,
-                    },
+                    ...(sys.responseWindow ?? {}),
+                    current: undefined,
                 };
                 
                 return { core, sys };
@@ -206,6 +208,102 @@ describe('afterScoring 响应窗口中打出卡牌的执行', () => {
         expect(armedEvent).toBeUndefined();
 
         // 验证：应该生成交互（选择转移指示物）
+        const state = runner.getState();
+        const hasInteraction = state.sys.interaction?.queue?.length > 0 || !!state.sys.interaction?.current;
+        expect(hasInteraction).toBe(true);
+    });
+
+    it('只有 smashupReactionSession 时打出"我们乃最强"也应立即执行能力', () => {
+        const runner = new GameTestRunner<SmashUpCore, SmashUpCommand, SmashUpEvent>({
+            domain: SmashUpDomain,
+            systems: smashUpSystemsForTest,
+            playerIds: ['0', '1'],
+            setup: (playerIds, random) => {
+                const core = SmashUpDomain.setup(playerIds, random);
+                const sys = createInitialSystemState(playerIds, smashUpSystemsForTest, undefined);
+
+                core.factionSelection = undefined;
+                sys.phase = 'scoreBases';
+
+                core.bases[0] = {
+                    defId: 'base_the_mothership',
+                    minions: [
+                        {
+                            uid: 'm1',
+                            defId: 'alien_invader',
+                            owner: '0',
+                            controller: '0',
+                            basePower: 3,
+                            powerModifier: 0,
+                            tempPowerModifier: 0,
+                            powerCounters: 10,
+                            attachedActions: [],
+                            talentUsed: false,
+                        },
+                        {
+                            uid: 'm2',
+                            defId: 'robot_microbot_alpha',
+                            owner: '0',
+                            controller: '0',
+                            basePower: 2,
+                            powerModifier: 0,
+                            tempPowerModifier: 0,
+                            powerCounters: 0,
+                            attachedActions: [],
+                            talentUsed: false,
+                        },
+                        {
+                            uid: 'm3',
+                            defId: 'ninja_shinobi',
+                            owner: '1',
+                            controller: '1',
+                            basePower: 2,
+                            powerModifier: 0,
+                            tempPowerModifier: 0,
+                            powerCounters: 10,
+                            attachedActions: [],
+                            talentUsed: false,
+                        },
+                    ] as MinionOnBase[],
+                    ongoingActions: [],
+                };
+
+                core.players['0'].hand = [
+                    { uid: 'card-1', defId: 'giant_ant_we_are_the_champions', type: 'action', owner: '0' },
+                ];
+                core.players['1'].hand = [];
+
+                (sys as any).smashupReactionSession = {
+                    frameId: 'score-after:0:test',
+                    frameKind: 'score-after',
+                    phase: 'optional',
+                    activePlayerId: '0',
+                    currentPlayerId: '0',
+                    consecutivePasses: 0,
+                    sourceBaseIndex: 0,
+                    responseWindowType: 'afterScoring',
+                };
+                sys.responseWindow = {
+                    ...(sys.responseWindow ?? {}),
+                    current: undefined,
+                };
+
+                return { core, sys };
+            },
+        });
+
+        const result = runner.dispatch('su:play_action', {
+            playerId: '0',
+            cardUid: 'card-1',
+            targetBaseIndex: 0,
+        });
+
+        const actionPlayedEvent = result.events.find(e => e.type === SU_EVENT_TYPES.ACTION_PLAYED);
+        expect(actionPlayedEvent).toBeDefined();
+
+        const armedEvent = result.events.find(e => e.type === SU_EVENT_TYPES.SPECIAL_AFTER_SCORING_ARMED);
+        expect(armedEvent).toBeUndefined();
+
         const state = runner.getState();
         const hasInteraction = state.sys.interaction?.queue?.length > 0 || !!state.sys.interaction?.current;
         expect(hasInteraction).toBe(true);

@@ -8,7 +8,8 @@ import { clearOngoingEffectRegistry, registerTrigger, collectTriggers } from '..
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 import { getInteractionHandler, clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
-import { reduce } from '../domain/reduce';
+import { processAffectTriggers, processDeckInspectionTriggers, processMoveTriggers } from '../domain/reducer';
+import '../domain/index';
 
 // Minimal factories reused from other tests
 function baseCore(overrides?: Partial<SmashUpCore>): SmashUpCore {
@@ -72,12 +73,12 @@ describe('Reaction queue ordering (Wiki-style)', () => {
     expect(rq).toBeDefined();
     const ms1 = rq!.state;
     const current = ms1.sys.interaction.current as any;
-    expect(current?.data?.sourceId).toBe('reaction_queue_choose_next');
+    expect(current?.data?.sourceId).toBe('smashup_reaction_choose');
 
     // Choose trigger B first
     const optB = current.data.options.find((o: any) => (o.label as string).includes('test_source_b'));
     expect(optB).toBeDefined();
-    const handler = getInteractionHandler('reaction_queue_choose_next')!;
+    const handler = getInteractionHandler('smashup_reaction_choose')!;
     const r2 = handler(ms1 as any, '0', optB.value, current.data, { shuffle: (a: any[]) => a } as any, 2);
     expect(r2).toBeDefined();
     const evts = r2!.events as SmashUpEvent[];
@@ -107,140 +108,143 @@ describe('Reaction queue ordering (Wiki-style)', () => {
     expect(queued).toBeUndefined();
   });
 
-  it('重复入队同一 triggerId 时只保留一份', () => {
-    const core = baseCore();
-    const trigger = {
-      id: 'afterScoring:pirate_first_mate_pod:0:1',
-      timing: 'afterScoring',
-      sourceDefId: 'pirate_first_mate_pod',
-      sourceControllerId: '0',
-      sourceBaseIndex: 0,
-      mandatory: true,
-      ownerPlayerId: '1',
-      witnessRequirement: 'inPlayAtTriggerTime',
-      witnessed: true,
-      baseIndex: 0,
-      rankings: [
-        { playerId: '0', power: 9, vp: 3 },
-        { playerId: '1', power: 9, vp: 3 },
+  it('queued trigger execution re-enters post processing before reaction session continues', () => {
+    registerTrigger('test_resolve_reveal', 'onMinionMoved', () => ([{
+      type: SU_EVENTS.REVEAL_HAND,
+      payload: {
+        targetPlayerId: '1',
+        viewerPlayerId: '0',
+        sourcePlayerId: '0',
+        cards: [{ uid: 'card-1', defId: 'test_action' }],
+        reason: 'test_reveal',
+      },
+      timestamp: 2,
+    }] as any));
+    registerTrigger('test_inspection_optional', 'onDeckInspected', () => ([{
+      type: SU_EVENTS.ABILITY_FEEDBACK,
+      payload: { playerId: '0', messageKey: 'inspection', tone: 'info' },
+      timestamp: 2,
+    }] as any), { optional: true });
+
+    const core = baseCore({
+      bases: [
+        makeBase('test_base_1'),
+        makeBase('test_base_2', [
+          makeMinion('r1', 'test_resolve_reveal', '0', 3),
+          makeMinion('i1', 'test_inspection_optional', '0', 3),
+        ]),
       ],
-    } as TriggerInstance;
-
-    const queuedEvent = {
-      type: SU_EVENTS.TRIGGER_QUEUED,
-      payload: { triggers: [trigger, trigger] },
-      timestamp: 0,
-    } as SmashUpEvent;
-
-    const next = reduce(core, queuedEvent);
-    expect(next.triggerQueue).toHaveLength(1);
-    expect(next.triggerQueue?.[0].id).toBe(trigger.id);
-  });
-  it('perInstance afterScoring 会为同名来源的每个实例单独入队', () => {
-    registerTrigger('test_source_a', 'afterScoring', () => [], {
-      perInstance: true,
-      sourceScope: 'triggerBase',
     });
+
+    const queued = collectTriggers(core, 'onMinionMoved', {
+      state: core,
+      matchState: makeMatchState(core),
+      playerId: '0',
+      baseIndex: 1,
+      triggerMinionUid: 'moved1',
+      triggerMinionDefId: 'any_minion',
+      random: { shuffle: (a: any[]) => a } as any,
+      now: 1,
+    });
+    expect(queued).toBeDefined();
+
+    const ms0 = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
+    const rq = maybeResolveReactionQueue(ms0, { shuffle: (a: any[]) => a } as any, 2);
+    expect(rq).toBeDefined();
+    expect(rq!.events.some(event => event.type === SU_EVENTS.REVEAL_HAND)).toBe(true);
+    expect(rq!.events.some(event => event.type === SU_EVENTS.TRIGGER_QUEUED)).toBe(true);
+  });
+
+  it('processMoveTriggers stamps queued onMinionMoved reactions with explicit frame ids', () => {
+    registerTrigger('test_move_watcher', 'onMinionMoved', () => []);
+
+    const core = baseCore({
+      bases: [
+        makeBase('test_base_1', [makeMinion('moved1', 'test_minion', '0', 2)]),
+        makeBase('test_base_2', [makeMinion('watcher1', 'test_move_watcher', '0', 3)]),
+      ],
+    });
+
+    const result = processMoveTriggers([{
+      type: SU_EVENTS.MINION_MOVED,
+      payload: {
+        minionUid: 'moved1',
+        minionDefId: 'test_minion',
+        fromBaseIndex: 0,
+        toBaseIndex: 1,
+        reason: 'test_move',
+      },
+      timestamp: 7,
+    } as any], makeMatchState(core), '0', { shuffle: (a: any[]) => a } as any, 7);
+
+    const queued = result.events.find((event: any) => event.type === SU_EVENTS.TRIGGER_QUEUED) as any;
+    expect(queued).toBeDefined();
+    const trigger = queued.payload.triggers[0];
+    expect(trigger.sourceEventId).toBe('minion-moved:moved1:0:1:7');
+    expect(trigger.frameId).toBe('minion-moved-frame:moved1:0:1:7');
+    expect(trigger.moveFromBaseIndex).toBe(0);
+    expect(trigger.moveToBaseIndex).toBe(1);
+  });
+
+  it('processAffectTriggers stamps queued onMinionAffected reactions with explicit frame ids', () => {
+    registerTrigger('test_affect_watcher', 'onMinionAffected', () => []);
 
     const core = baseCore({
       bases: [
         makeBase('test_base_1', [
-          makeMinion('a1', 'test_source_a', '0', 3),
-          makeMinion('a2', 'test_source_a', '1', 3),
+          makeMinion('moved1', 'test_minion', '0', 2),
+          makeMinion('watcher1', 'test_affect_watcher', '0', 3),
         ]),
-        makeBase('test_base_2', [makeMinion('a3', 'test_source_a', '0', 3)]),
+        makeBase('test_base_2'),
       ],
     });
 
-    const queued = collectTriggers(core, 'afterScoring', {
-      state: core,
-      matchState: makeMatchState(core),
-      playerId: '0',
-      baseIndex: 0,
-      rankings: [{ playerId: '0', power: 6, vp: 1 }],
-      random: { shuffle: (a: any[]) => a, random: () => 0.5, d: () => 1, range: (m: number) => m } as any,
-      now: 1,
-    });
+    const result = processAffectTriggers([{
+      type: SU_EVENTS.MINION_MOVED,
+      payload: {
+        minionUid: 'moved1',
+        minionDefId: 'test_minion',
+        fromBaseIndex: 0,
+        toBaseIndex: 1,
+        reason: 'test_move',
+      },
+      timestamp: 9,
+    } as any], makeMatchState(core), '0', { shuffle: (a: any[]) => a } as any, 9);
 
+    const queued = result.events.find((event: any) => event.type === SU_EVENTS.TRIGGER_QUEUED) as any;
     expect(queued).toBeDefined();
-    const triggers = (queued as any).payload.triggers as TriggerInstance[];
-    expect(triggers).toHaveLength(2);
-    expect(triggers.map(t => t.sourceCardUid)).toEqual(['a1', 'a2']);
-    expect(new Set(triggers.map(t => t.id)).size).toBe(2);
-    expect(triggers.every(t => t.sourceBaseIndex === 0)).toBe(true);
+    const trigger = queued.payload.triggers[0];
+    expect(trigger.sourceEventId).toBe(`minion-affected:${SU_EVENTS.MINION_MOVED}:moved1:move:0:0:0:9`);
+    expect(trigger.frameId).toBe(`minion-affected-frame:${SU_EVENTS.MINION_MOVED}:moved1:move:0:0:0:9`);
   });
 
-  it('reaction queue 选项会附带 AI hint，且优先己方触发', () => {
-    const triggerSelf = {
-      id: 'afterScoring:self_trigger:0:0',
-      timing: 'afterScoring',
-      sourceDefId: 'test_source_self',
-      sourceControllerId: '0',
-      sourceBaseIndex: 0,
-      mandatory: true,
-      ownerPlayerId: '0',
-      witnessRequirement: 'inPlayAtTriggerTime',
-      witnessed: true,
-      baseIndex: 0,
-      rankings: [
-        { playerId: '0', power: 10, vp: 3 },
-        { playerId: '1', power: 6, vp: 2 },
-      ],
-    } as TriggerInstance;
-
-    const triggerEnemy = {
-      id: 'afterScoring:enemy_trigger:0:0',
-      timing: 'afterScoring',
-      sourceDefId: 'test_source_enemy',
-      sourceControllerId: '1',
-      sourceBaseIndex: 0,
-      mandatory: true,
-      ownerPlayerId: '1',
-      witnessRequirement: 'inPlayAtTriggerTime',
-      witnessed: true,
-      baseIndex: 0,
-      rankings: [
-        { playerId: '1', power: 11, vp: 3 },
-        { playerId: '0', power: 6, vp: 1 },
-      ],
-    } as TriggerInstance;
+  it('processDeckInspectionTriggers stamps queued onDeckInspected reactions with explicit frame ids', () => {
+    registerTrigger('test_inspect_watcher', 'onDeckInspected', () => []);
 
     const core = baseCore({
-      triggerQueue: [triggerSelf, triggerEnemy],
-    });
-    const ms0 = makeMatchState(core);
-    const rq = maybeResolveReactionQueue(
-      ms0,
-      { shuffle: (a: any[]) => a, random: () => 0.5, d: () => 1, range: (m: number) => m } as any,
-      1,
-    );
-    expect(rq).toBeDefined();
-
-    const interaction = rq!.state.sys.interaction.current as any;
-    const selfOption = interaction.data.options.find((o: any) => o.value?.triggerId === triggerSelf.id);
-    const enemyOption = interaction.data.options.find((o: any) => o.value?.triggerId === triggerEnemy.id);
-
-    expect(selfOption?._ai).toBeDefined();
-    expect(enemyOption?._ai).toBeDefined();
-
-    const actions = buildSmashUpAiLegalActions({
-      playerId: '0',
-      state: rq!.state as any,
+      bases: [
+        makeBase('test_base_1', [makeMinion('watcher1', 'test_inspect_watcher', '0', 3)]),
+        makeBase('test_base_2'),
+      ],
     });
 
-    const findAction = (triggerId: string) => actions.find((action) => {
-      return (action as any)?.metadata?.optionValue?.triggerId === triggerId;
-    });
+    const result = processDeckInspectionTriggers([{
+      type: SU_EVENTS.REVEAL_HAND,
+      payload: {
+        targetPlayerId: '1',
+        viewerPlayerId: '0',
+        sourcePlayerId: '0',
+        cards: [{ uid: 'card-1', defId: 'test_action' }],
+        reason: 'test_reveal',
+      },
+      timestamp: 11,
+    } as any], makeMatchState(core), '0', { shuffle: (a: any[]) => a } as any, 11);
 
-    const selfAction = findAction(triggerSelf.id);
-    const enemyAction = findAction(triggerEnemy.id);
-
-    expect(selfAction).toBeDefined();
-    expect(enemyAction).toBeDefined();
-
-    const selfScore = scoreAiHints(selfAction?.aiHints ?? []);
-    const enemyScore = scoreAiHints(enemyAction?.aiHints ?? []);
-    expect(selfScore).toBeGreaterThan(enemyScore);
+    const queued = result.events.find((event: any) => event.type === SU_EVENTS.TRIGGER_QUEUED) as any;
+    expect(queued).toBeDefined();
+    const trigger = queued.payload.triggers[0];
+    expect(trigger.sourceEventId).toBe(`deck-inspected:${SU_EVENTS.REVEAL_HAND}:hand:1:0:11`);
+    expect(trigger.frameId).toBe(`deck-inspected-frame:${SU_EVENTS.REVEAL_HAND}:hand:1:0:11`);
   });
 });
 

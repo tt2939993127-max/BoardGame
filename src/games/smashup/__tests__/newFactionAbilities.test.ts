@@ -3531,18 +3531,19 @@ describe('巨蚁派系能力', () => {
             ],
         });
 
-        // 设置 Me First! 响应窗口
         const ms = makeMatchState(core);
         ms.sys.phase = 'scoreBases';
-        (ms.sys as any).responseWindow = {
-            current: {
-                windowId: 'meFirst_scoreBases_1',
-                responderQueue: ['0', '1'],
-                currentResponderIndex: 0,
-                windowType: 'meFirst',
-                sourceId: 'scoreBases',
-            },
+        (ms.sys as any).smashupReactionSession = {
+            frameId: 'score-before:0:test',
+            frameKind: 'score-before',
+            phase: 'optional',
+            activePlayerId: '0',
+            currentPlayerId: '0',
+            consecutivePasses: 0,
+            sourceBaseIndex: 0,
+            responseWindowType: 'meFirst',
         };
+        ms.sys.responseWindow = { ...(ms.sys.responseWindow ?? {}), current: undefined } as any;
 
         const playResult = runCommand(
             ms,
@@ -3584,12 +3585,14 @@ describe('巨蚁派系能力', () => {
         expect(removed).toBeDefined();
         expect(added).toBeDefined();
         expect((removed as any).payload.amount).toBe(3);
+        expect((removed as any).payload.minionUid).toBe('m1');
         expect((added as any).payload.amount).toBe(3);
-        
-        // 验证最终状态：m1 在基地 0，m2 在基地 1
+        expect((added as any).payload.minionUid).toBe('m2');
+
+        // Me First! 子动作完成后，计分链会继续推进，所以来源随从可能已随计分基地一起离场。
         const m1Final = amountResult.finalState.core.bases[0]?.minions.find(m => m.uid === 'm1');
         const m2Final = amountResult.finalState.core.bases[1]?.minions.find(m => m.uid === 'm2');
-        expect(m1Final?.powerCounters).toBe(0);
+        expect(m1Final).toBeUndefined();
         expect(m2Final?.powerCounters).toBe(3);
     });
 

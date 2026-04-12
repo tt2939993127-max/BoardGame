@@ -383,6 +383,29 @@ export function getMaxRemainingGlobalPowerLimitedQuota(
  * 若还存在其他可用路径（不限力量的全局额度 / 同名额度 / 当前基地可用的基地额度），
  * 就不应该对这次打出强制施加全局力量上限。
  */
+export function getRemainingBaseLimitedPowerLimitedMinionQuotas(
+    player: PlayerState | undefined,
+    baseIndex: number,
+): number[] {
+    if (!player) return [];
+    const directCaps = player.baseLimitedMinionPowerCaps?.[baseIndex];
+    if (directCaps && directCaps.length > 0) {
+        return [...directCaps];
+    }
+    return [];
+}
+
+export function getBestMatchingBaseLimitedPowerQuota(
+    player: PlayerState | undefined,
+    baseIndex: number,
+    basePower: number,
+): number | undefined {
+    const candidates = getRemainingBaseLimitedPowerLimitedMinionQuotas(player, baseIndex)
+        .filter(powerCap => basePower <= powerCap)
+        .sort((a, b) => a - b);
+    return candidates[0];
+}
+
 export function mustUseGlobalPowerLimitedMinionQuota(
     state: SmashUpCore,
     player: PlayerState | undefined,
@@ -399,6 +422,30 @@ export function mustUseGlobalPowerLimitedMinionQuota(
     if (canUseSameNameMinionQuota(player, cardDefId)) return false;
     if (canUseBaseLimitedMinionQuota(state, player, baseIndex, cardDefId, basePower)) return false;
     return true;
+}
+
+export function resolveLiveBaseIndex(
+    state: SmashUpCore,
+    baseIndex: number | undefined,
+    baseDefId?: string,
+): number | undefined {
+    if (baseIndex !== undefined) {
+        const baseAtIndex = state.bases[baseIndex];
+        if (baseAtIndex && (!baseDefId || baseAtIndex.defId === baseDefId)) {
+            return baseIndex;
+        }
+    }
+
+    if (baseDefId) {
+        const matchedIndex = state.bases.findIndex(base => base.defId === baseDefId);
+        if (matchedIndex >= 0) return matchedIndex;
+    }
+
+    if (baseIndex !== undefined && baseIndex >= 0 && baseIndex < state.bases.length) {
+        return baseIndex;
+    }
+
+    return undefined;
 }
 
 // ============================================================================

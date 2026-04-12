@@ -114,7 +114,15 @@ export type TriggerTiming =
 /** 閻熸粍婢樺畷顒勫箹妞嬪海灏甸悹鍥皺閳ь剛鍏橀弫宥夊醇濠婂懐鐓?onMinionAffected 闂佸搫鍟抽崺鏍э耿娓氣偓瀹曟劗娑垫搴ｎ槴 */
 export type TitanAwareTriggerTiming = TriggerTiming | 'whenScoring' | 'onTitanMoved';
 
-export type AffectType = 'destroy' | 'move' | 'power_change' | 'attach_action' | 'control_change';
+export type AffectType =
+    | 'destroy'
+    | 'move'
+    | 'return'
+    | 'power_change'
+    | 'attach_action'
+    | 'control_change'
+    | 'cancel_ability'
+    | 'shuffle_into_deck';
 
 /** 闁荤喐鐟辩粻鎴ｃ亹閸屾稓鈻斿┑鐘辫兌閻熸捇鏌?*/
 export interface TriggerContext {
@@ -122,6 +130,10 @@ export interface TriggerContext {
     /** 完整的 match 状态，用于触发器创建交互 */
     matchState?: MatchState<SmashUpCore>;
     timing: TitanAwareTriggerTiming;
+    /** 同一事件/同一牌的反应 frame */
+    frameId?: string;
+    /** 触发来源事件 id */
+    sourceEventId?: string;
     /** 具体触发来源实例 uid */
     sourceCardUid?: string;
     /** 触发来源所在基地 */
@@ -221,6 +233,7 @@ interface TriggerEntry {
     timing: TitanAwareTriggerTiming;
     callback: TriggerCallback;
     optional?: boolean;
+    mandatory?: boolean;
     phase?: 'replacement' | 'reaction';
     playerContext?: 'eventPlayer' | 'sourceController';
     baseScoped?: boolean;
@@ -289,6 +302,7 @@ export function registerTrigger(
     callback: TriggerCallback,
     options?: {
         optional?: boolean;
+        mandatory?: boolean;
         phase?: 'replacement' | 'reaction';
         global?: boolean;
         globalZones?: Array<'hand' | 'discard' | 'deck'>;
@@ -305,6 +319,7 @@ export function registerTrigger(
         timing,
         callback,
         optional: options?.optional,
+        mandatory: options?.mandatory,
         phase: options?.phase ?? 'reaction',
         perInstance: options?.perInstance,
         sourceScope: options?.sourceScope ?? 'any',
@@ -399,6 +414,9 @@ function createTriggerInstance(
     located: TriggerSourceLocation,
     ctx: Omit<TriggerContext, 'timing'>,
 ): TriggerInstance {
+    const mandatory = entry.mandatory ?? !(entry.optional ?? false);
+    const sourceEventId = ctx.sourceEventId ?? `${timing}:${now}`;
+    const frameId = ctx.frameId ?? `${timing}:${sourceEventId}`;
     return {
         id: buildTriggerId(entry, timing, now, order, located),
         timing,
@@ -406,7 +424,10 @@ function createTriggerInstance(
         sourceCardUid: located.uid,
         sourceControllerId: located.controllerId,
         sourceBaseIndex: located.baseIndex,
-        mandatory: entry.optional ? false : true,
+        mandatory,
+        resolutionClass: mandatory ? 'mandatory' : 'optional',
+        frameId,
+        sourceEventId,
         ownerPlayerId: entry.playerContext === 'sourceController' && located.controllerId
             ? located.controllerId
             : pid,

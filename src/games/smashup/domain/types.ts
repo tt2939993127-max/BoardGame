@@ -530,6 +530,11 @@ export interface TriggerInstance {
 
     /** Wiki ordering */
     mandatory: boolean;
+    resolutionClass: 'mandatory' | 'optional';
+    /** 同一张牌/同一时点产生的反应 frame */
+    frameId?: string;
+    /** 触发源事件快照 id */
+    sourceEventId?: string;
     /** who decides / is credited */
     ownerPlayerId: PlayerId;
     witnessRequirement: WitnessRequirement;
@@ -563,6 +568,27 @@ export interface TriggerInstance {
     /** LKI snapshots captured at queue time */
     lkiMinion?: MinionLkiSnapshot;
     lkiBase?: BaseLkiSnapshot;
+}
+
+export type SmashUpReactionPhase = 'mandatory' | 'optional';
+
+export type SmashUpReactionFrameKind =
+    | 'generic'
+    | 'turn-start'
+    | 'turn-end'
+    | 'score-before'
+    | 'score-when'
+    | 'score-after';
+
+export interface SmashUpReactionSession {
+    frameId: string;
+    frameKind: SmashUpReactionFrameKind;
+    phase: SmashUpReactionPhase;
+    activePlayerId: PlayerId;
+    currentPlayerId: PlayerId;
+    consecutivePasses: number;
+    sourceBaseIndex?: number;
+    responseWindowType?: 'meFirst' | 'afterScoring';
 }
 
 export type DuelOutcomeKind =
@@ -948,6 +974,9 @@ export interface MinionPlayedEvent extends GameEvent<'su:minion_played'> {
         fromDeck?: boolean;
         /** 从埋葬区打出（揭开时使用） */
         fromBuried?: boolean;
+        targetBaseIndex?: number;
+        targetType?: 'base' | 'minion';
+        targetMinionUid?: string;
         /** 弃牌堆出牌来源能力 ID（用于每回合限制追踪） */
         discardPlaySourceId?: string;
         /** 是否消耗正常随从额度 */
@@ -1383,6 +1412,10 @@ export interface MinionControlChangedEvent extends GameEvent<typeof SU_EVENTS.MI
         fromControllerId: PlayerId;
         toControllerId: PlayerId;
         sourcePlayerId: PlayerId;
+        sourceCardUid?: string;
+        sourceDefId?: string;
+        sourceControllerId?: PlayerId;
+        sourceBaseIndex?: number;
         reason: string;
     };
 }
@@ -1736,26 +1769,6 @@ export interface CardSuppressedEvent extends GameEvent<typeof SU_EVENTS.CARD_SUP
         sourceDefId?: string;
         sourceControllerId?: PlayerId;
         sourceBaseIndex?: number;
-    };
-}
-
-/** 主动基地能力已使用事件 */
-export interface BaseAbilityUsedEvent extends GameEvent<typeof SU_EVENTS.BASE_ABILITY_USED> {
-    payload: {
-        playerId: PlayerId;
-        baseIndex: number;
-        baseDefId: string;
-    };
-}
-
-/** 卡牌能力压制事件（直到压制者的下个回合开始） */
-export interface CardSuppressedEvent extends GameEvent<typeof SU_EVENTS.CARD_SUPPRESSED> {
-    payload: {
-        cardUid: string;
-        baseIndex: number;
-        suppressorPlayerId: PlayerId;
-        cardType: 'minion' | 'ongoing' | 'attached' | 'titan';
-        reason: string;
     };
 }
 

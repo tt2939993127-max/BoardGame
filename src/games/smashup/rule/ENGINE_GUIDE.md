@@ -42,7 +42,7 @@
   - 会根据 `isSourceActive` + witness 规则检查来源是否仍在场，并为 move/affect timing 做“目的地基地 must match”的见证校验。
 - **执行入口**：
   - `postProcessSystemEvents` 里，处理完一批事件后会调用 `maybeResolveReactionQueue`；
-  - 单一触发时直接执行，多触发时为当前决策玩家创建 `reaction_queue_choose_next` 交互，由其决定下一触发顺序。
+  - 单一触发时直接执行，多触发时为当前决策玩家创建 `smashup_reaction_choose` 交互，由其决定下一触发顺序。
 - **编码约定：新增“After X”类持续反应时：**
   - 若是单一来源、单一触发、无同时触发排序争议，可以继续使用现有 `fireTriggers`（非 destroy/move 场景）；
   - 若存在“同时有多个来源/多名玩家都要对 X 做出反应”的场景，应优先建模为：
@@ -52,7 +52,7 @@
 - **基地能力也进入 reaction queue**：
   - `registerBaseAbility(baseDefId, timing, ...)` 注册的基地能力，会被队列化为 `TriggerInstance`（`sourceDefId = baseDefId`，`sourceBaseIndex = baseIndex`，并填充 `lkiBase`）。
   - 在计分/回合开始等时机，基地能力会通过 `SU_EVENTS.TRIGGER_QUEUED` 入队，并由 `maybeResolveReactionQueue` 执行；
-  - 因此当基地能力与其他持续反应同时触发时，可能先出现 `reaction_queue_choose_next`，再进入具体的基地/随从交互。
+  - 因此当基地能力与其他持续反应同时触发时，可能先出现 `smashup_reaction_choose`，再进入具体的基地/随从交互。
 
 ### 3. Witness / LKI（“卡必须看到 X 才能 After X”）
 
@@ -173,7 +173,7 @@ registerTrigger('my_faction_example_minion', 'onMinionDestroyed', (ctx: TriggerC
 
 2. destroy 管线部分无需特殊处理：  
    - 这是一个 **reaction**，会在 `processDestroyTriggers` 的 Phase 2，通过 `collectTriggers('onMinionDestroyed', ...)` 入队；
-   - 若同时存在多个类似触发，统一交给 **reaction queue** 和 `reaction_queue_choose_next` 排序解决。
+   - 若同时存在多个类似触发，统一交给 **reaction queue** 和 `smashup_reaction_choose` 排序解决。
 
 #### 6.3 AI 使用时的“模板步骤”
 

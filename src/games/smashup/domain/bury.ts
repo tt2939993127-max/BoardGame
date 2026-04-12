@@ -1,21 +1,12 @@
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
-import type {
-    SmashUpCore,
-    SmashUpEvent,
-    BuriedCardOnBase,
-    MinionPlayedEvent,
-    ActionPlayedEvent,
-    OngoingAttachedEvent,
-} from './types';
+import type { SmashUpCore, SmashUpEvent, BuriedCardOnBase, MinionPlayedEvent, OngoingAttachedEvent } from './types';
 import { SU_EVENTS } from './types';
 import { registerInteractionHandler, type InteractionHandler } from './abilityInteractionHandlers';
 import { getBaseDef, getCardDef } from '../data/cards';
 import { resolveOnPlay, resolveOnUncover, resolveSpecial } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
-import { collectTriggers } from './ongoingEffects';
-import { triggerBaseAbility } from './baseAbilities';
-import { buildMinionTargetOptions } from './abilityHelpers';
+import { buildActionPlayedEvent } from './actionPlayEvent';
 
 type UncoverChoiceValue = { cardUid: string; baseIndex: number } | { skip: true };
 
@@ -206,36 +197,130 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
     if (def.type === 'action') {
         const actionDef = def as any;
         const subtype = actionDef.subtype as string;
-        const specialTiming = actionDef.specialTiming ?? 'beforeScoring';
-        if (subtype !== 'special' && !isStandardActionTimingAllowed(matchState)) {
-            const events: SmashUpEvent[] = [{
-                type: SU_EVENTS.BURIED_CARD_UNCOVERED,
-                payload: { playerId, cardUid, baseIndex, reason, discardWithoutPlay: true },
-                timestamp: now,
-            } as SmashUpEvent];
-            if (uncoverTriggers) events.push(uncoverTriggers);
-            return { state: matchState, events };
+        const isOngoing = subtype === 'ongoing';
+        const events: SmashUpEvent[] = [];
+
+        if (isOngoing) {
+            // Play-on-base ongoing: attach to this base; play-on-minion needs target on this base.
+            const ongoingTarget = actionDef.ongoingTarget ?? 'base';
+            if (ongoingTarget === 'base') {
+                events.push(buildActionPlayedEvent({
+                    playerId,
+                    cardUid,
+                    defId: buried.defId,
+                    isExtraAction: true,
+                    fromBuried: true,
+                    targetBaseIndex: baseIndex,
+                    timestamp: now,
+                }));
+                const attach: OngoingAttachedEvent = {
+                    type: SU_EVENTS.ONGOING_ATTACHED,
+                    payload: {
+                        cardUid,
+                        defId: buried.defId,
+                        ownerId: playerId,
+                        targetType: 'base',
+                        targetBaseIndex: baseIndex,
+                    },
+                    timestamp: now,
+                } as any;
+                events.push(attach);
+            } else {
+                const minionsHere = base.minions;
+                if (minionsHere.length === 0) {
+                    // 无法打到随从上：弃置无效（ACTION_PLAYED reducer 会入弃牌堆）
+                    events.push(buildActionPlayedEvent({
+                        playerId,
+                        cardUid,
+                        defId: buried.defId,
+                        isExtraAction: true,
+                        fromBuried: true,
+                        timestamp: now,
+                    }));
+                    return { state, events };
+                }
+                if (minionsHere.length === 1) {
+                    events.push(buildActionPlayedEvent({
+                        playerId,
+                        cardUid,
+                        defId: buried.defId,
+                        isExtraAction: true,
+                        fromBuried: true,
+                        targetBaseIndex: baseIndex,
+                        targetMinionUid: minionsHere[0].uid,
+                        timestamp: now,
+                    }));
+                    const attach: OngoingAttachedEvent = {
+                        type: SU_EVENTS.ONGOING_ATTACHED,
+                        payload: {
+                            cardUid,
+                            defId: buried.defId,
+                            ownerId: playerId,
+                            targetType: 'minion',
+                            targetBaseIndex: baseIndex,
+                            targetMinionUid: minionsHere[0].uid,
+                        },
+                        timestamp: now,
+                    } as any;
+                    events.push(attach);
+                } else {
+                    // 需要选择目标随从
+                    const options = minionsHere.map((m, i) => ({
+                        id: `m-${i}`,
+                        label: getCardDef(m.defId)?.name ?? m.defId,
+                        value: { targetMinionUid: m.uid },
+                        _source: 'field' as const,
+                        displayMode: 'card' as const,
+                    }));
+                    const interaction = createSimpleChoice(
+                        `bury_uncover_ongoing_target_${now}`,
+                        playerId,
+                        '选择要附着的随从',
+                        options as any[],
+                        { sourceId: 'bury_uncover_ongoing_target', targetType: 'minion' },
+                    );
+                    (interaction.data as any).continuationContext = { cardUid, defId: buried.defId, baseIndex };
+                    return { state: queueInteraction(state, interaction), events };
+                }
+            }
+
+            // ongoing 的 onPlay（如果有）也要执行（与 PLAY_ACTION 一致）
+            const executor = resolveOnPlay(buried.defId);
+            if (executor) {
+                const ctx: AbilityContext = {
+                    state: state.core,
+                    matchState: state,
+                    playerId,
+                    cardUid,
+                    defId: buried.defId,
+                    baseIndex,
+                    random,
+                    now,
+                };
+                const result = executor(ctx);
+                events.push(...result.events);
+                if (result.matchState) {
+                    return { state: result.matchState, events };
+                }
+            }
+
+            return { state, events };
         }
-        if (subtype === 'special' && !isSpecialTimingAllowed(matchState, specialTiming)) {
-            const events: SmashUpEvent[] = [{
-                type: SU_EVENTS.BURIED_CARD_UNCOVERED,
-                payload: { playerId, cardUid, baseIndex, reason, discardWithoutPlay: true },
-                timestamp: now,
-            } as SmashUpEvent];
-            if (uncoverTriggers) events.push(uncoverTriggers);
-            return { state: matchState, events };
-        }
-        const executeResult = executeUncoveredAction({
-            matchState,
+
+        // standard/special: resolve onPlay immediately
+        events.push(buildActionPlayedEvent({
             playerId,
-            buried,
-            baseIndex,
-            random,
-            now,
-        });
-        const events: SmashUpEvent[] = [{
-            type: SU_EVENTS.BURIED_CARD_UNCOVERED,
-            payload: {
+            cardUid,
+            defId: buried.defId,
+            isExtraAction: true,
+            fromBuried: true,
+            timestamp: now,
+        }));
+        const executor = resolveOnPlay(buried.defId);
+        if (executor) {
+            const ctx: AbilityContext = {
+                state: state.core,
+                matchState: state,
                 playerId,
                 cardUid,
                 baseIndex,
@@ -435,14 +520,39 @@ const handleUncoverOngoingPickTargetMinion: InteractionHandler = (state, playerI
     const buried = (state.core.bases[ctx.baseIndex]?.buriedCards ?? []).find(card => card.uid === ctx.cardUid);
     if (!buried) return { state, events: [] };
 
-    return executeUncoveredAction({
-        matchState: state,
-        playerId,
-        buried,
-        baseIndex: ctx.baseIndex,
-        random,
-        now,
-        targetMinionUid,
-        targetBaseIndex,
-    });
+    const events: SmashUpEvent[] = [
+        buildActionPlayedEvent({
+            playerId,
+            cardUid: ctx.cardUid,
+            defId: ctx.defId,
+            isExtraAction: true,
+            fromBuried: true,
+            targetBaseIndex: ctx.baseIndex,
+            targetMinionUid,
+            timestamp: now,
+        }),
+        attach,
+    ];
+
+    const executor = resolveOnPlay(ctx.defId);
+    if (executor) {
+        const abilityCtx: AbilityContext = {
+            state: state.core,
+            matchState: state,
+            playerId,
+            cardUid: ctx.cardUid,
+            defId: ctx.defId,
+            baseIndex: ctx.baseIndex,
+            targetMinionUid,
+            random,
+            now,
+        };
+        const result = executor(abilityCtx);
+        events.push(...result.events);
+        if (result.matchState) {
+            return { state: result.matchState, events };
+        }
+    }
+
+    return { state, events };
 };

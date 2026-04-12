@@ -21,6 +21,7 @@ import {
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { registerProtection, registerTrigger } from '../domain/ongoingEffects';
 import type { ProtectionChecker, TriggerContext } from '../domain/ongoingEffects';
+import { getSmashUpReactionWindowContext } from '../domain/reactionWindowState';
 import { getCardDef } from '../data/cards';
 import { drawCards, resolveLiveBaseIndex } from '../domain/utils';
 import { SU_EVENTS } from '../domain/types';
@@ -769,9 +770,8 @@ function giantAntUnderPressure(ctx: AbilityContext): AbilityResult {
 }
 
 function giantAntWeAreTheChampions(ctx: AbilityContext): AbilityResult {
-    // 检查是否在 afterScoring 响应窗口中
-    const responseWindow = ctx.matchState?.sys.responseWindow?.current;
-    const isInAfterScoringWindow = responseWindow?.windowType === 'afterScoring';
+    const reactionWindow = getSmashUpReactionWindowContext(ctx.matchState);
+    const isInAfterScoringWindow = reactionWindow?.windowType === 'afterScoring';
     
     if (isInAfterScoringWindow) {
         // 在响应窗口中：立即执行（不生成 ARMED 事件）
