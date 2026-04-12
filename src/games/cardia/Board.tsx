@@ -409,6 +409,13 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         isMultiplayer,
     });
     
+    console.log('[CardiaBoard] useEndgame result', {
+        isGameOver,
+        endgamePropsIsGameOver: endgameProps.isGameOver,
+        endgamePropsResult: endgameProps.result,
+        playerID,
+    });
+    
     useGameAudio({
         config: cardiaAudioConfig,
         gameId: CARDIA_MANIFEST.id,

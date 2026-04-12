@@ -57,6 +57,14 @@ export function useEndgame(options: UseEndgameOptions): UseEndgameReturn {
     const isGameOver = options.isGameOverOverride !== undefined
         ? options.isGameOverOverride
         : !!result;
+    
+    console.log('[useEndgame]', {
+        result,
+        isGameOver,
+        isGameOverOverride: options.isGameOverOverride,
+        playerID,
+        isSpectator,
+    });
 
     // 注册 reset 回调（双方投票后由 socket 触发）
     useEffect(() => {
