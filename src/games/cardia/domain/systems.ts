@@ -164,10 +164,16 @@ function wrapCardiaInteraction(
         interactionType = 'faction-selection';
         
         // 创建派系选项列表
-        const factions = ['swamp', 'academy', 'guild', 'dynasty'];
+        const factions: Array<'swamp' | 'academy' | 'guild' | 'dynasty'> = ['swamp', 'academy', 'guild', 'dynasty'];
+        const factionLabels: Record<string, string> = {
+            swamp: '沼泽',
+            academy: '学院',
+            guild: '公会',
+            dynasty: '王朝',
+        };
         options = factions.map(faction => ({
             id: `faction_${faction}`,
-            label: faction,
+            label: factionLabels[faction],
             value: { faction },
         }));
     } else if (cardiaInteraction.type === 'modifier_selection') {

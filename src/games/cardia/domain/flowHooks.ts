@@ -262,6 +262,12 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
         // end 阶段的逻辑（抽牌等）由 onPhaseEnter 自动处理并发射 TURN_ENDED 事件
         // 当 TURN_ENDED 事件出现在 events 中时，说明回合清理已完成，可以推进到下一回合
         if (sys.phase === 'end') {
+            // ⚠️ 关键修复：如果游戏已经结束，不再自动推进阶段
+            if (sys.gameover) {
+                console.log('[CardiaFlowHooks] Game is over, skipping auto-continue');
+                return;
+            }
+            
             // 检测是否有 TURN_ENDED 事件
             const turnEnded = events.some(e => e.type === CARDIA_EVENTS.TURN_ENDED);
             
