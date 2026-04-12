@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { FLOW_COMMANDS } from '../../../engine';
+import { createSimpleChoice } from '../../../engine/systems/InteractionSystem';
 import { SummonerWarsDomain, SW_COMMANDS } from '../domain';
 import type { SummonerWarsCore, GamePhase, PlayerId, UnitCard, EventCard } from '../domain/types';
 import { buildAiDecisionContext, resolveNextLocalAiAction } from '../../../engine/ai';
@@ -1560,7 +1561,7 @@ describe('召唤师战争本地 AI', () => {
         });
     });
 
-    it('flowHalted 的阶段结束技能应优先暴露可执行技能，不回落普通阶段动作', () => {
+    it('flowHalted 的阶段结束技能应优先暴露交互选项，不回落普通阶段动作', () => {
         const core = createInitializedCore(['0', '1'], aiTestRandom, {
             faction0: 'frost',
             faction1: 'necromancer',
@@ -1632,6 +1633,26 @@ describe('召唤师战争本地 AI', () => {
 
         const sys = createInitialSystemState(['0', '1'], []);
         sys.flowHalted = true;
+        const interaction = createSimpleChoice(
+            'sw-ai-ice-shards-choice',
+            '0',
+            'interaction.sw.iceShards',
+            [
+                {
+                    id: 'confirm',
+                    label: '确认',
+                    value: { action: 'ice_shards', sourceUnitId: jamud.instanceId },
+                },
+                {
+                    id: 'skip',
+                    label: '跳过',
+                    value: { action: 'ice_shards', sourceUnitId: jamud.instanceId, skip: true },
+                },
+            ],
+            { sourceId: 'ice_shards' },
+        );
+        (interaction.data as { sw?: unknown }).sw = { type: 'ice_shards', sourceUnitId: jamud.instanceId };
+        sys.interaction = { ...sys.interaction, current: interaction };
 
         const actions = buildSummonerWarsAiLegalActions({
             playerId: '0',
@@ -1639,15 +1660,15 @@ describe('召唤师战争本地 AI', () => {
         });
 
         expect(actions.length).toBeGreaterThan(0);
-        expect(actions.every((action) => action.kind === 'activate-ability')).toBe(true);
+        expect(actions.some((action) => action.kind === 'interaction-choice')).toBe(true);
+        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(false);
         expect(actions.map((action) => action.commands[0])).toContainEqual({
-            type: SW_COMMANDS.ACTIVATE_ABILITY,
+            type: 'SYS_INTERACTION_RESPOND',
             payload: {
-                abilityId: 'ice_shards',
-                sourceUnitId: jamud.instanceId,
+                interactionId: 'sw-ai-ice-shards-choice',
+                optionId: 'confirm',
             },
         });
-        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(false);
     });
 
     it('殉葬火堆有受伤友军时，AI 应优先生成并选择 FUNERAL_PYRE_HEAL，而不是回落普通阶段动作', async () => {

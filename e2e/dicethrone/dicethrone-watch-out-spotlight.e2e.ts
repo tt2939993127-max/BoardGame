@@ -2009,6 +2009,14 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
 
+    // 攻击修正徽章应在打出卡牌后出现（效果提示）
+    const activeBadgeEarly = page.locator('[data-testid="active-modifier-badge"]').first();
+    await expect(activeBadgeEarly).toBeVisible({ timeout: 5000 });
+    await game.screenshot('09-samurai-righteousness-badge-after-play', testInfo);
+
+    // 特写骰子 / 奖励骰 overlay 必须有成功路径证据截图
+    await game.screenshot('09-samurai-righteousness-bonus-die-overlay', testInfo);
+
     await page.waitForFunction(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
         const entries = state?.sys?.eventStream?.entries ?? [];

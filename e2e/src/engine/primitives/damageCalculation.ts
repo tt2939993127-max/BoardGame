@@ -188,6 +188,29 @@ export class DamageCalculation {
   private getCoreState(): any {
     return this.config.state?.core ?? this.config.state;
   }
+
+  /**
+   * 检查 onDamageReceived 类型的被动效果是否允许在当前伤害上下文触发。
+   * 默认兼容旧行为：未声明 scope 时，仍视为任意伤害触发。
+   */
+  private shouldApplyOnDamageReceivedTrigger(def: any): boolean {
+    const passiveTrigger = def?.passiveTrigger;
+    if (passiveTrigger?.timing !== 'onDamageReceived') return true;
+
+    const scope = passiveTrigger.damageTriggerScope ?? 'anyDamage';
+    if (scope === 'anyDamage') return true;
+
+    if (scope === 'opponentAttackDamage') {
+      const pendingAttack = this.getCoreState()?.pendingAttack;
+      if (!pendingAttack) return false;
+
+      return pendingAttack.attackerId === this.config.source.playerId
+        && pendingAttack.defenderId === this.config.target.playerId
+        && this.config.source.playerId !== this.config.target.playerId;
+    }
+
+    return true;
+  }
   
   constructor(config: DamageCalculationConfig) {
     this.config = config;
@@ -308,6 +331,7 @@ export class DamageCalculation {
     //    遍历所有 tokenDefinitions，根据 category 从 statusEffects 或 tokens 取层数
     for (const def of tokenDefs) {
       if (def.passiveTrigger?.timing !== 'onDamageReceived') continue;
+      if (!this.shouldApplyOnDamageReceivedTrigger(def)) continue;
       
       // 根据 category 决定从 statusEffects 还是 tokens 取层数
       const statusStacks = targetPlayer.statusEffects?.[def.id] ?? 0;

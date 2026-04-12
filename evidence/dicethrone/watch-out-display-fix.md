@@ -70,7 +70,7 @@ PW_USE_DEV_SERVERS=true npx playwright test e2e/dicethrone/dicethrone-watch-out-
 
 #### 1. 初始场景
 
-![初始场景](../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/01-initial-state.png)
+![初始场景](../../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/01-initial-state.png)
 
 分析：
 
@@ -80,7 +80,7 @@ PW_USE_DEV_SERVERS=true npx playwright test e2e/dicethrone/dicethrone-watch-out-
 
 #### 2. 打出后特写
 
-![打出后特写](../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/02-after-play-card.png)
+![打出后特写](../../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/02-after-play-card.png)
 
 分析：
 
@@ -90,7 +90,7 @@ PW_USE_DEV_SERVERS=true npx playwright test e2e/dicethrone/dicethrone-watch-out-
 
 #### 3. 最终状态
 
-![最终状态](../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/03-final-state.png)
+![最终状态](../../test-results/dicethrone-watch-out-spotlight.e2e.ts-自己打出-Watch-Out-应显示骰子特写-chromium/03-final-state.png)
 
 分析：
 

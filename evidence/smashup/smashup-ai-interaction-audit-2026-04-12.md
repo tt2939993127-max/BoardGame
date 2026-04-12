@@ -258,3 +258,11 @@
 ## 修订记录
 
 - 2026-04-12：首次形成《Smash Up AI 交互审计》；结论为**存在 2 个直接影响 AI 卡死/重复交互的结构性 finding（P1/P2）**，不可视为“已收口”。
+- 2026-04-12：已修复 P1（移除 `SmashUpEventSystem.afterEvents()` 内部对 `postProcessSystemEvents()` 的重复调用），并回归：
+  - `npm run test -- src/games/smashup/__tests__/architecture-duplicate-processing.test.ts`
+  - `npm run test -- src/games/smashup/__tests__/alien-scout-no-duplicate-scoring.test.ts`
+  当前**仅确认 P1 结构性重复后处理已移除**，P2（CANCELLED 善后链）仍待处理。
+- 2026-04-12：已修复 P2（在 `SmashUpEventSystem.afterEvents()` 中处理 `INTERACTION_EVENTS.CANCELLED`；优先复用交互里的控制选项值，缺失时再归一化为 `skip/__cancel__/__emergency_skip__`，让 handler 与 deferred post-scoring 善后链继续落地），新增/复跑回归：
+  - `npm run test -- src/games/smashup/__tests__/afterscoring-window-skip-base-clear.test.ts`（新增用例：`base_greenhouse 被 watchdog emergency-cancel 时，仍应补发延迟清场而不是卡在 afterScoring`）
+  - `npm run test -- src/games/smashup/__tests__/newFactionAbilities.test.ts`
+  - `npm run test -- src/games/smashup/__tests__/architecture-duplicate-processing.test.ts src/games/smashup/__tests__/alien-scout-no-duplicate-scoring.test.ts`

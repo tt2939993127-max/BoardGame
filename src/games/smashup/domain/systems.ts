@@ -29,7 +29,6 @@ import {
     mirrorDeferredPostScoringToFirstInteraction,
     updateScoringSession,
 } from './scoringSession';
-import { postProcessSystemEvents } from './index';
 import { getCardDef } from '../data/cards';
 
 const BODY_SHOP_PENDING_DISTRIBUTIONS_KEY = '_pendingBodyShopDistributions';
@@ -228,6 +227,43 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             const nextEvents: GameEvent[] = [];
             const pendingStartTurnInteractionReduceFlag = '_waitForStartTurnInteractionReduce';
             let latestTimestamp = 0;
+            const normalizeCancelledValue = (
+                raw: unknown,
+                reason: unknown,
+                interactionData?: Record<string, unknown>,
+            ): Record<string, unknown> => {
+                const optionSeed = Array.isArray(interactionData?.options)
+                    ? interactionData.options.find((option) => {
+                        if (!option || typeof option !== 'object') return false;
+                        const candidate = option as Record<string, unknown>;
+                        return candidate.disabled !== true
+                            && candidate.value
+                            && typeof candidate.value === 'object'
+                            && (
+                                (candidate.value as Record<string, unknown>).skip
+                                || (candidate.value as Record<string, unknown>).done
+                                || (candidate.value as Record<string, unknown>).cancel
+                                || (candidate.value as Record<string, unknown>).__cancel__
+                                || (candidate.value as Record<string, unknown>).__emergency_skip__
+                            );
+                    })
+                    : undefined;
+                const normalized: Record<string, unknown> =
+                    raw && typeof raw === 'object'
+                        ? { ...(raw as Record<string, unknown>) }
+                        : optionSeed && typeof optionSeed === 'object' && (optionSeed as Record<string, unknown>).value && typeof (optionSeed as Record<string, unknown>).value === 'object'
+                            ? { ...((optionSeed as { value: Record<string, unknown> }).value) }
+                            : {};
+                if (typeof reason === 'string' && normalized.__emergency_skip_reason__ === undefined) {
+                    normalized.__emergency_skip_reason__ = reason;
+                }
+                if (normalized.__emergency_skip__ === undefined && typeof reason === 'string') {
+                    normalized.__emergency_skip__ = true;
+                }
+                normalized.__cancel__ = true;
+                normalized.skip = true;
+                return normalized;
+            };
 
             const scoringSession = getScoringSession(newState);
             if (scoringSession?.currentStep === 'awaiting-post-reduce') {
@@ -252,8 +288,9 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                 const eventTimestamp = typeof event.timestamp === 'number' ? event.timestamp : 0;
                 latestTimestamp = Math.max(latestTimestamp, eventTimestamp);
 
-                // 监听 SYS_INTERACTION_RESOLVED → 从 sourceId 查找处理函数 → 生成后续事件
-                if (event.type === INTERACTION_EVENTS.RESOLVED) {
+                // 监听 SYS_INTERACTION_RESOLVED / SYS_INTERACTION_CANCELLED → 从 sourceId 查找处理函数 → 生成后续事件
+                if (event.type === INTERACTION_EVENTS.RESOLVED || event.type === INTERACTION_EVENTS.CANCELLED) {
+                    const isCancelled = event.type === INTERACTION_EVENTS.CANCELLED;
                     const payload = event.payload as {
                         interactionId: string;
                         playerId: string;
@@ -261,7 +298,11 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                         value: unknown;
                         sourceId?: string;
                         interactionData?: Record<string, unknown>;
+                        reason?: unknown;
                     };
+                    const resolvedValue = isCancelled
+                        ? normalizeCancelledValue(payload.value, payload.reason, payload.interactionData)
+                        : payload.value;
 
                     if (payload.sourceId) {
                         const handler = getInteractionHandler(payload.sourceId);
@@ -274,7 +315,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                             const result = handler(
                                 newState,
                                 payload.playerId,
-                                payload.value,
+                                resolvedValue,
                                 payload.interactionData,
                                 random,
                                 eventTimestamp
@@ -316,18 +357,9 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                     }
                                 }
                                 
-                                if (emittedEvents.length > 0) {
-                                    const postProcessed = postProcessSystemEvents(
-                                        newState.core,
-                                        emittedEvents,
-                                        random,
-                                        newState,
-                                    );
-                                    emittedEvents = postProcessed.events;
-                                    if (postProcessed.matchState) {
-                                        newState = postProcessed.matchState;
-                                    }
-                                }
+                                // 注意：afterEvents 轮产生的领域事件会在 pipeline.runAfterEventsRounds 中
+                                // 统一调用 postProcessSystemEvents 处理（包含 trigger/保护/去重逻辑）。
+                                // 此处不再手动调用，避免重复触发（D41/D45）。
 
                                 // 交互处理器返回的领域事件需要先经过与 execute() 同步的后处理，
                                 // 再统一交给 pipeline.reduceEventsToCore 做一次拦截与 reduce。
@@ -352,7 +384,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
 
                         if (payload.sourceId === 'giant_ant_drone_prevent_destroy') {
                             const targetMinionUid = (payload.interactionData?.continuationContext as { targetMinionUid?: string } | undefined)?.targetMinionUid;
-                            const selected = payload.value as { skip?: boolean } | undefined;
+                            const selected = resolvedValue as { skip?: boolean } | undefined;
                             if (targetMinionUid && !selected?.skip) {
                                 const pending = getPendingBodyShopDistributions(newState)
                                     .filter((item) => item.targetMinionUid !== targetMinionUid);
@@ -370,7 +402,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             }
 
             if (!newState.sys.interaction?.current) {
-                const reactionQueueResult = maybeResolveReactionQueue(newState as { core: SmashUpCore; sys: any }, random, latestTimestamp);
+                const reactionQueueResult = maybeResolveReactionQueue(newState as MatchState<SmashUpCore>, random, latestTimestamp);
                 if (reactionQueueResult) {
                     newState = reactionQueueResult.state;
                     nextEvents.push(...reactionQueueResult.events as GameEvent[]);

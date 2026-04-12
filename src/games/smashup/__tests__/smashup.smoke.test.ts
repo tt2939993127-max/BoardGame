@@ -4982,12 +4982,28 @@ describe('smashup', () => {
         }) as any;
 
         const emittedEvents = hook?.events ?? [];
-        expect(emittedEvents.some((event: SmashUpEvent) => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
 
+        // 注意：泰坦 clash / 冲突属于 postProcessSystemEvents 的派生事件（afterEvents 轮统一处理），
+        // eventSystem.afterEvents 本身只负责从 interaction handler 拉取领域事件。
         const postSystemState = hook?.state ?? state;
-        const finalCore = emittedEvents.reduce(
-            (acc: SmashUpCore, event: SmashUpEvent) => SmashUpDomain.reduce(acc, event),
+        const postProcessed = SmashUpDomain.postProcessSystemEvents(
             postSystemState.core,
+            emittedEvents,
+            FIXED_RANDOM,
+            postSystemState as any,
+        ) as any;
+        const processedEvents: SmashUpEvent[] = Array.isArray(postProcessed)
+            ? postProcessed
+            : (postProcessed.events ?? []);
+        const processedState = !Array.isArray(postProcessed) && postProcessed.matchState
+            ? ({ ...postSystemState, sys: postProcessed.matchState.sys } as typeof postSystemState)
+            : postSystemState;
+
+        expect(processedEvents.some((event: SmashUpEvent) => event.type === SU_EVENTS.TITAN_REMOVED_FROM_PLAY)).toBe(true);
+
+        const finalCore = processedEvents.reduce(
+            (acc: SmashUpCore, event: SmashUpEvent) => SmashUpDomain.reduce(acc, event),
+            processedState.core,
         );
         const titansOnBaseOne = (finalCore.titans ?? [])
             .filter(candidate => candidate.location.zone === 'base' && candidate.location.baseIndex === 1);

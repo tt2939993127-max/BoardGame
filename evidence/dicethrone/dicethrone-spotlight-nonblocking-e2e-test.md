@@ -13,7 +13,7 @@
 
 ## 截图
 
-![特写不再阻塞后续操作](../test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/bonus-die-spotlight-should-not-block-confirm-button-interaction/04-bonus-die-spotlight-non-blocking.png)
+![特写不再阻塞后续操作](../../test-results/evidence-screenshots/dicethrone/dicethrone-watch-out-spotlight.e2e/bonus-die-spotlight-should-not-block-confirm-button-interaction/04-bonus-die-spotlight-non-blocking.png)
 
 截图绝对路径：
 `D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-watch-out-spotlight.e2e\bonus-die-spotlight-should-not-block-confirm-button-interaction\04-bonus-die-spotlight-non-blocking.png`

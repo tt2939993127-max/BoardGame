@@ -83,6 +83,7 @@ export const GUNSLINGER_TOKENS: TokenDef[] = [
         category: 'debuff',
         passiveTrigger: {
             timing: 'onDamageReceived',
+            damageTriggerScope: 'opponentAttackDamage',
             removable: false,
             actions: [
                 { type: 'modifyStat', target: 'self', value: 1 },

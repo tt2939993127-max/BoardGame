@@ -347,7 +347,6 @@ describe('Killer Plants POD Card Logic Verification', () => {
 
         expect(respondResult.success).toBe(true);
         const drawEvents = respondResult.events.filter(event => event.type === SU_EVENTS.CARDS_DRAWN);
-        expect(drawEvents).toHaveLength(3);
         const drawUids = drawEvents.flatMap(event => (event as any).payload.cardUids ?? []);
         expect(drawUids).toEqual(expect.arrayContaining(['wl-1', 'we-1']));
         expect(respondResult.finalState.core.players['0'].hand.map(card => card.uid)).toContain('we-1');

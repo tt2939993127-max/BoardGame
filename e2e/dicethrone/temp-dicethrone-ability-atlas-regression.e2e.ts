@@ -700,6 +700,277 @@ async function openAndInjectSamuraiAttackModifierScene(
   await expectHandUsesExpectedPreviewAssets(page, 'samurai', [options.cardId]);
 }
 
+async function openAndInjectSamuraiMasamune2Scene(
+  page: Page,
+  game: TestGameController,
+  options: {
+    defenderCharacter: 'paladin' | 'monk';
+  },
+): Promise<void> {
+  await game.openTestGame('dicethrone');
+  await page.evaluate(async ({ defenderCharacter }) => {
+    const harness = (window as any).__BG_TEST_HARNESS__;
+    const state = harness?.state?.get?.();
+    if (!harness || !state) {
+      throw new Error('TestHarness state not ready');
+    }
+
+    const random = {
+      random: () => 0.5,
+      d: (max: number) => Math.min(max, 1),
+      range: (min: number, _max: number) => min,
+      shuffle: <T,>(array: T[]) => [...array],
+    };
+
+    const [{ initHeroState }, { MASAMUNE_2 }, { SAMURAI_CARDS }] = await Promise.all([
+      import('/src/games/dicethrone/domain/characters.ts'),
+      import('/src/games/dicethrone/heroes/samurai/abilities.ts'),
+      import('/src/games/dicethrone/heroes/samurai/cards.ts'),
+    ]);
+
+    const samuraiBase = initHeroState('0', 'samurai', random as any);
+    const defenderBase = initHeroState('1', defenderCharacter, random as any);
+    const upgradeCard = SAMURAI_CARDS.find((entry: any) => entry.id === 'upgrade-masamune-2');
+    if (!upgradeCard) {
+      throw new Error('upgrade-masamune-2 not found');
+    }
+
+    harness.state.set({
+      ...state,
+      sys: {
+        ...state.sys,
+        phase: 'offensiveRoll',
+        interaction: {
+          current: undefined,
+          queue: [],
+        },
+        eventStream: {
+          ...(state.sys?.eventStream ?? {}),
+          entries: [],
+        },
+      },
+      core: {
+        ...state.core,
+        activePlayerId: '0',
+        hostStarted: true,
+        selectedCharacters: {
+          ...(state.core.selectedCharacters ?? {}),
+          '0': 'samurai',
+          '1': defenderCharacter,
+        },
+        rollCount: 1,
+        rollConfirmed: true,
+        dice: [
+          { id: 0, value: 1, isKept: false, playerId: '0' },
+          { id: 1, value: 2, isKept: false, playerId: '0' },
+          { id: 2, value: 3, isKept: false, playerId: '0' },
+          { id: 3, value: 4, isKept: false, playerId: '0' },
+          { id: 4, value: 5, isKept: false, playerId: '0' },
+        ],
+        pendingAttack: null,
+        pendingDamage: undefined,
+        pendingBonusDiceSettlement: undefined,
+        players: {
+          ...state.core.players,
+          '0': {
+            ...samuraiBase,
+            hand: [],
+            discard: [],
+            abilities: samuraiBase.abilities.map((ability: any) => (
+              ability.id === 'masamune' ? JSON.parse(JSON.stringify(MASAMUNE_2)) : ability
+            )),
+            abilityLevels: {
+              ...(samuraiBase.abilityLevels ?? {}),
+              masamune: 2,
+            },
+            upgradeCardByAbilityId: {
+              ...(samuraiBase.upgradeCardByAbilityId ?? {}),
+              masamune: {
+                cardId: upgradeCard.id,
+                cpCost: upgradeCard.cpCost,
+              },
+            },
+            resources: {
+              ...samuraiBase.resources,
+              cp: 4,
+              hp: 50,
+            },
+          },
+          '1': {
+            ...defenderBase,
+            hand: [],
+            discard: [],
+            resources: {
+              ...defenderBase.resources,
+              hp: 50,
+            },
+          },
+        },
+      },
+    });
+
+    (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+  }, options);
+
+  await expect.poll(async () => {
+    const state = await readState(game);
+    return {
+      phase: state?.sys?.phase ?? null,
+      activePlayerId: state?.core?.activePlayerId ?? null,
+      attackerCharacter: state?.core?.selectedCharacters?.['0'] ?? null,
+      defenderCharacter: state?.core?.selectedCharacters?.['1'] ?? null,
+      masamuneLevel: state?.core?.players?.['0']?.abilityLevels?.masamune ?? 0,
+      pendingAttack: state?.core?.pendingAttack ?? null,
+      diceCount: state?.core?.dice?.length ?? 0,
+    };
+  }, { timeout: 10000 }).toMatchObject({
+    phase: 'offensiveRoll',
+    activePlayerId: '0',
+    attackerCharacter: 'samurai',
+    defenderCharacter: options.defenderCharacter,
+    masamuneLevel: 2,
+    pendingAttack: null,
+    diceCount: 5,
+  });
+}
+
+async function openAndInjectSamuraiStandTall2DefenseScene(
+  page: Page,
+  game: TestGameController,
+): Promise<void> {
+  await game.openTestGame('dicethrone');
+  await page.evaluate(async () => {
+    const harness = (window as any).__BG_TEST_HARNESS__;
+    const state = harness?.state?.get?.();
+    if (!harness || !state) {
+      throw new Error('TestHarness state not ready');
+    }
+
+    const random = {
+      random: () => 0.5,
+      d: (max: number) => Math.min(max, 1),
+      range: (min: number, _max: number) => min,
+      shuffle: <T,>(array: T[]) => [...array],
+    };
+
+    const [{ initHeroState }, { STAND_TALL_2 }, { SAMURAI_CARDS }] = await Promise.all([
+      import('/src/games/dicethrone/domain/characters.ts'),
+      import('/src/games/dicethrone/heroes/samurai/abilities.ts'),
+      import('/src/games/dicethrone/heroes/samurai/cards.ts'),
+    ]);
+
+    const attackerBase = initHeroState('0', 'monk', random as any);
+    const samuraiBase = initHeroState('1', 'samurai', random as any);
+    const upgradeCard = SAMURAI_CARDS.find((entry: any) => entry.id === 'upgrade-stand-tall-2');
+    if (!upgradeCard) {
+      throw new Error('upgrade-stand-tall-2 not found');
+    }
+
+    harness.state.set({
+      ...state,
+      sys: {
+        ...state.sys,
+        phase: 'offensiveRoll',
+        interaction: {
+          current: undefined,
+          queue: [],
+        },
+        eventStream: {
+          ...(state.sys?.eventStream ?? {}),
+          entries: [],
+        },
+      },
+      core: {
+        ...state.core,
+        activePlayerId: '0',
+        hostStarted: true,
+        selectedCharacters: {
+          ...(state.core.selectedCharacters ?? {}),
+          '0': 'monk',
+          '1': 'samurai',
+        },
+        rollCount: 1,
+        rollConfirmed: true,
+        dice: [
+          { id: 0, value: 1, isKept: false, playerId: '0' },
+          { id: 1, value: 2, isKept: false, playerId: '0' },
+          { id: 2, value: 3, isKept: false, playerId: '0' },
+          { id: 3, value: 4, isKept: false, playerId: '0' },
+          { id: 4, value: 5, isKept: false, playerId: '0' },
+        ],
+        pendingDamage: undefined,
+        pendingBonusDiceSettlement: undefined,
+        players: {
+          ...state.core.players,
+          '0': {
+            ...attackerBase,
+            hand: [],
+            discard: [],
+            resources: {
+              ...attackerBase.resources,
+              hp: 50,
+              cp: 2,
+            },
+          },
+          '1': {
+            ...samuraiBase,
+            hand: [],
+            discard: [],
+            abilities: samuraiBase.abilities.map((ability: any) => (
+              ability.id === 'stand-tall' ? JSON.parse(JSON.stringify(STAND_TALL_2)) : ability
+            )),
+            abilityLevels: {
+              ...(samuraiBase.abilityLevels ?? {}),
+              'stand-tall': 2,
+            },
+            upgradeCardByAbilityId: {
+              ...(samuraiBase.upgradeCardByAbilityId ?? {}),
+              'stand-tall': {
+                cardId: upgradeCard.id,
+                cpCost: upgradeCard.cpCost,
+              },
+            },
+            resources: {
+              ...samuraiBase.resources,
+              hp: 50,
+              cp: 2,
+            },
+          },
+        },
+        pendingAttack: {
+          attackerId: '0',
+          defenderId: '1',
+          isDefendable: true,
+          damage: 5,
+          bonusDamage: 0,
+          sourceAbilityId: 'harmony',
+        },
+      },
+    });
+
+    (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+  });
+
+  await expect.poll(async () => {
+    const state = await readState(game);
+    return {
+      phase: state?.sys?.phase ?? null,
+      activePlayerId: state?.core?.activePlayerId ?? null,
+      defenderCharacter: state?.core?.selectedCharacters?.['1'] ?? null,
+      standTallLevel: state?.core?.players?.['1']?.abilityLevels?.['stand-tall'] ?? 0,
+      sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+      pendingAttackDefender: state?.core?.pendingAttack?.defenderId ?? null,
+    };
+  }, { timeout: 10000 }).toMatchObject({
+    phase: 'offensiveRoll',
+    activePlayerId: '0',
+    defenderCharacter: 'samurai',
+    standTallLevel: 2,
+    sourceAbilityId: 'harmony',
+    pendingAttackDefender: '1',
+  });
+}
+
 test.describe('DiceThrone hand card preview regression', () => {
   test('samurai and gunslinger hand cards should use ability atlas without shimmer', async ({ page, game }) => {
     test.setTimeout(120000);
@@ -1364,5 +1635,140 @@ test.describe('DiceThrone hand card preview regression', () => {
 
     await waitForHandAnimationSettled(page);
     await page.screenshot({ path: join(evidenceDir, 'samurai-attack-modifiers-end-to-end.png'), fullPage: true });
+  });
+
+  test('samurai Stand Tall II 应显示 4 骰防御并在无盾时不自加 Shame', async ({ page, game }) => {
+    test.setTimeout(240000);
+    const evidenceDir = ensureEvidenceDir();
+
+    await openAndInjectSamuraiStandTall2DefenseScene(page, game);
+    await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-before-response.png'), fullPage: true });
+
+    await clickAdvancePhase(page);
+
+    await expect.poll(async () => {
+      const state = await readState(game);
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        defenseAbilityId: state?.core?.pendingAttack?.defenseAbilityId ?? null,
+        rollCount: state?.core?.rollCount ?? null,
+        activePlayerId: state?.core?.activePlayerId ?? null,
+      };
+    }, { timeout: 10000 }).toMatchObject({
+      reject: null,
+      phase: 'defensiveRoll',
+      defenseAbilityId: 'stand-tall',
+      rollCount: 0,
+      activePlayerId: '0',
+    });
+
+    const defensiveDice = page.locator('[data-tutorial-id="dice-tray"] [data-testid="die"]');
+    await expect(defensiveDice).toHaveCount(4, { timeout: 5000 });
+    await expect(page.locator('[data-tutorial-id="dice-roll-button"]').first()).toBeVisible({ timeout: 5000 });
+    await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-defense-roll-4dice.png'), fullPage: true });
+
+    await setHarnessDiceValues(page, [1, 1, 1, 1]);
+    await page.locator('[data-tutorial-id="dice-roll-button"]').first().click();
+
+    await expect.poll(async () => {
+      const state = await readState(game);
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        pendingAttack: state?.core?.pendingAttack ?? null,
+        attackerHp: getHp(state?.core?.players?.['0']),
+        samuraiHp: getHp(state?.core?.players?.['1']),
+        samuraiShame: state?.core?.players?.['1']?.tokens?.shame ?? 0,
+      };
+    }, { timeout: 15000 }).toMatchObject({
+      reject: null,
+      phase: 'main2',
+      pendingAttack: null,
+      attackerHp: 46,
+      samuraiHp: 45,
+      samuraiShame: 0,
+    });
+
+    await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-settled-no-shame.png'), fullPage: true });
+  });
+
+  test('samurai Masamune II 应展示 6 骰奖励骰并能完成真实 UI 收口', async ({ page, game }) => {
+    test.setTimeout(240000);
+    const evidenceDir = ensureEvidenceDir();
+
+    await openAndInjectSamuraiMasamune2Scene(page, game, {
+      defenderCharacter: 'paladin',
+    });
+    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-before-trigger.png'), fullPage: true });
+
+    await clickAbilitySlot(page, 'masamune');
+    await clickAdvancePhase(page);
+
+    await expect.poll(async () => {
+      const state = await readState(game);
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
+        defenseAbilityId: state?.core?.pendingAttack?.defenseAbilityId ?? null,
+      };
+    }, { timeout: 10000 }).toMatchObject({
+      reject: null,
+      phase: 'defensiveRoll',
+      sourceAbilityId: 'masamune-2-large-straight',
+      defenseAbilityId: 'holy-defense',
+    });
+
+    await setHarnessDiceValues(page, [1, 1, 1, 1, 4, 6, 1, 6, 4]);
+    await page.locator('[data-tutorial-id="dice-roll-button"]').first().click();
+
+    const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
+    await expect(bonusDieOverlay.locator('[data-testid="dice-3d"]')).toHaveCount(6, { timeout: 10000 });
+    await expect(bonusDieOverlay).toContainText(/Dice Results|投掷结果/i, { timeout: 5000 });
+    await expect(bonusDieOverlay).toContainText(/2.*(武士刀|Katana).*2.*(耻辱|Shame).*2.*(反击|Back Strike)/i, { timeout: 5000 });
+
+    await expect.poll(async () => {
+      const state = await readState(game);
+      const settlementDice = state?.core?.pendingBonusDiceSettlement?.dice ?? [];
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        pendingSettlementId: state?.core?.pendingBonusDiceSettlement?.id ?? null,
+        settlementDisplayOnly: state?.core?.pendingBonusDiceSettlement?.displayOnly ?? null,
+        settlementDiceCount: settlementDice.length,
+        settlementFaces: settlementDice.map((die: any) => die.face ?? null),
+        totalBonusDamage: state?.core?.pendingAttack?.bonusDamage ?? 0,
+        paladinShame: state?.core?.players?.['1']?.tokens?.shame ?? 0,
+        samuraiRetribution: state?.core?.players?.['0']?.tokens?.samurai_retribution ?? 0,
+      };
+    }, { timeout: 15000 }).toMatchObject({
+      reject: null,
+      settlementDisplayOnly: true,
+      settlementDiceCount: 6,
+      settlementFaces: ['katana', 'helm', 'rising_sun', 'katana', 'rising_sun', 'helm'],
+      totalBonusDamage: 2,
+      paladinShame: 2,
+      samuraiRetribution: 2,
+    });
+
+    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-bonus-die-overlay.png'), fullPage: true });
+
+    await closeVisibleBonusDieOverlay(page);
+    await expect(bonusDieOverlay).toHaveCount(0, { timeout: 5000 });
+    await expect.poll(async () => {
+      const state = await readState(game);
+      return {
+        pendingSettlement: state?.core?.pendingBonusDiceSettlement ?? null,
+        phase: state?.sys?.phase ?? null,
+        pendingAttack: state?.core?.pendingAttack ?? null,
+      };
+    }, { timeout: 10000 }).toMatchObject({
+      pendingSettlement: null,
+      phase: 'main2',
+      pendingAttack: null,
+    });
+
+    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-bonus-die-closed.png'), fullPage: true });
   });
 });

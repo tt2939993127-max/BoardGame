@@ -4002,6 +4002,49 @@ describe('巨蚁派系能力', () => {
         expect(discard).toContain('m1');
     });
 
+    it('雄蜂：SYS_INTERACTION_CANCEL 视为跳过，恢复消灭并清空交互', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    discard: [makeCard('dis1', 'test_minion', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('d1', 'giant_ant_drone', '0', 3, { powerCounters: 1 }),
+                        makeMinion('m1', 'cthulhu_servitor', '0', 2, { powerModifier: 0 }),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const triggerResult = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.USE_TALENT, playerId: '0', payload: { minionUid: 'm1', baseIndex: 0 } },
+            defaultTestRandom,
+        );
+
+        const cancelResult = runCommand(
+            triggerResult.finalState,
+            { type: 'SYS_INTERACTION_CANCEL', playerId: '0', payload: { reason: 'empty-options' } } as any,
+            defaultTestRandom,
+        );
+
+        const destroyEvt = cancelResult.events.find(e => e.type === SU_EVENTS.MINION_DESTROYED);
+        expect(destroyEvt).toBeDefined();
+        expect((destroyEvt as any).payload.reason).toBe('giant_ant_drone_skip');
+        expect(getInteractionsFromMS(cancelResult.finalState).length).toBe(0);
+        const baseMinions = cancelResult.finalState.core.bases[0].minions.map((m: any) => m.uid);
+        expect(baseMinions).not.toContain('m1');
+        expect(baseMinions).toContain('d1');
+        const discard = cancelResult.finalState.core.players['0'].discard.map((c: any) => c.uid);
+        expect(discard).toContain('m1');
+    });
+
     it('雄蜂+Igor：pendingSave 时 onDestroy 不触发（单元测试 processDestroyTriggers）', () => {
         const core = makeState({
             players: {

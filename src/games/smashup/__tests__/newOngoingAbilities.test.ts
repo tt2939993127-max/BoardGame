@@ -2375,7 +2375,7 @@ describe('bear_cavalry_superiority_pod 保护模式', () => {
 });
 
 describe('bear_cavalry_bear_rides_you_pod 交互选项', () => {
-    it('移动己方随从后仅提供基地压制与跳过两个有效选项', () => {
+    it('移动己方随从后应提供“新基地上的卡牌压制”候选项（含基地/随从/持续行动）', () => {
         const myMinion = makeMinion('m1', 'test_minion', '0', 3, { powerModifier: 0 });
         const fromBase = makeBase({ minions: [myMinion] });
         const toBase = makeBase({
@@ -2405,9 +2405,26 @@ describe('bear_cavalry_bear_rides_you_pod 交互选项', () => {
 
         expect(kinds).toContain('base');
         expect(kinds).toContain('skip');
-        expect(kinds).not.toContain('minion');
-        expect(kinds).not.toContain('ongoing');
-        expect(kinds).not.toContain('attached');
-        expect(kinds).not.toContain('titan');
+        expect(kinds).toContain('minion');
+        expect(kinds).toContain('ongoing');
+
+        // 值契约：用于 UI card 展示与后续 CARD_SUPPRESSED / BASE_ABILITY_SUPPRESSED
+        const baseOption = (pending?.data?.options ?? []).find((o: any) => o?.value?.kind === 'base');
+        expect(baseOption?.value?.baseDefId).toBeTruthy();
+
+        const movedMinionOption = (pending?.data?.options ?? []).find((o: any) =>
+            o?.value?.kind === 'minion' && o?.value?.minionUid === 'm1'
+        );
+        expect(movedMinionOption?.value?.minionDefId).toBe('test_minion');
+
+        const enemyMinionOption = (pending?.data?.options ?? []).find((o: any) =>
+            o?.value?.kind === 'minion' && o?.value?.minionUid === 'e1'
+        );
+        expect(enemyMinionOption?.value?.minionDefId).toBe('test_minion');
+
+        const ongoingOption = (pending?.data?.options ?? []).find((o: any) =>
+            o?.value?.kind === 'ongoing' && o?.value?.cardUid === 'oa1'
+        );
+        expect(ongoingOption?.value?.defId).toBe('bear_cavalry_superiority_pod');
     });
 });

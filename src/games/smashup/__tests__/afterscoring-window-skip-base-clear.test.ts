@@ -15,6 +15,7 @@ import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearOngoingEffectRegistry } from '../domain/ongoingEffects';
+import { postProcessSystemEvents } from '../domain';
 import { createSmashUpEventSystem } from '../domain/systems';
 import { smashUpFlowHooks } from '../domain/index';
 import { reduce } from '../domain/reduce';
@@ -23,6 +24,7 @@ import type { SmashUpCommand } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { SmashUpDomain, smashUpSystemsForTest } from '../game';
+import { defaultTestRandom } from './testRunner';
 
 beforeAll(() => {
     clearRegistry();
@@ -158,7 +160,14 @@ describe('afterScoring 延迟清场回归', () => {
         });
 
         const emittedEvents = result?.events as SmashUpEvent[] | undefined;
-        expect(emittedEvents?.map(event => event.type)).toEqual([
+        const processed = postProcessSystemEvents(
+            state.core as SmashUpCore,
+            emittedEvents ?? [],
+            defaultTestRandom,
+            result?.state ?? state,
+        );
+        const processedEvents = processed.events as SmashUpEvent[];
+        expect(processedEvents.map(event => event.type)).toEqual([
             SU_EVENTS.BASE_CLEARED,
             SU_EVENTS.BASE_REPLACED,
             SU_EVENTS.MINION_PLAYED,
@@ -166,10 +175,78 @@ describe('afterScoring 延迟清场回归', () => {
             SU_EVENTS.ABILITY_FEEDBACK,
         ]);
 
-        const finalCore = emittedEvents?.reduce((core, event) => reduce(core, event), state.core as SmashUpCore);
+        const finalCore = processedEvents.reduce(
+            (core, event) => reduce(core, event),
+            (processed.matchState?.core ?? state.core) as SmashUpCore,
+        );
         expect(finalCore?.bases[0].defId).toBe('base_secret_garden');
         expect(finalCore?.bases[0].minions.map(minion => minion.uid)).toEqual(['dk1']);
         expect(finalCore?.players['0'].deck).toHaveLength(0);
+    });
+
+    it('base_greenhouse 被 watchdog emergency-cancel 时，仍应补发延迟清场而不是卡在 afterScoring', () => {
+        const system = createSmashUpEventSystem();
+        const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('dk1', 'alien_collector', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [makeBase('base_greenhouse')],
+            baseDeck: ['base_secret_garden'],
+        }));
+
+        const result = system.afterEvents?.({
+            state,
+            random: undefined as any,
+            events: [{
+                type: INTERACTION_EVENTS.CANCELLED,
+                payload: {
+                    interactionId: 'i-greenhouse-cancel',
+                    playerId: '0',
+                    sourceId: 'base_greenhouse',
+                    reason: 'ai-emergency-timeout',
+                    interactionData: {
+                        sourceId: 'base_greenhouse',
+                        options: [
+                            { id: '__emergency_skip__', label: '跳过（当前无可执行选项）', value: { __emergency_skip__: true, skip: true } },
+                        ],
+                        continuationContext: {
+                            baseIndex: 0,
+                            _deferredPostScoringEvents: [
+                                {
+                                    type: SU_EVENTS.BASE_CLEARED,
+                                    payload: { baseIndex: 0, baseDefId: 'base_greenhouse' },
+                                    timestamp: 2102,
+                                },
+                                {
+                                    type: SU_EVENTS.BASE_REPLACED,
+                                    payload: {
+                                        baseIndex: 0,
+                                        oldBaseDefId: 'base_greenhouse',
+                                        newBaseDefId: 'base_secret_garden',
+                                    },
+                                    timestamp: 2102,
+                                },
+                            ],
+                        },
+                    },
+                },
+                timestamp: 2102,
+            } as any],
+        });
+
+        const emittedEvents = result?.events as SmashUpEvent[] | undefined;
+        expect(emittedEvents?.map(event => event.type)).toEqual([
+            SU_EVENTS.BASE_CLEARED,
+            SU_EVENTS.BASE_REPLACED,
+        ]);
+
+        const finalCore = emittedEvents?.reduce((core, event) => reduce(core, event), state.core as SmashUpCore);
+        expect(finalCore?.bases[0].defId).toBe('base_secret_garden');
+        expect(finalCore?.bases[0].minions).toHaveLength(0);
+        expect(finalCore?.players['0'].deck).toHaveLength(1);
     });
 
     it('延迟打出随从时即使旧 baseIndex 漂移，仍应按 baseDefId 落到替换后基地', () => {

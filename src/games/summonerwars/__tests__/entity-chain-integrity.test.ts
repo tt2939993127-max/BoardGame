@@ -48,9 +48,16 @@ import { summonerWarsFlowHooks } from '../domain/flowHooks';
 const HANDLED_BY_UI_EVENTS = new Set([
     'illusion_copy',          // useGameEvents → setAbilityMode('illusion')
     'blood_rune_choice',      // useGameEvents → setAbilityMode('blood_rune')
-    'ice_shards_damage',      // useGameEvents → setAbilityMode('ice_shards')
-    'feed_beast_check',       // useGameEvents → setAbilityMode('feed_beast')
     'rapid_fire_extra_attack', // afterAttack 触发 → UI 显示确认 → ACTIVATE_ABILITY(rapid_fire) 消耗充能+授予额外攻击
+]);
+
+/**
+ * fallback ABILITY_TRIGGERED 事件被 SummonerWars InteractionSystem 消费的 actionId
+ * 修改后必须同步更新 domain/systems.ts 中的交互映射逻辑
+ */
+const HANDLED_BY_INTERACTION_SYSTEM = new Set([
+    'ice_shards_damage',      // InteractionSystem → 交互确认 → ACTIVATE_ABILITY(ice_shards)
+    'feed_beast_check',       // InteractionSystem → 交互确认 → ACTIVATE_ABILITY(feed_beast)
 ]);
 
 /**
@@ -158,6 +165,7 @@ const registeredIds = swCustomActionRegistry.getRegisteredIds();
 const allHandledIds = new Set([
     ...registeredIds,
     ...HANDLED_BY_UI_EVENTS,
+    ...HANDLED_BY_INTERACTION_SYSTEM,
     ...HANDLED_BY_EXECUTORS,
     ...HANDLED_BY_COMMAND_FLOW,
     ...HANDLED_BY_PASSIVE,
@@ -172,6 +180,7 @@ createRefChainSuite<AbilityDef>({
     orphanCheck: { label: 'swCustomActionRegistry', registeredIds },
     staleWhitelists: [
         { label: 'HANDLED_BY_UI_EVENTS', ids: HANDLED_BY_UI_EVENTS },
+        { label: 'HANDLED_BY_INTERACTION_SYSTEM', ids: HANDLED_BY_INTERACTION_SYSTEM },
         { label: 'HANDLED_BY_EXECUTORS', ids: HANDLED_BY_EXECUTORS },
         { label: 'HANDLED_BY_COMMAND_FLOW', ids: HANDLED_BY_COMMAND_FLOW },
         { label: 'HANDLED_BY_PASSIVE', ids: HANDLED_BY_PASSIVE },

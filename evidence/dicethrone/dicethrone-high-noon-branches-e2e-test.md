@@ -82,5 +82,4 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-hi
 ## 覆盖声明与未覆盖风险
 
 - 本文覆盖：`card-high-noon` 在 **1v1 场景** 下的三分支结算正确性，以及奖励骰特写的“出现→关闭→收口”闭环。
-- 未覆盖（需要另开用例/另补证据）：4 人 2v2 模式下“只能选敌方目标”的交互 UI（目前相关覆盖主要在 `e2e/dicethrone/dicethrone-simple-start.e2e.ts`，但并非三分支稳定证据链）。
-
+- 未覆盖（需要另开用例/另补证据）：4 人 2v2 模式下“目标玩家（all seating）”的交互 UI 证据（当前实现口径：>2 人时 `High Noon` 目标集合取 `getSeatingOrder(state)`；但本文没有提供 4 人局的连续截图链）。

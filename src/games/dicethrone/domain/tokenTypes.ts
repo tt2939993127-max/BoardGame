@@ -245,6 +245,12 @@ export interface EffectAction {
 export interface PassiveTriggerConfig {
     /** 触发时机 */
     timing: PassiveTiming;
+    /**
+     * 伤害触发范围（仅 timing === onDamageReceived 时生效）
+     * - anyDamage: 任意伤害
+     * - opponentAttackDamage: 仅对手发起的攻击伤害
+     */
+    damageTriggerScope?: 'anyDamage' | 'opponentAttackDamage';
     /** 效果行为（可自动执行） */
     actions?: EffectAction[];
     /** 持续回合数（undefined = 永久，直到手动移除） */

@@ -353,6 +353,108 @@ describe('cross hero battles', () => {
             expect(result.finalState.sys.interaction.current).toBeFalsy();
         });
 
+        it('bounty-hunter 的不可防御攻击伤害会立即触发赏金加伤与 +1 CP', () => {
+            let startingCp = 0;
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 2, 6, 6, 4]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].tokens.loaded = 0;
+                    startingCp = state.core.players['0'].resources.cp;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger bounty-hunter triggers bounty on attack damage',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'bounty-hunter' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50, cp: startingCp + 1 },
+                        '1': { hp: 48 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].tokens.bounty).toBe(1);
+            expect(result.finalState.core.pendingAttack).toBeNull();
+        });
+
+        it('duel 的防御反击伤害不会触发目标身上的赏金', () => {
+            let startingCp = 0;
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([1, 1, 1, 1, 1, 1, 6]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'monk', '1': 'gunslinger' }
+                    );
+                    state.core.players['0'].tokens.bounty = 1;
+                    startingCp = state.core.players['1'].resources.cp;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger duel counter damage ignores bounty',
+                commands: [
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'fist-technique-5' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '1'),
+                    cmd('CONFIRM_ROLL', '1'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('ADVANCE_PHASE', '1'),
+                    cmd('SYS_INTERACTION_CONFIRM', '1'),
+                ],
+                expect: {
+                    turnPhase: 'main2',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 49 },
+                        '1': { hp: 42, cp: startingCp },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['0'].tokens.bounty).toBe(1);
+            expect(result.finalState.core.players['1'].resources.cp).toBe(startingCp);
+        });
+
         it('showdown uses compare-roll-choice and confirms into bonus damage', () => {
             const playerIds: PlayerId[] = ['0', '1'];
             let state = createInitializedStateWithCharacters(
@@ -1425,6 +1527,60 @@ describe('cross hero battles', () => {
             expect(result.finalState.core.players['1'].tokens.protect).toBe(1);
             expect(result.finalState.core.players['1'].statusEffects.knockdown ?? 0).toBe(0);
             expect(result.finalState.core.players['1'].tokens.bounty ?? 0).toBe(0);
+        });
+
+        it('pistol-whip 的非攻击伤害不会触发目标身上的赏金', () => {
+            const upgradeCard = GUNSLINGER_CARDS.find(card => card.id === 'upgrade-fan-the-hammer-2');
+            expect(upgradeCard).toBeDefined();
+
+            const runner = new GameTestRunner({
+                domain: DiceThroneDomain,
+                systems: testSystems,
+                playerIds: ['0', '1'],
+                random: createQueuedRandom([4, 4, 6, 1, 1]),
+                setup: (playerIds: PlayerId[], random: RandomFn) => {
+                    const state = createInitializedStateWithCharacters(
+                        playerIds,
+                        random,
+                        { '0': 'gunslinger', '1': 'monk' }
+                    );
+                    state.core.players['0'].resources.cp = 2;
+                    state.core.players['0'].hand = [{ ...upgradeCard! }];
+                    state.core.players['0'].deck = [];
+                    state.core.players['1'].tokens.bounty = 1;
+                    return state;
+                },
+                assertFn: assertState,
+                silent: true,
+            });
+
+            const result = runner.run({
+                name: 'gunslinger pistol-whip direct damage ignores bounty',
+                commands: [
+                    cmd('PLAY_CARD', '0', { cardId: 'upgrade-fan-the-hammer-2' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('ROLL_DICE', '0'),
+                    cmd('CONFIRM_ROLL', '0'),
+                    cmd('RESPONSE_PASS', '0'),
+                    cmd('RESPONSE_PASS', '1'),
+                    cmd('SELECT_ABILITY', '0', { abilityId: 'pistol-whip' }),
+                    cmd('ADVANCE_PHASE', '0'),
+                    cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }),
+                ],
+                expect: {
+                    turnPhase: 'offensiveRoll',
+                    pendingInteraction: null,
+                    players: {
+                        '0': { hp: 50, cp: 0, discardSize: 0 },
+                        '1': { hp: 49 },
+                    },
+                },
+            });
+
+            expect(result.assertionErrors).toEqual([]);
+            expect(result.finalState.core.players['1'].statusEffects.knockdown).toBe(1);
+            expect(result.finalState.core.players['1'].tokens.bounty).toBe(1);
+            expect(result.finalState.core.players['0'].resources.cp).toBe(0);
         });
 
         it('high noon bullseye branch applies bounty', () => {

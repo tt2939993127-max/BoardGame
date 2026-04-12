@@ -18,8 +18,8 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Onlin
 
 > **修订原因**：早期证据曾把 `The Law` 的目标集合简化成“敌方 only”。但权威卡面用的是“目标玩家 / up to 2 target players”的表述，本轮已统一裁决为：
 > - `1v1`：自动退化为唯一对手（无交互弹窗）；
-> - `3+` 人：进入多目标交互（最多选择 2 名“非自己”玩家；该交互在 FFA 场景下即表现为两名敌方）；
-> - `4 人 2v2`：进入多目标交互，目标集合覆盖 **全部座次玩家**（含 self / ally / enemies），并可一次确认原子化结算两名被选目标的 `bounty + knockdown`。
+> - `3+` 人：进入多目标交互（最多选择 2 名目标玩家；当前实现的目标集合覆盖 **全部座次玩家**，即包含 self / ally / enemies）；
+> - `4 人 2v2`：同样进入多目标交互，目标集合覆盖 **全部座次玩家**（含 self / ally / enemies），并可一次确认原子化结算两名被选目标的 `bounty + knockdown`。
 
 ### 1) 1v1：选择升级变体后应直接结算（无多目标弹窗）
 > 待补证据：需要复跑 `e2e/dicethrone/dicethrone-watch-out-spotlight.e2e.ts` 中对应 1v1 用例并回填截图路径（避免引用已不存在的旧产物）。

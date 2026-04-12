@@ -16,7 +16,6 @@ import type { GameBoardProps } from '../../engine/transport/protocol';
 import type { SummonerWarsCore } from './domain';
 import { SW_COMMANDS } from './domain';
 import './cursor'; // Register cursor themes
-import { FLOW_COMMANDS } from '../../engine';
 import { isUndeadCard, isPlagueZombieCard, isFortressUnit } from './domain/ids';
 import { GameDebugPanel } from '../../components/game/framework/widgets/GameDebugPanel';
 import { SummonerWarsDebugConfig } from './debug-config';

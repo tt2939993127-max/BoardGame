@@ -874,7 +874,11 @@ function bearCavalryBearRidesYouPod(ctx: AbilityContext): AbilityResult {
 
 type BearRidesYouPodSuppressTarget =
     | { kind: 'skip' }
-    | { kind: 'base'; baseIndex: number };
+    | { kind: 'base'; baseIndex: number; baseDefId?: string }
+    | { kind: 'minion'; baseIndex: number; minionUid: string; minionDefId: string }
+    | { kind: 'ongoing'; baseIndex: number; cardUid: string; defId?: string }
+    | { kind: 'attached'; baseIndex: number; cardUid: string; defId?: string }
+    | { kind: 'titan'; baseIndex: number; titanUid: string; defId?: string; ownerId?: string };
 
 /** 你们都是美食 onPlay：选择有己方随从的基地→选择目标基地，移动所有对手随从*/
 function bearCavalryYourePrettyMuchBorscht(ctx: AbilityContext): AbilityResult {
@@ -1612,27 +1616,36 @@ export function registerBearCavalryInteractionHandlers(): void {
         const base = state.core.bases[toBase];
         if (!base) return { state, events };
 
-        const suppressOptions: Array<{ id: string; label: string; value: BearRidesYouPodSuppressTarget }> = [];
+        const suppressOptions: Array<{ id: string; label: string; value: BearRidesYouPodSuppressTarget; displayMode?: 'card' | 'button' }> = [];
         const baseDef = getBaseDef(base.defId);
         suppressOptions.push({
             id: 'base',
             label: `[基地] ${baseDef?.name ?? base.defId}`,
-            value: { kind: 'base', baseIndex: toBase },
+            value: { kind: 'base', baseIndex: toBase, baseDefId: base.defId },
+            displayMode: 'card',
         });
 
-        for (const m of base.minions) {
+        // 交互创建时 moveMinion 事件尚未 reduce，因此这里要把“即将移动过来的随从”也纳入候选项。
+        const movedMinion = state.core.bases[ctx.fromBase]?.minions.find(m => m.uid === ctx.minionUid);
+        const minionsOnNewBase = movedMinion && !base.minions.some(m => m.uid === movedMinion.uid)
+            ? [...base.minions, movedMinion]
+            : base.minions;
+
+        for (const m of minionsOnNewBase) {
             const def = getCardDef(m.defId) as MinionCardDef | undefined;
             suppressOptions.push({
                 id: `minion-${m.uid}`,
                 label: `[随从] ${def?.name ?? m.defId}`,
-                value: { kind: 'minion', minionUid: m.uid, baseIndex: toBase },
+                value: { kind: 'minion', minionUid: m.uid, minionDefId: m.defId, baseIndex: toBase },
+                displayMode: 'card',
             });
             for (const a of m.attachedActions ?? []) {
                 const aDef = getCardDef(a.defId);
                 suppressOptions.push({
                     id: `attached-${a.uid}`,
                     label: `[附着行动] ${aDef?.name ?? a.defId}`,
-                    value: { kind: 'attached', cardUid: a.uid, baseIndex: toBase },
+                    value: { kind: 'attached', cardUid: a.uid, defId: a.defId, baseIndex: toBase },
+                    displayMode: 'card',
                 });
             }
         }
@@ -1642,7 +1655,8 @@ export function registerBearCavalryInteractionHandlers(): void {
             suppressOptions.push({
                 id: `ongoing-${oa.uid}`,
                 label: `[持续行动] ${oDef?.name ?? oa.defId}`,
-                value: { kind: 'ongoing', cardUid: oa.uid, baseIndex: toBase },
+                value: { kind: 'ongoing', cardUid: oa.uid, defId: oa.defId, baseIndex: toBase },
+                displayMode: 'card',
             });
         }
 
@@ -1656,21 +1670,18 @@ export function registerBearCavalryInteractionHandlers(): void {
             suppressOptions.push({
                 id: `titan-${t.titanUid}`,
                 label: `[泰坦] ${tDef?.name ?? t.defId}`,
-                value: { kind: 'titan', titanUid: t.titanUid, baseIndex: toBase, ownerId: pid },
+                value: { kind: 'titan', titanUid: t.titanUid, defId: t.defId, baseIndex: toBase, ownerId: pid },
+                displayMode: 'card',
             });
         }
 
-        suppressOptions.push({ id: 'skip', label: '跳过（不压制）', value: { kind: 'skip' } });
-
-        const visibleSuppressOptions = suppressOptions.filter(option =>
-            option.value.kind === 'base' || option.value.kind === 'skip'
-        );
+        suppressOptions.push({ id: 'skip', label: '跳过（不压制）', value: { kind: 'skip' }, displayMode: 'button' });
 
         const next = createSimpleChoice(
             `bear_cavalry_bear_rides_you_pod_choose_suppress_${timestamp}`,
             playerId,
             '与熊同行：选择要压制能力的卡牌（到你下回合开始）',
-            visibleSuppressOptions as any[],
+            suppressOptions as any[],
             { sourceId: 'bear_cavalry_bear_rides_you_pod_choose_suppress', targetType: 'generic', autoCancelOption: true }
         );
         (next.data as any).continuationContext = { toBase };
@@ -1691,6 +1702,74 @@ export function registerBearCavalryInteractionHandlers(): void {
                     payload: { baseIndex: chosen.baseIndex, suppressorPlayerId: playerId, reason: 'bear_cavalry_bear_rides_you_pod' },
                     timestamp,
                 } as any]
+            };
+        }
+
+        if (chosen.kind === 'minion') {
+            return {
+                state,
+                events: [{
+                    type: SU_EVENTS.CARD_SUPPRESSED,
+                    payload: {
+                        cardUid: chosen.minionUid,
+                        baseIndex: chosen.baseIndex,
+                        suppressorPlayerId: playerId,
+                        cardType: 'minion',
+                        reason: 'bear_cavalry_bear_rides_you_pod',
+                    },
+                    timestamp,
+                } as any],
+            };
+        }
+
+        if (chosen.kind === 'ongoing') {
+            return {
+                state,
+                events: [{
+                    type: SU_EVENTS.CARD_SUPPRESSED,
+                    payload: {
+                        cardUid: chosen.cardUid,
+                        baseIndex: chosen.baseIndex,
+                        suppressorPlayerId: playerId,
+                        cardType: 'ongoing',
+                        reason: 'bear_cavalry_bear_rides_you_pod',
+                    },
+                    timestamp,
+                } as any],
+            };
+        }
+
+        if (chosen.kind === 'attached') {
+            return {
+                state,
+                events: [{
+                    type: SU_EVENTS.CARD_SUPPRESSED,
+                    payload: {
+                        cardUid: chosen.cardUid,
+                        baseIndex: chosen.baseIndex,
+                        suppressorPlayerId: playerId,
+                        cardType: 'attached',
+                        reason: 'bear_cavalry_bear_rides_you_pod',
+                    },
+                    timestamp,
+                } as any],
+            };
+        }
+
+        if (chosen.kind === 'titan') {
+            return {
+                state,
+                events: [{
+                    type: SU_EVENTS.CARD_SUPPRESSED,
+                    payload: {
+                        cardUid: chosen.titanUid,
+                        baseIndex: chosen.baseIndex,
+                        suppressorPlayerId: playerId,
+                        cardType: 'titan',
+                        reason: 'bear_cavalry_bear_rides_you_pod',
+                    },
+                    timestamp,
+                } as any],
             };
         }
 

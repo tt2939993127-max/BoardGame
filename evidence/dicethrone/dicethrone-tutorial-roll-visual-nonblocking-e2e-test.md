@@ -20,7 +20,7 @@
 
 ## 截图
 
-![教程已推进到可确认步骤](../test-results/evidence-screenshots/dicethrone/dicethrone-tutorial-simple.e2e/tutorial-roll-visual-should-not-block-next-required-action/tutorial-roll-visual-non-blocking.png)
+![教程已推进到可确认步骤](../../test-results/evidence-screenshots/dicethrone/dicethrone-tutorial-simple.e2e/tutorial-roll-visual-should-not-block-next-required-action/tutorial-roll-visual-non-blocking.png)
 
 截图绝对路径：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\dicethrone\dicethrone-tutorial-simple.e2e\tutorial-roll-visual-should-not-block-next-required-action\tutorial-roll-visual-non-blocking.png`
 
