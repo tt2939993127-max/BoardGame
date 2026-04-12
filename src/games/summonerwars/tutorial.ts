@@ -313,7 +313,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       highlightTarget: 'sw-map-area',
       position: 'right',
       requireAction: true,
-      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK, SW_COMMANDS.CONFIRM_ATTACK],
+      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK],
       advanceOnEvents: [{ type: SW_EVENTS.UNIT_ATTACKED }],
       waitForAnimation: true,
     },
@@ -325,7 +325,7 @@ const SUMMONER_WARS_TUTORIAL: TutorialManifest = {
       highlightTarget: 'sw-end-phase-btn',
       position: 'left',
       requireAction: true,
-      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK, SW_COMMANDS.CONFIRM_ATTACK, FLOW_COMMANDS.ADVANCE_PHASE],
+      allowedCommands: [SW_COMMANDS.SELECT_UNIT, SW_COMMANDS.DECLARE_ATTACK, FLOW_COMMANDS.ADVANCE_PHASE],
       advanceOnEvents: [MATCH_PHASE_MAGIC],
     },
 

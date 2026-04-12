@@ -44,6 +44,7 @@ import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
 import { useScreenShake } from './ui/BoardEffects';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { useVisualSequenceGate } from '../../components/game/framework/hooks/useVisualSequenceGate';
+import { useIsInteractionBusy } from '../../components/game/framework/hooks/useIsInteractionBusy';
 import { summonerWarsFxRegistry, SW_FX } from './ui/fxSetup';
 import type { Card, BoardUnit, BoardStructure, CellCoord, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
@@ -367,7 +368,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     dyingEntities,
     damageBuffer,
     isVisualBusy,
-    abilityMode, setAbilityMode,
+    abilityMode: localAbilityMode, setAbilityMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode, setRapidFireMode,
     withdrawTrigger, setWithdrawTrigger,
@@ -442,6 +443,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     };
   }, [swInteraction]);
 
+  const abilityMode = localAbilityMode;
+
   const systemIceShardsMode = useMemo(() => {
     if (!swInteraction || swInteraction.type !== 'ice_shards') return null;
     const meta = swInteraction.meta as { sourceUnitId?: string };
@@ -452,6 +455,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       sourceBoosts: unit?.boosts ?? 0,
     };
   }, [core, swInteraction]);
+
+  const systemInfectionCards = useMemo(() => {
+    if (!swInteraction || swInteraction.type !== 'infection') return null;
+    const discard = core.players[myPlayerId]?.discard ?? [];
+    const cardLookup = new Map(discard.map((card) => [card.id, card]));
+    return swInteraction.options
+      .map((option) => cardLookup.get(option.id))
+      .filter((card): card is Card => !!card);
+  }, [core.players, myPlayerId, swInteraction]);
 
   const systemFeedBeastMode = !!swInteraction && swInteraction.type === 'feed_beast';
 
@@ -472,6 +484,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     grabFollowMode: null,
     setGrabFollowMode: noopSetGrabFollowMode,
   });
+
+  const engineInteractionBusy = useIsInteractionBusy(G, playerID);
+  const handInteractionBusy = engineInteractionBusy || !!abilityMode || interaction.hasActiveEventMode;
 
   // 桥接：useGameEvents 检测到 afterAttack 触发 withdraw → 设置 useEventCardModes 的 withdrawMode
   const setWithdrawMode = interaction.setWithdrawMode;
@@ -772,6 +787,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     const optionId = findInteractionOptionId((option) => {
       const value = option.value as { action?: string; choice?: string } | undefined;
       return value?.action === 'feed_beast' && value.choice === 'self_destroy';
+    });
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
+  const handleSelectInfectionCard = useCallback((card: Card) => {
+    if (!swInteraction || swInteraction.type !== 'infection') return;
+    respondInteractionOption(card.id);
+  }, [respondInteractionOption, swInteraction]);
+  const handleSkipInfection = useCallback(() => {
+    if (!swInteraction || swInteraction.type !== 'infection') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { skip?: boolean } | undefined;
+      return option.id === 'skip' || value?.skip === true;
     });
     respondInteractionOption(optionId);
   }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
@@ -1188,7 +1215,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onMagnifyCard={handleMagnifyCard}
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
-                    interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
+                    interactionBusy={handInteractionBusy}
                     compactLayout={false}
                   />
                   </div>
@@ -1217,6 +1244,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   }) ?? []}
                   onSelect={(card) => {
                     if (abilityMode.abilityId === 'infection' && abilityMode.targetPosition) {
+                      if (swInteraction?.type === 'infection') {
+                        respondInteractionOption(card.id);
+                        return;
+                      }
                       dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
                         abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id, targetPosition: abilityMode.targetPosition,
@@ -1234,7 +1265,24 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       setAbilityMode(abilityMode ? { ...abilityMode, step: 'selectPosition', selectedCardId: card.id } : null);
                     }
                   }}
-                  onCancel={() => setAbilityMode(null)}
+                  onCancel={() => {
+                    if (swInteraction?.type === 'infection') {
+                      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+                      return;
+                    }
+                    setAbilityMode(null);
+                  }}
+                />
+              )}
+
+              {/* 系统交互：感染（从弃牌堆选择疫病体） */}
+              {systemInfectionCards && (
+                <CardSelectorOverlay
+                  title={t('cardSelector.infection')}
+                  cards={systemInfectionCards}
+                  onSelect={handleSelectInfectionCard}
+                  onCancel={handleSkipInfection}
+                  cancelLabelKey="actions.skip"
                 />
               )}
 

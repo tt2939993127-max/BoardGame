@@ -172,7 +172,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   onCancelHypnoticLure,
   onConfirmMindCapture, onCancelAfterAttackAbility,
   onConfirmRapidFire, onCancelRapidFire,
-  onConfirmTelekinesis, onCancelTelekinesis,
+  onConfirmTelekinesis: _onConfirmTelekinesis, onCancelTelekinesis,
   onAfterMoveSelfCharge,
   onPlayMagicEvent, onDiscardMagicEvent, onCancelMagicEventChoice,
 }) => {

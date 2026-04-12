@@ -234,6 +234,8 @@ export interface EffectAction {
     preventStatus?: boolean;
     // damage 相关
     unblockable?: boolean;
+    /** 伤害来源范围（用于区分攻击伤害与直接伤害） */
+    damageScope?: 'attack' | 'direct';
     // 其他可选参数
     [key: string]: unknown;
 }
@@ -275,6 +277,8 @@ export interface ActiveUseConfig {
     /** 使用时消耗的数量（默认 1） */
     consumeAmount: number;
     allowedConsumeAmounts?: number[];
+    /** 仅允许在攻击伤害窗口使用（如 Back Strike） */
+    requiresAttackDamage?: boolean;
     /** 主动使用时需要额外触发的 custom action */
     customActionId?: string;
     /** 使用效果 */

@@ -23,6 +23,48 @@ export interface DiceFaceResult {
   marks: DiceMark[];
 }
 
+const isDiceMark = (value: unknown): value is DiceMark =>
+  value === 'melee' || value === 'ranged' || value === 'special';
+
+const isDiceFaceResult = (value: unknown): value is DiceFaceResult => {
+  if (!value || typeof value !== 'object') return false;
+  const data = value as Record<string, unknown>;
+  if (typeof data.faceIndex !== 'number') return false;
+  if (!Array.isArray(data.marks) || data.marks.length === 0) return false;
+  return data.marks.every(isDiceMark);
+};
+
+const FALLBACK_DICE_FACE_BY_MARK: Record<DiceMark, DiceFaceResult> = {
+  melee: { faceIndex: 8, marks: ['melee'] },
+  ranged: { faceIndex: 0, marks: ['ranged'] },
+  special: { faceIndex: 7, marks: ['special'] },
+};
+
+/**
+ * 规范化骰子结果（兼容旧的 string[] 形式）
+ * - DiceFaceResult[]：原样返回
+ * - ('melee'|'ranged'|'special')[]：转换为最接近的骰面
+ * - 其余输入：返回 null
+ */
+export function normalizeDiceResults(value: unknown): DiceFaceResult[] | null {
+  if (!Array.isArray(value)) return null;
+  const normalized: DiceFaceResult[] = [];
+
+  for (const item of value) {
+    if (isDiceFaceResult(item)) {
+      normalized.push({ faceIndex: item.faceIndex, marks: [...item.marks] });
+      continue;
+    }
+    if (isDiceMark(item)) {
+      const fallback = FALLBACK_DICE_FACE_BY_MARK[item];
+      normalized.push({ faceIndex: fallback.faceIndex, marks: [...fallback.marks] });
+      continue;
+    }
+  }
+
+  return normalized.length > 0 ? normalized : null;
+}
+
 /**
  * 标准骰子的6个面
  * 

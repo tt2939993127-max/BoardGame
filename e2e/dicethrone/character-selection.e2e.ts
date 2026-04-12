@@ -30,7 +30,7 @@ const openDiceThroneRoom = async (page: Page) => {
     await waitForHomeGameList(page);
     await expect(page.getByRole('heading', { name: diceThroneHeadingPattern })).toBeVisible();
     await page.getByRole('heading', { name: diceThroneHeadingPattern }).click();
-    await page.getByRole('button', { name: createRoomPattern }).click();
+    await page.getByTestId('game-details-open-create-room').first().click();
     await expect(page.getByRole('heading', { name: createRoomPattern })).toBeVisible();
     await page.getByRole('button', { name: confirmPattern }).click();
     try {
@@ -110,6 +110,11 @@ const joinGuest = async (page: Page): Promise<{ guestContext: BrowserContext; gu
 
 test.describe('角色选择系统', () => {
     test('应该显示角色选择界面', async ({ page }) => {
+        const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'character-selection.e2e', '应该显示角色选择界面');
+        mkdirSync(evidenceDir, { recursive: true });
+        const evidencePath = join(evidenceDir, 'character-selection-mobile-portrait.png');
+
+        await page.setViewportSize({ width: 375, height: 812 });
         await prepareHostSelection(page);
         await expect(page.getByText(selectionTitlePattern)).toBeVisible();
         await expect(page.locator('[data-character-id="monk"]')).toBeVisible();
@@ -117,6 +122,7 @@ test.describe('角色选择系统', () => {
         await expect(page.locator('[data-character-id="pyromancer"]')).toBeVisible();
         await expect(page.locator('[data-character-id="gunslinger"]')).toBeVisible();
         await expect(page.locator('[data-character-id="samurai"]')).toBeVisible();
+        await page.screenshot({ path: evidencePath, fullPage: false });
     });
 
     test('应该能够切换角色', async ({ page }) => {
@@ -249,7 +255,11 @@ test.describe('角色选择系统', () => {
         await page.screenshot({ path: testInfo.outputPath('character-selection-mobile-landscape.png'), fullPage: false });
     });
 
-    test('选角后应该能够开始游戏', async ({ page }) => {
+    test('选角后应该能够开始游戏', async ({ page }, testInfo) => {
+        const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'character-selection.e2e', '选角后应该能够开始游戏');
+        mkdirSync(evidenceDir, { recursive: true });
+        const evidencePath = join(evidenceDir, 'dicethrone-game-hud-mobile-landscape.png');
+
         await withOnlineMatch(page, async (guestPage) => {
             await page.click('[data-character-id="samurai"]');
             await page.waitForTimeout(500);
@@ -264,6 +274,10 @@ test.describe('角色选择系统', () => {
 
             await expect(page.getByText(selectionTitlePattern)).not.toBeVisible();
             await expect(page.getByText(turnPattern)).toBeVisible();
+
+            await page.setViewportSize({ width: 812, height: 375 });
+            await page.screenshot({ path: evidencePath, fullPage: false });
+            await page.screenshot({ path: testInfo.outputPath('dicethrone-game-hud-mobile-landscape.png'), fullPage: false });
         });
     });
 

@@ -4,7 +4,6 @@
  * 覆盖以下零覆盖命令：
  * 1. SELECT_UNIT — 选择单位（设置 core.selectedUnit）
  * 2. SELECT_CUSTOM_DECK — 选择自定义牌组
- * 3. CONFIRM_ATTACK — 确认攻击（类型已定义但 execute 未实现，属于死代码）
  */
 
 import { describe, it, expect } from 'vitest';
@@ -159,24 +158,4 @@ describe('SELECT_CUSTOM_DECK 选择自定义牌组', () => {
     });
 });
 
-// ============================================================================
-// 3. CONFIRM_ATTACK — 确认攻击（死代码）
-// ============================================================================
-
-describe('CONFIRM_ATTACK 确认攻击', () => {
-    it('命令类型已定义但 execute 未实现（validate 走 default 通过）', () => {
-        // CONFIRM_ATTACK 在 types.ts 中定义了接口和常量，
-        // 但 execute.ts 的 switch 中没有对应 case。
-        // validate.ts 的 switch 也没有对应 case，走 default 返回 valid: true。
-        // 实际攻击流程通过 DECLARE_ATTACK 一步完成（包含掷骰和伤害结算）。
-        const state = createMatchState(['0', '1'], fixedRandom);
-        // 推进到攻击阶段
-        state.core.phase = 'attack';
-
-        const result = execCmd(state, SW_COMMANDS.CONFIRM_ATTACK, '0', {
-            diceResults: ['melee', 'melee', 'special'],
-        });
-        // validate 通过（default），execute 无 case 所以不产生事件
-        expect(result.success).toBe(true);
-    });
-});
+ 

@@ -18,6 +18,7 @@ import type { TokenDef } from '../domain/tokenTypes';
 import { resolveEffectsToEvents, type EffectContext } from '../domain/effects';
 import { executeCardCommand } from '../domain/executeCards';
 import { getLeftOpponentId, getResponderQueue, getRightOpponentId, getTeamIdByPlayerIdMap } from '../domain/rules';
+import { buildAfterRollConfirmedSignature } from '../domain/responseWindowGuards';
 import { playerView } from '../domain/view';
 import { MONK_CARDS } from '../heroes/monk/cards';
 import { BARBARIAN_CARDS } from '../heroes/barbarian/cards';
@@ -1569,6 +1570,38 @@ describe('王权骰铸流程测试', () => {
                     playerId: '0',
                     payload: {},
                     timestamp: 123,
+                } as DiceThroneCommand,
+                fixedRandom,
+            );
+
+            expect(events.map((event) => event.type)).toEqual(['ROLL_CONFIRMED']);
+        });
+
+        it('源头级去重：骰面签名已处理时，不应重复打开 afterRollConfirmed', () => {
+            const state = createSetupWithHand(['card-flick'], {
+                playerId: '1',
+                cp: 10,
+                mutate: (core) => {
+                    core.players['0'].hand = [];
+                    core.players['0'].deck = [];
+                },
+            })(['0', '1'], fixedRandom);
+
+            state.sys.phase = 'offensiveRoll';
+            state.core.rollCount = 1;
+            state.core.rollLimit = 3;
+            state.core.rollConfirmed = false;
+            state.core.rollConfirmedSequence = 2;
+            state.core.afterRollResponseWindowSequence = 0;
+            state.core.afterRollResponseWindowSignature = buildAfterRollConfirmedSignature(state.core);
+
+            const events = executeDomainCommand(
+                { core: state.core, sys: { phase: 'offensiveRoll' } },
+                {
+                    type: 'CONFIRM_ROLL',
+                    playerId: '0',
+                    payload: {},
+                    timestamp: 124,
                 } as DiceThroneCommand,
                 fixedRandom,
             );

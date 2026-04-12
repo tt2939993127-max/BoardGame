@@ -23,8 +23,14 @@ const CACHE_SCHEMA_VERSION = 2;
 // huge log payloads. `threads` has been unstable on Windows here because worker
 // result serialization can fail with DataCloneError / OOM before assertions do.
 // `forks` is slower but materially more reliable for the local gate.
-const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
-const FAST_VITEST_ARGS = ['--pool', 'forks', '--no-file-parallelism', '--maxWorkers', '1'];
+// 允许通过 QUALITY_GATE_VITEST_POOL / VITEST_POOL 覆盖默认 pool（仅支持 forks / threads）。
+const vitestPoolOverrideRaw = (process.env.QUALITY_GATE_VITEST_POOL || process.env.VITEST_POOL || '').trim().toLowerCase();
+const vitestPoolOverride = vitestPoolOverrideRaw === 'threads' || vitestPoolOverrideRaw === 'forks'
+  ? vitestPoolOverrideRaw
+  : '';
+const vitestPool = vitestPoolOverride || 'forks';
+const GAME_VITEST_ARGS = ['--config', 'vitest.config.core.ts', '--pool', vitestPool, '--no-file-parallelism', '--maxWorkers', '1'];
+const FAST_VITEST_ARGS = ['--pool', vitestPool, '--no-file-parallelism', '--maxWorkers', '1'];
 const KNOWN_GAME_IDS = new Set(['smashup', 'dicethrone', 'summonerwars', 'tictactoe', 'cardia']);
 const PRE_PUSH_CORE_TARGET_GROUPS = [
   {
@@ -104,6 +110,9 @@ const PRE_PUSH_CACHE_FILE = path.join(CACHE_DIR, 'pre-push.json');
 const COMMAND_CACHE_FILE = path.join(CACHE_DIR, 'command-results.json');
 const QUALITY_GATE_TYPECHECK_BUILD_INFO = path.join('temp', 'quality-gate-cache', 'typecheck.tsbuildinfo');
 const STABLE_VITEST_NODE_OPTIONS = '--max-old-space-size=8192';
+const STABLE_ESLINT_NODE_OPTIONS = '--max-old-space-size=4096';
+const ESLINT_CHUNK_LIMIT = 2;
+const CORE_VITEST_TARGETS = ['src/core', 'src/components', 'src/hooks', 'src/lib', 'src/shared', 'src/engine', 'src/pages'];
 
 function runGit(args, options = {}) {
   try {
@@ -701,7 +710,10 @@ function collectCommands(files, baseRef, affectsTypecheck) {
     console.log('[changed-quality-gate] pre-push lint warning 计数：所有 lint 目标均被忽略（e2e 或 __tests__），跳过 warning delta。');
   } else if (lintFiles.length > 0) {
     const eslintBaseArgs = ['eslint', '--max-warnings', '999'];
-    const lintChunks = splitFilesForCommand(eslintBaseArgs, lintFiles);
+    // Windows 下 eslint 一次性 lint 过多文件时容易 OOM（尤其是同时包含 src + e2e 的大批次）。
+    // 这里在“命令行长度切分”的基础上，再按固定数量切分，降低单次 eslint 负载。
+    const lintChunks = splitFilesForCommand(eslintBaseArgs, lintFiles, 6000)
+      .flatMap((chunk) => chunkValues(chunk, ESLINT_CHUNK_LIMIT));
     lintChunks.forEach((chunk, index) => {
       commands.push({
         label: lintChunks.length === 1 ? 'ESLint' : `ESLint (${index + 1}/${lintChunks.length})`,
@@ -715,11 +727,18 @@ function collectCommands(files, baseRef, affectsTypecheck) {
   }
 
   if (hasAny(files, affectsBuild) && !isPrePushMode) {
+    const buildArgs = ['run', 'build'];
+    // 本地 pre-commit 门禁只需要确保能成功构建并捕获编译/打包错误，
+    // 不需要强制跑 esbuild minify（它在 Windows + 大 bundle 时更容易触发内存峰值导致 gate 失败）。
+    // CI 会兜底 full build（含 minify），因此这里默认在 pre-commit 下关闭 minify 来提高稳定性。
+    if (isPreCommitMode) {
+      buildArgs.push('--', '--minify', 'false');
+    }
     commands.push({
       label: 'Build',
       reason: 'local 模式下存在前端/构建输入改动',
       command: 'npm',
-      args: ['run', 'build'],
+      args: buildArgs,
     });
     if (hasAny(files, affectsDiceThroneStyleContract)) {
       commands.push({
@@ -846,11 +865,14 @@ function collectCommands(files, baseRef, affectsTypecheck) {
     }
   } else {
     if (hasAny(files, affectsCoreArea)) {
-      commands.push({
-        label: 'Core tests',
-        reason: '核心框架/引擎区域改动',
-        command: 'npm',
-        args: ['run', 'test:core'],
+      CORE_VITEST_TARGETS.forEach((target, index) => {
+        const label = CORE_VITEST_TARGETS.length === 1 ? 'Core tests' : `Core tests (${index + 1}/${CORE_VITEST_TARGETS.length})`;
+        commands.push(...createVitestCommands({
+          label,
+          reason: '核心框架/引擎区域改动，拆分执行以降低 Windows OOM 风险',
+          target,
+          vitestArgs: FAST_VITEST_ARGS,
+        }));
       });
       commands.push({
         label: 'Games core tests',
@@ -959,6 +981,13 @@ function createVitestEnv() {
   };
 }
 
+function createEslintEnv() {
+  return {
+    ...process.env,
+    NODE_OPTIONS: mergeNodeOptions(STABLE_ESLINT_NODE_OPTIONS),
+  };
+}
+
 function shouldUseStableVitestEnv(command, args) {
   if (command.includes('vitest-cli-safe') || args.includes('scripts/infra/vitest-cli-safe.mjs')) {
     return true;
@@ -968,6 +997,11 @@ function shouldUseStableVitestEnv(command, args) {
     && args[0] === 'run'
     && typeof args[1] === 'string'
     && args[1].startsWith('test');
+}
+
+function shouldUseStableEslintEnv(command, args) {
+  return command.trim().toLowerCase() === 'npx'
+    && args[0] === 'eslint';
 }
 
 function shouldDirectSpawnOnWindows(command) {
@@ -1109,7 +1143,7 @@ async function runCommand({ label, reason, command, args }) {
   const startAt = Date.now();
   const env = shouldUseStableVitestEnv(command, args)
     ? createVitestEnv()
-    : process.env;
+    : (shouldUseStableEslintEnv(command, args) ? createEslintEnv() : process.env);
   const result = shouldDirectSpawnOnWindows(command)
     ? spawnSync(command, args, {
         cwd: repoRoot,

@@ -340,6 +340,8 @@ export interface PendingDamage {
     currentDamage: number;
     /** 来源技能 ID */
     sourceAbilityId?: string;
+    /** 伤害范围（attack=攻击伤害，direct=直接伤害） */
+    damageScope?: 'attack' | 'direct';
     /** 响应窗口类型 */
     responseType: 'beforeDamageDealt' | 'beforeDamageReceived';
     /** 当前响应者 ID */
@@ -540,6 +542,11 @@ export interface DiceThroneCore {
      * 等于 rollConfirmedSequence 时表示本次确认源已处理。
      */
     afterRollResponseWindowSequence?: number;
+    /**
+     * 最近一次已处理的 afterRollConfirmed 骰面签名
+     * 当确认骰面反复进入相同骰面时，用于防止重复打开响应窗口。
+     */
+    afterRollResponseWindowSignature?: string;
     /**
      * 打牌序号（自增）
      * 用于 afterCardPlayed 响应窗口源头级去重，避免 CLOSED 后在同一打牌源上立刻 reopen。

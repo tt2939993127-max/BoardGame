@@ -3,7 +3,7 @@
  *
  * 召唤师战争大部分命令为确定性操作（召唤、移动、建造等），
  * 攻击宣告（掷骰子）和开始游戏（洗牌）依赖随机数。
- * 注意：DECLARE_ATTACK 是实际执行攻击结算（含掷骰）的命令，CONFIRM_ATTACK 是死代码（execute 未实现）。
+ * 注意：DECLARE_ATTACK 是实际执行攻击结算（含掷骰）的命令。
  * 技能激活由 Random Probe 自动检测确定性（当前所有执行器均不调用 random）。
  */
 
@@ -49,10 +49,8 @@ const NON_DETERMINISTIC_COMMANDS = [
     // 开始游戏 → 洗牌（random.shuffle）
     SW_COMMANDS.HOST_START_GAME,
     // 宣告攻击 → 掷骰子（random.random）
-    // 注意：DECLARE_ATTACK 是实际执行攻击结算的命令（含掷骰），CONFIRM_ATTACK 是死代码
+    // 注意：DECLARE_ATTACK 是实际执行攻击结算的命令（含掷骰）
     SW_COMMANDS.DECLARE_ATTACK,
-    // 确认攻击（死代码，execute 未实现，保留声明避免 Random Probe 误判）
-    SW_COMMANDS.CONFIRM_ATTACK,
 ] as const;
 
 // ============================================================================
@@ -100,7 +98,6 @@ export const summonerWarsLatencyConfig: LatencyOptimizationConfig = {
             [SW_COMMANDS.DISCARD_FOR_MAGIC]: 'optimistic',
             // 技能激活 → 确定性，立即反馈（心灵捕获/幻化/念力等）
             [SW_COMMANDS.ACTIVATE_ABILITY]: 'optimistic',
-            // CONFIRM_ATTACK 是死代码（execute 未实现），无需声明动画模式
         },
     },
     batching: {

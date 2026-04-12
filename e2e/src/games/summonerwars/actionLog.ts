@@ -24,6 +24,7 @@ import { getSummonerWarsCardPreviewMeta } from './ui/cardPreviewHelper';
 import { getCardIdFromInstanceId } from './domain/utils';
 import { getBaseCardId } from './domain/ids';
 import type { DiceFaceResult } from './config/dice';
+import { normalizeDiceResults } from './config/dice';
 
 // ============================================================================
 // 白名单定义
@@ -172,15 +173,16 @@ const withCardSegments = (i18nKey: string, cardId?: string, params?: Record<stri
 const buildPositionKey = (pos?: { row: number; col: number }) => (pos ? `${pos.row},${pos.col}` : '');
 
 /** 构建骰子结果 segment（使用精灵图） */
-const buildDiceResultSegment = (diceResults?: DiceFaceResult[]): ActionLogSegment | null => {
-    if (!diceResults || diceResults.length === 0) return null;
+const buildDiceResultSegment = (diceResults?: DiceFaceResult[] | unknown): ActionLogSegment | null => {
+    const normalized = normalizeDiceResults(diceResults);
+    if (!normalized || normalized.length === 0) return null;
     
     // 骰子精灵图：3x3 网格，帧索引 0-8
     const SPRITE_COLS = 3;
     const SPRITE_ROWS = 3;
     
     // 将 DiceFaceResult 转换为精灵图位置（使用 faceIndex 直接定位）
-    const dice = diceResults.map((face, index) => {
+    const dice = normalized.map((face, index) => {
         const frameIndex = face.faceIndex;
         const col = frameIndex % SPRITE_COLS;
         const row = Math.floor(frameIndex / SPRITE_COLS);

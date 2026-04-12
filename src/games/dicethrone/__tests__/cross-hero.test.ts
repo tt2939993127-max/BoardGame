@@ -1568,7 +1568,7 @@ describe('cross hero battles', () => {
                     cmd('SYS_INTERACTION_RESPOND', '0', { optionId: 'option-1' }),
                 ],
                 expect: {
-                    turnPhase: 'offensiveRoll',
+                    turnPhase: 'main2',
                     pendingInteraction: null,
                     players: {
                         '0': { hp: 50, cp: 0, discardSize: 0 },
@@ -2143,7 +2143,7 @@ describe('cross hero battles', () => {
                     pendingInteraction: null,
                     players: {
                         '0': { hp: 49 },
-                        '1': { hp: 45 },
+                        '1': { hp: 48 },
                     },
                 },
             });

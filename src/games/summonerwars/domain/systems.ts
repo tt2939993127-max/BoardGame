@@ -36,11 +36,13 @@ type SwInteractionMeta =
   | {
       type: 'soul_transfer';
       sourceUnitId: string;
+      sourcePosition?: CellCoord;
       victimPosition: CellCoord;
     }
   | {
       type: 'mind_capture';
       sourceUnitId: string;
+      sourcePosition?: CellCoord;
       targetPosition: CellCoord;
       targetUnitId: string;
       hits: number;
@@ -195,17 +197,25 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           });
           if (discardCards.length === 0 || !payload.sourceUnitId) continue;
 
-          const options: PromptOption<SwInteractionValue>[] = discardCards.map((card) => ({
-            id: card.id,
-            label: card.name,
-            value: {
-              action: 'infection',
-              cardId: card.id,
-              sourceUnitId: payload.sourceUnitId!,
-              targetPosition: payload.position,
+          const options: PromptOption<SwInteractionValue>[] = [
+            ...discardCards.map((card) => ({
+              id: card.id,
+              label: card.name,
+              value: {
+                action: 'infection',
+                cardId: card.id,
+                sourceUnitId: payload.sourceUnitId!,
+                targetPosition: payload.position,
+              },
+              displayMode: 'card',
+            })),
+            {
+              id: 'skip',
+              label: '跳过',
+              labelKey: 'actions.skip',
+              value: { skip: true },
             },
-            displayMode: 'card',
-          }));
+          ];
 
           const interaction = createSimpleChoice(
             `sw-infection-${event.timestamp ?? 0}-${payload.sourceUnitId}`,
@@ -214,11 +224,15 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             options,
             { sourceId: 'infection', autoResolveIfSingle: false },
           );
-          (interaction.data as any).sw = {
-            type: 'infection',
-            sourceUnitId: payload.sourceUnitId,
-            targetPosition: payload.position,
-          } satisfies SwInteractionMeta;
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'infection',
+              sourceUnitId: payload.sourceUnitId,
+              targetPosition: payload.position,
+            } satisfies SwInteractionMeta,
+          };
           newState = queueInteraction(newState, interaction);
         }
 
@@ -257,12 +271,16 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             options,
             { sourceId: 'grab', autoResolveIfSingle: false },
           );
-          (interaction.data as any).sw = {
-            type: 'grab_follow',
-            grabberUnitId: payload.grabberUnitId,
-            movedUnitId: payload.movedUnitId,
-            movedTo: payload.movedTo,
-          } satisfies SwInteractionMeta;
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'grab_follow',
+              grabberUnitId: payload.grabberUnitId,
+              movedUnitId: payload.movedUnitId,
+              movedTo: payload.movedTo,
+            } satisfies SwInteractionMeta,
+          };
           newState = queueInteraction(newState, interaction);
         }
 
@@ -298,11 +316,16 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             options,
             { sourceId: 'soul_transfer', autoResolveIfSingle: false },
           );
-          (interaction.data as any).sw = {
-            type: 'soul_transfer',
-            sourceUnitId: payload.sourceUnitId,
-            victimPosition: payload.victimPosition,
-          } satisfies SwInteractionMeta;
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'soul_transfer',
+              sourceUnitId: payload.sourceUnitId,
+              sourcePosition: payload.sourcePosition,
+              victimPosition: payload.victimPosition,
+            } satisfies SwInteractionMeta,
+          };
           newState = queueInteraction(newState, interaction);
         }
 
@@ -347,13 +370,18 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             options,
             { sourceId: 'mind_capture_resolve', autoResolveIfSingle: false },
           );
-          (interaction.data as any).sw = {
-            type: 'mind_capture',
-            sourceUnitId: payload.sourceUnitId,
-            targetPosition: payload.targetPosition,
-            targetUnitId: payload.targetUnitId,
-            hits: payload.hits,
-          } satisfies SwInteractionMeta;
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'mind_capture',
+              sourceUnitId: payload.sourceUnitId,
+              sourcePosition: payload.sourcePosition,
+              targetPosition: payload.targetPosition,
+              targetUnitId: payload.targetUnitId,
+              hits: payload.hits,
+            } satisfies SwInteractionMeta,
+          };
           newState = queueInteraction(newState, interaction);
         }
 
@@ -366,12 +394,15 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           if (!sourceUnit) continue;
 
           if (actionId === 'ice_shards_damage') {
+            const hasCharge = (sourceUnit.boosts ?? 0) >= 1;
             const options: PromptOption<SwInteractionValue>[] = [
               {
                 id: 'confirm',
                 label: '确认',
                 labelKey: 'actions.confirm',
                 value: { action: 'ice_shards', sourceUnitId },
+                disabled: !hasCharge,
+                disabledReasonKey: !hasCharge ? 'statusBanners.insufficientCharge' : undefined,
               },
               {
                 id: 'skip',
@@ -387,10 +418,14 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
               options,
               { sourceId: 'ice_shards', autoResolveIfSingle: false },
             );
-            (interaction.data as any).sw = {
-              type: 'ice_shards',
-              sourceUnitId,
-            } satisfies SwInteractionMeta;
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'ice_shards',
+                sourceUnitId,
+              } satisfies SwInteractionMeta,
+            };
             newState = queueInteraction(newState, interaction);
           }
 
@@ -421,10 +456,14 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
               options,
               { sourceId: 'feed_beast', autoResolveIfSingle: false },
             );
-            (interaction.data as any).sw = {
-              type: 'feed_beast',
-              sourceUnitId,
-            } satisfies SwInteractionMeta;
+            const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+            interaction.data = {
+              ...interactionData,
+              sw: {
+                type: 'feed_beast',
+                sourceUnitId,
+              } satisfies SwInteractionMeta,
+            };
             newState = queueInteraction(newState, interaction);
           }
         }

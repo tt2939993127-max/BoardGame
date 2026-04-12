@@ -17,6 +17,8 @@ interface CardSelectorOverlayProps {
     title: string;
     /** 是否只显示单位（默认 true） */
     unitOnly?: boolean;
+    /** 取消按钮文案 i18n key（默认 actions.cancel） */
+    cancelLabelKey?: string;
 }
 
 /**
@@ -34,8 +36,10 @@ export const CardSelectorOverlay: React.FC<CardSelectorOverlayProps> = ({
     onSelect,
     onCancel,
     title,
+    cancelLabelKey,
 }) => {
     const { t } = useTranslation('game-summonerwars');
+    const cancelLabel = cancelLabelKey ? t(cancelLabelKey) : t('actions.cancel');
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
 
@@ -50,7 +54,7 @@ export const CardSelectorOverlay: React.FC<CardSelectorOverlayProps> = ({
                     <h3 className="text-xl text-white font-bold mb-4">{title}</h3>
                     <p className="text-slate-300 mb-6">{t('cardSelector.empty')}</p>
                     <GameButton onClick={onCancel} variant="secondary">
-                        {t('actions.close')}
+                        {cancelLabel}
                     </GameButton>
                 </div>
             </div>
@@ -145,7 +149,7 @@ export const CardSelectorOverlay: React.FC<CardSelectorOverlayProps> = ({
             {/* 底部操作区 */}
             <div className="mt-12 flex gap-4">
                 <GameButton onClick={onCancel} variant="secondary" size="lg">
-                    {t('actions.cancel')}
+                    {cancelLabel}
                 </GameButton>
             </div>
         </div>

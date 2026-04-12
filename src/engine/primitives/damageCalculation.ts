@@ -104,6 +104,9 @@ export interface DamageCalculationConfig extends DamageContext {
   /** PassiveTrigger handler（游戏层注入） */
   passiveTriggerHandler?: PassiveTriggerHandler;
 
+  /** 伤害来源范围（用于区分攻击伤害与直接伤害） */
+  damageScope?: 'attack' | 'direct';
+
   /** 时间戳 */
   timestamp?: number;
 }
@@ -201,8 +204,13 @@ export class DamageCalculation {
     if (scope === 'anyDamage') return true;
 
     if (scope === 'opponentAttackDamage') {
+      if (this.config.damageScope === 'direct') return false;
+
       const pendingAttack = this.getCoreState()?.pendingAttack;
-      if (!pendingAttack) return false;
+      if (!pendingAttack) {
+        return this.config.damageScope !== 'direct'
+          && this.config.source.playerId !== this.config.target.playerId;
+      }
 
       return pendingAttack.attackerId === this.config.source.playerId
         && pendingAttack.defenderId === this.config.target.playerId

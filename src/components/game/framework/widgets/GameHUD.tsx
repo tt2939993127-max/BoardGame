@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUndo, useUndoStatus } from '../../../../contexts/UndoContext';
-import { UI_Z_INDEX } from '../../../../core';
+import { UI_Z_INDEX, HudPortal } from '../../../../core';
 import { FabMenu, type FabAction } from '../../../system/FabMenu';
 import { UNDO_COMMANDS } from '../../../../engine';
 import { AudioControlSection } from './AudioControlSection';
@@ -889,7 +889,7 @@ export const GameHUD = ({
     }
 
     return (
-        <>
+        <HudPortal>
             {/* 对手状态提示（仅联机模式，加载完成后） */}
             {isOnline && !isSpectator && opponentConnected !== undefined && (
                 <OpponentOfflineBanner
@@ -970,6 +970,6 @@ export const GameHUD = ({
                     })()}
                 />
             )}
-        </>
+        </HudPortal>
     );
 };

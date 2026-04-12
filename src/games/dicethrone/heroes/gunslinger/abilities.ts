@@ -10,10 +10,16 @@ export const GUNSLINGER_SFX_ULTIMATE = 'combat.general.mini_games_sound_effects_
 const damage = (
     value: number,
     description: string,
-    opts?: { timing?: EffectTiming; unblockable?: boolean },
+    opts?: { timing?: EffectTiming; unblockable?: boolean; damageScope?: 'attack' | 'direct' },
 ): AbilityEffect => ({
     description,
-    action: { type: 'damage', target: 'opponent', value, ...(opts?.unblockable ? { unblockable: true } : {}) },
+    action: {
+        type: 'damage',
+        target: 'opponent',
+        value,
+        ...(opts?.unblockable ? { unblockable: true } : {}),
+        ...(opts?.damageScope ? { damageScope: opts.damageScope } : {}),
+    },
     timing: opts?.timing,
 });
 
@@ -125,8 +131,8 @@ const BOUNTY_HUNTER: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.BULLSEYE]: 2 } },
     effects: [
-        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。'),
-        damage(1, '造成 1 点不可防御伤害。'),
+        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。', 'preDefense'),
+        damage(1, '造成 1 点不可防御伤害。', { unblockable: true }),
     ],
 };
 
@@ -139,8 +145,8 @@ export const BOUNTY_HUNTER_2: AbilityDef = {
     tags: ['unblockable'],
     trigger: { type: 'diceSet', faces: { [FACE.BULLET]: 2, [FACE.BULLSEYE]: 2 } },
     effects: [
-        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。'),
-        damage(2, '造成 2 点不可防御伤害。'),
+        grantToken('opponent', TOKEN_IDS.BOUNTY, 1, '对手获得 1 个赏金。', 'preDefense'),
+        damage(2, '造成 2 点不可防御伤害。', { unblockable: true }),
     ],
 };
 
@@ -341,7 +347,7 @@ export const FAN_THE_HAMMER_2: AbilityDef = {
             effects: [
                 grantToken('self', TOKEN_IDS.EVASIVE, 1, '获得 1 个闪避。', 'preDefense'),
                 inflictStatus(STATUS_IDS.KNOCKDOWN, 1, '对手获得击倒。', 'preDefense'),
-                damage(1, '造成 1 点不可防御伤害。', { unblockable: true }),
+                damage(1, '造成 1 点不可防御伤害。', { unblockable: true, damageScope: 'direct' }),
             ],
             priority: 0,
         },

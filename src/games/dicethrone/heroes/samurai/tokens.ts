@@ -64,6 +64,7 @@ export const SAMURAI_TOKENS: TokenDef[] = [
         activeUse: {
             timing: ['beforeDamageReceived'],
             consumeAmount: 1,
+            requiresAttackDamage: true,
             customActionId: 'samurai-back-strike-use',
             effect: {
                 type: 'modifyDamageReceived',

@@ -39,10 +39,13 @@ import { TOKEN_IDS } from './ids';
 export function getUsableTokensForTiming(
     state: DiceThroneCore,
     playerId: PlayerId,
-    timing: 'beforeDamageDealt' | 'beforeDamageReceived'
+    timing: 'beforeDamageDealt' | 'beforeDamageReceived',
+    options?: { damageScope?: 'attack' | 'direct' }
 ): TokenDef[] {
     const player = state.players[playerId];
     if (!player) return [];
+    const damageScope = options?.damageScope ?? 'attack';
+    const hasAttackContext = !!state.pendingAttack;
 
     return (state.tokenDefinitions ?? []).filter(def => {
         if (!def.activeUse?.timing?.includes(timing)) return false;
@@ -58,6 +61,11 @@ export function getUsableTokensForTiming(
         const maxWindowUsage = getMaxTokenUseAmount(def);
         const usedInWindow = state.pendingDamage?.tokenUsageTotals?.[def.id] ?? 0;
         if (usedInWindow >= maxWindowUsage) return false;
+
+        if (def.activeUse?.requiresAttackDamage) {
+            if (!hasAttackContext) return false;
+            if (damageScope !== 'attack') return false;
+        }
 
         return true;
     });
@@ -105,15 +113,23 @@ export function hasOffensiveRollEndTokens(
 /**
  * 检查玩家是否有可用于减伤的 Token（beforeDamageReceived）
  */
-export function hasDefensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
-    return getUsableTokensForTiming(state, playerId, 'beforeDamageReceived').length > 0;
+export function hasDefensiveTokens(
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    damageScope?: 'attack' | 'direct'
+): boolean {
+    return getUsableTokensForTiming(state, playerId, 'beforeDamageReceived', { damageScope }).length > 0;
 }
 
 /**
  * 检查玩家是否有可用于加伤的 Token（beforeDamageDealt）
  */
-export function hasOffensiveTokens(state: DiceThroneCore, playerId: PlayerId): boolean {
-    return getUsableTokensForTiming(state, playerId, 'beforeDamageDealt').length > 0;
+export function hasOffensiveTokens(
+    state: DiceThroneCore,
+    playerId: PlayerId,
+    damageScope?: 'attack' | 'direct'
+): boolean {
+    return getUsableTokensForTiming(state, playerId, 'beforeDamageDealt', { damageScope }).length > 0;
 }
 
 /**
@@ -155,7 +171,8 @@ export function createPendingDamage(
     responseType: 'beforeDamageDealt' | 'beforeDamageReceived',
     sourceAbilityId: string | undefined,
     timestamp: number = 0,
-    initialModifiers?: Array<{ type: 'defense' | 'token' | 'shield' | 'status'; value: number; sourceId?: string; sourceName?: string }>
+    initialModifiers?: Array<{ type: 'defense' | 'token' | 'shield' | 'status'; value: number; sourceId?: string; sourceName?: string }>,
+    damageScope?: 'attack' | 'direct'
 ): PendingDamage {
     const responderId = responseType === 'beforeDamageDealt' ? sourcePlayerId : targetPlayerId;
     const normalizedSource = sourceAbilityId ?? 'none';
@@ -167,6 +184,7 @@ export function createPendingDamage(
         originalDamage: damage,
         currentDamage: damage,
         sourceAbilityId,
+        damageScope,
         responseType,
         responderId,
         isFullyEvaded: false,
@@ -534,13 +552,15 @@ export function shouldOpenTokenResponse(
     attackerId: PlayerId,
     defenderId: PlayerId,
     damage: number,
-    isDefensiveContext?: boolean
+    isDefensiveContext?: boolean,
+    damageScope?: 'attack' | 'direct'
 ): 'attackerBoost' | 'defenderMitigation' | null {
     console.log('[DT-TokenResponse] shouldOpenTokenResponse 调用', {
         attackerId,
         defenderId,
         damage,
         isDefensiveContext,
+        damageScope,
         hasPendingDamage: !!state.pendingDamage,
         isUltimate: state.pendingAttack?.isUltimate,
     });
@@ -568,7 +588,7 @@ export function shouldOpenTokenResponse(
     // 先检查攻击方是否有太极可用于加伤
     // 注意：规则说"本回合获得的太极不可用于本回合增强伤害"
     // 这个限制需要额外的状态追踪，暂时先不实现
-    const hasOffensiveTokensResult = hasOffensiveTokens(state, attackerId);
+    const hasOffensiveTokensResult = hasOffensiveTokens(state, attackerId, damageScope);
     console.log('[DT-TokenResponse] 检查攻击方 Token', {
         attackerId,
         hasOffensiveTokens: hasOffensiveTokensResult,
@@ -585,7 +605,7 @@ export function shouldOpenTokenResponse(
     }
     
     // 检查防御方是否有可用的防御 Token
-    const hasDefensiveTokensResult = hasDefensiveTokens(state, defenderId);
+    const hasDefensiveTokensResult = hasDefensiveTokens(state, defenderId, damageScope);
     console.log('[DT-TokenResponse] 检查防御方 Token', {
         defenderId,
         hasDefensiveTokens: hasDefensiveTokensResult,

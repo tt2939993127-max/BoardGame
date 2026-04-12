@@ -11,6 +11,7 @@ import type {
 } from './types';
 import type { RandomFn } from '../../../engine/types';
 import { buildTeamIdByPlayerIdFromSeatingOrder, getDieFaceByDefinition, getTokenStackLimit, getRollerId } from './rules';
+import { buildAfterRollConfirmedSignature } from './responseWindowGuards';
 import { RESOURCE_IDS } from './resources';
 import { TOKEN_IDS } from './ids';
 import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
@@ -617,6 +618,7 @@ const handleResponseWindowOpened: EventHandler<Extract<DiceThroneEvent, { type: 
         return {
             ...state,
             afterRollResponseWindowSequence: rollSequence,
+            afterRollResponseWindowSignature: buildAfterRollConfirmedSignature(state),
         };
     }
 

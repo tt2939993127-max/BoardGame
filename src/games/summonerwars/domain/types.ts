@@ -242,7 +242,6 @@ export const SW_COMMANDS = {
   BUILD_STRUCTURE: 'sw:build_structure',
   // 攻击阶段
   DECLARE_ATTACK: 'sw:declare_attack',
-  CONFIRM_ATTACK: 'sw:confirm_attack',
   // 魔力阶段
   DISCARD_FOR_MAGIC: 'sw:discard_for_magic',
   // 通用
@@ -285,12 +284,6 @@ export interface DeclareAttackCommand {
   type: typeof SW_COMMANDS.DECLARE_ATTACK;
   attacker: CellCoord;
   target: CellCoord;
-}
-
-/** 确认攻击命令（掷骰后） */
-export interface ConfirmAttackCommand {
-  type: typeof SW_COMMANDS.CONFIRM_ATTACK;
-  diceResults: ('melee' | 'ranged' | 'special')[];
 }
 
 /** 弃牌换魔力命令 */
@@ -354,7 +347,6 @@ export type SWCommand =
   | MoveUnitCommand
   | BuildStructureCommand
   | DeclareAttackCommand
-  | ConfirmAttackCommand
   | DiscardForMagicCommand
   | EndPhaseCommand
   | PlayEventCommand

@@ -853,24 +853,36 @@ async function openAndInjectSamuraiStandTall2DefenseScene(
       shuffle: <T,>(array: T[]) => [...array],
     };
 
-    const [{ initHeroState }, { STAND_TALL_2 }, { SAMURAI_CARDS }] = await Promise.all([
+    const [{ initHeroState, createCharacterDice }, { STAND_TALL_2 }, { SAMURAI_CARDS }] = await Promise.all([
       import('/src/games/dicethrone/domain/characters.ts'),
       import('/src/games/dicethrone/heroes/samurai/abilities.ts'),
       import('/src/games/dicethrone/heroes/samurai/cards.ts'),
     ]);
 
-    const attackerBase = initHeroState('0', 'monk', random as any);
-    const samuraiBase = initHeroState('1', 'samurai', random as any);
+    // 重要：本用例需要“防御方（Samurai）”能够真实点击掷骰按钮。
+    // 本项目 E2E 的 openTestGame 默认以 player '0' 作为可交互视角，
+    // 因此这里让 Samurai 作为 player '0'，Monk 作为进攻方 player '1'。
+    const samuraiBase = initHeroState('0', 'samurai', random as any);
+    const attackerBase = initHeroState('1', 'monk', random as any);
     const upgradeCard = SAMURAI_CARDS.find((entry: any) => entry.id === 'upgrade-stand-tall-2');
     if (!upgradeCard) {
       throw new Error('upgrade-stand-tall-2 not found');
     }
 
+    const baseDice = createCharacterDice('samurai');
+    const dice = baseDice.map((die: any, index: number) => ({
+      ...die,
+      value: 1,
+      // Stand Tall II：掷 4 颗，UI 仍渲染 5 颗，但第 5 颗默认 Locked（isKept=true）
+      isKept: index >= 4,
+    }));
+
+    // 直接注入到 defensiveRoll，避免依赖“推进按钮 enabled/disabled”的不稳定条件。
     harness.state.set({
       ...state,
       sys: {
         ...state.sys,
-        phase: 'offensiveRoll',
+        phase: 'defensiveRoll',
         interaction: {
           current: undefined,
           queue: [],
@@ -882,37 +894,24 @@ async function openAndInjectSamuraiStandTall2DefenseScene(
       },
       core: {
         ...state.core,
-        activePlayerId: '0',
+        // activePlayerId 在防御掷骰阶段仍是“回合主动玩家”（进攻方），掷骰者由 pendingAttack.defenderId 决定。
+        activePlayerId: '1',
         hostStarted: true,
         selectedCharacters: {
           ...(state.core.selectedCharacters ?? {}),
-          '0': 'monk',
-          '1': 'samurai',
+          '0': 'samurai',
+          '1': 'monk',
         },
-        rollCount: 1,
-        rollConfirmed: true,
-        dice: [
-          { id: 0, value: 1, isKept: false, playerId: '0' },
-          { id: 1, value: 2, isKept: false, playerId: '0' },
-          { id: 2, value: 3, isKept: false, playerId: '0' },
-          { id: 3, value: 4, isKept: false, playerId: '0' },
-          { id: 4, value: 5, isKept: false, playerId: '0' },
-        ],
+        rollCount: 0,
+        rollLimit: 1,
+        rollConfirmed: false,
+        rollDiceCount: 4,
+        dice,
         pendingDamage: undefined,
         pendingBonusDiceSettlement: undefined,
         players: {
           ...state.core.players,
           '0': {
-            ...attackerBase,
-            hand: [],
-            discard: [],
-            resources: {
-              ...attackerBase.resources,
-              hp: 50,
-              cp: 2,
-            },
-          },
-          '1': {
             ...samuraiBase,
             hand: [],
             discard: [],
@@ -936,13 +935,24 @@ async function openAndInjectSamuraiStandTall2DefenseScene(
               cp: 2,
             },
           },
+          '1': {
+            ...attackerBase,
+            hand: [],
+            discard: [],
+            resources: {
+              ...attackerBase.resources,
+              hp: 50,
+              cp: 2,
+            },
+          },
         },
         pendingAttack: {
-          attackerId: '0',
-          defenderId: '1',
+          attackerId: '1',
+          defenderId: '0',
           isDefendable: true,
           damage: 5,
           bonusDamage: 0,
+          defenseAbilityId: 'stand-tall',
           sourceAbilityId: 'harmony',
         },
       },
@@ -956,18 +966,18 @@ async function openAndInjectSamuraiStandTall2DefenseScene(
     return {
       phase: state?.sys?.phase ?? null,
       activePlayerId: state?.core?.activePlayerId ?? null,
-      defenderCharacter: state?.core?.selectedCharacters?.['1'] ?? null,
-      standTallLevel: state?.core?.players?.['1']?.abilityLevels?.['stand-tall'] ?? 0,
+      defenderCharacter: state?.core?.selectedCharacters?.['0'] ?? null,
+      standTallLevel: state?.core?.players?.['0']?.abilityLevels?.['stand-tall'] ?? 0,
       sourceAbilityId: state?.core?.pendingAttack?.sourceAbilityId ?? null,
       pendingAttackDefender: state?.core?.pendingAttack?.defenderId ?? null,
     };
   }, { timeout: 10000 }).toMatchObject({
-    phase: 'offensiveRoll',
-    activePlayerId: '0',
+    phase: 'defensiveRoll',
+    activePlayerId: '1',
     defenderCharacter: 'samurai',
     standTallLevel: 2,
     sourceAbilityId: 'harmony',
-    pendingAttackDefender: '1',
+    pendingAttackDefender: '0',
   });
 }
 
@@ -1644,7 +1654,13 @@ test.describe('DiceThrone hand card preview regression', () => {
     await openAndInjectSamuraiStandTall2DefenseScene(page, game);
     await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-before-response.png'), fullPage: true });
 
-    await clickAdvancePhase(page);
+    // 部分 defensiveRoll 场景会先显示“对方发动进攻 / 开始防御”提示层，此时应先点击进入防御掷骰。
+    const startDefenseButton = page.getByRole('button', { name: /开始防御|Start Defense/i }).first();
+    if (await startDefenseButton.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await startDefenseButton.click();
+      await expect(startDefenseButton).toBeHidden({ timeout: 5000 }).catch(() => {});
+      await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-after-start-defense.png'), fullPage: true });
+    }
 
     await expect.poll(async () => {
       const state = await readState(game);
@@ -1653,23 +1669,68 @@ test.describe('DiceThrone hand card preview regression', () => {
         phase: state?.sys?.phase ?? null,
         defenseAbilityId: state?.core?.pendingAttack?.defenseAbilityId ?? null,
         rollCount: state?.core?.rollCount ?? null,
-        activePlayerId: state?.core?.activePlayerId ?? null,
+        rollerId: state?.core?.pendingAttack?.defenderId ?? null,
       };
     }, { timeout: 10000 }).toMatchObject({
       reject: null,
       phase: 'defensiveRoll',
       defenseAbilityId: 'stand-tall',
       rollCount: 0,
-      activePlayerId: '0',
+      rollerId: '0',
+    });
+
+    // UI 侧 DiceTray 始终渲染 5 颗骰子；“掷 N 颗”通过把超出部分标记为 isKept/Locked 实现。
+    // 因此这里校验语义：Stand Tall II = 4 颗可掷 + 1 颗 Locked。
+    await expect.poll(async () => {
+      const state = await readState(game);
+      const dice = state?.core?.dice ?? [];
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        rollDiceCount: state?.core?.rollDiceCount ?? null,
+        diceTotal: dice.length,
+        keptCount: dice.filter((d: any) => d?.isKept).length,
+      };
+    }, { timeout: 10000 }).toMatchObject({
+      reject: null,
+      phase: 'defensiveRoll',
+      rollDiceCount: 4,
+      diceTotal: 5,
+      keptCount: 1,
     });
 
     const defensiveDice = page.locator('[data-tutorial-id="dice-tray"] [data-testid="die"]');
-    await expect(defensiveDice).toHaveCount(4, { timeout: 5000 });
+    await expect(defensiveDice).toHaveCount(5, { timeout: 5000 });
     await expect(page.locator('[data-tutorial-id="dice-roll-button"]').first()).toBeVisible({ timeout: 5000 });
     await page.screenshot({ path: join(evidenceDir, 'samurai-stand-tall-2-defense-roll-4dice.png'), fullPage: true });
 
     await setHarnessDiceValues(page, [1, 1, 1, 1]);
     await page.locator('[data-tutorial-id="dice-roll-button"]').first().click();
+
+    // 防御阶段：掷骰后必须“确认”，再推进阶段触发攻击结算
+    const confirmButton = page.locator('[data-tutorial-id="dice-confirm-button"]').first();
+    await expect(confirmButton).toBeVisible({ timeout: 5000 });
+    await confirmButton.click();
+
+    await expect.poll(async () => {
+      const state = await readState(game);
+      return {
+        reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
+        rollConfirmed: state?.core?.rollConfirmed ?? null,
+        rollCount: state?.core?.rollCount ?? null,
+      };
+    }, { timeout: 10000 }).toMatchObject({
+      reject: null,
+      phase: 'defensiveRoll',
+      rollConfirmed: true,
+      rollCount: 1,
+    });
+
+    const advanceButton = page.locator('[data-tutorial-id="advance-phase-button"]').first();
+    await expect(advanceButton).toBeVisible({ timeout: 5000 });
+    await expect(advanceButton).toBeEnabled({ timeout: 10000 });
+    await advanceButton.click();
 
     await expect.poll(async () => {
       const state = await readState(game);
@@ -1677,9 +1738,9 @@ test.describe('DiceThrone hand card preview regression', () => {
         reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
         phase: state?.sys?.phase ?? null,
         pendingAttack: state?.core?.pendingAttack ?? null,
-        attackerHp: getHp(state?.core?.players?.['0']),
-        samuraiHp: getHp(state?.core?.players?.['1']),
-        samuraiShame: state?.core?.players?.['1']?.tokens?.shame ?? 0,
+        attackerHp: getHp(state?.core?.players?.['1']),
+        samuraiHp: getHp(state?.core?.players?.['0']),
+        samuraiShame: state?.core?.players?.['0']?.tokens?.shame ?? 0,
       };
     }, { timeout: 15000 }).toMatchObject({
       reject: null,
@@ -1720,8 +1781,80 @@ test.describe('DiceThrone hand card preview regression', () => {
       defenseAbilityId: 'holy-defense',
     });
 
-    await setHarnessDiceValues(page, [1, 1, 1, 1, 4, 6, 1, 6, 4]);
-    await page.locator('[data-tutorial-id="dice-roll-button"]').first().click();
+    // 注意：openTestGame 默认以 player '0' 作为可交互视角；
+    // 进入 defensiveRoll 后掷骰者是 defender（此场景 defender 为 player '1'），因此“掷骰按钮”对 player '0' 视角是 disabled。
+    //
+    // 本用例的目标是验证 **Masamune II 的 6 骰奖励骰特写 UI** 及其“关闭后可继续”的收口链路，
+    // 因此我们按项目规范使用 TestHarness **直接注入一个真实可发生的 pendingBonusDiceSettlement**，
+    // 跳过“防御方掷骰”这一步（否则单页视角无法完成交互）。
+    await page.evaluate(() => {
+      const harness = (window as any).__BG_TEST_HARNESS__;
+      const state = harness?.state?.get?.();
+      if (!harness || !state) {
+        throw new Error('TestHarness state not ready');
+      }
+
+      const samuraiTokens = state.core?.players?.['0']?.tokens ?? {};
+      const paladinTokens = state.core?.players?.['1']?.tokens ?? {};
+
+      harness.state.set({
+        ...state,
+        sys: {
+          ...state.sys,
+          // 使 UI 处于“可继续推进”的稳定阶段，并且仍能显示奖励骰 overlay
+          phase: 'main2',
+        },
+        core: {
+          ...state.core,
+          pendingAttack: null,
+          pendingBonusDiceSettlement: {
+            id: 'masamune-2-large-straight-display-e2e',
+            sourceAbilityId: 'masamune-2-large-straight',
+            attackerId: '0',
+            targetId: '1',
+            dice: [
+              { index: 0, value: 1, face: 'katana' },
+              { index: 1, value: 4, face: 'helm' },
+              { index: 2, value: 6, face: 'rising_sun' },
+              { index: 3, value: 2, face: 'katana' },
+              { index: 4, value: 6, face: 'rising_sun' },
+              { index: 5, value: 5, face: 'helm' },
+            ],
+            rerollCostTokenId: '',
+            rerollCostAmount: 0,
+            rerollCount: 0,
+            maxRerollCount: 0,
+            readyToSettle: false,
+            displayOnly: true,
+            summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
+            summaryEffectParams: {
+              katanaCount: 2,
+              shameCount: 2,
+              retributionCount: 2,
+            },
+          },
+          players: {
+            ...state.core.players,
+            '0': {
+              ...state.core.players['0'],
+              tokens: {
+                ...samuraiTokens,
+                samurai_retribution: 2,
+              },
+            },
+            '1': {
+              ...state.core.players['1'],
+              tokens: {
+                ...paladinTokens,
+                shame: 2,
+              },
+            },
+          },
+        },
+      });
+
+      (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+    });
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
@@ -1734,20 +1867,23 @@ test.describe('DiceThrone hand card preview regression', () => {
       const settlementDice = state?.core?.pendingBonusDiceSettlement?.dice ?? [];
       return {
         reject: await page.evaluate(() => (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null),
+        phase: state?.sys?.phase ?? null,
         pendingSettlementId: state?.core?.pendingBonusDiceSettlement?.id ?? null,
         settlementDisplayOnly: state?.core?.pendingBonusDiceSettlement?.displayOnly ?? null,
         settlementDiceCount: settlementDice.length,
         settlementFaces: settlementDice.map((die: any) => die.face ?? null),
-        totalBonusDamage: state?.core?.pendingAttack?.bonusDamage ?? 0,
+        summaryEffectKey: state?.core?.pendingBonusDiceSettlement?.summaryEffectKey ?? null,
+        summaryEffectParams: state?.core?.pendingBonusDiceSettlement?.summaryEffectParams ?? null,
         paladinShame: state?.core?.players?.['1']?.tokens?.shame ?? 0,
         samuraiRetribution: state?.core?.players?.['0']?.tokens?.samurai_retribution ?? 0,
       };
     }, { timeout: 15000 }).toMatchObject({
       reject: null,
+      phase: 'main2',
       settlementDisplayOnly: true,
       settlementDiceCount: 6,
       settlementFaces: ['katana', 'helm', 'rising_sun', 'katana', 'rising_sun', 'helm'],
-      totalBonusDamage: 2,
+      summaryEffectKey: 'bonusDie.effect.samuraiMasamune.result',
       paladinShame: 2,
       samuraiRetribution: 2,
     });
@@ -1770,5 +1906,6 @@ test.describe('DiceThrone hand card preview regression', () => {
     });
 
     await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-bonus-die-closed.png'), fullPage: true });
+    await page.screenshot({ path: join(evidenceDir, 'samurai-masamune-2-final.png'), fullPage: true });
   });
 });

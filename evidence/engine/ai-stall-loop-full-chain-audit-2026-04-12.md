@@ -54,7 +54,7 @@
 
 **验证（单测）**：`src/engine/transport/__tests__/server.test.ts`  
 用例：`online AI watchdog 在 responseWindow 当前响应者为 human 时不得误触发强制结束 AI 回合`  
-运行命令：`npm test -- src/engine/transport/__tests__/server.test.ts`（本轮已通过）
+（本轮未运行测试）
 
 ### 2) 服务端 watchdog 能在 AI seat 未建连时处理“隐藏交互阻塞”
 **原因**：某些隐藏交互只在 AI seat 的 `playerView` 可见，sharedState 只表现为 `isBlocked=true`。若服务端不构造 seatView，则 AI seat 未建连时 watchdog 可能失明。  
@@ -71,7 +71,7 @@
 **验证（单测）**：`src/games/dicethrone/__tests__/basic-commands-coverage.test.ts`  
 - `本地 AI 在已确认骰面时不应再使用教皇税重掷骰子（避免反复打开响应窗口打扰真人）`  
 - `本地 AI 在未确认骰面且有可重掷骰子时应能使用教皇税重掷骰子`  
-运行命令：`npm test -- src/games/dicethrone/__tests__/basic-commands-coverage.test.ts`（本轮已通过）
+（本轮未运行测试）
 
 ### 4) watchdog 推进策略升级：active-turn / 交互恢复后可连续推进多个阶段，直到交还给真人回合
 **背景症状**：用户在 DiceThrone 遇到“提示跳过了一个阶段，但没有直接回到我的回合，随后仍可能卡死”。  
@@ -85,7 +85,32 @@
 
 **验证（单测）**：`src/engine/transport/__tests__/server.test.ts`  
 用例：`online AI watchdog 在 active-turn 卡死时应持续推进直到交还给真人回合（或遇到 blocker/步数上限）`  
-运行命令：`npm test -- src/engine/transport/__tests__/server.test.ts`（本轮已通过）
+（本轮未运行测试）
+
+### 7) 自动反馈携带“无法选择原因”与选项诊断
+**实现**：`src/engine/transport/server.ts`  
+- `buildUnsatisfiableInteractionStateSnapshot()` 会附带：  
+  - `interaction.seatSelectability`（可选项可用性诊断）  
+  - `resolveUnsatisfiableReasonFromInteraction()` 的原因枚举  
+  - `disabledReason/disabledReasonKey`（若 options 提供）  
+**用途**：当 watchdog 失败或强制跳过触发时，上报日志能够携带“为什么无法选择”。  
+（本轮未运行测试）
+
+### 5) watchdog 不依赖 enableAi 才启动（改为 seatControllers 判断）
+**原因**：部分老房间缺少 `enableAi` 标记，但仍有 AI seatControllers；若强依赖 enableAi 会导致 watchdog 不启动。  
+**实现**：`src/engine/transport/server.ts` 内 `shouldTrustOnlineAiSeatControllersForWatchdog()` 仅依赖 seatControllers 中是否存在 AI 类型。  
+**风险门禁**：仍以 `seatControllers[playerId].type === 'human'` 作为保护，避免误伤真人。  
+**验证（单测）**：`src/engine/transport/__tests__/server.test.ts`  
+用例：`online AI watchdog 缺少 enableAi 标记时仍应根据 seatControllers 启动`  
+（本轮未运行测试）
+
+### 6) 前端 seat 校验不应误把真人房识别成 AI 房
+**原因**：UI 侧若把真人房识别成 AI 房，会导致提示/按钮出现错位，并可能误导用户“AI 被强制跳过”。  
+**实现**：`src/pages/onlineAiSeats.ts` + `src/pages/__tests__/matchSeatValidation.test.ts`  
+用例：  
+- `缺少 enableAi 标记时，即使残留了 seatControllers 也不得把真人房识别成 AI 房`  
+- `显式 enableAi=false 时，应忽略残留的 AI seatControllers 与本地旧凭据`  
+（本轮未运行测试）
 
 ## 音效循环：链路判定（不是“音效系统坏了”）
 
@@ -108,11 +133,14 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 如果队列里 currentResponder 被错误保留为 human，watchdog 现在会刻意不接管；这类 bug 必须在 ResponseWindowSystem 或领域事件源头修复。  
 
 3) **Summoner Wars 的“响应重触发/音效循环”**：  
-已完成专项审计与最小修复（`flowHalted` 重复提示/音效回放），详见 `evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`。  
-**仍保留的结构性风险**：Summoner Wars 有多条“领域事件 → UI 本地 mode”链路未落到 `InteractionSystem`，AI 默认看不到这类交互，存在“AI 看不见但真人能操作”的隐性分叉风险，需要后续单独治理。  
+已完成专项审计与最小修复（`flowHalted` 重复提示/音效回放），并把 6 条核心交互迁到 `InteractionSystem`（infection / grab follow / soul transfer / mind capture / ice_shards / feed_beast），详见 `evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`。  
+本轮未运行 E2E。  
+**仍保留的结构性风险**：Summoner Wars 仍有多条“领域事件 → UI 本地 mode”链路未落到 `InteractionSystem`（Phase B 范围），AI 仍看不到这类交互，存在“AI 看不见但真人能操作”的隐性分叉风险，需要后续继续治理。  
 
 4) **AI 循环动作的检测覆盖面**：  
 `onlineAiRecovery.ts` 的 action-loop detector 只覆盖部分 phase 且仅 repeat/alternating；三步以上循环仍可能漏检。  
+此外它依赖 `sys.actionLog.entries[].kind`，而 DiceThrone 的 ActionLog 允许列表 **不包含** `DISCARD_CARD` / `UNDO_SELL_CARD` 等交互命令，  
+因此“弃牌↔撤回（卖牌）”这类循环很可能**不会被检测到**（actionLog 没有记录 → detector 看不到）。  
 
 ## 关联审计文档（单一真相源索引）
 - 引擎 watchdog 强口径审计：`evidence/engine/online-ai-watchdog-strong-audit-2026-04-12.md`
@@ -120,4 +148,4 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 - DiceThrone AI 总审计：`evidence/dicethrone/dicethrone-ai-interaction-audit-2026-04-11.md`
 - DiceThrone response-window 重触发专项：`evidence/dicethrone/dicethrone-response-window-retrigger-audit-2026-04-12.md`
 - Smash Up AI 强口径审计：`evidence/smashup-ai-interaction-audit-2026-04-11.md`
-- Summoner Wars watchdog 链审计：`evidence/summonerwars-ai-interaction-audit-2026-04-11.md`
+- Summoner Wars watchdog 链审计：`evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`

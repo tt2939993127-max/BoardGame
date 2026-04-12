@@ -1199,9 +1199,20 @@ describe('Token 响应窗口判定', () => {
         const baseSetup = createNoResponseSetupWithEmptyHand();
         const state = baseSetup(['0', '1'], fixedRandom);
         state.core.players['1'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] = 1;
+        state.core.pendingAttack = { attackerId: '0', defenderId: '1', isDefendable: true };
 
         const responseType = shouldOpenTokenResponse(state.core, '0', '1', 4);
         expect(responseType).toBe('defenderMitigation');
+    });
+
+    it('防御方有 samurai_retribution Token 但无 pendingAttack 时不应打开 defenderMitigation', () => {
+        const baseSetup = createNoResponseSetupWithEmptyHand();
+        const state = baseSetup(['0', '1'], fixedRandom);
+        state.core.players['1'].tokens[TOKEN_IDS.SAMURAI_RETRIBUTION] = 1;
+        state.core.pendingAttack = undefined;
+
+        const responseType = shouldOpenTokenResponse(state.core, '0', '1', 4);
+        expect(responseType).toBeNull();
     });
 });
 

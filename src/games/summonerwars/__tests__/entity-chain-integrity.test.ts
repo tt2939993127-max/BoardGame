@@ -660,7 +660,7 @@ describe('完整流程验证 (Section 9)', () => {
 
     /** random 产生 melee 面（index=0），确保近战攻击命中 */
     function meleeRandom(): RandomFn {
-        return { shuffle: <T>(arr: T[]) => arr, random: () => 0, d: (max: number) => 1, range: (min: number) => min };
+        return { shuffle: <T>(arr: T[]) => arr, random: () => 0, d: (_max: number) => 1, range: (min: number) => min };
     }
 
     // ================================================================
@@ -1090,7 +1090,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
     }
 
     function meleeRandom(): RandomFn {
-        return { shuffle: <T>(arr: T[]) => arr, random: () => 0, d: (max: number) => 1, range: (min: number) => min };
+        return { shuffle: <T>(arr: T[]) => arr, random: () => 0, d: (_max: number) => 1, range: (min: number) => min };
     }
 
     // ================================================================
