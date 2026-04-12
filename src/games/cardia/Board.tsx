@@ -64,6 +64,14 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const core = G.core;
     const phase = G.sys.phase;  // 从 sys.phase 读取阶段（FlowSystem 管理）
     const isGameOver = G.sys.gameover;
+    
+    console.log('[CardiaBoard] Render', {
+        phase,
+        isGameOver,
+        isGameOverType: typeof isGameOver,
+        isGameOverTruthy: !!isGameOver,
+        playerID,
+    });
     const gameMode = useGameMode();
     const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
     const isOnline = !isLocalMatch;
@@ -407,6 +415,13 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         matchData,
         reset,
         isMultiplayer,
+    });
+    
+    console.log('[CardiaBoard] useEndgame result', {
+        isGameOver,
+        endgamePropsIsGameOver: endgameProps.isGameOver,
+        endgamePropsResult: endgameProps.result,
+        playerID,
     });
     
     useGameAudio({
