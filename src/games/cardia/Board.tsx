@@ -64,6 +64,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const core = G.core;
     const phase = G.sys.phase;  // 从 sys.phase 读取阶段（FlowSystem 管理）
     const isGameOver = G.sys.gameover;
+    
     const gameMode = useGameMode();
     const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
     const isOnline = !isLocalMatch;
@@ -409,13 +410,6 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
         isMultiplayer,
     });
     
-    console.log('[CardiaBoard] useEndgame result', {
-        isGameOver,
-        endgamePropsIsGameOver: endgameProps.isGameOver,
-        endgamePropsResult: endgameProps.result,
-        playerID,
-    });
-    
     useGameAudio({
         config: cardiaAudioConfig,
         gameId: CARDIA_MANIFEST.id,
@@ -504,7 +498,8 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     const canActivateAbility = isAbilityPhase 
         && core.currentEncounter?.loserId === myPlayerId
         && !G.sys.interaction.current  // 没有我的交互
-        && !G.sys.interaction.isBlocked;  // ✅ 修复：对手有交互时也不显示能力按钮
+        && !G.sys.interaction.isBlocked  // ✅ 修复：对手有交互时也不显示能力按钮
+        && !isGameOver;  // 游戏结束时不显示能力按钮
     
     const handlePlayCard = (cardUid: string) => {
         if (phase !== 'play') {
@@ -1002,7 +997,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     )}
                     
                     {/* 结束回合按钮（结束阶段显示） */}
-                    {phase === 'end' && core.currentPlayerId === myPlayerId && (
+                    {phase === 'end' && core.currentPlayerId === myPlayerId && !isGameOver && (
                         <div className="absolute inset-x-2 bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] z-10 flex justify-center md:inset-x-auto md:bottom-auto md:left-1/2 md:top-1/2 md:-translate-x-1/2 md:-translate-y-1/2">
                             <button
                                 data-testid="cardia-end-turn-btn"
@@ -1069,7 +1064,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
                     interactive={isTouchLikeDevice}
                 />
                 
-                {isGameOver && <EndgameOverlay {...endgameProps} />}
+                <EndgameOverlay {...endgameProps} />
                 <GameDebugPanel G={G} dispatch={dispatch} playerID={myPlayerId} />
                 
                 {/* 动画层 */}

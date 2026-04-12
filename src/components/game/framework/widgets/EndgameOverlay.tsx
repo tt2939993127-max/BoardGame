@@ -6,7 +6,7 @@
  * 支持插槽式自定义内容和按钮区域。
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
@@ -162,45 +162,28 @@ export function EndgameOverlay({
     const gameMode = useGameMode();
 
     // 仅在 isGameOver 从 false → true 时触发显示，并冻结 result
-    useEffect(() => {
-        console.log('[EndgameOverlay] useEffect triggered', {
-            isGameOver,
-            prevGameOver: prevGameOverRef.current,
-            result,
-            shouldShow,
-        });
-        
-        if (isGameOver && !prevGameOverRef.current) {
-            console.log('[EndgameOverlay] Game over detected, showing overlay');
-            let cancelled = false;
-            queueMicrotask(() => {
-                if (cancelled) return;
-                console.log('[EndgameOverlay] Setting shouldShow=true');
-                setShouldShow(true);
-                setFrozenResult(result);
-            });
+    useLayoutEffect(() => {
+        // 游戏结束时显示 overlay
+        if (isGameOver && !shouldShow) {
+            prevGameOverRef.current = true;
+            setShouldShow(true);
+            setFrozenResult(result);
+        }
+        // 游戏重置时隐藏 overlay
+        else if (!isGameOver && shouldShow) {
+            prevGameOverRef.current = false;
+            setShouldShow(false);
+            setFrozenResult(undefined);
+        }
+        // 更新 ref 以跟踪 isGameOver 状态
+        else if (isGameOver !== prevGameOverRef.current) {
             prevGameOverRef.current = isGameOver;
-            return () => {
-                cancelled = true;
-            };
         }
-        prevGameOverRef.current = isGameOver;
-    }, [isGameOver, result]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isGameOver, shouldShow]);  // 依赖 isGameOver 和 shouldShow
+    // 注意：不依赖 result 是有意为之，避免对象引用变化导致重复触发
 
-    // 如果游戏重置（isGameOver 变回 false），关闭遮罩
-    useEffect(() => {
-        if (!isGameOver) {
-            let cancelled = false;
-            queueMicrotask(() => {
-                if (cancelled) return;
-                setShouldShow(false);
-                setFrozenResult(undefined);
-            });
-            return () => {
-                cancelled = true;
-            };
-        }
-    }, [isGameOver]);
+    // 注意：游戏重置的逻辑已合并到上面的 useEffect 中
 
     const contentProps: ContentSlotProps = {
         result: frozenResult,
