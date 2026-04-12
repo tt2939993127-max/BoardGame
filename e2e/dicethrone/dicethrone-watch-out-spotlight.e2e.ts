@@ -1876,8 +1876,14 @@ test.skip('samurai righteousness should resolve a visible bonus-die branch again
     });
     await page.locator('[data-card-id="card-righteousness"]').first().click();
 
+    // 攻击修正徽章应在打出卡牌后出现（效果提示，不代表必须延迟到关闭特写才生效）
+    const activeBadgeEarly = page.locator('[data-testid="active-modifier-badge"]').first();
+    await expect(activeBadgeEarly).toBeVisible({ timeout: 5000 });
+    await game.screenshot('09-samurai-righteousness-badge-after-play', testInfo);
+
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
+    await game.screenshot('09-samurai-righteousness-bonus-die-overlay', testInfo);
     await expect(bonusDieOverlay).toContainText(/samuraiRighteousnessKatana|武士刀：\+2 伤害|\+2\s*伤害/i, { timeout: 5000 });
 
     await page.waitForFunction(() => {
@@ -2041,6 +2047,17 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     expect(stateAfterPlay.shame).toBe(0);
     expect(stateAfterPlay.samuraiRetribution).toBe(0);
 
+    // displayOnly 特写：点击遮罩关闭，证明可收口并继续推进
+    await bonusDieOverlay.click({ force: true });
+    await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
+    await game.screenshot('09-samurai-righteousness-bonus-die-closed', testInfo);
+
+    await expect.poll(async () => {
+        const state = await game.getState();
+        return state?.core?.pendingBonusDiceSettlement ?? null;
+    }, { timeout: 5000 }).toBeNull();
+    await game.screenshot('09-samurai-righteousness-settled', testInfo);
+
     await game.screenshot('09-samurai-righteousness-vs-monk', testInfo);
 });
 
@@ -2065,8 +2082,14 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
     });
     await page.locator('[data-card-id="card-zanshin"]').first().click();
 
+    // 攻击修正徽章应在打出卡牌后出现（效果提示）
+    const activeBadgeEarly = page.locator('[data-testid="active-modifier-badge"]').first();
+    await expect(activeBadgeEarly).toBeVisible({ timeout: 5000 });
+    await game.screenshot('10-samurai-zanshin-badge-after-play', testInfo);
+
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
+    await game.screenshot('10-samurai-zanshin-bonus-die-overlay', testInfo);
 
     await page.waitForFunction(() => {
         const settlement = (window as any).__BG_TEST_HARNESS__?.state?.get()?.core?.pendingBonusDiceSettlement;
@@ -2128,7 +2151,18 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
     await expect(activeBadge).toContainText(/攻击修正\s*\+2|Attack Modifier\s*\+2/i, { timeout: 5000 });
 
-    await page.waitForTimeout(900);
+    // displayOnly 特写：点击遮罩关闭，证明可收口
+    await bonusDieOverlay.click({ force: true });
+    await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
+    await game.screenshot('10-samurai-zanshin-bonus-die-closed', testInfo);
+
+    await expect.poll(async () => {
+        const state = await game.getState();
+        return state?.core?.pendingBonusDiceSettlement ?? null;
+    }, { timeout: 5000 }).toBeNull();
+    await game.screenshot('10-samurai-zanshin-settled', testInfo);
+
+    await page.waitForTimeout(400);
     await game.screenshot('10-samurai-zanshin-vs-paladin', testInfo);
 });
 
