@@ -5,3 +5,4 @@
 - [ ] 1.4 在线 watchdog 反馈补充响应窗口 fingerprint / unsatisfiable reason
 - [ ] 1.5 更新相关单测（优先 `src/engine/transport/__tests__/server.test.ts`）
 - [ ] 1.6 更新 AI 审计 evidence（若规则/行为变化）
+- [ ] 1.7 在线 watchdog 移除 enableAi 启动依赖，并补齐对应测试

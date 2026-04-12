@@ -25,3 +25,17 @@
 - **GIVEN** 当前响应窗口的 responder 为 human seat
 - **WHEN** watchdog 评估兜底方案
 - **THEN** watchdog MUST 不对该响应窗口执行自动跳过
+
+### Requirement: 在线 AI watchdog 不依赖 enableAi 标记启动
+在线 AI watchdog MUST 以 setupData.seatControllers 为准识别 AI seat，不得依赖 enableAi 标记是否存在。
+
+#### Scenario: 缺少 enableAi 但 seatControllers 标记了 AI
+- **GIVEN** setupData.enableAi 未设置或为 false
+- **AND** setupData.seatControllers 存在并标记了 local-ai/remote-ai
+- **WHEN** watchdog 执行兜底检测
+- **THEN** watchdog MUST 仍然对 AI seat 启动兜底流程
+
+#### Scenario: seatControllers 未包含 AI 时不触发 watchdog
+- **GIVEN** setupData.seatControllers 未标记任何 AI seat
+- **WHEN** watchdog 执行兜底检测
+- **THEN** watchdog MUST 不触发任何自动推进

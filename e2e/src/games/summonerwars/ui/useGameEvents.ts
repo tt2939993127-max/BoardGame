@@ -251,7 +251,7 @@ export function useGameEvents({
   // 刷新恢复：首次挂载时扫描 EventStream 历史，恢复未完成的交互型阶段技能
   // ============================================================================
   // 问题：useEventStreamCursor 首次调用跳过所有历史事件（防止重播动画），
-  // 但阶段开始/结束触发的交互型技能（幻化、鲜血符文、寒冰碎屑、喟养巨食兽）
+    // 但阶段开始/结束触发的交互型技能（幻化、鲜血符文）
   // 需要玩家交互，跳过后 UI 不会进入选择模式，技能"丢失"。
   // 解决：首次挂载时反向扫描历史，找到最后一个未处理的交互型技能事件并恢复。
   const hasRecoveredRef = useRef(false);
@@ -269,8 +269,6 @@ export function useGameEvents({
     }> = {
       'illusion_copy': { phases: ['move'], uiAbilityId: 'illusion', step: 'selectUnit' },
       'blood_rune_choice': { phases: ['attack'], uiAbilityId: 'blood_rune', step: 'selectUnit' },
-      'ice_shards_damage': { phases: ['build'], uiAbilityId: 'ice_shards', step: 'selectUnit' },
-      'feed_beast_check': { phases: ['attack'], uiAbilityId: 'feed_beast', step: 'selectUnit' },
     };
 
     // 反向扫描：找最后一个可恢复的 ABILITY_TRIGGERED 事件

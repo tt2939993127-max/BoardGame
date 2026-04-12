@@ -1369,6 +1369,7 @@ describe('GameTransportServer（离座与重连）', () => {
         await serverInternal.runOnlineAiRecoveryTick();
         await nextTick();
         await nextTick();
+        await nextTick();
 
         // main2 -> discard -> main1（交还到玩家0）
         expect(executeSpy).toHaveBeenCalledTimes(2);
@@ -1536,7 +1537,7 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(feedbackReporter).not.toHaveBeenCalled();
     });
 
-    it('online AI watchdog 缺少 enableAi 标记时应忽略残留 AI seatControllers', async () => {
+    it('online AI watchdog 缺少 enableAi 标记时仍应根据 seatControllers 启动', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
         const feedbackReporter = vi.fn(async () => undefined);
@@ -1577,15 +1578,39 @@ describe('GameTransportServer（离座与重连）', () => {
             ) => Promise<boolean>;
         };
 
-        await serverInternal.loadMatch('match-watchdog-stale-seat-controllers');
-        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal');
+        const match = await serverInternal.loadMatch('match-watchdog-stale-seat-controllers');
+        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (activeMatch, _playerID, commandType) => {
+            if (commandType !== 'ADVANCE_PHASE') {
+                return false;
+            }
+            activeMatch.state = {
+                ...activeMatch.state,
+                sys: {
+                    ...activeMatch.state.sys,
+                    phase: 'main1',
+                    turnNumber: (activeMatch.state.sys?.turnNumber ?? 0) + 1,
+                },
+                core: {
+                    ...activeMatch.state.core,
+                    activePlayerId: '0',
+                    currentPlayerIndex: 0,
+                },
+            };
+            return true;
+        });
 
         await serverInternal.runOnlineAiRecoveryTick();
         await serverInternal.runOnlineAiRecoveryTick();
         await nextTick();
 
-        expect(executeSpy).not.toHaveBeenCalled();
-        expect(feedbackReporter).not.toHaveBeenCalled();
+        expect(executeSpy).toHaveBeenCalled();
+        expect(match.state.core.activePlayerId).toBe('0');
+        expect(match.state.sys.phase).toBe('main1');
+        expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+            matchId: 'match-watchdog-stale-seat-controllers',
+            playerId: '1',
+            incidentKind: 'force-end-turn-success',
+        }));
     });
 
     it('online AI watchdog 在 responseWindow 当前响应者为 human 时不得误触发强制结束 AI 回合', async () => {

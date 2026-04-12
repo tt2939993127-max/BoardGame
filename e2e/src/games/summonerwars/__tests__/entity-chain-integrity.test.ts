@@ -1011,7 +1011,7 @@ describe('完整流程验证 (Section 9)', () => {
         const enemyCard = mkUnit('enemy-adj', { faction: 'necromancer' });
         putUnit(core, { row: 3, col: 4 }, enemyCard, '1' as PlayerId);
 
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         const result = summonerWarsFlowHooks.onPhaseExit!({
             state,
             from: 'build',
@@ -1076,7 +1076,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
     });
 
     function exec(cmd: string, payload: Record<string, unknown>, overrideRandom?: RandomFn) {
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         return executeCommand(state, { type: cmd, payload, timestamp: 0 }, overrideRandom ?? random);
     }
 
@@ -1513,7 +1513,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
         putUnit(core, { row: 4, col: 3 }, guide, '1');
         core.players['1' as PlayerId].deck = []; // 空牌组
 
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         const events = summonerWarsFlowHooks.onPhaseEnter!({
             state,
             from: 'draw',
@@ -1535,7 +1535,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
         putUnit(core, { row: 4, col: 3 }, guide, '1');
         core.players['1' as PlayerId].deck = [mkUnit('last-card', {})];
 
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         const events = summonerWarsFlowHooks.onPhaseEnter!({
             state,
             from: 'draw',
@@ -1561,7 +1561,7 @@ describe('边界/异常场景验证 (Section 10)', () => {
         const iceUnit = mkUnit('frost-shards-b', { abilities: ['ice_shards'], faction: 'frost' });
         putUnit(core, { row: 4, col: 3 }, iceUnit, '0');
 
-        const state = { core } as MatchState<SummonerWarsCore>;
+        const state = { core, sys: { flowHalted: false } } as MatchState<SummonerWarsCore>;
         const result = summonerWarsFlowHooks.onPhaseExit!({
             state,
             from: 'move',

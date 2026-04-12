@@ -77,6 +77,8 @@ interface StatusBannersProps {
   rapidFireMode: import('./modeTypes').RapidFireModeState | null;
   telekinesisTargetMode: { abilityId: string; targetPosition: CellCoord; destinations: { position: CellCoord; moveRow: number; moveCol: number }[] } | null;
   magicEventChoiceMode: { cardId: string } | null;
+  systemIceShardsMode: { sourceBoosts: number } | null;
+  systemFeedBeastMode: boolean;
   // 回调
   onCancelAbility: () => void;
   onConfirmBeforeAttackCards: () => void;
@@ -156,6 +158,7 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
   abilityMode, fireSacrificeSummonMode, onCancelFireSacrifice, pendingBeforeAttack, bloodSummonMode, annihilateMode, soulTransferMode, funeralPyreMode,
   mindControlMode, chantEntanglementMode, sneakMode, glacialShiftMode, withdrawMode, stunMode, hypnoticLureMode,
   mindCaptureMode, afterAttackAbilityMode, rapidFireMode, telekinesisTargetMode, magicEventChoiceMode,
+  systemIceShardsMode, systemFeedBeastMode,
   onCancelAbility, onConfirmBeforeAttackCards, onConfirmBloodRune, onConfirmIceShards, onConfirmFeedBeastSelfDestroy,
   onCancelBeforeAttack, onCancelBloodSummon, onContinueBloodSummon,
   onCancelAnnihilate, onConfirmAnnihilateTargets, onSkipAnnihilateDamage,
@@ -314,6 +317,37 @@ export const StatusBanners: React.FC<StatusBannersProps> = ({
         {abilityMode.abilityId === 'life_drain' && abilityMode.context !== 'beforeAttack' && (
           <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.cancel')}</GameButton>
         )}
+      </div>
+    );
+  }
+
+  if (systemIceShardsMode) {
+    return (
+      <div className="bg-amber-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-amber-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-amber-200 text-sm font-bold">
+          {t('statusBanners.ability.iceShards')}
+        </span>
+        <GameButton
+          onClick={onConfirmIceShards}
+          variant="primary"
+          size="sm"
+          disabled={systemIceShardsMode.sourceBoosts < 1}
+          title={systemIceShardsMode.sourceBoosts < 1 ? t('statusBanners.insufficientCharge') : undefined}
+        >
+          {t('actions.confirm')}
+        </GameButton>
+        <GameButton onClick={onCancelAbility} variant="secondary" size="sm">{t('actions.skip')}</GameButton>
+      </div>
+    );
+  }
+
+  if (systemFeedBeastMode) {
+    return (
+      <div className="bg-amber-900/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-amber-500/40 flex items-center gap-3 shadow-lg">
+        <span className="text-amber-200 text-sm font-bold">
+          {t('statusBanners.ability.feedBeast')}
+        </span>
+        <GameButton onClick={onConfirmFeedBeastSelfDestroy} variant="secondary" size="sm">{t('actions.feedBeastSelfDestroy')}</GameButton>
       </div>
     );
   }

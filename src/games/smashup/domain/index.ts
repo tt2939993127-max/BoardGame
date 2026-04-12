@@ -1914,11 +1914,11 @@ function postProcessSystemEvents(
         };
     }
 
-    const sysAny = ms.sys as any;
-    if (!sysAny._processedDestroyEvents || !(sysAny._processedDestroyEvents instanceof Set)) {
-        sysAny._processedDestroyEvents = new Set<string>();
+    const destroySysAny = ms.sys as any;
+    if (!destroySysAny._processedDestroyEvents || !(destroySysAny._processedDestroyEvents instanceof Set)) {
+        destroySysAny._processedDestroyEvents = new Set<string>();
     }
-    const processedDestroyEventKeys = sysAny._processedDestroyEvents as Set<string>;
+    const processedDestroyEventKeys = destroySysAny._processedDestroyEvents as Set<string>;
     const destroyEventKeysInBatch = new Set<string>();
     for (const event of events) {
         if (event.type === SU_EVENTS.MINION_DESTROYED) {
@@ -2083,7 +2083,14 @@ function postProcessSystemEvents(
     // 瀵?derived events 閫掑綊鎵ц trigger 鍚庡鐞嗭紙onPlay 浜х敓鐨?MINION_DESTROYED 绛夐渶瑕佽Е鍙?onDestroy 閾撅級
     let finalDerived = derivedEvents;
     if (derivedEvents.length > 0) {
-        const afterDerivedDestroyMove = processDestroyMoveCycle(derivedEvents, ms, pid, random, now);
+        for (const event of derivedEvents) {
+            if (event.type === SU_EVENTS.MINION_DESTROYED) {
+                destroyEventKeysInBatch.add(buildDestroyEventKey(event as MinionDestroyedEvent));
+            }
+        }
+        const afterDerivedDestroyMove = processDestroyMoveCycle(derivedEvents, ms, pid, random, now, {
+            skipDestroyEventKeys: processedDestroyEventKeys,
+        });
         if (afterDerivedDestroyMove.matchState) ms = afterDerivedDestroyMove.matchState;
         // 返回手牌/影响保护过滤（与 execute() 后处理对齐）
         const afterDerivedProtectedAffect = filterProtectedAffectEvents(afterDerivedDestroyMove.events, ms.core, pid);

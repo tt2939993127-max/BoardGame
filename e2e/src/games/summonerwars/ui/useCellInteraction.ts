@@ -1052,6 +1052,19 @@ export function useCellInteraction({
   // ---------- 外部技能确认 ----------
 
   const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
+    if (swInteraction && swInteraction.type === 'mind_capture') {
+      const option = swInteraction.options.find((opt) => {
+        const val = opt.value as { action?: string; choice?: string } | undefined;
+        return val?.action === 'mind_capture' && val.choice === choice;
+      });
+      if (option) {
+        dispatch(INTERACTION_COMMANDS.RESPOND, {
+          interactionId: swInteraction.id,
+          optionId: option.id,
+        });
+      }
+      return;
+    }
     if (!mindCaptureMode) return;
     dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
       abilityId: 'mind_capture_resolve',
@@ -1062,7 +1075,7 @@ export function useCellInteraction({
       _noSnapshot: true,
     });
     setMindCaptureMode(null);
-  }, [dispatch, mindCaptureMode, setMindCaptureMode]);
+  }, [dispatch, mindCaptureMode, setMindCaptureMode, swInteraction]);
 
   const handleConfirmBeforeAttackCards = () => {
     if (!abilityMode || abilityMode.step !== 'selectCards') return;

@@ -82,14 +82,20 @@ const extractSetupSeatControllers = (setupData: unknown): Record<string, { type?
     return rawSeatControllers as Record<string, { type?: unknown } | undefined>;
 };
 
-const shouldTrustOnlineAiSeatControllersForWatchdog = (setupData: unknown): boolean => (
-    Boolean(
-        setupData
-        && typeof setupData === 'object'
-        && !Array.isArray(setupData)
-        && (setupData as { enableAi?: unknown }).enableAi === true,
-    )
-);
+const shouldTrustOnlineAiSeatControllersForWatchdog = (setupData: unknown): boolean => {
+    if (!setupData || typeof setupData !== 'object' || Array.isArray(setupData)) {
+        return false;
+    }
+
+    const rawSeatControllers = (setupData as { seatControllers?: unknown }).seatControllers;
+    if (!rawSeatControllers || typeof rawSeatControllers !== 'object' || Array.isArray(rawSeatControllers)) {
+        return false;
+    }
+
+    return Object.values(rawSeatControllers as Record<string, { type?: unknown } | undefined>).some(
+        (controller) => controller?.type === 'local-ai' || controller?.type === 'remote-ai',
+    );
+};
 
 const DEFAULT_TRAINING_CAPTURE_POLICY = 'human-only' as const;
 const DEFAULT_ONLINE_AI_RECOVERY_TICK_MS = 500;

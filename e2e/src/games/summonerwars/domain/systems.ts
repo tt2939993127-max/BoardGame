@@ -245,6 +245,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             {
               id: 'skip',
               label: '跳过',
+              labelKey: 'actions.skip',
               value: { skip: true },
             },
           ];
@@ -275,7 +276,8 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           const options: PromptOption<SwInteractionValue>[] = [
             {
               id: 'confirm',
-              label: '确认',
+              label: '确认移动',
+              labelKey: 'actions.confirmMove',
               value: {
                 action: 'soul_transfer',
                 sourceUnitId: payload.sourceUnitId,
@@ -285,6 +287,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             {
               id: 'skip',
               label: '跳过',
+              labelKey: 'actions.skip',
               value: { skip: true },
             },
           ];
@@ -315,6 +318,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             {
               id: 'control',
               label: '控制',
+              labelKey: 'actions.control',
               value: {
                 action: 'mind_capture',
                 sourceUnitId: payload.sourceUnitId,
@@ -326,6 +330,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             {
               id: 'damage',
               label: '伤害',
+              labelKey: 'actions.damage',
               value: {
                 action: 'mind_capture',
                 sourceUnitId: payload.sourceUnitId,
@@ -365,11 +370,13 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
               {
                 id: 'confirm',
                 label: '确认',
+                labelKey: 'actions.confirm',
                 value: { action: 'ice_shards', sourceUnitId },
               },
               {
                 id: 'skip',
                 label: '跳过',
+                labelKey: 'actions.skip',
                 value: { action: 'ice_shards', sourceUnitId, skip: true },
               },
             ];
@@ -403,6 +410,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
               {
                 id: 'self_destroy',
                 label: '自毁',
+                labelKey: 'actions.feedBeastSelfDestroy',
                 value: { action: 'feed_beast', sourceUnitId, choice: 'self_destroy' },
               },
             ];
@@ -527,4 +535,3 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
     },
   };
 }
-
