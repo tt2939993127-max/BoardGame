@@ -28,7 +28,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SABOTEUR, (ctx: CardiaAbilityContex
     return {
         events: [
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK,
+                type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type,
                 payload: {
                     playerId: ctx.opponentId,
                     count: 2,
@@ -57,7 +57,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.REVOLUTIONARY, (ctx: CardiaAbilityC
         return {
             events: [
                 {
-                    type: CARDIA_EVENTS.CARD_DRAWN,
+                    type: CARDIA_EVENTS.CARD_DRAWN.type,
                     payload: {
                         playerId: ctx.opponentId,
                         count: 2,
@@ -81,7 +81,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.REVOLUTIONARY, (ctx: CardiaAbilityC
     return {
         events: [
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: ctx.opponentId,
                     cardIds: discardedCardIds,
@@ -90,7 +90,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.REVOLUTIONARY, (ctx: CardiaAbilityC
                 timestamp: ctx.timestamp,
             },
             {
-                type: CARDIA_EVENTS.CARD_DRAWN,
+                type: CARDIA_EVENTS.CARD_DRAWN.type,
                 payload: {
                     playerId: ctx.opponentId,
                     count: 2,
@@ -124,7 +124,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.HEIR, (ctx: CardiaAbilityContext) =
         return {
             events: [
                 {
-                    type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK,
+                    type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type,
                     payload: {
                         playerId: ctx.opponentId,
                         count: opponentPlayer.deck.length,
@@ -156,7 +156,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.HEIR, (ctx: CardiaAbilityContext) =
     return {
         events: [
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: ctx.opponentId,
                     cardIds: discardedCardIds,
@@ -165,7 +165,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.HEIR, (ctx: CardiaAbilityContext) =
                 timestamp: ctx.timestamp,
             },
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK,
+                type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type,
                 payload: {
                     playerId: ctx.opponentId,
                     count: opponentPlayer.deck.length,
@@ -196,7 +196,7 @@ export function registerResourceInteractionHandlers(): void {
             events: [
                 // 弃掉选中的 2 张手牌
                 {
-                    type: CARDIA_EVENTS.CARDS_DISCARDED,
+                    type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                     payload: {
                         playerId: opponentId,
                         cardIds: selection.cardUids,
@@ -206,7 +206,7 @@ export function registerResourceInteractionHandlers(): void {
                 },
                 // 抽 2 张牌
                 {
-                    type: CARDIA_EVENTS.CARD_DRAWN,
+                    type: CARDIA_EVENTS.CARD_DRAWN.type,
                     payload: {
                         playerId: opponentId,
                         count: 2,
@@ -240,7 +240,7 @@ export function registerResourceInteractionHandlers(): void {
             events: [
                 // 弃掉未选中的手牌
                 {
-                    type: CARDIA_EVENTS.CARDS_DISCARDED,
+                    type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                     payload: {
                         playerId: opponentId,
                         cardIds: discardedCardIds,
@@ -250,7 +250,7 @@ export function registerResourceInteractionHandlers(): void {
                 },
                 // 弃掉整个牌库
                 {
-                    type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK,
+                    type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type,
                     payload: {
                         playerId: opponentId,
                         count: opponentPlayer.deck.length,

@@ -115,7 +115,7 @@ export function formatCardiaActionEntry({
     // 命令格式化
     switch (command.type) {
         case CARDIA_COMMANDS.PLAY_CARD: {
-            const cardPlayedEvent = events.find(e => e.type === CARDIA_EVENTS.CARD_PLAYED);
+            const cardPlayedEvent = events.find(e => e.type === CARDIA_EVENTS.CARD_PLAYED.type);
             if (!cardPlayedEvent) return null;
             
             const { cardUid, slotIndex } = cardPlayedEvent.payload;
@@ -140,7 +140,7 @@ export function formatCardiaActionEntry({
         }
 
         case CARDIA_COMMANDS.ACTIVATE_ABILITY: {
-            const abilityEvent = events.find(e => e.type === CARDIA_EVENTS.ABILITY_ACTIVATED);
+            const abilityEvent = events.find(e => e.type === CARDIA_EVENTS.ABILITY_ACTIVATED.type);
             if (!abilityEvent) return null;
             
             const { cardId } = abilityEvent.payload;

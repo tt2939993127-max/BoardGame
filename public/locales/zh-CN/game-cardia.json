@@ -402,6 +402,7 @@
   },
   
   "actionLog": {
+    "title": "行为日志",
     "playCard": "打出",
     "toSlot": "到遭遇 {{slot}}",
     "atSlot": "在遭遇 {{slot}}",

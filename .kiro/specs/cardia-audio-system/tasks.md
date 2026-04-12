@@ -14,15 +14,15 @@
 
 ## Tasks
 
-- [ ] 1. 更新事件定义使用 defineEvents()
+- [x] 1. 更新事件定义使用 defineEvents()
   - 修改 `src/games/cardia/domain/events.ts`
   - 为所有事件定义音频策略（immediate/fx/silent）
   - 为 immediate 事件指定音效 key
   - 支持动态音效选择（如 MODIFIER_TOKEN_PLACED 根据正负值选择音效）
   - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 3.1, 3.2, 3.3, 3.4, 3.5, 3.6, 5.1, 5.2, 5.3, 5.4, 5.5_
 
-- [ ] 2. 创建音频配置文件
-  - [ ] 2.1 创建 `src/games/cardia/audio.config.ts`
+- [x] 2. 创建音频配置文件
+  - [x] 2.1 创建 `src/games/cardia/audio.config.ts`
     - 定义 BGM 常量（8 首曲目，分为 normal 和 battle 两组）
     - 配置 `criticalSounds` 列表（使用 `collectPreloadKeys()` 自动收集 + 手动补充高频音效）
     - 定义 `bgm` 数组（包含所有 BGM 的 key、name、volume、category）
@@ -31,7 +31,7 @@
     - 定义 `bgmRules`（根据游戏阶段自动切换 BGM）
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 3.1, 3.2, 4.1, 4.2, 4.4, 6.1, 6.2, 6.3, 6.4, 6.5, 6.7_
 
-  - [ ]* 2.2 编写单元测试验证配置正确性
+  - [x] 2.2 编写单元测试验证配置正确性
     - 验证 `collectPreloadKeys()` 正确收集 immediate 音效
     - 验证 `feedbackResolver` 返回正确的音效 key
     - 验证动态选择逻辑（MODIFIER_TOKEN_PLACED 正负值、ENCOUNTER_RESOLVED 胜负）
@@ -39,24 +39,24 @@
     - 验证 `bgmRules` 根据游戏阶段返回正确的 BGM
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5, 3.6_
 
-- [ ] 3. 集成音频系统到游戏引擎
+- [x] 3. 集成音频系统到游戏引擎
   - 修改 `src/games/cardia/game.ts`
   - 导入 `CARDIA_AUDIO_CONFIG`
   - 在 `createGameEngine()` 中注册 `audioConfig`
   - _Requirements: 7.1, 7.2, 7.3, 7.4_
 
-- [ ] 4. Checkpoint - 确保配置正确且无编译错误
+- [x] 4. Checkpoint - 确保配置正确且无编译错误
   - 运行 `npx eslint src/games/cardia/audio.config.ts src/games/cardia/domain/events.ts src/games/cardia/game.ts`
   - 运行 `npx tsc --noEmit` 确认无类型错误
   - 确保所有音效 key 在注册表中存在（通过 `/dev/audio` 页面验证）
   - 如有问题，询问用户
 
-- [ ] 5. 生成运行时精简注册表
+- [x] 5. 生成运行时精简注册表
   - 运行 `node scripts/audio/generate-slim-registry.mjs`
   - 确保 Cardia 使用的所有音效 key 包含在精简注册表中
   - _Requirements: 8.5_
 
-- [ ]* 6. 编写 E2E 测试验证音效播放
+- [x] 6. 编写 E2E 测试验证音效播放
   - 创建 `e2e/cardia-audio-system.e2e.ts`
   - 测试卡牌打出音效（CARD_PLAYED）
   - 测试印戒授予音效（SIGNET_GRANTED）
@@ -65,7 +65,7 @@
   - 测试 BGM 切换（normal → battle → normal）
   - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5_
 
-- [ ] 7. 编写证据文档
+- [x] 7. 编写证据文档
   - 创建 `evidence/cardia-audio-system.md`
   - 说明 BGM 选择的理由和风格定位
   - 列出所有事件与音效的映射关系
@@ -74,7 +74,7 @@
   - 附上关键截图（`/dev/audio` 页面、游戏内音效播放）
   - _Requirements: 10.1, 10.2, 10.3, 10.4, 10.5_
 
-- [ ] 8. Final checkpoint - 确保所有功能正常
+- [x] 8. Final checkpoint - 确保所有功能正常
   - 访问 `/dev/audio` 页面，验证所有 Cardia 使用的音效可预览
   - 启动游戏，验证音效正确播放
   - 验证 BGM 在不同阶段正确切换

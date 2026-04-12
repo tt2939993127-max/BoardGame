@@ -40,6 +40,9 @@ registerCriticalImageResolver('cardia', cardiaCriticalImageResolver);
 // 注册 AI Runtime
 registerGameAiRuntime(cardiaAiRuntime);
 
+// 导入音频配置
+import { CARDIA_AUDIO_CONFIG } from './audio.config';
+
 // 导入所有能力组以注册执行器（必须在游戏引擎创建前执行）
 import './domain/abilities/group1-resources';
 import { registerResourceInteractionHandlers } from './domain/abilities/group1-resources';
@@ -105,6 +108,7 @@ export const Cardia = createGameEngine<CardiaCore, CardiaCommand, CardiaEvent>({
     minPlayers: 2,
     maxPlayers: 2,
     commandTypes,
+    audioConfig: CARDIA_AUDIO_CONFIG,
 });
 
 // 引擎配置（用于服务端注册）

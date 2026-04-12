@@ -12,7 +12,7 @@ import { useTutorialBridge } from '../../contexts/TutorialContext';
 import { useEndgame } from '../../hooks/game/useEndgame';
 import { useGameAudio } from '../../lib/audio/useGameAudio';
 import { useToast } from '../../contexts/ToastContext';
-import { cardiaAudioConfig } from './audio.config';
+import { CARDIA_AUDIO_CONFIG } from './audio.config';
 import { CARDIA_MANIFEST } from './manifest';
 import { CARDIA_COMMANDS } from './domain/commands';
 import { AbilityButton } from './ui/AbilityButton';
@@ -411,7 +411,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
     });
     
     useGameAudio({
-        config: cardiaAudioConfig,
+        config: CARDIA_AUDIO_CONFIG,
         gameId: CARDIA_MANIFEST.id,
         G: core,
         ctx: {
@@ -419,6 +419,7 @@ export const CardiaBoard: React.FC<Props> = ({ G, dispatch, playerID, reset, mat
             phase: phase,
             gameover: isGameOver,
         },
+        eventEntries: G.sys.eventStream?.entries ?? [],
     });
     
     // 暴露状态给 E2E 测试

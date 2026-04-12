@@ -402,6 +402,7 @@
   },
   
   "actionLog": {
+    "title": "Action Log",
     "playCard": "Played",
     "toSlot": "to Encounter {{slot}}",
     "atSlot": "at Encounter {{slot}}",

@@ -96,7 +96,7 @@ export function registerFactionInteractionHandlers(): void {
         
         const events: CardiaEvent[] = [
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: opponentId,
                     cardIds,
@@ -134,7 +134,7 @@ export function registerFactionInteractionHandlers(): void {
         // 弃掉手牌中该派系的卡牌
         if (handCardIds.length > 0) {
             events.push({
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: opponentId,
                     cardIds: handCardIds,
@@ -147,7 +147,7 @@ export function registerFactionInteractionHandlers(): void {
         // 弃掉牌库中该派系的卡牌
         if (deckCardIds.length > 0) {
             events.push({
-                type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK,
+                type: CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type,
                 payload: {
                     playerId: opponentId,
                     count: deckCardIds.length,
@@ -158,7 +158,7 @@ export function registerFactionInteractionHandlers(): void {
         
         // 混洗牌库
         events.push({
-            type: CARDIA_EVENTS.DECK_SHUFFLED,
+            type: CARDIA_EVENTS.DECK_SHUFFLED.type,
             payload: {
                 playerId: opponentId,
             },
