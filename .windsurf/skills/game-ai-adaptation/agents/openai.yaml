@@ -1,0 +1,4 @@
+interface:
+  display_name: "游戏AI适配"
+  short_description: "用于游戏 AI 接入、策略改动、交互兜底与自动反馈的流程指引"
+  default_prompt: "请按技能流程梳理 AI 接入/兜底/测试清单"

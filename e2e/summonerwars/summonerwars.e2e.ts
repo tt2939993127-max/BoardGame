@@ -10,6 +10,7 @@ import type { BrowserContext, Locator, Page } from '@playwright/test';
 import { waitForState, waitForCoreState, waitForPhaseChange } from '../helpers/waitForState';
 import { cloneState, createSWRoomViaAPI } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
+import { getMatchState, injectMatchState } from '../helpers/state-injection';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
 import { DESKTOP_REFERENCE_VIEWPORT, MOBILE_LANDSCAPE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
 import {
@@ -179,6 +180,9 @@ const resetMatchStorage = async (context: BrowserContext | Page) => {
       if (key.startsWith('match_creds_')) {
         localStorage.removeItem(key);
       }
+      if (key.startsWith('match_ai_creds_')) {
+        localStorage.removeItem(key);
+      }
     });
     localStorage.setItem('guest_id', newGuestId);
     try {
@@ -187,6 +191,75 @@ const resetMatchStorage = async (context: BrowserContext | Page) => {
       // ignore
     }
     document.cookie = `bg_guest_id=${encodeURIComponent(newGuestId)}; path=/; SameSite=Lax`;
+  });
+};
+
+const buildSummonerWarsOnlineAiWatchdogState = (
+  liveState: Awaited<ReturnType<typeof getMatchState>>,
+) => {
+  const state = withSummonerWarsMobileEvidenceActionLog(
+    createSummonerWarsMobileEvidenceState({
+      faction0: 'necromancer',
+      faction1: 'trickster',
+    }),
+    Date.now(),
+  );
+  const liveTurnOrder = Array.isArray((liveState.sys as { turnOrder?: unknown } | undefined)?.turnOrder)
+    ? ((liveState.sys as { turnOrder?: unknown[] }).turnOrder ?? []).filter((playerId): playerId is string => typeof playerId === 'string')
+    : ['0', '1'];
+  const liveCurrentPlayerIndex = typeof (liveState.sys as { currentPlayerIndex?: unknown } | undefined)?.currentPlayerIndex === 'number'
+    ? (liveState.sys as { currentPlayerIndex: number }).currentPlayerIndex
+    : 0;
+  const aiPlayerIndex = liveTurnOrder.indexOf('1');
+
+  return {
+    ...liveState,
+    ...state,
+    core: {
+      ...liveState.core,
+      ...state.core,
+      currentPlayer: '1',
+      phase: 'summon',
+      turnNumber: Math.max(state.core.turnNumber ?? 0, 5),
+    },
+    sys: {
+      ...liveState.sys,
+      ...state.sys,
+      matchId: liveState.sys?.matchId,
+      turnOrder: liveTurnOrder,
+      currentPlayerIndex: aiPlayerIndex >= 0 ? aiPlayerIndex : liveCurrentPlayerIndex,
+      phase: 'summon',
+      turnNumber: Math.max(state.sys.turnNumber ?? 0, 5),
+      interaction: {
+        ...state.sys.interaction,
+        current: undefined,
+        queue: [],
+        isBlocked: false,
+      },
+      responseWindow: {
+        ...state.sys.responseWindow,
+        current: undefined,
+      },
+    },
+  };
+};
+
+const blockSummonerWarsAiSeatAutoClaim = async (
+  context: BrowserContext,
+  targetPlayerId = '1',
+) => {
+  await context.route(/\/games\/summonerwars\/[^/]+\/claim-seat$/i, async (route) => {
+    const request = route.request();
+    const body = request.postDataJSON?.() as { playerID?: unknown } | undefined;
+    if (body?.playerID === targetPlayerId) {
+      await route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'e2e_block_ai_claim' }),
+      });
+      return;
+    }
+    await route.continue();
   });
 };
 
@@ -2235,6 +2308,134 @@ test.describe('SummonerWars', () => {
 
     await hostContext.close();
     await guestContext.close();
+  });
+
+  test('在线 AI watchdog/卡死兜底：阻止 AI seat 建连后，服务端仍应自动收口到真人回合且不误推进真人', async ({ browser }, testInfo) => {
+    test.setTimeout(150000);
+    await clearEvidenceScreenshotsForTest(testInfo);
+
+    const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+    const hostContext = await browser.newContext({ baseURL });
+    await blockAudioRequests(hostContext);
+    await setChineseLocale(hostContext);
+    await resetMatchStorage(hostContext);
+    await disableAudio(hostContext);
+    await disableTutorial(hostContext);
+    const hostPage = await hostContext.newPage();
+
+    try {
+      if (!await ensureGameServerAvailable(hostPage)) {
+        test.skip(true, 'Game server unavailable for online AI watchdog tests.');
+      }
+
+      await hostPage.goto('/', { waitUntil: 'domcontentloaded' });
+      await hostPage.waitForSelector('[data-game-id]', { timeout: 15000 }).catch(() => {});
+
+      const matchId = await createSWRoomViaAPI(hostPage, {
+        setupData: {
+          enableAi: true,
+          seatControllers: {
+            '1': {
+              type: 'local-ai',
+              minimumActionDelayMs: 0,
+            },
+          },
+        },
+      });
+      if (!matchId) {
+        test.skip(true, 'AI room creation failed or backend unavailable.');
+      }
+
+      await ensurePlayerIdInUrl(hostPage, '0');
+      await blockSummonerWarsAiSeatAutoClaim(hostContext, '1');
+      await hostPage.goto(`/play/summonerwars/match/${matchId!}?playerID=0`, { waitUntil: 'domcontentloaded' });
+
+      await waitForState(hostPage, async () => {
+        return await hostPage.getByTestId('debug-toggle').isVisible().catch(() => false);
+      }, { timeout: 30000, message: '等待 Summoner Wars 在线房间调试面板就绪' });
+
+      await expect.poll(async () => {
+        return hostPage.evaluate((targetMatchId) => {
+          return localStorage.getItem(`match_ai_creds_${targetMatchId}`);
+        }, matchId!);
+      }, {
+        timeout: 8000,
+        message: 'AI seat 凭据不应在本用例中被自动领取',
+      }).toBeNull();
+
+      const liveState = await getMatchState(matchId!, hostPage);
+      const aiTurnState = buildSummonerWarsOnlineAiWatchdogState(liveState);
+      await injectMatchState(matchId!, aiTurnState as never, hostPage);
+      await waitForSummonerWarsUI(hostPage, 30000);
+
+      await expect.poll(async () => {
+        const core = await readCoreState(hostPage);
+        return {
+          currentPlayer: core?.currentPlayer ?? null,
+          phase: core?.phase ?? null,
+        };
+      }, {
+        timeout: 8000,
+        message: '等待注入后的 AI 回合状态在前端稳定',
+      }).toEqual({
+        currentPlayer: '1',
+        phase: 'summon',
+      });
+
+      await expect(hostPage.getByTestId('sw-end-phase')).toBeDisabled({ timeout: 5000 });
+      await expect(hostPage.getByTestId('sw-action-banner')).toContainText(/等待对手|Waiting for opponent/i);
+
+      const beforeWatchdogPath = getEvidenceScreenshotPath(testInfo, 'online-ai-watchdog-before-recovery', {
+        filename: 'watchdog-before-recovery.png',
+      });
+      await hostPage.screenshot({ path: beforeWatchdogPath, fullPage: false });
+
+      await expect.poll(async () => {
+        const core = await readCoreState(hostPage);
+        return {
+          currentPlayer: core?.currentPlayer ?? null,
+          phase: core?.phase ?? null,
+          turnNumber: typeof core?.turnNumber === 'number' ? core.turnNumber : null,
+        };
+      }, {
+        timeout: 25000,
+        message: '等待服务端 watchdog 将 AI 卡死回合收口并切回真人',
+      }).toEqual({
+        currentPlayer: '0',
+        phase: 'summon',
+        turnNumber: 6,
+      });
+
+      await expect(hostPage.getByTestId('sw-end-phase')).toBeEnabled({ timeout: 5000 });
+      await expect(hostPage.getByText(/AI 强制结束失败|AI 自动跳过失败/i)).toHaveCount(0);
+
+      const afterRecoveryPath = getEvidenceScreenshotPath(testInfo, 'online-ai-watchdog-after-recovery', {
+        filename: 'watchdog-after-recovery.png',
+      });
+      await hostPage.screenshot({ path: afterRecoveryPath, fullPage: false });
+
+      const recoveredCore = await readCoreState(hostPage);
+      expect(recoveredCore.currentPlayer).toBe('0');
+      expect(recoveredCore.phase).toBe('summon');
+      expect(recoveredCore.turnNumber).toBe(6);
+
+      await hostPage.waitForTimeout(9000);
+
+      const stableHumanCore = await readCoreState(hostPage);
+      expect(stableHumanCore.currentPlayer).toBe('0');
+      expect(stableHumanCore.phase).toBe(recoveredCore.phase);
+      expect(stableHumanCore.turnNumber).toBe(recoveredCore.turnNumber);
+      await expect(hostPage.getByTestId('sw-end-phase')).toBeEnabled({ timeout: 5000 });
+      await expect(hostPage.getByText(/AI 强制结束失败|AI 自动跳过失败/i)).toHaveCount(0);
+
+      const humanGuardPath = getEvidenceScreenshotPath(testInfo, 'online-ai-watchdog-human-turn-stable', {
+        filename: 'watchdog-human-turn-stable.png',
+      });
+      await hostPage.screenshot({ path: humanGuardPath, fullPage: false });
+    } finally {
+      await hostContext.close();
+    }
   });
 
   test('在线对局流程：召唤、移动、建造、攻击与弃牌', async ({ browser }, testInfo) => {

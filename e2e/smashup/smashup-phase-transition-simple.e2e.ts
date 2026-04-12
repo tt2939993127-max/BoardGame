@@ -73,6 +73,7 @@ async function setupSmashUpOnlineAiRoom(
                 guestId,
                 ownerKey: `guest:${guestId}`,
                 ownerType: 'guest',
+                enableAi: true,
                 seatControllers: {
                     '1': {
                         type: 'local-ai',
@@ -1708,6 +1709,7 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动�
                 forceSkipDelegated: status?.forceSkipDelegated ?? false,
                 interactionSourceId: state.sys?.interaction?.current?.data?.sourceId ?? null,
                 interactionPlayerId: state.sys?.interaction?.current?.playerId ?? null,
+                currentPlayerIndex: state.core?.currentPlayerIndex ?? null,
                 baseMinions: state.core?.bases?.[0]?.minions?.map((minion: any) => minion.uid) ?? [],
                 deckTop: state.core?.players?.['1']?.deck?.[0]?.defId ?? null,
             };
@@ -1719,6 +1721,7 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动�
             forceSkipDelegated: true,
             interactionSourceId: null,
             interactionPlayerId: null,
+            currentPlayerIndex: 1,
             baseMinions: ['ai-hoverbot-on-base'],
             deckTop: 'robot_zapbot',
         });
@@ -1729,6 +1732,7 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动�
                 return {
                     interactionPlayerId: state?.sys?.interaction?.current?.playerId ?? null,
                     isBlocked: state?.sys?.interaction?.isBlocked ?? null,
+                    currentPlayerIndex: state?.core?.currentPlayerIndex ?? null,
                     toastVisible: Array.from(document.querySelectorAll('h4')).some((node) =>
                         node.textContent?.trim() === 'AI 响应超时'),
                 };
@@ -1739,8 +1743,11 @@ test('在线 AI 的盘旋机器人隐藏交互卡住时，应在 4 秒后自动�
         }).toEqual({
             interactionPlayerId: null,
             isBlocked: false,
+            currentPlayerIndex: 1,
             toastVisible: false,
         });
+
+        await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
 
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-hoverbot-force-skip-after-resolve');
     } finally {
@@ -1807,6 +1814,7 @@ test('在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束�
         const forceEndTurnToast = hostPage.getByText('AI 强制结束回合').locator('..');
         await expect(forceEndTurnToast).toBeVisible({ timeout: 16000 });
         await expect(hostPage.getByText('AI 已强制结束回合。')).toBeVisible({ timeout: 5000 });
+        await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
 
         await expect.poll(async () => {
             const status = await readSmashUpAiChoiceRejectPatchStatus(hostPage);
@@ -1852,6 +1860,7 @@ test('在线 AI 连续 8 秒没有任何实际进展时，应自动强制结束�
         await expect(
             hostPage.locator('[data-tutorial-id="su-turn-tracker"]').filter({ hasText: /你自己|YOU/i }),
         ).toBeVisible({ timeout: 8000 });
+        await expect(hostPage.getByText(/AI 强制结束失败/i)).toHaveCount(0);
         await saveEvidenceScreenshot(hostPage, testInfo, 'online-ai-force-end-turn-after-resolve');
     } finally {
         await setup.hostContext.close();

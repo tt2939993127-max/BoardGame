@@ -47,7 +47,16 @@ export const initSWContext = async (context: BrowserContext, storageKey?: string
 // ============================================================================
 
 /** 通过 API 创建 SW 房间并注入凭据，返回 matchID */
-export const createSWRoomViaAPI = async (page: Page): Promise<string | null> => {
+export const createSWRoomViaAPI = async (
+  page: Page,
+  options: {
+    /**
+     * 透传到 setupData 的额外字段（会与默认 guestId/ownerKey/ownerType 合并）。
+     * 用于在线 AI 房间创建（seatControllers/enableAi 等）。
+     */
+    setupData?: Record<string, unknown>;
+  } = {},
+): Promise<string | null> => {
   try {
     const guestId = `sw_e2e_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
     // 注入 guestId 到 localStorage
@@ -62,7 +71,15 @@ export const createSWRoomViaAPI = async (page: Page): Promise<string | null> => 
 
     const base = getGameServerBaseURL();
     const res = await page.request.post(`${base}/games/${GAME_NAME}/create`, {
-      data: { numPlayers: 2, setupData: { guestId, ownerKey: `guest:${guestId}`, ownerType: 'guest' } },
+      data: {
+        numPlayers: 2,
+        setupData: {
+          guestId,
+          ownerKey: `guest:${guestId}`,
+          ownerType: 'guest',
+          ...(options.setupData ?? {}),
+        },
+      },
     });
     if (!res.ok()) return null;
     const resData = (await res.json().catch(() => null)) as { matchID?: string } | null;

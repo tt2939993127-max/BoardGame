@@ -844,11 +844,11 @@ async function injectGunslingerTheLawInteractionScene(page: Page): Promise<void>
         };
 
         const currentInteraction = {
-            id: 'dt-interaction-card-the-law-scene',
+            id: 'dt-interaction-the-law-scene',
             kind: 'dt:card-interaction',
             playerId: '0',
             data: {
-                id: 'card-the-law-scene',
+                id: 'the-law-scene',
                 playerId: '0',
                 sourceCardId: 'the-law',
                 sourceId: 'the-law',
@@ -1810,8 +1810,10 @@ test('selected attack should show visible attack-modifier ui above the dice tray
     }, { timeout: 10000, polling: 200 });
 
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
+    const diceTray = page.locator('[data-tutorial-id="dice-tray"]');
 
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
+    await expect(diceTray).toBeVisible({ timeout: 5000 });
     await expect(activeBadge).toContainText('+2', { timeout: 5000 });
     await expect(page.locator('[data-testid="attack-modifier-bonus-badge"]')).toHaveCount(0);
 
@@ -1819,9 +1821,36 @@ test('selected attack should show visible attack-modifier ui above the dice tray
     expect(viewport).not.toBeNull();
     await expectElementInsideViewport(activeBadge, 'active modifier badge', viewport!.width, viewport!.height);
 
+    const [badgeBox, diceTrayBox] = await Promise.all([
+        activeBadge.boundingBox(),
+        diceTray.boundingBox(),
+    ]);
+    expect(badgeBox).not.toBeNull();
+    expect(diceTrayBox).not.toBeNull();
+    const badgeCenterX = badgeBox!.x + badgeBox!.width / 2;
+    const diceTrayCenterX = diceTrayBox!.x + diceTrayBox!.width / 2;
+    const centerDelta = Math.abs(badgeCenterX - diceTrayCenterX);
+    expect(centerDelta, `攻击修正徽章应与骰盘列水平对齐，当前中心偏差 ${centerDelta.toFixed(2)}px`).toBeLessThanOrEqual(2);
+
     await game.screenshot('08-attack-modifier-ui-visible', testInfo);
+
+    // 旋转状态截图：放开投掷限制并触发一次投掷动画
+    const coreState = await readCoreState(page);
+    await applyCoreStateDirect(page, {
+        ...coreState,
+        rollConfirmed: false,
+        rollCount: 0,
+    });
+    await ensureDebugPanelClosed(page);
+
+    const rollButton = page.locator('[data-tutorial-id="dice-roll-button"]');
+    await expect(rollButton).toBeVisible({ timeout: 5000 });
+    await rollButton.click();
+    await page.locator('.animate-dice3d-tumble').first().waitFor({ state: 'visible', timeout: 5000 });
+    await game.screenshot('08-attack-modifier-ui-rolling', testInfo);
+
     await activeBadge.hover();
-    await expect(page.getByText(/modifierActive\.tooltip|must be played after selecting an attack ability|attack modifier/i).first()).toBeVisible({
+    await expect(page.getByText(/modifierActive\.tooltip|must be played after selecting an attack ability|attack modifier|已激活的攻击修正牌|攻击修正牌/i).first()).toBeVisible({
         timeout: 5000,
     });
 });
@@ -3030,7 +3059,7 @@ test.describe('枪手 The Law 多目标交互', () => {
         await injectGunslingerTheLawInteractionScene(page);
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            return state?.sys?.interaction?.current?.data?.sourceCardId === 'card-the-law'
+            return state?.sys?.interaction?.current?.data?.sourceCardId === 'the-law'
                 && state?.core?.players?.['2']?.nickname === '圣骑士-B';
         }, { timeout: 10000, polling: 200 });
 
@@ -3070,7 +3099,7 @@ test.describe('枪手 The Law 多目标交互', () => {
         await injectGunslingerTheLawInteractionScene(page);
         await page.waitForFunction(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
-            return state?.sys?.interaction?.current?.data?.sourceCardId === 'card-the-law'
+            return state?.sys?.interaction?.current?.data?.sourceCardId === 'the-law'
                 && state?.core?.players?.['2']?.nickname === '圣骑士-B';
         }, { timeout: 10000, polling: 200 });
 

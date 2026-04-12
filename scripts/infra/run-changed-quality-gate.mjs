@@ -123,6 +123,88 @@ function readGitFile(ref, file) {
   return runGit(['show', `${ref}:${file}`], { allowFailure: true });
 }
 
+function getMergeCommitParents(commit) {
+  const parents = runGit(['show', '-s', '--format=%P', commit], { allowFailure: true })
+    .split(/\s+/)
+    .filter(Boolean);
+  return parents.length === 2 ? parents : null;
+}
+
+function getIntersectingChangedFiles(parentA, parentB, commit) {
+  const changedA = new Set(
+    runGit(['diff', '--name-only', parentA, commit], { allowFailure: true })
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  const changedB = new Set(
+    runGit(['diff', '--name-only', parentB, commit], { allowFailure: true })
+      .split(/\r?\n/)
+      .map((value) => value.trim())
+      .filter(Boolean),
+  );
+  return [...changedA].filter((file) => changedB.has(file)).sort();
+}
+
+function getMergeCommitsInRange(baseRef, headRef) {
+  if (!baseRef || !headRef) return [];
+  const range = `${baseRef}..${headRef}`;
+  const output = runGit(['rev-list', '--merges', range], { allowFailure: true });
+  if (!output) return [];
+  return output.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+}
+
+function hasMergeConflictEvidence(commit) {
+  const changedFiles = runGit(['diff-tree', '--no-commit-id', '--name-only', '-r', commit], { allowFailure: true })
+    .split(/\r?\n/)
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return changedFiles.some((file) => file.startsWith('evidence/merge-conflict-') && file.endsWith('.md'));
+}
+
+function runMergeAuditStrict(commit) {
+  const result = spawnSync(process.execPath, ['scripts/verify/merge-conflict-audit.mjs', commit, '--fail-on-single-side'], {
+    cwd: repoRoot,
+    stdio: 'inherit',
+    shell: false,
+  });
+  if (result.error) {
+    console.error(`[changed-quality-gate] merge:audit 启动失败: ${result.error.message}`);
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
+function runMergeConflictGuards({ baseRef, headRef }) {
+  if (isPreCommitMode) return;
+  const mergeCommits = getMergeCommitsInRange(baseRef, headRef);
+  if (mergeCommits.length === 0) return;
+
+  console.log('\n[changed-quality-gate] Merge conflict guard');
+  console.log(`[changed-quality-gate] merge commits: ${mergeCommits.length}`);
+
+  for (const commit of mergeCommits) {
+    console.log(`[changed-quality-gate] 审计 merge commit: ${commit}`);
+    runMergeAuditStrict(commit);
+
+    const parents = getMergeCommitParents(commit);
+    if (!parents) continue;
+    const intersecting = getIntersectingChangedFiles(parents[0], parents[1], commit);
+    if (intersecting.length === 0) {
+      console.log('[changed-quality-gate] 未检测到双方同时改动文件，跳过冲突汇报强制。');
+      continue;
+    }
+
+    if (!hasMergeConflictEvidence(commit)) {
+      console.error(`[changed-quality-gate] merge commit ${commit} 缺少 evidence/merge-conflict-*.md 冲突汇报。`);
+      console.error('[changed-quality-gate] 请补充冲突汇报文档并重新提交。');
+      process.exit(1);
+    }
+  }
+}
+
 function normalizeFile(file) {
   return file.replace(/\\/g, '/').replace(/^\.?\//, '');
 }
@@ -1105,6 +1187,11 @@ if (isPrePushMode && aheadCount > 1 && effectiveBaseRef !== baseRef) {
 } else {
   console.log(`[changed-quality-gate] 当前校验范围: ${effectiveScopeLabel}`);
 }
+
+runMergeConflictGuards({
+  baseRef,
+  headRef: resolvedTargetHead,
+});
 
 if (files.length === 0) {
   console.log('[changed-quality-gate] 未检测到已提交改动，跳过。');

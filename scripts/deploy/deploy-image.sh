@@ -315,39 +315,42 @@ check_http_response() {
   local body_expectation="${4:-}"
   local label="${5:-$url}"
   local tmp_body tmp_headers status_code content_type
+  local max_retries="${SMOKE_HTTP_RETRY:-6}"
+  local retry_delay="${SMOKE_HTTP_RETRY_DELAY:-3}"
+  local attempt=1
 
-  tmp_body=$(mktemp)
-  tmp_headers=$(mktemp)
+  while [ "$attempt" -le "$max_retries" ]; do
+    tmp_body=$(mktemp)
+    tmp_headers=$(mktemp)
 
-  if ! curl -fsS --max-time 10 -D "$tmp_headers" -o "$tmp_body" "$url" >/dev/null 2>&1; then
+    if curl -fsS --max-time 10 -D "$tmp_headers" -o "$tmp_body" "$url" >/dev/null 2>&1; then
+      status_code=$(awk 'toupper($1) ~ /^HTTP/ { code=$2 } END { print code }' "$tmp_headers")
+      content_type=$(awk -F': ' 'tolower($1)=="content-type" {print tolower($2)}' "$tmp_headers" | tail -1 | tr -d '\r')
+
+      if [ "$status_code" != "$expect_status" ]; then
+        log "❌ ${label} 状态码异常: expected=${expect_status}, actual=${status_code:-unknown}"
+      elif [ -n "$expect_content_type" ] && [[ "$content_type" != *"$expect_content_type"* ]]; then
+        log "❌ ${label} content-type 异常: expected~=${expect_content_type}, actual=${content_type:-empty}"
+      elif [ -n "$body_expectation" ] && ! grep -q "$body_expectation" "$tmp_body"; then
+        log "❌ ${label} body 未命中预期片段: ${body_expectation}"
+      else
+        rm -f "$tmp_body" "$tmp_headers"
+        return 0
+      fi
+    else
+      log "⚠️  ${label} 请求失败: ${url}"
+    fi
+
     rm -f "$tmp_body" "$tmp_headers"
-    log "❌ ${label} 请求失败: ${url}"
-    return 1
-  fi
+    if [ "$attempt" -lt "$max_retries" ]; then
+      log "⏳ ${label} 重试中 (${attempt}/${max_retries})，等待 ${retry_delay}s"
+      sleep "$retry_delay"
+    fi
+    attempt=$((attempt + 1))
+  done
 
-  status_code=$(awk 'toupper($1) ~ /^HTTP/ { code=$2 } END { print code }' "$tmp_headers")
-  content_type=$(awk -F': ' 'tolower($1)=="content-type" {print tolower($2)}' "$tmp_headers" | tail -1 | tr -d '\r')
-
-  if [ "$status_code" != "$expect_status" ]; then
-    log "❌ ${label} 状态码异常: expected=${expect_status}, actual=${status_code:-unknown}"
-    rm -f "$tmp_body" "$tmp_headers"
-    return 1
-  fi
-
-  if [ -n "$expect_content_type" ] && [[ "$content_type" != *"$expect_content_type"* ]]; then
-    log "❌ ${label} content-type 异常: expected~=${expect_content_type}, actual=${content_type:-empty}"
-    rm -f "$tmp_body" "$tmp_headers"
-    return 1
-  fi
-
-  if [ -n "$body_expectation" ] && ! grep -q "$body_expectation" "$tmp_body"; then
-    log "❌ ${label} body 未命中预期片段: ${body_expectation}"
-    rm -f "$tmp_body" "$tmp_headers"
-    return 1
-  fi
-
-  rm -f "$tmp_body" "$tmp_headers"
-  return 0
+  log "❌ ${label} 请求失败（已重试 ${max_retries} 次）: ${url}"
+  return 1
 }
 
 run_post_deploy_smoke() {

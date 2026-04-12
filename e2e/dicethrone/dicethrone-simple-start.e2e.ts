@@ -17,6 +17,8 @@ import { RESOURCE_IDS } from '../../src/games/dicethrone/domain/resources';
 import { getAvailableAbilityIds } from '../../src/games/dicethrone/domain/rules';
 import { HAND_LIMIT } from '../../src/games/dicethrone/domain/types';
 import { registerDiceThroneConditions } from '../../src/games/dicethrone/conditions';
+// 确保 Node 侧构造场景时，骰子定义已注册（否则 createCharacterDice/initHeroState 会报“未注册骰子定义”）
+import '../../src/games/dicethrone/domain';
 import { DEADEYE_2, FAN_THE_HAMMER_2 } from '../../src/games/dicethrone/heroes/gunslinger/abilities';
 import { GUNSLINGER_CARDS } from '../../src/games/dicethrone/heroes/gunslinger/cards';
 import { VENGEANCE_2 } from '../../src/games/dicethrone/heroes/paladin/abilities';
@@ -164,6 +166,7 @@ async function setupDTOnlineAiRoom(
         numPlayers: 2,
         gameServerBaseURL: getGameServerBaseURL(),
         setupData: {
+            enableAi: true,
             seatControllers: {
                 '1': {
                     type: 'local-ai',
@@ -677,6 +680,85 @@ const buildDiscardOverflowState = (state: any) => {
     return normalizeInjectedMatchState(next.sys.matchId ?? 'discard-overflow', next);
 };
 
+const buildOnlineAiUndoSellLoopState = (state: any) => {
+    const next = structuredClone(state);
+    const fallbackTurnOrder = Array.isArray(next.sys?.turnOrder)
+        ? [...next.sys.turnOrder]
+        : ['0', '1'];
+    const loopCard = COMMON_CARDS[0];
+    if (!loopCard) {
+        throw new Error('公共卡牌为空，无法构造 AI undo-sell 场景');
+    }
+
+    const hostHp = Math.max(20, next.core?.players?.['0']?.resources?.[RESOURCE_IDS.HP] ?? 0);
+    const aiHp = Math.max(20, next.core?.players?.['1']?.resources?.[RESOURCE_IDS.HP] ?? 0);
+    const cardCopy = structuredClone(loopCard);
+    const aiCp = Math.max(1, next.core?.players?.['1']?.resources?.[RESOURCE_IDS.CP] ?? 0);
+
+    next.core = {
+        ...next.core,
+        activePlayerId: '1',
+        currentPlayerIndex: 1,
+        turnOrder: fallbackTurnOrder,
+        turnNumber: 4,
+        phase: 'main2',
+        lastSoldCardId: cardCopy.id,
+        pendingAttack: null,
+        pendingDamage: null,
+        pendingBonusDiceSettlement: undefined,
+        activatingAbilityId: undefined,
+        selectedAbilityId: undefined,
+        rollConfirmed: true,
+        rollCount: 1,
+        rollLimit: 2,
+        players: {
+            ...next.core.players,
+            '0': {
+                ...next.core.players['0'],
+                resources: {
+                    ...next.core.players['0']?.resources,
+                    [RESOURCE_IDS.HP]: hostHp,
+                },
+            },
+            '1': {
+                ...next.core.players['1'],
+                hand: [],
+                discard: [cardCopy],
+                resources: {
+                    ...next.core.players['1']?.resources,
+                    [RESOURCE_IDS.HP]: aiHp,
+                    [RESOURCE_IDS.CP]: aiCp,
+                },
+            },
+        },
+    };
+
+    next.sys = {
+        ...next.sys,
+        turnNumber: 4,
+        phase: 'main2',
+        turnOrder: fallbackTurnOrder,
+        currentPlayerIndex: 1,
+        interaction: {
+            current: undefined,
+            queue: [],
+            isBlocked: false,
+        },
+        responseWindow: {
+            ...next.sys?.responseWindow,
+            current: undefined,
+        },
+        gameover: undefined,
+        eventStream: {
+            ...(next.sys?.eventStream ?? {}),
+            entries: [],
+            nextId: 1,
+        },
+    };
+
+    return normalizeInjectedMatchState(next.sys.matchId ?? 'online-ai-undo-sell', next);
+};
+
 const advanceHostTurnToMain1 = async (
     matchId: string,
     page: Page,
@@ -1010,6 +1092,58 @@ const buildTwoPlayerAfterCardResponseState = (state: any) => {
         },
     };
 
+    return next;
+};
+
+const buildTwoPlayerResponseLoopState = (
+    state: any,
+    options: { windowId?: string; pendingInteractionId?: string } = {},
+) => {
+    const next = buildTwoPlayerAfterCardResponseState(state);
+    next.core = {
+        ...next.core,
+        hostStarted: true,
+        selectedCharacters: {
+            ...next.core.selectedCharacters,
+            '0': 'monk',
+            '1': 'paladin',
+        },
+        readyPlayers: {
+            ...next.core.readyPlayers,
+            '0': true,
+            '1': true,
+        },
+        players: {
+            ...next.core.players,
+            '0': {
+                ...next.core.players['0'],
+                characterId: 'monk',
+                resources: {
+                    ...next.core.players['0']?.resources,
+                    [RESOURCE_IDS.HP]: Math.max(next.core.players['0']?.resources?.[RESOURCE_IDS.HP] ?? 0, 50),
+                },
+            },
+            '1': {
+                ...next.core.players['1'],
+                characterId: 'paladin',
+                resources: {
+                    ...next.core.players['1']?.resources,
+                    [RESOURCE_IDS.HP]: Math.max(next.core.players['1']?.resources?.[RESOURCE_IDS.HP] ?? 0, 50),
+                },
+            },
+        },
+    };
+    if (!Array.isArray(next.core.dice)) {
+        next.core.dice = [];
+    }
+    next.sys.responseWindow = {
+        ...next.sys.responseWindow,
+        current: {
+            ...(next.sys.responseWindow?.current ?? {}),
+            id: options.windowId ?? (next.sys.responseWindow?.current as any)?.id ?? 'after-card-2p',
+            pendingInteractionId: options.pendingInteractionId ?? 'loop-pending-interaction',
+        },
+    };
     return next;
 };
 
@@ -2437,6 +2571,74 @@ test.describe('DiceThrone Simple Start', () => {
         }
     });
 
+    test('Online AI 响应窗口反复卡死时，watchdog 应强制关闭响应窗口', async ({ browser }, testInfo) => {
+        test.setTimeout(180000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForTestHarness(hostPage, 15000);
+
+            await applyOnlineMatchState(matchId, hostPage, (state) => buildTwoPlayerResponseLoopState(state, {
+                windowId: 'after-card-2p',
+                pendingInteractionId: 'loop-pending-interaction',
+            }));
+            await waitForGameBoard(hostPage, 30000);
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return state.sys?.responseWindow?.current?.windowType ?? null;
+            }, {
+                timeout: 10000,
+                message: '等待响应窗口注入完成',
+            }).toBe('afterCardPlayed');
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-before');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return Boolean(state.sys?.responseWindow?.current);
+            }, {
+                timeout: 40000,
+                message: '等待 watchdog 强制关闭响应窗口',
+            }).toBe(false);
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-after');
+
+            await applyOnlineMatchState(matchId, hostPage, (state) => buildTwoPlayerResponseLoopState(state, {
+                windowId: 'after-card-2p-reopen',
+                pendingInteractionId: 'loop-pending-interaction-2',
+            }));
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return state.sys?.responseWindow?.current?.id ?? null;
+            }, {
+                timeout: 10000,
+                message: '等待响应窗口二次注入完成',
+            }).toBe('after-card-2p-reopen');
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-reopen-before');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return Boolean(state.sys?.responseWindow?.current);
+            }, {
+                timeout: 40000,
+                message: '等待 watchdog 再次强制关闭响应窗口',
+            }).toBe(false);
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-response-loop-reopen-after');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
     test('Online DiceThrone 弃牌超限时应可正常弃到手牌上限并自动推进下一回合（避免弃牌/撤回循环卡死）', async ({ browser }, testInfo) => {
         test.setTimeout(120000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
@@ -2496,6 +2698,70 @@ test.describe('DiceThrone Simple Start', () => {
             await saveEvidenceScreenshot(hostPage, testInfo, '22-discard-overflow-after');
         } finally {
             await cleanupDTMatch(setup);
+        }
+    });
+
+    test('Online AI 在 main2 仅剩撤回卖牌可选时应直接推进阶段（避免卖/撤循环卡死）', async ({ browser }, testInfo) => {
+        test.setTimeout(120000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForCharacterSelection(hostPage, 20000);
+            await waitForAiSeatCredential(hostPage, matchId, '1');
+
+            await selectCharacter(hostPage, 'monk');
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const hostSelected = state.core?.selectedCharacters?.['0'];
+                const aiSelected = state.core?.selectedCharacters?.['1'];
+                return hostSelected === 'monk'
+                    && aiSelected !== 'unselected'
+                    && state.core?.readyPlayers?.['1'] === true;
+            }, {
+                timeout: 30000,
+                message: '等待 DiceThrone host/AI 完成卖/撤循环测试前置条件',
+            }).toBe(true);
+
+            const startButton = hostPage.locator('button').filter({ hasText: /开始游戏|Start Game|Press.*Start/i }).first();
+            await expect(startButton).toBeEnabled({ timeout: 10000 });
+            await startButton.click();
+            await hostPage.waitForTimeout(500);
+
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiUndoSellLoopState);
+            await waitForPhase(hostPage, 'main2', 30000);
+            await waitForGameBoard(hostPage, 30000);
+            await waitForTestHarness(hostPage, 15000);
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '23-ai-undo-sell-loop-before');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    phase: state.sys?.phase ?? null,
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    aiHandCount: state.core?.players?.['1']?.hand?.length ?? null,
+                    lastSoldCardId: state.core?.lastSoldCardId ?? null,
+                };
+            }, {
+                timeout: 15000,
+                message: '等待 AI 在仅剩撤回卖牌可选时直接推进到弃牌阶段',
+            }).toMatchObject({
+                phase: 'discard',
+                activePlayerId: '1',
+                aiHandCount: 0,
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '24-ai-undo-sell-loop-after');
+        } finally {
+            await setup.hostContext.close();
         }
     });
 
@@ -2625,7 +2891,8 @@ test.describe('DiceThrone Simple Start', () => {
         await readyMultiplePlayersAndStartGame(hostPage, players.slice(1).map((player) => player.page));
 
         await waitForGameBoard(hostPage);
-        await waitForHarnessPages(players.map((player) => player.page));
+        // 该用例只依赖 host+目标页的 harness；避免因无关玩家页未完成注入导致用例超时
+        await waitForHarnessPages([hostPage, enemyCaptainPage]);
 
         const headerLocator = hostPage.locator('[data-testid^="dt-top-header-"]');
         await expect(headerLocator).toHaveCount(3, { timeout: 10000 });
@@ -2662,7 +2929,8 @@ test.describe('DiceThrone Simple Start', () => {
         await readyMultiplePlayersAndStartGame(hostPage, players.slice(1).map((player) => player.page));
 
         await waitForGameBoard(hostPage);
-        await waitForHarnessPages(players.map((player) => player.page));
+        // 该用例只依赖 host+目标页的 harness；避免因无关玩家页未完成注入导致用例超时
+        await waitForHarnessPages([hostPage, enemyCaptainPage]);
 
         await applyOnlineMatchState(matchId, hostPage, (state) => buildTargetingRollState(state, 2));
         await waitForPhase(hostPage, 'targetingRoll');
@@ -2850,7 +3118,7 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 4-player The Law variant: upgraded Deadeye only offers enemies in 2v2 and resolves on both', async ({ browser }, testInfo) => {
+    test('Online 4-player The Law variant: upgraded Deadeye offers all target players in 2v2 and resolves on two selected targets', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -2880,6 +3148,7 @@ test.describe('DiceThrone Simple Start', () => {
         await waitForPhase(hostPage, 'offensiveRoll');
 
         const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
+        const selfTarget = hostPage.getByTestId('dt-player-target-0');
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
@@ -2892,21 +3161,23 @@ test.describe('DiceThrone Simple Start', () => {
             const current = state?.sys?.interaction?.current?.data;
             const targetPlayerIds = current?.targetPlayerIds ?? [];
             return current?.sourceCardId === 'the-law'
-                && targetPlayerIds.length === 2
+                && targetPlayerIds.length === 4
+                && targetPlayerIds.includes('0')
                 && targetPlayerIds.includes('1')
+                && targetPlayerIds.includes('2')
                 && targetPlayerIds.includes('3')
-                && !targetPlayerIds.includes('2')
                 && state?.core?.players?.['0']?.upgradeCardByAbilityId?.deadeye?.cardId === 'upgrade-deadeye-2'
                 && (state?.core?.players?.['0']?.tokens?.evasive ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
+        await expect(selfTarget).toHaveAttribute('data-team-tone', 'self');
         await expect(enemyOne).toHaveAttribute('data-team-tone', 'enemy');
         await expect(enemyTwo).toHaveAttribute('data-team-tone', 'enemy');
-        await expect(allyTarget).toHaveCount(0);
+        await expect(allyTarget).toHaveAttribute('data-team-tone', 'ally');
         await expect(confirmButton).toBeDisabled();
 
         await clearEvidenceScreenshotsForTest(testInfo);
-        await saveEvidenceScreenshot(hostPage, testInfo, '10-four-player-the-law-enemy-only-selection');
+        await saveEvidenceScreenshot(hostPage, testInfo, '10-four-player-the-law-all-target-selection');
 
         await enemyOne.click();
         await enemyTwo.click();
@@ -2929,7 +3200,7 @@ test.describe('DiceThrone Simple Start', () => {
                 && (state?.core?.players?.['3']?.statusEffects?.knockdown ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
-        await saveEvidenceScreenshot(hostPage, testInfo, '11-four-player-the-law-resolved-on-enemies');
+        await saveEvidenceScreenshot(hostPage, testInfo, '11-four-player-the-law-resolved-on-selected-targets');
 
         const hostState = await readHarnessState<any>(hostPage);
         const allyState = await readHarnessState<any>(allyPage);
@@ -2950,7 +3221,7 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 4-player Wanted: real hand play only offers enemies in 2v2 and grants Bounty to selected enemy', async ({ browser }, testInfo) => {
+    test('Online 4-player Wanted: real hand play offers all target players in 2v2 and grants Bounty to selected target', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -2980,6 +3251,7 @@ test.describe('DiceThrone Simple Start', () => {
 
         const wantedCard = hostPage.locator(`[data-card-id="${WANTED_CARD_ID}"]`).first();
         const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
+        const selfTarget = hostPage.getByTestId('dt-player-target-0');
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
@@ -2993,21 +3265,22 @@ test.describe('DiceThrone Simple Start', () => {
             return {
                 sourceCardId: current?.sourceCardId ?? null,
                 resolveCustomActionId: current?.resolveCustomActionId ?? null,
-                targetPlayerIds: current?.targetPlayerIds ?? [],
+                targetPlayerIds: (current?.targetPlayerIds ?? []).slice().sort(),
             };
         }), { timeout: 15000, intervals: [200, 400, 800] }).toEqual({
             sourceCardId: 'card-wanted',
             resolveCustomActionId: 'gunslinger-card-wanted-resolve',
-            targetPlayerIds: ['1', '3'],
+            targetPlayerIds: ['0', '1', '2', '3'],
         });
 
+        await expect(selfTarget).toHaveAttribute('data-team-tone', 'self');
         await expect(enemyOne).toHaveAttribute('data-team-tone', 'enemy');
         await expect(enemyTwo).toHaveAttribute('data-team-tone', 'enemy');
-        await expect(allyTarget).toHaveCount(0);
+        await expect(allyTarget).toHaveAttribute('data-team-tone', 'ally');
         await expect(confirmButton).toBeDisabled();
 
         await clearEvidenceScreenshotsForTest(testInfo);
-        await saveEvidenceScreenshot(hostPage, testInfo, '12-four-player-wanted-enemy-only-selection');
+        await saveEvidenceScreenshot(hostPage, testInfo, '12-four-player-wanted-all-target-selection');
 
         await enemyTwo.click();
         await expect(confirmButton).toBeEnabled();
@@ -3025,7 +3298,7 @@ test.describe('DiceThrone Simple Start', () => {
             return (state?.core?.players?.['3']?.tokens?.bounty ?? 0) === 1;
         }, undefined, { timeout: 10000, polling: 200 });
 
-        await saveEvidenceScreenshot(hostPage, testInfo, '13-four-player-wanted-resolved-on-selected-enemy');
+        await saveEvidenceScreenshot(hostPage, testInfo, '13-four-player-wanted-resolved-on-selected-target');
         await cleanupDTMatch(setup);
     });
 
@@ -3227,7 +3500,7 @@ test.describe('DiceThrone Simple Start', () => {
         await cleanupDTMatch(setup);
     });
 
-    test('Online 4-player High Noon: real hand play only offers enemies in 2v2 and resolves the rolled branch on selected enemy', async ({ browser }, testInfo) => {
+    test('Online 4-player High Noon: real hand play offers all target players in 2v2 and resolves the rolled branch on selected target', async ({ browser }, testInfo) => {
         test.setTimeout(150000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -3257,6 +3530,7 @@ test.describe('DiceThrone Simple Start', () => {
 
         const highNoonCard = hostPage.locator(`[data-card-id="${HIGH_NOON_CARD_ID}"]`).first();
         const confirmButton = hostPage.getByRole('button', { name: /^(Confirm|确认)(?:\s*\(\d+\))?$/i }).last();
+        const selfTarget = hostPage.getByTestId('dt-player-target-0');
         const enemyOne = hostPage.getByTestId('dt-player-target-1');
         const allyTarget = hostPage.getByTestId('dt-player-target-2');
         const enemyTwo = hostPage.getByTestId('dt-player-target-3');
@@ -3265,7 +3539,8 @@ test.describe('DiceThrone Simple Start', () => {
         const enemyHpBefore = beforeState.core.players['3'].resources[RESOURCE_IDS.HP] ?? 0;
 
         await expect(highNoonCard).toBeVisible({ timeout: 5000 });
-        await highNoonCard.click({ force: true });
+        // 这里用 harness 命令触发出牌，避免 UI 点击在部分环境下被预览/拖拽态吞掉导致不出牌
+        await dispatchHarnessCommand(hostPage, 'PLAY_CARD', '0', { cardId: HIGH_NOON_CARD_ID });
 
         await expect.poll(async () => hostPage.evaluate(() => {
             const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
@@ -3273,23 +3548,24 @@ test.describe('DiceThrone Simple Start', () => {
             return {
                 sourceCardId: current?.sourceCardId ?? null,
                 resolveCustomActionId: current?.resolveCustomActionId ?? null,
-                targetPlayerIds: current?.targetPlayerIds ?? [],
+                targetPlayerIds: (current?.targetPlayerIds ?? []).slice().sort(),
                 hand: state?.core?.players?.['0']?.hand?.map((card: any) => card.id) ?? [],
             };
         }), { timeout: 15000, intervals: [200, 400, 800] }).toEqual({
             sourceCardId: 'card-high-noon',
             resolveCustomActionId: 'gunslinger-card-high-noon-resolve',
-            targetPlayerIds: ['1', '3'],
+            targetPlayerIds: ['0', '1', '2', '3'],
             hand: [],
         });
 
+        await expect(selfTarget).toHaveAttribute('data-team-tone', 'self');
         await expect(enemyOne).toHaveAttribute('data-team-tone', 'enemy');
         await expect(enemyTwo).toHaveAttribute('data-team-tone', 'enemy');
-        await expect(allyTarget).toHaveCount(0);
+        await expect(allyTarget).toHaveAttribute('data-team-tone', 'ally');
         await expect(confirmButton).toBeDisabled();
 
         await clearEvidenceScreenshotsForTest(testInfo);
-        await saveEvidenceScreenshot(hostPage, testInfo, '16-four-player-high-noon-enemy-only-selection');
+        await saveEvidenceScreenshot(hostPage, testInfo, '16-four-player-high-noon-all-target-selection');
 
         await enemyTwo.click();
         await expect(confirmButton).toBeEnabled();
@@ -3350,7 +3626,7 @@ test.describe('DiceThrone Simple Start', () => {
             expect(stateAfter.enemyTwoKnockdown).toBe(0);
         }
 
-        await saveEvidenceScreenshot(hostPage, testInfo, '17-four-player-high-noon-resolved-on-selected-enemy');
+        await saveEvidenceScreenshot(hostPage, testInfo, '17-four-player-high-noon-resolved-on-selected-target');
         await cleanupDTMatch(setup);
     });
 

@@ -441,7 +441,7 @@
     },
     "policyId": "策略 ID",
     "policyPlaceholder": "留空则使用默认策略",
-    "providerId": "Provider ID",
+    "providerId": "提供方 ID",
     "providerPlaceholder": "留空则使用 astrbot",
     "quickStart": "默认快速开始：1 号位为真人，2 号位在支持时自动使用该游戏的本地 AI。",
     "startLocal": "开始本地对战"

@@ -237,6 +237,7 @@
     "react-dom": "19.2.4"
   },
   "devDependencies": {
+    "@babel/core": "^7.29.0",
     "@capacitor/android": "^8.2.0",
     "@capacitor/cli": "^8.2.0",
     "@eslint/js": "^9.39.1",

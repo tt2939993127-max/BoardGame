@@ -30,7 +30,13 @@
 - 交互提示：带轻微背景增强可读性，可使用 animate-pulse
 - 所有提示默认 pointer-events-none，除非需要交互
 
-### 6. 组件扩展规则（新增）
+### 6. board-shell 缩放下的 HUD/Overlay 反模式（新增）
+- **反模式**：在 `MobileBoardShell` 内部直接渲染 `fixed/absolute` 的 HUD/Overlay。
+  - 原因：board-shell 会在移动端横屏使用 `transform: scale(...)`，导致 `fixed` 参照缩放容器而非 viewport，出现偏移。
+- **正确做法**：新 HUD/Overlay 必须通过 HUD portal 渲染到 `#hud-root`（使用 `HudPortal` / `getHudPortalRoot`）。
+- **历史实现**：旧代码不强制重构，但新增/修复必须改为 portal。
+
+### 7. 组件扩展规则（新增）
 - 对已内置居中/定位的浮层组件，**禁止用 containerClassName 完全替换默认定位类**（例如 left-0/right-0/translate 居中）。
 - 如需允许交互或调整样式，优先使用显式 props（如 allowPointerEvents / layout），或在 containerClassName **追加**样式，避免破坏默认居中布局。
 

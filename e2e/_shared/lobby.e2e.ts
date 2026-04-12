@@ -422,26 +422,14 @@ test.describe('Lobby E2E', () => {
             keyboardInsetHeight: 280,
         });
 
-        await getRoomNameInput().evaluate((node, value) => {
-            if (!(node instanceof HTMLInputElement)) {
-                throw new Error('房间名输入框节点不是 input');
-            }
-            node.focus();
-            node.value = value;
-            node.dispatchEvent(new Event('input', { bubbles: true }));
-        }, '移动端建房输入校验');
+        await getRoomNameInput().click();
+        await getRoomNameInput().fill('移动端建房输入校验');
         await expect(getPasswordInput()).toBeVisible();
         await expect(getPasswordInput()).toHaveAttribute('type', 'password');
         await getPasswordToggle().click();
         await expect(getPasswordInput()).toHaveAttribute('type', 'text');
-        await getPasswordInput().evaluate((node, value) => {
-            if (!(node instanceof HTMLInputElement)) {
-                throw new Error('房间密码输入框节点不是 input');
-            }
-            node.focus();
-            node.value = value;
-            node.dispatchEvent(new Event('input', { bubbles: true }));
-        }, '123456');
+        await getPasswordInput().click();
+        await getPasswordInput().fill('123456');
         await expect(getRoomNameInput()).toHaveValue('移动端建房输入校验');
         await expect(getPasswordInput()).toHaveValue('123456');
 
@@ -450,63 +438,6 @@ test.describe('Lobby E2E', () => {
             const password = element.querySelector('[data-testid="create-room-password-input"]');
             const runtimeViewportHeight = Number.parseFloat(window.getComputedStyle(document.documentElement).getPropertyValue('--runtime-viewport-height') || '0');
             const modalRect = element.getBoundingClientRect();
-
-            document.querySelector('[data-testid="e2e-create-room-modal-capture-host"]')?.remove();
-            if (!(element instanceof HTMLElement)) {
-                throw new Error('建房弹窗节点不是 HTMLElement');
-            }
-            const clone = element.cloneNode(true);
-            if (!(clone instanceof HTMLElement)) {
-                throw new Error('建房弹窗快照节点不是 HTMLElement');
-            }
-            clone.setAttribute('data-testid', 'e2e-create-room-modal-capture');
-            clone.style.position = 'fixed';
-            clone.style.top = '16px';
-            clone.style.left = '16px';
-            clone.style.right = 'auto';
-            clone.style.bottom = 'auto';
-            clone.style.inset = 'auto';
-            clone.style.margin = '0';
-            clone.style.transform = 'none';
-            clone.style.maxHeight = 'none';
-            clone.style.width = `${modalRect.width}px`;
-            clone.style.height = `${modalRect.height}px`;
-            clone.style.zIndex = '2147483647';
-            clone.style.pointerEvents = 'none';
-            clone.style.opacity = '1';
-            clone.style.visibility = 'visible';
-
-            const sourceInputs = element.querySelectorAll('input, textarea, select');
-            const cloneInputs = clone.querySelectorAll('input, textarea, select');
-            sourceInputs.forEach((input, index) => {
-                const target = cloneInputs[index];
-                if (input instanceof HTMLInputElement && target instanceof HTMLInputElement) {
-                    target.value = input.value;
-                    target.checked = input.checked;
-                    return;
-                }
-                if (input instanceof HTMLTextAreaElement && target instanceof HTMLTextAreaElement) {
-                    target.value = input.value;
-                    return;
-                }
-                if (input instanceof HTMLSelectElement && target instanceof HTMLSelectElement) {
-                    target.value = input.value;
-                }
-            });
-
-            const host = document.createElement('div');
-            host.setAttribute('data-testid', 'e2e-create-room-modal-capture-host');
-            host.style.position = 'fixed';
-            host.style.inset = '0';
-            host.style.zIndex = '2147483647';
-            host.style.background = getComputedStyle(document.body).backgroundColor || '#efe4cb';
-            host.style.display = 'flex';
-            host.style.alignItems = 'flex-start';
-            host.style.justifyContent = 'flex-start';
-            host.style.padding = '16px';
-            host.style.pointerEvents = 'none';
-            host.appendChild(clone);
-            document.body.appendChild(host);
 
             return {
                 modalLeft: modalRect.left,
@@ -532,7 +463,6 @@ test.describe('Lobby E2E', () => {
         expect(layoutMetrics.passwordBottom, '密码输入框应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
         expect(Math.min(...layoutMetrics.inputFontSizes), '移动端建房输入区至少应为 16px').toBeGreaterThanOrEqual(16);
 
-        await expect(page.getByTestId('e2e-create-room-modal-capture-host')).toBeVisible();
         await page.screenshot({
             path: 'test-results/evidence-screenshots/_shared/create-room-modal-mobile-keyboard-safe.png',
             fullPage: false,
@@ -564,10 +494,12 @@ test.describe('Lobby E2E', () => {
 
         const passwordModal = page.getByTestId('room-password-modal');
         const passwordInput = page.getByTestId('room-password-input');
+        const passwordToggle = page.getByTestId('room-password-toggle');
         const confirmButton = page.getByTestId('room-password-confirm');
 
         await expect(passwordModal).toBeVisible();
         await expect(confirmButton).toBeVisible();
+        await expect(confirmButton, '未输入密码时确认按钮应禁用').toBeDisabled();
         await applyKeyboardViewportSimulation(page, {
             runtimeViewportHeight: 564,
             keyboardInsetHeight: 280,
@@ -580,6 +512,14 @@ test.describe('Lobby E2E', () => {
             }
             node.focus();
         });
+        // 输入密码（先保持默认 password 类型），确保“能输入”和“值确实写进去了”
+        await passwordInput.fill(privateRoom.password);
+        await expect(passwordInput).toHaveValue(privateRoom.password);
+        // 切换显示密码，确保用户可以看到自己输入的内容（避免“看不到输入内容”的反馈）
+        await expect(passwordToggle).toBeVisible();
+        await passwordToggle.click();
+        await expect(passwordInput).toHaveAttribute('type', 'text');
+        await expect(confirmButton, '输入密码后确认按钮应可点击').toBeEnabled();
 
         const layoutMetrics = await passwordModal.evaluate((element) => {
             if (!(element instanceof HTMLElement)) {
@@ -613,40 +553,15 @@ test.describe('Lobby E2E', () => {
         expect(layoutMetrics.confirmBottom, '私密房间确认按钮应留在键盘上方可视区').toBeLessThanOrEqual(layoutMetrics.runtimeViewportHeight);
         expect(passwordInputFontSize, '移动端私密房间密码输入至少应为 16px').toBeGreaterThanOrEqual(16);
 
-        await page.evaluate(() => {
-            document.querySelector('[data-testid="room-password-modal-capture"]')?.remove();
-
-            const liveModal = document.querySelector('[data-testid="room-password-modal"]');
-            if (!(liveModal instanceof HTMLElement)) {
-                throw new Error('未找到用于截图的私密房间密码弹窗');
-            }
-
-            const clonedModal = liveModal.cloneNode(true);
-            if (!(clonedModal instanceof HTMLElement)) {
-                throw new Error('私密房间密码弹窗克隆失败');
-            }
-
-            clonedModal.dataset.testid = 'room-password-modal-capture';
-            clonedModal.style.position = 'fixed';
-            clonedModal.style.left = '50%';
-            clonedModal.style.top = '50%';
-            clonedModal.style.transform = 'translate(-50%, -50%)';
-            clonedModal.style.zIndex = '9999';
-            clonedModal.style.pointerEvents = 'none';
-            clonedModal.style.margin = '0';
-            clonedModal.style.maxHeight = 'none';
-            clonedModal.style.visibility = 'visible';
-            clonedModal.style.opacity = '1';
-
-            document.body.appendChild(clonedModal);
-        });
-
-        const captureModal = page.getByTestId('room-password-modal-capture');
-        await expect(captureModal).toBeVisible();
-        await captureModal.screenshot({
+        await page.screenshot({
             path: 'test-results/evidence-screenshots/_shared/private-room-password-modal-mobile.png',
+            fullPage: false,
             animations: 'disabled',
         });
+
+        // 点击确认并真正加入对局，避免只验证“弹窗出现”而没有验证“加入链路可用”。
+        await confirmButton.click();
+        await expect(page).toHaveURL(new RegExp(`/play/tictactoe/match/${privateRoom.matchId}\\?playerID=`), { timeout: 15000 });
     });
 
     test('创建房间时会显示进入对局 loading', async ({ page, game }, testInfo) => {
