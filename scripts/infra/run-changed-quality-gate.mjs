@@ -656,12 +656,18 @@ function collectScopedVitestTargets(files, targets) {
 
 function createVitestCommands({ label, reason, target, vitestArgs }) {
   const shards = VITEST_SHARDED_TARGETS.get(target);
+  // Vitest 会在 “No test files found” 时以 exit code 1 退出。
+  // 我们的增量门禁会按目录拆分执行（例如 src/shared），而该目录可能没有独立测试文件；
+  // 这不应阻塞提交/门禁，因此统一开启 passWithNoTests。
+  const safeVitestArgs = vitestArgs.includes('--passWithNoTests')
+    ? vitestArgs
+    : [...vitestArgs, '--passWithNoTests'];
   if (!shards || shards.length === 0) {
     return [{
       label,
       reason,
       command: process.execPath,
-      args: [...VITEST_SAFE_ENTRY, 'run', target, ...vitestArgs],
+      args: [...VITEST_SAFE_ENTRY, 'run', target, ...safeVitestArgs],
     }];
   }
 
@@ -669,7 +675,7 @@ function createVitestCommands({ label, reason, target, vitestArgs }) {
     label: `${label} - ${shard.label} (${index + 1}/${shards.length})`,
     reason: `${reason}；${shard.reason}（限定到 ${target} / ${shard.label}）`,
     command: process.execPath,
-    args: [...VITEST_SAFE_ENTRY, 'run', target, ...vitestArgs, '-t', shard.testNamePattern],
+    args: [...VITEST_SAFE_ENTRY, 'run', target, ...safeVitestArgs, '-t', shard.testNamePattern],
   }));
 }
 

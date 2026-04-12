@@ -20,6 +20,7 @@
   - `evidence/dicethrone/dicethrone-new-passives-e2e-test-2026-04-06.md`
   - `evidence/dicethrone/dicethrone-samurai-token-response-e2e-test.md`
   - `evidence/dicethrone/dicethrone-samurai-cross-hero-attack-modifier-e2e.md`
+  - `evidence/dicethrone/dicethrone-hero-ability-cards-e2e-test.md`（2026-04-12 补充：Stand Tall II / Masamune II 成功链路截图）
   - `evidence/dicethrone/dicethrone-gunslinger-samurai-4p-targeted-cards-e2e-test.md`
 - 不含：本轮新增 E2E / 单测执行、UI 截图复验、资源清理与历史裁图治理
 
@@ -46,7 +47,7 @@
 | 肃穆之仪（solemnity） | +1 耻辱 +7 伤害 | `abilities.ts` SOLEMNITY | D1/D3 | ✅ 一致 |
 | 武道（budo） | 小顺；+1 荣誉 +6 伤害 | `abilities.ts` BUDO | D1/D3 | ✅ 一致 |
 | 叶隐之心（hagakure） | +1 荣誉 +1 反击 +1 耻辱 +5 不可防御伤害 | `abilities.ts` SAMURAI_SLOT_06 | D1/D3 | ✅ 一致 |
-| 正宗（masamune） | 固定 7 伤害 + 额外掷 5 骰按图标结算 | `abilities.ts` MASAMUNE + `customActions/samurai.ts` | D1/D3/D8 | ✅ 主语义一致；但 `Masamune II` 的真实 UI 收口证据仍待补 |
+| 正宗（masamune） | 固定 7 伤害 + 额外掷 5 骰按图标结算 | `abilities.ts` MASAMUNE + `customActions/samurai.ts` | D1/D3/D8 | ✅ 主语义一致；`Masamune II` 的 6 骰奖励骰特写 UI 已补“出现→关闭→最终态”成功链路证据（见 `dicethrone-hero-ability-cards-e2e-test.md` §10） |
 | 昂首无畏（stand-tall） | 防御技：katana 反击 1 点**不可防御**伤害；helm 抵挡 1；rising_sun 抵挡 2；若无盾则自得耻辱 | `abilities.ts` + `customActions/samurai.ts` | D1/D5/D8/D10 | ✅ 基础版语义、不可防御标记与 metadata 已一致 |
 | 征夷大将军！（ultimate） | +1 荣誉 +2 耻辱 +13 不可防御伤害 | `abilities.ts` ULTIMATE | D1/D3 | ✅ 一致 |
 
@@ -113,7 +114,7 @@
 | `Honor / Shame / Back Strike` token | `tokens.ts:20-31`/`44-72` 分别把时机固定在 `beforeDamageDealt` / `beforeDamageReceived`，并补上 `Back Strike` 的“仅攻击伤害可用”门禁 | `Honor` 双档消耗、`Shame` 按层减伤、`Back Strike` 不减伤只反打；`customActions/samurai.ts:88-121` 把反打来源/目标写死为防御方→原攻击方 | 历史 E2E `dicethrone-samurai-token-response-e2e-test.md` 证明 `Honor` 可在同一窗口连点两次到 `+3` 且第三次被禁止；`Back Strike` 在响应窗口消耗后再追加 bonus die 反打 | 历史 E2E 已记录 `TOKEN_RESPONSE_CLOSED`、`Back Strike` 真实点击后返回正常结算 | ⚠️ 时机闭环成立，但 `Back Strike` 的**最大堆叠值**仍缺权威 OCR，且攻击伤害门禁尚缺动态复验 |
 | `You Should Be Ashamed` | `cards.ts:176-188` 为主阶段即时 action；`customActions/samurai.ts:371-393` 在多人局先发 `selectPlayer`，单敌方时直接落 token | 目标筛选基于 `getOpponents`，不再沿用默认目标推断 | `cross-hero.test.ts:1048-1112` 已证明 4 人队伍模式只给敌方 `1/3`，并把 2 层 `Shame` 写到所选敌方 | 历史 E2E `dicethrone-gunslinger-samurai-4p-targeted-cards-e2e-test.md` 已证明从真实手牌点击进入、选择、确认、结算回到正常局面 | ✅ 四问已闭环（但本轮未复跑，仅引用历史证据） |
 | `Stand Tall / Stand Tall II` | `abilities.ts:389-416` 明确挂在 `defensiveRoll`；`customActions/samurai.ts:124-182` 先取回原攻击方，再按 `katana / helm / rising_sun` 结算 | 基础版顺序为“不可防御反伤 → 防御减伤 → 无盾自得 Shame”；II 级通过 `suppressSelfShame=true` 关掉最后一支 | `cross-hero.test.ts:1963-1998` 已证明基础版反伤/减伤链路与不误加 `Shame` 的正向案例；但 II 级“无盾且 4 骰时不自加 Shame”仍只有静态代码证据；此外需确保 `DAMAGE_SHIELD_GRANTED` 能同步进入后续伤害与响应窗口判断 | 缺少 `Stand Tall II` 的独立动态收口证据；`Stand Tall` 本身也没有专属历史 E2E 截图链 | ⚠️ 基础版主时序成立；II 级否定路径仍待补证据，防御减伤同步逻辑需复验 |
-| `Masamune / Masamune II / Righteousness / Zanshin` | `abilities.ts:340-381` 使 `Masamune` 先落固定伤害，再触发奖励骰 custom action；`cards.ts:201-239` 让两张攻击修正卡在 `roll` 窗口即时触发 | `customActions/samurai.ts:223-368` 先写 `BONUS_DIE_ROLLED`/`displayOnlySettlement`，再分发 `BONUS_DAMAGE_ADDED`/`TOKEN_GRANTED` | `cross-hero.test.ts:2001-2288` 证明 `Righteousness`、`Zanshin`、`Masamune II` 的状态写入仍留在 `pendingAttack` / token 消费窗口内；历史 E2E 已覆盖 `Righteousness/Zanshin` 成功路径截图链（本轮未复跑） | ✅ `Righteousness` / `Zanshin` 已有“徽章→特写→关闭→settled→最终态”的连续证据；⚠️ `Masamune II` 仍只有状态级回归，没有 6 骰真实 UI 收口链 | ⚠️ `Righteousness` / `Zanshin` 四问闭环；`Masamune II` 的 Q4 仍待新证据 |
+| `Masamune / Masamune II / Righteousness / Zanshin` | `abilities.ts:340-381` 使 `Masamune` 先落固定伤害，再触发奖励骰 custom action；`cards.ts:201-239` 让两张攻击修正卡在 `roll` 窗口即时触发 | `customActions/samurai.ts:223-368` 先写 `BONUS_DIE_ROLLED`/`displayOnlySettlement`，再分发 `BONUS_DAMAGE_ADDED`/`TOKEN_GRANTED` | `cross-hero.test.ts:2001-2288` 证明 `Righteousness`、`Zanshin`、`Masamune II` 的状态写入仍留在 `pendingAttack` / token 消费窗口内；E2E 已覆盖 `Righteousness/Zanshin` 成功路径截图链 | ✅ `Righteousness` / `Zanshin` 已有“徽章→特写→关闭→settled→最终态”的连续证据；✅ `Masamune II` 已补 6 骰奖励骰特写“出现→关闭→最终态”成功链（见 `dicethrone-hero-ability-cards-e2e-test.md` §10） | ✅ 四问闭环已补齐（不再把 `Masamune II` 作为证据缺口） |
 
 ## 验证证据
 - **本轮已复跑**：`src/games/dicethrone/__tests__/cross-hero.test.ts` 与 `src/games/dicethrone/__tests__/token-execution.test.ts`（2026-04-12）；E2E 仍未复跑。以下其余证据仅引用仓库内**既有可复查证据**与本轮静态核对路径。
@@ -154,7 +155,7 @@
    - 本轮改为：**明确标注已复跑的单测（`cross-hero` / `token-execution`），其余保持历史证据引用，不冒充本轮动态验证**。
 4. **细化武士 E2E 覆盖缺口，不再笼统写“武士线缺关键 E2E”**
    - 既有历史 E2E 已覆盖：`Bushido`、`Honor`、`Back Strike`、`You Should Be Ashamed`、`Righteousness`、`Zanshin`。
-   - 仍缺或仍不足：`Stand Tall / Stand Tall II` 专属连续截图链、`Masamune II` 的 6 骰真实 UI 收口证据。
+  - 仍缺或仍不足：基础版 `Stand Tall` 的专属连续截图链（`Stand Tall II` 与 `Masamune II` 已补成功链路证据）。
 5. **回写规则证据口径冲突**
    - `武士录入核对.md:80-83` 当前把 `retribution` OCR 写成“不再影响当前角色板 / 卡牌实现闭环”；
    - 但对 D1/D2/D7 审计来说，**堆叠上限仍是边界语义**，没有稳定权威图就不能写成已完成。本轮在审计文档里显式回写该旧判断失效。
@@ -194,32 +195,30 @@
 ## 未覆盖风险 / 待确认
 1. **`samurai_retribution` 堆叠上限仍未拿到足够清晰的权威图片 / OCR 证据**。
 2. **`Stand Tall` 防御减伤同步修复缺少动态复验**（需验证护盾对响应窗口/伤害计算的影响）。
-3. **`Stand Tall II` 缺少“4 骰且无盾时不自加 Shame”的独立动态证据**（状态级或 E2E 皆可）。
-4. **`Masamune II` 缺少 6 骰奖励骰结算的真实 UI 收口证据**；当前仅有静态合同与状态级回归。
-5. **`Stand Tall / Stand Tall II` 仍缺专属连续截图证据链**：当前仓库里的武士历史 E2E 已覆盖 token / targeted card / attack modifier / passive，但未覆盖该防御技本身。
-6. **组合场景回归不足**：`Honor + Shame + Back Strike` 同回合叠加、多人局与防御时序叠加、本轮均未新增验证。
+3. **`Stand Tall II` / `Masamune II` 的真实 UI 成功链路证据已补齐**（见 `evidence/dicethrone/dicethrone-hero-ability-cards-e2e-test.md` §9、§10）。
+4. **组合场景回归不足**：`Honor + Shame + Back Strike` 同回合叠加、多人局与防御时序叠加、本轮仍未新增代表性组合验证。
 
 ## D1–D49 全量审计表（2026-04-12 补审回写）
 - **D1 语义保真**：⚠️ 角色板能力、升级卡、攻击修正卡主语义已对齐；唯一未闭环的是 `samurai_retribution` 堆叠上限权威来源。
-- **D2 边界完整**：⚠️ `Back Strike` 上限边界仍欠真相源闭环；`Stand Tall II`“无盾不自加 Shame”只有静态合同，缺独立动态证据。
+- **D2 边界完整**：⚠️ `Back Strike` 上限边界仍欠真相源闭环；但 `Stand Tall II`“无盾不自加 Shame”已补 E2E 成功链路证据（见 `dicethrone-hero-ability-cards-e2e-test.md` §9）。
 - **D3 数据流闭环**：✅ 真相源 → abilities/cards/tokens/customActions → locales → 测试 / evidence 路径已闭环；但闭环强度仍受第 1、2 条风险约束。
 - **D4 查询一致性**：✅ 未发现应走统一查询入口的动态数值被直接绕过读取。
 - **D5 交互完整**：✅ `You Should Be Ashamed`、`Honor`、`Back Strike` 有真实交互证据；`Stand Tall`、`Masamune` 不依赖额外玩家选择，本轮未发现交互缺口。
 - **D6 副作用传播**：✅ `Honor` / `Shame` / `Back Strike` 均能进入既有伤害与 token 结算链。
 - **D7 资源守恒**：⚠️ `Honor` / `Shame` 已与现实现状对齐；仍剩 `Back Strike` 堆叠上限是否应为无限的规则确认风险。
-- **D8 时序正确**：⚠️ 四问重查后，`Bushido`、`Honor`、`Back Strike`、`You Should Be Ashamed`、`Righteousness`、`Zanshin` 已有静态 + 历史链路证据；`Back Strike` 攻击伤害门禁已补单测；`Stand Tall` 防御减伤同步仍缺动态复验；`Stand Tall II` 否定路径与 `Masamune II` 真实 UI 收口仍待补证据。
+- **D8 时序正确**：⚠️ `Bushido`、`Honor`、`Back Strike`、`You Should Be Ashamed`、`Righteousness`、`Zanshin` 已有静态 + 历史链路证据；`Back Strike` 攻击伤害门禁已补单测；`Stand Tall`（基础版）防御减伤同步仍缺动态复验；`Stand Tall II` 否定路径与 `Masamune II` 的真实 UI 收口已补 E2E 证据（见 `dicethrone-hero-ability-cards-e2e-test.md` §9、§10）。
 - **D9 幂等与重入**：⚠️ 未做“重复进入防御交互 / 重复消费 Back Strike / 连续打开奖励骰结算”的专项回归，本轮只看到单次链路正确。
 - **D10 元数据一致**：✅ `samurai-stand-tall*` 已声明 `damage`；未发现“输出 `DAMAGE_DEALT` 但 `categories` 不含 `damage`”的现存问题。
 - **D11 Reducer 消耗路径**：✅ `Honor` / `Shame` / `Back Strike` 均通过 token activeUse 进入正确的消耗路径。
 - **D12 写入-消耗对称**：✅ 授予 `Honor` / `Shame` / `Back Strike` 的路径都能被后续消费链读取。
 - **D13 多来源竞争**：⚠️ 多来源同时授予 `Honor` / `Shame` / `Back Strike` 的组合场景未做专项复验。
 - **D14 回合清理完整**：✅ `Bushido` 历史 E2E 已说明 `TURN_CHANGED` 后攻掷计数被清空；未发现武士专属临时字段跨回合泄漏。
-- **D15 UI 状态同步**：⚠️ `Righteousness` / `Zanshin` 已有连续成功链路截图（徽章→特写→关闭→settled→最终态，详见 `evidence/dicethrone/dicethrone-samurai-cross-hero-attack-modifier-e2e.md`，本轮未复跑）；但 `Stand Tall / Stand Tall II` 与 `Masamune II` 仍缺实时 UI 证据。
+- **D15 UI 状态同步**：⚠️ `Righteousness` / `Zanshin` 已有连续成功链路截图（徽章→特写→关闭→settled→最终态，详见 `evidence/dicethrone/dicethrone-samurai-cross-hero-attack-modifier-e2e.md`）；`Stand Tall II` 与 `Masamune II` 的成功链路已补（见 `evidence/dicethrone/dicethrone-hero-ability-cards-e2e-test.md` §9、§10）。基础版 `Stand Tall` 仍可补专门证据以进一步压实。
 - **D16 条件优先级**：✅ `Stand Tall` 中“先反伤、再减伤、最后按条件自加 Shame”的分支顺序与描述一致。
 - **D17 隐式依赖**：⚠️ `Stand Tall` / `Back Strike` 依赖 defensiveRoll 上下文中的 attacker/defender 角色约定；静态看已处理，缺少组合回归进一步压实。
-- **D18 否定路径**：⚠️ 已有 `Bushido`“恰好 3 次攻掷不再加 Honor”、`You Should Be Ashamed` 不选队友等否定路径；但 `Stand Tall II`“无盾也不自加 Shame”仍缺独立回归。
+- **D18 否定路径**：⚠️ 已有 `Bushido`“恰好 3 次攻掷不再加 Honor”、`You Should Be Ashamed` 不选队友等否定路径；`Stand Tall II`“无盾也不自加 Shame”已补 E2E 成功链路（见 `dicethrone-hero-ability-cards-e2e-test.md` §9）。
 - **D19 组合场景**：⚠️ `Honor + Shame` 对冲、`Back Strike + 防御减伤` 等组合场景本轮未复验。
-- **D20 状态可观测性**：✅ `Righteousness / Zanshin` 本轮已补齐“可见性 + 收口”截图链；仍缺 `Stand Tall` 与 `Masamune II` 的专属可见性证据。
+- **D20 状态可观测性**：✅ `Righteousness / Zanshin` 已补齐“可见性 + 收口”截图链；✅ `Masamune II` 已补 6 骰特写闭环；⚠️ 仍缺基础版 `Stand Tall` 的专属可见性证据。
 - **D21 触发频率门控**：✅ `Bushido` 起手与回合末触发都有明确门控；`Back Strike` 以单个 token 主动消费，不存在一枚多次触发的静态迹象。
 - **D22 伤害计算管线配置**：✅ `Stand Tall` / `Back Strike` 都通过 `createDamageCalculation` 生成伤害事件，`Stand Tall` 额外显式标记 `unblockable`。
 - **D23 架构假设一致性**：✅ 武士的“防御反伤 + token 反弹”仍落在 customAction + damage pipeline 合同内，没有继续回落到旁路特判。
@@ -242,12 +241,12 @@
 - **D39 流程控制标志清除完整性**：N/A。
 - **D40 后处理循环事件去重完整性**：N/A。
 - **D41 系统职责重叠检测**：✅ 本轮未见武士实现继续走旧旁路特判。
-- **D42 事件流全链路审计**：⚠️ 仓库中已有多份历史 E2E / 截图证据，但本轮未复跑；`Stand Tall / Stand Tall II / Masamune II` 也还缺完整 UI → eventStream 的新增证据。
+- **D42 事件流全链路审计**：⚠️ 仓库中已有多份历史 E2E / 截图证据；本轮已新增 `Stand Tall II` / `Masamune II` 的 UI 成功链路证据，但尚未补“UI → eventStream”的专项截图/断言。
 - **D43 重构完整性检查**：⚠️ 运行时代码侧本轮未见新的结构残缺；但规则证据侧仍有旧结论过宽（`Back Strike` 上限“不影响闭环”），已在本审计文档回写纠偏。
-- **D44 测试设计反模式检测**：⚠️ 当前武士证据以历史状态级 / E2E 混合承担；`Stand Tall II` 与 `Masamune II` 仍缺与当前风险直接对位的专用用例。
+- **D44 测试设计反模式检测**：⚠️ 当前武士证据以状态级 / E2E 混合承担；本轮已补 `Stand Tall II` / `Masamune II` 专用用例，但基础版 `Stand Tall` 仍可补一条对位用例以避免回归。
 - **D45 Pipeline 多阶段调用去重**：N/A。
 - **D46 交互选项 UI 渲染模式声明完整性**：N/A。
-- **D47 E2E 覆盖完整性**：⚠️ `Righteousness / Zanshin` 已有历史连续截图链覆盖（本轮未复跑）；仍缺 `Stand Tall / Stand Tall II` 与 `Masamune II` 的专属连续截图链。
+- **D47 E2E 覆盖完整性**：⚠️ `Righteousness / Zanshin` 已有连续截图链覆盖；`Stand Tall II` 与 `Masamune II` 已补专属连续截图链；基础版 `Stand Tall` 仍可补专属链路以进一步压实。
 - **D48 UI 交互渲染模式完整性**：N/A。
 - **D49 abilityTags 与触发机制一致性**：N/A（DiceThrone 此处不依赖 `abilityTags` 作为核心合同）。
 
@@ -256,7 +255,7 @@
 - `Honor` / `Shame` / `Back Strike` token 响应窗口：D7 / D8 / D11 / D12 / D15
 - `You Should Be Ashamed` 多人局选敌与 resolve 收口：D5 / D8 / D18 / D34
 - `Stand Tall II` 否定路径（无盾不自加 Shame）证据不足：D2 / D8 / D18 / D47
-- `Masamune II` 6 骰真实 UI 收口证据不足：D8 / D15 / D42 / D47
+- `Stand Tall`（基础版）缺少专属连续截图链：D15 / D20 / D47
 - `Back Strike` 堆叠上限未闭环：D1 / D2 / D7 / D43
 
 ## 修订记录
