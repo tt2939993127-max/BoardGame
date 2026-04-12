@@ -307,20 +307,17 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
             return { state, events };
         }
 
-        // standard/special: resolve onPlay immediately
-        events.push(buildActionPlayedEvent({
+        const executeResult = executeUncoveredAction({
+            matchState,
             playerId,
-            cardUid,
-            defId: buried.defId,
-            isExtraAction: true,
-            fromBuried: true,
-            timestamp: now,
-        }));
-        const executor = resolveOnPlay(buried.defId);
-        if (executor) {
-            const ctx: AbilityContext = {
-                state: state.core,
-                matchState: state,
+            buried,
+            baseIndex,
+            random,
+            now,
+        });
+        const uncoveredEvents: SmashUpEvent[] = [{
+            type: SU_EVENTS.BURIED_CARD_UNCOVERED,
+            payload: {
                 playerId,
                 cardUid,
                 baseIndex,
@@ -329,8 +326,8 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
             },
             timestamp: now,
         } as SmashUpEvent, ...executeResult.events];
-        if (uncoverTriggers) events.push(uncoverTriggers);
-        return { state: executeResult.state, events };
+        if (uncoverTriggers) uncoveredEvents.push(uncoverTriggers);
+        return { state: executeResult.state, events: uncoveredEvents };
     }
 
     return { state: matchState, events: [uncoverEvent] };

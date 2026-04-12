@@ -12,6 +12,9 @@ import { createSimpleChoice, INTERACTION_EVENTS, queueInteraction, resolveIntera
 import type {
     SmashUpCore,
     SmashUpEvent,
+    SmashUpSystemState,
+    PendingPostScoringAction,
+    MinionPlayedEvent,
     MinionDestroyedEvent,
     MinionMovedEvent,
     MinionReturnedEvent,
@@ -19,11 +22,17 @@ import type {
     CardToDeckTopEvent,
 } from './types';
 import { getInteractionHandler } from './abilityInteractionHandlers';
-import { addPowerCounter } from './abilityHelpers';
+import { addPowerCounter, buildValidatedMoveEvents } from './abilityHelpers';
 import { SU_EVENT_TYPES } from './events';
 import { reduce } from './reduce';
 import { resolveLiveBaseIndex } from './utils';
 import { maybeResolveReactionQueue } from './reactionQueue';
+import {
+    getDeferredPostScoringEvents,
+    getScoringSession,
+    mergeDeferredPostScoringCompatibility,
+    mirrorDeferredPostScoringToFirstInteraction,
+} from './scoringSession';
 
 // ============================================================================
 // SmashUp 事件处理系统
@@ -130,6 +139,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
             let newState = state;
             const nextEvents: GameEvent[] = [];
             const pendingStartTurnInteractionReduceFlag = '_waitForStartTurnInteractionReduce';
+            const pendingReduceFlag = '_waitForPostScoringReduce';
             let latestTimestamp = 0;
 
             // 同一轮 afterEvents 中，后续系统看不到本轮新发出事件的 reduce 结果。
@@ -221,7 +231,7 @@ export function createSmashUpEventSystem(): EngineSystem<SmashUpCore> {
                                         emittedEvents = compatibility.events;
                                     }
                                 }
-                                nextEvents.push(...interceptedEvents);
+                                nextEvents.push(...emittedEvents);
 
                                 // 补发延迟的 BASE_CLEARED/BASE_REPLACED 事件
                                 // afterScoring 基地能力创建交互时，清除事件被延迟到交互解决后发出，

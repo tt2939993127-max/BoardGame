@@ -12,8 +12,11 @@ import {
     getPlayerEffectivePowerOnBase,
 } from './ongoingModifiers';
 import { canPlayFromDiscard } from './discardPlayability';
-import { getTitanByController, getTitanByUid, isSpecialLimitBlocked } from './abilityHelpers';
+import { getTitanByUid, isSpecialLimitBlocked } from './abilityHelpers';
+import { canUseActiveBaseAbility, getActiveBaseAbilityOptions, hasActiveBaseAbility } from './baseAbilities';
+import { getActionPlayRestrictionError, getMinionPlayRestrictionError, validateActionPlaySemantics } from './playLegality';
 import { resolveOngoingActivation, resolveSpecial, resolveTalent } from './abilityRegistry';
+import { validateTitanOngoingActivation, validateTitanSpecialActivation, validateTitanTalentUse } from './titanAbilityValidators';
 import {
     actionLikeNeedsResponseWindowBase,
     getActionLikeResponseWindowTiming,
@@ -27,6 +30,128 @@ import {
 } from './utils';
 import { isCardActionLike, isCardMinionLike } from './utils';
 import { getSmashUpReactionWindowContext, hasBlockingLegacyResponseWindow } from './reactionWindowState';
+
+type TitanAbilityKind = 'special' | 'talent' | 'ongoing';
+
+function resolveTitanAbilityLabel(kind: TitanAbilityKind): string {
+    switch (kind) {
+        case 'special':
+            return '特殊能力';
+        case 'talent':
+            return '天赋能力';
+        case 'ongoing':
+            return '持续能力';
+        default:
+            return '能力';
+    }
+}
+
+function validateTitanAbility(
+    state: MatchState<SmashUpCore>,
+    command: { playerId: string; payload: { titanUid?: string; baseIndex: number } },
+    kind: TitanAbilityKind,
+): ValidationResult {
+    const core = state.core;
+    const { titanUid, baseIndex } = command.payload;
+    if (!titanUid) return { valid: false, error: '必须指定泰坦' };
+    if (baseIndex < 0 || baseIndex >= core.bases.length) {
+        return { valid: false, error: '无效的基地索引' };
+    }
+
+    const titan = getTitanByUid(core, titanUid);
+    if (!titan) return { valid: false, error: '该泰坦不存在' };
+
+    const titanDef = getTitanDef(titan.defId);
+    if (!titanDef) return { valid: false, error: '泰坦定义不存在' };
+
+    const abilityLabel = resolveTitanAbilityLabel(kind);
+    if (!titanDef.abilityTags?.includes(kind)) {
+        return { valid: false, error: `该泰坦没有${abilityLabel}` };
+    }
+    if (titanDef.activatableAbilityKinds && !titanDef.activatableAbilityKinds.includes(kind)) {
+        return { valid: false, error: `该泰坦的${abilityLabel}不能手动激活` };
+    }
+
+    if (kind === 'special') {
+        if (!resolveSpecial(titan.defId)) {
+            return { valid: false, error: '该泰坦的特殊能力不能手动激活' };
+        }
+        if (titan.location.zone !== 'setaside') {
+            return { valid: false, error: '该泰坦当前不在牌库旁' };
+        }
+        if (titan.ownerId !== command.playerId) {
+            return { valid: false, error: '只能激活自己拥有的泰坦特殊能力' };
+        }
+    } else {
+        if (titan.location.zone !== 'base') {
+            return { valid: false, error: '该泰坦当前不在场' };
+        }
+        if (titan.controllerId !== command.playerId) {
+            return { valid: false, error: `只能使用自己控制的泰坦${abilityLabel}` };
+        }
+    }
+
+    if (kind === 'talent' && !resolveTalent(titan.defId)) {
+        return { valid: false, error: '该泰坦的天赋不能手动激活' };
+    }
+    if (kind === 'ongoing' && !resolveOngoingActivation(titan.defId)) {
+        return { valid: false, error: '该泰坦的持续能力不能手动激活' };
+    }
+    if (kind === 'ongoing' && (core.titanOngoingSuppressedUntilTurnEnd ?? []).includes(titan.uid)) {
+        return { valid: false, error: '该泰坦的持续能力已被压制' };
+    }
+
+    const ctx = { state: core, playerId: command.playerId, titan, titanDef, baseIndex };
+    const error = kind === 'special'
+        ? validateTitanSpecialActivation(ctx)
+        : kind === 'talent'
+            ? validateTitanTalentUse(ctx)
+            : validateTitanOngoingActivation(ctx);
+    return error ? { valid: false, error } : { valid: true };
+}
+
+function hasActiveBearNecessitiesPodRestriction(core: SmashUpCore, playerId: string): boolean {
+    for (const base of core.bases) {
+        const hasPlayerMinion = base.minions.some(minion => minion.controller === playerId);
+        if (!hasPlayerMinion) continue;
+        const hasOpponentActivePod = base.ongoingActions.some(ongoing =>
+            ongoing.defId === 'bear_cavalry_bear_necessities_pod'
+            && ongoing.ownerId !== playerId
+            && ongoing.talentUsed === true,
+        );
+        if (hasOpponentActivePod) return true;
+    }
+    return false;
+}
+
+function isExtraMinionPlayAttempt(
+    core: SmashUpCore,
+    playerId: string,
+    baseIndex: number,
+    cardDefId: string,
+    basePower: number,
+    fromDiscard: boolean,
+    consumesNormalLimit: boolean,
+): boolean {
+    const player = core.players[playerId];
+    if (!player) return false;
+    const globalQuotaRemaining = player.minionLimit - player.minionsPlayed;
+    if (fromDiscard && consumesNormalLimit === false) return true;
+    if (player.minionsPlayed >= 1) return true;
+    if (globalQuotaRemaining <= 0) {
+        if (canUseBaseLimitedMinionQuota(core, player, baseIndex, cardDefId, basePower)) return true;
+        if (canUseSameNameMinionQuota(player, cardDefId)) return true;
+    }
+    if (mustUseBaseLimitedMinionQuota(core, player, baseIndex, cardDefId, basePower)) return true;
+    if (mustUseGlobalPowerLimitedMinionQuota(core, player, baseIndex, cardDefId, basePower)) return true;
+    return false;
+}
+
+function isExtraActionPlayAttempt(core: SmashUpCore, playerId: string): boolean {
+    const player = core.players[playerId];
+    if (!player) return false;
+    return player.actionsPlayed >= 1;
+}
 
 export function validate(
     state: MatchState<SmashUpCore>,
@@ -495,33 +620,11 @@ export function validate(
             if (targetCount !== 1) {
                 return { valid: false, error: '蹇呴』涓旀墜鑳藉彧鑳芥寚瀹氫竴绉嶅ぉ璧嬬洰鏍?' };
             }
+            if (titanUid) {
+                return validateTitanAbility(state, command, 'talent');
+            }
             const targetBase = core.bases[baseIndex];
             if (!targetBase) return { valid: false, error: '无效的基地索引' };
-
-            // ongoing 行动卡天赋（基地上或随从附着）
-            if (titanUid) {
-                const titan = getTitanByUid(core, titanUid);
-                if (!titan || titan.location.zone !== 'base' || titan.location.baseIndex !== baseIndex) {
-                    return { valid: false, error: '鍩哄湴涓婃病鏈夎娉板潶' };
-                }
-                if (titan.controllerId !== command.playerId) {
-                    return { valid: false, error: '鍙兘浣跨敤鑷繁鎺у埗鐨勬嘲鍧︾殑澶╄祴' };
-                }
-                if (titan.talentUsed) {
-                    return { valid: false, error: '鏈洖鍚堝ぉ璧嬪凡浣跨敤' };
-                }
-                const titanDef = getCardDef(titan.defId);
-                if (
-                    !titanDef
-                    || titanDef.type !== 'titan'
-                    || !titanDef.abilityTags?.includes('talent')
-                    || !titanDef.activatableAbilityKinds?.includes('talent')
-                    || !resolveTalent(titan.defId)
-                ) {
-                    return { valid: false, error: '璇ユ嘲鍧︽病鏈夊ぉ璧嬭兘鍔?' };
-                }
-                return { valid: true };
-            }
 
             if (ongoingCardUid) {
                 // 先查基地 ongoingActions
@@ -610,35 +713,13 @@ export function validate(
             const spBase = core.bases[spBaseIndex];
             if (!spBase) return { valid: false, error: '无效的基地索引' };
             if (spTitanUid) {
-                const titan = getTitanByUid(core, spTitanUid);
-                if (!titan) return { valid: false, error: '娌℃湁鎵惧埌璇ユ嘲鍧?' };
-
-                if (titan.location.zone === 'base') {
-                    if (titan.location.baseIndex !== spBaseIndex) {
-                        return { valid: false, error: '璇ユ嘲鍧︿笉鍦ㄨ鍩哄湴涓?' };
-                    }
-                    if (titan.controllerId !== command.playerId) {
-                        return { valid: false, error: '鍙兘婵€娲昏嚜宸辨帶鍒剁殑娉板潶鐗规畩鑳藉姏' };
-                    }
-                } else {
-                    if (titan.ownerId !== command.playerId) {
-                        return { valid: false, error: '鍙湁娉板潶鎵€鏈夎€呭彲浠ュ湪绂诲満鏃舵縺娲诲畠' };
-                    }
-                    const activeTitan = getTitanByController(core, command.playerId);
-                    if (activeTitan) {
-                        return { valid: false, error: '姣忎綅鐜╁鍚屾椂鏈€澶氬彧鑳芥帶鍒朵竴涓嘲鍧?' };
-                    }
-                }
-
-                const titanDef = getCardDef(titan.defId);
-                if (
-                    !titanDef
-                    || titanDef.type !== 'titan'
-                    || !titanDef.abilityTags?.includes('special')
-                    || !titanDef.activatableAbilityKinds?.includes('special')
-                    || !resolveSpecial(titan.defId)
-                ) {
-                    return { valid: false, error: '璇ユ嘲鍧︽病鏈夌壒娈婅兘鍔?' };
+                const titanValidation = validateTitanAbility(
+                    state,
+                    { playerId: command.playerId, payload: { titanUid: spTitanUid, baseIndex: spBaseIndex } },
+                    'special',
+                );
+                if (!titanValidation.valid) {
+                    return titanValidation;
                 }
                 if (phase === 'scoreBases') {
                     const eligibleIndices = getScoringEligibleBaseIndices(core);
@@ -660,9 +741,6 @@ export function validate(
             const spDef = getCardDef(spMinion.defId);
             if (!spDef || !('abilityTags' in spDef) || !spDef.abilityTags?.includes('special')) {
                 return { valid: false, error: '该随从没有特殊能力' };
-            }
-            if (!resolveSpecial(spMinion.defId)) {
-                return { valid: false, error: '该随从的特殊能力不能手动激活' };
             }
             // specialLimitGroup 检查
             if (isSpecialLimitBlocked(core, spMinion.defId, spBaseIndex)) {
@@ -689,28 +767,7 @@ export function validate(
             if (command.playerId !== currentPlayerId) {
                 return { valid: false, error: 'player_mismatch' };
             }
-            const { titanUid, baseIndex } = command.payload;
-            const titan = getTitanByUid(core, titanUid);
-            if (!titan || titan.location.zone !== 'base' || titan.location.baseIndex !== baseIndex) {
-                return { valid: false, error: '鍩哄湴涓婃病鏈夎娉板潶' };
-            }
-            if (titan.controllerId !== command.playerId) {
-                return { valid: false, error: '鍙兘婵€娲昏嚜宸辨帶鍒剁殑娉板潶' };
-            }
-            if ((core.titanOngoingSuppressedUntilTurnEnd ?? []).includes(titanUid)) {
-                return { valid: false, error: '璇ユ嘲鍧︾殑鎸佺画鑳藉姏宸茶鍘嬪埗' };
-            }
-            const titanDef = getCardDef(titan.defId);
-            if (
-                !titanDef
-                || titanDef.type !== 'titan'
-                || !titanDef.abilityTags?.includes('ongoingActivation')
-                || !titanDef.activatableAbilityKinds?.includes('ongoing')
-                || !resolveOngoingActivation(titan.defId)
-            ) {
-                return { valid: false, error: '璇ユ嘲鍧︽病鏈夊彲涓诲姩婵€娲荤殑鎸佺画鑳藉姏' };
-            }
-            return { valid: true };
+            return validateTitanAbility(state, command, 'ongoing');
         }
 
         default:

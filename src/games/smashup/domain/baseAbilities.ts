@@ -1788,28 +1788,6 @@ export function registerBaseInteractionHandlers(): void {
         if (selected.skip) return { state, events: [] };
         const ctx = getContinuationContext<{ baseIndex: number }>(iData);
         if (!ctx) return { state, events: [] };
-        const deferredEvents = getDeferredPostScoringEvents(state, iData);
-        if (deferredEvents && deferredEvents.length > 0) {
-            const targetBaseDefId = getDeferredReplacementBaseDefId(state, iData)
-                ?? state.core.bases[ctx.baseIndex]?.defId;
-            if (!targetBaseDefId) return { state, events: [] };
-            const pendingAction: PendingPostScoringAction = {
-                kind: 'moveMinionToReplacementBase',
-                minionUid: selected.minionUid!,
-                minionDefId: selected.minionDefId!,
-                fromBaseIndex: selected.fromBaseIndex ?? -1,
-                toBaseIndex: ctx.baseIndex,
-                targetBaseDefId,
-                reason: '托尔图加：亚军移动随从到替换基地',
-            };
-            const compatibility = mergeDeferredPostScoringCompatibility(state, iData, timestamp, {
-                extraPendingActions: [pendingAction],
-            });
-            if (compatibility) {
-                return compatibility;
-            }
-            return { state: appendPendingPostScoringActions(state, [pendingAction]), events: [] };
-        }
         const moveEvents = buildValidatedMoveEvents(state, {
             minionUid: selected.minionUid!,
             minionDefId: selected.minionDefId!,

@@ -11,6 +11,7 @@ import { initAllAbilities } from '../abilities';
 import { SmashUpDomain } from '../domain';
 import { smashUpSystemsForTest } from '../game';
 import type { MinionOnBase, SmashUpCore } from '../domain/types';
+import { advanceSmashUpReactionSession, startSmashUpReactionSession } from '../domain/reactionSession';
 
 interface ReactionSessionView {
     responseWindowType?: 'meFirst' | 'afterScoring';
@@ -291,35 +292,38 @@ describe('响应窗口跳过逻辑', () => {
                     { uid: 'card-p1-special', defId: 'ninja_hidden_ninja', type: 'action', owner: '1' },
                     { uid: 'card-p1-minion', defId: 'ninja_shinobi', type: 'minion', owner: '1' },
                 ];
-
-                sys.responseWindow = {
-                    current: {
-                        id: 'tail-responder-window',
-                        responderQueue: ['0', '1'],
-                        currentResponderIndex: 1,
-                        passedPlayers: ['0'],
-                        windowType: 'meFirst',
-                        sourceId: 'test',
-                        actionTakenThisRound: false,
-                        consecutivePassRounds: 0,
-                    },
-                };
-
-                return { core, sys };
+                const baseState = { core, sys };
+                const withSession = startSmashUpReactionSession(baseState, {
+                    frameId: 'tail-responder-window',
+                    frameKind: 'score-before',
+                    phase: 'optional',
+                    currentPlayerId: '0',
+                    activePlayerId: '1',
+                    consecutivePasses: 1,
+                    sourceBaseIndex: 0,
+                    responseWindowType: 'meFirst',
+                });
+                const advanced = advanceSmashUpReactionSession(withSession, random, 1);
+                return advanced?.state ?? withSession;
             },
         });
 
-        const playResult = runner.dispatch('su:play_action', {
-            playerId: '1',
-            cardUid: 'card-p1-special',
-            targetBaseIndex: 0,
-        });
+        const reactionChoice = getCurrentChoice(runner.getState());
+        expect(reactionChoice?.sourceId).toBe('smashup_reaction_choose');
+        expect(reactionChoice?.playerId).toBe('1');
+        expect(getReactionSession(runner.getState())?.activePlayerId).toBe('1');
+        expectMirroredIndex(runner.getState(), 1);
 
+        const playOptionId = findOptionId(
+            reactionChoice!,
+            option => option.value?.kind === 'play_action' && option.value?.cardUid === 'card-p1-special',
+            '找不到隐身忍者选项',
+        );
+        const playResult = runner.resolveInteraction('1', { optionId: playOptionId });
         expect(playResult.success).toBe(true);
 
         const stateAfterPlay = runner.getState();
         expect(stateAfterPlay.sys.interaction?.current?.data?.sourceId).toBe('ninja_hidden_ninja');
-        expect(stateAfterPlay.sys.responseWindow?.current?.pendingInteractionId).toBeTruthy();
 
         const playOption = stateAfterPlay.sys.interaction!.current!.data.options.find(
             (option: any) => option.value?.cardUid === 'card-p1-minion',
@@ -329,10 +333,12 @@ describe('响应窗口跳过逻辑', () => {
         const resolveResult = runner.resolveInteraction('1', { optionId: playOption!.id });
 
         expect(resolveResult.success).toBe(true);
-        expect(resolveResult.finalState.sys.interaction?.current).toBeUndefined();
-        expect(resolveResult.finalState.sys.responseWindow?.current).toBeDefined();
-        expect(resolveResult.finalState.sys.responseWindow?.current?.pendingInteractionId).toBeUndefined();
-        expect(resolveResult.finalState.sys.responseWindow?.current?.currentResponderIndex).toBe(0);
+        const stateAfterResolve = runner.getState();
+        const resumedChoice = getCurrentChoice(stateAfterResolve);
+        expect(resumedChoice?.sourceId).toBe('smashup_reaction_choose');
+        expect(resumedChoice?.playerId).toBe('0');
+        expect(getReactionSession(stateAfterResolve)?.activePlayerId).toBe('0');
+        expectMirroredIndex(stateAfterResolve, 0);
     });
 
 });

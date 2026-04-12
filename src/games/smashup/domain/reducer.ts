@@ -1613,54 +1613,6 @@ export function processAffectTriggers(
 export function processDeckInspectionTriggers(
     events: SmashUpEvent[],
     state: MatchState<SmashUpCore>,
-    _playerId: PlayerId,
-    random: RandomFn,
-    now: number,
-): PostProcessResult {
-    const core = state.core;
-    const extraEvents: SmashUpEvent[] = [];
-    let ms: MatchState<SmashUpCore> | undefined;
-    const seenInspectionKeys = new Set<string>();
-
-    for (const event of events) {
-        let inspectorPlayerId: PlayerId | undefined;
-        let reason: string | undefined;
-
-        if (event.type === SU_EVENTS.DECK_INSPECTED) {
-            const payload = (event as DeckInspectedEvent).payload;
-            inspectorPlayerId = payload.inspectorPlayerId;
-            reason = payload.reason;
-        } else if (event.type === SU_EVENTS.REVEAL_DECK_TOP) {
-            const payload = (event as RevealDeckTopEvent).payload;
-            inspectorPlayerId = payload.sourcePlayerId ?? (payload.viewerPlayerId === 'all' ? undefined : payload.viewerPlayerId);
-            reason = payload.reason;
-        }
-
-        if (!inspectorPlayerId || !reason) continue;
-        const dedupeKey = `${inspectorPlayerId}:${reason}:${event.timestamp ?? now}`;
-        if (seenInspectionKeys.has(dedupeKey)) continue;
-        seenInspectionKeys.add(dedupeKey);
-
-        const queued = collectTriggers(core, 'onDeckInspected', {
-            state: core,
-            matchState: ms ?? state,
-            playerId: inspectorPlayerId,
-            reason,
-            random,
-            now,
-        });
-        if (queued) extraEvents.push(queued);
-    }
-
-    return extraEvents.length > 0
-        ? { events: [...events, ...extraEvents], matchState: ms }
-        : { events };
-}
-
-// reduce 函数已提取到 ./reduce.ts
-export function processDeckInspectionTriggers(
-    events: SmashUpEvent[],
-    state: MatchState<SmashUpCore>,
     playerId: PlayerId,
     random: RandomFn,
     now: number,

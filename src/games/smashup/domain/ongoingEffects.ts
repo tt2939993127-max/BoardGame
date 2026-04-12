@@ -579,7 +579,7 @@ export function hasRegisteredTrigger(sourceDefId: string, timing: TriggerTiming)
  * 闂婎偄娲ら幊姗€濡磋箛娑樻嵍闁靛绠戦。鏌ユ煛閸繍妲规繛锝呯－閸栨牜绱掑Ο缁樻畼闂佸憡鍔曢懟顖炴偩椤掆偓琚欓柡鍥╁仦閸婄敻鎮圭€ｎ亜鏆熼柡浣靛€曢～銏ゅΧ閸涱厽鐦ｉ梺杞版祰閸╁洭鍩€?
  */
 export function registerPodOngoingAliases(): void {
-    let _mappedCount = 0;
+    let mappedCount = 0;
     
     // 1. 闂佸搫瀚慨鎾儍?Trigger
     const triggersToAdd: TriggerEntry[] = [];
@@ -641,7 +641,7 @@ export function registerPodOngoingAliases(): void {
         if (alreadyRegistered) continue;
         
         restrictionsToAdd.push({ sourceDefId: podDefId, restrictionType, checker });
-        _mappedCount++;
+        mappedCount++;
     }
     
     restrictionRegistry.push(...restrictionsToAdd);
@@ -662,7 +662,7 @@ export function registerPodOngoingAliases(): void {
         if (alreadyRegistered) continue;
         
         protectionsToAdd.push({ sourceDefId: podDefId, protectionType, checker });
-        _mappedCount++;
+        mappedCount++;
     }
     
     protectionRegistry.push(...protectionsToAdd);
@@ -683,7 +683,7 @@ export function registerPodOngoingAliases(): void {
         if (alreadyRegistered) continue;
         
         suppressionsToAdd.push({ sourceDefId: podDefId, checker });
-        _mappedCount++;
+        mappedCount++;
     }
     
     baseAbilitySuppressionRegistry.push(...suppressionsToAdd);

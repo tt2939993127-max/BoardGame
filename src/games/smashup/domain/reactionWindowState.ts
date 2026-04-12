@@ -39,8 +39,9 @@ export function getSmashUpReactionWindowContext(
 
     const responseWindow = state.sys.responseWindow?.current;
     if (
-        responseWindow?.sourceId === 'smashup_reaction_choose'
+        responseWindow
         && (responseWindow.windowType === 'meFirst' || responseWindow.windowType === 'afterScoring')
+        && responseWindow.responderQueue?.length
     ) {
         const activePlayerId = responseWindow.responderQueue[responseWindow.currentResponderIndex]
             ?? responseWindow.responderQueue[0];

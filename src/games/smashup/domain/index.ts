@@ -1734,7 +1734,7 @@ function postProcessSystemEvents(
     if (!sysAny._processedPlayedEvents || !(sysAny._processedPlayedEvents instanceof Set)) {
         sysAny._processedPlayedEvents = new Set<string>();
     }
-    const processedSet = playedSysAny._processedPlayedEvents as Set<string>;
+    const processedSet = sysAny._processedPlayedEvents as Set<string>;
     
     // 【修复】清理返回手牌的随从的去重标记
     // 当随从返回手牌后再次打出时，应该重新触发 onPlay 能力

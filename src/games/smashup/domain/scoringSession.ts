@@ -267,6 +267,54 @@ export function flushDeferredPostScoringCompatibility(
     };
 }
 
+export function appendPendingPostScoringActions(
+    state: MatchState<SmashUpCore>,
+    actions: PendingPostScoringAction[] | undefined,
+): MatchState<SmashUpCore> {
+    if (!actions?.length) {
+        return state;
+    }
+
+    return {
+        ...state,
+        core: {
+            ...state.core,
+            pendingPostScoringActions: [
+                ...(state.core.pendingPostScoringActions ?? []),
+                ...actions,
+            ],
+        },
+    };
+}
+
+export function mergeDeferredPostScoringCompatibility(
+    state: MatchState<SmashUpCore>,
+    interactionData: Record<string, unknown> | undefined,
+    timestamp: number,
+    options?: {
+        primaryOrder?: 'before' | 'after';
+        extraPendingActions?: PendingPostScoringAction[];
+    },
+): { state: MatchState<SmashUpCore>; events: SmashUpEvent[] } | undefined {
+    if (getScoringSession(state)) {
+        return undefined;
+    }
+
+    const nextState = appendPendingPostScoringActions(state, options?.extraPendingActions);
+    const deferredEvents = getDeferredPostScoringEvents(nextState, interactionData);
+    if (!deferredEvents?.length) {
+        return options?.extraPendingActions?.length
+            ? { state: nextState, events: [] }
+            : undefined;
+    }
+
+    const flushed = flushDeferredPostScoringCompatibility(nextState, interactionData, timestamp);
+    return {
+        state: flushed.state,
+        events: flushed.events,
+    };
+}
+
 export function resolveScoringBaseRefSlotIndex(
     state: MatchState<SmashUpCore>,
     baseRef: SmashUpScoringBaseRef | undefined,
