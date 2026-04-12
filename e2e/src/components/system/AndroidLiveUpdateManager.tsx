@@ -9,6 +9,7 @@ import {
     startAndroidLiveUpdateBackgroundCheck,
 } from '../../lib/mobile/androidLiveUpdates';
 import { requestAndroidNativeUpdateCheck } from '../../lib/mobile/androidNativeUpdates';
+import { shouldShowAndroidOtaToastOncePerDay } from '../../lib/mobile/otaToastGate';
 
 let hasAutoStartedAndroidLiveUpdateCheck = false;
 const HIDDEN_FORCE_UPDATE_STATE: AndroidForceUpdateState = {
@@ -42,10 +43,12 @@ export const AndroidLiveUpdateManager = () => {
 
             if (result.status === 'up-to-date' && options?.interactive) {
                 setForceUpdateState(HIDDEN_FORCE_UPDATE_STATE);
-                toast.success('当前已经是最新版本。', '应用更新', {
-                    dedupeKey: 'android-ota-up-to-date',
-                    ttlMs: 3000,
-                });
+                if (shouldShowAndroidOtaToastOncePerDay('up-to-date')) {
+                    toast.success('当前已经是最新版本。', '应用更新', {
+                        dedupeKey: 'android-ota-up-to-date',
+                        ttlMs: 3000,
+                    });
+                }
                 return;
             }
 
@@ -62,7 +65,9 @@ export const AndroidLiveUpdateManager = () => {
             if (result.status === 'error') {
                 console.warn('[OTA] 后台检查失败', result.reason);
                 if (options?.interactive) {
-                    toast.error(result.reason, '应用更新');
+                    if (shouldShowAndroidOtaToastOncePerDay('error')) {
+                        toast.error(result.reason, '应用更新');
+                    }
                 }
                 return;
             }

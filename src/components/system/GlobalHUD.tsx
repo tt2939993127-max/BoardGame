@@ -15,6 +15,7 @@ import {
 } from '../../lib/mobile/androidLiveUpdates';
 import { resolveAndroidWebAppDownload } from '../../lib/mobile/androidNativeUpdates';
 import { isNativeAndroidRuntime } from '../../lib/mobile/androidRuntime';
+import { shouldShowAndroidOtaToastOncePerDay } from '../../lib/mobile/otaToastGate';
 
 const HUD_MODAL_NS = 'hud';
 const LazyAudioProvider = lazy(() => import('../../contexts/AudioContext').then(m => ({ default: m.AudioProvider })));
@@ -124,7 +125,9 @@ export const GlobalHUD = () => {
 
     const handleCheckAppUpdate = () => {
         if (!otaEnabledForCurrentShell) {
-            toast.warning('当前测试版 App 已禁用 OTA 更新，请改用正式版安装包。');
+            if (shouldShowAndroidOtaToastOncePerDay('disabled')) {
+                toast.warning('当前测试版 App 已禁用 OTA 更新，请改用正式版安装包。');
+            }
             return;
         }
         if (otaActivityState.active) {
