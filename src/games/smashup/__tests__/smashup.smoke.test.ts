@@ -2630,7 +2630,7 @@ describe('smashup', () => {
         const resolved = events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
         expect(resolved.players['0'].actionLimit).toBe(2);
     });
-    it('黑熊骑兵泰坦满足条件后可通过 special 从牌库旁进场', () => {
+    it('大熊座满足条件后可通过 special 从牌库旁进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.BEAR_CAVALRY } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -2640,7 +2640,7 @@ describe('smashup', () => {
 
         const runner = createRunner();
         const result = runner.run({
-            name: '黑熊骑兵进场',
+            name: '大熊座进场',
             commands: titanDraft,
         });
 
@@ -2680,7 +2680,7 @@ describe('smashup', () => {
         });
     });
 
-    it('黑熊骑兵泰坦天赋在两个分支都可用时会先创建模式选择交互', () => {
+    it('大熊座天赋会先加 1 枚 +1 标记再要求选择新基地', () => {
         const core = makeState({
             bases: [makeBase(), makeBase()],
             titans: [{
@@ -2716,7 +2716,7 @@ describe('smashup', () => {
         expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_destination');
     });
 
-    it('黑熊骑兵移动后可继续选择对手 3 或更低随从并移动到其他基地', () => {
+    it('大熊座移动后可继续选择对手 3 或更低随从并移动到其他基地', () => {
         const core = makeState({
             bases: [
                 makeBase(),

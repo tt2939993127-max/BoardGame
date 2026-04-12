@@ -337,7 +337,7 @@ function kaijuGorgodzollaOnActionPlayed(ctx: TriggerContext): TriggerResult | Sm
     const interaction = createSimpleChoice(
         `titan_kaiju_gorgodzolla_draw_${titan.uid}_${ctx.now}`,
         ctx.playerId,
-        'Gorgodzolla：你可以抽 1 张牌',
+        '哥佐拉：你可以抽 1 张牌',
         [
             { id: 'draw', label: '抽 1 张牌', value: { draw: true }, displayMode: 'button' as const },
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
@@ -843,7 +843,7 @@ function ghostsCreampuffManTalent(ctx: AbilityContext): AbilityResult {
     const interaction = createSimpleChoice(
         `titan_ghosts_creampuff_man_discard_${ctx.now}`,
         ctx.playerId,
-        '奶油泡芙美人：弃置 1 张牌',
+        '奶油泡芙美人：弃 1 张牌',
         discardOptions,
         { sourceId: 'titan_ghosts_creampuff_man_discard', targetType: 'hand' },
     );
@@ -1366,7 +1366,7 @@ function penguinsEmperorPenguinOnTurnStart(ctx: TriggerContext) {
     const interaction = createSimpleChoice(
         `titan_penguins_emperor_penguin_play_${ctx.now}`,
         ctx.playerId,
-        '帝企鹅：选择要进场的基地',
+        '企鹅帝皇：选择要进场的基地',
         [
             ...baseOptions,
             { id: 'skip', label: '跳过', value: { skip: true }, displayMode: 'button' as const },
@@ -2407,7 +2407,7 @@ function queueVampireAncientLordSpecialInteraction(
     const interaction = createSimpleChoice(
         `titan_vampires_ancient_lord_special_${now}`,
         playerId,
-        '鲜血领主：选择是否把其中 1 枚 +1 战力标记改放到此泰坦上',
+        '鲜血领主：选择是否把其中 1 枚 +1 战斗力标记改放到此泰坦上',
         options,
         { sourceId: 'titan_vampires_ancient_lord_special', targetType: 'generic' },
     );
@@ -3348,13 +3348,13 @@ export function registerTitanAbilities(): void {
     registerTrigger('super_spies_moon_zero_three', 'onDeckInspected', superSpiesMoonZeroThreeOnDeckInspected);
 
     registerTitanSpecialValidator('penguins_emperor_penguin', () =>
-        '帝企鹅只能在你的回合开始时通过特殊能力进场');
+        '企鹅帝皇只能在你的回合开始时通过特殊能力进场');
     registerAbility('penguins_emperor_penguin', 'ongoingActivation', penguinsEmperorPenguinOngoingActivation);
     registerAbility('penguins_emperor_penguin', 'talent', penguinsEmperorPenguinTalent);
     registerTitanOngoingActivationValidator('penguins_emperor_penguin', ({ state, playerId, titan }) => {
         // 该持续主动能力会把牌库顶随从按「通常随从额度」打出（events.payload.consumesNormalLimit=true）。
         // 因此若本回合随从额度用尽，或牌库顶不是随从/合体随从，则应该直接判定为不可用，避免“看似可点但无效果”的交互。
-        if (titan.location.zone !== 'base') return '璇ユ嘲鍧﹀綋鍓嶄笉鍦ㄥ満';
+        if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         const player = state.players[playerId];
         if (!player) return '玩家不存在';
         if (player.minionsPlayed >= player.minionLimit) return '本回合随从额度已用完';
@@ -3431,7 +3431,7 @@ export function registerTitanAbilities(): void {
     registerTitanSpecialValidator('ignobles_the_hill_that_strolls', ({ state, playerId }) =>
         getHillOwnedMinionsControlledByOthers(state, playerId).length >= 2
             ? null
-            : '只有至少 2 个你拥有的随从正被其他玩家控制时，你才能打出漫游山丘巨人');
+            : '只有至少 2 个你拥有的随从正被其他玩家控制时，你才能打出漫游山岭巨人');
     registerTitanTalentValidator('ignobles_the_hill_that_strolls', ({ state, playerId, titan }) => {
         if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         const canGive = getHillGiveControlTargets(state, playerId).length > 0;
@@ -3589,7 +3589,7 @@ export function registerTitanAbilities(): void {
         if (titan.location.zone !== 'base') return '该泰坦当前不在场';
         return getOtherBaseOptions(state, titan.location.baseIndex).length > 0
             ? null
-            : '没有其他可移动到的基地';
+            : '没有可以移动到的其他基地';
     });
     registerTrigger('bear_cavalry_major_ursa', 'onTitanMoved', bearCavalryMajorUrsaOnTitanMoved, { optional: true });
     registerTitanSpecialValidator('bear_cavalry_major_ursa', ({ state, titan, baseIndex }) => {
@@ -3631,7 +3631,7 @@ export function registerTitanAbilities(): void {
         const hasTarget = state.bases.some(base =>
             base.minions.some(minion => minion.controller === playerId && (minion.powerCounters ?? 0) > 0),
         );
-        return hasTarget ? null : '你没有已有 +1 战力标记的己方随从';
+        return hasTarget ? null : '你没有已有 +1 战斗力标记的己方随从';
     });
     registerTrigger('vampires_ancient_lord', 'onPowerCounterChanged', vampireAncientLordOnPowerCounterChanged, {
         global: true,
@@ -5330,7 +5330,7 @@ export function registerTitanInteractionHandlers(): void {
         const interaction = createSimpleChoice(
             `titan_bear_cavalry_major_ursa_choose_base_${timestamp}`,
             playerId,
-            'Major Ursa：选择要将该随从移动到的基地',
+            '大熊座：选择要将该随从移动到的基地',
             buildBaseTargetOptions(baseOptions, state.core),
             { sourceId: 'titan_bear_cavalry_major_ursa_choose_base', targetType: 'base' },
         );
