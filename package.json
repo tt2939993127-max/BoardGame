@@ -1,7 +1,7 @@
 {
   "name": "boardgame-platform",
   "private": true,
-  "version": "0.5.33",
+  "version": "0.5.35",
   "type": "module",
   "engines": {
     "node": "24.1.0"
