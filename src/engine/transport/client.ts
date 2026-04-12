@@ -58,9 +58,12 @@ export class GameTransportClient {
     private _syncTimer: ReturnType<typeof setTimeout> | null = null;
     private _syncRetries = 0;
     private _healthCheckTimer: ReturnType<typeof setInterval> | null = null;
+    /** sendBatch 超时定时器映射表（batchId -> timer） */
+    private _batchTimeouts = new Map<string, ReturnType<typeof setTimeout>>();
     private static readonly SYNC_TIMEOUT_MS = 5000;
     private static readonly SYNC_MAX_RETRIES = 5;
     private static readonly HEALTH_CHECK_INTERVAL_MS = 30000; // 30秒检查一次
+    private static readonly BATCH_TIMEOUT_MS = 10000; // 10秒批次超时
 
     constructor(config: GameTransportClientConfig) {
         this.config = config;
@@ -131,12 +134,23 @@ export class GameTransportClient {
 
         socket.on('connect', () => {
             if (this._destroyed) return;
+            console.log('[GameTransportClient] Socket connected:', {
+                matchID: this.config.matchID,
+                playerID: this.config.playerID,
+                connectionState: this._connectionState,
+            });
             // 连接后立即发送 sync 请求
             this.sendSync();
         });
 
         socket.on('state:sync', (matchID, state, matchPlayers, randomMeta) => {
             if (this._destroyed || matchID !== this.config.matchID) return;
+            console.log('[GameTransportClient] Received state:sync:', {
+                matchID,
+                playerID: this.config.playerID,
+                hasState: !!state,
+                matchPlayersCount: matchPlayers.length,
+            });
             this.clearSyncTimer();
             this._syncRetries = 0;
             this._connectionState = 'connected';
@@ -262,22 +276,56 @@ export class GameTransportClient {
         onConfirmed?: (state: unknown) => void,
         onRejected?: (reason: string) => void,
     ): void {
-        if (!this.socket || this._destroyed) return;
-        // 检查连接状态：只有在完成 sync 握手后才能发送命令
-        if (this._connectionState !== 'connected') {
-            console.warn('[GameTransportClient] 连接未就绪，批量命令被拒绝', {
+        console.log('[GameTransportClient.sendBatch] Called:', {
+            batchId,
+            commandCount: commands.length,
+            commandTypes: commands.map(c => c.type),
+            hasSocket: !!this.socket,
+            destroyed: this._destroyed,
+            connectionState: this._connectionState,
+            socketConnected: this.socket?.connected,
+            isConnected: this.isConnected,
+            matchID: this.config.matchID,
+            playerID: this.config.playerID,
+            hasCredentials: !!this.config.credentials,
+        });
+        
+        if (!this.socket || this._destroyed) {
+            console.warn('[GameTransportClient.sendBatch] No socket or destroyed');
+            onRejected?.('no_socket');
+            return;
+        }
+        
+        // 检查连接状态：必须同时满足 connectionState === 'connected' 和 socket.connected === true
+        if (this._connectionState !== 'connected' || !this.socket.connected) {
+            console.warn('[GameTransportClient.sendBatch] 连接未就绪，批量命令被拒绝', {
                 batchId,
                 commandCount: commands.length,
                 connectionState: this._connectionState,
+                socketConnected: this.socket.connected,
+                isConnected: this.isConnected,
                 matchID: this.config.matchID,
+                playerID: this.config.playerID,
             });
             onRejected?.('not_connected');
             return;
         }
 
+        console.log('[GameTransportClient.sendBatch] 注册事件监听器:', {
+            batchId,
+            matchID: this.config.matchID,
+            playerID: this.config.playerID,
+        });
+
         // 注册一次性监听器
         const confirmHandler = (matchID: string, receivedBatchId: string, state: unknown) => {
             if (matchID !== this.config.matchID || receivedBatchId !== batchId) return;
+            console.log('[GameTransportClient.sendBatch] batch:confirmed 触发:', {
+                batchId,
+                matchID,
+                hasState: !!state,
+            });
+            this.clearBatchTimeout(batchId);
             this.socket?.off('batch:confirmed', confirmHandler);
             this.socket?.off('batch:rejected', rejectHandler);
             this.socket?.off('disconnect', disconnectHandler);
@@ -286,6 +334,12 @@ export class GameTransportClient {
 
         const rejectHandler = (matchID: string, receivedBatchId: string, reason: string) => {
             if (matchID !== this.config.matchID || receivedBatchId !== batchId) return;
+            console.log('[GameTransportClient.sendBatch] batch:rejected 触发:', {
+                batchId,
+                matchID,
+                reason,
+            });
+            this.clearBatchTimeout(batchId);
             this.socket?.off('batch:confirmed', confirmHandler);
             this.socket?.off('batch:rejected', rejectHandler);
             this.socket?.off('disconnect', disconnectHandler);
@@ -294,6 +348,11 @@ export class GameTransportClient {
 
         // socket 断开时清理监听器，避免永久泄漏
         const disconnectHandler = () => {
+            console.log('[GameTransportClient.sendBatch] disconnect 触发:', {
+                batchId,
+                matchID: this.config.matchID,
+            });
+            this.clearBatchTimeout(batchId);
             this.socket?.off('batch:confirmed', confirmHandler);
             this.socket?.off('batch:rejected', rejectHandler);
             onRejected?.('disconnected');
@@ -303,6 +362,28 @@ export class GameTransportClient {
         this.socket.on('batch:rejected', rejectHandler);
         this.socket.once('disconnect', disconnectHandler);
 
+        console.log('[GameTransportClient.sendBatch] 事件监听器已注册，准备发送 batch 事件:', {
+            batchId,
+            matchID: this.config.matchID,
+        });
+
+        // 启动超时定时器
+        const timeoutTimer = setTimeout(() => {
+            console.error('[GameTransportClient.sendBatch] 批次超时，未收到 batch:confirmed 或 batch:rejected:', {
+                batchId,
+                matchID: this.config.matchID,
+                playerID: this.config.playerID,
+                timeoutMs: GameTransportClient.BATCH_TIMEOUT_MS,
+            });
+            this._batchTimeouts.delete(batchId);
+            this.socket?.off('batch:confirmed', confirmHandler);
+            this.socket?.off('batch:rejected', rejectHandler);
+            this.socket?.off('disconnect', disconnectHandler);
+            onRejected?.('timeout');
+        }, GameTransportClient.BATCH_TIMEOUT_MS);
+
+        this._batchTimeouts.set(batchId, timeoutTimer);
+
         // 发送批次
         this.socket.emit(
             'batch',
@@ -311,6 +392,25 @@ export class GameTransportClient {
             commands,
             this.config.credentials,
         );
+
+        console.log('[GameTransportClient.sendBatch] batch 事件已发送:', {
+            batchId,
+            matchID: this.config.matchID,
+            commandCount: commands.length,
+            socketConnected: this.socket.connected,
+        });
+    }
+
+    /**
+     * 清理批次超时定时器
+     */
+    private clearBatchTimeout(batchId: string): void {
+        const timer = this._batchTimeouts.get(batchId);
+        if (timer) {
+            clearTimeout(timer);
+            this._batchTimeouts.delete(batchId);
+            console.log('[GameTransportClient] 批次超时定时器已清理:', { batchId });
+        }
     }
 
     /** 断开连接并清理资源 */
@@ -318,12 +418,24 @@ export class GameTransportClient {
         this._destroyed = true;
         this.clearSyncTimer();
         this.clearHealthCheck();
+        this.clearAllBatchTimeouts();
         if (this.socket) {
             this.socket.removeAllListeners();
             this.socket.disconnect();
             this.socket = null;
         }
         this._connectionState = 'disconnected';
+    }
+
+    /**
+     * 清理所有批次超时定时器
+     */
+    private clearAllBatchTimeouts(): void {
+        for (const [batchId, timer] of this._batchTimeouts.entries()) {
+            clearTimeout(timer);
+            console.log('[GameTransportClient] 批次超时定时器已清理（disconnect）:', { batchId });
+        }
+        this._batchTimeouts.clear();
     }
 
     /**
@@ -346,8 +458,26 @@ export class GameTransportClient {
 
     /** 发送 sync 请求并启动超时重试 */
     private sendSync(): void {
-        if (this._destroyed || !this.socket?.connected) return;
+        if (this._destroyed || !this.socket?.connected) {
+            console.log('[GameTransportClient.sendSync] Cannot send sync:', {
+                destroyed: this._destroyed,
+                hasSocket: !!this.socket,
+                socketConnected: this.socket?.connected,
+                matchID: this.config.matchID,
+                playerID: this.config.playerID,
+                connectionState: this._connectionState,
+            });
+            return;
+        }
         this.clearSyncTimer();
+        console.log('[GameTransportClient.sendSync] Sending sync request:', {
+            matchID: this.config.matchID,
+            playerID: this.config.playerID,
+            hasCredentials: !!this.config.credentials,
+            credentialsLength: this.config.credentials?.length,
+            socketConnected: this.socket.connected,
+            connectionState: this._connectionState,
+        });
         this.socket.emit(
             'sync',
             this.config.matchID,
@@ -359,10 +489,16 @@ export class GameTransportClient {
             if (this._destroyed || this._connectionState === 'connected') return;
             this._syncRetries += 1;
             if (this._syncRetries <= GameTransportClient.SYNC_MAX_RETRIES) {
-                console.warn(`[GameTransport] sync 超时，重试 ${this._syncRetries}/${GameTransportClient.SYNC_MAX_RETRIES}`);
+                console.warn(`[GameTransport] sync 超时，重试 ${this._syncRetries}/${GameTransportClient.SYNC_MAX_RETRIES}`, {
+                    matchID: this.config.matchID,
+                    playerID: this.config.playerID,
+                });
                 this.sendSync();
             } else {
-                console.error(`[GameTransport] sync 重试耗尽，matchID=${this.config.matchID}`);
+                console.error(`[GameTransport] sync 重试耗尽`, {
+                    matchID: this.config.matchID,
+                    playerID: this.config.playerID,
+                });
                 this.config.onError?.('sync_timeout');
             }
         }, GameTransportClient.SYNC_TIMEOUT_MS);

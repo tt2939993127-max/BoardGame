@@ -414,12 +414,42 @@ export class GameTransportServer {
             ) => {
                 if (!matchID || !batchId || !Array.isArray(commands)) return;
                 const info = this.socketIndex.get(socket.id);
-                if (!info || info.matchID !== matchID || !info.playerID) return;
+                if (!info || info.matchID !== matchID || !info.playerID) {
+                    logger.warn('[GameTransport] batch: socket not registered or playerID missing', {
+                        matchID,
+                        batchId,
+                        socketId: socket.id,
+                        hasInfo: Boolean(info),
+                        infoMatchID: info?.matchID,
+                        infoPlayerID: info?.playerID,
+                    });
+                    return;
+                }
+                logger.info('[GameTransport] batch: validating credentials', {
+                    matchID,
+                    batchId,
+                    playerID: info.playerID,
+                    socketId: socket.id,
+                    hasCredentials: Boolean(credentials),
+                    hasStoredCredentials: Boolean(info.credentials),
+                });
                 const authorized = await this.validateCommandAuth(matchID, info.playerID, info.credentials ?? credentials);
                 if (!authorized) {
+                    logger.warn('[GameTransport] batch: credentials validation failed', {
+                        matchID,
+                        batchId,
+                        playerID: info.playerID,
+                        socketId: socket.id,
+                    });
                     socket.emit('batch:rejected', matchID, batchId, 'unauthorized');
                     return;
                 }
+                logger.info('[GameTransport] batch: credentials validated, calling handleBatch', {
+                    matchID,
+                    batchId,
+                    playerID: info.playerID,
+                    socketId: socket.id,
+                });
                 await this.handleBatch(socket, matchID, info.playerID, batchId, commands);
             });
 
@@ -1038,12 +1068,28 @@ export class GameTransportServer {
         playerID: string | null,
         credentials?: string,
     ): Promise<void> {
+        logger.info('[GameTransport] handleSync: received sync request', {
+            matchID,
+            playerID,
+            socketId: socket.id,
+            hasCredentials: Boolean(credentials),
+        });
+
         // 加载或获取活跃对局
         let match = this.activeMatches.get(matchID);
         const reusedActiveMatch = Boolean(match);
         if (!match) {
+            logger.info('[GameTransport] handleSync: loading match from storage', {
+                matchID,
+                playerID,
+            });
             match = await this.loadMatch(matchID);
             if (!match) {
+                logger.warn('[GameTransport] handleSync: match not found', {
+                    matchID,
+                    playerID,
+                    socketId: socket.id,
+                });
                 socket.emit('error', matchID, 'match_not_found');
                 return;
             }
@@ -1056,7 +1102,19 @@ export class GameTransportServer {
                 ? await this.readFreshAuthMetadata(matchID, match.metadata) ?? match.metadata
                 : match.metadata;
             const ok = await this.validateCommandAuth(matchID, playerID, credentials, authMetadata);
+            logger.info('[GameTransport] handleSync: credentials validation result', {
+                matchID,
+                playerID,
+                socketId: socket.id,
+                authorized: ok,
+                hasStoredCredentials: Boolean(authMetadata.players[playerID]?.credentials),
+            });
             if (!ok) {
+                logger.warn('[GameTransport] handleSync: unauthorized', {
+                    matchID,
+                    playerID,
+                    socketId: socket.id,
+                });
                 socket.emit('error', matchID, 'unauthorized');
                 return;
             }
@@ -1070,20 +1128,41 @@ export class GameTransportServer {
 
         this.socketIndex.set(socket.id, { matchID, playerID, credentials });
         socket.join(`game:${matchID}`);
+        logger.info('[GameTransport] handleSync: socket registered', {
+            matchID,
+            playerID,
+            socketId: socket.id,
+            roomJoined: `game:${matchID}`,
+        });
 
         if (playerID === null) {
             match.spectatorSockets.add(socket.id);
+            logger.info('[GameTransport] handleSync: spectator socket added', {
+                matchID,
+                socketId: socket.id,
+                spectatorCount: match.spectatorSockets.size,
+            });
         } else {
             // 更新连接状态
             const conns = match.connections.get(playerID) ?? new Set();
             conns.add(socket.id);
             match.connections.set(playerID, conns);
+            logger.info('[GameTransport] handleSync: player socket added', {
+                matchID,
+                playerID,
+                socketId: socket.id,
+                connectionCount: conns.size,
+            });
 
             // 取消离线裁决定时器
             const timer = match.offlineTimers.get(playerID);
             if (timer) {
                 clearTimeout(timer);
                 match.offlineTimers.delete(playerID);
+                logger.info('[GameTransport] handleSync: offline timer cleared', {
+                    matchID,
+                    playerID,
+                });
             }
 
             // 更新 metadata 连接状态
@@ -1113,6 +1192,13 @@ export class GameTransportServer {
         socket.emit('state:sync', matchID, viewState, matchPlayers, {
             seed: match.randomSeed,
             cursor: match.getRandomCursor(),
+        });
+        logger.info('[GameTransport] handleSync: state:sync event sent', {
+            matchID,
+            playerID,
+            socketId: socket.id,
+            stateID: match.stateID,
+            randomCursor: match.getRandomCursor(),
         });
 
         // 写入缓存，确保后续走 diff 基准正确
@@ -1171,14 +1257,35 @@ export class GameTransportServer {
         batchId: string,
         commands: Array<{ type: string; payload: unknown }>,
     ): Promise<void> {
+        logger.info('[GameTransport] handleBatch: received batch request', {
+            matchID,
+            playerID,
+            batchId,
+            socketId: socket.id,
+            commandCount: commands.length,
+            commandTypes: commands.map((c) => c.type),
+        });
+
         const match = this.activeMatches.get(matchID);
         if (!match) {
+            logger.warn('[GameTransport] handleBatch: match not found', {
+                matchID,
+                playerID,
+                batchId,
+                socketId: socket.id,
+            });
             socket.emit('batch:rejected', matchID, batchId, 'match_not_found');
             return;
         }
 
         // 串行执行：如果正在执行，将整个 batch 任务排入队列（与 handleCommand 保持一致）
         if (match.executing) {
+            logger.info('[GameTransport] handleBatch: queuing batch (match executing)', {
+                matchID,
+                playerID,
+                batchId,
+                queueLength: match.commandQueue.length,
+            });
             await new Promise<void>((resolve) => {
                 match.commandQueue.push({
                     _batch: true,
@@ -1198,8 +1305,21 @@ export class GameTransportServer {
         try {
             // 批次内命令串行执行（抑制中间广播，避免客户端收到中间状态导致动画重播）
             for (const cmd of commands) {
+                logger.info('[GameTransport] handleBatch: executing command', {
+                    matchID,
+                    playerID,
+                    batchId,
+                    commandType: cmd.type,
+                });
                 const success = await this.executeCommandInternal(match, playerID, cmd.type, cmd.payload, { suppressBroadcast: true });
                 if (!success) {
+                    logger.warn('[GameTransport] handleBatch: command failed, rolling back', {
+                        matchID,
+                        playerID,
+                        batchId,
+                        commandType: cmd.type,
+                        snapshotStateID,
+                    });
                     // 命令失败 - 从内存快照恢复到批次开始前的状态
                     match.state = snapshotState;
                     match.stateID = snapshotStateID;
@@ -1212,7 +1332,24 @@ export class GameTransportServer {
                     };
                     await this.storage.setState(matchID, rollbackStored);
                     this.broadcastState(match);
-                    socket.emit('batch:rejected', matchID, batchId, 'command_failed');
+                    
+                    // 检查 socket 是否仍然连接
+                    if (!socket.connected) {
+                        logger.warn('[GameTransport] handleBatch: socket disconnected before batch:rejected', {
+                            matchID,
+                            playerID,
+                            batchId,
+                            socketId: socket.id,
+                        });
+                    } else {
+                        socket.emit('batch:rejected', matchID, batchId, 'command_failed');
+                        logger.info('[GameTransport] handleBatch: batch:rejected event sent', {
+                            matchID,
+                            playerID,
+                            batchId,
+                            reason: 'command_failed',
+                        });
+                    }
                     return;
                 }
             }
@@ -1221,7 +1358,24 @@ export class GameTransportServer {
             this.broadcastState(match);
             // batch:confirmed 是乐观更新的确认响应，客户端已通过本地预测消费了事件
             const authoritative = this.stripStateForTransport(match.state, { stripEventStream: true });
-            socket.emit('batch:confirmed', matchID, batchId, authoritative);
+            
+            // 检查 socket 是否仍然连接
+            if (!socket.connected) {
+                logger.warn('[GameTransport] handleBatch: socket disconnected before batch:confirmed', {
+                    matchID,
+                    playerID,
+                    batchId,
+                    socketId: socket.id,
+                });
+            } else {
+                socket.emit('batch:confirmed', matchID, batchId, authoritative);
+                logger.info('[GameTransport] handleBatch: batch:confirmed event sent', {
+                    matchID,
+                    playerID,
+                    batchId,
+                    stateID: match.stateID,
+                });
+            }
         } finally {
             await this.drainCommandQueue(match);
             match.executing = false;
@@ -1240,13 +1394,34 @@ export class GameTransportServer {
         commands: Array<{ type: string; payload: unknown }>,
     ): Promise<void> {
         const matchID = match.matchID;
+        logger.info('[GameTransport] executeBatchInternal: starting batch execution', {
+            matchID,
+            playerID,
+            batchId,
+            commandCount: commands.length,
+            commandTypes: commands.map((c) => c.type),
+        });
+
         const snapshotState = match.state;
         const snapshotStateID = match.stateID;
 
         // 批次内命令串行执行（抑制中间广播，避免客户端收到中间状态导致动画重播）
         for (const cmd of commands) {
+            logger.info('[GameTransport] executeBatchInternal: executing command', {
+                matchID,
+                playerID,
+                batchId,
+                commandType: cmd.type,
+            });
             const success = await this.executeCommandInternal(match, playerID, cmd.type, cmd.payload, { suppressBroadcast: true });
             if (!success) {
+                logger.warn('[GameTransport] executeBatchInternal: command failed, rolling back', {
+                    matchID,
+                    playerID,
+                    batchId,
+                    commandType: cmd.type,
+                    snapshotStateID,
+                });
                 match.state = snapshotState;
                 match.stateID = snapshotStateID;
                 const rollbackStored = {
@@ -1257,7 +1432,24 @@ export class GameTransportServer {
                 };
                 await this.storage.setState(matchID, rollbackStored);
                 this.broadcastState(match);
-                socket.emit('batch:rejected', matchID, batchId, 'command_failed');
+                
+                // 检查 socket 是否仍然连接
+                if (!socket.connected) {
+                    logger.warn('[GameTransport] executeBatchInternal: socket disconnected before batch:rejected', {
+                        matchID,
+                        playerID,
+                        batchId,
+                        socketId: socket.id,
+                    });
+                } else {
+                    socket.emit('batch:rejected', matchID, batchId, 'command_failed');
+                    logger.info('[GameTransport] executeBatchInternal: batch:rejected event sent', {
+                        matchID,
+                        playerID,
+                        batchId,
+                        reason: 'command_failed',
+                    });
+                }
                 return;
             }
         }
@@ -1265,7 +1457,24 @@ export class GameTransportServer {
         // 批次成功 - 广播最终状态给所有玩家，然后发送确认给发送者
         this.broadcastState(match);
         const authoritative = this.stripStateForTransport(match.state, { stripEventStream: true });
-        socket.emit('batch:confirmed', matchID, batchId, authoritative);
+        
+        // 检查 socket 是否仍然连接
+        if (!socket.connected) {
+            logger.warn('[GameTransport] executeBatchInternal: socket disconnected before batch:confirmed', {
+                matchID,
+                playerID,
+                batchId,
+                socketId: socket.id,
+            });
+        } else {
+            socket.emit('batch:confirmed', matchID, batchId, authoritative);
+            logger.info('[GameTransport] executeBatchInternal: batch:confirmed event sent', {
+                matchID,
+                playerID,
+                batchId,
+                stateID: match.stateID,
+            });
+        }
     }
 
     /**

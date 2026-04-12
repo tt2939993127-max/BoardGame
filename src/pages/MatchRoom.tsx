@@ -225,10 +225,28 @@ const OnlineAiSeatBridge = ({
                 .map(([playerId]) => playerId),
         );
 
+        console.log('=== KIRO DEBUG: AI SEAT CLIENT MANAGEMENT ===');
+        console.log('[OnlineAiSeatBridge] Managing AI seat clients:', {
+            timestamp: new Date().toISOString(),
+            matchId,
+            nextClientKeys: Array.from(nextClientKeys),
+            currentClientKeys: Object.keys(clientsRef.current),
+            seatControllers: Object.fromEntries(
+                Object.entries(seatControllers).map(([pid, ctrl]) => [pid, ctrl.type])
+            ),
+            hasSeatCredentials: Object.fromEntries(
+                Object.entries(seatCredentials).map(([pid, cred]) => [pid, !!cred])
+            ),
+        });
+
         for (const [playerId, client] of Object.entries(clientsRef.current)) {
             if (nextClientKeys.has(playerId)) {
                 continue;
             }
+            console.log('[OnlineAiSeatBridge] Disconnecting removed AI seat client:', {
+                playerId,
+                matchId,
+            });
             client.disconnect();
             delete clientsRef.current[playerId];
         }
@@ -237,15 +255,40 @@ const OnlineAiSeatBridge = ({
             if (clientsRef.current[playerId]) {
                 continue;
             }
+            const credential = seatCredentials[playerId];
+            console.log('[OnlineAiSeatBridge] Creating new AI seat client:', {
+                timestamp: new Date().toISOString(),
+                playerId,
+                matchId,
+                server,
+                hasCredential: !!credential,
+                credentialLength: credential?.length ?? 0,
+            });
             const client = new GameTransportClient({
                 server,
                 matchID: matchId,
                 playerID: playerId,
-                credentials: seatCredentials[playerId],
+                credentials: credential,
                 onStateUpdate: () => {
+                    console.log('[OnlineAiSeatBridge] AI seat client state updated:', {
+                        timestamp: new Date().toISOString(),
+                        playerId,
+                        matchId,
+                    });
                     setAiRetryVersion((version) => version + 1);
                 },
                 onConnectionChange: () => {
+                    const connectionState = client.connectionState;
+                    const isConnected = client.isConnected;
+                    const socketConnected = client.getSocket()?.connected;
+                    console.log('[OnlineAiSeatBridge] AI seat client connection changed:', {
+                        timestamp: new Date().toISOString(),
+                        playerId,
+                        matchId,
+                        connectionState,
+                        isConnected,
+                        socketConnected,
+                    });
                     setConnectionVersion((version) => version + 1);
                 },
             });
@@ -263,6 +306,16 @@ const OnlineAiSeatBridge = ({
 
     useEffect(() => {
         const hasAiSeat = Object.values(seatControllers).some((controller) => controller.type !== 'human');
+        const timestamp = new Date().toISOString();
+        console.log('=== KIRO DEBUG: AI TURN EXECUTION TRIGGER ===');
+        console.log('[OnlineAiSeatBridge] useEffect triggered:', {
+            timestamp,
+            hasAiSeat,
+            hasState: !!state,
+            aiRetryVersion,
+            connectionVersion,
+            lastAiAttemptKey: lastAiAttemptKeyRef.current,
+        });
         if (!hasAiSeat || !state) {
             lastAiAttemptKeyRef.current = null;
             return;
@@ -272,6 +325,7 @@ const OnlineAiSeatBridge = ({
         let delayTimer: ReturnType<typeof setTimeout> | null = null;
 
         const runAiTurn = async () => {
+            console.log('[OnlineAiSeatBridge] runAiTurn started:', { timestamp: new Date().toISOString() });
             const startedAt = Date.now();
             const resolution = await resolveNextAiAction({
                 engineConfig,
@@ -287,20 +341,57 @@ const OnlineAiSeatBridge = ({
                 },
             });
 
-            if (cancelled) return;
+            if (cancelled) {
+                console.log('[OnlineAiSeatBridge] Cancelled before resolution:', { timestamp: new Date().toISOString() });
+                return;
+            }
 
             if (!resolution) {
+                console.log('[OnlineAiSeatBridge] No resolution found:', { timestamp: new Date().toISOString() });
                 lastAiAttemptKeyRef.current = null;
                 return;
             }
 
+            console.log('[OnlineAiSeatBridge] Resolution found:', {
+                timestamp: new Date().toISOString(),
+                playerId: resolution.playerId,
+                actionId: resolution.action.actionId,
+                attemptKey: resolution.attemptKey,
+                commandCount: resolution.action.commands.length,
+                commandTypes: resolution.action.commands.map(c => c.type),
+            });
+
             if (lastAiAttemptKeyRef.current === resolution.attemptKey) {
+                console.log('[OnlineAiSeatBridge] Duplicate attempt key, skipping:', {
+                    timestamp: new Date().toISOString(),
+                    attemptKey: resolution.attemptKey,
+                });
                 return;
             }
 
             const controller = seatControllers[resolution.playerId];
             const client = clientsRef.current[resolution.playerId];
+            console.log('=== KIRO DEBUG: CLIENT STATUS CHECK ===');
+            console.log('[OnlineAiSeatBridge] Checking client status:', {
+                timestamp: new Date().toISOString(),
+                playerId: resolution.playerId,
+                hasController: !!controller,
+                controllerType: controller?.type,
+                hasClient: !!client,
+                isConnected: client?.isConnected,
+                connectionState: client?.connectionState,
+                socketConnected: client?.getSocket()?.connected,
+                socketId: client?.getSocket()?.id,
+            });
             if (!controller || controller.type === 'human' || !client?.isConnected) {
+                console.log('[OnlineAiSeatBridge] Invalid controller or client not connected - skipping:', {
+                    timestamp: new Date().toISOString(),
+                    playerId: resolution.playerId,
+                    hasController: !!controller,
+                    controllerType: controller?.type,
+                    hasClient: !!client,
+                    isConnected: client?.isConnected,
+                });
                 return;
             }
 
@@ -310,6 +401,11 @@ const OnlineAiSeatBridge = ({
             );
 
             if (remainingDelayMs > 0) {
+                console.log('[OnlineAiSeatBridge] Waiting for minimum delay:', {
+                    timestamp: new Date().toISOString(),
+                    remainingDelayMs,
+                    playerId: resolution.playerId,
+                });
                 await new Promise<void>((resolve) => {
                     delayTimer = setTimeout(() => {
                         delayTimer = null;
@@ -319,14 +415,29 @@ const OnlineAiSeatBridge = ({
             }
 
             if (cancelled || !client.isConnected) {
+                console.log('[OnlineAiSeatBridge] Cancelled or disconnected after delay:', {
+                    timestamp: new Date().toISOString(),
+                    cancelled,
+                    isConnected: client?.isConnected,
+                    playerId: resolution.playerId,
+                });
                 return;
             }
 
+            console.log('[OnlineAiSeatBridge] Submitting AI resolution:', {
+                timestamp: new Date().toISOString(),
+                playerId: resolution.playerId,
+                attemptKey: resolution.attemptKey,
+            });
             submitOnlineAiResolution({
                 client,
                 resolution,
                 lastAiAttemptKeyRef,
                 scheduleRetry: () => {
+                    console.log('[OnlineAiSeatBridge] Scheduling retry:', {
+                        timestamp: new Date().toISOString(),
+                        playerId: resolution.playerId,
+                    });
                     setAiRetryVersion((version) => version + 1);
                 },
             });
