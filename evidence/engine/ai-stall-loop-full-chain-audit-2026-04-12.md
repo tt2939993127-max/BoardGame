@@ -149,3 +149,52 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 - DiceThrone response-window 重触发专项：`evidence/dicethrone/dicethrone-response-window-retrigger-audit-2026-04-12.md`
 - Smash Up AI 强口径审计：`evidence/smashup-ai-interaction-audit-2026-04-11.md`
 - Summoner Wars watchdog 链审计：`evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`
+
+## 补充专项：AI action-loop detector 覆盖面审计（2026-04-12）
+
+### 审计入口与命中维度
+- 入口文件：`src/engine/transport/onlineAiRecovery.ts`（`AI_LOOP_PHASES` / `extractRecentActionKinds` / `detectAiActionLoop`）
+- 依赖链路：`src/engine/systems/ActionLogSystem.ts` → `src/games/dicethrone/game.ts`（`ACTION_LOG_ALLOWLIST` + formatter）→ `src/games/dicethrone/ai.ts`（AI legalActions）
+- 诊断上报参考：`src/engine/transport/server.ts`（`buildOnlineAiRecoveryActionLog` 仅截尾部 5 条）
+- 本节命中维度：**D8（时序正确）/ D9（幂等与重入）/ D39（流程控制标志清除完整性）/ D40（后处理循环事件去重完整性）/ D41（系统职责重叠检测）/ D45（Pipeline 多阶段调用去重）**
+- 本轮结论来自静态审计；**未跑测试、未改源码**。
+
+### detector 当前真实合同（不是“通用循环检测器”）
+1. **只在 phase 白名单内工作**：`main1/main2/discard/income/upkeep/playCards/scoreBases/draw/offensiveRoll/targetingRoll/defensiveRoll/summon/move/build/attack/magic/draw` 之外的循环，当前 detector 直接忽略。
+2. **只读 `sys.actionLog.entries[].kind`**：不读取命令历史、不读取撤回栈、不读取 eventStream，也不直接看 `legalActions` 序列。任何没进 ActionLog 的动作，detector 天然看不见。
+3. **只取当前 AI 自己最近 6 条 action kind**：`actorId !== playerId` 的动作被过滤；窗口外历史全部丢失。
+4. **只识别两种模式**：
+   - `repeat`：最近样本全部同一种 kind；
+   - `alternating`：最近样本只有 2 种 kind，且必须严格 `A/B/A/B/...`，相邻不能相同，并且两种都至少出现 2 次。
+5. **命中后的 recovery 也只有单一动作**：当前 `reason='action-loop'` 时，恢复动作是提交 `ADVANCE_PHASE`，它不是“回滚到稳定态”，只是尝试把流程往后推。
+
+### 明确漏检面（本轮强口径）
+1. **三步及以上循环漏检**  
+   典型形态：`A → B → C → A → B → C`。当前 `kinds.length === 3` 时直接不命中。
+2. **带噪音的双动作循环漏检**  
+   典型形态：`A → B → A → A → B`、`A → B → pass → A → B`。只要不是严格交替，相邻出现一次重复或插入噪音，当前 alternating 判定就失效。
+3. **长窗口循环漏检**  
+   真实循环如果节拍超过最近 6 条，或中间混入其它可记录动作，样本窗口会把闭环截断，导致 detector 看不出“重复结构”。
+4. **ActionLog 缺项导致的完全失明**  
+   若循环里的关键动作没有被 ActionLog 接纳，detector 看到的只是残缺序列，甚至是空序列；这类场景不是“误判”，而是**根本不在 detector 视野内**。
+5. **推进型兜底无法证明根因已消失**  
+   即使 detector 命中并成功执行 `ADVANCE_PHASE`，也只代表阶段被推进，不代表造成循环的状态源、重入触发点或重复响应源头已经消失；这对应 D8/D9/D39 风险，而不是单纯“多点一次结束回合”能彻底解决。
+
+### DiceThrone 专项：经济动作循环为什么最容易漏
+1. **当前 `ACTION_LOG_ALLOWLIST` 不包含 `SELL_CARD` / `DISCARD_CARD` / `UNDO_SELL_CARD`**  
+   `src/games/dicethrone/game.ts` 顶部 ActionLog 白名单目前只允许 `PLAY_CARD`、`PLAY_UPGRADE_CARD`、`ADVANCE_PHASE`、`SELECT_ABILITY`、`USE_TOKEN`、`SKIP_TOKEN_RESPONSE`、`USE_PURIFY`、`PAY_TO_REMOVE_KNOCKDOWN`、`USE_PASSIVE_ABILITY`、`CONFIRM_ROLL`、`SYS_INTERACTION_RESPOND`。  
+   这意味着：**卖牌、弃牌、撤回卖牌本身即使真的发生，action-loop detector 也大概率完全看不到。**
+2. **formatter 有 `SELL_CARD` 分支，但 allowlist 没放行，属于“死接线”**  
+   `formatDiceThroneActionEntry()` 已实现 `SELL_CARD` 文案与 `kind='SELL_CARD'` 产出，但被 allowlist 前置门禁挡住；静态上看，这是一个“格式化器支持了，日志入口没开”的断链点。
+3. **AI 侧已显式移除 `UNDO_SELL_CARD` 生成，只是上游规避，不是 detector 完整覆盖**  
+   `src/games/dicethrone/ai.ts` 已明确写明：AI 不再生成 `UNDO_SELL_CARD`，目的是避免 `sell ↔ undo-sell` 卡死。这个改动降低了当前主路径风险，但**不等于 detector 已经有能力审计/识别该类循环**；只是 AI legalActions 先把其中一种循环源头压掉了。
+4. **“弃牌↔撤回”在当前静态代码里更应理解为经济动作振荡，而不是存在 `UNDO_DISCARD_CARD`**  
+   目前 DiceThrone 命令面里没有 `UNDO_DISCARD_CARD`。因此用户观察到的“弃牌↔撤回”更可能是：`DISCARD_CARD / SELL_CARD / UNDO_SELL_CARD / ADVANCE_PHASE` 之间的振荡组合，或“卖牌后撤回、再重新评估弃牌/推进”的往返，而不是专门的“撤回弃牌”命令。
+5. **结论：DiceThrone 最危险的盲区不是 detector 判错，而是 detector 根本无数据可判**  
+   尤其是“弃牌↔卖牌”“卖牌↔撤回卖牌”“弃牌/卖牌/推进交替震荡”这类经济动作循环，当前 watchdog 的 action-loop detector 不能被视为权威兜底。
+
+### 对当前 watchdog 口径的修订结论
+- `detectAiActionLoop` 只能算**有限覆盖的兜底信号**，不能算“AI 动作循环检测已完成”。
+- 对 DiceThrone 来说，当前最大漏检面就是 **ActionLog 未覆盖的经济动作循环**；用户此前提到的“弃牌↔撤回、卖牌↔撤回”类卡死，静态审计上完全成立为高风险盲区。
+- `buildOnlineAiRecoveryActionLog()` 上报给反馈接口的也只是尾部 5 条摘要，因此**线上反馈包本身也不能当作完整循环轨迹**；它更适合辅助定位，不足以证明“没有发生动作循环”。
+- 若后续要把“AI 不允许卡死”做成真正强口径，动作循环检测不能再只绑在 ActionLog allowlist 上，也不能只识别 repeat / 严格 alternating 两种模式；否则它仍然只是“部分 case 能挡住”的有限兜底。

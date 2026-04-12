@@ -865,8 +865,10 @@ function collectCommands(files, baseRef, affectsTypecheck) {
     }
   } else {
     if (hasAny(files, affectsCoreArea)) {
-      CORE_VITEST_TARGETS.forEach((target, index) => {
-        const label = CORE_VITEST_TARGETS.length === 1 ? 'Core tests' : `Core tests (${index + 1}/${CORE_VITEST_TARGETS.length})`;
+      const coreCoverage = collectTrackedTestCoverage(CORE_VITEST_TARGETS);
+      const coreTargetsWithTests = CORE_VITEST_TARGETS.filter((target) => coreCoverage.coveredScopes.has(target));
+      coreTargetsWithTests.forEach((target, index) => {
+        const label = coreTargetsWithTests.length === 1 ? 'Core tests' : `Core tests (${index + 1}/${coreTargetsWithTests.length})`;
         commands.push(...createVitestCommands({
           label,
           reason: '核心框架/引擎区域改动，拆分执行以降低 Windows OOM 风险',
