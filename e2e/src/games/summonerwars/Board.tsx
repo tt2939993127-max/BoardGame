@@ -632,12 +632,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const handleConfirmAnnihilateTargets = useCallback(() => {
     if (!interaction.annihilateMode || interaction.annihilateMode.selectedTargets.length === 0) return;
     if (swInteraction?.type === 'annihilate_select_targets') {
-      const optionIds = interaction.annihilateMode.selectedTargets.map(
-        (pos) => `pos:${pos.row},${pos.col}`,
-      );
+      const optionIds = interaction.annihilateMode.selectedTargets
+        .map((pos) => findInteractionOptionId((option) => {
+          const value = option.value as { action?: string; targetPosition?: CellCoord } | undefined;
+          return value?.action === 'annihilate_target'
+            && value.targetPosition?.row === pos.row
+            && value.targetPosition?.col === pos.col;
+        }))
+        .filter((id): id is string => !!id);
+      if (optionIds.length !== interaction.annihilateMode.selectedTargets.length) return;
       respondInteractionOption(null, optionIds);
     }
-  }, [interaction, respondInteractionOption, swInteraction]);
+  }, [findInteractionOptionId, interaction, respondInteractionOption, swInteraction]);
   // 除灭：跳过当前目标的伤害分配（描述中"你可以"表示可选）
   const handleSkipAnnihilateDamage = useCallback(() => {
     if (swInteraction?.type === 'annihilate_select_damage') {

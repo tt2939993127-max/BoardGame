@@ -125,7 +125,15 @@ export function useEventCardModes({
   }, [swInteraction]);
 
   const respondPositionOption = useCallback((pos: CellCoord): boolean => {
-    const optionId = findInteractionOptionId((option) => option.id === `pos:${pos.row},${pos.col}`);
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as {
+        targetPosition?: CellCoord;
+        summonPosition?: CellCoord;
+        position?: CellCoord;
+      } | undefined;
+      const target = value?.targetPosition ?? value?.summonPosition ?? value?.position;
+      return !!target && target.row === pos.row && target.col === pos.col;
+    });
     if (!optionId) return false;
     respondInteractionOption(optionId);
     return true;

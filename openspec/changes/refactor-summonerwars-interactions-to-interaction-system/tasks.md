@@ -3,6 +3,7 @@
 ## 1. Spec & Design
 - [x] 明确迁移范围与交互映射（见 design.md）
 - [x] 补齐 summonerwars-core 规范差异（spec delta）
+- [x] Phase B（其余本地 UI mode 全量迁移）本轮暂缓，按用户要求不做
 
 ## 2. Domain/Interaction
 - [x] 为 SUMMON_FROM_DISCARD_REQUESTED / GRAB_FOLLOW_REQUESTED / SOUL_TRANSFER_REQUESTED / MIND_CAPTURE_REQUESTED / ice_shards_damage / feed_beast_check 建立 InteractionSystem 交互
