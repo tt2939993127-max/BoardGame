@@ -418,21 +418,6 @@ export function useGameAudio<G, Ctx = unknown, Meta extends Record<string, unkno
                 config,
             );
             
-            // 临时调试：记录 ATTACK_INITIATED 事件的音效解析
-            if (gameId === 'dicethrone' && event.type === 'ATTACK_INITIATED') {
-                console.log('[Audio Debug] ATTACK_INITIATED feedback resolution:', {
-                    eventType: event.type,
-                    resolvedKey: key,
-                    payload: event.payload,
-                });
-                console.log('[Audio Debug] ATTACK_INITIATED - About to check playedKeys:', {
-                    key,
-                    hasKey: playedKeys.has(key),
-                    playedKeysSize: playedKeys.size,
-                    playedKeysArray: Array.from(playedKeys),
-                });
-            }
-            
             if (!key) continue;
             // 立即播放（去重）
             if (!playedKeys.has(key)) {
