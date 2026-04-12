@@ -52,7 +52,7 @@ import { DiscardPileOverlay } from './ui/DiscardPileOverlay';
 import { FactionSelection } from './ui/FactionSelectionAdapter';
 import type { FactionId } from './domain/types';
 import { BOARD_ROWS, BOARD_COLS } from './config/board';
-import { MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN } from './domain/helpers';
+import { MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN, findUnitPositionByInstanceId } from './domain/helpers';
 // 提取的子模块
 import { CardSprite } from './ui/CardSprite';
 import { getUnitSpriteConfig, getStructureSpriteConfig, getEventSpriteConfig } from './ui/spriteHelpers';
@@ -413,11 +413,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     dispatch(INTERACTION_COMMANDS.RESPOND, { interactionId: swInteraction.id, optionId });
   }, [dispatch, swInteraction]);
 
-  const cancelInteraction = useCallback(() => {
-    if (!swInteraction) return;
-    dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
-  }, [dispatch, swInteraction]);
-
   const soulTransferMode = useMemo(() => {
     if (!swInteraction || swInteraction.type !== 'soul_transfer') return null;
     const meta = swInteraction.meta as { sourceUnitId?: string; sourcePosition?: CellCoord; victimPosition?: CellCoord };
@@ -447,6 +442,19 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       hits: meta.hits,
     };
   }, [swInteraction]);
+
+  const systemIceShardsMode = useMemo(() => {
+    if (!swInteraction || swInteraction.type !== 'ice_shards') return null;
+    const meta = swInteraction.meta as { sourceUnitId?: string };
+    if (!meta.sourceUnitId) return null;
+    const pos = findUnitPositionByInstanceId(core, meta.sourceUnitId);
+    const unit = pos ? core.board[pos.row]?.[pos.col]?.unit : null;
+    return {
+      sourceBoosts: unit?.boosts ?? 0,
+    };
+  }, [core, swInteraction]);
+
+  const systemFeedBeastMode = !!swInteraction && swInteraction.type === 'feed_beast';
 
   const noopSetGrabFollowMode = useCallback(() => {}, []);
   const noopSetMindCaptureMode = useCallback(() => {}, []);
@@ -593,8 +601,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // StatusBanners 回调
   const handleCancelAbility = useCallback(() => {
-    // 喂养巨食兽是必选：不可跳过
-    if (abilityMode?.abilityId === 'feed_beast') {
+    if (swInteraction?.type === 'ice_shards') {
+      const optionId = findInteractionOptionId((option) => {
+        const value = option.value as { action?: string; skip?: boolean } | undefined;
+        return value?.action === 'ice_shards' && value.skip === true;
+      });
+      respondInteractionOption(optionId);
       return;
     }
     // 寒冰冲撞推拉步骤跳过：仍然发送命令（造成伤害但不推拉）
@@ -608,14 +620,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         _noSnapshot: true,
       });
     }
-    // ice_shards 跳过时需要 dispatch ADVANCE_PHASE
-    // 让 FlowSystem 继续推进阶段（此时 flowHalted=true，onPhaseExit 不会再次 halt）
-    const isPhaseEndAbility = abilityMode?.abilityId === 'ice_shards';
     setAbilityMode(null);
-    if (isPhaseEndAbility) {
-      dispatch(FLOW_COMMANDS.ADVANCE_PHASE, {});
-    }
-  }, [setAbilityMode, abilityMode, dispatch]);
+  }, [abilityMode, dispatch, findInteractionOptionId, respondInteractionOption, setAbilityMode, swInteraction]);
   const handleCancelBeforeAttack = useCallback(() => interaction.handleCancelBeforeAttack(), [interaction]);
   const handleCancelBloodSummon = useCallback(() => {
     interaction.setBloodSummonMode(null);
@@ -661,16 +667,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     }
   }, [interaction, dispatch]);
   const handleConfirmSoulTransfer = useCallback(() => {
-    if (!soulTransferMode) return;
-    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'soul_transfer',
-      sourceUnitId: soulTransferMode.sourceUnitId,
-      targetPosition: soulTransferMode.victimPosition,
-      _noSnapshot: true,
+    if (!swInteraction || swInteraction.type !== 'soul_transfer') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { action?: string } | undefined;
+      return value?.action === 'soul_transfer';
     });
-    setSoulTransferMode(null);
-  }, [soulTransferMode, dispatch, setSoulTransferMode]);
-  const handleSkipSoulTransfer = useCallback(() => setSoulTransferMode(null), [setSoulTransferMode]);
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
+  const handleSkipSoulTransfer = useCallback(() => {
+    if (!swInteraction || swInteraction.type !== 'soul_transfer') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { skip?: boolean } | undefined;
+      return value?.skip === true;
+    });
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   const handleSkipFuneralPyre = useCallback(() => {
     if (!interaction.funeralPyreMode) return;
     dispatch(SW_COMMANDS.FUNERAL_PYRE_HEAL, {
@@ -720,8 +731,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
 
   // 心灵捕获 + 攻击后技能回调
   const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
-    interaction.handleConfirmMindCapture(choice);
-  }, [interaction]);
+    if (!swInteraction || swInteraction.type !== 'mind_capture') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { action?: string; choice?: string } | undefined;
+      return value?.action === 'mind_capture' && value.choice === choice;
+    });
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   const handleCancelAfterAttackAbility = useCallback(() => setAfterAttackAbilityMode(null), [setAfterAttackAbilityMode]);
 
   // 连续射击确认/取消
@@ -744,25 +760,22 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   }, [abilityMode, dispatch, setAbilityMode]);
   // 寒冰碎屑确认回调
   const handleConfirmIceShards = useCallback(() => {
-    if (!abilityMode || abilityMode.abilityId !== 'ice_shards') return;
-    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'ice_shards',
-      sourceUnitId: abilityMode.sourceUnitId,
-      _noSnapshot: true,
+    if (!swInteraction || swInteraction.type !== 'ice_shards') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { action?: string; skip?: boolean } | undefined;
+      return value?.action === 'ice_shards' && value.skip !== true;
     });
-    setAbilityMode(null);
-  }, [abilityMode, dispatch, setAbilityMode]);
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   // 喂养巨食兽自毁回调
   const handleConfirmFeedBeastSelfDestroy = useCallback(() => {
-    if (!abilityMode || abilityMode.abilityId !== 'feed_beast') return;
-    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'feed_beast',
-      sourceUnitId: abilityMode.sourceUnitId,
-      choice: 'self_destroy',
-      _noSnapshot: true,
+    if (!swInteraction || swInteraction.type !== 'feed_beast') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { action?: string; choice?: string } | undefined;
+      return value?.action === 'feed_beast' && value.choice === 'self_destroy';
     });
-    setAbilityMode(null);
-  }, [abilityMode, dispatch, setAbilityMode]);
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   const handleConfirmTelekinesis = useCallback((_direction?: 'push' | 'pull', _axis?: 'row' | 'col') => {
     // 念力已改为棋盘点击终点模式，此回调为空实现
     interaction.handleConfirmTelekinesis();
@@ -1116,6 +1129,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     afterAttackAbilityMode={afterAttackAbilityMode}
                     telekinesisTargetMode={interaction.telekinesisTargetMode}
                     magicEventChoiceMode={interaction.magicEventChoiceMode}
+                    systemIceShardsMode={systemIceShardsMode}
+                    systemFeedBeastMode={systemFeedBeastMode}
                     onCancelAbility={handleCancelAbility}
                     onConfirmBeforeAttackCards={interaction.handleConfirmBeforeAttackCards}
                     onConfirmBloodRune={handleConfirmBloodRune}
