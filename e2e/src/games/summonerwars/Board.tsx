@@ -80,39 +80,11 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
 const SUMMONERWARS_BOARD_REFERENCE_WIDTH = 1280;
-const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1920;
-const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT = 1080;
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
 ]);
-
-const resolveSummonerWarsShellMetrics = (viewport: { width: number; height: number }) => {
-  const safeWidth = Number.isFinite(viewport.width) && viewport.width > 0
-    ? viewport.width
-    : SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH;
-  const safeHeight = Number.isFinite(viewport.height) && viewport.height > 0
-    ? viewport.height
-    : SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT;
-  const widthScale = safeWidth / SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH;
-  const heightScale = safeHeight / SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT;
-  const scale = Math.min(widthScale, heightScale);
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  const inverseScale = 1 / safeScale;
-  const logicalHeight = safeHeight / safeScale;
-  const inlineUnit = SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH / 100;
-  const blockUnit = logicalHeight / 100;
-
-  return {
-    designWidth: SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH,
-    scale: safeScale,
-    inverseScale,
-    logicalHeight,
-    inlineUnit,
-    blockUnit,
-  };
-};
 
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
@@ -125,8 +97,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
   const viewport = useRuntimeViewport();
-  const isLandscapeRuntimeViewport = viewport.width > viewport.height;
-  const isPhoneLandscapeViewport = isMobileViewport && isLandscapeRuntimeViewport;
   const viewportSafeWidth = useMemo(() => {
     const safeWidth = viewport.width - viewport.safeArea.left - viewport.safeArea.right;
     return safeWidth > 0 ? safeWidth : viewport.width;
@@ -156,32 +126,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
   const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    if (!isPhoneLandscapeViewport || viewport.width <= 0 || viewport.height <= 0) {
-      return;
-    }
-
-    const metrics = resolveSummonerWarsShellMetrics({
-      width: viewport.width,
-      height: viewport.height,
-    });
-    const rootStyle = document.documentElement.style;
-    rootStyle.setProperty('--mobile-board-shell-design-width', `${metrics.designWidth}px`);
-    rootStyle.setProperty('--mobile-board-shell-scale', metrics.scale.toFixed(6));
-    rootStyle.setProperty('--mobile-board-shell-inverse-scale', metrics.inverseScale.toFixed(6));
-    rootStyle.setProperty('--mobile-board-shell-logical-height', `${metrics.logicalHeight.toFixed(3)}px`);
-    rootStyle.setProperty('--mobile-board-shell-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
-    rootStyle.setProperty('--mobile-board-shell-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
-    rootStyle.setProperty('--mobile-layout-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
-    rootStyle.setProperty('--mobile-layout-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
-    const scaledWidth = metrics.designWidth * metrics.scale;
-    const offsetX = Math.max(0, (viewport.width - scaledWidth) / 2);
-    rootStyle.setProperty('--mobile-board-shell-offset-x', `${offsetX.toFixed(3)}px`);
-    rootStyle.setProperty('--mobile-board-shell-offset-y', '0px');
-  }, [isPhoneLandscapeViewport, viewport.height, viewport.width]);
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
