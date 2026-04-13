@@ -589,7 +589,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           const card = player.hand.find((c) => c.id === payload.cardId);
           if (!card || card.cardType !== 'event') continue;
           const baseId = getBaseCardId(card.id);
-          const interaction = INTERACTIVE_EVENT_BASE_IDS.has(baseId);
+          const hasInteraction = INTERACTIVE_EVENT_BASE_IDS.has(baseId);
           const options: PromptOption<SwInteractionValue>[] = [
             {
               id: 'play',
@@ -616,7 +616,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
               type: 'magic_event_choice',
               cardId: payload.cardId,
               baseId,
-              interaction,
+              interaction: hasInteraction,
             } satisfies SwInteractionMeta,
           };
           newState = queueInteraction(newState, interaction);

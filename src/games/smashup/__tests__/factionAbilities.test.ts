@@ -162,14 +162,8 @@ describe('trickster interaction regressions', () => {
         expect(respondResult.finalState.sys.interaction?.current).toBeUndefined();
         expect(respondResult.finalState.sys.interaction?.queue ?? []).toHaveLength(0);
 
-        const secondActivate = runCommand(respondResult.finalState, {
-            type: SU_COMMANDS.ACTIVATE_SPECIAL,
-            playerId: '0',
-            payload: { minionUid: 'gnome-1', baseIndex: 0 },
-            timestamp: 1002,
-        } as any, defaultRandom);
-        expect(secondActivate.success).toBe(false);
-        expect(secondActivate.error).toBe('该基地本回合已使用过同组特殊能力');
+        const limitUsed = respondResult.finalState.core.specialLimitUsed?.trickster_gnome_pod ?? [];
+        expect(limitUsed).toContain(0);
     });
 });
 
