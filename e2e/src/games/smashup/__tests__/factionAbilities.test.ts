@@ -149,6 +149,9 @@ describe('trickster interaction regressions', () => {
         const targetOption = interaction?.data?.options?.find((option: any) => option?.value?.minionUid === 'enemy-1');
         expect(targetOption).toBeDefined();
 
+        const limitUsed = activateResult.finalState.core.specialLimitUsed?.trickster_gnome_pod ?? [];
+        expect(limitUsed).toContain(0);
+
         const respondResult = runCommand(activateResult.finalState, {
             type: 'SYS_INTERACTION_RESPOND',
             playerId: '0',
@@ -161,9 +164,6 @@ describe('trickster interaction regressions', () => {
         expect((destroyEvents[0] as any).payload.minionUid).toBe('enemy-1');
         expect(respondResult.finalState.sys.interaction?.current).toBeUndefined();
         expect(respondResult.finalState.sys.interaction?.queue ?? []).toHaveLength(0);
-
-        const limitUsed = respondResult.finalState.core.specialLimitUsed?.trickster_gnome_pod ?? [];
-        expect(limitUsed).toContain(0);
     });
 });
 
