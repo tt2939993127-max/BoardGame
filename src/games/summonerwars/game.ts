@@ -174,6 +174,7 @@ const adapterConfig = {
         SW_COMMANDS.MOVE_UNIT,
         SW_COMMANDS.BUILD_STRUCTURE,
         SW_COMMANDS.DECLARE_ATTACK,
+        // 旧客户端兼容（no-op）
         SW_COMMANDS.CONFIRM_ATTACK,
         SW_COMMANDS.DISCARD_FOR_MAGIC,
         SW_COMMANDS.END_PHASE,

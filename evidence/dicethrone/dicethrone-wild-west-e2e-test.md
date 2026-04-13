@@ -10,8 +10,16 @@
 - 流程（成功链路）：打出卡牌 → 花费 Loaded → 特写出现 → 点击重掷 → 特写更新 → 关闭结算 → 攻击修正 UI 可见（仅 Wild West 的 +1）
 - 流程（否定链路）：Loaded=0 → 尝试打出 → toast 提示 requireLoaded → 不进入特写
 
+## 真相源（卡面裁图）
+- `Wild West / 荒野西部！`：`D:\gongzuo\webgame\BoardGame\temp\dicethrone\atlas-crops-20260411\gunslinger\slot-30.webp`
+  - 卡面明确标注“攻击修正卡”，且语义为“花费 1 个装填指示物 → 可重掷此骰一次 → 然后总攻击值再增加 1”。
+  - **指代裁决**：“此骰子”指 **装填奖励骰特写中的奖励骰**（不是主攻击骰盘上的 5 颗骰子）。
+
 ## 运行命令
 - `npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-wild-west 应触发弹药特写奖励骰，不改攻击骰盘"`
+
+## 运行结果
+- Playwright：`1 passed`（单 worker / 单用例）
 
 ## 关键截图与观察
 ### 0) 打出卡牌后：攻击修正徽章应立即出现（效果提示，不代表数值已生效）
@@ -52,6 +60,7 @@
   2. E2E 内部断言：
      - `pendingAttack.bonusDamage === 4`（Loaded 奖励骰半值向上取整：6→+3，再加上 Wild West 的“然后 +1”）
      - `pendingAttack.attackModifierBonusDamage === 1`（攻击修正卡汇总仅包含 Wild West 的 +1；Loaded 属于 token 效果，不应混入攻击修正卡汇总）
+     - `pendingAttack.loadedBonusDieBoost === null`（收口后清空增强状态，避免下次 Loaded 被错误复用；这是典型 D39 风险点）
 - 结论：证明“奖励骰结果确实汇总进总加伤”，且“攻击修正 UI 只显示 Wild West +1”的语义正确。
 
 ### 5) 攻击修正 UI 徽章可见（+1）

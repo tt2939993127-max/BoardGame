@@ -75,6 +75,7 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
 }
 
 const CARD_WIDTH_RATIO = 'var(--sw-hand-card-width-ratio, 0.16)';
+const HAND_REFERENCE_WIDTH = `var(--sw-hand-reference-width, ${BOARD_SHELL_REFERENCE_WIDTH})`;
 const MAGNIFY_BUTTON_OFFSET_RATIO = 0.004;
 const MAGNIFY_BUTTON_SIZE_RATIO = 0.022;
 const MAGNIFY_ICON_SIZE_RATIO = 0.012;
@@ -116,9 +117,9 @@ const HandCard: React.FC<{
   const [isHovered, setIsHovered] = useState(false);
   const spriteConfig = getCardSpriteConfig(card);
   const shouldRenderMagnifyButton = Boolean(onMagnify) && !suppressMagnifyButton;
-  const magnifyButtonSize = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_SIZE_RATIO})`;
-  const magnifyButtonOffset = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_OFFSET_RATIO})`;
-  const magnifyIconSize = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${MAGNIFY_ICON_SIZE_RATIO})`;
+  const magnifyButtonSize = `calc(${HAND_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_SIZE_RATIO})`;
+  const magnifyButtonOffset = `calc(${HAND_REFERENCE_WIDTH} * ${MAGNIFY_BUTTON_OFFSET_RATIO})`;
+  const magnifyIconSize = `calc(${HAND_REFERENCE_WIDTH} * ${MAGNIFY_ICON_SIZE_RATIO})`;
   const hoverMagnifyButtonStyle: React.CSSProperties = {
     top: magnifyButtonOffset,
     right: magnifyButtonOffset,
@@ -162,8 +163,8 @@ const HandCard: React.FC<{
       data-can-play={canPlay ? 'true' : 'false'}
       data-layout-mode={compactLayout ? 'compact' : 'default'}
       style={{
-        width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${cardWidthRatio})`,
-        marginLeft: index === 0 ? 0 : `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${cardSpacingRatio})`,
+        width: `calc(${HAND_REFERENCE_WIDTH} * ${cardWidthRatio})`,
+        marginLeft: index === 0 ? 0 : `calc(${HAND_REFERENCE_WIDTH} * ${cardSpacingRatio})`,
         zIndex: isSelected ? 100 : isHovered ? 50 : index,
       }}
       initial={false}
@@ -297,10 +298,23 @@ export const HandArea: React.FC<HandAreaProps> = ({
     return false;
   }, [phase, isMyTurn, currentMagic]);
 
+  const shouldUseClickForMagnify = useCallback((card: Card) => {
+    if (!onMagnifyCard) return false;
+    if (bloodSummonSelectingCard || abilitySelectingCards) return false;
+    if (!isMyTurn) return true;
+    if (phase === 'magic' || phase === 'summon' || phase === 'build') return false;
+    if (card.cardType === 'event') return false;
+    return true;
+  }, [abilitySelectingCards, bloodSummonSelectingCard, isMyTurn, onMagnifyCard, phase]);
+
   const handleCardClick = useCallback((cardId: string) => {
     const card = cards.find((item) => item.id === cardId);
     if (!card) return;
     if (shouldBlockClick(cardId)) return;
+    if (shouldUseClickForMagnify(card)) {
+      onMagnifyCard?.(card);
+      return;
+    }
 
     const cost = getCardCost(card);
     const canAfford = cost <= currentMagic;
@@ -408,6 +422,8 @@ export const HandArea: React.FC<HandAreaProps> = ({
     showToast,
     t,
     shouldBlockClick,
+    shouldUseClickForMagnify,
+    onMagnifyCard,
   ]);
 
   if (cards.length === 0) {

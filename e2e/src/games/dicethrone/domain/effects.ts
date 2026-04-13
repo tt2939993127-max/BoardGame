@@ -39,6 +39,7 @@ import {
     createTokenResponseRequestedEvent,
 } from './tokenResponse';
 import type { AbilityDef } from './combat';
+import { reduce as reduceDiceThroneCore } from './reducer';
 
 // ============================================================================
 // 效果上下文
@@ -498,6 +499,7 @@ function resolveEffectAction(
                     source: { playerId: attackerId, abilityId: sourceAbilityId },
                     target: { playerId: dmgTargetId },
                     state,
+                    damageScope: action.damageScope ?? 'attack',
                     autoCollectTokens: true,
                     autoCollectStatus: true,
                     autoCollectShields: true,
@@ -538,7 +540,8 @@ function resolveEffectAction(
                         attackerId,
                         dmgTargetId,
                         result.finalDamage,
-                        ctx.isDefensiveContext
+                        ctx.isDefensiveContext,
+                        action.damageScope ?? 'attack'
                     );
 
                     console.log('[DT-Effects] shouldOpenTokenResponse 检查', {
@@ -562,7 +565,8 @@ function resolveEffectAction(
                             responseType,
                             sourceAbilityId,
                             timestamp,
-                            passiveModifiers.length > 0 ? passiveModifiers : undefined
+                            passiveModifiers.length > 0 ? passiveModifiers : undefined,
+                            action.damageScope ?? 'attack'
                         );
                         const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage, timestamp);
                         console.log('[DT-Effects] 生成 TOKEN_RESPONSE_REQUESTED 事件', {
@@ -588,6 +592,7 @@ function resolveEffectAction(
                         amount: result.finalDamage,
                         actualDamage,
                         sourceAbilityId,
+                        damageScope: action.damageScope ?? 'attack',
                         ...(passiveModifiers.length > 0 ? { modifiers: passiveModifiers } : {}),
                         breakdown: result.breakdown,
                         ...(action.unblockable ? { unblockable: true } : {}),
@@ -806,6 +811,7 @@ function resolveEffectAction(
                         const dmgAmount = dmgPayload.amount ?? 0;
                         const dmgTargetId = dmgPayload.targetId;
                         const isUnblockable = dmgPayload.unblockable === true;
+                        const damageScope = dmgPayload.damageScope ?? (state.pendingAttack ? 'attack' : 'direct');
 
                         // 检查是否需要打开 Token 响应窗口
                         if (shouldCheckTokenResponse && dmgAmount > 0 && !isUnblockable) {
@@ -814,7 +820,8 @@ function resolveEffectAction(
                                 attackerId,
                                 dmgTargetId,
                                 dmgAmount,
-                                ctx.isDefensiveContext
+                                ctx.isDefensiveContext,
+                                damageScope
                             );
 
                             if (tokenResponseType) {
@@ -828,7 +835,9 @@ function resolveEffectAction(
                                     dmgAmount,
                                     responseType,
                                     sourceAbilityId,
-                                    timestamp
+                                    timestamp,
+                                    undefined,
+                                    damageScope
                                 );
                                 const tokenResponseEvent = createTokenResponseRequestedEvent(pendingDamage, timestamp);
                                 handledEvents[i] = tokenResponseEvent;
@@ -1263,6 +1272,24 @@ export function resolveEffectsToEvents(
             immediateEvents.push(event);
         }
         events.push(...immediateEvents);
+
+        // 关键：效果按顺序生效。
+        // 例如 Gunslinger 的 bounty-hunter：先给对手上赏金 Token，再造成伤害。
+        // 后续的 damage 计算（createDamageCalculation）必须能“看到”刚刚授予的 Token/状态，
+        // 否则会出现同一能力链内的被动修正（如 onDamageReceived 的 +1 伤害 / +1 CP）不生效。
+        //
+        // 这里用 reducer 对 ctx.state 做轻量模拟（仅用于后续 effect 的计算，不会改变最终输出事件序列）。
+        for (const evt of immediateEvents) {
+            ctx.state = reduceDiceThroneCore(ctx.state, evt);
+        }
+
+        // 同步条件上下文：后续条件判断应基于最新状态
+        // （比如某些效果链先施加状态，后续效果才根据状态分支）。
+        resolutionCtx.attackerStatusEffects = ctx.state.players[ctx.attackerId]?.statusEffects;
+        resolutionCtx.defenderStatusEffects = ctx.state.players[ctx.defenderId]?.statusEffects;
+        const updatedDice = getActiveDice(ctx.state);
+        resolutionCtx.diceValues = updatedDice.map(die => die.value);
+        resolutionCtx.faceCounts = getFaceCounts(updatedDice);
 
         // TOKEN_RESPONSE_REQUESTED 意味着伤害被挂起等待玩家响应，
         // 后续效果（如 rollDie）应在 Token 响应完成后由 resolvePostDamageEffects 执行。

@@ -56,6 +56,7 @@ import { findHeroCard } from '../heroes';
 import {
     hasAfterCardPlayedWindowBeenHandled,
     hasAfterRollConfirmedWindowBeenHandled,
+    buildAfterRollConfirmedSignature,
 } from './responseWindowGuards';
 
 // ============================================================================
@@ -413,7 +414,8 @@ export function execute(
             // 关键：必须用 ROLL_CONFIRMED 事件应用后的状态来检查响应窗口
             // 否则 rollConfirmed 仍为 false，requireRollConfirmed 的卡牌（如抬一手）会被过滤掉
             const stateAfterConfirm = applyEvents(state, [event] as DiceThroneEvent[], reduce);
-            if (hasAfterRollConfirmedWindowBeenHandled(stateAfterConfirm)) {
+            const rollSignature = buildAfterRollConfirmedSignature(stateAfterConfirm);
+            if (hasAfterRollConfirmedWindowBeenHandled(stateAfterConfirm, rollSignature)) {
                 break;
             }
             const responseTriggerId = getCombatOpponentId(stateAfterConfirm, rollerId) ?? rollerId;

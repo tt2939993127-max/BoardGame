@@ -13,6 +13,11 @@ export const getHudPortalRoot = () => {
 };
 
 export const HudPortal = ({ children }: { children: ReactNode }) => {
+    const shouldDisablePortal = typeof globalThis !== 'undefined'
+        && (globalThis as typeof globalThis & { __BG_DISABLE_PORTAL__?: boolean }).__BG_DISABLE_PORTAL__ === true;
+    if (shouldDisablePortal) {
+        return <>{children}</>;
+    }
     const portalRoot = getHudPortalRoot();
     return portalRoot ? createPortal(children, portalRoot) : <>{children}</>;
 };

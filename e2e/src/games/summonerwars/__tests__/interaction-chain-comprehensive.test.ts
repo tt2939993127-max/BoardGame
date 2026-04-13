@@ -24,9 +24,14 @@ import { executeCommand } from '../domain/execute';
 import { validateCommand } from '../domain/validate';
 import { SummonerWarsDomain } from '../domain';
 import { SW_COMMANDS, SW_EVENTS } from '../domain/types';
-import type { SummonerWarsCore, PlayerId, CellCoord, BoardUnit, UnitCard, StructureCard } from '../domain/types';
+import type { SummonerWarsCore, PlayerId, CellCoord, BoardUnit, UnitCard, StructureCard, EventCard } from '../domain/types';
 import type { RandomFn, MatchState } from '../../../engine/types';
 import { getUnitAt, isCellEmpty, getPlayerUnits, manhattanDistance } from '../domain/helpers';
+import { CARD_IDS } from '../domain/ids';
+import { executePipeline, createInitialSystemState } from '../../../engine/pipeline';
+import { createInteractionSystem, INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
+import { createSimpleChoiceSystem } from '../../../engine/systems/SimpleChoiceSystem';
+import { createSummonerWarsInteractionSystem } from '../domain/systems';
 
 // ============================================================================
 // 测试辅助
@@ -98,6 +103,32 @@ function validateAndExec(core: SummonerWarsCore, cmd: string, payload: Record<st
   const result = validate(core, cmd, payload);
   if (!result.valid) return [];
   return exec(core, cmd, payload, random);
+}
+
+const interactionSystems = [
+  createInteractionSystem<SummonerWarsCore>(),
+  createSimpleChoiceSystem<SummonerWarsCore>(),
+  createSummonerWarsInteractionSystem(),
+];
+
+function runPipeline(
+  state: MatchState<SummonerWarsCore>,
+  command: { type: string; playerId: PlayerId; payload: Record<string, unknown> },
+) {
+  return executePipeline(
+    { domain: SummonerWarsDomain, systems: interactionSystems },
+    state,
+    command,
+    testRandom(),
+    ['0', '1'],
+  );
+}
+
+function getSwCurrentType(state: MatchState<SummonerWarsCore>): string | undefined {
+  const current = state.sys.interaction.current;
+  if (!current || current.kind !== 'simple-choice') return undefined;
+  const data = current.data as { sw?: { type?: string } };
+  return data.sw?.type;
 }
 
 // ============================================================================
@@ -1514,5 +1545,137 @@ describe('usesPerTurn 限制', () => {
       sourceUnitId: unit.instanceId,
     });
     expect(result.valid).toBe(false);
+  });
+});
+
+// ============================================================================
+// Section 13: Phase B 事件卡交互 → InteractionSystem
+// ============================================================================
+
+describe('Phase B 事件卡交互可见性', () => {
+  it('[blood_summon] 走完整的 sys.interaction 链路', () => {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'necromancer', faction1: 'trickster' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    core.phase = 'summon';
+    core.currentPlayer = '0';
+
+    putUnit(core, { row: 4, col: 2 }, mkUnit('ally-target', { faction: 'necromancer' }), '0');
+    core.players['0'].hand = [
+      {
+        id: CARD_IDS.NECRO_BLOOD_SUMMON,
+        cardType: 'event',
+        name: '血契召唤',
+        eventType: 'common',
+        faction: 'necromancer',
+        cost: 0,
+        playPhase: 'summon',
+        effect: '测试',
+        deckSymbols: [],
+      } as EventCard,
+      mkUnit('cheap-unit', { cost: 1, faction: 'necromancer' }),
+    ];
+
+    let state: MatchState<SummonerWarsCore> = {
+      core,
+      sys: createInitialSystemState(['0', '1'], interactionSystems),
+    };
+
+    const requested = runPipeline(state, {
+      type: SW_COMMANDS.REQUEST_EVENT_INTERACTION,
+      playerId: '0',
+      payload: { cardId: CARD_IDS.NECRO_BLOOD_SUMMON },
+    });
+    expect(requested.success).toBe(true);
+    state = requested.state;
+    expect(getSwCurrentType(state)).toBe('blood_summon_select_target');
+
+    const pickTarget = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: state.sys.interaction.current!.id, optionId: 'pos:4,2' },
+    });
+    expect(pickTarget.success).toBe(true);
+    state = pickTarget.state;
+    expect(getSwCurrentType(state)).toBe('blood_summon_select_card');
+
+    const pickCard = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: state.sys.interaction.current!.id, optionId: 'cheap-unit' },
+    });
+    expect(pickCard.success).toBe(true);
+    state = pickCard.state;
+    expect(getSwCurrentType(state)).toBe('blood_summon_select_position');
+
+    const pickPosition = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: state.sys.interaction.current!.id, optionId: 'pos:3,2' },
+    });
+    expect(pickPosition.success).toBe(true);
+    state = pickPosition.state;
+    expect(getSwCurrentType(state)).toBe('blood_summon_confirm');
+
+    const finish = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: { interactionId: state.sys.interaction.current!.id, optionId: 'finish' },
+    });
+    expect(finish.success).toBe(true);
+    state = finish.state;
+    expect(state.sys.interaction.current).toBeUndefined();
+    expect(getUnitAt(state.core, { row: 3, col: 2 })?.card.id).toBe('cheap-unit');
+  });
+
+  it('[annihilate] 多选 optionIds 会推进到伤害分配交互', () => {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'necromancer', faction1: 'trickster' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    core.phase = 'move';
+    core.currentPlayer = '0';
+
+    putUnit(core, { row: 4, col: 1 }, mkUnit('ally-a', { faction: 'necromancer' }), '0');
+    putUnit(core, { row: 4, col: 3 }, mkUnit('ally-b', { faction: 'necromancer' }), '0');
+    putUnit(core, { row: 4, col: 2 }, mkUnit('enemy-a', { faction: 'trickster' }), '1');
+    putUnit(core, { row: 3, col: 3 }, mkUnit('enemy-b', { faction: 'trickster' }), '1');
+    core.players['0'].hand = [{
+      id: CARD_IDS.NECRO_ANNIHILATE,
+      cardType: 'event',
+      name: '除灭',
+      eventType: 'common',
+      faction: 'necromancer',
+      cost: 0,
+      playPhase: 'move',
+      effect: '测试',
+      deckSymbols: [],
+    } as EventCard];
+
+    let state: MatchState<SummonerWarsCore> = {
+      core,
+      sys: createInitialSystemState(['0', '1'], interactionSystems),
+    };
+
+    const requested = runPipeline(state, {
+      type: SW_COMMANDS.REQUEST_EVENT_INTERACTION,
+      playerId: '0',
+      payload: { cardId: CARD_IDS.NECRO_ANNIHILATE },
+    });
+    expect(requested.success).toBe(true);
+    state = requested.state;
+    expect(getSwCurrentType(state)).toBe('annihilate_select_targets');
+
+    const picked = runPipeline(state, {
+      type: INTERACTION_COMMANDS.RESPOND,
+      playerId: '0',
+      payload: {
+        interactionId: state.sys.interaction.current!.id,
+        optionIds: ['pos:4,1', 'pos:4,3'],
+      },
+    });
+    expect(picked.success).toBe(true);
+    state = picked.state;
+    expect(getSwCurrentType(state)).toBe('annihilate_select_damage');
+    expect(state.sys.interaction.current?.kind).toBe('simple-choice');
   });
 });

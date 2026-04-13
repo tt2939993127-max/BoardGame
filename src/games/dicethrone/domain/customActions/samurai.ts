@@ -275,7 +275,10 @@ function handleMasamune({ attackerId, ctx, sourceAbilityId, state, timestamp, ra
             payload: {
                 playerId: attackerId,
                 amount: katanaCount,
-                sourceCardId: sourceAbilityId,
+                // 只有攻击修正卡牌才应计入 attackModifierBonusDamage。
+                // - `card-zanshin`：攻击修正卡，应该显示在“攻击修正”徽章/汇总里。
+                // - `masamune` / `masamune-2-*`：角色技能本体，不应被误归类为“攻击修正卡加伤”。
+                sourceCardId: sourceAbilityId.startsWith('card-') ? sourceAbilityId : undefined,
             },
             sourceCommandType: 'ABILITY_EFFECT',
             timestamp: timestamp + 11,

@@ -1044,6 +1044,48 @@ describe('Cowboys abilities', () => {
         expect(optionValues).not.toContain('enemy-smoke');
     });
 
+    it('werewolf_chew_toy 多己方随从时若目标全被烟雾弹保护，会给出 all_protected 反馈', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('chew-1', 'werewolf_chew_toy', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'base_a',
+                minions: [
+                    makeMinion('ally-strong', 'werewolf_howler', '0', 5),
+                    makeMinion('ally-tall', 'robot_microbot_alpha', '0', 6),
+                    makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 3, {
+                        attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                    }),
+                    makeMinion('enemy-strong', 'ghosts_spectre', '1', 7),
+                ],
+                ongoingActions: [],
+            }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'chew-1' } },
+            defaultTestRandom,
+        );
+        const prompt = getInteractionsFromMS(play.finalState)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('werewolf_chew_toy');
+        const chooseStrong = prompt.data.options.find((entry: any) => entry.value?.minionUid === 'ally-strong');
+        expect(chooseStrong).toBeDefined();
+
+        const resolved = runCommand(
+            play.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseStrong.id } } as any,
+            defaultTestRandom,
+        );
+
+        const feedback = resolved.events.find(event => event.type === SU_EVENTS.ABILITY_FEEDBACK) as any;
+        expect(feedback?.payload?.messageKey).toBe('feedback.all_protected');
+    });
+
     it('miskatonic_thing_on_the_doorstep 面对唯一最高的烟雾弹目标时不会直接消灭', () => {
         const executor = resolveSpecial('miskatonic_thing_on_the_doorstep');
         expect(executor).toBeDefined();
@@ -3062,6 +3104,51 @@ describe('stale destroy regression: 交互提示能力', () => {
 
         expect(resolved?.events ?? []).toHaveLength(0);
         expect(resolved?.state.sys.interaction?.queue ?? []).toHaveLength(0);
+    });
+
+    it('werewolf_let_the_dog_out 选择随从后若目标全被烟雾弹保护，会给出 all_protected 反馈', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'werewolf_let_the_dog_out', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                {
+                    defId: 'base_a',
+                    minions: [
+                        makeMinion('ally-strong', 'werewolf_howler', '0', 5),
+                        makeMinion('ally-tall', 'robot_microbot_alpha', '0', 6),
+                        makeMinion('enemy-smoke', 'ninja_tiger_assassin', '1', 3, {
+                            attachedActions: [{ uid: 'smoke-1', defId: 'ninja_smoke_bomb', ownerId: '1' }],
+                        }),
+                        makeMinion('enemy-strong', 'ghosts_spectre', '1', 7),
+                    ],
+                    ongoingActions: [],
+                },
+            ],
+        });
+
+        const playResult = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
+            defaultTestRandom,
+        );
+
+        const prompt = getInteractionsFromMS(playResult.finalState)[0] as any;
+        expect(prompt?.data?.sourceId).toBe('werewolf_let_the_dog_out');
+        const chooseStrong = prompt?.data?.options?.find((entry: any) => entry?.value?.minionUid === 'ally-strong');
+        expect(chooseStrong).toBeDefined();
+
+        const resolved = runCommand(
+            playResult.finalState,
+            { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: chooseStrong.id } } as any,
+            defaultTestRandom,
+        );
+
+        const feedback = resolved.events.find(event => event.type === SU_EVENTS.ABILITY_FEEDBACK) as any;
+        expect(feedback?.payload?.messageKey).toBe('feedback.all_protected');
     });
 });
 

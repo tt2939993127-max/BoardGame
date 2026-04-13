@@ -1738,19 +1738,23 @@ export const MatchRoom = () => {
 
     if (!isGameNamespaceReady) {
         return (
-            <LoadingScreen
-                description={t('matchRoom.loadingResources')}
-                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
-            />
+            <HudPortal>
+                <LoadingScreen
+                    description={t('matchRoom.loadingResources')}
+                    progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                />
+            </HudPortal>
         );
     }
 
     if (!gameImplReady) {
         return (
-            <LoadingScreen
-                description={t('matchRoom.loadingResources')}
-                progressText={t('matchRoom.loadingProgress.loadingGameModule')}
-            />
+            <HudPortal>
+                <LoadingScreen
+                    description={t('matchRoom.loadingResources')}
+                    progressText={t('matchRoom.loadingProgress.loadingGameModule')}
+                />
+            </HudPortal>
         );
     }
 
@@ -1772,10 +1776,12 @@ export const MatchRoom = () => {
             );
         }
         return (
-            <LoadingScreen
-                description={t('matchRoom.joiningRoom')}
-                progressText={t('matchRoom.loadingProgress.joiningRoom')}
-            />
+            <HudPortal>
+                <LoadingScreen
+                    description={t('matchRoom.joiningRoom')}
+                    progressText={t('matchRoom.loadingProgress.joiningRoom')}
+                />
+            </HudPortal>
         );
     }
 

@@ -257,10 +257,13 @@ export const CriticalImageGate: React.FC<CriticalImageGateProps> = ({
         effectiveNeedsPreload || (!ready && lastReadyKeyRef.current !== runKey)
     );
     if (shouldBlock) {
+        const useViewportAnchor = typeof document !== 'undefined'
+            && document.documentElement.getAttribute('data-mobile-layout-preset') === 'board-shell';
+        const loadingAnchor = useViewportAnchor ? 'viewport' : 'container';
         const progressText = loadingProgress
             ? t('matchRoom.loadingProgress.loadingAssets', { loaded: loadingProgress.loaded, total: loadingProgress.total })
             : undefined;
-        return <LoadingScreen anchor="container" description={loadingDescription} progressText={progressText} />;
+        return <LoadingScreen anchor={loadingAnchor} description={loadingDescription} progressText={progressText} />;
     }
 
     return <>{children}</>;

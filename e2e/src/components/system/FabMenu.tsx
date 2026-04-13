@@ -204,12 +204,9 @@ export const FabMenu = ({
     const handleDragEnd = (_: any, info: any) => {
         if (!fabPosition || viewportWidth <= 0 || viewportHeight <= 0) return;
         setIsDragging(false);
-        const next = clampPosition(normalizePosition({
+        const next = normalizePosition({
             left: fabPosition.left + info.offset.x,
             top: fabPosition.top + info.offset.y,
-        }), {
-            allowOverflow: false,
-            resolvedButtonSize: dockedButtonSize,
         });
         flushSync(() => {
             setFabPosition(next);

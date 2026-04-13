@@ -12,7 +12,7 @@ import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { Trash2 } from 'lucide-react';
 import type { InteractionDescriptor, TurnPhase } from '../domain/types';
-import { UI_Z_INDEX } from '../../../core';
+import { UI_Z_INDEX, HudPortal } from '../../../core';
 import { GameButton } from './components/GameButton';
 
 export interface GameHintsProps {
@@ -220,7 +220,7 @@ export const GameHints: React.FC<GameHintsProps> = ({
     isPassiveRerollSelecting,
 }) => {
     return (
-        <>
+        <HudPortal>
             {/* 弃牌阶段提示 Banner */}
             {isDiscardMode && (
                 <DiscardHint mustDiscardCount={mustDiscardCount} />
@@ -248,6 +248,6 @@ export const GameHints: React.FC<GameHintsProps> = ({
                     offsetClass={thinkingOffsetClass}
                 />
             )}
-        </>
+        </HudPortal>
     );
 };

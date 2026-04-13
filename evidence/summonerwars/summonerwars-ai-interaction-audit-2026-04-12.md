@@ -24,18 +24,70 @@
 - **未改代码、未跑测试、未创建/切换分支**。
 - 重点按 D8 / D9 / D39 / D40 / D41 / D45 评估“AI 是否能看见等待态、是否会重入循环、是否可能卡死”。
 
+## 2026-04-12 迁移补记（已落地，已修订）
+> 说明：以下为**迁移后补记**，不覆盖上文静态审计结论；用于记录本轮“本地 UI 交互 → InteractionSystem”的实装进度与证据。
+
+### 已迁移到 InteractionSystem 的 6 条交互
+- SUMMON_FROM_DISCARD_REQUESTED（infection）
+- GRAB_FOLLOW_REQUESTED（grab follow）
+- SOUL_TRANSFER_REQUESTED
+- MIND_CAPTURE_REQUESTED
+- ABILITY_TRIGGERED: ice_shards_damage
+- ABILITY_TRIGGERED: feed_beast_check
+
+### Phase B：事件卡交互迁移（已完成）
+- NECRO_HELLFIRE_BLADE（狱火铸剑）
+- NECRO_BLOOD_SUMMON（血契召唤）
+- NECRO_ANNIHILATE（除灭）
+- TRICKSTER_MIND_CONTROL（心灵操控）
+- TRICKSTER_STUN（震慑）
+- TRICKSTER_HYPNOTIC_LURE（催眠引诱）
+- BARBARIC_CHANT_OF_POWER / GROWTH / WEAVING / ENTANGLEMENT（颂歌系列）
+- GOBLIN_SNEAK（潜行）
+- FROST_GLACIAL_SHIFT（冰川位移）
+
+关键落点：
+- `SW_COMMANDS.REQUEST_EVENT_INTERACTION` → `SW_EVENTS.EVENT_INTERACTION_REQUESTED` → `domain/systems.ts` 创建交互
+- `useEventCardModes` / `useCellInteraction` / `Board`：全部改为 `sys.interaction` 派生 + `RESPOND/CANCEL`
+
+### 关键实现落点
+- `src/games/summonerwars/domain/systems.ts`：创建交互 + RESOLVED/CANCELLED 回流命令
+- `src/games/summonerwars/game.ts`：挂载 `createSummonerWarsInteractionSystem()`
+- `src/games/summonerwars/ui/useGameEvents.ts`：移除本地 mode 入口（改为由 sys.interaction 派生）
+- `src/games/summonerwars/ui/useCellInteraction.ts` / `StatusBanners.tsx` / `Board.tsx`：交互由 sys.interaction 驱动
+
+### 本轮修订补充
+- infection：系统交互增加 skip 选项，UI 改为使用 InteractionSystem 的 `CardSelectorOverlay`（不再走本地 abilityMode 选卡路径）。
+- soul_transfer / mind_capture：补齐 `interaction.data.sw` 的 `sourcePosition` 元信息，修复 banner 派生缺失。
+- ice_shards：确认选项带 `disabledReasonKey`（充能不足可解释），保留 skip。
+- HandArea busy 判定统一：引入 `useIsInteractionBusy` 与本地 mode 合并，避免系统交互时手牌仍可点。
+- 事件卡 AI 发起链：新增事件卡动作生成（优先发起 `REQUEST_EVENT_INTERACTION`），AI 可主动进入交互链。
+- 多选交互：修正 AI 枚举逻辑，`multi.max` 未提供时按可选项数量扩展，避免退化成单选。
+- 预检一致性：`glacial_shift` / `goblin_sneak` 的 validate 条件与交互创建条件对齐，避免“请求成功但交互缺席”。
+- UI 解析修复：`stun` 目的地 `pos:r,c` 解析纠正，避免 UI 端终点列表丢失。
+- 血契召唤：UI 高亮与预检改为以 `sys.interaction.options` 与 validate 条件为准（相邻空位 + 手牌≤2），消除本地重算漂移。
+- 除灭伤害步：高亮与点击改为读取 `sys.interaction.options`，结构目标可被选中。
+
+### 验证说明（本轮已跑）
+- `npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：除灭多目标选择流程"`
+- E2E 证据：`evidence/summonerwars/summonerwars-event-annihilate-e2e-test.md`
+
+### 仍保留的本地 UI 模式（Phase B 范围）
+- rapid_fire / withdraw / afterMove 系列 / magic 阶段二选一 等仍为本地 mode
+- 这些仍属于“AI 看不见”的结构性风险，需要后续继续迁移
+
 ## 结论摘要
 
 ### 总裁决
-**Summoner Wars 当前最核心的问题，不是 response-window 真正重开，而是“等待态大量停留在本地 UI mode，而不是服务端 `sys.interaction`/`sys.responseWindow`”。**
+**Summoner Wars 当前最核心的问题，不是 response-window 真正重开，而是“仍有关键等待态停留在本地 UI mode，而不是服务端 `sys.interaction`/`sys.responseWindow`”。事件卡多步已迁移到 InteractionSystem。**
 
 这会直接带来三类风险：
-1. **AI 看不见交互**：很多链路只发 EventStream 通知，AI 无法在 `ai.ts` 里生成后续合法动作。
-2. **自动反馈无法携带精确“为什么不能选”**：因为根本没有服务端 options/disabled reason 可读，只剩 UI 本地 toast/本地 mode。
+1. **AI 看不见交互**：仍有部分链路只发 EventStream 通知，AI 无法在 `ai.ts` 里生成后续合法动作。
+2. **自动反馈无法携带精确“为什么不能选”**：对仍留在本地 mode 的链路，服务端没有 options/disabled reason 可读，只剩 UI 本地 toast/本地 mode。
 3. **重复事件会重建本地提示并重复响音效**：请求事件和 `ABILITY_TRIGGERED` 都被配置成 immediate 音效，重复发事件就会重复提示、重复响。
 
 ### 这轮静态审计的关键判断
-- **D8：高风险** —— 事件写入发生在服务端，但消费窗口主要在客户端本地 state；多数等待态不是持久化状态机。
+- **D8：高风险** —— 事件写入发生在服务端，但仍有等待态停留在客户端本地 state（非事件卡多步）；这部分等待态不是持久化状态机。
 - **D9：高风险** —— 存在清空本地 mode 后只恢复少数 phase 技能的逻辑，其他等待链在 reset/刷新后容易丢失或重建。
 - **D39：中风险** —— `flowHalted` 这条链已有一定保护，但“进入 halt / 退出 halt / 人类 skip / AI 直出命令”由不同层分别负责，所有权并不统一。
 - **D40：低风险/本轮未命中** —— 当前未发现 Summoner Wars 自己存在“后处理循环从输出构建去重集合”这类典型问题。
@@ -46,29 +98,24 @@
 
 ## 全链路观察
 
-### 1. 引擎层已挂系统，但游戏层几乎没把等待态交给它们
+### 1. 引擎层已挂系统，核心等待态已迁到 InteractionSystem，但仍有本地 mode 残留
 - `src/games/summonerwars/game.ts:149-153` 挂了：
   - `createInteractionSystem()`
   - `createSimpleChoiceSystem()`
   - `createMultistepChoiceSystem()`
   - `createResponseWindowSystem()`
-- 但在 `src/games/summonerwars/domain` 里，审计未发现：
-  - `createSimpleChoice`
-  - `queueInteraction`
-  - `resolveInteraction`
-  - `postProcessSystemEvents`
-  - 任何 `RESPONSE_WINDOW_*` 事件源
-- `src/games/summonerwars/domain/index.ts` 也只暴露了 `setup/execute/reduce/validate/isGameOver`，没有游戏层 interaction system bridge。
+- `src/games/summonerwars/domain/systems.ts` 已引入 `createSimpleChoice` + `queueInteraction`，覆盖 infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast + Phase B 事件卡交互。
+- 但 `useGameEvents` / `useCellInteraction` / `useEventCardModes` 仍有本地 mode 等待态（afterMove / withdraw / rapid_fire / magic 二选一 等）。
 
-**结论**：系统虽然“装上了”，但 Summoner Wars 自己的大部分等待链并没有接到这些系统上。
+**结论**：Phase B 已完成事件卡交互迁移，但仍存在“本地 mode 真相源”残留，需要后续继续迁移。
 
-### 2. AI 层能处理 `sys.interaction`，但游戏层很少真正喂给它
+### 2. AI 层能处理 `sys.interaction`，仍有部分链路未喂给它
 - `src/games/summonerwars/ai.ts:950-1072` 明确支持：
   - `simple-choice`
   - `multistep-choice`
   - emergency cancel / empty selection
 - 但这套支持只有在 `state.sys.interaction.current` 存在时才会生效。
-- 当前 Summoner Wars 游戏层并未把绝大多数请求链写入 `sys.interaction.current`。
+- 当前 Summoner Wars 事件卡与 Phase A 核心交互已进入 `sys.interaction`，但 afterMove / rapid_fire / withdraw / magic 二选一 等仍是本地链路。
 
 **结论**：AI 基础能力在，Summoner Wars 接线不足。
 
@@ -81,21 +128,23 @@
 ---
 
 ## 交互链可见性 / AI 可解性矩阵
+> 补充说明（2026-04-12 迁移后）：infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast 已迁移进 `sys.interaction`；Phase B 事件卡交互（除灭/血契召唤/潜行/冰川位移等）也已迁移。  
+> 下表与后续“本地 UI mode”列表为**静态审计时的历史结论**，保留用于说明原始根因；迁移后的现状以“迁移补记”与最新证据为准。
 
 | 链路 | 入口 | 服务端是否有持久等待态 | AI 当前是否能解 | 审计结论 |
 | --- | --- | --- | --- | --- |
 | `sys.interaction.current` | `ai.ts:950-1072` | 是 | 是 | 这条链本身没问题，但 Summoner Wars 游戏层很少真正使用。 |
 | `flowHalted + ice_shards/feed_beast` | `flowHooks.ts:206-214, 292-298` + `ai.ts:1583-1689` | 是（`sys.flowHalted`） | 是 | 这是少数已做游戏层兜底的等待链。 |
 | `FUNERAL_PYRE_HEAL` | `ai.ts:352-421` | 是（`activeEvents`） | 是 | 这也是已被 AI 特判覆盖的例外。 |
-| `SUMMON_FROM_DISCARD_REQUESTED` → infection | `abilityResolver.ts:452-460` → `useGameEvents.ts:484-507` | 否 | 否 | 高风险，本地选卡+选位。 |
-| `GRAB_FOLLOW_REQUESTED` | `execute.ts:249-263` → `useGameEvents.ts:510-528` | 否 | 否 | 高风险，本地跟随确认。 |
-| `SOUL_TRANSFER_REQUESTED` | `customActionHandlers.ts:48-55` → `useGameEvents.ts:531-542` | 否 | 否 | 高风险，本地确认。 |
-| `MIND_CAPTURE_REQUESTED` | `customActionHandlers.ts:60-68` / `execute.ts:570-588` → `useGameEvents.ts:545-560` | 否 | 否 | 高风险，本地二选一。 |
+| `SUMMON_FROM_DISCARD_REQUESTED` → infection | `abilityResolver.ts:452-460` → `domain/systems.ts` | 是（sys.interaction） | 是 | ✅ 已迁移：交互进入 InteractionSystem，UI/AI 可见。 |
+| `GRAB_FOLLOW_REQUESTED` | `execute.ts:249-263` → `domain/systems.ts` | 是（sys.interaction） | 是 | ✅ 已迁移：系统交互包含位置候选+跳过。 |
+| `SOUL_TRANSFER_REQUESTED` | `customActionHandlers.ts:48-55` → `domain/systems.ts` | 是（sys.interaction） | 是 | ✅ 已迁移：确认/跳过由 sys.interaction 驱动。 |
+| `MIND_CAPTURE_REQUESTED` | `customActionHandlers.ts:60-68` / `execute.ts:570-588` → `domain/systems.ts` | 是（sys.interaction） | 是 | ✅ 已迁移：控制/伤害二选一可见。 |
 | `ABILITY_TRIGGERED(actionId=rapid_fire_extra_attack)` | `execute.ts:699` → `useGameEvents.ts:584-595` | 否 | 否 | 高风险，本地额外攻击确认。 |
 | `ABILITY_TRIGGERED(actionId=withdraw)` | `useGameEvents.ts:597-610` | 否 | 否 | 高风险，本地先选代价再选位置。 |
 | `ABILITY_TRIGGERED(afterMove:spirit_bond / ancestral_bond / structure_shift / frost_axe)` | `execute.ts:291-307` → `useGameEvents.ts:671-720` | 否 | 否 | 高风险，全部依赖本地 mode。 |
 | `ABILITY_TRIGGERED(ice_ram_trigger)` | `execute.ts:993-1053` → `useGameEvents.ts:727-739` | 否 | 否 | 高风险，本地目标/推拉选择。 |
-| 事件卡多步交互（`bloodSummon` / `annihilate` / `mindControl` / `stun` / `hypnoticLure` / `chant_*` / `glacial_shift` / `sneak` 等） | `useEventCardModes.ts:57-93` | 否 | 否 | 高风险，几乎全部是本地状态机。 |
+| 事件卡多步交互（`bloodSummon` / `annihilate` / `mindControl` / `stun` / `hypnoticLure` / `chant_*` / `glacial_shift` / `sneak` 等） | `domain/systems.ts` + `useEventCardModes.ts` | 是（sys.interaction） | 是 | ✅ Phase B 已迁移，UI/AI 可见；仍需关注非事件卡本地 mode。 |
 | 魔力阶段“打出事件卡还是弃牌” | `useCellInteraction.ts:118, 868, 986-995, 1127-1139` | 否 | 否 | 中高风险，本地二选一。 |
 
 ---
@@ -113,6 +162,8 @@
    - `ice_shards_damage`
    - `feed_beast_check`
 4. infection / grab / soul_transfer / mind_capture / rapid_fire / withdraw / 大量 afterMove 技能都**不在恢复名单里**。
+
+> 补记（已修订）：infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast 已迁移到 InteractionSystem，不再通过 `useGameEvents` 的本地 mode 驱动；本段仅对剩余本地 mode 仍适用。
 
 #### 判定
 - **服务端写入**的是“提示事件”。
@@ -187,7 +238,7 @@
 - `execute.ts:957-1060` 有若干命令尾部后处理，但本轮未发现“从输出事件构建去重集合再进入循环”的典型模式。
 
 #### 判定
-- 当前用户感知到的“重复弹/重复响”，在 Summoner Wars 里**更像重复请求事件 + 本地 mode 重建**，而不是 D40 典型 bug。
+- 当前用户感知到的“重复弹/重复响”，在 Summoner Wars 里**更像重复请求事件 + 剩余本地 mode 重建**，而不是 D40 典型 bug。
 
 **D40 裁决：✅ 本轮未发现命中证据，但后续若引入游戏层 systems.ts / postProcessSystemEvents，必须重审。**
 
@@ -208,7 +259,7 @@
 4. 这导致“引擎层说自己支持交互”“游戏 UI 也自己维护交互”“AI 只认识引擎层那套”，三者不一致。
 
 #### 判定
-这不是“功能点多所以复杂”，而是**同类职责被两套系统分摊**：
+这不是“功能点多所以复杂”，而是**同类职责被两套系统分摊**（事件卡已迁移，但其余本地 mode 仍在）：
 - 引擎系统：可见、可序列化、AI 可消费
 - 本地 UI mode：即时、隐式、AI 看不见
 
@@ -228,7 +279,7 @@
 - 当前未发现 Summoner Wars 像 SmashUp 那样：
   - 在多个 pipeline 阶段重复调用同一个游戏层后处理函数；
   - 再由该函数重复创建交互/重复触发能力。
-- `src/games/summonerwars/domain` 里也没有 `systems.ts` 这类游戏层 bridge 来重复消费同一批事件。
+- `src/games/summonerwars/domain/systems.ts` 已存在，但当前未发现“同一批事件被多阶段重复消费”的 D45 典型问题。
 
 #### 判定
 - 当前 Summoner Wars 的重复交互风险，核心不在 pipeline 多阶段重复调用。
@@ -241,10 +292,10 @@
 ## 自动反馈“为什么无法选择”能力审计
 
 ### 当前能不能自动带上原因？
-**大多数 Summoner Wars 本地交互，不能。**
+**仍留在本地 mode 的交互，不能。**
 
 ### 原因
-- `sys.interaction` 未承载这些请求时，服务端没有“选项列表 / disabled 原因 / min/max / 当前步骤”。
+- 对仍留在本地 mode 的请求，服务端没有“选项列表 / disabled 原因 / min/max / 当前步骤”。
 - 当前“不能选”的信息大多散落在：
   - 本地高亮计算
   - 本地 `showToast.warning(...)`
@@ -277,17 +328,14 @@
 
 ## 未收口风险清单（按严重度）
 
-### P0：所有 UI 本地请求链仍然是 AI 盲区
-- infection
-- grab follow
-- soul transfer
-- mind capture
+### P0：仍有 UI 本地请求链是 AI 盲区
 - rapid fire
 - withdraw
 - afterMove 一组追加技能
 - ice ram trigger
-- 事件卡多步交互
 - 魔力阶段事件卡二选一
+
+> ✅ 已迁移出 P0：infection / grab follow / soul transfer / mind capture + Phase B 事件卡交互 已进入 `sys.interaction`。
 
 ### P1：reset / 刷新后只恢复少数 phase 技能
 - 其余本地等待态可能直接丢失，或下一次重复事件来时被重新建出来。
@@ -327,9 +375,8 @@
 
 来止血，但很难一次审计后真正收口。
 
-## 本轮验证记录
-- 本轮**未执行测试**（按任务要求：只做审计，不跑测试）。
-- 本文所有结论均来自静态代码链路审查。
+## 本轮验证记录（无新测试）
+本轮未复跑测试，仅做审计留档。
 
 ---
 
@@ -354,36 +401,21 @@
    → `buildPendingActiveEventActions()` 能直接生成 AI 合法动作
    → 这条链是“非 interaction 但仍服务端可见”的例外
 
-### B. 只停留在本地 UI mode、AI 当前不可消费的链路
-1. `SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED`
-   → `useGameEvents` / 本地选卡+选位
-   → 未落入 `sys.interaction`
-   → AI 看不到 options / step / disabled reason
+3. `SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED / GRAB_FOLLOW_REQUESTED / SOUL_TRANSFER_REQUESTED / MIND_CAPTURE_REQUESTED`
+   → `createSummonerWarsInteractionSystem.afterEvents()`
+   → `createSimpleChoice()` + `queueInteraction()`
+   → `state.sys.interaction.current`
+   → AI 通过 `buildInteractionActions()` 生成响应
 
-2. `SW_EVENTS.GRAB_FOLLOW_REQUESTED`
-   → `useGameEvents` / `grabFollowMode`
-   → `useCellInteraction` 点击棋盘确认
-   → 未落入 `sys.interaction`
-
-3. `SW_EVENTS.SOUL_TRANSFER_REQUESTED`
-   → `useGameEvents` / `soulTransferMode`
-   → `Board.tsx` 本地 confirm/skip 回调
-   → 未落入 `sys.interaction`
-
-4. `SW_EVENTS.MIND_CAPTURE_REQUESTED`
-   → `useGameEvents` / `mindCaptureMode`
-   → `Board.tsx` 本地二选一
-   → 未落入 `sys.interaction`
-
-5. `SW_EVENTS.ABILITY_TRIGGERED(actionId=rapid_fire_extra_attack / withdraw / afterMove:* / ice_ram_trigger / blood_rune_choice / illusion_copy)`
+### B. 仍停留在本地 UI mode、AI 当前不可消费的链路
+1. `SW_EVENTS.ABILITY_TRIGGERED(actionId=rapid_fire_extra_attack / withdraw / afterMove:* / ice_ram_trigger / blood_rune_choice / illusion_copy)`
    → `useGameEvents` 创建 `rapidFireMode / withdrawTrigger / abilityMode / afterAttackAbilityMode`
    → `useCellInteraction` / `useEventCardModes` 再继续多步交互
    → 未落入 `sys.interaction`
 
-6. 事件卡多步链（`bloodSummon` / `annihilate` / `mindControl` / `stun` / `hypnoticLure` / `chantEntanglement` / `sneak` / `glacialShift` / `telekinesisTargetMode`）
-   → `useEventCardModes` 本地 `useState`
-   → 多步点击后直接 `dispatch(SW_COMMANDS.*)`
-   → AI 无法读取当前步骤与候选项
+2. 魔力阶段“打出事件卡还是弃牌”二选一
+   → `useCellInteraction` 本地 `magicEventChoiceMode`
+   → 未落入 `sys.interaction`
 
 ---
 
@@ -412,7 +444,7 @@
 - `src/games/summonerwars/ui/useCellInteraction.ts`
   - 本地 mode 点击推进与 `dispatch(SW_COMMANDS.*)` 出口
 - `src/games/summonerwars/ui/useEventCardModes.ts`
-  - 事件卡多步骤本地状态机
+  - 事件卡多步骤已改为 `sys.interaction` 派生 + RESPOND/CANCEL
 
 ### 关键事件名
 - 服务端可见且 AI 可解：
@@ -421,10 +453,6 @@
   - `SW_EVENTS.ABILITY_TRIGGERED`（仅 phase-end 这部分最终被 bridge 成 `sys.interaction`）
   - `FLOW_EVENTS.PHASE_CHANGED`
 - 服务端发出但只被本地 UI 消费：
-  - `SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED`
-  - `SW_EVENTS.GRAB_FOLLOW_REQUESTED`
-  - `SW_EVENTS.SOUL_TRANSFER_REQUESTED`
-  - `SW_EVENTS.MIND_CAPTURE_REQUESTED`
   - `SW_EVENTS.ABILITY_TRIGGERED(actionId=rapid_fire_extra_attack)`
   - `SW_EVENTS.ABILITY_TRIGGERED(actionId=withdraw)`
   - `SW_EVENTS.ABILITY_TRIGGERED(actionId=afterMove:spirit_bond)`

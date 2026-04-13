@@ -159,6 +159,13 @@
 - 要么删除这条预留链；
 - 要么补齐明确规则和可响应语义，避免“实现看起来有，规则层实际封死”。
 
+---
+
+## 修订记录
+
+- 2026-04-12：落实“骰面签名去重”补丁：在 afterRollConfirmed 打开时记录 `afterRollResponseWindowSignature`，CONFIRM_ROLL 若骰面签名已处理则不再重复打开响应窗口。新增/回归：
+  - `src/games/dicethrone/__tests__/flow.test.ts` 用例：`源头级去重：骰面签名已处理时，不应重复打开 afterRollConfirmed`
+
 ### 5.5 [中高风险] 弃牌 / 卖牌 / 推阶段循环没有从根因上消除，主要仍靠 action-loop 兜底（D9 / D39 / D43 / D45）
 **结论**：当前 AI 确实已经移除了 `UNDO_SELL_CARD` 的生成，因此“卖牌 ↔ 撤回卖牌”这条老循环在当前静态代码里不再是主路径；但 `discard-card` / `sell-card` / `advance-phase` 这些动作仍可能构成新的重复或交替循环，而根因消除仍主要依赖 watchdog 的 `action-loop` 识别。
 

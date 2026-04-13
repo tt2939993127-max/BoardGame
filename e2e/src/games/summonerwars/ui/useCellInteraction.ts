@@ -14,8 +14,8 @@ import { FLOW_COMMANDS } from '../../../engine';
 import {
   getValidSummonPositions, getValidBuildPositions,
   getValidMoveTargetsEnhanced, getValidAttackTargetsEnhanced,
-  getPlayerUnits, hasAvailableActions, isCellEmpty, isImmobile,
-  getAdjacentCells, MAX_MOVES_PER_TURN, MAX_ATTACKS_PER_TURN,
+  getPlayerUnits, hasAvailableActions, isCellEmpty,
+  getAdjacentCells,
   manhattanDistance, getStructureAt, findUnitPositionByInstanceId, getSummoner,
   getUnitAbilities, hasStableAbility, getForceDestinations,
 } from '../domain/helpers';
@@ -135,25 +135,44 @@ export function useCellInteraction({
     }
   }, [currentPhase]);
 
-  // ---------- 事件卡模式子 hook ----------
-  const eventCardModes = useEventCardModes({
-    core, dispatch, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
-    soulTransferMode, mindCaptureMode,
-    afterAttackAbilityMode, setAfterAttackAbilityMode,
-  });
-
   // ---------- InteractionSystem（SummonerWars） ----------
   const swInteraction = useMemo(() => {
     if (!interaction || interaction.kind !== 'simple-choice') return null;
     if (interaction.playerId !== (myPlayerId as '0' | '1')) return null;
-    const data = interaction.data as { sw?: { type?: string }; options?: PromptOption[] };
+    const data = interaction.data as { sw?: { type?: string } & Record<string, unknown>; options?: PromptOption[] };
     if (!data?.sw || typeof data.sw !== 'object') return null;
     return {
       id: interaction.id,
       type: (data.sw as { type?: string }).type ?? '',
+      meta: data.sw as Record<string, unknown>,
       options: (data.options ?? []) as PromptOption[],
     };
   }, [interaction, myPlayerId]);
+
+  const respondInteractionOption = useCallback((optionId: string | null, optionIds?: string[]) => {
+    if (!swInteraction) return;
+    if (Array.isArray(optionIds) && optionIds.length > 0) {
+      dispatch(INTERACTION_COMMANDS.RESPOND, {
+        interactionId: swInteraction.id,
+        optionIds,
+      });
+      return;
+    }
+    if (!optionId) return;
+    dispatch(INTERACTION_COMMANDS.RESPOND, {
+      interactionId: swInteraction.id,
+      optionId,
+    });
+  }, [dispatch, swInteraction]);
+
+  // ---------- 事件卡模式子 hook ----------
+  const eventCardModes = useEventCardModes({
+    core, dispatch, currentPhase, myPlayerId, myHand, setSelectedHandCardId,
+    swInteraction,
+    respondInteractionOption,
+    soulTransferMode, mindCaptureMode,
+    afterAttackAbilityMode, setAfterAttackAbilityMode,
+  });
 
   const interactionPositionOptions = useMemo(() => {
     if (!swInteraction) return [];
@@ -976,8 +995,17 @@ export function useCellInteraction({
     if (eventCardModes.bloodSummonMode?.step === 'selectCard' && cardId) {
       const card = myHand.find(c => c.id === cardId);
       if (card && card.cardType === 'unit' && (card as UnitCard).cost <= 2) {
-        eventCardModes.setBloodSummonMode({ ...eventCardModes.bloodSummonMode, step: 'selectPosition', summonCardId: cardId });
-        setSelectedHandCardId(cardId);
+        if (swInteraction?.type === 'blood_summon_select_card') {
+          const option = swInteraction.options.find((opt) => {
+            const value = opt.value as { action?: string; summonCardId?: string } | undefined;
+            return value?.action === 'blood_summon_card' && value.summonCardId === cardId;
+          });
+          if (option) {
+            respondInteractionOption(option.id);
+            setSelectedHandCardId(cardId);
+          }
+          return;
+        }
         return;
       }
     }

@@ -8,7 +8,7 @@
 import React from 'react';
 import type { MotionProps } from 'framer-motion';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UI_Z_INDEX } from '../../../core';
+import { HudPortal, UI_Z_INDEX } from '../../../core';
 import { createScopedLogger } from '../../../lib/logger';
 
 const spotlightContainerLogger = createScopedLogger('DT_SPOTLIGHT_CONTAINER');
@@ -124,62 +124,64 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     const m = contentMotion ?? DEFAULT_CONTENT_MOTION;
 
     return (
-        <AnimatePresence mode="wait">
-            <motion.div
-                key={id}
-                className={`fixed inset-0 flex items-center justify-center ${(blockPointerEvents || shouldCaptureBackdropClick) ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                style={{ zIndex }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-                onClick={!shouldCaptureBackdropClick
-                    ? undefined
-                    : () => {
-                        const guardActive = isCloseClickGuardActive();
-                        spotlightContainerLogger.info('backdrop-click', {
-                            id,
-                            guardActive,
-                        });
-                        if (guardActive) {
-                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'backdrop' });
-                            return;
-                        }
-                        spotlightContainerLogger.info('close', { id, source: 'backdrop' });
-                        onClose();
-                    }}
-            >
-                {/* 内容容器 */}
+        <HudPortal>
+            <AnimatePresence mode="wait">
                 <motion.div
-                    className={`relative ${allowContentPointerEvents ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                    initial={m.initial}
-                    animate={m.animate}
-                    exit={m.exit}
-                    transition={m.transition}
-                    onClick={(e) => {
-                        e.stopPropagation();
-                        const guardActive = isCloseClickGuardActive();
-                        spotlightContainerLogger.info('content-click', {
-                            id,
-                            closeOnContentClick,
-                            guardActive,
-                        });
-                        if (!closeOnContentClick) {
-                            spotlightContainerLogger.info('close-skipped', { reason: 'content-click-disabled', id, source: 'content' });
-                            return;
-                        }
-                        if (guardActive) {
-                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'content' });
-                            return;
-                        }
-                        spotlightContainerLogger.info('close', { id, source: 'content' });
-                        onClose();
-                    }}
+                    key={id}
+                    className={`fixed inset-0 flex items-center justify-center ${(blockPointerEvents || shouldCaptureBackdropClick) ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                    style={{ zIndex }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    onClick={!shouldCaptureBackdropClick
+                        ? undefined
+                        : () => {
+                            const guardActive = isCloseClickGuardActive();
+                            spotlightContainerLogger.info('backdrop-click', {
+                                id,
+                                guardActive,
+                            });
+                            if (guardActive) {
+                                spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'backdrop' });
+                                return;
+                            }
+                            spotlightContainerLogger.info('close', { id, source: 'backdrop' });
+                            onClose();
+                        }}
                 >
-                    {children}
+                    {/* 内容容器 */}
+                    <motion.div
+                        className={`relative ${allowContentPointerEvents ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                        initial={m.initial}
+                        animate={m.animate}
+                        exit={m.exit}
+                        transition={m.transition}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            const guardActive = isCloseClickGuardActive();
+                            spotlightContainerLogger.info('content-click', {
+                                id,
+                                closeOnContentClick,
+                                guardActive,
+                            });
+                            if (!closeOnContentClick) {
+                                spotlightContainerLogger.info('close-skipped', { reason: 'content-click-disabled', id, source: 'content' });
+                                return;
+                            }
+                            if (guardActive) {
+                                spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'content' });
+                                return;
+                            }
+                            spotlightContainerLogger.info('close', { id, source: 'content' });
+                            onClose();
+                        }}
+                    >
+                        {children}
+                    </motion.div>
                 </motion.div>
-            </motion.div>
-        </AnimatePresence>
+            </AnimatePresence>
+        </HudPortal>
     );
 };
 

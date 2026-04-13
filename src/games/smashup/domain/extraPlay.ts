@@ -7,7 +7,12 @@ import { reduce } from './reduce';
 import { buildBaseTargetOptions, buildMinionTargetOptions, createSkipOption, grantExtraAction, grantExtraMinion } from './abilityHelpers';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
 import { SU_COMMANDS, SU_EVENTS, type ActionCardDef, type FusionCardDef, type LimitModifiedEvent, type MinionOnBase, type SmashUpCore } from './types';
-import { isCardActionLike, isCardMinionLike } from './utils';
+import {
+    actionLikeNeedsPlayBase,
+    actionLikeNeedsPlayMinion,
+    isCardActionLike,
+    isCardMinionLike,
+} from './utils';
 
 type ImmediateExtraLimitPayload = LimitModifiedEvent['payload'] & { playTiming: 'immediate' };
 type ImmediateExtraMinionPayload = ImmediateExtraLimitPayload & { limitType: 'minion' };
@@ -153,13 +158,16 @@ function getImmediateActionTargetMode(def: ActionCardDef | FusionCardDef): 'none
         ? (def as FusionCardDef).actionSubtype
         : (def as ActionCardDef).subtype;
 
-    if (subtype !== 'ongoing') return 'none';
+    if (subtype === 'ongoing') {
+        const ongoingTarget = (def as any).type === 'fusion'
+            ? ((def as FusionCardDef).actionOngoingTarget ?? 'base')
+            : ((def as ActionCardDef).ongoingTarget ?? 'base');
+        return ongoingTarget === 'minion' ? 'minion' : 'base';
+    }
 
-    const ongoingTarget = (def as any).type === 'fusion'
-        ? ((def as FusionCardDef).actionOngoingTarget ?? 'base')
-        : ((def as ActionCardDef).ongoingTarget ?? 'base');
-
-    return ongoingTarget === 'minion' ? 'minion' : 'base';
+    if (actionLikeNeedsPlayMinion(def)) return 'minion';
+    if (actionLikeNeedsPlayBase(def)) return 'base';
+    return 'none';
 }
 
 function buildImmediateExtraActionBaseOptions(

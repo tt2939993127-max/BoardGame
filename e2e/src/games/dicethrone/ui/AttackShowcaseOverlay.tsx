@@ -12,8 +12,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { Swords } from 'lucide-react';
 import { CardPreview } from '../../../components/common/media/CardPreview';
-import { buildLocalizedImageSet } from '../../../core';
-import { UI_Z_INDEX } from '../../../core';
+import { buildLocalizedImageSet, HudPortal, UI_Z_INDEX } from '../../../core';
 import { GameButton } from './components/GameButton';
 import { ASSETS } from './assets';
 import {
@@ -104,74 +103,76 @@ export const AttackShowcaseOverlay: React.FC<AttackShowcaseOverlayProps> = ({
             : { width: '16vw', aspectRatio: String(slotAspect) };
 
     return (
-        <AnimatePresence>
-            <motion.div
-                key="attack-showcase"
-                className="fixed inset-0 flex items-center justify-center"
-                style={{ zIndex: UI_Z_INDEX.overlayRaised + 10 }}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3 }}
-            >
-                {/* 半透明遮罩 */}
-                <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-
-                {/* 内容 */}
+        <HudPortal>
+            <AnimatePresence>
                 <motion.div
-                    className="relative flex flex-col items-center gap-[1.5vw]"
-                    initial={{ y: -40, scale: 0.85, opacity: 0 }}
-                    animate={{ y: 0, scale: 1, opacity: 1 }}
-                    exit={{ y: 20, scale: 0.9, opacity: 0 }}
-                    transition={{ type: 'spring', stiffness: 200, damping: 22 }}
+                    key="attack-showcase"
+                    className="fixed inset-0 flex items-center justify-center"
+                    style={{ zIndex: UI_Z_INDEX.overlayRaised + 10 }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
                 >
-                    {/* 标题 */}
-                    <div className="flex items-center gap-[0.6vw] text-red-400">
-                        <Swords className="w-[1.8vw] h-[1.8vw]" />
-                        <span className="text-[1.4vw] font-black tracking-wider uppercase">
-                            {t('attackShowcase.title')}
-                        </span>
-                        <Swords className="w-[1.8vw] h-[1.8vw] scale-x-[-1]" />
-                    </div>
+                    {/* 半透明遮罩 */}
+                    <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-                    {/* 技能展示区域 */}
-                    <div
-                        className="relative overflow-hidden rounded-[0.8vw] border-2 border-red-500/60 shadow-[0_0_2vw_rgba(239,68,68,0.5),0_0_4vw_rgba(239,68,68,0.2)]"
-                        style={containerStyle}
+                    {/* 内容 */}
+                    <motion.div
+                        className="relative flex flex-col items-center gap-[1.5vw]"
+                        initial={{ y: -40, scale: 0.85, opacity: 0 }}
+                        animate={{ y: 0, scale: 1, opacity: 1 }}
+                        exit={{ y: 20, scale: 0.9, opacity: 0 }}
+                        transition={{ type: 'spring', stiffness: 200, damping: 22 }}
                     >
-                        {hasUpgradeCard ? (
-                            <CardPreview
-                                previewRef={data.upgradePreviewRef}
-                                locale={locale}
-                                className="w-full h-full"
-                            />
-                        ) : data.slotId ? (
-                            <AbilitySlotCrop
-                                characterId={data.attackerCharacterId}
-                                slotId={data.slotId}
-                                locale={locale}
-                            />
-                        ) : (
-                            // 无法定位技能槽时的 fallback：显示技能名称
-                            <div className="w-full h-full bg-slate-800/80 flex items-center justify-center">
-                                <span className="text-white/60 text-[1vw]">
-                                    {data.sourceAbilityId}
-                                </span>
-                            </div>
-                        )}
-                    </div>
+                        {/* 标题 */}
+                        <div className="flex items-center gap-[0.6vw] text-red-400">
+                            <Swords className="w-[1.8vw] h-[1.8vw]" />
+                            <span className="text-[1.4vw] font-black tracking-wider uppercase">
+                                {t('attackShowcase.title')}
+                            </span>
+                            <Swords className="w-[1.8vw] h-[1.8vw] scale-x-[-1]" />
+                        </div>
 
-                    {/* 继续按钮 */}
-                    <GameButton
-                        variant="primary"
-                        size="md"
-                        onClick={onDismiss}
-                        className="mt-[0.5vw] text-[1vw] px-[3vw] py-[0.8vw]"
-                    >
-                        {t('attackShowcase.continue')}
-                    </GameButton>
+                        {/* 技能展示区域 */}
+                        <div
+                            className="relative overflow-hidden rounded-[0.8vw] border-2 border-red-500/60 shadow-[0_0_2vw_rgba(239,68,68,0.5),0_0_4vw_rgba(239,68,68,0.2)]"
+                            style={containerStyle}
+                        >
+                            {hasUpgradeCard ? (
+                                <CardPreview
+                                    previewRef={data.upgradePreviewRef}
+                                    locale={locale}
+                                    className="w-full h-full"
+                                />
+                            ) : data.slotId ? (
+                                <AbilitySlotCrop
+                                    characterId={data.attackerCharacterId}
+                                    slotId={data.slotId}
+                                    locale={locale}
+                                />
+                            ) : (
+                                // 无法定位技能槽时的 fallback：显示技能名称
+                                <div className="w-full h-full bg-slate-800/80 flex items-center justify-center">
+                                    <span className="text-white/60 text-[1vw]">
+                                        {data.sourceAbilityId}
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 继续按钮 */}
+                        <GameButton
+                            variant="primary"
+                            size="md"
+                            onClick={onDismiss}
+                            className="mt-[0.5vw] text-[1vw] px-[3vw] py-[0.8vw]"
+                        >
+                            {t('attackShowcase.continue')}
+                        </GameButton>
+                    </motion.div>
                 </motion.div>
-            </motion.div>
-        </AnimatePresence>
+            </AnimatePresence>
+        </HudPortal>
     );
 };

@@ -5,11 +5,11 @@ import type {
     AttackResolvedEvent,
     AttackPreDefenseResolvedEvent,
     AttackDefenseResolvedEvent,
-    TokenGrantedEvent,
 } from './types';
 import { resolveEffectsToEvents, type EffectContext } from './effects';
 import { getPlayerAbilityEffects } from './abilityLookup';
-import { getPendingAttackExpectedDamage } from './utils';
+import { applyEvents, getPendingAttackExpectedDamage } from './utils';
+import { reduce } from './reducer';
 
 const isBlockingInteractionEvent = (event: DiceThroneEvent): boolean =>
     event.type === 'CHOICE_REQUESTED' || event.type === 'INTERACTION_REQUESTED';
@@ -105,30 +105,12 @@ const resolveDefenseEffects = (
     defenseEvents.push(...resolveEffectsToEvents(defenseEffects, 'postDamage', defenseCtx, { random }));
     defenseEvents.push(createDefenseResolvedEvent(attackerId, defenderId, defenseAbilityId, timestamp));
 
-    const tokenGrantedEvents = defenseEvents.filter((e): e is TokenGrantedEvent => e.type === 'TOKEN_GRANTED');
-    if (tokenGrantedEvents.length === 0) {
+    if (defenseEvents.length === 0) {
         return { defenseEvents, stateAfterDefense: state };
     }
 
-    let players = { ...state.players };
-    for (const evt of tokenGrantedEvents) {
-        const { targetId, tokenId, newTotal } = evt.payload;
-        const player = players[targetId];
-        if (!player) continue;
-
-        players = {
-            ...players,
-            [targetId]: {
-                ...player,
-                tokens: { ...player.tokens, [tokenId]: newTotal },
-            },
-        };
-    }
-
-    return {
-        defenseEvents,
-        stateAfterDefense: { ...state, players },
-    };
+    const stateAfterDefense = applyEvents(state, defenseEvents, reduce);
+    return { defenseEvents, stateAfterDefense };
 };
 
 export const resolveAttack = (
@@ -181,17 +163,20 @@ export const resolveAttack = (
     }
 
     const events: DiceThroneEvent[] = [];
+    let stateAfterPreDefense = state;
     if (options?.includePreDefense) {
         const preDefenseEvents = resolveOffensivePreDefenseEffects(state, random, timestamp);
         events.push(...preDefenseEvents);
 
         const hasChoice = preDefenseEvents.some(isBlockingInteractionEvent);
         if (hasChoice) return events;
+
+        stateAfterPreDefense = applyEvents(state, preDefenseEvents as DiceThroneEvent[], reduce);
     }
 
     const { attackerId, defenderId, sourceAbilityId, defenseAbilityId } = pending;
     const bonusDamage = pending.bonusDamage ?? 0;
-    const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(state, random, timestamp);
+    const { defenseEvents, stateAfterDefense } = resolveDefenseEffects(stateAfterPreDefense, random, timestamp);
     events.push(...defenseEvents);
     const hasDefenseChoice = defenseEvents.some(e => e.type === 'CHOICE_REQUESTED');
     const hasDefenseTokenResponse = defenseEvents.some(e => e.type === 'TOKEN_RESPONSE_REQUESTED');

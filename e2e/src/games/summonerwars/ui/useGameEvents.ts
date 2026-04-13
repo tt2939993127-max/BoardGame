@@ -12,6 +12,7 @@ import { SW_EVENTS } from '../domain/types';
 import { getEventStreamEntries } from '../../../engine/systems/EventStreamSystem';
 import type { DestroyEffectData } from './DestroyEffect';
 import type { DiceFaceResult } from '../config/dice';
+import { normalizeDiceResults } from '../config/dice';
 import { getDestroySpriteConfig } from './spriteHelpers';
 import type { FxBus } from '../../../engine/fx';
 import { SW_FX } from './fxSetup';
@@ -20,9 +21,14 @@ import { playSound } from '../../../lib/audio/useGameAudio';
 import { resolveDamageSoundKey, resolveDestroySoundKey } from '../audio.config';
 import type { UseVisualSequenceGateReturn } from '../../../components/game/framework/hooks/useVisualSequenceGate';
 import { useVisualStateBuffer } from '../../../components/game/framework/hooks/useVisualStateBuffer';
-import type { UseVisualStateBufferReturn } from '../../../components/game/framework/hooks/useVisualStateBuffer';
 import type { RapidFireModeState, WithdrawModeState } from './modeTypes';
 import { useEventStreamCursor } from '../../../engine/hooks';
+
+const isCellCoord = (value: unknown): value is CellCoord => {
+  if (!value || typeof value !== 'object') return false;
+  const coord = value as { row?: unknown; col?: unknown };
+  return typeof coord.row === 'number' && typeof coord.col === 'number';
+};
 
 // ============================================================================
 // 类型定义
@@ -366,13 +372,32 @@ export function useGameEvents({
       }
 
       // 攻击事件 - 显示骰子，效果队列化，开启视觉序列门控
-      if (event.type === SW_EVENTS.UNIT_ATTACKED) {
-        const p = event.payload as {
-          attackType: 'melee' | 'ranged'; diceResults: DiceFaceResult[]; hits: number; diceCount?: number;
-          target: CellCoord; attacker: CellCoord;
-        };
-        const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
-        const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
+        if (event.type === SW_EVENTS.UNIT_ATTACKED) {
+          const p = event.payload as {
+            attackType?: 'melee' | 'ranged'; diceResults?: DiceFaceResult[]; hits?: number; diceCount?: number;
+            target?: CellCoord; attacker?: CellCoord;
+          };
+          if (!isCellCoord(p.attacker) || !isCellCoord(p.target) || !p.attackType || typeof p.hits !== 'number') {
+            console.warn('[SW-EVENT] UNIT_ATTACKED payload 异常，跳过骰子与攻击动画', { payload: event.payload });
+            continue;
+          }
+          const normalizedDiceResults = normalizeDiceResults(p.diceResults);
+          const diceCount = p.diceCount
+            ?? normalizedDiceResults?.length
+            ?? (Array.isArray(p.diceResults) ? p.diceResults.length : undefined)
+            ?? 1;
+
+          const diceResultsForUi = normalizedDiceResults
+            ?? Array.from({ length: diceCount }, () => ({ faceIndex: 8, marks: ['melee'] as const }));
+
+          if (!normalizedDiceResults) {
+            console.warn('[SW-EVENT] UNIT_ATTACKED diceResults 不是有效格式，使用兜底骰面继续流程', {
+              diceResults: p.diceResults,
+              diceCount,
+            });
+          }
+          const attackerUnit = core.board[p.attacker.row]?.[p.attacker.col]?.unit;
+          const isOpponentAttack = attackerUnit ? attackerUnit.owner !== myPlayerId : false;
 
         gateRef.current.beginSequence();
         pendingAttackRef.current = {
@@ -391,19 +416,19 @@ export function useGameEvents({
           damageBuffer.freeze(`${p.target.row}-${p.target.col}`, targetCell.structure.damage);
         }
 
-        onDiceRollSoundRef.current?.(p.diceCount ?? p.diceResults?.length ?? 1);
+          onDiceRollSoundRef.current?.(diceCount);
 
         // 收集同批次的减伤事件（DAMAGE_REDUCED 在 UNIT_ATTACKED 之前发射）
         const damageReduced = newEntries
           .filter(e => e.event.type === SW_EVENTS.DAMAGE_REDUCED)
           .reduce((sum, e) => sum + ((e.event.payload as { value?: number }).value ?? 0), 0);
 
-        setDiceResult({
-          results: p.diceResults, attackType: p.attackType,
-          hits: p.hits, isOpponentAttack,
-          damageReduced: damageReduced > 0 ? damageReduced : undefined,
-        });
-      }
+          setDiceResult({
+            results: diceResultsForUi, attackType: p.attackType,
+            hits: p.hits, isOpponentAttack,
+            damageReduced: damageReduced > 0 ? damageReduced : undefined,
+          });
+        }
 
       // 受伤事件 - 存入待播放队列或立即播放
       if (event.type === SW_EVENTS.UNIT_DAMAGED) {

@@ -2388,6 +2388,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                         <FactionSelection core={core} dispatch={dispatch} playerID={playerID} />
                     </div>
                 </TutorialSelectionGate>
+                <GameDebugPanel G={G} dispatch={dispatch} playerID={playerID} autoSwitch={false} />
             </UndoProvider>
         );
     }

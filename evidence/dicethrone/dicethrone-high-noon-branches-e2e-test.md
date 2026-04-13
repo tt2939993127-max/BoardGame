@@ -4,7 +4,8 @@
 
 ## 真相源与语义约束
 
-- `card-high-noon`（枪手行动卡）：掷 1 颗枪手奖励骰，根据骰面分支：
+- 真相源（卡面裁图）：`D:\gongzuo\webgame\BoardGame\temp\dicethrone\atlas-crops-20260411\gunslinger\slot-29.webp`
+- `card-high-noon`（枪手行动卡，运行时显示名：`High Noon / 正午时分！`；卡面别名：`賭命輪盤！`）：**选择 1 位目标玩家**（1v1 自动为唯一对手），掷 1 颗枪手奖励骰，根据骰面分支：
   - `bullet`：造成 **2 点不可防御伤害**
   - `dash`：施加 **1 层击倒**
   - `bullseye`：施加 **1 层赏金**
@@ -25,6 +26,9 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-hi
 npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-high-noon（dash）应施加 1 层击倒，并提供奖励骰特写证据链"
 npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-high-noon（bullseye）应施加 1 层赏金，并提供奖励骰特写证据链"
 ```
+
+## 运行结果
+- Playwright：三条用例均为 `1 passed`（单 worker / 单用例）。
 
 ## 证据与肉眼结论
 
@@ -82,4 +86,4 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-hi
 ## 覆盖声明与未覆盖风险
 
 - 本文覆盖：`card-high-noon` 在 **1v1 场景** 下的三分支结算正确性，以及奖励骰特写的“出现→关闭→收口”闭环。
-- 未覆盖（需要另开用例/另补证据）：4 人 2v2 模式下“目标玩家（all seating）”的交互 UI 证据（当前实现口径：>2 人时 `High Noon` 目标集合取 `getSeatingOrder(state)`；但本文没有提供 4 人局的连续截图链）。
+- 4 人 2v2 模式下“目标玩家（all seating）”的交互 UI 证据：由 `evidence/dicethrone/dicethrone-gunslinger-samurai-4p-targeted-cards-e2e-test.md` 覆盖（本文不重复贴图）。

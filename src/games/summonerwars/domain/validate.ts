@@ -21,6 +21,8 @@ import {
   MAX_MOVES_PER_TURN,
   MAX_ATTACKS_PER_TURN,
   getUnitAt,
+  getPlayerUnits,
+  getStructureAt,
   isAdjacent,
   isCellEmpty,
   canMoveToEnhanced,
@@ -33,10 +35,123 @@ import {
   getUnitAbilities,
   findUnitPositionByInstanceId,
   isValidCoord,
+  isInStraightLine,
 } from './helpers';
 import { getPhaseDisplayName } from './execute';
 import { validateAbilityActivation } from './abilityValidation';
 import { VALID_FACTION_IDS, getBaseCardId, CARD_IDS } from './ids';
+
+const INTERACTIVE_EVENT_BASE_IDS = new Set<string>([
+  CARD_IDS.NECRO_HELLFIRE_BLADE,
+  CARD_IDS.NECRO_BLOOD_SUMMON,
+  CARD_IDS.NECRO_ANNIHILATE,
+  CARD_IDS.TRICKSTER_MIND_CONTROL,
+  CARD_IDS.TRICKSTER_STUN,
+  CARD_IDS.TRICKSTER_HYPNOTIC_LURE,
+  CARD_IDS.BARBARIC_CHANT_OF_POWER,
+  CARD_IDS.BARBARIC_CHANT_OF_GROWTH,
+  CARD_IDS.BARBARIC_CHANT_OF_WEAVING,
+  CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT,
+  CARD_IDS.FROST_GLACIAL_SHIFT,
+  CARD_IDS.GOBLIN_SNEAK,
+]);
+
+const hasAdjacentEmptyCell = (core: SummonerWarsCore, position: CellCoord): boolean => {
+  const adj = [
+    { row: position.row - 1, col: position.col },
+    { row: position.row + 1, col: position.col },
+    { row: position.row, col: position.col - 1 },
+    { row: position.row, col: position.col + 1 },
+  ];
+  return adj.some((pos) => isValidCoord(pos) && isCellEmpty(core, pos));
+};
+
+const hasValidEventInteractionTargets = (
+  core: SummonerWarsCore,
+  playerId: PlayerId,
+  eventCard: EventCard,
+): boolean => {
+  const baseId = getBaseCardId(eventCard.id);
+  const friendlyUnits = getPlayerUnits(core, playerId as PlayerId);
+  const summoner = getSummoner(core, playerId as PlayerId);
+
+  switch (baseId) {
+    case CARD_IDS.NECRO_HELLFIRE_BLADE: {
+      return friendlyUnits.some((unit) => unit.card.unitClass === 'common');
+    }
+    case CARD_IDS.NECRO_BLOOD_SUMMON: {
+      const hasTarget = friendlyUnits.some((unit) => hasAdjacentEmptyCell(core, unit.position));
+      const hasCard = core.players[playerId].hand.some((card) => card.cardType === 'unit' && (card as UnitCard).cost <= 2);
+      return hasTarget && hasCard;
+    }
+    case CARD_IDS.NECRO_ANNIHILATE: {
+      return friendlyUnits.some((unit) => unit.card.unitClass !== 'summoner');
+    }
+    case CARD_IDS.TRICKSTER_MIND_CONTROL: {
+      if (!summoner) return false;
+      const opponentId = playerId === '0' ? '1' : '0';
+      const enemyUnits = getPlayerUnits(core, opponentId as PlayerId)
+        .filter((unit) => unit.card.unitClass !== 'summoner');
+      return enemyUnits.some((unit) => manhattanDistance(summoner.position, unit.position) <= 2);
+    }
+    case CARD_IDS.TRICKSTER_STUN: {
+      if (!summoner) return false;
+      const opponentId = playerId === '0' ? '1' : '0';
+      const enemyUnits = getPlayerUnits(core, opponentId as PlayerId)
+        .filter((unit) => unit.card.unitClass !== 'summoner');
+      return enemyUnits.some((unit) => {
+        const dist = manhattanDistance(summoner.position, unit.position);
+        return dist > 0 && dist <= 3 && isInStraightLine(summoner.position, unit.position);
+      });
+    }
+    case CARD_IDS.TRICKSTER_HYPNOTIC_LURE: {
+      const opponentId = playerId === '0' ? '1' : '0';
+      return getPlayerUnits(core, opponentId as PlayerId)
+        .some((unit) => unit.card.unitClass !== 'summoner');
+    }
+    case CARD_IDS.BARBARIC_CHANT_OF_POWER: {
+      if (!summoner) return false;
+      return friendlyUnits.some((unit) => unit.card.unitClass !== 'summoner'
+        && manhattanDistance(summoner.position, unit.position) <= 3);
+    }
+    case CARD_IDS.BARBARIC_CHANT_OF_GROWTH:
+    case CARD_IDS.BARBARIC_CHANT_OF_WEAVING: {
+      return friendlyUnits.length > 0;
+    }
+    case CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT: {
+      if (!summoner) return false;
+      const commons = friendlyUnits.filter((unit) =>
+        unit.card.unitClass === 'common' && manhattanDistance(summoner.position, unit.position) <= 3);
+      return commons.length >= 2;
+    }
+    case CARD_IDS.FROST_GLACIAL_SHIFT: {
+      if (!summoner) return false;
+      const buildings: CellCoord[] = [];
+      for (let row = 0; row < BOARD_ROWS; row++) {
+        for (let col = 0; col < BOARD_COLS; col++) {
+          const pos = { row, col };
+          const structure = getStructureAt(core, pos);
+          const unit = getUnitAt(core, pos);
+          const isAllyStructure = (structure && structure.owner === playerId)
+            || (unit && unit.owner === playerId && getUnitAbilities(unit, core).includes('mobile_structure'));
+          if (isAllyStructure && manhattanDistance(summoner.position, pos) <= 3 && hasAdjacentEmptyCell(core, pos)) {
+            buildings.push(pos);
+          }
+        }
+      }
+      return buildings.length > 0;
+    }
+    case CARD_IDS.GOBLIN_SNEAK: {
+      return friendlyUnits.some((unit) =>
+        unit.card.unitClass !== 'summoner'
+        && unit.card.cost === 0
+        && hasAdjacentEmptyCell(core, unit.position),
+      );
+    }
+    default:
+      return false;
+  }
+};
 
 // ============================================================================
 // 命令验证
@@ -363,6 +478,11 @@ export function validateCommand(
       return { valid: true };
     }
 
+    case SW_COMMANDS.CONFIRM_ATTACK: {
+      // 兼容旧客户端缓存：历史上该命令不会独立结算攻击，当前保留为安全 no-op
+      return { valid: true };
+    }
+
     case SW_COMMANDS.PLAY_EVENT: {
       const cardId = payload.cardId as string;
       const targets = payload.targets as CellCoord[] | undefined;
@@ -393,6 +513,26 @@ export function validateCommand(
         }
       }
       
+      return { valid: true };
+    }
+
+    case SW_COMMANDS.REQUEST_EVENT_INTERACTION: {
+      const cardId = payload.cardId as string;
+      const player = core.players[playerId];
+      const card = player.hand.find(c => c.id === cardId);
+      if (!card || card.cardType !== 'event') return { valid: false, error: '无效的事件卡' };
+      const eventCard = card as EventCard;
+      if (!hasEnoughMagic(core, playerId, eventCard.cost)) return { valid: false, error: '魔力不足' };
+      if (eventCard.playPhase !== 'any' && eventCard.playPhase !== core.phase) {
+        return { valid: false, error: `该事件只能在${getPhaseDisplayName(eventCard.playPhase)}施放` };
+      }
+      const baseId = getBaseCardId(eventCard.id);
+      if (!INTERACTIVE_EVENT_BASE_IDS.has(baseId)) {
+        return { valid: false, error: '该事件无需交互' };
+      }
+      if (!hasValidEventInteractionTargets(core, playerId, eventCard)) {
+        return { valid: false, error: '没有可用目标' };
+      }
       return { valid: true };
     }
 

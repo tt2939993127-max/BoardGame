@@ -44,6 +44,7 @@ import { DestroyEffectsLayer, useDestroyEffects } from './ui/DestroyEffect';
 import { useScreenShake } from './ui/BoardEffects';
 import { useFxBus, FxLayer } from '../../engine/fx';
 import { useVisualSequenceGate } from '../../components/game/framework/hooks/useVisualSequenceGate';
+import { useIsInteractionBusy } from '../../components/game/framework/hooks/useIsInteractionBusy';
 import { summonerWarsFxRegistry, SW_FX } from './ui/fxSetup';
 import type { Card, BoardUnit, BoardStructure, CellCoord, EventCard, PlayerId } from './domain/types';
 import { CardSelectorOverlay } from './ui/CardSelectorOverlay';
@@ -66,7 +67,6 @@ import { BOARD_SHELL_REFERENCE_WIDTH } from './ui/layoutConstants';
 import { getEventStreamEntries } from '../../engine/systems/EventStreamSystem';
 import { SUMMONER_WARS_AUDIO_CONFIG, resolveDiceRollSound, resolveAttackSoundKey, resolveDamageSoundKey } from './audio.config';
 import { SUMMONER_WARS_MANIFEST } from './manifest';
-import { useMobileViewport } from '../../hooks/ui/useMobileViewport';
 import { useRuntimeViewport } from '../../hooks/ui/useRuntimeViewport';
 import type { InteractionDescriptor, PromptOption } from '../../engine/systems/InteractionSystem';
 import { INTERACTION_COMMANDS } from '../../engine/systems/InteractionSystem';
@@ -80,54 +80,34 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
 const SUMMONERWARS_BOARD_REFERENCE_WIDTH = 1280;
-const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH = 1920;
-const SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT = 1080;
 const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
 ]);
 
-const resolveSummonerWarsShellMetrics = (viewport: { width: number; height: number }) => {
-  const safeWidth = Number.isFinite(viewport.width) && viewport.width > 0
-    ? viewport.width
-    : SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH;
-  const safeHeight = Number.isFinite(viewport.height) && viewport.height > 0
-    ? viewport.height
-    : SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT;
-  const widthScale = safeWidth / SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH;
-  const heightScale = safeHeight / SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_HEIGHT;
-  const scale = Math.min(widthScale, heightScale);
-  const safeScale = Number.isFinite(scale) && scale > 0 ? scale : 1;
-  const inverseScale = 1 / safeScale;
-  const logicalHeight = safeHeight / safeScale;
-  const inlineUnit = SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH / 100;
-  const blockUnit = logicalHeight / 100;
-
-  return {
-    designWidth: SUMMONERWARS_MOBILE_BOARD_SHELL_DESIGN_WIDTH,
-    scale: safeScale,
-    inverseScale,
-    logicalHeight,
-    inlineUnit,
-    blockUnit,
-  };
-};
-
 export const SummonerWarsBoard: React.FC<Props> = ({
   G, dispatch, playerID, reset, matchData, isMultiplayer, locale,
 }) => {
   const isGameOver = G.sys.gameover;
   const gameMode = useGameMode();
-  const isMobileViewport = useMobileViewport();
   const isLocalMatch = gameMode ? !gameMode.isMultiplayer : !isMultiplayer;
   const isSpectator = !!gameMode?.isSpectator;
   const isTutorialMode = gameMode?.mode === 'tutorial';
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
   const viewport = useRuntimeViewport();
-  const isLandscapeRuntimeViewport = viewport.width > viewport.height;
-  const isPhoneLandscapeViewport = isMobileViewport && isLandscapeRuntimeViewport;
+  const viewportSafeWidth = useMemo(() => {
+    const safeWidth = viewport.width - viewport.safeArea.left - viewport.safeArea.right;
+    return safeWidth > 0 ? safeWidth : viewport.width;
+  }, [viewport.safeArea.left, viewport.safeArea.right, viewport.width]);
+  const handReferenceWidth = useMemo(() => {
+    if (viewportSafeWidth <= 0) {
+      return SUMMONERWARS_BOARD_REFERENCE_WIDTH;
+    }
+    return Math.min(SUMMONERWARS_BOARD_REFERENCE_WIDTH, viewportSafeWidth);
+  }, [viewportSafeWidth]);
+  const useCompactHandLayout = handReferenceWidth < 1100;
   const mapInitialScale = MOBILE_LANDSCAPE_MAP_INITIAL_SCALE;
   const mapSideRatio = DEFAULT_MAP_SIDE_RATIO;
   const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
@@ -146,32 +126,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
   const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
-  useEffect(() => {
-    if (typeof document === 'undefined') {
-      return;
-    }
-    if (!isPhoneLandscapeViewport || viewport.width <= 0 || viewport.height <= 0) {
-      return;
-    }
-
-    const metrics = resolveSummonerWarsShellMetrics({
-      width: viewport.width,
-      height: viewport.height,
-    });
-    const rootStyle = document.documentElement.style;
-    rootStyle.setProperty('--mobile-board-shell-design-width', `${metrics.designWidth}px`);
-    rootStyle.setProperty('--mobile-board-shell-scale', metrics.scale.toFixed(6));
-    rootStyle.setProperty('--mobile-board-shell-inverse-scale', metrics.inverseScale.toFixed(6));
-    rootStyle.setProperty('--mobile-board-shell-logical-height', `${metrics.logicalHeight.toFixed(3)}px`);
-    rootStyle.setProperty('--mobile-board-shell-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
-    rootStyle.setProperty('--mobile-board-shell-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
-    rootStyle.setProperty('--mobile-layout-inline-unit', `${metrics.inlineUnit.toFixed(4)}px`);
-    rootStyle.setProperty('--mobile-layout-block-unit', `${metrics.blockUnit.toFixed(4)}px`);
-    const scaledWidth = metrics.designWidth * metrics.scale;
-    const offsetX = Math.max(0, (viewport.width - scaledWidth) / 2);
-    rootStyle.setProperty('--mobile-board-shell-offset-x', `${offsetX.toFixed(3)}px`);
-    rootStyle.setProperty('--mobile-board-shell-offset-y', '0px');
-  }, [isPhoneLandscapeViewport, viewport.height, viewport.width]);
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -367,7 +321,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     dyingEntities,
     damageBuffer,
     isVisualBusy,
-    abilityMode, setAbilityMode,
+    abilityMode: localAbilityMode, setAbilityMode,
     afterAttackAbilityMode, setAfterAttackAbilityMode,
     rapidFireMode, setRapidFireMode,
     withdrawTrigger, setWithdrawTrigger,
@@ -407,8 +361,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     [swInteraction],
   );
 
-  const respondInteractionOption = useCallback((optionId: string | null) => {
-    if (!swInteraction || !optionId) return;
+  const respondInteractionOption = useCallback((optionId: string | null, optionIds?: string[]) => {
+    if (!swInteraction) return;
+    if (Array.isArray(optionIds) && optionIds.length > 0) {
+      dispatch(INTERACTION_COMMANDS.RESPOND, { interactionId: swInteraction.id, optionIds });
+      return;
+    }
+    if (!optionId) return;
     dispatch(INTERACTION_COMMANDS.RESPOND, { interactionId: swInteraction.id, optionId });
   }, [dispatch, swInteraction]);
 
@@ -442,6 +401,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     };
   }, [swInteraction]);
 
+  const abilityMode = localAbilityMode;
+
   const systemIceShardsMode = useMemo(() => {
     if (!swInteraction || swInteraction.type !== 'ice_shards') return null;
     const meta = swInteraction.meta as { sourceUnitId?: string };
@@ -452,6 +413,15 @@ export const SummonerWarsBoard: React.FC<Props> = ({
       sourceBoosts: unit?.boosts ?? 0,
     };
   }, [core, swInteraction]);
+
+  const systemInfectionCards = useMemo(() => {
+    if (!swInteraction || swInteraction.type !== 'infection') return null;
+    const discard = core.players[myPlayerId]?.discard ?? [];
+    const cardLookup = new Map(discard.map((card) => [card.id, card]));
+    return swInteraction.options
+      .map((option) => cardLookup.get(option.id))
+      .filter((card): card is Card => !!card);
+  }, [core.players, myPlayerId, swInteraction]);
 
   const systemFeedBeastMode = !!swInteraction && swInteraction.type === 'feed_beast';
 
@@ -472,6 +442,9 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     grabFollowMode: null,
     setGrabFollowMode: noopSetGrabFollowMode,
   });
+
+  const engineInteractionBusy = useIsInteractionBusy(G, playerID);
+  const handInteractionBusy = engineInteractionBusy || !!abilityMode || interaction.hasActiveEventMode;
 
   // 桥接：useGameEvents 检测到 afterAttack 触发 withdraw → 设置 useEventCardModes 的 withdrawMode
   const setWithdrawMode = interaction.setWithdrawMode;
@@ -623,48 +596,64 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   }, [abilityMode, dispatch, findInteractionOptionId, respondInteractionOption, setAbilityMode, swInteraction]);
   const handleCancelBeforeAttack = useCallback(() => interaction.handleCancelBeforeAttack(), [interaction]);
   const handleCancelBloodSummon = useCallback(() => {
+    if (swInteraction?.type?.startsWith('blood_summon')) {
+      if (swInteraction.type === 'blood_summon_confirm') {
+        const optionId = findInteractionOptionId((option) => {
+          const value = option.value as { action?: string } | undefined;
+          return value?.action === 'blood_summon_finish';
+        });
+        respondInteractionOption(optionId);
+      } else {
+        dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      }
+      return;
+    }
     interaction.setBloodSummonMode(null);
     // 清除血契召唤期间选中的手牌高亮
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, findInteractionOptionId, interaction, respondInteractionOption, swInteraction]);
   const handleContinueBloodSummon = useCallback(() => {
-    // 直接设置状态，避免经过 handleCardSelect 触发 clearAllEventModes
-    interaction.setBloodSummonMode({
-      step: 'selectTarget',
-      cardId: interaction.bloodSummonMode?.cardId,
-      completedCount: interaction.bloodSummonMode?.completedCount,
-    });
-  }, [interaction]);
+    if (swInteraction?.type === 'blood_summon_confirm') {
+      const optionId = findInteractionOptionId((option) => {
+        const value = option.value as { action?: string } | undefined;
+        return value?.action === 'blood_summon_continue';
+      });
+      respondInteractionOption(optionId);
+    }
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   const handleCancelAnnihilate = useCallback(() => {
+    if (swInteraction?.type === 'annihilate_select_targets' || swInteraction?.type === 'annihilate_select_damage') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setAnnihilateMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
   const handleConfirmAnnihilateTargets = useCallback(() => {
-    if (!interaction.annihilateMode) return;
-    interaction.setAnnihilateMode({
-      ...interaction.annihilateMode,
-      step: 'selectDamageTarget',
-      currentTargetIndex: 0,
-      damageTargets: [],
-    });
-  }, [interaction]);
+    if (!interaction.annihilateMode || interaction.annihilateMode.selectedTargets.length === 0) return;
+    if (swInteraction?.type === 'annihilate_select_targets') {
+      const optionIds = interaction.annihilateMode.selectedTargets
+        .map((pos) => findInteractionOptionId((option) => {
+          const value = option.value as { action?: string; targetPosition?: CellCoord } | undefined;
+          return value?.action === 'annihilate_target'
+            && value.targetPosition?.row === pos.row
+            && value.targetPosition?.col === pos.col;
+        }))
+        .filter((id): id is string => !!id);
+      if (optionIds.length !== interaction.annihilateMode.selectedTargets.length) return;
+      respondInteractionOption(null, optionIds);
+    }
+  }, [findInteractionOptionId, interaction, respondInteractionOption, swInteraction]);
   // 除灭：跳过当前目标的伤害分配（描述中"你可以"表示可选）
   const handleSkipAnnihilateDamage = useCallback(() => {
-    if (!interaction.annihilateMode || interaction.annihilateMode.step !== 'selectDamageTarget') return;
-    const newDamageTargets = [...interaction.annihilateMode.damageTargets];
-    newDamageTargets[interaction.annihilateMode.currentTargetIndex] = null;
-    const nextIndex = interaction.annihilateMode.currentTargetIndex + 1;
-    if (nextIndex < interaction.annihilateMode.selectedTargets.length) {
-      interaction.setAnnihilateMode({ ...interaction.annihilateMode, damageTargets: newDamageTargets, currentTargetIndex: nextIndex });
-    } else {
-      dispatch(SW_COMMANDS.PLAY_EVENT, {
-        cardId: interaction.annihilateMode.cardId,
-        targets: interaction.annihilateMode.selectedTargets,
-        damageTargets: newDamageTargets,
+    if (swInteraction?.type === 'annihilate_select_damage') {
+      const optionId = findInteractionOptionId((option) => {
+        const value = option.value as { action?: string; skip?: boolean } | undefined;
+        return value?.action === 'annihilate_damage_skip' || value?.skip === true;
       });
-      interaction.setAnnihilateMode(null);
+      respondInteractionOption(optionId);
     }
-  }, [interaction, dispatch]);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   const handleConfirmSoulTransfer = useCallback(() => {
     if (!swInteraction || swInteraction.type !== 'soul_transfer') return;
     const optionId = findInteractionOptionId((option) => {
@@ -693,24 +682,40 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   // 欺心巫族事件卡回调
   const handleConfirmMindControl = useCallback(() => interaction.handleConfirmMindControl(), [interaction]);
   const handleCancelMindControl = useCallback(() => {
+    if (swInteraction?.type === 'mind_control_select_targets') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setMindControlMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
   const handleConfirmEntanglement = useCallback(() => interaction.handleConfirmEntanglement(), [interaction]);
   const handleCancelEntanglement = useCallback(() => {
+    if (swInteraction?.type === 'chant_entanglement_select_targets') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setChantEntanglementMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
   const handleConfirmSneak = useCallback(() => interaction.handleConfirmSneak(), [interaction]);
   const handleCancelSneak = useCallback(() => {
+    if (swInteraction?.type === 'sneak_select_unit' || swInteraction?.type === 'sneak_select_direction') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setSneakMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
   const handleConfirmGlacialShift = useCallback(() => interaction.handleConfirmGlacialShift(), [interaction]);
   const handleCancelGlacialShift = useCallback(() => {
+    if (swInteraction?.type === 'glacial_shift_select_building' || swInteraction?.type === 'glacial_shift_select_destination') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setGlacialShiftMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
   const handleWithdrawCostSelect = useCallback((costType: 'charge' | 'magic') => {
     if (!interaction.withdrawMode) return;
     interaction.setWithdrawMode({ ...interaction.withdrawMode, step: 'selectPosition', costType });
@@ -720,13 +725,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     interaction.handleConfirmStun();
   }, [interaction]);
   const handleCancelStun = useCallback(() => {
+    if (swInteraction?.type === 'stun_select_target' || swInteraction?.type === 'stun_select_destination') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setStunMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
   const handleCancelHypnoticLure = useCallback(() => {
+    if (swInteraction?.type === 'hypnotic_lure_select_target') {
+      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+      return;
+    }
     interaction.setHypnoticLureMode(null);
     interaction.handleCardSelect(null);
-  }, [interaction]);
+  }, [dispatch, interaction, swInteraction]);
 
   // 心灵捕获 + 攻击后技能回调
   const handleConfirmMindCapture = useCallback((choice: 'control' | 'damage') => {
@@ -772,6 +785,18 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     const optionId = findInteractionOptionId((option) => {
       const value = option.value as { action?: string; choice?: string } | undefined;
       return value?.action === 'feed_beast' && value.choice === 'self_destroy';
+    });
+    respondInteractionOption(optionId);
+  }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
+  const handleSelectInfectionCard = useCallback((card: Card) => {
+    if (!swInteraction || swInteraction.type !== 'infection') return;
+    respondInteractionOption(card.id);
+  }, [respondInteractionOption, swInteraction]);
+  const handleSkipInfection = useCallback(() => {
+    if (!swInteraction || swInteraction.type !== 'infection') return;
+    const optionId = findInteractionOptionId((option) => {
+      const value = option.value as { skip?: boolean } | undefined;
+      return option.id === 'skip' || value?.skip === true;
     });
     respondInteractionOption(optionId);
   }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
@@ -1172,7 +1197,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                 </div>
 
                   {/* 底部：手牌区 */}
-                  <div className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30" data-tutorial-id="sw-hand-area">
+                  <div
+                    className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30"
+                    data-tutorial-id="sw-hand-area"
+                    style={{ '--sw-hand-reference-width': `${handReferenceWidth}px` } as React.CSSProperties}
+                  >
                     <HandArea
                       cards={myHand}
                       phase={currentPhase}
@@ -1188,8 +1217,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     onMagnifyCard={handleMagnifyCard}
                     bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
                     abilitySelectingCards={abilityMode?.step === 'selectCards'}
-                    interactionBusy={!!abilityMode || interaction.hasActiveEventMode}
-                    compactLayout={false}
+                    interactionBusy={handInteractionBusy}
+                    compactLayout={useCompactHandLayout}
                   />
                   </div>
                 </div>
@@ -1217,6 +1246,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   }) ?? []}
                   onSelect={(card) => {
                     if (abilityMode.abilityId === 'infection' && abilityMode.targetPosition) {
+                      if (swInteraction?.type === 'infection') {
+                        respondInteractionOption(card.id);
+                        return;
+                      }
                       dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
                         abilityId: 'infection', sourceUnitId: abilityMode.sourceUnitId,
                         targetCardId: card.id, targetPosition: abilityMode.targetPosition,
@@ -1234,7 +1267,24 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       setAbilityMode(abilityMode ? { ...abilityMode, step: 'selectPosition', selectedCardId: card.id } : null);
                     }
                   }}
-                  onCancel={() => setAbilityMode(null)}
+                  onCancel={() => {
+                    if (swInteraction?.type === 'infection') {
+                      dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+                      return;
+                    }
+                    setAbilityMode(null);
+                  }}
+                />
+              )}
+
+              {/* 系统交互：感染（从弃牌堆选择疫病体） */}
+              {systemInfectionCards && (
+                <CardSelectorOverlay
+                  title={t('cardSelector.infection')}
+                  cards={systemInfectionCards}
+                  onSelect={handleSelectInfectionCard}
+                  onCancel={handleSkipInfection}
+                  cancelLabelKey="actions.skip"
                 />
               )}
 

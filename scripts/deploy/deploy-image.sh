@@ -42,6 +42,7 @@ WEB_CONTAINER_NAME="boardgame-web"
 GAME_CONTAINER_NAME="boardgame-game-server"
 MONGODB_CONTAINER_NAME="boardgame-mongodb"
 REDIS_CONTAINER_NAME="boardgame-redis"
+COMPOSE_PROJECT_NAME_EFFECTIVE="${COMPOSE_PROJECT_NAME:-$(basename "$(pwd)" | tr '[:upper:]' '[:lower:]')}"
 
 PREVIOUS_WEB_IMAGE_REF=""
 PREVIOUS_GAME_IMAGE_REF=""
@@ -266,6 +267,30 @@ get_container_health() {
 
 get_container_restart_count() {
   docker inspect --format '{{.RestartCount}}' "$1" 2>/dev/null || echo "0"
+}
+
+get_container_project_label() {
+  docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$1" 2>/dev/null || true
+}
+
+cleanup_residual_container() {
+  local container_name="${1:-}"
+  if [ -z "$container_name" ]; then
+    return
+  fi
+
+  if container_exists "$container_name"; then
+    local project_label
+    project_label=$(get_container_project_label "$container_name")
+    if [ -z "$project_label" ]; then
+      die "检测到残留容器 ${container_name} 但缺少 compose 标签，无法安全自动清理，请手动处理后再部署"
+    fi
+    if [ "$project_label" != "$COMPOSE_PROJECT_NAME_EFFECTIVE" ]; then
+      die "检测到残留容器 ${container_name} 属于其他项目(${project_label})，无法自动清理，请手动处理后再部署"
+    fi
+    log "检测到残留容器 ${container_name}，执行清理"
+    docker rm -f "$container_name" >/dev/null 2>&1 || true
+  fi
 }
 
 wait_for_container_running() {
@@ -720,7 +745,14 @@ deploy() {
   docker compose -f "$COMPOSE_FILE" pull
 
   log "停止旧服务"
-  docker compose -f "$COMPOSE_FILE" down --remove-orphans 2>/dev/null || true
+  if ! docker compose -f "$COMPOSE_FILE" down --remove-orphans; then
+    log "⚠️  docker compose down 执行失败，继续尝试清理残留容器"
+  fi
+
+  cleanup_residual_container "$MONGODB_CONTAINER_NAME"
+  cleanup_residual_container "$REDIS_CONTAINER_NAME"
+  cleanup_residual_container "$GAME_CONTAINER_NAME"
+  cleanup_residual_container "$WEB_CONTAINER_NAME"
 
   log "启动服务"
   if ! docker compose -f "$COMPOSE_FILE" up -d; then

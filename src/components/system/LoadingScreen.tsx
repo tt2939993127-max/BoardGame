@@ -99,7 +99,7 @@ export const LoadingScreen = ({
     const isViewportAnchor = anchor === 'viewport';
     const layoutClassName = fullScreen
         ? (isViewportAnchor
-            ? 'fixed inset-0 h-[100dvh] w-screen'
+            ? 'fixed inset-0 h-[var(--runtime-viewport-height,100vh)] w-[var(--runtime-viewport-width,100vw)]'
             : 'absolute inset-0 h-full w-full max-h-full max-w-full')
         : 'relative h-full w-full min-h-0';
 
@@ -113,7 +113,7 @@ export const LoadingScreen = ({
                 data-loading-anchor={anchor}
                 className={clsx(
                     // 关键：不再用 flex-column 居中承载“动画 + 文本”，避免文本高度变化影响动画视觉中心
-                    "relative bg-black overflow-hidden",
+                    "bg-black overflow-hidden",
                     layoutClassName,
                     className
                 )}

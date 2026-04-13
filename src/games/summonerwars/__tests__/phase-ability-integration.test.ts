@@ -15,10 +15,16 @@ import { resolveAbilityEffects, resolveEffect } from '../domain/abilityResolver'
 import { abilityRegistry } from '../domain/abilities';
 import { SW_EVENTS } from '../domain/types';
 import type { SummonerWarsCore, BoardUnit, UnitCard, GamePhase } from '../domain/types';
+import type { DiceFaceResult } from '../config/dice';
 import type { RandomFn } from '../../../engine/types';
 import { createInitializedCore } from './test-helpers';
 
 const fixedTimestamp = 1000;
+const testDiceResults: DiceFaceResult[] = [
+  { faceIndex: 7, marks: ['melee', 'special'] },
+  { faceIndex: 0, marks: ['melee', 'ranged'] },
+  { faceIndex: 8, marks: ['melee'] },
+];
 
 // ============================================================================
 // 辅助
@@ -274,7 +280,7 @@ describe('全量技能 ABILITY_TRIGGERED 事件 sourcePosition 守卫', () => {
         targetPosition: { row: enemyRow, col: enemyCol },
         victimUnit: enemyUnit,
         victimPosition: { row: enemyRow, col: enemyCol },
-        diceResults: ['melee', 'melee', 'ranged'],
+        diceResults: testDiceResults,
         timestamp: fixedTimestamp,
       });
 

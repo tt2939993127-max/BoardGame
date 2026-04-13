@@ -54,6 +54,15 @@
 >    - `design-system/styles/<风格>.md` — 对应视觉风格规范
 >    - `design-system/games/<gameId>.md` — 游戏专属覆盖配置（若存在）
 > 3. **冲突时以项目自定义设计系统为准**：Skill 提供的是通用建议，项目 `design-system/` 是权威来源；两者冲突时，以后者为准。
+>
+> ### 0.4 UI 重构必须端到端验证 + 端到端截图（强制）
+> **触发条件**：UI 重构、全局/共享布局改动、HUD/Overlay 分层重排、壳层/缩放逻辑调整、跨页面共享 UI 组件改造。
+>
+> **强制要求**：
+> - **必须跑 E2E**：覆盖本次改动影响的真实流程与关键 UI 交互，不得只做静态检查就收口。
+> - **必须出端到端截图**：使用 E2E 产物截图作为验收证据。
+> - **移动端优先**：默认至少提供 `375x812` 的移动端截图；如桌面也受影响或有额外风险，再补 `1920x1080` 桌面截图。
+> - **证据直指问题位点**：截图必须能直接证明“本轮重构的 UI 位点已达标”，不能用无关页或非真实链路截图代替。
 
 ---
 
@@ -365,4 +374,5 @@ React.useEffect(() => {
 - **高度稳定性**：核心游戏区（棋盘/面板）**必须**使用明确高度约束（如 `h-[35vw]`）代替 `h-full`，彻底解耦父级 Flex 依赖。
 - **`MobileBoardShell` 容器约束（强制）**：凡是 manifest 声明 `mobileLayoutPreset: 'board-shell'` 的游戏，Board 根容器必须跟随壳内画布高度，使用 `h-full` / `absolute inset-0` 等容器高度方案；**禁止**在 Board 根容器上写 `h-screen`、`min-h-screen`、`100vh`、`100dvh`。原因：`board-shell` 会在移动横屏下先做整体缩放，若子树继续读取原始视口高度，会导致内容实际渲染高度小于壳高度，出现底部黑边、下半截空白或布局漂移。
 - **board-shell 内 HUD/Overlay 固定定位禁令（强制）**：在 `MobileBoardShell` 内部渲染的 HUD/Overlay **不得直接使用 `fixed/absolute` 作为最终定位**；必须通过 HUD portal（`HudPortal` / `getHudPortalRoot`）渲染到 `#hud-root`，脱离缩放容器。历史实现可保留，但新增/修复必须遵守该规则。
+- **board-shell 下全屏 Loading/门禁锚点（强制）**：凡是覆盖全屏的 Loading（`LoadingScreen`/`ConnectionLoadingScreen`/`CriticalImageGate`）在 `board-shell` 场景必须使用 `anchor="viewport"` 并挂载到 `#hud-root`；**禁止**用 `anchor="container"` 或在 Loading 根节点强行追加 `relative`，否则会让 `fixed` 退化为容器相对定位，出现整体偏移。
 - **相位敏感性**：UI 必须清晰反馈当前"游戏相位"与"操作权限"，通过高亮合规动作 (Valid Actions) 降低认知负荷。

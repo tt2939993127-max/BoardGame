@@ -40,6 +40,10 @@
 - 对已内置居中/定位的浮层组件，**禁止用 containerClassName 完全替换默认定位类**（例如 left-0/right-0/translate 居中）。
 - 如需允许交互或调整样式，优先使用显式 props（如 allowPointerEvents / layout），或在 containerClassName **追加**样式，避免破坏默认居中布局。
 
+### 8. board-shell 下的 Loading 规则（新增）
+- **全屏 Loading 必须走 viewport 锚点**：`LoadingScreen`/`ConnectionLoadingScreen`/`CriticalImageGate` 在 board-shell 场景必须使用 `anchor="viewport"` 并渲染到 `#hud-root`，否则会跟随容器缩放/偏移。
+- **禁止在 Loading 根节点加 `relative` 覆盖定位**：Loading 根容器需要保留 `fixed/absolute` 语义，避免 `relative` 覆盖导致整体偏移。
+
 ## 动画 / 特效规范
 
 ### 1. 自适应尺寸（强制）

@@ -18,9 +18,11 @@ import type {
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
+import { queueImmediateExtraPlayInteractions } from '../domain/extraPlay';
+ 
 import { runCommand } from './testRunner';
 import type { MatchState, RandomFn } from '../../../engine/types';
-import { makeMatchState } from './helpers';
+import { makeMatchState, resolveInteractionChain } from './helpers';
 
 beforeAll(() => {
     clearRegistry();
@@ -203,10 +205,8 @@ describe('trickster interaction regressions', () => {
     });
 });
 
-// ============================================================================
-// 辅助函数
-// ============================================================================
-
+// =====================================================================// 辅助函数
+// =====================================================================
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
@@ -269,10 +269,8 @@ function applyEventsLocal(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCo
     return events.reduce((s, e) => reduce(s, e), state);
 }
 
-// ============================================================================
-// 海盗派系
-// ============================================================================
-
+// =====================================================================// 海盗派系
+// =====================================================================
 describe('海盗派系能力', () => {
     it('pirate_broadside: 单个有己方随从的基地时创建 Prompt', () => {
         const state = makeState({
@@ -364,10 +362,8 @@ describe('海盗派系能力', () => {
     });
 });
 
-// ============================================================================
-// 忍者派系
-// ============================================================================
-
+// =====================================================================// 忍者派系
+// =====================================================================
 describe('忍者派系能力', () => {
     it('ninja_seeing_stars: 单个力量≤3对手随从时创建 Prompt', () => {
         const state = makeState({
@@ -390,10 +386,8 @@ describe('忍者派系能力', () => {
     });
 });
 
-// ============================================================================
-// 恐龙派系
-// ============================================================================
-
+// =====================================================================// 恐龙派系
+// =====================================================================
 describe('恐龙派系能力', () => {
     it('dino_rampage: 多个基地时先创建基地选择', () => {
         const state = makeState({
@@ -613,10 +607,8 @@ describe('恐龙派系能力', () => {
 });
 
 
-// ============================================================================
-// 机器人派系
-// ============================================================================
-
+// =====================================================================// 机器人派系
+// =====================================================================
 describe('机器人派系能力', () => {
     it('robot_zapbot: 打出后直接获得额外随从额度（力量≤2限制）', () => {
         const state = makeState({
@@ -756,10 +748,8 @@ describe('机器人派系能力', () => {
     });
 });
 
-// ============================================================================
-// 巫师派系
-// ============================================================================
-
+// =====================================================================// 巫师派系
+// =====================================================================
 describe('巫师派系能力', () => {
     it('wizard_neophyte: 牌库顶是行动卡时创建 Prompt 选择处理方式', () => {
         const state = makeState({
@@ -798,10 +788,134 @@ describe('巫师派系能力', () => {
     });
 });
 
-// ============================================================================
-// 诡术师派系
-// ============================================================================
+// =====================================================================// 立即额外行动交互
+// =====================================================================
+describe('立即额外行动交互', () => {
+    function queueImmediateExtraAction(matchState: MatchState<SmashUpCore>) {
+        const immediateEvent = {
+            type: SU_EVENTS.LIMIT_MODIFIED,
+            payload: {
+                playerId: '0',
+                limitType: 'action',
+                delta: 1,
+                reason: 'test_immediate_extra_action',
+                playTiming: 'immediate',
+            },
+            timestamp: 1000,
+        } as const;
 
+        return queueImmediateExtraPlayInteractions(matchState, [immediateEvent as any]);
+    }
+
+    it('立即额外行动应包含需要基地目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'ancient_egyptians_you_can_take_it_with_you', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const queuedState = queueImmediateExtraAction(makeMatchState(state));
+        const interaction = queuedState.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('smashup_immediate_extra_action');
+
+        const optionsGenerator = interaction?.data?.optionsGenerator as any;
+        expect(typeof optionsGenerator).toBe('function');
+
+        const options = optionsGenerator(queuedState, interaction?.data);
+        const hasCardOption = options.some((option: any) => option?.value?.defId === 'ancient_egyptians_you_can_take_it_with_you');
+        expect(hasCardOption).toBe(true);
+    });
+
+    it('立即额外行动应包含需要随从目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'samurai_way_of_the_warrior', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('m1', 'test_enemy', '1', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const queuedState = queueImmediateExtraAction(makeMatchState(state));
+        const interaction = queuedState.sys.interaction?.current as any;
+        expect(interaction?.data?.sourceId).toBe('smashup_immediate_extra_action');
+
+        const optionsGenerator = interaction?.data?.optionsGenerator as any;
+        expect(typeof optionsGenerator).toBe('function');
+
+        const options = optionsGenerator(queuedState, interaction?.data);
+        const hasCardOption = options.some((option: any) => option?.value?.defId === 'samurai_way_of_the_warrior');
+        expect(hasCardOption).toBe(true);
+    });
+
+    it('立即额外行动应能实际打出需要基地目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'ancient_egyptians_you_can_take_it_with_you', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const result = resolveInteractionChain(
+            queueImmediateExtraAction(makeMatchState(state)),
+            (prompt) => {
+                const option = prompt?.data?.options?.find(
+                    (candidate: any) => candidate?.value?.defId === 'ancient_egyptians_you_can_take_it_with_you',
+                );
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            },
+        );
+
+        expect(result.finalState.core.players['0'].hand.some(card => card.uid === 'a1')).toBe(false);
+        expect(result.finalState.core.bases[0].buriedCards?.some(card => card.uid === 'a1')).toBe(true);
+    });
+
+    it('立即额外行动应能实际打出需要随从目标的行动卡', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    hand: [makeCard('a1', 'samurai_way_of_the_warrior', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [{
+                defId: 'b1',
+                minions: [makeMinion('enemy-1', 'test_enemy', '1', 2)],
+                ongoingActions: [],
+            }],
+        });
+
+        const result = resolveInteractionChain(
+            queueImmediateExtraAction(makeMatchState(state)),
+            (prompt) => {
+                const option = prompt?.data?.options?.find(
+                    (candidate: any) => candidate?.value?.defId === 'samurai_way_of_the_warrior',
+                );
+                expect(option).toBeDefined();
+                return { optionId: option.id };
+            },
+        );
+
+        expect(result.finalState.core.players['0'].hand.some(card => card.uid === 'a1')).toBe(false);
+        expect(result.finalState.core.bases[0].minions.find(minion => minion.uid === 'enemy-1')?.tempPowerModifier).toBe(3);
+    });
+});
+
+// =====================================================================// 诡术师派系
+// =====================================================================
 describe('诡术师派系能力', () => {
     it('trickster_take_the_shinies: 每个对手随机弃两张手牌', () => {
         const state = makeState({
@@ -987,10 +1101,8 @@ describe('诡术师派系能力', () => {
     });
 });
 
-// ============================================================================
-// 外星人派系
-// ============================================================================
-
+// =====================================================================// 外星人派系
+// =====================================================================
 describe('外星人派系能力', () => {
     it('alien_invader: 获得1VP', () => {
         const state = makeState({
@@ -1076,3 +1188,4 @@ describe('外星人派系能力', () => {
         expect(current?.data?.sourceId).toBe('alien_crop_circles');
     });
 });
+

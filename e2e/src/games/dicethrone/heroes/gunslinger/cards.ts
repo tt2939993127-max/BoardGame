@@ -219,7 +219,8 @@ export const GUNSLINGER_CARDS: AbilityCard[] = [
         playCondition: { requireDiceExists: true, requireHasRolled: true, requireLoaded: true },
         effects: [
             // 说明：这里的“该骰子”指的是你后续花费 Loaded 时触发的“装填奖励骰特写”中的那颗骰子（不是主攻击骰盘）。
-            custom('gunslinger-card-wild-west', '在本次攻击中，当你下一次花费 1 个装填指示物并掷装填奖励骰时，你可以将该奖励骰重掷 1 次。然后本次攻击总伤害值 +1。'),
+            // 注意：本效果挂载到“装填奖励骰特写（bonus die spotlight）”的后续结算上；卡面描述不强调“下一次”，这里保持与 i18n 文案一致，避免双源漂移。
+            custom('gunslinger-card-wild-west', '当你花费 1 个装填指示物并掷装填奖励骰时，你可以将该奖励骰重掷 1 次，然后本次攻击总伤害值 +1。'),
         ],
     },
     {

@@ -3,7 +3,7 @@
  * 闂佽崵鍠愬ú鏍涘☉妯忕儤绻濋崘顏佹灃婵犮垼娉涢鍡涙嫃鐎ｎ喗鈷戦柣鎰靛墮缁€鍐煟椤撱垻鐣洪柡? * 1. 闂備胶鍘ч〃搴㈢濠婂懏宕插〒姘ｅ亾妤犵偛绉归獮姗€宕橀崣澶屾 Watch Out 闂備礁鎼崯鎶筋敊閹邦喗顫曟繝闈涙处閸庣喖鏌￠崘銊モ偓鍦不濞嗘挻鐓曢柟鐑樻尰缁惰尙鈧娲滈崰鎰般€冮妷鈺佺妞ゆ梻鈷堝Λ妤呮⒑? * 2. 闂備礁鎼Λ娆忣焽濞嗘挸鍚规い鏇楀亾鐎规洩缍侀、鏃堝礋閸偅绶梻浣告啞濮婄粯鎱ㄩ悽绋跨劦妞ゆ帒鍠氶崬鐑樼節绾版ê浜鹃梺璇叉捣椤㈠﹤鈻嶉弴鐑嗘富闁稿瞼鍋為弲顒勬倶閻愯泛浜归柣鐔哥箞楠炴牜鈧稒蓱椤ュ牓鏌℃担闈╁姛闁归濞€椤㈡稑鈽夊▎灞剧亙缂傚倷璁查崑鎾绘煟閹寸倖鎴﹀汲娴煎瓨鐓曢柟杈剧秵閸炴椽鏌熸笟鍨妞ゎ偁鍨介弫鎰板川椤栨粌鎹剁紓? * 3. P1 闂備胶鎳撻悘姘跺箰閹间礁鍚规い鎾跺枎缁剁偟鎲稿澶婄畺闊洦鏌ㄧ欢鐐垫喐瀹ュ鏄ラ柛鏇ㄥ灠缁秹鎮规担鍛婅础缂佲偓婵? 闂備礁鎲￠悷顖涚濠婂懓濮抽柡灞诲劜閸庢垿鎮楅敐搴濈盎闁绘挸鍊块弻娑樜旂€ｎ剛锛熸繝鈷€鍕疄闁诡啫鍥ㄥ仭闁哄瀵у▍銏ゆ⒑閹稿海鈽夊┑鍌涙⒒缁厽寰勭€ｎ偄鍔呴梺鍝勫暙閻楀棗鈻嶉姀鐙€鐔嗛悹楦挎鑲栧┑鐘亾闁告稒娼欑粈?bonus overlay
  */
 
-import { mkdir } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { test, expect } from '../framework';
 import type { Locator, Page } from '@playwright/test';
@@ -168,6 +168,18 @@ async function applyFullStateDirect(page: Page, state: Record<string, any>): Pro
     await input.fill(JSON.stringify(state));
     await page.getByTestId('debug-state-apply').click();
     await expect(input).toBeHidden({ timeout: 5000 }).catch(() => {});
+}
+
+async function waitForHandCardVisualReady(page: Page, cardId: string): Promise<void> {
+    await page.waitForFunction((expectedCardId) => {
+        const handArea = document.querySelector('[data-testid="hand-area"]');
+        if (!handArea) return false;
+        const card = handArea.querySelector(`[data-card-id="${expectedCardId}"]`);
+        if (!card) return false;
+        return card.getAttribute('data-is-flipped') === 'true'
+            && handArea.querySelectorAll('.atlas-shimmer').length === 0;
+    }, cardId, { timeout: 15000, polling: 100 });
+    await page.waitForTimeout(900);
 }
 
 async function expectMinBoundingBox(locator: Locator, label: string, minWidth: number, minHeight: number): Promise<void> {
@@ -566,7 +578,8 @@ async function injectSamuraiTokenResponseScene(
         const opponentBase = initHeroState('1', opponentCharacter, random as any);
         const samuraiTokens = {
             ...samuraiBase.tokens,
-            [TOKEN_IDS.HONOR]: mode === 'honor' ? 3 : 0,
+            // 真相源（tip.webp）标注荣誉（honor）堆叠上限为 2；E2E 注入场景也应保持“真实可达状态”。
+            [TOKEN_IDS.HONOR]: mode === 'honor' ? 2 : 0,
             [TOKEN_IDS.SHAME]: 0,
             [TOKEN_IDS.SAMURAI_RETRIBUTION]: mode === 'samurai-retribution' ? 1 : 0,
         };
@@ -1777,7 +1790,7 @@ test('attack modifier should show the correct timing prompt after invalid play',
         return reject?.error === 'attackModifierRequiresSelectedAttack';
     }, { timeout: 10000, polling: 200 });
 
-    const timingPrompt = page.getByText(/attackModifierRequiresSelectedAttack|select an attack ability before playing this attack modifier/i).first();
+    const timingPrompt = page.getByText(/attackModifierRequiresSelectedAttack|select an attack ability before playing this attack modifier|请先选择一个攻击技能，再打出此攻击修正牌/i).first();
     await expect(timingPrompt).toBeVisible({ timeout: 5000 });
 
     const rejectState = await page.evaluate(() => ({
@@ -1979,7 +1992,8 @@ test.skip('samurai zanshin should show 5-die settlement and mixed samurai effect
     expect(stateAfterPlay.attackBonusDamage).toBe(2);
     expect(stateAfterPlay.totalBonusDamage).toBe(2);
     expect(stateAfterPlay.paladinShame).toBe(1);
-    expect(stateAfterPlay.samuraiRetribution).toBe(2);
+    // 真相源（tip.webp）标注反击（samurai_retribution）堆叠上限为 1；即使掷出 2 个旭日，授予也应被 clamp
+    expect(stateAfterPlay.samuraiRetribution).toBe(1);
 
     await game.screenshot('10-samurai-zanshin-vs-paladin', testInfo);
 });
@@ -2006,8 +2020,19 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     });
     await page.locator('[data-card-id="card-righteousness"]').first().click();
 
+    // 真实链路：打出卡牌后通常会先出现卡牌特写，再进入奖励骰特写。
+    // 该用例需要显式关闭卡牌特写，否则奖励骰特写可能被队列阻塞，导致“找不到 bonus-die-overlay”。
+    const cardSpotlight = page.locator('[data-testid="card-spotlight-overlay"]');
+    const cardSpotlightAppeared = await cardSpotlight.waitFor({ state: 'visible', timeout: 2500 }).then(() => true).catch(() => false);
+    if (cardSpotlightAppeared) {
+        // SpotlightContainer 有 closeClickGuard（默认 180ms），避免触发它的同一次点击立刻把特写关掉
+        await page.waitForTimeout(250);
+        await cardSpotlight.click({ force: true });
+        await expect(cardSpotlight).toBeHidden({ timeout: 5000 });
+    }
+
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
-    await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
+    await expect(bonusDieOverlay).toBeVisible({ timeout: 10000 });
 
     // 攻击修正徽章应在打出卡牌后出现（效果提示）
     const activeBadgeEarly = page.locator('[data-testid="active-modifier-badge"]').first();
@@ -2015,7 +2040,13 @@ test('samurai righteousness should resolve a valid branch against monk', async (
     await game.screenshot('09-samurai-righteousness-badge-after-play', testInfo);
 
     // 特写骰子 / 奖励骰 overlay 必须有成功路径证据截图
-    await game.screenshot('09-samurai-righteousness-bonus-die-overlay', testInfo);
+    // 必须等到“骰子停止 + 最终效果文案出现”后再截图，否则证据链不成立
+    await page.waitForFunction(() => {
+        const overlay = document.querySelector('[data-testid="bonus-die-overlay"]');
+        if (!overlay) return false;
+        // BonusDieSpotlightContent 在停止滚动后会渲染 glow ring（class=animate-pulse）
+        return overlay.querySelectorAll('.animate-pulse').length >= 1;
+    }, { timeout: 10000, polling: 100 });
 
     await page.waitForFunction(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
@@ -2048,6 +2079,17 @@ test('samurai righteousness should resolve a valid branch against monk', async (
 
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
     await expect(bonusDieOverlay).toContainText(/samuraiRighteousnessKatana|武士刀：\+2 伤害|Katana:\s*\+2 damage|\+2\s*(伤害|damage)/i, { timeout: 5000 });
+    // 证据链要求：必须截图到“最终文案已真正显现”（而不是刚插入 DOM 但仍处于 opacity=0 的过渡态）
+    const effectChip = bonusDieOverlay.getByText(/武士刀：\+2 伤害|Katana:\s*\+2 damage/i).first();
+    await expect.poll(async () => {
+        try {
+            const opacity = await effectChip.evaluate((el) => Number.parseFloat(getComputedStyle(el).opacity));
+            return Number.isFinite(opacity) ? opacity : 0;
+        } catch {
+            return 0;
+        }
+    }, { timeout: 8000, intervals: [100, 150, 200, 300] }).toBeGreaterThan(0.9);
+    await game.screenshot('09-samurai-righteousness-bonus-die-overlay', testInfo);
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
     await expect(activeBadge).toContainText(/攻击修正\s*\+2|Attack Modifier\s*\+2/i, { timeout: 5000 });
     expect(stateAfterPlay.attackModifierBonusDamage).toBe(2);
@@ -2097,7 +2139,6 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
 
     const bonusDieOverlay = page.locator('[data-testid="bonus-die-overlay"]');
     await expect(bonusDieOverlay).toBeVisible({ timeout: 5000 });
-    await game.screenshot('10-samurai-zanshin-bonus-die-overlay', testInfo);
 
     await page.waitForFunction(() => {
         const settlement = (window as any).__BG_TEST_HARNESS__?.state?.get()?.core?.pendingBonusDiceSettlement;
@@ -2106,6 +2147,14 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
 
     await expect(bonusDieOverlay).toContainText(/Dice Results|投掷结果/i, { timeout: 5000 });
     await expect(bonusDieOverlay).toContainText(/2.*(武士刀|Katana).*1.*(耻辱|Shame).*2.*(反击|Back Strike)/i, { timeout: 5000 });
+    // 必须等到“骰子停止 + 汇总文案出现”后再截图，否则看不到最终描述文案
+    await page.waitForFunction(() => {
+        const overlay = document.querySelector('[data-testid="bonus-die-overlay"]');
+        if (!overlay) return false;
+        // 多骰：每颗骰子停止后都会出现 glow ring（class=animate-pulse）
+        return overlay.querySelectorAll('.animate-pulse').length >= 5;
+    }, { timeout: 12000, polling: 100 });
+    await game.screenshot('10-samurai-zanshin-bonus-die-overlay', testInfo);
 
     const stateAfterPlay = await page.evaluate(() => {
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get();
@@ -2153,7 +2202,8 @@ test('samurai zanshin should settle 5 bonus dice and synchronize effects against
     expect(stateAfterPlay.attackBonusDamage).toBe(2);
     expect(stateAfterPlay.totalBonusDamage).toBe(2);
     expect(stateAfterPlay.paladinShame).toBe(1);
-    expect(stateAfterPlay.samuraiRetribution).toBe(2);
+    // 真相源（tip.webp）标注反击（samurai_retribution）堆叠上限为 1；即使掷出 2 个旭日，授予也应被 clamp
+    expect(stateAfterPlay.samuraiRetribution).toBe(1);
 
     const activeBadge = page.locator('[data-testid="active-modifier-badge"]');
     await expect(activeBadge).toBeVisible({ timeout: 5000 });
@@ -2202,7 +2252,7 @@ test('samurai honor token should accumulate to +3 after two real clicks', async 
         const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
         return state?.core?.pendingDamage?.currentDamage === 5
             && state?.core?.pendingDamage?.tokenUsageTotals?.honor === 1
-            && state?.core?.players?.['0']?.tokens?.honor === 2;
+            && state?.core?.players?.['0']?.tokens?.honor === 1;
     }, undefined, { timeout: 10000, polling: 200 });
 
     await expect(attackerTitle).toBeVisible({ timeout: 5000 });
@@ -2226,7 +2276,8 @@ test('samurai honor token should accumulate to +3 after two real clicks', async 
     });
 
     expect(finalState.pendingDamage).toBeNull();
-    expect(finalState.honor).toBe(1);
+    // 真相源（tip.webp）标注荣誉（honor）堆叠上限为 2；本用例两次点击合计消耗 2 点荣誉后应清零
+    expect(finalState.honor).toBe(0);
     expect(finalState.opponentHp).toBe(43);
     expect(finalState.lastEventTypes.filter(type => type === 'TOKEN_USED')).toHaveLength(2);
     expect(finalState.lastEventTypes).toContain('TOKEN_RESPONSE_CLOSED');
@@ -2662,23 +2713,62 @@ test('opponent common-card spotlight should match actual effect for samurai and 
                 expectedWindowId: `common-card-${options.actorCardId}-response-window`,
             }, { timeout: 15000, polling: 200 });
 
-            const cardInHand = guestPage.locator(`[data-card-id="${options.actorCardId}"]`).first();
+            await guestPage.evaluate(() => {
+                (window as any).__BG_LAST_COMMAND_REJECTED__ = null;
+            });
+            await waitForHandCardVisualReady(guestPage, options.actorCardId);
+
+            const cardInHand = guestPage.locator(`[data-testid="hand-area"] [data-card-id="${options.actorCardId}"]`).first();
             await expect(cardInHand).toBeVisible({ timeout: 10000 });
-            await cardInHand.click();
-            const armedResponseButton = guestPage.getByRole('button', { name: /^可以响应$/ }).last();
-            if (await armedResponseButton.isVisible({ timeout: 1500 }).catch(() => false)) {
-                await armedResponseButton.click();
+            await cardInHand.hover();
+            await guestPage.waitForTimeout(150);
+            await cardInHand.click({ force: true });
+
+            const firstClickState = await guestPage.evaluate(({ actorCardId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
+                return {
+                    reject: (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null,
+                    played: entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId),
+                    stillInHand: handIds.includes(actorCardId),
+                };
+            }, {
+                actorCardId: options.actorCardId,
+            });
+
+            if (!firstClickState.played && !firstClickState.reject && firstClickState.stillInHand) {
+                await guestPage.waitForTimeout(200);
+                await cardInHand.click({ force: true });
             }
 
             await guestPage.waitForFunction(({ actorCardId }) => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const reject = (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null;
                 const entries = state?.sys?.eventStream?.entries ?? [];
                 const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
-                return !handIds.includes(actorCardId)
-                    && entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId);
+                return (reject?.commandType === 'PLAY_CARD')
+                    || (!handIds.includes(actorCardId)
+                    && entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId));
             }, {
                 actorCardId: options.actorCardId,
             }, { timeout: 10000, polling: 200 });
+
+            const guestPlayState = await guestPage.evaluate(({ actorCardId }) => {
+                const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();
+                const entries = state?.sys?.eventStream?.entries ?? [];
+                const handIds = state?.core?.players?.['1']?.hand?.map((card: any) => card.id) ?? [];
+                return {
+                    reject: (window as any).__BG_LAST_COMMAND_REJECTED__ ?? null,
+                    played: entries.some((entry: any) => entry.event?.type === 'CARD_PLAYED' && entry.event?.payload?.cardId === actorCardId),
+                    handIds,
+                };
+            }, {
+                actorCardId: options.actorCardId,
+            });
+
+            expect(guestPlayState.reject).toBeNull();
+            expect(guestPlayState.played).toBe(true);
 
             await hostPage.waitForFunction(({ actorCardId }) => {
                 const state = (window as any).__BG_TEST_HARNESS__?.state?.get?.();

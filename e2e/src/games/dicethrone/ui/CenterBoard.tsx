@@ -52,8 +52,9 @@ export const CenterBoard = ({
     const showTouchMagnifyButton = useCoarsePointer();
     const boardUiTuning = getPlayerBoardUiTuning(characterId);
     const playerBoardAspectRatio = getPlayerBoardAspectRatio(characterId);
+    const playerBoardHeightVw = boardUiTuning.playerBoardBaseHeightVw;
+    const tipBoardHeightVw = boardUiTuning.tipBoardHeightVw;
     const shellFrameClassName = 'absolute left-[15vw] right-[15vw] top-[-6.5vw] bottom-0 flex items-center justify-center pointer-events-auto';
-    const boardGapClassName = 'gap-[0.5vw]';
     const overlayButtonIconClassName = 'w-[0.72vw] h-[0.72vw] fill-current';
     const overlayButtonClassName = `absolute flex items-center justify-center rounded-full border border-white/20 bg-black/60 p-0 text-white shadow-xl transition-[background-color,border-color,opacity] duration-300 hover:bg-amber-500/72 hover:border-amber-300/45 ${showTouchMagnifyButton ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`;
     const overlayButtonVisualClassName = 'flex h-full w-full items-center justify-center';
@@ -102,12 +103,18 @@ export const CenterBoard = ({
                 ? undefined
                 : { transform: `translateX(${boardUiTuning.shellTranslateX}vw)` }}
         >
-            <div className={`relative flex items-center justify-center ${boardGapClassName}`}>
+            <div
+                className="relative flex items-center justify-center"
+                style={{ gap: `${boardUiTuning.centerBoardGapVw}vw` }}
+            >
                 <div
-                    className={`relative h-[35vw] w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
-                    style={boardUiTuning.playerBoardTranslateY === 0
-                        ? undefined
-                        : { transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)` }}
+                    className={`relative w-auto shadow-2xl z-10 group transition-[outline] duration-300 rounded-[0.8vw] overflow-hidden ${isLayoutEditing ? '' : 'cursor-zoom-in'} ${coreAreaHighlighted ? 'outline outline-4 outline-dashed outline-amber-400 outline-offset-[0.1vw]' : ''}`}
+                    style={{
+                        height: `${playerBoardHeightVw}vw`,
+                        ...(boardUiTuning.playerBoardTranslateY === 0
+                            ? {}
+                            : { transform: `translateY(${boardUiTuning.playerBoardTranslateY}vw)` }),
+                    }}
                     data-tutorial-id="player-board"
                     data-testid="player-board-surface"
                     onClick={(event) => handleMagnifySurfaceClick(event, playerBoardPath)}
@@ -117,7 +124,7 @@ export const CenterBoard = ({
                         role="img"
                         aria-label={t('imageAlt.playerBoard')}
                         style={{
-                            width: `calc(35vw * ${playerBoardAspectRatio})`,
+                            width: `calc(${playerBoardHeightVw}vw * ${playerBoardAspectRatio})`,
                             backgroundImage: playerBoardBackground,
                             backgroundRepeat: 'no-repeat',
                             backgroundPosition: 'center',
@@ -155,7 +162,11 @@ export const CenterBoard = ({
                         </span>
                     </button>
                 </div>
-                <div className="flex items-center relative h-[35vw]" data-tutorial-id="tip-board">
+                <div
+                    className="flex items-center relative"
+                    style={{ height: `${tipBoardHeightVw}vw` }}
+                    data-tutorial-id="tip-board"
+                >
                     <button
                         type="button"
                         onClick={onToggleTip}
