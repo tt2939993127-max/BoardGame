@@ -36,7 +36,7 @@ describe('Cardia - Command Execution', () => {
             }, random);
             
             expect(events.length).toBeGreaterThan(0);
-            expect(events[0].type).toBe(CARDIA_EVENTS.CARD_PLAYED);
+            expect(events[0].type).toBe(CARDIA_EVENTS.CARD_PLAYED.type);
             expect(events[0].payload.playerId).toBe('0');
             expect(events[0].payload.cardUid).toBe(cardUid);
         });
@@ -67,7 +67,7 @@ describe('Cardia - Command Execution', () => {
             // Should have CARD_PLAYED, ENCOUNTER_RESOLVED, possibly SIGNET_GRANTED
             // Note: PHASE_CHANGED is now emitted by FlowSystem (SYS_PHASE_CHANGED), not by domain execute
             expect(events1.length).toBeGreaterThanOrEqual(2);
-            expect(events1.some(e => e.type === CARDIA_EVENTS.ENCOUNTER_RESOLVED)).toBe(true);
+            expect(events1.some(e => e.type === CARDIA_EVENTS.ENCOUNTER_RESOLVED.type)).toBe(true);
         });
     });
     
@@ -102,7 +102,7 @@ describe('Cardia - Command Execution', () => {
             }, random);
             
             expect(events.length).toBeGreaterThan(0);
-            expect(events[0].type).toBe(CARDIA_EVENTS.ABILITY_ACTIVATED);
+            expect(events[0].type).toBe(CARDIA_EVENTS.ABILITY_ACTIVATED.type);
             expect(events[0].payload.playerId).toBe('0');
             expect(events[0].payload.abilityId).toBe(abilityId);
         });
@@ -190,7 +190,7 @@ describe('Cardia - Command Execution', () => {
             
             // SKIP_ABILITY should emit ABILITY_SKIPPED event to trigger FlowSystem auto-advance
             expect(events.length).toBeGreaterThanOrEqual(1);
-            const abilitySkippedEvent = events.find(e => e.type === CARDIA_EVENTS.ABILITY_SKIPPED);
+            const abilitySkippedEvent = events.find(e => e.type === CARDIA_EVENTS.ABILITY_SKIPPED.type);
             expect(abilitySkippedEvent).toBeDefined();
             expect(abilitySkippedEvent?.payload.playerId).toBe('0');
         });
@@ -209,8 +209,8 @@ describe('Cardia - Command Execution', () => {
             // Should have 2 CARD_DRAWN (one for each player) and TURN_ENDED
             // Note: PHASE_CHANGED is now emitted by FlowSystem, not by domain execute
             expect(events.length).toBeGreaterThanOrEqual(3);
-            expect(events.filter(e => e.type === CARDIA_EVENTS.CARD_DRAWN).length).toBe(2);
-            expect(events.some(e => e.type === CARDIA_EVENTS.TURN_ENDED)).toBe(true);
+            expect(events.filter(e => e.type === CARDIA_EVENTS.CARD_DRAWN.type).length).toBe(2);
+            expect(events.some(e => e.type === CARDIA_EVENTS.TURN_ENDED.type)).toBe(true);
         });
         
         it('should transition to play phase', () => {
@@ -241,7 +241,7 @@ describe('Cardia - Command Execution', () => {
             }, random);
             
             expect(events.length).toBe(1);
-            expect(events[0].type).toBe(CARDIA_EVENTS.MODIFIER_ADDED);
+            expect(events[0].type).toBe(CARDIA_EVENTS.MODIFIER_ADDED.type);
             expect(events[0].payload.cardUid).toBe(cardUid);
             expect(events[0].payload.value).toBe(3);
         });
@@ -262,7 +262,7 @@ describe('Cardia - Command Execution', () => {
             }, random);
             
             expect(events.length).toBe(1);
-            expect(events[0].type).toBe(CARDIA_EVENTS.MODIFIER_REMOVED);
+            expect(events[0].type).toBe(CARDIA_EVENTS.MODIFIER_REMOVED.type);
             expect(events[0].payload.cardUid).toBe(cardUid);
             expect(events[0].payload.modifierId).toBe(modifierId);
         });

@@ -53,7 +53,7 @@ describe('Bug Fixes: Card06 (占卜师) and Card08 (审判官)', () => {
             
             // 玩家0打出卡牌（不应揭示）
             const event1 = {
-                type: CARDIA_EVENTS.CARD_PLAYED,
+                type: CARDIA_EVENTS.CARD_PLAYED.type,
                 timestamp: Date.now(),
                 payload: {
                     cardUid: player0Card.uid,
@@ -69,7 +69,7 @@ describe('Bug Fixes: Card06 (占卜师) and Card08 (审判官)', () => {
             
             // 玩家1打出卡牌（应该立即揭示）
             const event2 = {
-                type: CARDIA_EVENTS.CARD_PLAYED,
+                type: CARDIA_EVENTS.CARD_PLAYED.type,
                 timestamp: Date.now(),
                 payload: {
                     cardUid: player1Card.uid,
@@ -85,7 +85,7 @@ describe('Bug Fixes: Card06 (占卜师) and Card08 (审判官)', () => {
             
             // 模拟遭遇解析
             const encounterEvent = {
-                type: CARDIA_EVENTS.ENCOUNTER_RESOLVED,
+                type: CARDIA_EVENTS.ENCOUNTER_RESOLVED.type,
                 timestamp: Date.now(),
                 payload: {
                     slotIndex: 0,
@@ -140,7 +140,7 @@ describe('Bug Fixes: Card06 (占卜师) and Card08 (审判官)', () => {
             
             // 玩家0尝试先出牌（应该被阻止）
             const event1 = {
-                type: CARDIA_EVENTS.CARD_PLAYED,
+                type: CARDIA_EVENTS.CARD_PLAYED.type,
                 timestamp: Date.now(),
                 payload: {
                     cardUid: player0Card.uid,
@@ -155,7 +155,7 @@ describe('Bug Fixes: Card06 (占卜师) and Card08 (审判官)', () => {
             
             // 玩家1先出牌（应该成功）
             const event2 = {
-                type: CARDIA_EVENTS.CARD_PLAYED,
+                type: CARDIA_EVENTS.CARD_PLAYED.type,
                 timestamp: Date.now(),
                 payload: {
                     cardUid: player1Card.uid,
@@ -177,7 +177,7 @@ describe('Bug Fixes: Card06 (占卜师) and Card08 (审判官)', () => {
             
             // 模拟遭遇解析
             const encounterEvent = {
-                type: CARDIA_EVENTS.ENCOUNTER_RESOLVED,
+                type: CARDIA_EVENTS.ENCOUNTER_RESOLVED.type,
                 timestamp: Date.now(),
                 payload: {
                     slotIndex: 0,

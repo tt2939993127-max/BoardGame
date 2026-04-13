@@ -34,13 +34,13 @@ describe.skip('TODO: Deck II - 继承者（Heir）', () => {
     expect(result.events).toHaveLength(2);
     
     // 第一个事件：弃掉未保留的手牌（应该弃掉 2 张）
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED.type);
     expect((result.events[0].payload as any).playerId).toBe('player2');
     expect((result.events[0].payload as any).cardIds).toHaveLength(2);
     expect((result.events[0].payload as any).from).toBe('hand');
 
     // 第二个事件：弃掉整个牌库
-    expect(result.events[1].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+    expect(result.events[1].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
     expect((result.events[1].payload as any).playerId).toBe('player2');
     expect((result.events[1].payload as any).count).toBe(2);
   });
@@ -61,7 +61,7 @@ describe.skip('TODO: Deck II - 继承者（Heir）', () => {
     const result = executor!(mockContext);
 
     expect(result.events).toHaveLength(1);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
     expect((result.events[0].payload as any).playerId).toBe('player2');
     expect((result.events[0].payload as any).count).toBe(2);
   });
@@ -82,7 +82,7 @@ describe.skip('TODO: Deck II - 继承者（Heir）', () => {
     const result = executor!(mockContext);
 
     expect(result.events).toHaveLength(1);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
     expect((result.events[0].payload as any).playerId).toBe('player2');
     expect((result.events[0].payload as any).count).toBe(3);
   });

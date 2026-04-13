@@ -96,7 +96,7 @@ describe('reduceCardsDiscarded - 从手牌弃牌', () => {
         
         // 创建 CARDS_DISCARDED 事件（弃掉 2 张 Academy 派系的牌）
         const event = {
-            type: CARDIA_EVENTS.CARDS_DISCARDED,
+            type: CARDIA_EVENTS.CARDS_DISCARDED.type,
             payload: {
                 playerId: '1',
                 cardIds: ['card_1', 'card_2'], // 弃掉前两张牌

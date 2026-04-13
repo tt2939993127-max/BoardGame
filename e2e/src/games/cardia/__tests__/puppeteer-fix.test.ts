@@ -176,7 +176,7 @@ describe('Cardia - 傀儡师能力修复', () => {
         
         // 傀儡师能力：弃掉相对的牌（card_15），替换为从对手手牌随机抽取的一张牌（card_09）
         const event: CardiaEvent = {
-            type: CARDIA_EVENTS.CARD_REPLACED,
+            type: CARDIA_EVENTS.CARD_REPLACED.type,
             payload: {
                 oldCardId: 'card_15',
                 newCardId: 'card_09',

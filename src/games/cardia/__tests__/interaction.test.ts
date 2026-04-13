@@ -194,12 +194,12 @@ describe('Cardia - 交互系统', () => {
             };
             
             const event = {
-                type: CARDIA_EVENTS.INTERACTION_CREATED,
+                type: 'INTERACTION_CREATED',
                 timestamp: Date.now(),
                 payload: { interaction },
             };
             
-            expect(event.type).toBe(CARDIA_EVENTS.INTERACTION_CREATED);
+            expect(event.type).toBe('INTERACTION_CREATED');
             expect(event.payload.interaction.id).toBe('test_interaction');
             expect(event.payload.interaction.playerId).toBe('0');
             expect(event.payload.interaction.data.options.length).toBe(2);

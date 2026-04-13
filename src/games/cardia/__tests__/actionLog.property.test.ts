@@ -191,7 +191,7 @@ function generateEventsForCommand(command: Command): GameEvent[] {
         case CARDIA_COMMANDS.PLAY_CARD:
             return [
                 {
-                    type: CARDIA_EVENTS.CARD_PLAYED,
+                    type: CARDIA_EVENTS.CARD_PLAYED.type,
                     payload: {
                         cardUid: command.payload.cardUid,
                         playerId: command.playerId,
@@ -204,7 +204,7 @@ function generateEventsForCommand(command: Command): GameEvent[] {
         case CARDIA_COMMANDS.ACTIVATE_ABILITY:
             return [
                 {
-                    type: CARDIA_EVENTS.ABILITY_ACTIVATED,
+                    type: CARDIA_EVENTS.ABILITY_ACTIVATED.type,
                     payload: {
                         abilityId: command.payload.abilityId,
                         cardId: command.payload.sourceCardUid,

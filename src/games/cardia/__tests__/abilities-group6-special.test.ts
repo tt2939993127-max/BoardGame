@@ -146,7 +146,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.PUPPETEER)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.CARD_REPLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.CARD_REPLACED.type);
       expect(executor.events[0].payload.oldCardId).toBe('opp_played1');
       expect(executor.events[0].payload.newCardId).toMatch(/opp_hand[12]/); // 随机选择的手牌
       expect(executor.events[0].payload.playerId).toBe('player2');
@@ -204,7 +204,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.DIVINER)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.REVEAL_ORDER_CHANGED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.REVEAL_ORDER_CHANGED.type);
       expect(executor.events[0].payload.revealFirstPlayerId).toBe('player2');
     });
 
@@ -224,7 +224,7 @@ describe('组 6：特殊机制能力', () => {
 
       // 验证事件正确发射
       // 实际的"只影响下一次遭遇"逻辑在 execute.ts 中处理
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.REVEAL_ORDER_CHANGED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.REVEAL_ORDER_CHANGED.type);
     });
   });
 
@@ -235,7 +235,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ARISTOCRAT)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.EXTRA_SIGNET_PLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type);
       expect(executor.events[0].payload.cardId).toBe('played1');
       expect(executor.events[0].payload.playerId).toBe('player1');
       expect(executor.events[0].payload.conditional).toBe(true);
@@ -259,7 +259,7 @@ describe('组 6：特殊机制能力', () => {
 
       // 验证事件正确发射
       // 实际的获胜检查在 execute.ts 的 resolveEncounter 中处理
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.EXTRA_SIGNET_PLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type);
     });
   });
 
@@ -270,7 +270,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ELF)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.GAME_WON);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.GAME_WON.type);
       expect(executor.events[0].payload.winnerId).toBe('player1');
       expect(executor.events[0].payload.reason).toBe('elf');
     });
@@ -290,7 +290,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ELF)!(mockContext);
 
       // 验证游戏胜利事件
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.GAME_WON);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.GAME_WON.type);
       
       // 实际的游戏结束逻辑在 execute.ts 中处理
     });
@@ -303,7 +303,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.EXTORTIONIST)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type);
       expect(executor.events[0].payload.abilityId).toBe(ABILITY_IDS.EXTORTIONIST);
       expect(executor.events[0].payload.playerId).toBe('player1');
       expect(executor.events[0].payload.targetPlayerId).toBe('player2');
@@ -355,7 +355,7 @@ describe('组 6：特殊机制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.DIVINER)!(mockContext);
 
       // 验证事件正确发射
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.REVEAL_ORDER_CHANGED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.REVEAL_ORDER_CHANGED.type);
       
       // 实际的"只影响下一次遭遇"逻辑在 execute.ts 中处理
       // 需要在遭遇结算后重置 revealFirstNextEncounter

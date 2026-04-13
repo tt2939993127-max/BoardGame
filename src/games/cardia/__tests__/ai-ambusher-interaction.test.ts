@@ -104,12 +104,14 @@ describe('AI 伏击者能力交互', () => {
                         playerId: '0',
                         title: '选择派系',
                         description: '选择一个派系，对手弃掉所有该派系的手牌',
-                        options: [
-                            { id: 'faction_swamp', label: 'swamp', value: { faction: 'swamp' } },
-                            { id: 'faction_academy', label: 'academy', value: { faction: 'academy' } },
-                            { id: 'faction_guild', label: 'guild', value: { faction: 'guild' } },
-                            { id: 'faction_dynasty', label: 'dynasty', value: { faction: 'dynasty' } },
-                        ],
+                        data: {
+                            options: [
+                                { id: 'faction_swamp', label: 'swamp', value: { faction: 'swamp' } },
+                                { id: 'faction_academy', label: 'academy', value: { faction: 'academy' } },
+                                { id: 'faction_guild', label: 'guild', value: { faction: 'guild' } },
+                                { id: 'faction_dynasty', label: 'dynasty', value: { faction: 'dynasty' } },
+                            ],
+                        },
                     },
                     history: [],
                 },

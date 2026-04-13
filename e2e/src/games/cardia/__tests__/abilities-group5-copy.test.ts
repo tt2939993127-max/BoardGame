@@ -175,7 +175,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.GOVERNESS)!(contextWithSelection);
 
       // 第一个事件：ABILITY_COPIED
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED.type);
       expect((executor.events[0].payload as any).sourceCardId).toBe('played1');
       expect((executor.events[0].payload as any).sourceAbilityId).toBe(ABILITY_IDS.SABOTEUR);
       expect((executor.events[0].payload as any).copiedByCardId).toBe('played2');
@@ -192,7 +192,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.GOVERNESS)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect((executor.events[0].payload as any).reason).toBe('no_eligible_cards');
       expect(executor.interaction).toBeUndefined();
     });
@@ -203,7 +203,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.GOVERNESS)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect(executor.interaction).toBeUndefined();
     });
 
@@ -215,7 +215,7 @@ describe('组 5：能力复制能力', () => {
 
       // 如果只有一张符合条件的卡牌（就是当前卡牌），应该发射 ABILITY_NO_VALID_TARGET 事件
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
     });
 
     it('应该考虑修正标记计算当前影响力', () => {
@@ -262,7 +262,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ILLUSIONIST)!(contextWithSelection);
 
       expect(executor.events.length).toBeGreaterThan(0);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED.type);
       expect((executor.events[0].payload as any).sourceCardId).toBe('opp_played1');
       expect((executor.events[0].payload as any).sourceAbilityId).toBe(ABILITY_IDS.REVOLUTIONARY);
       expect((executor.events[0].payload as any).copiedByCardId).toBe('played2');
@@ -276,7 +276,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ILLUSIONIST)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect(executor.interaction).toBeUndefined();
     });
 
@@ -287,7 +287,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ILLUSIONIST)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect(executor.interaction).toBeUndefined();
     });
 
@@ -330,13 +330,13 @@ describe('组 5：能力复制能力', () => {
       expect(executor.events.length).toBeGreaterThan(2);
       
       // 第一个事件：弃掉手牌
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED.type);
       expect((executor.events[0].payload as any).playerId).toBe('player1');
       expect((executor.events[0].payload as any).cardIds).toContain('hand1');
       expect((executor.events[0].payload as any).from).toBe('hand');
       
       // 第二个事件：复制能力
-      expect(executor.events[1].type).toBe(CARDIA_EVENTS.ABILITY_COPIED);
+      expect(executor.events[1].type).toBe(CARDIA_EVENTS.ABILITY_COPIED.type);
       expect((executor.events[1].payload as any).sourceCardId).toBe('hand1');
       expect((executor.events[1].payload as any).sourceAbilityId).toBe(ABILITY_IDS.SURGEON);
       expect((executor.events[1].payload as any).copiedByCardId).toBe('played2');
@@ -344,7 +344,7 @@ describe('组 5：能力复制能力', () => {
       
       // 最后一个事件：抽一张牌
       const lastEvent = executor.events[executor.events.length - 1];
-      expect(lastEvent.type).toBe(CARDIA_EVENTS.CARD_DRAWN);
+      expect(lastEvent.type).toBe(CARDIA_EVENTS.CARD_DRAWN.type);
       expect((lastEvent.payload as any).playerId).toBe('player1');
       expect((lastEvent.payload as any).count).toBe(1);
     });
@@ -356,7 +356,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ELEMENTALIST)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect(executor.interaction).toBeUndefined();
     });
 
@@ -367,7 +367,7 @@ describe('组 5：能力复制能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ELEMENTALIST)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect(executor.interaction).toBeUndefined();
     });
 

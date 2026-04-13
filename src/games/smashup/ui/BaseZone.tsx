@@ -90,6 +90,12 @@ export const BaseZone: React.FC<{
     const ratio = totalPower / breakpoint;
     const isNearBreak = ratio >= 0.8 && ratio < 1;
     const isAtBreak = ratio >= 1;
+    const powerTokenContainerClassName = isMobileViewport
+        ? 'absolute -top-[1.05vw] -right-[1.05vw] w-[4vw] h-[4vw] pointer-events-none z-30 flex items-center justify-center'
+        : 'absolute -top-[1.5vw] -right-[1.5vw] w-[4vw] h-[4vw] pointer-events-none z-30 flex items-center justify-center';
+    const powerTokenLabelClassName = isMobileViewport
+        ? 'absolute -bottom-[0.28vw] bg-white text-slate-900 text-[0.6vw] font-bold px-[0.4vw] py-[0.1vw] rounded shadow-sm border border-slate-300 whitespace-nowrap'
+        : 'absolute -bottom-[0.5vw] bg-white text-slate-900 text-[0.6vw] font-bold px-[0.4vw] py-[0.1vw] rounded shadow-sm border border-slate-300 whitespace-nowrap';
     const titansOnBase = getTitansOnBase(core, baseIndex);
     const ongoingActions = base.ongoingActions ?? [];
     const hasOngoingRow = ongoingActions.length > 0;
@@ -635,8 +641,7 @@ export const BaseZone: React.FC<{
                 )}
 
                 {/* Power Token */}
-                <div className="absolute -top-[1.5vw] -right-[1.5vw] w-[4vw] h-[4vw] pointer-events-none z-30 flex items-center justify-center"
-                >
+                <div className={powerTokenContainerClassName}>
                     <motion.div
                         className={`w-[3.5vw] h-[3.5vw] rounded-full flex items-center justify-center border-[0.2vw] border-dashed shadow-xl transform rotate-12 group-hover/base:scale-110 transition-transform ${isAtBreak
                             ? 'bg-green-600 border-green-300'
@@ -662,7 +667,7 @@ export const BaseZone: React.FC<{
                         <div className={`text-[1.2vw] font-black ${isAtBreak ? 'text-white' : isNearBreak ? 'text-amber-100' : 'text-white'}`}>
                             {totalPower}
                         </div>
-                        <div className="absolute -bottom-[0.5vw] bg-white text-slate-900 text-[0.6vw] font-bold px-[0.4vw] py-[0.1vw] rounded shadow-sm border border-slate-300 whitespace-nowrap">
+                        <div className={powerTokenLabelClassName}>
                             / {breakpoint}
                         </div>
                     </motion.div>

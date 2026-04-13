@@ -118,7 +118,7 @@ describe('调停者持续标记移除后重新判定胜负', () => {
         
         // 虚空法师移除调停者的持续标记
         const event = {
-            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
             payload: {
                 abilityId: ABILITY_IDS.MEDIATOR,
                 cardId: card04.uid,
@@ -240,7 +240,7 @@ describe('调停者持续标记移除后重新判定胜负', () => {
         
         // 虚空法师移除调停者的持续标记
         const event = {
-            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
             payload: {
                 abilityId: ABILITY_IDS.MEDIATOR,
                 cardId: card04.uid,

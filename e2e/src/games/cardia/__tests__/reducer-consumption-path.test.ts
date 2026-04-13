@@ -87,7 +87,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
       };
 
       const event = {
-        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
         payload: {
           cardId: 'card1',
           value: 3,
@@ -128,7 +128,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
       };
 
       const event = {
-        type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+        type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
         payload: {
           effectType: 'modifyInfluence',
           target: 'self',
@@ -190,7 +190,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
       };
 
       const event = {
-        type: CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED,
+        type: CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED.type,
         payload: {
           effectType: 'modifyInfluence',
           sourceAbilityId: 'ability_i_clockmaker',
@@ -241,7 +241,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
       };
 
       const event = {
-        type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+        type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
         payload: {
           cardId: 'card1',
           abilityId: 'ability_i_mediator',
@@ -293,7 +293,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
 
       // 添加第一个修正标记（来自发明家）
       const event1 = {
-        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
         payload: {
           cardId: 'card1',
           value: 3,
@@ -306,7 +306,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
 
       // 添加第二个修正标记（来自钟表匠）
       const event2 = {
-        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
         payload: {
           cardId: 'card1',
           value: 3,
@@ -364,7 +364,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
       };
 
       const event = {
-        type: CARDIA_EVENTS.TURN_ENDED,
+        type: CARDIA_EVENTS.TURN_ENDED.type,
         payload: {
           playerId: 'player1',
         },
@@ -427,7 +427,7 @@ describe('Reducer 消耗路径（D11-D14）', () => {
       };
 
       const event = {
-        type: CARDIA_EVENTS.ENCOUNTER_RESOLVED,
+        type: CARDIA_EVENTS.ENCOUNTER_RESOLVED.type,
         payload: {
           slotIndex: 0,
           winner: 'player1',

@@ -196,7 +196,7 @@ describe('傀儡师印戒授予修复', () => {
         
         // 傀儡师能力发动：替换 P0 的 card11 为 P0 手牌中的 card03
         const cardReplacedEvent = {
-            type: CARDIA_EVENTS.CARD_REPLACED,
+            type: CARDIA_EVENTS.CARD_REPLACED.type,
             timestamp: Date.now(),
             payload: {
                 oldCardId: 'p0_card11',
@@ -358,7 +358,7 @@ describe('傀儡师印戒授予修复', () => {
         
         // 傀儡师能力发动
         const cardReplacedEvent = {
-            type: CARDIA_EVENTS.CARD_REPLACED,
+            type: CARDIA_EVENTS.CARD_REPLACED.type,
             timestamp: Date.now(),
             payload: {
                 oldCardId: 'p0_card11',

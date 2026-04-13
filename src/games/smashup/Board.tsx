@@ -2506,7 +2506,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                                         >
                                             {core.players[pid]?.vp ?? 0}
                                             {/* 对手区域悬浮时显示眼睛图标（无背景，直接叠加在圆球上） */}
-                                            {isOpponent && (
+                                            {isOpponent && !isMobileViewport && (
                                                 <svg 
                                                     viewBox="0 0 24 24" 
                                                     className={`absolute inset-0 m-auto w-5 h-5 fill-white/80 drop-shadow-[0_0_4px_rgba(0,0,0,0.8)] transition-opacity duration-300 pointer-events-none ${viewMode === 'opponent' ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}

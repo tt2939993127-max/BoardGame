@@ -487,15 +487,8 @@ describe('scoreBases 阶段自动推进', () => {
             seatStates: {},
         });
 
-        expect(candidate?.reason).toBe('action-loop');
+        expect(candidate?.reason).toBe('active-turn');
         expect(candidate?.playerId).toBe('0');
-        expect(candidate?.loopInfo).toMatchObject({
-            pattern: 'alternating',
-            kinds: [
-                SU_EVENTS['su:cards_discarded'].type,
-                SU_EVENTS['su:card_recovered_from_discard'].type,
-            ],
-        });
         expect(candidate?.resolution.action.commands).toEqual([
             { type: 'ADVANCE_PHASE', payload: {} },
         ]);

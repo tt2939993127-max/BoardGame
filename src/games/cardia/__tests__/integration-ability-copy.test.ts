@@ -13,6 +13,7 @@ import type { CardiaCore, CardiaCommand } from '../domain/types';
 import type { MatchState } from '../../../engine/types';
 import { CARDIA_COMMANDS } from '../domain/commands';
 import { ABILITY_IDS } from '../domain/ids';
+import { CARDIA_EVENTS } from '../domain/events';
 import { createTestCard, createTestPlayedCard, TEST_CARDS } from './test-helpers';
 
 // 导入所有能力组以注册执行器
@@ -123,7 +124,7 @@ describe('能力复制集成测试', () => {
 
       // 验证事件产生
       expect(events.length).toBeGreaterThanOrEqual(1);
-      expect(events[0].type).toBe('cardia:ability_activated');
+      expect(events[0].type).toBe(CARDIA_EVENTS.ABILITY_ACTIVATED.type);
       
       // reduce所有事件，验证最终状态
       let newCore = state.core;
@@ -228,7 +229,7 @@ describe('能力复制集成测试', () => {
 
       // 验证事件产生
       expect(events.length).toBeGreaterThanOrEqual(1);
-      expect(events[0].type).toBe('cardia:ability_activated');
+      expect(events[0].type).toBe(CARDIA_EVENTS.ABILITY_ACTIVATED.type);
 
       // reduce所有事件，验证最终状态
       let newCore = state.core;
@@ -317,7 +318,7 @@ describe('能力复制集成测试', () => {
 
       // 验证事件产生
       expect(events.length).toBeGreaterThanOrEqual(1);
-      expect(events[0].type).toBe('cardia:ability_activated');
+      expect(events[0].type).toBe(CARDIA_EVENTS.ABILITY_ACTIVATED.type);
 
       // reduce所有事件，验证最终状态
       let newCore = state.core;
@@ -519,7 +520,7 @@ describe('能力复制集成测试', () => {
 
       // 验证事件产生
       expect(events.length).toBeGreaterThanOrEqual(1);
-      expect(events[0].type).toBe('cardia:ability_activated');
+      expect(events[0].type).toBe(CARDIA_EVENTS.ABILITY_ACTIVATED.type);
 
       // reduce所有事件，验证最终状态
       let newCore = state.core;

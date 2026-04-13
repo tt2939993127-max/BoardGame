@@ -27,7 +27,7 @@ describe('破坏者（Saboteur）', () => {
     const result = executor!(mockContext);
 
     expect(result.events).toHaveLength(1);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
     expect((result.events[0].payload as any).playerId).toBe('player2');
     expect((result.events[0].payload as any).count).toBe(2);
   });

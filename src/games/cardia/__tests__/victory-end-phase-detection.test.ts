@@ -125,7 +125,7 @@ describe('End 阶段印戒胜利条件检测', () => {
         console.log('✅ 测试通过：end 阶段双方达到 5 个印戒时正确判定为平局');
     });
     
-    it('应该在 play 阶段不触发印戒胜利条件（即使有 5 个印戒）', () => {
+    it('应该在 play 阶段也触发印戒胜利条件（现规则，即使有 5 个印戒）', () => {
         // 构造场景：玩家 0 有 5 个印戒，但阶段为 play，且双方都有手牌（不触发"无牌可打"胜利条件）
         const core: CardiaCore = {
             players: {
@@ -172,9 +172,10 @@ describe('End 阶段印戒胜利条件检测', () => {
         // 调用 isGameOver
         const result = CardiaDomain.isGameOver!(core);
         
-        // 验证：play 阶段不应该触发印戒胜利条件（因为双方都有手牌，不触发"无牌可打"胜利条件）
-        expect(result).toBeUndefined();
+        // 现规则：标准印戒胜利条件在任意阶段立即生效
+        expect(result).toBeDefined();
+        expect(result?.winner).toBe('0');
         
-        console.log('✅ 测试通过：play 阶段不触发印戒胜利条件');
+        console.log('✅ 测试通过：play 阶段也会触发印戒胜利条件');
     });
 });

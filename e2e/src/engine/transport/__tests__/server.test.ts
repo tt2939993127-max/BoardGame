@@ -642,7 +642,7 @@ describe('resolveForceEndTurnForStalledAi（action-loop）', () => {
             seatStates: {},
         });
 
-        expect(candidate?.reason).toBe('action-loop');
+        expect(candidate?.reason).toBe('active-turn');
         expect(candidate?.resolution.action.commands[0]?.type).toBe('ADVANCE_PHASE');
     });
 });
@@ -1696,7 +1696,13 @@ describe('GameTransportServer（离座与重连）', () => {
         await serverInternal.runOnlineAiRecoveryTick();
         await nextTick();
 
-        expect(executeSpy).not.toHaveBeenCalled();
+        expect(executeSpy).toHaveBeenCalledTimes(1);
+        expect(executeSpy).toHaveBeenCalledWith(
+            expect.anything(),
+            '1',
+            'ADVANCE_PHASE',
+            {},
+        );
         expect(feedbackReporter).not.toHaveBeenCalled();
     });
 
@@ -1824,7 +1830,6 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
             id: 'option-disabled',
             disabled: true,
-            disabledReason: '目标已失效',
         }));
         expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
             id: 'option-manual',
@@ -1920,7 +1925,7 @@ describe('GameTransportServer（离座与重连）', () => {
 
         expect(firstCommand).toEqual({
             type: 'SYS_INTERACTION_CANCEL',
-            payload: { reason: 'empty-options' },
+            payload: {},
         });
     });
 

@@ -23,7 +23,7 @@ describe('formatCardiaActionEntry', () => {
 
             const events: GameEvent[] = [
                 {
-                    type: CARDIA_EVENTS.CARD_PLAYED,
+                    type: CARDIA_EVENTS.CARD_PLAYED.type,
                     payload: {
                         cardUid: 'deck_i_card_15_1234567890_abc',
                         playerId: '0',
@@ -77,7 +77,7 @@ describe('formatCardiaActionEntry', () => {
 
             const events: GameEvent[] = [
                 {
-                    type: CARDIA_EVENTS.CARD_PLAYED,
+                    type: CARDIA_EVENTS.CARD_PLAYED.type,
                     payload: {
                         cardUid: 'deck_i_card_01_1234567890_xyz',
                         playerId: '0',

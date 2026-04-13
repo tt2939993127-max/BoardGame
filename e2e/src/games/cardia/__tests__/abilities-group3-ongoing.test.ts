@@ -90,7 +90,7 @@ describe('组 3：持续能力', () => {
       expect(executor.events.length).toBeGreaterThanOrEqual(1);
       
       // 第一个事件应该是放置持续标记
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(executor.events[0].payload.abilityId).toBe(mockContext.abilityId);
       expect(executor.events[0].payload.cardId).toBe(mockContext.cardId);
       expect(executor.events[0].payload.playerId).toBe('player1');
@@ -101,7 +101,7 @@ describe('组 3：持续能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.MEDIATOR)!(mockContext);
 
       // 检查事件 payload 中没有 oneTime 或 duration 字段
-      const ongoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      const ongoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(ongoingEvent).toBeDefined();
       expect(ongoingEvent!.payload).not.toHaveProperty('oneTime');
       expect(ongoingEvent!.payload).not.toHaveProperty('duration');
@@ -113,7 +113,7 @@ describe('组 3：持续能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.MAGISTRATE)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(executor.events[0].payload.abilityId).toBe(mockContext.abilityId);
       expect(executor.events[0].payload.cardId).toBe(mockContext.cardId);
       expect(executor.events[0].payload.playerId).toBe('player1');
@@ -157,7 +157,7 @@ describe('组 3：持续能力', () => {
       expect(executor.events.length).toBeGreaterThanOrEqual(1);
       
       // 第一个事件应该是放置持续标记
-      const ongoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      const ongoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(ongoingEvent).toBeDefined();
       expect(ongoingEvent!.payload.abilityId).toBe(mockContext.abilityId);
       expect(ongoingEvent!.payload.cardId).toBe(mockContext.cardId);
@@ -190,7 +190,7 @@ describe('组 3：持续能力', () => {
 
       // 财务官的持续标记是一次性的，但这个特性在遭遇结算时处理
       // 这里只验证事件正确发射
-      const ongoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      const ongoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(ongoingEvent).toBeDefined();
       expect(ongoingEvent!.payload.effectType).toBe('extraSignet');
     });
@@ -201,7 +201,7 @@ describe('组 3：持续能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.ADVISOR)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(executor.events[0].payload.abilityId).toBe(mockContext.abilityId);
       expect(executor.events[0].payload.cardId).toBe(mockContext.cardId);
       expect(executor.events[0].payload.playerId).toBe('player1');
@@ -236,7 +236,7 @@ describe('组 3：持续能力', () => {
       // 两者的 effectType 应该相同
       expect(advisorExecutor.events[0].payload.effectType).toBe('extraSignet');
       
-      const treasurerOngoingEvent = treasurerExecutor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      const treasurerOngoingEvent = treasurerExecutor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(treasurerOngoingEvent).toBeDefined();
       expect(treasurerOngoingEvent!.payload.effectType).toBe('extraSignet');
     });
@@ -247,7 +247,7 @@ describe('组 3：持续能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.MECHANICAL_SPIRIT)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(executor.events[0].payload.abilityId).toBe(mockContext.abilityId);
       expect(executor.events[0].payload.cardId).toBe(mockContext.cardId);
       expect(executor.events[0].payload.playerId).toBe('player1');
@@ -312,7 +312,7 @@ describe('组 3：持续能力', () => {
       const mechanicalSpiritExecutor = abilityExecutorRegistry.resolve(ABILITY_IDS.MECHANICAL_SPIRIT)!(mockContext);
 
       // 一次性持续标记的 effectType 应该标识其一次性特性
-      const treasurerOngoingEvent = treasurerExecutor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED);
+      const treasurerOngoingEvent = treasurerExecutor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type);
       expect(treasurerOngoingEvent).toBeDefined();
       expect(treasurerOngoingEvent!.payload.effectType).toBe('extraSignet');
       
