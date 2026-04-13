@@ -131,13 +131,11 @@ const HandCard: React.FC<{
     height: magnifyIconSize,
   };
 
-  const cardSpacingRatio = compactLayout
-    ? (totalCards > 6 ? -0.012 : totalCards > 4 ? -0.004 : 0.008)
-    : (totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05);
-  const selectedLift = compactLayout ? -14 : -30;
-  const hoverLift = compactLayout ? -6 : -20;
-  const hoverScale = compactLayout ? 1.02 : 1.08;
-  const cardWidthRatio = compactLayout ? '0.105' : CARD_WIDTH_RATIO;
+  const cardSpacingRatio = totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05;
+  const selectedLift = -30;
+  const hoverLift = -20;
+  const hoverScale = 1.08;
+  const cardWidthRatio = CARD_WIDTH_RATIO;
 
   const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

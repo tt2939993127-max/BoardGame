@@ -254,7 +254,12 @@ export const summonerWarsFlowHooks: FlowHooks<SummonerWarsCore> = {
       for (const activeEvent of newTurnPlayer.activeEvents) {
         const cardBaseId = getBaseCardId(activeEvent.id);
         if (cardBaseId === CARD_IDS.NECRO_FUNERAL_PYRE && (activeEvent.charges ?? 0) > 0) {
-          // 有充能的殉葬火堆：不自动弃置，由 UI 处理
+          // 有充能的殉葬火堆：不自动弃置，交互系统驱动选择治疗目标/跳过
+          events.push({
+            type: SW_EVENTS.FUNERAL_PYRE_PROMPTED,
+            payload: { playerId: nextPlayer, cardId: activeEvent.id, charges: activeEvent.charges ?? 0 },
+            timestamp,
+          });
           continue;
         }
         if (cardBaseId === CARD_IDS.PALADIN_HOLY_JUDGMENT && (activeEvent.charges ?? 0) > 0) {

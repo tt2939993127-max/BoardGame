@@ -6,6 +6,8 @@
  */
 
 import { test } from '@playwright/test';
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import {
     setupTwoPlayerMatch,
     completeFactionSelection,
@@ -15,6 +17,8 @@ import {
 
 test.describe('SmashUp 外星人卡牌图片视觉验证', () => {
     test('截图手牌中的外星人卡牌', async ({ browser }, testInfo) => {
+        const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'smashup-selection-to-ingame-online');
+        mkdirSync(evidenceDir, { recursive: true });
         const baseURL = testInfo.project.use.baseURL as string | undefined;
         const setup = await setupTwoPlayerMatch(browser, baseURL);
         if (!setup) {
@@ -40,11 +44,19 @@ test.describe('SmashUp 外星人卡牌图片视觉验证', () => {
                 path: testInfo.outputPath('alien-game-full.png'),
                 fullPage: true,
             });
+            await hostPage.screenshot({
+                path: join(evidenceDir, 'alien-game-full.png'),
+                fullPage: true,
+            });
 
             // 截图手牌区域
             const handArea = hostPage.locator('[data-testid="su-hand-area"]');
             await handArea.screenshot({
                 path: testInfo.outputPath('alien-hand-area.png'),
+                animations: 'disabled',
+            });
+            await handArea.screenshot({
+                path: join(evidenceDir, 'alien-hand-area.png'),
                 animations: 'disabled',
             });
 

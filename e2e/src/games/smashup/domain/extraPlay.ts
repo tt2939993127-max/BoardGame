@@ -6,7 +6,16 @@ import { execute } from './reducer';
 import { reduce } from './reduce';
 import { buildBaseTargetOptions, buildMinionTargetOptions, createSkipOption, grantExtraAction, grantExtraMinion } from './abilityHelpers';
 import { registerInteractionHandler } from './abilityInteractionHandlers';
-import { SU_COMMANDS, SU_EVENTS, type ActionCardDef, type FusionCardDef, type LimitModifiedEvent, type MinionOnBase, type SmashUpCore } from './types';
+import {
+    SU_COMMANDS,
+    SU_EVENTS,
+    type ActionCardDef,
+    type FusionCardDef,
+    type LimitModifiedEvent,
+    type MinionOnBase,
+    type SmashUpCore,
+    type SmashUpEvent,
+} from './types';
 import {
     actionLikeNeedsPlayBase,
     actionLikeNeedsPlayMinion,
@@ -348,10 +357,17 @@ export function queueImmediateExtraPlayInteractions(
 
 export function registerImmediateExtraPlayInteractionHandlers(): void {
     registerInteractionHandler('smashup_immediate_extra_minion', (state, playerId, value, interactionData, random, timestamp) => {
-        if ((value as { skip?: boolean })?.skip) return { state, events: [] };
+        const extra = (interactionData?.continuationContext as { extra?: ImmediateExtraMinionPayload } | undefined)?.extra;
+        if ((value as { skip?: boolean })?.skip) {
+            return {
+                state,
+                events: extra?.consumePendingMinionPlayEffectOnSkip
+                    ? [{ type: SU_EVENTS.MINION_PLAY_EFFECT_CONSUMED, payload: { playerId }, timestamp } as SmashUpEvent]
+                    : [],
+            };
+        }
 
         const choice = value as ImmediateMinionCardChoice;
-        const extra = (interactionData?.continuationContext as { extra?: ImmediateExtraMinionPayload } | undefined)?.extra;
         if (!choice.cardUid || !extra || extra.playerId !== playerId) return { state, events: [] };
 
         const baseOptions = buildImmediateExtraMinionBaseOptions(state, extra, choice);
@@ -380,9 +396,16 @@ export function registerImmediateExtraPlayInteractionHandlers(): void {
     });
 
     registerInteractionHandler('smashup_immediate_extra_minion_base', (state, playerId, value, interactionData, random, timestamp) => {
-        if ((value as { skip?: boolean })?.skip) return { state, events: [] };
-        const { baseIndex } = value as ImmediateBaseChoice;
         const ctx = interactionData?.continuationContext as { extra?: ImmediateExtraMinionPayload; choice?: ImmediateMinionCardChoice } | undefined;
+        if ((value as { skip?: boolean })?.skip) {
+            return {
+                state,
+                events: ctx?.extra?.consumePendingMinionPlayEffectOnSkip
+                    ? [{ type: SU_EVENTS.MINION_PLAY_EFFECT_CONSUMED, payload: { playerId }, timestamp } as SmashUpEvent]
+                    : [],
+            };
+        }
+        const { baseIndex } = value as ImmediateBaseChoice;
         if (baseIndex === undefined || !ctx?.extra || !ctx.choice || ctx.extra.playerId !== playerId) return { state, events: [] };
         return executeImmediateExtraMinionPlay(state, ctx.extra, ctx.choice, baseIndex, timestamp, random);
     });

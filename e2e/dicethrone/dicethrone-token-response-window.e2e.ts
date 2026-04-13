@@ -318,6 +318,54 @@ test.describe('Token 响应窗口真实入口', () => {
         }
     });
 
+    test('samurai honor pass should close response window without reopen', async ({ page, game }, testInfo) => {
+        await game.openTestGame('dicethrone');
+        await game.setupScene({
+            gameId: 'dicethrone',
+            player0: {
+                resources: { CP: 2, HP: 50 },
+                tokens: { [TOKEN_IDS.HONOR]: 1 },
+            },
+            player1: {
+                resources: { CP: 2, HP: 50 },
+            },
+            currentPlayer: '0',
+            phase: 'offensiveRoll',
+            extra: {
+                selectedCharacters: { '0': 'samurai', '1': 'barbarian' },
+            },
+            sys: {
+                responseWindow: {
+                    current: {
+                        id: 'rw-after-roll',
+                        windowType: 'afterRollConfirmed',
+                        sourceId: 'roll:fixed-signature',
+                        responderQueue: ['0'],
+                        currentResponderIndex: 0,
+                        passedPlayers: [],
+                    },
+                },
+            },
+        });
+
+        const passButton = page.getByRole('button', { name: /^(Pass|跳过)$/i }).first();
+        await expect(passButton).toBeVisible({ timeout: 5000 });
+
+        await game.screenshot('samurai-honor-pass-before', testInfo);
+        await passButton.click();
+
+        await expect.poll(async () => {
+            const state = await game.getState();
+            return state?.sys?.responseWindow?.current ?? null;
+        }, { timeout: 10000 }).toBeNull();
+
+        await page.waitForTimeout(1500);
+        const responseAfterDelay = await game.getState();
+        expect(responseAfterDelay.sys.responseWindow?.current ?? null).toBeNull();
+
+        await game.screenshot('samurai-honor-pass-after', testInfo);
+    });
+
     test('samurai back strike should open from real attack flow and retaliate on click', async ({ browser }, testInfo) => {
         test.setTimeout(180000);
         const baseURL = testInfo.project.use.baseURL as string | undefined;

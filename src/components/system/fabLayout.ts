@@ -22,43 +22,42 @@ export const resolveExpandedFabLayout = ({
     safeAreaBottom: number;
     getHorizontalAlignment: (target: FabPosition, resolvedButtonSize: number) => FabAlignment['h'];
 }) => {
-    const offset = buttonSize + buttonGap;
-    const safeBottom = Math.max(safeAreaTop + buttonSize, viewportHeight - safeAreaBottom);
-    const preferredDirection = alignment.v === 'bottom' ? 'above' : 'below';
-
-    if (satelliteCount <= 0) {
-        return {
-            position,
-            alignment: {
-                v: preferredDirection === 'above' ? 'bottom' : 'top',
-                h: getHorizontalAlignment(position, buttonSize),
-            } as FabAlignment,
-            listOffset: { x: 0, y: 0 },
-        };
-    }
-
-    let resolvedTop = position.top;
-    if (preferredDirection === 'above') {
-        const minTop = safeAreaTop + satelliteCount * offset;
-        const maxTop = Math.max(minTop, safeBottom - buttonSize);
-        resolvedTop = Math.min(Math.max(position.top, minTop), maxTop);
-    } else {
-        const minTop = safeAreaTop;
-        const maxTop = Math.max(minTop, safeBottom - buttonSize - satelliteCount * offset);
-        resolvedTop = Math.min(Math.max(position.top, minTop), maxTop);
-    }
-
     const resolvedPosition = {
-        left: position.left,
-        top: resolvedTop,
+        left: Number.isFinite(position.left) ? position.left : 0,
+        top: Number.isFinite(position.top) ? position.top : 0,
+    };
+    const resolvedButtonSize = Number.isFinite(buttonSize) && buttonSize > 0 ? buttonSize : 0;
+    const resolvedButtonGap = Number.isFinite(buttonGap) ? buttonGap : 0;
+    const totalListHeight = Math.max(satelliteCount, 0) * (resolvedButtonSize + resolvedButtonGap);
+    const resolvedViewportHeight = Number.isFinite(viewportHeight) ? viewportHeight : 0;
+    const topInset = Number.isFinite(safeAreaTop) ? safeAreaTop : 0;
+    const bottomInset = Number.isFinite(safeAreaBottom) ? safeAreaBottom : 0;
+    const offset = resolvedButtonSize + resolvedButtonGap;
+
+    let offsetY = 0;
+    if (resolvedViewportHeight > 0 && totalListHeight > 0) {
+        if (alignment.v === 'bottom') {
+            const listTop = resolvedPosition.top - totalListHeight;
+            if (listTop < topInset) {
+                offsetY = topInset - listTop;
+            }
+        } else {
+            const listBottom = resolvedPosition.top + totalListHeight + offset + resolvedButtonSize;
+            const maxBottom = resolvedViewportHeight - bottomInset;
+            if (listBottom > maxBottom) {
+                offsetY = maxBottom - listBottom;
+            }
+        }
+    }
+
+    const resolvedAlignment: FabAlignment = {
+        v: alignment.v,
+        h: getHorizontalAlignment(resolvedPosition, resolvedButtonSize),
     };
 
     return {
         position: resolvedPosition,
-        alignment: {
-            v: preferredDirection === 'above' ? 'bottom' : 'top',
-            h: getHorizontalAlignment(resolvedPosition, buttonSize),
-        } as FabAlignment,
-        listOffset: { x: 0, y: 0 },
+        alignment: resolvedAlignment,
+        listOffset: { x: 0, y: offsetY },
     };
 };

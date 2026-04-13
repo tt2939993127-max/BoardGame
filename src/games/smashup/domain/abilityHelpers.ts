@@ -947,7 +947,13 @@ export function grantExtraMinion(
     /** 限定额度只能用于指定基地（不设则为全局额度） */
     restrictToBase?: number,
     /** 额外选项 */
-    options?: { sameNameOnly?: boolean; sameNameDefId?: string; powerMax?: number; playTiming?: 'banked' | 'immediate' },
+    options?: {
+        sameNameOnly?: boolean;
+        sameNameDefId?: string;
+        powerMax?: number;
+        playTiming?: 'banked' | 'immediate';
+        consumePendingMinionPlayEffectOnSkip?: boolean;
+    },
 ): LimitModifiedEvent {
     return {
         type: SU_EVENTS.LIMIT_MODIFIED,
@@ -958,6 +964,7 @@ export function grantExtraMinion(
             ...(options?.powerMax !== undefined ? { powerMax: options.powerMax } : {}),
             ...(options?.sameNameOnly ? { sameNameOnly: true } : {}),
             ...(options?.sameNameDefId ? { sameNameDefId: options.sameNameDefId } : {}),
+            ...(options?.consumePendingMinionPlayEffectOnSkip ? { consumePendingMinionPlayEffectOnSkip: true } : {}),
         },
         timestamp: now,
     };

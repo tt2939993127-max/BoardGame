@@ -8,7 +8,7 @@
 >
 > 本文目标：不把问题当成单点 bug，而是把“全链路”拆成可审计的责任边界与可验证的兜底策略。
 >
-> 补记：**active-turn 连续推进**修复已在「### 4) watchdog 推进策略升级」中明示记录。
+> 补记：**active-turn 连续推进**修复已在「### 4) watchdog 推进策略升级」中明示记录（本轮仅补记口径，无新增测试）。
 
 ## 审计范围（全链路分层）
 
@@ -135,9 +135,10 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 如果队列里 currentResponder 被错误保留为 human，watchdog 现在会刻意不接管；这类 bug 必须在 ResponseWindowSystem 或领域事件源头修复。  
 
 3) **Summoner Wars 的“响应重触发/音效循环”**：  
-已完成专项审计与最小修复（`flowHalted` 重复提示/音效回放），并完成 Phase B 事件卡交互迁移（含除灭/血契召唤/心灵操控/震慑/潜行/冰川位移等），详见 `evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`。  
-本轮已运行 E2E：`evidence/summonerwars/summonerwars-event-annihilate-e2e-test.md`。  
-**仍保留的结构性风险**：Summoner Wars 仍有多条“领域事件 → UI 本地 mode”链路未落到 `InteractionSystem`（rapid_fire / withdraw / afterMove / magic 二选一等），AI 仍看不到这类交互，存在“AI 看不见但真人能操作”的隐性分叉风险，需要后续继续治理。  
+已完成专项审计与最小修复（`flowHalted` 重复提示/音效回放），并完成 Phase A 关键交互迁移（infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast），详见 `evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`。  
+本轮已运行 E2E：  
+- `evidence/summonerwars/summonerwars-ice-shards-e2e-test.md`  
+**仍保留的结构性风险**：Summoner Wars 仍有多条“领域事件 → UI 本地 mode”链路未落到 `InteractionSystem`（rapid_fire / withdraw / afterMove / magic 二选一等），AI 仍看不到这类交互，存在“AI 看不见但真人能操作”的隐性分叉风险，需要后续继续治理（事件卡 Phase B 已纳入本轮验收，剩余为非事件卡本地 mode）。  
 
 4) **AI 循环动作的检测覆盖面**：  
 `onlineAiRecovery.ts` 的 action-loop detector 只覆盖部分 phase 且仅 repeat/alternating；三步以上循环仍可能漏检。  
@@ -151,7 +152,9 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 - DiceThrone response-window 重触发专项：`evidence/dicethrone/dicethrone-response-window-retrigger-audit-2026-04-12.md`
 - Smash Up AI 强口径审计：`evidence/smashup-ai-interaction-audit-2026-04-11.md`
 - Summoner Wars watchdog 链审计：`evidence/summonerwars/summonerwars-ai-interaction-audit-2026-04-12.md`
+- Summoner Wars ice_shards E2E 证据：`evidence/summonerwars/summonerwars-ice-shards-e2e-test.md`
 - Summoner Wars 事件卡 E2E 证据：`evidence/summonerwars/summonerwars-event-annihilate-e2e-test.md`
+- Summoner Wars 事件卡 E2E 证据：`evidence/summonerwars/summonerwars-blood-summon-e2e-test.md`
 
 ## 补充专项：AI action-loop detector 覆盖面审计（2026-04-12）
 
@@ -198,6 +201,7 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 
 ### 对当前 watchdog 口径的修订结论
 - `detectAiActionLoop` 只能算**有限覆盖的兜底信号**，不能算“AI 动作循环检测已完成”。
+- 已补上 **active-turn 连续推进** 的兜底（仅 AI seat 生效），避免“推进一步仍停在 AI 回合中间阶段”的假收口；详见「### 4) watchdog 推进策略升级」。
 - 对 DiceThrone 来说，当前最大漏检面就是 **ActionLog 未覆盖的经济动作循环**；用户此前提到的“弃牌↔撤回、卖牌↔撤回”类卡死，静态审计上完全成立为高风险盲区。
 - `buildOnlineAiRecoveryActionLog()` 上报给反馈接口的也只是尾部 5 条摘要，因此**线上反馈包本身也不能当作完整循环轨迹**；它更适合辅助定位，不足以证明“没有发生动作循环”。
 - 若后续要把“AI 不允许卡死”做成真正强口径，动作循环检测不能再只绑在 ActionLog allowlist 上，也不能只识别 repeat / 严格 alternating 两种模式；否则它仍然只是“部分 case 能挡住”的有限兜底。
@@ -256,7 +260,7 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 
 ### Summoner Wars（最小代表集合）
 1. **迁移后的 sys.interaction 交互**：infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast  
-2. **仍为本地 mode 的高风险链**：rapid_fire / withdraw / afterMove / event card 多步骤  
+2. **仍为本地 mode 的高风险链**：rapid_fire / withdraw / afterMove / magic 二选一  
 3. **flowHalted 结束阶段**：确认/跳过后能够继续推进，不遗留等待态  
 4. **自动反馈原因**：本地 mode 迁移后能输出“无法选择原因”
 
@@ -277,7 +281,7 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 - rollConfirmed 被其他链路重置后再 confirm 的 reopen 边界仍需明确验证。  
 
 ### Summoner Wars
-- 大量等待态仍停留在本地 UI mode（rapid_fire / withdraw / afterMove / event card 多步骤 / magic 二选一）。  
+- 大量等待态仍停留在本地 UI mode（rapid_fire / withdraw / afterMove / magic 二选一）。  
 - AI 无法读取本地 mode 的“不可选原因”，自动反馈仍不完整。  
 
 ### Smash Up
@@ -301,7 +305,7 @@ DiceThrone 的响应窗口音效还有额外门禁：只对 responderQueue 包�
 ### 游戏层（DiceThrone / SummonerWars / SmashUp）
 1. **Summoner Wars：迁移本地 UI mode → sys.interaction**  
    - 责任：SummonerWars 游戏层  
-   - 交付：rapid_fire / withdraw / afterMove / event card 多步骤 / magic 二选一迁移完成；AI 可解性矩阵更新。  
+   - 交付：rapid_fire / withdraw / afterMove / magic 二选一迁移完成；AI 可解性矩阵更新。  
 2. **DiceThrone：response-window reopen 边界收口**  
    - 责任：DiceThrone 游戏层  
    - 交付：明确 rollConfirmed 重置链与 reopen 条件；补“经济动作循环”最小回归。  

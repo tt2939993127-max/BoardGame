@@ -63,6 +63,9 @@ import { diceThroneAiRuntime } from './ai';
 const ACTION_LOG_ALLOWLIST = [
     'PLAY_CARD',
     'PLAY_UPGRADE_CARD',
+    'DISCARD_CARD',
+    'SELL_CARD',
+    'UNDO_SELL_CARD',
     // 注意：阶段推进属于明确的规则行为，允许撤回 + 记录。
     'ADVANCE_PHASE',
     'SELECT_ABILITY',
@@ -271,6 +274,67 @@ function formatDiceThroneActionEntry({
             timestamp,
             actorId: command.playerId,
             kind: 'SELL_CARD',
+            segments,
+        });
+    }
+
+    if (command.type === 'DISCARD_CARD') {
+        const cardId = (command.payload as { cardId: string }).cardId;
+        const card = findDiceThroneCard(core, cardId, command.playerId);
+
+        const segments: ActionLogSegment[] = [
+            i18nSeg('actionLog.discardCard'),
+        ];
+        if (card?.previewRef) {
+            const isI18nKey = card.name?.includes('.');
+            segments.push({
+                type: 'card',
+                cardId: card.id,
+                previewText: card.name ?? cardId,
+                previewRef: card.previewRef,
+                ...(isI18nKey ? { previewTextNs: DT_NS } : {}),
+            });
+        } else {
+            const displayName = card?.name ?? cardId;
+            segments.push({ type: 'text', text: displayName });
+        }
+
+        entries.push({
+            id: `DISCARD_CARD-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: 'DISCARD_CARD',
+            segments,
+        });
+    }
+
+    if (command.type === 'UNDO_SELL_CARD') {
+        const undoEvent = events.find((event) => event.type === 'SELL_UNDONE') as { payload?: { cardId?: string } } | undefined;
+        const cardId = undoEvent?.payload?.cardId ?? core.lastSoldCardId ?? '';
+        const card = cardId ? findDiceThroneCard(core, cardId, command.playerId) : undefined;
+
+        const segments: ActionLogSegment[] = [
+            i18nSeg('actionLog.undoSellCard'),
+        ];
+        if (card?.previewRef) {
+            const isI18nKey = card.name?.includes('.');
+            segments.push({
+                type: 'card',
+                cardId: card.id,
+                previewText: card.name ?? cardId,
+                previewRef: card.previewRef,
+                ...(isI18nKey ? { previewTextNs: DT_NS } : {}),
+            });
+        } else if (cardId) {
+            const displayName = card?.name ?? cardId;
+            segments.push({ type: 'text', text: displayName });
+        }
+
+        entries.push({
+            id: `UNDO_SELL_CARD-${command.playerId}-${timestamp}`,
+            timestamp,
+            actorId: command.playerId,
+            kind: 'UNDO_SELL_CARD',
             segments,
         });
     }

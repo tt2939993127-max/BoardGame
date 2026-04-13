@@ -86,4 +86,4 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-die-reroll.e2e.ts "card-hi
 ## 覆盖声明与未覆盖风险
 
 - 本文覆盖：`card-high-noon` 在 **1v1 场景** 下的三分支结算正确性，以及奖励骰特写的“出现→关闭→收口”闭环。
-- 4 人 2v2 模式下“目标玩家（all seating）”的交互 UI 证据：由 `evidence/dicethrone/dicethrone-gunslinger-samurai-4p-targeted-cards-e2e-test.md` 覆盖（本文不重复贴图）。
+- 4 人 2v2 模式下“目标玩家（all seating）”的交互 UI 证据：由 `evidence/dicethrone/dicethrone-gunslinger-samurai-4p-targeted-cards-e2e-test.md` 覆盖（本文不重复贴图；本次文档回写按**历史证据复用**口径引用该文档，不额外宣称本轮已复跑 4P 用例）。

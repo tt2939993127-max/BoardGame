@@ -25,6 +25,66 @@ async function saveEvidenceLocatorScreenshot(page: any, locator: any, testInfo: 
     });
 }
 
+async function waitForFabPanelStable(
+    panel: any,
+    mainVisual: any,
+    panelButtons: any,
+    label = 'fab panel',
+) {
+    let previousSignature: string | null = null;
+    let stableCount = 0;
+
+    await expect
+        .poll(async () => {
+            const panelBox = await panel.boundingBox();
+            const mainBox = await mainVisual.boundingBox();
+            const buttonCount = await panelButtons.count();
+
+            if (!panelBox || !mainBox || buttonCount === 0) {
+                stableCount = 0;
+                previousSignature = null;
+                return 0;
+            }
+
+            const buttonBoxes = await Promise.all(
+                Array.from({ length: buttonCount }, (_, index) => panelButtons.nth(index).boundingBox()),
+            );
+            if (buttonBoxes.some((box) => !box)) {
+                stableCount = 0;
+                previousSignature = null;
+                return 0;
+            }
+
+            const round = (value: number) => Math.round(value * 10) / 10;
+            const normalize = (box: { x: number; y: number; width: number; height: number }) => ({
+                x: round(box.x),
+                y: round(box.y),
+                width: round(box.width),
+                height: round(box.height),
+            });
+
+            const signature = JSON.stringify({
+                panel: normalize(panelBox),
+                main: normalize(mainBox),
+                buttons: buttonBoxes.map((box) => normalize(box!)),
+            });
+
+            if (signature === previousSignature) {
+                stableCount += 1;
+            } else {
+                stableCount = 0;
+                previousSignature = signature;
+            }
+
+            return stableCount;
+        }, {
+            timeout: 2500,
+            intervals: [80, 120, 160],
+            message: `${label} 展开态布局未稳定`,
+        })
+        .toBeGreaterThanOrEqual(1);
+}
+
 async function longPressTouch(locator: any, page: any, pointerId: number) {
     const box = await locator.boundingBox();
     expect(box, '长按目标应该先可见').not.toBeNull();
@@ -1118,9 +1178,25 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         await expect(endTurnHints).toBeVisible({ timeout: 5000 });
         await game.screenshot('04c-mobile-end-turn-restored', testInfo);
 
+        const exitFabBoxBeforeOpen = await exitFabVisual.boundingBox();
+        expect(exitFabBoxBeforeOpen, 'exit FAB 打开前应提供尺寸').not.toBeNull();
+
         await exitFabButton.click();
         await expect(exitFabPanel).toBeVisible({ timeout: 5000 });
         await expectLocatorInsideViewport(exitFabPanel, 'exit fab panel', viewport!.width, viewport!.height);
+        const exitFabPanelButtons = exitFabPanel.locator('button');
+        await waitForFabPanelStable(exitFabPanel, exitFabVisual, exitFabPanelButtons, 'exit fab panel');
+        const exitFabBoxAfterOpen = await exitFabVisual.boundingBox();
+        expect(exitFabBoxAfterOpen, 'exit FAB 打开后应仍可见').not.toBeNull();
+        expect(
+            Math.abs((exitFabBoxAfterOpen?.x ?? 0) - (exitFabBoxBeforeOpen?.x ?? 0)),
+            'exit FAB 打开后不应横向漂移',
+        ).toBeLessThan(3);
+        expect(
+            Math.abs((exitFabBoxAfterOpen?.y ?? 0) - (exitFabBoxBeforeOpen?.y ?? 0)),
+            'exit FAB 打开后不应纵向漂移',
+        ).toBeLessThan(3);
+
         const hasExitFabSheet = await exitFabSheet.isVisible().catch(() => false);
         if (hasExitFabSheet) {
             const exitFabDocumentMetrics = await page.evaluate(() => ({
@@ -1134,6 +1210,7 @@ test.describe('大杀四方四人局三基地同时计分', () => {
             expect(exitFabDocumentMetrics.htmlOverscrollBehaviorY, 'exit fab sheet 打开时 html 不应继续透传滚动').toBe('none');
             expect(exitFabDocumentMetrics.bodyOverscrollBehaviorY, 'exit fab sheet 打开时 body 不应继续透传滚动').toBe('none');
         }
+        expect(hasExitFabSheet, 'exit FAB 在移动端横屏应以内嵌 popover 展示，不应出现独立 sheet').toBeFalsy();
         const exitFabPanelMetrics = await exitFabPanel.evaluate((element) => ({
             clientWidth: element.clientWidth,
             scrollWidth: element.scrollWidth,
@@ -1142,7 +1219,6 @@ test.describe('大杀四方四人局三基地同时计分', () => {
         }));
         expect(exitFabPanelMetrics.scrollWidth, 'exit fab panel 不应出现横向内容溢出').toBeLessThanOrEqual(exitFabPanelMetrics.clientWidth + 1);
         expect(exitFabPanelMetrics.scrollHeight, 'exit fab panel should not rely on internal scrolling').toBeLessThanOrEqual(exitFabPanelMetrics.clientHeight + 1);
-        const exitFabPanelButtons = exitFabPanel.locator('button');
         const exitFabPanelButtonCount = await exitFabPanelButtons.count();
         expect(exitFabPanelButtonCount, 'exit fab panel should expose at least one action button').toBeGreaterThan(0);
         for (let index = 0; index < exitFabPanelButtonCount; index += 1) {

@@ -233,7 +233,10 @@ function frankensteinJolt(ctx: AbilityContext): AbilityResult {
 function frankensteinItsAlive(ctx: AbilityContext): AbilityResult {
     return {
         events: [
-            grantExtraMinion(ctx.playerId, 'frankenstein_its_alive', ctx.now, undefined, { playTiming: 'immediate' }),
+            grantExtraMinion(ctx.playerId, 'frankenstein_its_alive', ctx.now, undefined, {
+                playTiming: 'immediate',
+                consumePendingMinionPlayEffectOnSkip: true,
+            }),
             queueMinionPlayEffect(ctx.playerId, 'addPowerCounter', 1, ctx.now),
         ],
     };

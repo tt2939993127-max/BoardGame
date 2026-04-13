@@ -729,6 +729,18 @@ export function executeCommand(
       break;
     }
 
+    case SW_COMMANDS.REQUEST_MAGIC_EVENT_CHOICE: {
+      const cardId = payload.cardId as string;
+      if (cardId) {
+        events.push({
+          type: SW_EVENTS.MAGIC_EVENT_CHOICE_REQUESTED,
+          payload: { playerId, cardId },
+          timestamp,
+        });
+      }
+      break;
+    }
+
     case SW_COMMANDS.REQUEST_EVENT_INTERACTION: {
       const cardId = payload.cardId as string;
       if (cardId) {

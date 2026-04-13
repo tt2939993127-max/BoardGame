@@ -215,6 +215,41 @@ describe('Runtime viewport css vars', () => {
         document.documentElement.removeAttribute('data-mobile-profile');
         document.documentElement.removeAttribute('data-game-id');
     });
+
+    it('summonerwars 未单独覆写时沿用默认 900 设计宽度', () => {
+        document.documentElement.setAttribute('data-game-page', 'true');
+        document.documentElement.setAttribute('data-mobile-layout-preset', 'board-shell');
+        document.documentElement.setAttribute('data-mobile-profile', 'landscape-adapted');
+        document.documentElement.setAttribute('data-game-id', 'summonerwars');
+
+        applyRuntimeViewportCssVars({
+            width: 936,
+            height: 432,
+            safeArea: { top: 0, right: 0, bottom: 0, left: 0 },
+            keyboardInsetBottom: 0,
+        }, {
+            layoutEngineCapabilities: {
+                chromiumMajorVersion: 91,
+                layoutMode: 'legacy',
+                supportsCalcDivision: false,
+                supportsDynamicViewportUnits: false,
+                requiresJsScaleFallback: true,
+                requiresLegacyViewportFallback: true,
+            },
+        });
+
+        const rootStyle = document.documentElement.style;
+        expect(rootStyle.getPropertyValue('--mobile-board-shell-design-width')).toBe('900px');
+        expect(rootStyle.getPropertyValue('--mobile-board-shell-scale')).toBe('1.040000');
+        expect(rootStyle.getPropertyValue('--mobile-board-shell-inverse-scale')).toBe('0.961538');
+        expect(rootStyle.getPropertyValue('--mobile-layout-inline-unit')).toBe('9.0000px');
+        expect(rootStyle.getPropertyValue('--mobile-root-scale')).toBe('0.731250');
+
+        document.documentElement.removeAttribute('data-game-page');
+        document.documentElement.removeAttribute('data-mobile-layout-preset');
+        document.documentElement.removeAttribute('data-mobile-profile');
+        document.documentElement.removeAttribute('data-game-id');
+    });
 });
 
 describe('Play route loading fallback helpers', () => {

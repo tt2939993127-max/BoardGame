@@ -1791,7 +1791,7 @@ describe('GameDetailsModal create room ai entry', () => {
         });
     });
 
-    it('仅有本地旧房主状态时，点击创建会先清理陈旧状态再打开建房弹窗', async () => {
+    it('仅有本地旧房主状态时，会隐藏创建按钮并保留返回/强制退出入口', async () => {
         markGamePackageInstalled();
         vi.mocked(matchStatus.getOwnerActiveMatch).mockImplementation(() => ({
             matchID: 'match-stale',
@@ -1799,25 +1799,16 @@ describe('GameDetailsModal create room ai entry', () => {
             ownerKey: 'owner-1',
             ownerType: 'guest',
         }));
-        vi.spyOn(matchApi, 'getMatch')
-            .mockImplementationOnce(() => new Promise(() => undefined))
-            .mockRejectedValueOnce(new Error('404: Match not found'));
 
         render(createElement(GameDetailsModal, baseProps));
 
-        fireEvent.click(screen.getByTestId('game-details-open-create-room'));
-
-        await waitFor(() => {
-            expect(vi.mocked(matchStatus.clearMatchCredentials)).toHaveBeenCalledWith('match-stale');
-            expect(vi.mocked(matchStatus.clearOwnerActiveMatch)).toHaveBeenCalledWith('match-stale');
-        });
-        await waitFor(() => {
-            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
-        });
-        expect(vi.mocked(lobbySocket.requestRefresh)).toHaveBeenCalledWith('dicethrone');
+        expect(screen.queryByTestId('game-details-open-create-room')).toBeNull();
+        expect(screen.getByText('activeMatch.notice')).toBeInTheDocument();
+        expect(screen.getByText('activeMatch.return')).toBeInTheDocument();
+        expect(screen.getByText('actions.forceExit')).toBeInTheDocument();
     });
 
-    it('已有旧房间凭证时，点击创建会先退出旧房再打开建房弹窗', async () => {
+    it('已有旧房间凭证时，会隐藏创建按钮并保留返回/销毁入口', async () => {
         markGamePackageInstalled();
         const stored = buildStored({
             matchID: 'match-old',
@@ -1827,32 +1818,13 @@ describe('GameDetailsModal create room ai entry', () => {
         });
         vi.mocked(matchStatus.getLatestStoredMatchCredentials).mockImplementation(() => stored);
         vi.mocked(matchStatus.listStoredMatchCredentials).mockImplementation(() => [stored]);
-        vi.spyOn(matchApi, 'getMatch').mockResolvedValue({
-            matchID: 'match-old',
-            gameName: 'dicethrone',
-            players: [{ id: 0, name: 'Guest', isConnected: true }],
-        });
-        vi.mocked(matchStatus.exitMatch).mockResolvedValueOnce({ success: true });
 
         render(createElement(GameDetailsModal, baseProps));
 
-        fireEvent.click(screen.getByTestId('game-details-open-create-room'));
-
-        await waitFor(() => {
-            expect(vi.mocked(matchStatus.exitMatch)).toHaveBeenCalledWith(
-                'dicethrone',
-                'match-old',
-                '0',
-                'host-creds',
-                true,
-            );
-        });
-        await waitFor(() => {
-            expect(screen.getByText('mock-create-room-confirm')).toBeInTheDocument();
-        });
-        expect(vi.mocked(matchStatus.clearMatchCredentials)).toHaveBeenCalledWith('match-old');
-        expect(vi.mocked(matchStatus.clearOwnerActiveMatch)).toHaveBeenCalledWith('match-old');
-        expect(vi.mocked(lobbySocket.requestRefresh)).toHaveBeenCalledWith('dicethrone');
+        expect(screen.queryByTestId('game-details-open-create-room')).toBeNull();
+        expect(screen.getByText('activeMatch.notice')).toBeInTheDocument();
+        expect(screen.getByText('activeMatch.return')).toBeInTheDocument();
+        expect(screen.getByText('actions.destroy')).toBeInTheDocument();
     });
 
     it('服务端返回 ACTIVE_MATCH_EXISTS 时，会弹出强制清理确认并带 force 重试创建', async () => {

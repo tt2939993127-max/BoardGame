@@ -168,7 +168,8 @@ describe('trickster interaction regressions', () => {
             payload: { minionUid: 'gnome-1', baseIndex: 0 },
             timestamp: 1002,
         } as any, defaultRandom);
-        expect(secondActivate.success).toBe(true);
+        expect(secondActivate.success).toBe(false);
+        expect(secondActivate.error).toBe('该基地本回合已使用过同组特殊能力');
     });
 });
 

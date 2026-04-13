@@ -35,6 +35,21 @@ import {
 } from './helpers';
 import { getBaseCardId, CARD_IDS, isPlagueZombieCard } from './ids';
 
+const INTERACTIVE_EVENT_BASE_IDS = new Set<string>([
+  CARD_IDS.NECRO_HELLFIRE_BLADE,
+  CARD_IDS.NECRO_BLOOD_SUMMON,
+  CARD_IDS.NECRO_ANNIHILATE,
+  CARD_IDS.TRICKSTER_MIND_CONTROL,
+  CARD_IDS.TRICKSTER_STUN,
+  CARD_IDS.TRICKSTER_HYPNOTIC_LURE,
+  CARD_IDS.BARBARIC_CHANT_OF_POWER,
+  CARD_IDS.BARBARIC_CHANT_OF_GROWTH,
+  CARD_IDS.BARBARIC_CHANT_OF_WEAVING,
+  CARD_IDS.BARBARIC_CHANT_OF_ENTANGLEMENT,
+  CARD_IDS.FROST_GLACIAL_SHIFT,
+  CARD_IDS.GOBLIN_SNEAK,
+]);
+
 type SwInteractionMeta =
   | {
       type: 'infection';
@@ -45,6 +60,17 @@ type SwInteractionMeta =
       type: 'event_target';
       cardId: string;
       baseId: string;
+    }
+  | {
+      type: 'magic_event_choice';
+      cardId: string;
+      baseId: string;
+      interaction: boolean;
+    }
+  | {
+      type: 'funeral_pyre';
+      cardId: string;
+      charges: number;
     }
   | {
       type: 'blood_summon_select_target';
@@ -155,6 +181,10 @@ type SwInteractionMeta =
 type SwInteractionValue =
   | { action: 'infection'; cardId: string; sourceUnitId: string; targetPosition: CellCoord }
   | { action: 'event_target'; targetPosition: CellCoord }
+  | { action: 'magic_event_play' }
+  | { action: 'magic_event_discard' }
+  | { action: 'funeral_pyre_heal'; targetPosition: CellCoord }
+  | { action: 'funeral_pyre_skip'; skip?: boolean }
   | { action: 'blood_summon_target'; targetPosition: CellCoord }
   | { action: 'blood_summon_card'; summonCardId: string }
   | { action: 'blood_summon_position'; summonPosition: CellCoord }
@@ -165,14 +195,14 @@ type SwInteractionValue =
   | { action: 'annihilate_damage_skip'; skip?: boolean }
   | { action: 'mind_control_target'; targetPosition: CellCoord }
   | { action: 'stun_target'; targetPosition: CellCoord }
-  | { action: 'stun_destination'; moveRow: number; moveCol: number; distance: number }
+  | { action: 'stun_destination'; targetPosition: CellCoord; moveRow: number; moveCol: number; distance: number }
   | { action: 'hypnotic_lure_target'; targetPosition: CellCoord }
   | { action: 'chant_entanglement_target'; targetPosition: CellCoord }
   | { action: 'sneak_unit'; position: CellCoord }
-  | { action: 'sneak_destination'; newPosition: CellCoord }
+  | { action: 'sneak_destination'; newPosition: CellCoord; targetPosition: CellCoord }
   | { action: 'sneak_finish'; skip?: boolean }
   | { action: 'glacial_shift_building'; position: CellCoord }
-  | { action: 'glacial_shift_destination'; newPosition: CellCoord }
+  | { action: 'glacial_shift_destination'; newPosition: CellCoord; targetPosition: CellCoord }
   | { action: 'glacial_shift_finish'; skip?: boolean }
   | { action: 'grab_follow'; sourceUnitId: string; targetPosition: CellCoord }
   | { action: 'soul_transfer'; sourceUnitId: string; targetPosition: CellCoord }
@@ -552,6 +582,81 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           }
         }
 
+        if (event.type === SW_EVENTS.MAGIC_EVENT_CHOICE_REQUESTED) {
+          const payload = event.payload as { playerId: PlayerId; cardId: string };
+          const player = newState.core.players[payload.playerId];
+          if (!player) continue;
+          const card = player.hand.find((c) => c.id === payload.cardId);
+          if (!card || card.cardType !== 'event') continue;
+          const baseId = getBaseCardId(card.id);
+          const interaction = INTERACTIVE_EVENT_BASE_IDS.has(baseId);
+          const options: PromptOption<SwInteractionValue>[] = [
+            {
+              id: 'play',
+              labelKey: 'actions.playEvent',
+              value: { action: 'magic_event_play' },
+            },
+            {
+              id: 'discard',
+              labelKey: 'actions.discardForMagic',
+              value: { action: 'magic_event_discard' },
+            },
+          ];
+          const interaction = createSimpleChoice(
+            `sw-magic-event-choice-${event.timestamp ?? 0}-${payload.cardId}`,
+            payload.playerId,
+            'interaction.sw.magicEventChoice',
+            options,
+            { sourceId: 'magic_event_choice', targetType: 'button', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'magic_event_choice',
+              cardId: payload.cardId,
+              baseId,
+              interaction,
+            } satisfies SwInteractionMeta,
+          };
+          newState = queueInteraction(newState, interaction);
+        }
+
+        if (event.type === SW_EVENTS.FUNERAL_PYRE_PROMPTED) {
+          const payload = event.payload as { playerId: PlayerId; cardId: string; charges: number };
+          const targets = getPlayerUnits(newState.core, payload.playerId)
+            .filter((unit) => unit.damage > 0)
+            .map((unit) => unit.position);
+          const options: PromptOption<SwInteractionValue>[] = [
+            ...buildPositionOptions(targets, (pos) => ({
+              action: 'funeral_pyre_heal',
+              targetPosition: pos,
+            })),
+            {
+              id: 'skip',
+              labelKey: 'actions.skip',
+              value: { action: 'funeral_pyre_skip', skip: true },
+            },
+          ];
+          const interaction = createSimpleChoice(
+            `sw-funeral-pyre-${event.timestamp ?? 0}-${payload.cardId}`,
+            payload.playerId,
+            'interaction.sw.funeralPyre',
+            options,
+            { sourceId: 'funeral_pyre', targetType: 'minion', autoResolveIfSingle: false },
+          );
+          const interactionData = (interaction.data ?? {}) as Record<string, unknown>;
+          interaction.data = {
+            ...interactionData,
+            sw: {
+              type: 'funeral_pyre',
+              cardId: payload.cardId,
+              charges: payload.charges,
+            } satisfies SwInteractionMeta,
+          };
+          newState = queueInteraction(newState, interaction);
+        }
+
         if (event.type === SW_EVENTS.SUMMON_FROM_DISCARD_REQUESTED) {
           const payload = event.payload as {
             playerId: PlayerId;
@@ -860,6 +965,49 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
             }
           }
 
+          if (sw.type === 'magic_event_choice') {
+            const picked = values.find((item) => item.action === 'magic_event_play' || item.action === 'magic_event_discard');
+            if (picked?.action === 'magic_event_play') {
+              const playCommandType = sw.interaction ? SW_COMMANDS.REQUEST_EVENT_INTERACTION : SW_COMMANDS.PLAY_EVENT;
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: playCommandType,
+                payload: {
+                  cardId: sw.cardId,
+                },
+              }));
+            }
+            if (picked?.action === 'magic_event_discard') {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.DISCARD_FOR_MAGIC,
+                payload: {
+                  cardIds: [sw.cardId],
+                },
+              }));
+            }
+          }
+
+          if (sw.type === 'funeral_pyre') {
+            const picked = values.find((item) => item.action === 'funeral_pyre_heal') as { action: 'funeral_pyre_heal'; targetPosition: CellCoord } | undefined;
+            const hasSkip = isSkipValue(value) || values.some((item) => item.action === 'funeral_pyre_skip');
+            if (picked?.targetPosition) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.FUNERAL_PYRE_HEAL,
+                payload: {
+                  cardId: sw.cardId,
+                  targetPosition: picked.targetPosition,
+                },
+              }));
+            } else if (hasSkip) {
+              nextEvents.push(...executeSwCommand(newState, random, {
+                type: SW_COMMANDS.FUNERAL_PYRE_HEAL,
+                payload: {
+                  cardId: sw.cardId,
+                  skip: true,
+                },
+              }));
+            }
+          }
+
           if (sw.type === 'blood_summon_select_target') {
             const target = values.find((item) => item.action === 'blood_summon_target') as { action: 'blood_summon_target'; targetPosition: CellCoord } | undefined;
             if (target?.targetPosition) {
@@ -1158,6 +1306,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
                   label: `(${dest.position.row},${dest.position.col})`,
                   value: {
                     action: 'stun_destination',
+                    targetPosition: dest.position,
                     moveRow: dest.moveRow,
                     moveCol: dest.moveCol,
                     distance: dest.distance,
@@ -1185,7 +1334,13 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           }
 
           if (sw.type === 'stun_select_destination') {
-            const picked = values.find((item) => item.action === 'stun_destination') as { action: 'stun_destination'; moveRow: number; moveCol: number; distance: number } | undefined;
+            const picked = values.find((item) => item.action === 'stun_destination') as {
+              action: 'stun_destination';
+              targetPosition: CellCoord;
+              moveRow: number;
+              moveCol: number;
+              distance: number;
+            } | undefined;
             if (picked && sw.targetPosition) {
               nextEvents.push(...executeSwCommand(newState, random, {
                 type: SW_COMMANDS.PLAY_EVENT,
@@ -1249,6 +1404,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
                   const options = buildPositionOptions(adj, (pos) => ({
                     action: 'sneak_destination',
                     newPosition: pos,
+                    targetPosition: pos,
                   }));
                   const interaction = createSimpleChoice(
                     `sw-sneak-direction-${event.timestamp ?? 0}-${sw.cardId}`,
@@ -1274,7 +1430,11 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           }
 
           if (sw.type === 'sneak_select_direction') {
-            const picked = values.find((item) => item.action === 'sneak_destination') as { action: 'sneak_destination'; newPosition: CellCoord } | undefined;
+            const picked = values.find((item) => item.action === 'sneak_destination') as {
+              action: 'sneak_destination';
+              newPosition: CellCoord;
+              targetPosition: CellCoord;
+            } | undefined;
             if (picked?.newPosition && sw.currentUnit) {
               const recorded = [...(sw.recorded ?? []), { position: sw.currentUnit, newPosition: picked.newPosition }];
               const remainingUnits = getPlayerUnits(newState.core, payload.playerId)
@@ -1347,7 +1507,7 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
                     options.push({
                       id: `pos:${pos.row},${pos.col}`,
                       label: `(${pos.row},${pos.col})`,
-                      value: { action: 'glacial_shift_destination', newPosition: pos },
+                      value: { action: 'glacial_shift_destination', newPosition: pos, targetPosition: pos },
                     });
                   }
                 }
@@ -1376,7 +1536,11 @@ export function createSummonerWarsInteractionSystem(): EngineSystem<SummonerWars
           }
 
           if (sw.type === 'glacial_shift_select_destination') {
-            const picked = values.find((item) => item.action === 'glacial_shift_destination') as { action: 'glacial_shift_destination'; newPosition: CellCoord } | undefined;
+            const picked = values.find((item) => item.action === 'glacial_shift_destination') as {
+              action: 'glacial_shift_destination';
+              newPosition: CellCoord;
+              targetPosition: CellCoord;
+            } | undefined;
             if (picked?.newPosition && sw.currentBuilding) {
               const recorded = [...(sw.recorded ?? []), { position: sw.currentBuilding, newPosition: picked.newPosition }];
               if (recorded.length >= 3) {

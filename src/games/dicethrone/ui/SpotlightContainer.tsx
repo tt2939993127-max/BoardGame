@@ -73,10 +73,15 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
     const visibleSinceRef = React.useRef<number>(0);
     const onCloseRef = React.useRef(onClose);
     const shouldCaptureBackdropClick = !disableBackdropClose;
+    const [portalReady, setPortalReady] = React.useState(false);
 
     React.useEffect(() => {
         onCloseRef.current = onClose;
     }, [onClose]);
+
+    React.useEffect(() => {
+        setPortalReady(true);
+    }, []);
 
     React.useEffect(() => {
         if (isVisible) {
@@ -123,65 +128,73 @@ export const SpotlightContainer: React.FC<SpotlightContainerProps> = ({
 
     const m = contentMotion ?? DEFAULT_CONTENT_MOTION;
 
-    return (
-        <HudPortal>
-            <AnimatePresence mode="wait">
+    const content = (
+        <AnimatePresence mode="wait">
+            <motion.div
+                key={id}
+                className={`fixed inset-0 flex items-center justify-center ${(blockPointerEvents || shouldCaptureBackdropClick) ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                style={{ zIndex }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3 }}
+                onClick={!shouldCaptureBackdropClick
+                    ? undefined
+                    : () => {
+                        const guardActive = isCloseClickGuardActive();
+                        spotlightContainerLogger.info('backdrop-click', {
+                            id,
+                            guardActive,
+                        });
+                        if (guardActive) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'backdrop' });
+                            return;
+                        }
+                        spotlightContainerLogger.info('close', { id, source: 'backdrop' });
+                        onClose();
+                    }}
+            >
+                {/* 内容容器 */}
                 <motion.div
-                    key={id}
-                    className={`fixed inset-0 flex items-center justify-center ${(blockPointerEvents || shouldCaptureBackdropClick) ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                    style={{ zIndex }}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    onClick={!shouldCaptureBackdropClick
-                        ? undefined
-                        : () => {
-                            const guardActive = isCloseClickGuardActive();
-                            spotlightContainerLogger.info('backdrop-click', {
-                                id,
-                                guardActive,
-                            });
-                            if (guardActive) {
-                                spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'backdrop' });
-                                return;
-                            }
-                            spotlightContainerLogger.info('close', { id, source: 'backdrop' });
-                            onClose();
-                        }}
+                    className={`relative ${allowContentPointerEvents ? 'pointer-events-auto' : 'pointer-events-none'}`}
+                    initial={m.initial}
+                    animate={m.animate}
+                    exit={m.exit}
+                    transition={m.transition}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        const guardActive = isCloseClickGuardActive();
+                        spotlightContainerLogger.info('content-click', {
+                            id,
+                            closeOnContentClick,
+                            guardActive,
+                        });
+                        if (!closeOnContentClick) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'content-click-disabled', id, source: 'content' });
+                            return;
+                        }
+                        if (guardActive) {
+                            spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'content' });
+                            return;
+                        }
+                        spotlightContainerLogger.info('close', { id, source: 'content' });
+                        onClose();
+                    }}
                 >
-                    {/* 内容容器 */}
-                    <motion.div
-                        className={`relative ${allowContentPointerEvents ? 'pointer-events-auto' : 'pointer-events-none'}`}
-                        initial={m.initial}
-                        animate={m.animate}
-                        exit={m.exit}
-                        transition={m.transition}
-                        onClick={(e) => {
-                            e.stopPropagation();
-                            const guardActive = isCloseClickGuardActive();
-                            spotlightContainerLogger.info('content-click', {
-                                id,
-                                closeOnContentClick,
-                                guardActive,
-                            });
-                            if (!closeOnContentClick) {
-                                spotlightContainerLogger.info('close-skipped', { reason: 'content-click-disabled', id, source: 'content' });
-                                return;
-                            }
-                            if (guardActive) {
-                                spotlightContainerLogger.info('close-skipped', { reason: 'guard-active', id, source: 'content' });
-                                return;
-                            }
-                            spotlightContainerLogger.info('close', { id, source: 'content' });
-                            onClose();
-                        }}
-                    >
-                        {children}
-                    </motion.div>
+                    {children}
                 </motion.div>
-            </AnimatePresence>
+            </motion.div>
+        </AnimatePresence>
+    );
+
+    const canUsePortal = portalReady && typeof document !== 'undefined';
+
+    return canUsePortal ? (
+        <HudPortal>
+            {content}
         </HudPortal>
+    ) : (
+        content
     );
 };
 

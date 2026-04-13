@@ -12,7 +12,7 @@
  * - 委托底层动画组件（SummonEffect、VortexEffect 等）
  */
 
-import React, { useRef, useCallback, useLayoutEffect } from 'react';
+import React, { useEffect, useRef, useCallback, useLayoutEffect } from 'react';
 import { FxRegistry, type FxRendererProps, type FeedbackPack } from '../../../engine/fx';
 import { SummonHybridEffect } from '../../../components/common/animations/SummonHybridEffect';
 import { VortexShaderEffect } from '../../../components/common/animations/VortexShaderEffect';

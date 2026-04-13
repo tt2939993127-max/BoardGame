@@ -1671,6 +1671,138 @@ describe('召唤师战争本地 AI', () => {
         });
     });
 
+    it('infection 交互应生成可响应动作，而不是回落普通阶段动作', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        core.phase = 'summon';
+        core.currentPlayer = '0';
+        const sys = createInitialSystemState(['0', '1'], []);
+        const interaction = createSimpleChoice(
+            'sw-ai-infection-choice',
+            '0',
+            'interaction.sw.infection',
+            [
+                {
+                    id: 'confirm',
+                    label: '感染',
+                    value: { action: 'infection', targetCardId: 'plague_zombie', targetPosition: { row: 5, col: 3 } },
+                },
+                {
+                    id: 'skip',
+                    label: '跳过',
+                    value: { action: 'infection', skip: true },
+                },
+            ],
+            { sourceId: 'infection' },
+        );
+        (interaction.data as { sw?: unknown }).sw = { type: 'infection' };
+        sys.interaction = { ...sys.interaction, current: interaction };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        expect(actions.length).toBeGreaterThan(0);
+        expect(actions.some((action) => action.kind === 'interaction-choice')).toBe(true);
+        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(false);
+        expect(actions.map((action) => action.commands[0])).toContainEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: {
+                interactionId: 'sw-ai-infection-choice',
+                optionId: 'confirm',
+            },
+        });
+    });
+
+    it('mind_capture 交互应生成控制/伤害选择，而不是回落普通阶段动作', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom);
+        core.phase = 'attack';
+        core.currentPlayer = '0';
+        const sys = createInitialSystemState(['0', '1'], []);
+        const interaction = createSimpleChoice(
+            'sw-ai-mind-capture-choice',
+            '0',
+            'interaction.sw.mindCapture',
+            [
+                {
+                    id: 'control',
+                    label: '控制',
+                    value: { action: 'mind_capture', choice: 'control', targetPosition: { row: 4, col: 2 } },
+                },
+                {
+                    id: 'damage',
+                    label: '伤害',
+                    value: { action: 'mind_capture', choice: 'damage', targetPosition: { row: 4, col: 2 } },
+                },
+            ],
+            { sourceId: 'mind_capture' },
+        );
+        (interaction.data as { sw?: unknown }).sw = { type: 'mind_capture' };
+        sys.interaction = { ...sys.interaction, current: interaction };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        expect(actions.length).toBeGreaterThan(0);
+        expect(actions.some((action) => action.kind === 'interaction-choice')).toBe(true);
+        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(false);
+        expect(actions.map((action) => action.commands[0])).toContainEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: {
+                interactionId: 'sw-ai-mind-capture-choice',
+                optionId: 'control',
+            },
+        });
+    });
+
+    it('feed_beast 交互应生成吞噬目标选项，而不是回落普通阶段动作', () => {
+        const core = createInitializedCore(['0', '1'], aiTestRandom, {
+            faction0: 'goblin',
+            faction1: 'paladin',
+        });
+        core.phase = 'build';
+        core.currentPlayer = '0';
+        const sys = createInitialSystemState(['0', '1'], []);
+        const interaction = createSimpleChoice(
+            'sw-ai-feed-beast-choice',
+            '0',
+            'interaction.sw.feedBeast',
+            [
+                {
+                    id: 'consume',
+                    label: '吞噬',
+                    value: { action: 'feed_beast', choice: 'destroy_adjacent', targetPosition: { row: 4, col: 4 } },
+                },
+                {
+                    id: 'skip',
+                    label: '跳过',
+                    value: { action: 'feed_beast', skip: true },
+                },
+            ],
+            { sourceId: 'feed_beast' },
+        );
+        (interaction.data as { sw?: unknown }).sw = { type: 'feed_beast' };
+        sys.interaction = { ...sys.interaction, current: interaction };
+
+        const actions = buildSummonerWarsAiLegalActions({
+            playerId: '0',
+            state: { core, sys },
+        });
+
+        expect(actions.length).toBeGreaterThan(0);
+        expect(actions.some((action) => action.kind === 'interaction-choice')).toBe(true);
+        expect(actions.some((action) => action.kind === 'advance-phase')).toBe(false);
+        expect(actions.map((action) => action.commands[0])).toContainEqual({
+            type: 'SYS_INTERACTION_RESPOND',
+            payload: {
+                interactionId: 'sw-ai-feed-beast-choice',
+                optionId: 'consume',
+            },
+        });
+    });
+
     it('殉葬火堆有受伤友军时，AI 应优先生成并选择 FUNERAL_PYRE_HEAL，而不是回落普通阶段动作', async () => {
         const core = createInitializedCore(['0', '1'], aiTestRandom, {
             faction0: 'necromancer',

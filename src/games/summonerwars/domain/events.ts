@@ -77,6 +77,7 @@ export const SW_EVENTS = defineEvents({
   CARD_DISCARDED: { audio: 'immediate', sound: CARD_DISCARD_KEY },
   EVENT_PLAYED: { audio: 'immediate', sound: EVENT_PLAY_KEY },
   EVENT_INTERACTION_REQUESTED: 'silent',
+  MAGIC_EVENT_CHOICE_REQUESTED: 'silent',
   ACTIVE_EVENT_DISCARDED: { audio: 'immediate', sound: CARD_DISCARD_KEY },
   CARD_RETRIEVED: { audio: 'immediate', sound: CARD_RETRIEVE_KEY },
   
@@ -85,6 +86,7 @@ export const SW_EVENTS = defineEvents({
   
   ABILITY_TRIGGERED: { audio: 'immediate', sound: ABILITY_TRIGGER_KEY },
   STRENGTH_MODIFIED: { audio: 'immediate', sound: STRENGTH_MODIFY_KEY },
+  FUNERAL_PYRE_PROMPTED: 'silent',
   FUNERAL_PYRE_CHARGED: { audio: 'immediate', sound: UNIT_CHARGE_KEY },
   EVENT_ATTACHED: { audio: 'immediate', sound: EVENT_ATTACH_KEY },
   

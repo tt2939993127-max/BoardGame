@@ -122,7 +122,10 @@
 | `card-eat-my-lead` | 吃我的铅弹！/ 攻击修正 | 额外掷 5 骰；每个子弹令本次攻击 +1；若加伤 >4，再施加击倒 | `cards.ts` + `customActions/gunslinger.ts` | D1/D3/D8 | ✅ 一致 |
 
 ## 验证证据
-- 本轮**已复跑** `src/games/dicethrone/__tests__/cross-hero.test.ts`（2026-04-12）；E2E 仍未复跑，仅复用既有证据文档、截图产物与静态源码核对。
+- **本次文档回写（2026-04-12）未新增跑测。** 本节中的动态证据分为两类并显式区分：
+  - **历史动态证据复用**：既有 E2E evidence 文档、截图产物、既有测试文件中的断言与先前审计留痕；
+  - **本轮静态补审**：基于源码落点、规则文档、真相源表与既有 evidence 的重新核对。
+- 因此，除非某条证据明确写了“已复跑/已执行”，否则本文件均按“**历史证据复用**”口径理解，不将本轮文档修订误写成新增动态验证。
 - Wild West E2E：`evidence/dicethrone/dicethrone-wild-west-e2e-test.md`
 - High Noon E2E：`evidence/dicethrone/dicethrone-high-noon-branches-e2e-test.md`
 - The Law 既有多目标证据：`evidence/dicethrone/dicethrone-gunslinger-the-law-multiselect-e2e-test.md`
@@ -245,6 +248,7 @@
   - 修正文档中 `fill-em-with-lead / upgrade-quick-draw` 的测试引用行号。
   - 补入 `duel` 防御反击不触发 `bounty` 的负路径证据。
   - 更新 D47 与未覆盖风险，明确 `Loaded / Quick Draw II / Fill'Em With Lead` 的 UI 证据缺口。
+  - 将“本轮复跑”与“历史证据复用”口径拆开，避免把本次文档回写误写成新增动态验证。
 - 2026-04-12（时机四问补审）：
   - 下调 `quick-draw / upgrade-quick-draw / fill-em-with-lead` 的收口口径为“行为已验证、结构未完全收口”。
   - 将 `Bounty` 的结论回写为“attack-only 门禁已闭环”，并补充引用负路径测试与实现门禁，避免再次误报为待补回归。

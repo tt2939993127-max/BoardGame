@@ -29,9 +29,12 @@ import type { RandomFn, MatchState } from '../../../engine/types';
 import { getUnitAt, isCellEmpty, getPlayerUnits, manhattanDistance } from '../domain/helpers';
 import { CARD_IDS } from '../domain/ids';
 import { executePipeline, createInitialSystemState } from '../../../engine/pipeline';
-import { createInteractionSystem, INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
+import { createInteractionSystem, createSimpleChoice, INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
 import { createSimpleChoiceSystem } from '../../../engine/systems/SimpleChoiceSystem';
 import { createSummonerWarsInteractionSystem } from '../domain/systems';
+import { buildSummonerWarsAiLegalActions } from '../ai';
+import { resolveNextLocalAiAction } from '../../../engine/ai';
+import { engineConfig } from '../game';
 
 // ============================================================================
 // 测试辅助
@@ -123,6 +126,132 @@ function runPipeline(
     ['0', '1'],
   );
 }
+
+// ============================================================================
+// AI 交互覆盖
+// ============================================================================
+
+describe('SummonerWars AI 交互覆盖', () => {
+  it('simple-choice 交互时应生成响应动作', () => {
+    const core = createInitializedCore(['0', '1'], testRandom());
+    const sys = createInitialSystemState(['0', '1'], []);
+    const interaction = createSimpleChoice(
+      'sw-ai-choice',
+      '0',
+      '测试交互',
+      [{
+        id: 'opt-1',
+        label: '目标 1',
+        value: { targetPosition: { row: 1, col: 1 } },
+      }],
+    );
+    sys.interaction = { current: interaction, queue: [], isBlocked: false };
+
+    const actions = buildSummonerWarsAiLegalActions({
+      playerId: '0',
+      state: { core, sys },
+    });
+
+    expect(actions.some((action) => action.kind === 'interaction-choice')).toBe(true);
+    expect(actions[0]?.commands[0]?.type).toBe('SYS_INTERACTION_RESPOND');
+  });
+
+  it('multistep-choice 交互时应提供 confirm/cancel', () => {
+    const core = createInitializedCore(['0', '1'], testRandom());
+    const sys = createInitialSystemState(['0', '1'], []);
+    sys.interaction = {
+      current: {
+        id: 'sw-ai-multi',
+        playerId: '0',
+        kind: 'multistep-choice',
+        data: { title: '测试多步' },
+      },
+      queue: [],
+      isBlocked: false,
+    };
+
+    const actions = buildSummonerWarsAiLegalActions({
+      playerId: '0',
+      state: { core, sys },
+    });
+
+    const kinds = actions.map((action) => action.kind);
+    expect(kinds).toContain('interaction-confirm');
+    expect(kinds).toContain('interaction-cancel');
+  });
+
+  it('[blood_summon] 本地 AI 可走完整事件交互链并完成收口', async () => {
+    resetInstanceCounter();
+    const core = createInitializedCore(['0', '1'], testRandom(), { faction0: 'necromancer', faction1: 'trickster' });
+    clearRect(core, [2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5]);
+    core.phase = 'summon';
+    core.currentPlayer = '0';
+
+    const targetUnit = mkUnit('ally-target', { life: 4, faction: 'necromancer', abilities: [] });
+    putUnit(core, { row: 4, col: 2 }, targetUnit, '0');
+    putStructure(core, { row: 5, col: 2 }, '0');
+    putStructure(core, { row: 4, col: 1 }, '0');
+    putStructure(core, { row: 4, col: 3 }, '0');
+
+    core.players['0'].magic = 0;
+    core.players['0'].hand = [
+      {
+        id: CARD_IDS.NECRO_BLOOD_SUMMON,
+        cardType: 'event',
+        name: '血契召唤',
+        eventType: 'common',
+        faction: 'necromancer',
+        cost: 0,
+        playPhase: 'summon',
+        effect: '测试',
+        deckSymbols: [],
+      } as EventCard,
+      mkUnit('cheap-unit', { cost: 1, faction: 'necromancer' }),
+    ];
+
+    let state: MatchState<SummonerWarsCore> = {
+      core,
+      sys: createInitialSystemState(['0', '1'], interactionSystems),
+    };
+
+    const runAiStep = async () => {
+      const resolution = await resolveNextLocalAiAction({
+        engineConfig,
+        state,
+        matchId: 'local:summonerwars-blood-summon-ai',
+        seatControllers: {
+          '0': { type: 'local-ai' },
+        },
+      });
+
+      expect(resolution?.playerId).toBe('0');
+      expect(resolution?.action.commands.length).toBeGreaterThan(0);
+      for (const command of resolution!.action.commands) {
+        const result = runPipeline(state, {
+          type: command.type,
+          playerId: '0',
+          payload: (command.payload ?? {}) as Record<string, unknown>,
+        });
+        expect(result.success).toBe(true);
+        state = result.state;
+      }
+      return resolution!;
+    };
+
+    const first = await runAiStep();
+    expect(first.action.commands[0]?.type).toBe(SW_COMMANDS.REQUEST_EVENT_INTERACTION);
+    expect(getSwCurrentType(state)).toBe('blood_summon_select_target');
+
+    for (let step = 0; step < 6 && state.sys.interaction.current; step += 1) {
+      await runAiStep();
+    }
+
+    expect(state.sys.interaction.current).toBeUndefined();
+    expect(getUnitAt(state.core, { row: 3, col: 2 })?.card.id).toBe('cheap-unit');
+    const targetAfter = getUnitAt(state.core, { row: 4, col: 2 });
+    expect(targetAfter?.damage).toBe(2);
+  });
+});
 
 function getSwCurrentType(state: MatchState<SummonerWarsCore>): string | undefined {
   const current = state.sys.interaction.current;

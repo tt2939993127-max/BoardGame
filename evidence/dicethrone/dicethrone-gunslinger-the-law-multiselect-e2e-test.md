@@ -20,6 +20,8 @@ npm run test:e2e:ci:file -- e2e/dicethrone/dicethrone-simple-start.e2e.ts "Onlin
 > - `1v1`：自动退化为唯一对手（无交互弹窗）；
 > - `3+` 人：进入多目标交互（最多选择 2 名目标玩家；当前实现的目标集合覆盖 **全部座次玩家**，即包含 self / ally / enemies）；
 > - `4 人 2v2`：同样进入多目标交互，目标集合覆盖 **全部座次玩家**（含 self / ally / enemies），并可一次确认原子化结算两名被选目标的 `bounty + knockdown`。
+>
+> **对象命名修订**：旧口径若把它写成独立手牌对象 `card-the-law`，该结论已失效。当前运行时正确对象是 **`upgrade-deadeye-2` 的升级变体 `the-law`**，不是一张独立可抽/可弃的手牌。
 
 ### 1) 1v1：选择升级变体后应直接结算（无多目标弹窗）
 

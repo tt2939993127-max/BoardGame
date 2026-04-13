@@ -496,10 +496,6 @@
     pointer-events: auto;
 }
 
-[data-game-page][data-game-id="summonerwars"] .sw-phase-end-button {
-    bottom: calc(120px + 0.75rem + 0.5rem);
-}
-
 @media (max-width: 1023px) {
     [data-game-page][data-mobile-layout-preset="board-shell"] .mobile-board-shell {
         padding:

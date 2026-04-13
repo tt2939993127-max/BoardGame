@@ -20,12 +20,13 @@
 2. 审计规范：`docs/ai-rules/testing-audit.md`
 
 ## 审计方法与限制
-- 本轮仅做**静态代码审计**。
-- **未改代码、未跑测试、未创建/切换分支**。
+- 本轮包含**静态代码审计 + Phase A/B 迁移落地 + 验证**。
+- **已改代码并补跑测试**（详见“验证说明”），未创建/切换分支。
 - 重点按 D8 / D9 / D39 / D40 / D41 / D45 评估“AI 是否能看见等待态、是否会重入循环、是否可能卡死”。
 
-## 2026-04-12 迁移补记（已落地，已修订）
-> 说明：以下为**迁移后补记**，不覆盖上文静态审计结论；用于记录本轮“本地 UI 交互 → InteractionSystem”的实装进度与证据。
+## 2026-04-12 迁移补记（Phase A：仅 AI 关键链路）
+> 说明：以下为**迁移后补记**，不覆盖上文静态审计结论；用于记录本轮“本地 UI 交互 → InteractionSystem”的实装进度与证据。  
+> 补充：**Phase B（事件卡交互）本轮已推进并纳入验收口径**。
 
 ### 已迁移到 InteractionSystem 的 6 条交互
 - SUMMON_FROM_DISCARD_REQUESTED（infection）
@@ -35,51 +36,50 @@
 - ABILITY_TRIGGERED: ice_shards_damage
 - ABILITY_TRIGGERED: feed_beast_check
 
-### Phase B：事件卡交互迁移（已完成）
-- NECRO_HELLFIRE_BLADE（狱火铸剑）
-- NECRO_BLOOD_SUMMON（血契召唤）
-- NECRO_ANNIHILATE（除灭）
-- TRICKSTER_MIND_CONTROL（心灵操控）
-- TRICKSTER_STUN（震慑）
-- TRICKSTER_HYPNOTIC_LURE（催眠引诱）
-- BARBARIC_CHANT_OF_POWER / GROWTH / WEAVING / ENTANGLEMENT（颂歌系列）
-- GOBLIN_SNEAK（潜行）
-- FROST_GLACIAL_SHIFT（冰川位移）
+### Phase B：事件卡交互（已推进 / 纳入验收）
+- 事件卡多步骤链路已纳入本轮**服务端交互范围**；验证以**人工 E2E + 管线单测**为主，并补充本地 AI 单测（端到端 AI 用例仍缺）。
+- 代表性 E2E 仅覆盖 `bloodSummon` / `annihilate` 两条链路，其余事件卡仍是静态审计为主。
+- 已补齐 UI 侧与 `sys.interaction.options` 的合同一致性，并补跑对应 E2E 证据。
 
-关键落点：
-- `SW_COMMANDS.REQUEST_EVENT_INTERACTION` → `SW_EVENTS.EVENT_INTERACTION_REQUESTED` → `domain/systems.ts` 创建交互
-- `useEventCardModes` / `useCellInteraction` / `Board`：全部改为 `sys.interaction` 派生 + `RESPOND/CANCEL`
+关键落点（Phase A）：
+- `SW_EVENTS.*_REQUESTED` → `domain/systems.ts` 创建交互
+- `useCellInteraction` / `Board`：**Phase A 相关路径**改为 `sys.interaction` 派生 + `RESPOND/CANCEL`
 
-### 关键实现落点
+### 关键实现落点（Phase A）
 - `src/games/summonerwars/domain/systems.ts`：创建交互 + RESOLVED/CANCELLED 回流命令
 - `src/games/summonerwars/game.ts`：挂载 `createSummonerWarsInteractionSystem()`
-- `src/games/summonerwars/ui/useGameEvents.ts`：移除本地 mode 入口（改为由 sys.interaction 派生）
+- `src/games/summonerwars/ui/useGameEvents.ts`：**Phase A 交互**改为由 sys.interaction 派生（仍保留其他本地 mode）
 - `src/games/summonerwars/ui/useCellInteraction.ts` / `StatusBanners.tsx` / `Board.tsx`：交互由 sys.interaction 驱动
 
-### 本轮修订补充
+### 本轮修订补充（Phase A/B）
 - infection：系统交互增加 skip 选项，UI 改为使用 InteractionSystem 的 `CardSelectorOverlay`（不再走本地 abilityMode 选卡路径）。
 - soul_transfer / mind_capture：补齐 `interaction.data.sw` 的 `sourcePosition` 元信息，修复 banner 派生缺失。
 - ice_shards：确认选项带 `disabledReasonKey`（充能不足可解释），保留 skip。
 - HandArea busy 判定统一：引入 `useIsInteractionBusy` 与本地 mode 合并，避免系统交互时手牌仍可点。
-- 事件卡 AI 发起链：新增事件卡动作生成（优先发起 `REQUEST_EVENT_INTERACTION`），AI 可主动进入交互链。
-- 多选交互：修正 AI 枚举逻辑，`multi.max` 未提供时按可选项数量扩展，避免退化成单选。
-- 预检一致性：`glacial_shift` / `goblin_sneak` 的 validate 条件与交互创建条件对齐，避免“请求成功但交互缺席”。
-- UI 解析修复：`stun` 目的地 `pos:r,c` 解析纠正，避免 UI 端终点列表丢失。
-- 血契召唤：UI 高亮与预检改为以 `sys.interaction.options` 与 validate 条件为准（相邻空位 + 手牌≤2），消除本地重算漂移。
-- 除灭伤害步：高亮与点击改为读取 `sys.interaction.options`，结构目标可被选中。
+- 事件卡终点合同统一：`stun` / `goblin_sneak` / `glacial_shift` 终点坐标统一写入 `sys.interaction.options[].value.targetPosition`，UI 不再解析 `pos:r,c` 或本地重算。
+- 血契召唤：高亮/候选读取 `sys.interaction.options`，入口仍保留本地预检 + 服务端 validate 双轨；补齐收口 E2E 断言与证据。
+- 除灭：多目标/伤害阶段高亮与点击改为读取 `sys.interaction.options`，确认阶段反查 `optionIds` 提交。
+- 本地 AI 单测：新增 `blood_summon` 事件卡交互链自动收口用例（interaction-chain-comprehensive.test.ts），作为 AI 动态证据补点。
 
 ### 验证说明（本轮已跑）
-- `npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：除灭多目标选择流程"`
+- `npm run test:e2e:ci -- e2e/summonerwars/summonerwars-ice-shards-minimal.e2e.ts`（通过）
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars/__tests__/flow.test.ts --configLoader native`（通过）
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars/__tests__/entity-chain-integrity.test.ts --configLoader native`（通过）
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars/__tests__/interaction-chain-comprehensive.test.ts --configLoader native`（通过，含本地 AI 血契召唤链路覆盖）
+- `npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：除灭多目标选择流程"`（通过）
+- `npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：血契召唤收口流程"`（通过）
+- E2E 证据：`evidence/summonerwars/summonerwars-ice-shards-e2e-test.md`
 - E2E 证据：`evidence/summonerwars/summonerwars-event-annihilate-e2e-test.md`
+- E2E 证据：`evidence/summonerwars/summonerwars-blood-summon-e2e-test.md`
 
-### 仍保留的本地 UI 模式（Phase B 范围）
+### 仍保留的本地 UI 模式（未迁移范围）
 - rapid_fire / withdraw / afterMove 系列 / magic 阶段二选一 等仍为本地 mode
 - 这些仍属于“AI 看不见”的结构性风险，需要后续继续迁移
 
 ## 结论摘要
 
 ### 总裁决
-**Summoner Wars 当前最核心的问题，不是 response-window 真正重开，而是“仍有关键等待态停留在本地 UI mode，而不是服务端 `sys.interaction`/`sys.responseWindow`”。事件卡多步已迁移到 InteractionSystem。**
+**Summoner Wars 当前最核心的问题，不是 response-window 真正重开，而是“仍有关键等待态停留在本地 UI mode，而不是服务端 `sys.interaction`/`sys.responseWindow`”。本轮已确保 Phase A 六条 AI 关键交互 + Phase B 事件卡多步进入 InteractionSystem；Phase B 验证为人工 E2E + 管线单测，并补充本地 AI 单测（AI 端到端证据仍缺失），且仍有少量本地 mode 残留待迁移。**
 
 这会直接带来三类风险：
 1. **AI 看不见交互**：仍有部分链路只发 EventStream 通知，AI 无法在 `ai.ts` 里生成后续合法动作。
@@ -104,10 +104,10 @@
   - `createSimpleChoiceSystem()`
   - `createMultistepChoiceSystem()`
   - `createResponseWindowSystem()`
-- `src/games/summonerwars/domain/systems.ts` 已引入 `createSimpleChoice` + `queueInteraction`，覆盖 infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast + Phase B 事件卡交互。
+- `src/games/summonerwars/domain/systems.ts` 已引入 `createSimpleChoice` + `queueInteraction`，覆盖 infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast。
 - 但 `useGameEvents` / `useCellInteraction` / `useEventCardModes` 仍有本地 mode 等待态（afterMove / withdraw / rapid_fire / magic 二选一 等）。
 
-**结论**：Phase B 已完成事件卡交互迁移，但仍存在“本地 mode 真相源”残留，需要后续继续迁移。
+**结论**：本轮已覆盖 Phase A + Phase B（事件卡多步），仍存在“本地 mode 真相源”残留，需要后续继续迁移。
 
 ### 2. AI 层能处理 `sys.interaction`，仍有部分链路未喂给它
 - `src/games/summonerwars/ai.ts:950-1072` 明确支持：
@@ -128,7 +128,7 @@
 ---
 
 ## 交互链可见性 / AI 可解性矩阵
-> 补充说明（2026-04-12 迁移后）：infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast 已迁移进 `sys.interaction`；Phase B 事件卡交互（除灭/血契召唤/潜行/冰川位移等）也已迁移。  
+> 补充说明（2026-04-12 迁移后）：infection / grab_follow / soul_transfer / mind_capture / ice_shards / feed_beast 已迁移进 `sys.interaction`；Phase B 事件卡交互已纳入本轮验收（人工 E2E 证据详见下述文档）。  
 > 下表与后续“本地 UI mode”列表为**静态审计时的历史结论**，保留用于说明原始根因；迁移后的现状以“迁移补记”与最新证据为准。
 
 | 链路 | 入口 | 服务端是否有持久等待态 | AI 当前是否能解 | 审计结论 |
@@ -144,7 +144,7 @@
 | `ABILITY_TRIGGERED(actionId=withdraw)` | `useGameEvents.ts:597-610` | 否 | 否 | 高风险，本地先选代价再选位置。 |
 | `ABILITY_TRIGGERED(afterMove:spirit_bond / ancestral_bond / structure_shift / frost_axe)` | `execute.ts:291-307` → `useGameEvents.ts:671-720` | 否 | 否 | 高风险，全部依赖本地 mode。 |
 | `ABILITY_TRIGGERED(ice_ram_trigger)` | `execute.ts:993-1053` → `useGameEvents.ts:727-739` | 否 | 否 | 高风险，本地目标/推拉选择。 |
-| 事件卡多步交互（`bloodSummon` / `annihilate` / `mindControl` / `stun` / `hypnoticLure` / `chant_*` / `glacial_shift` / `sneak` 等） | `domain/systems.ts` + `useEventCardModes.ts` | 是（sys.interaction） | 是 | ✅ Phase B 已迁移，UI/AI 可见；仍需关注非事件卡本地 mode。 |
+| 事件卡多步交互（`bloodSummon` / `annihilate` 已有 E2E，其余 `mindControl` / `stun` / `hypnoticLure` / `chant_*` / `glacial_shift` / `sneak` 等仍为静态审计） | `domain/systems.ts` + `useEventCardModes.ts` | — | — | ✅ Phase B 迁移完成；动态证据仅覆盖 bloodSummon/annihilate，其他待补。 |
 | 魔力阶段“打出事件卡还是弃牌” | `useCellInteraction.ts:118, 868, 986-995, 1127-1139` | 否 | 否 | 中高风险，本地二选一。 |
 
 ---
@@ -335,7 +335,7 @@
 - ice ram trigger
 - 魔力阶段事件卡二选一
 
-> ✅ 已迁移出 P0：infection / grab follow / soul transfer / mind capture + Phase B 事件卡交互 已进入 `sys.interaction`。
+> ✅ 已迁移出 P0：infection / grab follow / soul transfer / mind capture / ice_shards / feed_beast 已进入 `sys.interaction`（Phase A）。
 
 ### P1：reset / 刷新后只恢复少数 phase 技能
 - 其余本地等待态可能直接丢失，或下一次重复事件来时被重新建出来。
@@ -375,8 +375,14 @@
 
 来止血，但很难一次审计后真正收口。
 
-## 本轮验证记录（无新测试）
-本轮未复跑测试，仅做审计留档。
+## 本轮验证记录（已跑）
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars/__tests__/flow.test.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars/__tests__/entity-chain-integrity.test.ts --configLoader native`
+- `node scripts/infra/vitest-cli-safe.mjs run src/games/summonerwars/__tests__/interaction-chain-comprehensive.test.ts --configLoader native`（含本地 AI 血契召唤链路）
+- `npm run test:e2e:ci -- e2e/summonerwars/summonerwars-ice-shards-minimal.e2e.ts`
+- `npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：除灭多目标选择流程"`
+- `npm run test:e2e:ci:file -- e2e/summonerwars/summonerwars.e2e.ts "事件卡：血契召唤收口流程"`
+- 复跑记录：2026-04-13 05:04（Asia/Shanghai）血契召唤收口流程通过（断言收紧为服务器权威状态：召唤落点 + 目标伤害 +2；若应致死则移除），证据见 `evidence/summonerwars/summonerwars-blood-summon-e2e-test.md`。
 
 ---
 

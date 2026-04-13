@@ -245,6 +245,7 @@ export const SW_COMMANDS = {
   CONFIRM_ATTACK: 'sw:confirm_attack',
   // 魔力阶段
   DISCARD_FOR_MAGIC: 'sw:discard_for_magic',
+  REQUEST_MAGIC_EVENT_CHOICE: 'sw:request_magic_event_choice',
   // 通用
   END_PHASE: 'sw:end_phase',
   PLAY_EVENT: 'sw:play_event',
@@ -303,6 +304,12 @@ export interface ConfirmAttackCommand {
 export interface DiscardForMagicCommand {
   type: typeof SW_COMMANDS.DISCARD_FOR_MAGIC;
   cardIds: string[];
+}
+
+/** 请求魔力阶段事件卡二选一交互命令 */
+export interface RequestMagicEventChoiceCommand {
+  type: typeof SW_COMMANDS.REQUEST_MAGIC_EVENT_CHOICE;
+  cardId: string;
 }
 
 /** 结束阶段命令 */
@@ -368,6 +375,7 @@ export type SWCommand =
   | DeclareAttackCommand
   | ConfirmAttackCommand
   | DiscardForMagicCommand
+  | RequestMagicEventChoiceCommand
   | EndPhaseCommand
   | PlayEventCommand
   | RequestEventInteractionCommand
@@ -407,6 +415,7 @@ export const SW_EVENTS = {
   CARD_DISCARDED: 'sw:card_discarded',
   EVENT_PLAYED: 'sw:event_played',
   EVENT_INTERACTION_REQUESTED: 'sw:event_interaction_requested',
+  MAGIC_EVENT_CHOICE_REQUESTED: 'sw:magic_event_choice_requested',
   ACTIVE_EVENT_DISCARDED: 'sw:active_event_discarded',
   // 阶段/回合事件
   PHASE_CHANGED: 'sw:phase_changed',
@@ -417,6 +426,7 @@ export const SW_EVENTS = {
   STRENGTH_MODIFIED: 'sw:strength_modified',
   SUMMON_FROM_DISCARD_REQUESTED: 'sw:summon_from_discard_requested',
   SOUL_TRANSFER_REQUESTED: 'sw:soul_transfer_requested',
+  FUNERAL_PYRE_PROMPTED: 'sw:funeral_pyre_prompted',
   FUNERAL_PYRE_CHARGED: 'sw:funeral_pyre_charged',
   EVENT_ATTACHED: 'sw:event_attached',
   // 推拉事件（欺心巫族核心机制）

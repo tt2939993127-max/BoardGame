@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GameTransportServer, type GameEngineConfig } from '../server';
-import { buildAiProgressMarker } from '../onlineAiRecovery';
+import { buildAiProgressMarker, resolveForceEndTurnForStalledAi } from '../onlineAiRecovery';
 import { createInteractionSystem, createSimpleChoice, INTERACTION_COMMANDS } from '../../systems/InteractionSystem';
 import { createSimpleChoiceSystem } from '../../systems/SimpleChoiceSystem';
 import { createResponseWindowSystem, RESPONSE_WINDOW_EVENTS } from '../../systems/ResponseWindowSystem';
@@ -610,6 +610,40 @@ describe('buildAiProgressMarker（响应窗口语义指纹）', () => {
 
         expect(buildAiProgressMarker(baseState as any))
             .toBe(buildAiProgressMarker(reopenedState as any));
+    });
+});
+
+describe('resolveForceEndTurnForStalledAi（action-loop）', () => {
+    it('重复交替动作循环应触发 action-loop 兜底', () => {
+        const sharedState = createOnlineAiRecoveryState({
+            activePlayerId: '1',
+            phase: 'main1',
+        }).G as any;
+
+        sharedState.sys = {
+            ...sharedState.sys,
+            actionLog: {
+                maxEntries: 50,
+                entries: [
+                    { actorId: '1', kind: 'DISCARD_CARD' },
+                    { actorId: '1', kind: 'UNDO_SELL_CARD' },
+                    { actorId: '1', kind: 'DISCARD_CARD' },
+                    { actorId: '1', kind: 'UNDO_SELL_CARD' },
+                ],
+            },
+        };
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState,
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('action-loop');
+        expect(candidate?.resolution.action.commands[0]?.type).toBe('ADVANCE_PHASE');
     });
 });
 

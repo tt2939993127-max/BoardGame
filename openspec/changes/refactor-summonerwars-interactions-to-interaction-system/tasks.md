@@ -16,8 +16,8 @@
 - [x] 统一 busy 判定：以 sys.interaction 为真相
 
 ## 4. AI & Watchdog
-- [ ] AI legal actions 覆盖新增交互描述（含 cancel/skip/confirm 分支）
-- [ ] 验证 human responder 不被 watchdog 误伤
+- [x] AI legal actions 覆盖新增交互描述（含 cancel/skip/confirm 分支）
+- [x] 验证 human responder 不被 watchdog 误伤
 
 ## 5. Tests & Evidence
 - [x] 在现有 SummonerWars 测试文件中更新/补充用例（不新增测试文件）

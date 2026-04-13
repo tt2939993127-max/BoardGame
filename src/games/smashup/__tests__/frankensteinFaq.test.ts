@@ -88,5 +88,35 @@ describe('frankenstein (base) FAQ alignment', () => {
         // onTurnStart triggers are queued; the counter placement should be among produced events
         expect(enter.events.some(e => e.type === SU_EVENTS.POWER_COUNTER_ADDED)).toBe(true);
     });
+
+    it('It’s Alive!: 放弃额外随从时不应遗留 pending 指示物效果', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', { hand: [makeCard('a1', 'frankenstein_its_alive', 'action', '0')] }),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+
+        const play = runCommand(
+            makeMatchState(core),
+            { type: SU_COMMANDS.PLAY_ACTION, playerId: '0', payload: { cardUid: 'a1' } },
+            defaultTestRandom,
+        );
+        const prompt = play.finalState.sys.interaction.current as any;
+        expect(prompt?.data?.sourceId).toBe('smashup_immediate_extra_minion');
+
+        const skipOpt = prompt?.data?.options?.find((opt: any) => opt?.value?.skip);
+        expect(skipOpt).toBeTruthy();
+
+        const skipped = runCommand(
+            play.finalState,
+            { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: skipOpt.id } } as any,
+            defaultTestRandom,
+        );
+
+        const pending = skipped.finalState.core.players['0'].pendingMinionPlayEffects ?? [];
+        expect(pending.length).toBe(0);
+    });
 });
 

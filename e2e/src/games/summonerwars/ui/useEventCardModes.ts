@@ -171,6 +171,15 @@ export function useEventCardModes({
         }
         break;
       }
+      case 'funeral_pyre': {
+        if (cardId) {
+          setFuneralPyreMode({
+            cardId,
+            charges: (meta.charges as number | undefined) ?? 0,
+          });
+        }
+        break;
+      }
       case 'blood_summon_select_target': {
         setBloodSummonMode({ step: 'selectTarget', cardId, completedCount: (meta.completedCount as number | undefined) ?? 0 });
         break;
@@ -247,14 +256,14 @@ export function useEventCardModes({
         const targetPosition = meta.targetPosition as CellCoord | undefined;
         const destinations = swInteraction.options
           .map((option) => {
-            const value = option.value as { moveRow?: number; moveCol?: number; distance?: number };
-            const pos = option.id?.startsWith('pos:')
-              ? {
-                row: Number(option.id.split(':')[1]?.split(',')[0]),
-                col: Number(option.id.split(':')[1]?.split(',')[1]),
-              }
-              : undefined;
-            if (!pos || Number.isNaN(pos.row) || Number.isNaN(pos.col)) return null;
+            const value = option.value as {
+              moveRow?: number;
+              moveCol?: number;
+              distance?: number;
+              targetPosition?: CellCoord;
+            };
+            const pos = value.targetPosition;
+            if (!pos) return null;
             return {
               position: pos,
               moveRow: value.moveRow ?? 0,
@@ -401,22 +410,14 @@ export function useEventCardModes({
       const recordedKeys = new Set(glacialShiftMode.recorded.map(r => `${r.position.row}-${r.position.col}`));
       return glacialShiftMode.validBuildings.filter(p => !recordedKeys.has(`${p.row}-${p.col}`));
     }
-    if (glacialShiftMode.step === 'selectDestination' && glacialShiftMode.currentBuilding) {
-      const result: CellCoord[] = [];
-      const { row, col } = glacialShiftMode.currentBuilding;
-      // 强制移动只能沿直线（上下左右），逐格检查路径可通行
-      const dirs = [{ dr: -1, dc: 0 }, { dr: 1, dc: 0 }, { dr: 0, dc: -1 }, { dr: 0, dc: 1 }];
-      for (const { dr, dc } of dirs) {
-        for (let step = 1; step <= 2; step++) {
-          const pos = { row: row + dr * step, col: col + dc * step };
-          if (!isValidCoord(pos) || !isCellEmpty(core, pos)) break;
-          result.push(pos);
-        }
-      }
-      return result;
+    if (glacialShiftMode.step === 'selectDestination') {
+      if (swInteraction?.type !== 'glacial_shift_select_destination') return [];
+      return swInteraction.options
+        .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
+        .filter((pos): pos is CellCoord => !!pos);
     }
     return [];
-  }, [glacialShiftMode, core]);
+  }, [glacialShiftMode, swInteraction]);
 
   const sneakHighlights = useMemo(() => {
     if (!sneakMode) return [];
@@ -424,11 +425,14 @@ export function useEventCardModes({
       const recordedKeys = new Set(sneakMode.recorded.map(r => `${r.position.row}-${r.position.col}`));
       return sneakMode.validUnits.filter(p => !recordedKeys.has(`${p.row}-${p.col}`));
     }
-    if (sneakMode.step === 'selectDirection' && sneakMode.currentUnit) {
-      return getAdjacentCells(sneakMode.currentUnit).filter(p => isCellEmpty(core, p));
+    if (sneakMode.step === 'selectDirection') {
+      if (swInteraction?.type !== 'sneak_select_direction') return [];
+      return swInteraction.options
+        .map((option) => (option.value as { targetPosition?: CellCoord } | undefined)?.targetPosition)
+        .filter((pos): pos is CellCoord => !!pos);
     }
     return [];
-  }, [sneakMode, core]);
+  }, [sneakMode, swInteraction]);
 
   const stunHighlights = useMemo(() => {
     if (!stunMode) return [];
@@ -508,13 +512,8 @@ export function useEventCardModes({
   const handleEventModeClick = useCallback((gameRow: number, gameCol: number): boolean => {
     // 殉葬火堆治疗目标选择
     if (funeralPyreMode) {
-      const targetUnit = core.board[gameRow]?.[gameCol]?.unit;
-      if (targetUnit && targetUnit.damage > 0) {
-        dispatch(SW_COMMANDS.FUNERAL_PYRE_HEAL, {
-          cardId: funeralPyreMode.cardId,
-          targetPosition: { row: gameRow, col: gameCol },
-        });
-        setFuneralPyreMode(null);
+      if (swInteraction?.type === 'funeral_pyre') {
+        respondPositionOption({ row: gameRow, col: gameCol });
       }
       return true;
     }
@@ -752,7 +751,7 @@ export function useEventCardModes({
     sneakMode, sneakHighlights,
     chantEntanglementMode, entanglementHighlights,
     hypnoticLureMode, eventTargetMode,
-    respondPositionOption]);
+    respondPositionOption, swInteraction]);
 
   // ---------- 打出事件卡 ----------
 
@@ -963,21 +962,6 @@ export function useEventCardModes({
   }, []);
 
   // ---------- 副作用 ----------
-
-  // 检测殉葬火堆充能
-  useEffect(() => {
-    if (funeralPyreMode) return;
-    const player = core.players[myPlayerId as '0' | '1'];
-    if (!player) return;
-    for (const ev of player.activeEvents) {
-      const baseId = getBaseCardId(ev.id);
-      if (baseId === CARD_IDS.NECRO_FUNERAL_PYRE && (ev.charges ?? 0) > 0) {
-        // eslint-disable-next-line react-hooks/set-state-in-effect -- sync game state to UI mode
-        setFuneralPyreMode({ cardId: ev.id, charges: ev.charges ?? 0 });
-        return;
-      }
-    }
-  }, [core.players, myPlayerId, funeralPyreMode]);
 
   // ---------- 返回 ----------
 

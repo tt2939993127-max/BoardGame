@@ -435,6 +435,7 @@ export function execute(
                         windowId,
                         responderQueue,
                         windowType: 'afterRollConfirmed',
+                        sourceId: rollSignature,
                     },
                     sourceCommandType: command.type,
                     timestamp,

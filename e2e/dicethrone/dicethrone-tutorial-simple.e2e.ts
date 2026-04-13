@@ -602,12 +602,38 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await advanceToStep('enlightenment-play', 15000);
 
         const bonusDieOverlay = page.getByTestId('bonus-die-overlay');
+        const evidenceDir = join(
+            process.cwd(),
+            'test-results',
+            'evidence-screenshots',
+            'dicethrone-tutorial-simple.e2e',
+            'tutorial-enlightenment-hand-area',
+        );
+        mkdirSync(evidenceDir, { recursive: true });
+        let capturedOverlayVisible = false;
         let openedEnlightenmentOverlay = false;
         for (let attempt = 0; attempt < 3; attempt += 1) {
             await clickHandCardVisibleArea(page, 'card-enlightenment');
             try {
                 await expect(bonusDieOverlay).toBeVisible({ timeout: 2500 });
                 await waitForTutorialStep(page, 'inner-peace', 2500);
+                if (!capturedOverlayVisible) {
+                    capturedOverlayVisible = true;
+                    await bonusDieOverlay.screenshot({
+                        path: join(evidenceDir, 'tutorial-enlightenment-bonus-die-overlay.png'),
+                    });
+                    await bonusDieOverlay.screenshot({
+                        path: testInfo.outputPath('tutorial-enlightenment-bonus-die-overlay.png'),
+                    });
+                    await page.screenshot({
+                        path: join(evidenceDir, 'tutorial-enlightenment-bonus-die-visible.png'),
+                        fullPage: false,
+                    });
+                    await page.screenshot({
+                        path: testInfo.outputPath('tutorial-enlightenment-bonus-die-visible.png'),
+                        fullPage: false,
+                    });
+                }
                 openedEnlightenmentOverlay = true;
                 break;
             } catch {
@@ -619,15 +645,14 @@ test.describe('DiceThrone Tutorial (Simplified)', () => {
         await page.waitForTimeout(250);
         await clickHandCardVisibleArea(page, 'card-inner-peace');
         await expect(bonusDieOverlay).toBeHidden({ timeout: 5000 });
-
-        const evidenceDir = join(
-            process.cwd(),
-            'test-results',
-            'evidence-screenshots',
-            'dicethrone-tutorial-simple.e2e',
-            'tutorial-enlightenment-hand-area',
-        );
-        mkdirSync(evidenceDir, { recursive: true });
+        await page.screenshot({
+            path: join(evidenceDir, 'tutorial-enlightenment-bonus-die-auto-close.png'),
+            fullPage: false,
+        });
+        await page.screenshot({
+            path: testInfo.outputPath('tutorial-enlightenment-bonus-die-auto-close.png'),
+            fullPage: false,
+        });
 
         await page.screenshot({
             path: join(evidenceDir, 'tutorial-enlightenment-hand-area-after-close.png'),

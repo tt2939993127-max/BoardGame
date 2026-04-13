@@ -2,6 +2,7 @@ import type {
     GameManifestMobileDelivery,
     GameManifestEntry,
     GameMobileLayoutPreset,
+    GameMobileBattlefieldZoom,
     GameMobileProfile,
     GameOrientationPreference,
     GameShellTarget,
@@ -19,6 +20,7 @@ export interface ResolvedGameMobileSupport {
     mobileProfile: GameMobileProfile;
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
+    mobileBattlefieldZoom: GameMobileBattlefieldZoom;
     shellTargets: GameShellTarget[];
     mobileDelivery: GameManifestMobileDelivery;
 }
@@ -61,6 +63,7 @@ const GAME_PAGE_DOCUMENT_ATTRIBUTE_KEYS = [
     'data-mobile-profile',
     'data-preferred-orientation',
     'data-mobile-layout-preset',
+    'data-mobile-battlefield-zoom',
     'data-shell-targets',
 ] as const;
 
@@ -149,7 +152,12 @@ export const buildRuntimeBlockUnitValue = (multiplier: number, fallback = '1vh')
 export const resolveGameMobileSupport = (
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile'
+        | 'preferredOrientation'
+        | 'mobileLayoutPreset'
+        | 'mobileBattlefieldZoom'
+        | 'shellTargets'
+        | 'mobileDelivery'
     > | null,
 ): ResolvedGameMobileSupport => {
     const mobileProfile = entry?.mobileProfile ?? 'none';
@@ -165,6 +173,7 @@ export const resolveGameMobileSupport = (
             : mobileProfile === 'portrait-adapted'
                 ? 'portrait-simple'
                 : undefined);
+    const mobileBattlefieldZoom = entry?.mobileBattlefieldZoom ?? 'none';
     const shellTargets = entry?.shellTargets?.length
         ? [...entry.shellTargets]
         : [...DEFAULT_SHELL_TARGETS];
@@ -191,6 +200,7 @@ export const resolveGameMobileSupport = (
         mobileProfile,
         preferredOrientation,
         mobileLayoutPreset,
+        mobileBattlefieldZoom,
         shellTargets,
         mobileDelivery,
     };
@@ -208,7 +218,12 @@ export const getGamePageDataAttributes = (
     gameId?: string,
     entry?: Pick<
         GameManifestEntry,
-        'mobileProfile' | 'preferredOrientation' | 'mobileLayoutPreset' | 'shellTargets' | 'mobileDelivery'
+        'mobileProfile'
+        | 'preferredOrientation'
+        | 'mobileLayoutPreset'
+        | 'mobileBattlefieldZoom'
+        | 'shellTargets'
+        | 'mobileDelivery'
     > | null,
 ) => {
     const attributes: Record<string, string> = {
@@ -230,6 +245,9 @@ export const getGamePageDataAttributes = (
     }
     if (support.mobileLayoutPreset) {
         attributes['data-mobile-layout-preset'] = support.mobileLayoutPreset;
+    }
+    if (support.mobileBattlefieldZoom) {
+        attributes['data-mobile-battlefield-zoom'] = support.mobileBattlefieldZoom;
     }
 
     return attributes;
