@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import { gotoLocalSmashUp } from './smashup-debug-helpers';
 
 test.describe('SmashUp 派系选择页移动端间距', () => {
-  test('移动端压缩生效并输出移动端/桌面端参考截图', async ({ page }, testInfo) => {
+  test('移动端横屏应保持桌面化主布局并输出移动端/桌面端参考截图', async ({ page }, testInfo) => {
     const evidenceDir = join(process.cwd(), 'test-results', 'evidence-screenshots', 'smashup-faction-selection-spacing');
     mkdirSync(evidenceDir, { recursive: true });
 
@@ -29,13 +29,16 @@ test.describe('SmashUp 派系选择页移动端间距', () => {
         horizontalGap: first && second ? second.left - first.right : 0,
         firstTop: first?.top ?? 0,
         thirdTop: third?.top ?? 0,
+        thirdLeft: third?.left ?? 0,
+        firstLeft: first?.left ?? 0,
       };
     });
 
     expect(mobileMetrics.docScrollWidth, '移动端不应横向溢出').toBeLessThanOrEqual(mobileMetrics.innerWidth + 1);
     expect(mobileMetrics.firstWidth, '移动端派系卡应成功渲染').toBeGreaterThan(0);
     expect(mobileMetrics.horizontalGap, '移动端派系卡之间应保留可见间距').toBeGreaterThanOrEqual(0);
-    expect(mobileMetrics.thirdTop, '手机横屏下第三张卡应换到下一行，避免一排三张过挤').toBeGreaterThan(mobileMetrics.firstTop + 4);
+    expect(Math.abs(mobileMetrics.thirdTop - mobileMetrics.firstTop), '手机横屏主布局不应被误改成窄屏双列，前三张卡应仍在同一行').toBeLessThanOrEqual(4);
+    expect(mobileMetrics.thirdLeft, '第三张卡应位于第一张卡右侧，证明仍是横屏桌面化排布').toBeGreaterThan(mobileMetrics.firstLeft + mobileMetrics.firstWidth);
 
     await page.screenshot({ path: join(evidenceDir, 'mobile-landscape.png'), fullPage: false });
     await page.screenshot({ path: testInfo.outputPath('mobile-landscape.png'), fullPage: false });

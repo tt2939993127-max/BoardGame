@@ -61,6 +61,14 @@ vi.mock('framer-motion', () => {
     };
 });
 
+vi.mock('../../../core', async () => {
+    const actual = await vi.importActual<typeof import('../../../core')>('../../../core');
+    return {
+        ...actual,
+        HudPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    };
+});
+
 const buildBonusDice = (): BonusDieInfo[] => [
     { index: 0, value: 4, face: 'taiji' },
     { index: 1, value: 4, face: 'taiji' },
