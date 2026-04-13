@@ -7,12 +7,13 @@
 - `src/engine/transport/react.tsx`
 
 ## 根因结论
-1. **移动端布局偏移**：`FactionSelection.tsx` 已为 `isCompactLandscape` 增加 2 列紧凑布局，避免手机横屏继续套桌面式多列排布。
-2. **“等待提示”测试失败不是 SmashUp 业务实现 bug**：
+1. **旧结论失效（必须更正）**：此前把 `isCompactLandscape` 作为“手机横屏应切 2 列紧凑布局”的结论是错误的。用户真实诉求是“横屏主路径不要偏、不要被修成窄布局”，不是要求把横屏改成双列手机稿。
+2. **本轮最小风险修复**：移除 `FactionSelection.tsx` 中针对 `viewport <= 900` 的双列窄布局分支，恢复手机横屏继续使用桌面化主布局，只修选择页的锚点/居中问题，不再改列数和主版式。
+3. **“等待提示”测试失败不是 SmashUp 业务实现 bug**：
    - 本地路由 `LocalMatchRoom.tsx` 使用 `<LocalGameProvider followCurrentTurnPlayer />`。
    - `LocalGameProvider` 会在 `localBoardPlayerId` 中默认跟随当前回合玩家，因此本地单机页不会稳定停留在“固定 P0 视角”。
    - 旧测试把 `currentPlayerIndex` 当成“只切回合、不切视角”，这个前提与当前本地模式设计不一致，所以会看到“现在轮到你了”而不是“正在等待 Px”。
-3. **最小风险修复**：只改 E2E 口径，不改本地视角机制；测试改为验证“顶部回合状态贴纸本身不可点穿到派系详情”。
+4. **等待提示这条链路的最小风险修复**：只改 E2E 口径，不改本地视角机制；测试改为验证“顶部回合状态贴纸本身不可点穿到派系详情”。
 
 ## 关键证据
 - `src/pages/LocalMatchRoom.tsx`：本地页显式传入 `followCurrentTurnPlayer`
@@ -28,11 +29,12 @@
 
 ## 截图观察
 
-### 1. 手机横屏紧凑布局
+### 1. 手机横屏主布局（修正后）
 截图：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-faction-selection-spacing\mobile-landscape.png`
-- 我实际看到：顶部标题与状态贴纸居中，卡牌按 **2 列** 分布，第三张卡已经换到下一行，没有再挤成一排三张。
-- 我实际看到：左右两列之间仍保留明显空隙，卡面没有被压到互相遮挡，也没有横向溢出到屏幕外。
-- 验收结论：**达到本轮“手机横屏不要继续偏移/过挤”的验收标准。**
+- 我实际看到：顶部标题与状态贴纸仍在中轴附近，没有被挤到左上角，也没有只剩一块窄内容。
+- 我实际看到：首行保持 5 张卡的横屏桌面化排布，第三张卡仍与第一张处于同一行，说明这次没有再被误修成双列窄布局。
+- 我实际看到：卡面之间仍保留横向间距，且整页没有横向溢出滚动条。
+- 验收结论：**达到本轮“横屏主路径不再被改成窄布局，只修偏移不改版式”的验收标准。**
 
 ### 2. 桌面参考图
 截图：`D:\gongzuo\webgame\BoardGame\test-results\evidence-screenshots\smashup-faction-selection-spacing\desktop-reference.png`
@@ -48,4 +50,5 @@
 
 ## 备注
 - 这轮收口的是：**SmashUp 选择页布局回归 + 旧 E2E 错误前提**。
+- 旧文档里“手机横屏 2 列紧凑布局达标”的结论已经失效，不能再作为当前验收依据。
 - 本地单机页“视角跟随当前回合玩家”是当前既有设计，不建议为了这条测试去改共享本地模式逻辑。

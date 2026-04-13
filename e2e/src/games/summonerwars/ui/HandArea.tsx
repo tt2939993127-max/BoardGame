@@ -76,9 +76,9 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
 
 const CARD_WIDTH_RATIO = 'var(--sw-hand-card-width-ratio, 0.16)';
 const HAND_REFERENCE_WIDTH = `var(--sw-hand-reference-width, ${BOARD_SHELL_REFERENCE_WIDTH})`;
-const MAGNIFY_BUTTON_OFFSET_RATIO = 0.004;
-const MAGNIFY_BUTTON_SIZE_RATIO = 0.022;
-const MAGNIFY_ICON_SIZE_RATIO = 0.012;
+const MAGNIFY_BUTTON_OFFSET_RATIO = 0.003;
+const MAGNIFY_BUTTON_SIZE_RATIO = 0.018;
+const MAGNIFY_ICON_SIZE_RATIO = 0.01;
 const LONG_PRESS_DURATION_MS = 420;
 const LONG_PRESS_MOVE_CANCEL_PX = 14;
 const LONG_PRESS_CLICK_BLOCK_MS = 450;
