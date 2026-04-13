@@ -2660,6 +2660,9 @@
     "playerPlayed": "{{player}} 打出了卡牌",
     "confirm": "确认"
   },
+  "compareRoll": {
+    "confirming": "确认中..."
+  },
   "endgame": {
     "ariaHero": "英雄：{{hero}}",
     "ariaPanel": "游戏结束面板"

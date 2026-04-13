@@ -2644,6 +2644,9 @@
     "playerPlayed": "{{player}} played a card",
     "confirm": "OK"
   },
+  "compareRoll": {
+    "confirming": "Confirming..."
+  },
   "selection": {
     "title": "Select Your Hero",
     "selectHero": "Select Hero",

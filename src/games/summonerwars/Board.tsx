@@ -115,10 +115,10 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     ? 'absolute right-3 bottom-3 z-30 pointer-events-auto flex flex-col items-end gap-3'
     : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
   const phaseTrackerClass = isLandscapeMobileViewport
-    ? 'bg-slate-900/46 backdrop-blur-sm px-2.5 py-2 rounded-lg border border-slate-700/20 min-w-[6.75rem] max-w-[6.75rem]'
+    ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6rem] max-w-[6rem]'
     : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
   const phaseTrackerWrapperClass = isLandscapeMobileViewport
-    ? 'absolute top-[35%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
+    ? 'absolute top-[20%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
     : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
   const boardShellVars = isLandscapeMobileViewport
     ? { '--sw-hand-card-width-ratio': '0.14' } as React.CSSProperties

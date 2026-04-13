@@ -256,7 +256,7 @@ if (ability.abilityId === ABILITY_IDS.TREASURER) {
 
 ### 4.1 测试文件
 
-**测试文件**: `e2e/cardia/cardia-deck1-card12-treasurer.e2e.ts`
+**测试文件**: `e2e/cardia-deck1-card12-treasurer.e2e.ts`
 
 **测试模式**: ✅ 联机模式 + 状态注入
 
@@ -398,7 +398,7 @@ if (ability.abilityId === ABILITY_IDS.TREASURER) {
 ### 建议 1: 新增"第一个遭遇时激活财务官"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia/cardia-deck1-card12-treasurer.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia-deck1-card12-treasurer.e2e.ts` 中新增测试用例
 2. 测试场景：
    - 第1回合：P1 打出财务官（12），P2 打出精灵（16）
    - P2 获胜，P1 失败，激活财务官能力
@@ -415,7 +415,7 @@ if (ability.abilityId === ABILITY_IDS.TREASURER) {
 ### 建议 2: 新增"上一个遭遇是平局时激活财务官"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia/cardia-deck1-card12-treasurer.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia-deck1-card12-treasurer.e2e.ts` 中新增测试用例
 2. 测试场景：
    - 第1回合：P1 打出调停者（4），P2 打出虚空法师（2）
    - P1 获胜，激活调停者能力（强制平局）
@@ -441,7 +441,7 @@ if (ability.abilityId === ABILITY_IDS.TREASURER) {
 - **能力定义**: `src/games/cardia/domain/abilityRegistry.ts`
 - **能力执行器**: `src/games/cardia/domain/abilities/group3-ongoing.ts`
 - **触发逻辑**: `src/games/cardia/domain/execute.ts`
-- **E2E 测试**: `e2e/cardia/cardia-deck1-card12-treasurer.e2e.ts`
+- **E2E 测试**: `e2e/cardia-deck1-card12-treasurer.e2e.ts`
 - **i18n 文案**: `public/locales/zh-CN/game-cardia.json`
 
 ### B. 关键代码片段

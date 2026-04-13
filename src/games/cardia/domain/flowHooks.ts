@@ -78,7 +78,7 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
                 // 大法师：每回合抽1张
                 if (player.tags.tags[`Ongoing.${ABILITY_IDS.ARCHMAGE}`]) {
                     events.push({
-                        type: CARDIA_EVENTS.CARD_DRAWN,
+                        type: CARDIA_EVENTS.CARD_DRAWN.type,
                         timestamp,
                         payload: {
                             playerId,
@@ -93,7 +93,7 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
                     if (prev && prev.winnerId === playerId && prev.loserId) {
                         // 上一次遭遇该玩家获胜且对手失败（不是平局）
                         events.push({
-                            type: CARDIA_EVENTS.SIGNET_GRANTED,
+                            type: CARDIA_EVENTS.SIGNET_GRANTED.type,
                             timestamp,
                             payload: {
                                 playerId,
@@ -115,7 +115,7 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
                 const player = state.core.players[pid];
                 if (player && player.deck.length > 0) {
                     events.push({
-                        type: CARDIA_EVENTS.CARD_DRAWN,
+                        type: CARDIA_EVENTS.CARD_DRAWN.type,
                         timestamp,
                         payload: {
                             playerId: pid,
@@ -127,7 +127,7 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
             
             // 发射回合结束事件
             events.push({
-                type: CARDIA_EVENTS.TURN_ENDED,
+                type: CARDIA_EVENTS.TURN_ENDED.type,
                 timestamp,
                 payload: {
                     playerId: state.core.currentPlayerId,
@@ -212,12 +212,12 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
             const interactionJustResolved = events.some(e => e.type === 'SYS_INTERACTION_RESOLVED');
             
             // 或者检查是否跳过了能力
-            const abilitySkipped = events.some(e => e.type === CARDIA_EVENTS.ABILITY_SKIPPED);
+            const abilitySkipped = events.some(e => e.type === CARDIA_EVENTS.ABILITY_SKIPPED.type);
             
             // 或者检查是否有即时能力被激活（无交互请求）
             // 即时能力：ABILITY_ACTIVATED 事件存在，但没有 ABILITY_INTERACTION_REQUESTED 事件
-            const abilityActivated = events.some(e => e.type === CARDIA_EVENTS.ABILITY_ACTIVATED);
-            const interactionRequested = events.some(e => e.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED);
+            const abilityActivated = events.some(e => e.type === CARDIA_EVENTS.ABILITY_ACTIVATED.type);
+            const interactionRequested = events.some(e => e.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED.type);
             const abilityActivatedWithoutInteraction = abilityActivated && !interactionRequested;
             
             console.log('[CardiaFlowHooks] ability phase checks:', {
@@ -263,7 +263,7 @@ export const cardiaFlowHooks: FlowHooks<CardiaCore> = {
         // 当 TURN_ENDED 事件出现在 events 中时，说明回合清理已完成，可以推进到下一回合
         if (sys.phase === 'end') {
             // 检测是否有 TURN_ENDED 事件
-            const turnEnded = events.some(e => e.type === CARDIA_EVENTS.TURN_ENDED);
+            const turnEnded = events.some(e => e.type === CARDIA_EVENTS.TURN_ENDED.type);
             
             console.log('[CardiaFlowHooks] Checking end → play transition', {
                 turnEnded,

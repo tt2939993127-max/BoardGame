@@ -84,7 +84,7 @@ function executePlayCard(
     
     // 1. 发射卡牌打出事件
     events.push({
-        type: CARDIA_EVENTS.CARD_PLAYED,
+        type: CARDIA_EVENTS.CARD_PLAYED.type,
         timestamp,
         payload: {
             cardUid: card.uid,  // 修复: 使用 cardUid 而非 cardId
@@ -135,7 +135,7 @@ function executePlayCard(
         
         // 发射延迟效果触发事件
         events.push({
-            type: CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED,
+            type: CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED.type,
             timestamp,
             payload: {
                 effectType: effect.effectType,
@@ -154,7 +154,7 @@ function executePlayCard(
             });
             
             events.push({
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 timestamp,
                 payload: {
                     cardId: card.uid,
@@ -271,7 +271,7 @@ function resolveEncounter(
     });
     
     events.push({
-        type: CARDIA_EVENTS.ENCOUNTER_RESOLVED,
+        type: CARDIA_EVENTS.ENCOUNTER_RESOLVED.type,
         timestamp,
         payload: {
             slotIndex,
@@ -286,7 +286,7 @@ function resolveEncounter(
         
         // 5.1 基础印戒
         events.push({
-            type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
+            type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type,
             timestamp: Date.now(),
             payload: {
                 cardId: winnerCard.uid,
@@ -304,7 +304,7 @@ function resolveEncounter(
             if (ability.playerId === winner) {
                 // 给当前遭遇获胜的牌额外印戒
                 events.push({
-                    type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
+                    type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type,
                     timestamp: Date.now(),
                     payload: {
                         cardId: winnerCard.uid,
@@ -314,7 +314,7 @@ function resolveEncounter(
                 
                 // 顾问是一次性效果，触发后移除
                 events.push({
-                    type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                    type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
                     timestamp: Date.now(),
                     payload: {
                         abilityId: ability.abilityId,
@@ -336,7 +336,7 @@ function resolveEncounter(
         if (mechanicalSpiritAbility) {
             // 触发游戏胜利
             events.push({
-                type: CARDIA_EVENTS.GAME_WON,
+                type: CARDIA_EVENTS.GAME_WON.type,
                 timestamp: Date.now(),
                 payload: {
                     winnerId: winner,
@@ -346,7 +346,7 @@ function resolveEncounter(
             
             // 移除一次性持续标记
             events.push({
-                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
                 timestamp: Date.now(),
                 payload: {
                     abilityId: mechanicalSpiritAbility.abilityId,
@@ -413,7 +413,7 @@ function executeActivateAbility(
     const isOngoing = abilityDef.isOngoing ?? false;
     
     events.push({
-        type: CARDIA_EVENTS.ABILITY_ACTIVATED,
+        type: CARDIA_EVENTS.ABILITY_ACTIVATED.type,
         timestamp,
         payload: {
             abilityId,
@@ -454,7 +454,7 @@ function executeActivateAbility(
         // 该事件会被 Cardia 的自定义系统捕获并调用 queueInteraction
         if (result.interaction) {
             events.push({
-                type: CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED,
+                type: CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED.type,
                 timestamp,
                 payload: {
                     abilityId,
@@ -500,7 +500,7 @@ function executeSkipAbility(
     
     const events: CardiaEvent[] = [
         {
-            type: CARDIA_EVENTS.ABILITY_SKIPPED,
+            type: CARDIA_EVENTS.ABILITY_SKIPPED.type,
             timestamp,
             payload: {
                 playerId,
@@ -584,7 +584,7 @@ function executeAutoEndTurn(
         const player = core.players[pid];
         if (player && player.deck.length > 0) {
             events.push({
-                type: CARDIA_EVENTS.CARD_DRAWN,
+                type: CARDIA_EVENTS.CARD_DRAWN.type,
                 timestamp,
                 payload: {
                     playerId: pid,
@@ -596,7 +596,7 @@ function executeAutoEndTurn(
     
     // 2. 发射回合结束事件
     events.push({
-        type: CARDIA_EVENTS.TURN_ENDED,
+        type: CARDIA_EVENTS.TURN_ENDED.type,
         timestamp,
         payload: {
             playerId,
@@ -686,7 +686,7 @@ export function recalculateEncounterState(
     // 3. 发射影响力变化事件
     if (newPlayer1Influence !== encounter.player1Influence) {
         events.push({
-            type: CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED,
+            type: CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED.type,
             timestamp,
             payload: {
                 cardId: player1Card.uid,
@@ -698,7 +698,7 @@ export function recalculateEncounterState(
 
     if (newPlayer2Influence !== encounter.player2Influence) {
         events.push({
-            type: CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED,
+            type: CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED.type,
             timestamp,
             payload: {
                 cardId: player2Card.uid,
@@ -741,7 +741,7 @@ export function recalculateEncounterState(
     if (previousWinner !== newWinner) {
         // 发射遭遇结果改变事件
         events.push({
-            type: CARDIA_EVENTS.ENCOUNTER_RESULT_CHANGED,
+            type: CARDIA_EVENTS.ENCOUNTER_RESULT_CHANGED.type,
             timestamp,
             payload: {
                 slotIndex: encounterIndex,
@@ -764,7 +764,7 @@ export function recalculateEncounterState(
 
                 // 从旧获胜卡牌移动印戒到新获胜卡牌
                 events.push({
-                    type: CARDIA_EVENTS.SIGNET_MOVED,
+                    type: CARDIA_EVENTS.SIGNET_MOVED.type,
                     timestamp,
                     payload: {
                         fromCardId: oldWinnerCard.uid,
@@ -781,7 +781,7 @@ export function recalculateEncounterState(
                 : player2Card;
 
             events.push({
-                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
+                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type,
                 timestamp,
                 payload: {
                     cardId: newWinnerCard.uid,
@@ -808,7 +808,7 @@ function executeAddModifier(
     
     // 1. 发射修正标记添加事件
     events.push({
-        type: CARDIA_EVENTS.MODIFIER_ADDED,
+        type: CARDIA_EVENTS.MODIFIER_ADDED.type,
         timestamp,
         payload: {
             cardUid,
@@ -838,7 +838,7 @@ function executeRemoveModifier(
     
     // 发射修正标记移除事件
     events.push({
-        type: CARDIA_EVENTS.MODIFIER_REMOVED,
+        type: CARDIA_EVENTS.MODIFIER_REMOVED.type,
         timestamp,
         payload: {
             cardUid,

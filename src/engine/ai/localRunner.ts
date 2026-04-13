@@ -28,8 +28,9 @@ interface ResolveNextAiActionArgs {
     decisionBudgetMs?: number;
     /**
      * 在线房间里，每个 AI seat 都有自己的 transport client 和 playerView。
-     * 如果继续基于共享状态再套 playerView，AI 会看不到只对自己可见的交互。
-     * 返回 null 表示 seat 专属视角尚未就绪，本轮直接跳过，避免退回共享视角误判。
+     * 如果继续基于“当前主玩家”的过滤状态再套一层 playerView，
+     * AI 会看不到只对自己可见的交互，导致 simple-choice 永远不响应。
+     * 返回 null 表示“该 seat 的专属视角尚未就绪，本轮跳过，不要回退到共享视角”。
      */
     visibleStateResolver?: (playerId: string) => MatchState<unknown> | null | undefined;
 }
@@ -178,31 +179,27 @@ async function resolveRemoteAction(args: {
 export async function resolveNextAiAction(
     args: ResolveNextAiActionArgs,
 ): Promise<AiResolution | null> {
+    console.log('[resolveNextAiAction] Called with gameId:', args.engineConfig.gameId);
+    console.log('[resolveNextAiAction] State phase:', (args.state as any).core?.phase);
+    console.log('[resolveNextAiAction] Current player:', (args.state as any).core?.currentPlayerId);
+    console.log('[resolveNextAiAction] Seat controllers:', Object.keys(args.seatControllers));
+    
     const runtime = getGameAiRuntime(args.engineConfig.gameId);
-    if (!runtime) return null;
+    if (!runtime) {
+        console.log('[resolveNextAiAction] No AI runtime found for game:', args.engineConfig.gameId);
+        return null;
+    }
 
     const decisionBudgetMs = args.decisionBudgetMs ?? 250;
     const rulesVersion = args.rulesVersion ?? null;
 
     for (const [playerId, seatController] of Object.entries(args.seatControllers)) {
+        console.log(`[resolveNextAiAction] Checking player ${playerId}, controller type: ${seatController.type}`);
         if (seatController.type === 'human') continue;
 
-        const hasSeatResolver = typeof args.visibleStateResolver === 'function';
         const resolvedSeatState = args.visibleStateResolver?.(playerId);
-        if (hasSeatResolver && !resolvedSeatState) {
-            continue;
-        }
-        const seatInteraction = resolvedSeatState?.sys?.interaction as {
-            current?: unknown;
-            isBlocked?: unknown;
-        } | undefined;
-        const seatResponseWindow = resolvedSeatState?.sys?.responseWindow as { current?: unknown } | undefined;
-        if (
-            resolvedSeatState
-            && seatInteraction?.current == null
-            && seatInteraction?.isBlocked === true
-            && !seatResponseWindow?.current
-        ) {
+        console.log(`[resolveNextAiAction] Player ${playerId} resolved state:`, resolvedSeatState ? 'found' : 'null');
+        if (resolvedSeatState === null) {
             continue;
         }
 
@@ -219,6 +216,7 @@ export async function resolveNextAiAction(
             seatController,
         });
 
+        console.log(`[resolveNextAiAction] Player ${playerId} legal actions:`, context.legalActions.length);
         if (context.legalActions.length === 0) continue;
 
         const attemptKey = buildAttemptKey({

@@ -4,8 +4,14 @@ export function useDeferredRender(active = true): boolean {
     const [ready, setReady] = useState(false);
 
     useEffect(() => {
+        let cancelled = false;
+
         if (!active) {
-            setReady(false);
+            queueMicrotask(() => {
+                if (!cancelled) {
+                    setReady(false);
+                }
+            });
             return;
         }
 
@@ -14,9 +20,10 @@ export function useDeferredRender(active = true): boolean {
         });
 
         return () => {
+            cancelled = true;
             window.cancelAnimationFrame(frame);
         };
     }, [active]);
 
-    return ready;
+    return active ? ready : false;
 }

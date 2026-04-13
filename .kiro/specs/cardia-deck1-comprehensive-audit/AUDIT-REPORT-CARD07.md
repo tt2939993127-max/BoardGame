@@ -143,7 +143,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.COURT_GUARD, (ctx: CardiaAbilityCon
 
 ### 4.1 测试文件
 
-**测试文件**: `e2e/cardia/cardia-deck1-card07-court-guard.e2e.ts`
+**测试文件**: `e2e/cardia-deck1-card07-court-guard.e2e.ts`
 
 **测试模式**: ✅ 联机模式 + 状态注入
 
@@ -241,7 +241,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.COURT_GUARD, (ctx: CardiaAbilityCon
 - **规则文档**: `src/games/cardia/rule/卡迪亚规则.md`
 - **能力定义**: `src/games/cardia/domain/abilityRegistry.ts`
 - **能力执行器**: `src/games/cardia/domain/abilities/group2-modifiers.ts`
-- **E2E 测试**: `e2e/cardia/cardia-deck1-card07-court-guard.e2e.ts`
+- **E2E 测试**: `e2e/cardia-deck1-card07-court-guard.e2e.ts`
 - **i18n 文案**: `public/locales/zh-CN/game-cardia.json`
 
 ---

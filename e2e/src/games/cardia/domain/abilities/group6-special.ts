@@ -59,7 +59,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.PUPPETEER, (ctx: CardiaAbilityConte
     return {
         events: [
             {
-                type: CARDIA_EVENTS.CARD_REPLACED,
+                type: CARDIA_EVENTS.CARD_REPLACED.type,
                 payload: {
                     oldCardId: oppositeCard.uid,
                     newCardId: replacementCard.uid,
@@ -85,7 +85,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.DIVINER, (ctx: CardiaAbilityContext
     return {
         events: [
             {
-                type: CARDIA_EVENTS.REVEAL_ORDER_CHANGED,
+                type: CARDIA_EVENTS.REVEAL_ORDER_CHANGED.type,
                 payload: {
                     revealFirstPlayerId: ctx.opponentId,
                     forcedPlayOrderPlayerId: ctx.opponentId,  // 新增：强制先出牌
@@ -111,7 +111,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ARISTOCRAT, (ctx: CardiaAbilityCont
     return {
         events: [
             {
-                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
+                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type,
                 payload: {
                     cardId: ctx.cardId,
                     playerId: ctx.playerId,
@@ -133,7 +133,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ELF, (ctx: CardiaAbilityContext) =>
     return {
         events: [
             {
-                type: CARDIA_EVENTS.GAME_WON,
+                type: CARDIA_EVENTS.GAME_WON.type,
                 payload: {
                     winnerId: ctx.playerId,
                     reason: 'elf',
@@ -159,7 +159,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.EXTORTIONIST, (ctx: CardiaAbilityCo
     return {
         events: [
             {
-                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                 payload: {
                     effectId: `extortionist_${ctx.cardId}`,
                     abilityId: ABILITY_IDS.EXTORTIONIST,
@@ -195,7 +195,7 @@ export function registerSpecialInteractionHandlers(): void {
             state,
             events: [
                 {
-                    type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                    type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                     payload: {
                         effectId: `extortionist_${timestamp}`,
                         abilityId: ABILITY_IDS.EXTORTIONIST,

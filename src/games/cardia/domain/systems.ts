@@ -164,10 +164,16 @@ function wrapCardiaInteraction(
         interactionType = 'faction-selection';
         
         // 创建派系选项列表
-        const factions = ['swamp', 'academy', 'guild', 'dynasty'];
+        const factions: Array<'swamp' | 'academy' | 'guild' | 'dynasty'> = ['swamp', 'academy', 'guild', 'dynasty'];
+        const factionLabels: Record<string, string> = {
+            swamp: '沼泽',
+            academy: '学院',
+            guild: '公会',
+            dynasty: '王朝',
+        };
         options = factions.map(faction => ({
             id: `faction_${faction}`,
-            label: faction,
+            label: factionLabels[faction],
             value: { faction },
         }));
     } else if (cardiaInteraction.type === 'modifier_selection') {
@@ -248,10 +254,11 @@ export function createGameOverSystem(): EngineSystem<CardiaCore> {
 
         afterEvents: ({ state, events }): HookResult<CardiaCore> | void => {
             for (const event of events) {
-                if (event.type === CARDIA_EVENTS.GAME_WON) {
+                if (event.type === CARDIA_EVENTS.GAME_WON.type) {
                     const payload = event.payload as { winnerId: string; reason: string };
                     
-                    console.log('[GameOverSystem] GAME_WON event received:', {
+                    console.log('[GameOverSystem] Game end event received:', {
+                        eventType: event.type,
                         payload,
                         hasReason: 'reason' in payload,
                         reason: payload.reason,
@@ -335,7 +342,7 @@ export function createCardiaEventSystem(): EngineSystem<CardiaCore> {
 
             for (const event of events) {
                 // 监听 MODIFIER_TOKEN_PLACED → 记录修正标记事件（用于后续触发状态回溯）
-                if (event.type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED) {
+                if (event.type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type) {
                     const payload = event.payload as {
                         cardId: string;
                         value: number;
@@ -350,7 +357,7 @@ export function createCardiaEventSystem(): EngineSystem<CardiaCore> {
                 }
                 
                 // 监听 ABILITY_INTERACTION_REQUESTED → 将能力交互加入队列
-                if (event.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED) {
+                if (event.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED.type) {
                     const payload = event.payload as {
                         abilityId: string;
                         cardId: string;
@@ -488,7 +495,7 @@ export function createCardiaEventSystem(): EngineSystem<CardiaCore> {
                                     appliedEvents.push(evt);  // 记录已应用的事件
                                     
                                     // ✅ 修复：检查交互处理器返回的事件中是否有 MODIFIER_TOKEN_PLACED
-                                    if (evt.type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED) {
+                                    if (evt.type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type) {
                                         const payload = evt.payload as {
                                             cardId: string;
                                             value: number;
@@ -503,7 +510,7 @@ export function createCardiaEventSystem(): EngineSystem<CardiaCore> {
                                     }
                                     
                                     // ✅ 修复：检查是否有 INVENTOR_PENDING_SET 事件
-                                    if (evt.type === CARDIA_EVENTS.INVENTOR_PENDING_SET) {
+                                    if (evt.type === CARDIA_EVENTS.INVENTOR_PENDING_SET.type) {
                                         hasInventorPendingSet = true;
                                         console.log('[CardiaEventSystem] INVENTOR_PENDING_SET detected from handler');
                                     }

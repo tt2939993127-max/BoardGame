@@ -244,13 +244,13 @@ describe('D11-D14 Reducer 消耗路径测试', () => {
         
         // 验证：能力激活事件已发射
         const abilityActivated = activateEvents.find(
-            e => e.type === CARDIA_EVENTS.ABILITY_ACTIVATED
+            e => e.type === CARDIA_EVENTS.ABILITY_ACTIVATED.type
         );
         expect(abilityActivated).toBeDefined();
         
         // 验证：交互请求事件已发射
         const interactionRequested = activateEvents.find(
-            e => e.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED
+            e => e.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED.type
         );
         expect(interactionRequested).toBeDefined();
     });
@@ -313,7 +313,7 @@ describe('D11-D14 Reducer 消耗路径测试', () => {
         for (const event of p2Events) {
             state = { ...state, core: reduce(state.core, event) };
             
-            if (event.type === CARDIA_EVENTS.ENCOUNTER_RESOLVED) {
+            if (event.type === CARDIA_EVENTS.ENCOUNTER_RESOLVED.type) {
                 // 保存遭遇解析后的状态（用于验证 currentEncounter 存在）
                 encounterResolvedState = state;
             }
@@ -533,7 +533,7 @@ describe('D11-D14 Reducer 消耗路径测试', () => {
         
         // 移除特定来源的修正标记（外科医生）
         const removeEvent = {
-            type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED,
+            type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type,
             timestamp: Date.now(),
             payload: {
                 cardId: 'p1_card',
@@ -663,7 +663,7 @@ describe('D11-D14 Reducer 消耗路径测试', () => {
         
         // 移除调停者的持续能力
         const removeEvent = {
-            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
             timestamp: Date.now(),
             payload: {
                 abilityId: ABILITY_IDS.MEDIATOR,
@@ -893,7 +893,7 @@ describe('D11-D14 Reducer 消耗路径测试', () => {
         for (const event of p2Events) {
             state = { ...state, core: reduce(state.core, event) };
             
-            if (event.type === CARDIA_EVENTS.ENCOUNTER_RESOLVED) {
+            if (event.type === CARDIA_EVENTS.ENCOUNTER_RESOLVED.type) {
                 // 保存遭遇解析后的状态
                 encounterResolvedState = state;
             }
@@ -979,7 +979,7 @@ describe('D11-D14 Reducer 消耗路径测试', () => {
         
         // 回收卡牌
         const recycleEvent = {
-            type: CARDIA_EVENTS.CARD_RECYCLED,
+            type: CARDIA_EVENTS.CARD_RECYCLED.type,
             timestamp: Date.now(),
             payload: {
                 playerId: 'player1',

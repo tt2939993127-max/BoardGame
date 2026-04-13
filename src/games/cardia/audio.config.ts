@@ -1,138 +1,154 @@
 import type { GameAudioConfig } from '../../lib/audio/types';
+import { createFeedbackResolver, collectPreloadKeys } from '../../lib/audio/defineEvents';
 import { CARDIA_EVENTS } from './domain/events';
+import { ABILITY_IDS } from './domain/ids';
 
 /**
- * 卡迪亚音频配置
- * 
- * 音效策略：
- * - 无动画事件：返回 SoundKey（音效由音频系统播放）
- * - 有动画事件：返回 null（音效交给动画层）
- * 
- * 当前实现：所有事件都无动画，直接返回音效
+ * BGM 常量定义
+ * 从现有音频注册表中选择符合魔法城市主题的曲目
+ * 注意：避免与 DiceThrone 重复使用相同曲目
+ * Cardia 游戏体量小，使用单一 BGM 即可
  */
 
-// 音效 key 常量
-const CARD_PLAY_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_placing_001';
-const CARD_DRAW_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_take_001';
-const CARD_DISCARD_KEY = 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001';
-const CARD_RECYCLE_KEY = 'card.handling.decks_and_cards_sound_fx_pack.card_shuffle_001';
-const ABILITY_ACTIVATE_KEY = 'magic.general.spells_variations_vol_1.arcane_blast.magspel_arcane_blast_01_krst';
-const ABILITY_SKIP_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.negative.signal_negative_a';
-const ENCOUNTER_RESOLVE_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_a';
-const SIGNET_GRANT_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a';
-const MODIFIER_ADD_KEY = 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.buff_a';
-const MODIFIER_REMOVE_KEY = 'status.general.player_status_sound_fx_pack_vol.negative_debuffs_and_ailments.debuff_a';
-const TURN_CHANGE_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_b';
-const PHASE_CHANGE_KEY = 'ui.general.ui_menu_sound_fx_pack_vol.signals.update.update_chime_c';
+// 主 BGM（动感魔法主题 - Dragon Dance）
+const BGM_DRAGON_DANCE = 'bgm.fantasy.fantasy_music_pack_vol.dragon_dance_rt_2.fantasy_vol5_dragon_dance_main';
 
-// BGM 常量
-const BGM_NORMAL_KEY = 'bgm.general.casual_music_pack_vol.tiki_party_rt_2.casual_tiki_party_main';
-const BGM_BATTLE_KEY = 'bgm.funk.funk_music_pack.move_your_feet_rt_2.funk_move_your_feet_main';
-
-export const cardiaAudioConfig: GameAudioConfig = {
-    /**
-     * 事件音效解析器
-     * @param event 游戏事件
-     * @returns 音效键名，或 null（交给动画层）
-     */
-    feedbackResolver: (event) => {
-        switch (event.type) {
-            // 卡牌相关
-            case CARDIA_EVENTS.CARD_PLAYED:
-                return CARD_PLAY_KEY;
-            case CARDIA_EVENTS.CARD_DRAWN:
-                return CARD_DRAW_KEY;
-            case CARDIA_EVENTS.CARD_DISCARDED:
-                return CARD_DISCARD_KEY;
-            case CARDIA_EVENTS.CARD_RECYCLED:
-                return CARD_RECYCLE_KEY;
-            
-            // 能力相关
-            case CARDIA_EVENTS.ABILITY_ACTIVATED:
-                return ABILITY_ACTIVATE_KEY;
-            
-            // 遭遇战相关
-            case CARDIA_EVENTS.ENCOUNTER_RESOLVED:
-                return ENCOUNTER_RESOLVE_KEY;
-            case CARDIA_EVENTS.SIGNET_GRANTED:
-                return SIGNET_GRANT_KEY;
-            
-            // 修正标记相关
-            case CARDIA_EVENTS.MODIFIER_ADDED:
-                return MODIFIER_ADD_KEY;
-            case CARDIA_EVENTS.MODIFIER_REMOVED:
-                return MODIFIER_REMOVE_KEY;
-            
-            // 持续效果相关
-            case CARDIA_EVENTS.ONGOING_ADDED:
-                return MODIFIER_ADD_KEY;  // 复用修正标记音效
-            case CARDIA_EVENTS.ONGOING_REMOVED:
-                return MODIFIER_REMOVE_KEY;  // 复用修正标记音效
-            
-            // 回合相关
-            case CARDIA_EVENTS.TURN_ENDED:
-                return TURN_CHANGE_KEY;
-            case CARDIA_EVENTS.PHASE_CHANGED:
-                return PHASE_CHANGE_KEY;
-            
-            // 其他事件无音效
-            case CARDIA_EVENTS.HAND_VIEWED:
-            case CARDIA_EVENTS.DECK_SHUFFLED:
-                return null;
-            
-            default:
-                return null;
-        }
-    },
+/**
+ * 能力音效映射表
+ * 为每张卡牌的能力定制专属音效
+ */
+const ABILITY_SOUND_MAP: Record<string, string> = {
+    // Card 01 - 雇佣剑士：弃掉本牌和相对的牌
+    [ABILITY_IDS.MERCENARY_SWORDSMAN]: 'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001',
     
-    /**
-     * 关键音效列表
-     * 进入游戏后立即预加载，确保高频音效流畅播放
-     */
-    criticalSounds: [
-        CARD_PLAY_KEY,        // 打出卡牌（高频）
-        CARD_DRAW_KEY,        // 抽牌（高频）
-        CARD_DISCARD_KEY,     // 弃牌（高频）
-        ABILITY_ACTIVATE_KEY, // 激活能力（高频）
-        ENCOUNTER_RESOLVE_KEY,// 遭遇战解析（高频）
-        SIGNET_GRANT_KEY,     // 印戒授予（中频）
-        TURN_CHANGE_KEY,      // 回合切换（中频）
-        PHASE_CHANGE_KEY,     // 阶段切换（中频）
-    ],
+    // Card 02 - 虚空法师：从任一张牌上弃掉所有修正标记和持续标记
+    [ABILITY_IDS.VOID_MAGE]: 'magic.dark.32.dark_spell_01',
     
-    /**
-     * BGM 列表
-     */
-    bgm: [
-        {
-            key: BGM_NORMAL_KEY,
-            name: 'Tiki Party',
-            src: '',
-            // Cardia 默认 BGM 静音：仍保留曲目，便于后续在设置中切换/开启。
-            volume: 0,
-        },
-        {
-            key: BGM_BATTLE_KEY,
-            name: 'Move Your Feet',
-            src: '',
-            // Cardia 默认 BGM 静音：仍保留曲目，便于后续在设置中切换/开启。
-            volume: 0,
-        },
-    ],
+    // Card 03 - 外科医生：为你下一张打出的牌添加-5影响力
+    [ABILITY_IDS.SURGEON]: 'status.general.player_status_sound_fx_pack_vol.mental_and_magical_debuffs.cursed_a',
     
-    /**
-     * BGM 分组
-     */
-    bgmGroups: {
-        normal: [BGM_NORMAL_KEY],
-        battle: [BGM_BATTLE_KEY],
-    },
+    // Card 04 - 调停者：🔄 这次遭遇为平局
+    [ABILITY_IDS.MEDIATOR]: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_ripple_001',
     
-    /**
-     * BGM 规则
-     * Cardia 默认不自动播放音乐，保留曲目供玩家在音频面板中手动切换。
-     */
-    bgmRules: [],
+    // Card 05 - 破坏者：你的对手弃掉他牌库的2张顶牌
+    [ABILITY_IDS.SABOTEUR]: 'magic.general.modern_magic_sound_fx_pack_vol.offensive_spells.offensive_spells_shockwave_slam_001',
+    
+    // Card 06 - 占卜师：下一次遭遇中，你的对手必须在你之前朝上打出牌
+    [ABILITY_IDS.DIVINER]: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.glyphic_resonance_001',
+    
+    // Card 07 - 宫廷卫士：你选择一个派系，你的对手可以选择弃掉一张该派系的手牌，否则本牌添加+7影响力
+    [ABILITY_IDS.COURT_GUARD]: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_smite_001',
+    
+    // Card 08 - 审判官：🔄 你赢得所有平局，包括之后的遭遇
+    [ABILITY_IDS.MAGISTRATE]: 'magic.general.modern_magic_sound_fx_pack_vol.divine_magic.divine_magic_hallowed_beam_001',
+    
+    // Card 09 - 伏击者：选择一个派系，你的对手弃掉所有该派系的手牌
+    [ABILITY_IDS.AMBUSHER]: 'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_shadow_wail_001',
+    
+    // Card 10 - 傀儡师：弃掉相对的牌，替换为你从对手手牌随机抽取的一张牌
+    [ABILITY_IDS.PUPPETEER]: 'magic.general.modern_magic_sound_fx_pack_vol.dark_magic.dark_magic_blight_curse_001',
+    
+    // Card 11 - 钟表匠：添加+3影响力到你上一个遭遇的牌和你下一次打出的牌
+    [ABILITY_IDS.CLOCKMAKER]: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.aetherial_pulse_001',
+    
+    // Card 12 - 财务官：🔄 上个遭遇获胜的牌额外获得1枚印戒
+    [ABILITY_IDS.TREASURER]: 'coins.decks_and_cards_sound_fx_pack.small_reward_001',
+    
+    // Card 13 - 沼泽守卫：拿取一张你之前打出的牌回到手上，并弃掉其相对的牌
+    [ABILITY_IDS.SWAMP_GUARD]: 'magic.general.modern_magic_sound_fx_pack_vol.water_magic.water_magic_tidal_rush_001',
+    
+    // Card 14 - 女导师：复制并发动你的一张影响力不小于本牌的已打出牌的即时能力
+    [ABILITY_IDS.GOVERNESS]: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.astral_flare_001',
+    
+    // Card 15 - 发明家：添加+3影响力到任一张牌，并添加-3影响力到另外任一张牌
+    [ABILITY_IDS.INVENTOR]: 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_ripple_003',
+    
+    // Card 16 - 精灵：你赢得游戏
+    [ABILITY_IDS.ELF]: 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win',
 };
 
-export default cardiaAudioConfig;
+/**
+ * Cardia 音频配置
+ */
+export const CARDIA_AUDIO_CONFIG: GameAudioConfig = {
+    // 关键音效预加载（自动收集 + 手动补充去重）
+    criticalSounds: Array.from(new Set([
+        ...collectPreloadKeys(CARDIA_EVENTS),
+        // 手动补充高频音效（如果 collectPreloadKeys 已包含则会被去重）
+        'card.handling.decks_and_cards_sound_fx_pack.card_placing_001',  // 打出卡牌
+        'card.handling.decks_and_cards_sound_fx_pack.card_take_001',   // 抽取卡牌
+        'card.handling.decks_and_cards_sound_fx_pack.cards_shuffle_fast_001',
+        'card.fx.decks_and_cards_sound_fx_pack.fx_discard_001',
+        'coins.decks_and_cards_sound_fx_pack.small_reward_001',
+        'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a',
+        'status.general.player_status_sound_fx_pack_vol.mental_and_magical_debuffs.cursed_a',
+        'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.purged_a',
+        'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win',
+        'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose',
+        // 能力音效（16张卡牌）
+        ...Object.values(ABILITY_SOUND_MAP),
+    ])),
+
+    // BGM 列表（单一主题 BGM - 动感魔法风格）
+    bgm: [
+        { 
+            key: BGM_DRAGON_DANCE, 
+            name: 'Dragon Dance', 
+            src: '', 
+            volume: 0.5, 
+            category: { group: 'bgm', sub: 'main' } 
+        },
+    ],
+
+    // BGM 分组（单一分组）
+    bgmGroups: {
+        main: [BGM_DRAGON_DANCE],
+    },
+
+    // 事件音效解析器（自定义以支持动态音效选择）
+    feedbackResolver: (event: any, context?: any) => {
+        const { type } = event;
+        
+        // ABILITY_ACTIVATED：根据 abilityId 返回对应的音效
+        if (type === CARDIA_EVENTS.ABILITY_ACTIVATED.type) {
+            const abilityId = event.payload?.abilityId;
+            if (abilityId && ABILITY_SOUND_MAP[abilityId]) {
+                return ABILITY_SOUND_MAP[abilityId];
+            }
+            // 如果没有定制音效，返回默认音效
+            return 'magic.general.modern_magic_sound_fx_pack_vol.arcane_spells.arcane_spells_mana_surge_001';
+        }
+        
+        // 处理动态音效选择
+        if (type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type) {
+            const value = event.payload?.value ?? 0;
+            return value >= 0  // 注意：零值也返回增益音效
+                ? 'status.general.player_status_sound_fx_pack_vol.positive_buffs_and_cures.charged_a'
+                : 'status.general.player_status_sound_fx_pack_vol.mental_and_magical_debuffs.cursed_a';
+        }
+        
+        // 处理游戏胜利/失败音效选择
+        if (type === CARDIA_EVENTS.GAME_WON.type) {
+            const winnerId = event.payload?.winnerId;
+            const currentPlayerId = context?.playerId;
+            
+            // 如果当前玩家是获胜者，播放胜利音效；否则播放失败音效
+            return winnerId === currentPlayerId
+                ? 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_win'
+                : 'stinger.mini_games_sound_effects_and_music_pack.stinger.stgr_action_lose';
+        }
+        
+        // 其他事件使用基础 resolver
+        const baseResolver = createFeedbackResolver(CARDIA_EVENTS);
+        return baseResolver(event, context);
+    },
+
+    // BGM 切换规则（单一 BGM，无需切换）
+    bgmRules: [
+        {
+            when: () => true,
+            key: BGM_DRAGON_DANCE,
+            group: 'main',
+        },
+    ],
+};

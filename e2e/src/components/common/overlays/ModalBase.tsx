@@ -70,7 +70,7 @@ export const ModalBase = memo(({
                 animate="animate"
                 exit="exit"
                 className={clsx(
-                    'fixed inset-0 flex items-center justify-center pointer-events-none',
+                    'modal-base-container fixed inset-0 flex items-center justify-center pointer-events-none',
                     containerClassName
                 )}
                 style={{ willChange: 'transform, opacity', ...resolvedContainerStyle }}

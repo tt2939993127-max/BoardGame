@@ -27,7 +27,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
     if (eligibleCards.length === 0) {
         return {
             events: [{
-                type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET,
+                type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type,
                 timestamp: ctx.timestamp,
                 payload: {
                     abilityId: ctx.abilityId,
@@ -76,7 +76,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
     const events: any[] = [
         // 回收己方卡牌到手牌
         {
-            type: CARDIA_EVENTS.CARD_RECYCLED,
+            type: CARDIA_EVENTS.CARD_RECYCLED.type,
             payload: {
                 cardId: targetCard.uid,
                 playerId: ctx.playerId,
@@ -89,7 +89,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
     // 如果有相对的牌，弃掉它
     if (oppositeCard) {
         events.push({
-            type: CARDIA_EVENTS.CARDS_DISCARDED,
+            type: CARDIA_EVENTS.CARDS_DISCARDED.type,
             payload: {
                 playerId: ctx.opponentId,
                 cardIds: [oppositeCard.uid],
@@ -144,7 +144,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.VOID_MAGE, (ctx: CardiaAbilityConte
                 console.warn('[VoidMage] 场上没有标记，返回 NO_VALID_TARGET');
                 return {
                     events: [{
-                        type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET,
+                        type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type,
                         timestamp: ctx.timestamp,
                         payload: {
                             abilityId: ctx.abilityId,
@@ -209,7 +209,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.VOID_MAGE, (ctx: CardiaAbilityConte
         
         for (const modifier of modifiersToRemove) {
             events.push({
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type,
                 payload: {
                     cardId: targetCardId,
                     source: modifier.source,
@@ -225,7 +225,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.VOID_MAGE, (ctx: CardiaAbilityConte
         
         for (const ability of ongoingToRemove) {
             events.push({
-                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
                 payload: {
                     abilityId: ability.abilityId,
                     cardId: ability.cardId,
@@ -272,7 +272,7 @@ export function registerCardOpsInteractionHandlers(): void {
         
         for (const modifier of modifiersToRemove) {
             events.push({
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type,
                 payload: {
                     cardId: targetCardId,
                     source: modifier.source,
@@ -288,7 +288,7 @@ export function registerCardOpsInteractionHandlers(): void {
         
         for (const ability of ongoingToRemove) {
             events.push({
-                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
                 payload: {
                     abilityId: ability.abilityId,
                     cardId: ability.cardId,
@@ -329,7 +329,7 @@ export function registerCardOpsInteractionHandlers(): void {
         const events: CardiaEvent[] = [
             // 回收己方卡牌到手牌
             {
-                type: CARDIA_EVENTS.CARD_RECYCLED,
+                type: CARDIA_EVENTS.CARD_RECYCLED.type,
                 payload: {
                     cardId: targetCardId,
                     playerId,
@@ -342,7 +342,7 @@ export function registerCardOpsInteractionHandlers(): void {
         // 如果有相对的牌，弃掉它
         if (oppositeCard) {
             events.push({
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: opponentId,
                     cardIds: [oppositeCard.uid],

@@ -1,3 +1,4 @@
+// @asset-pipeline-allow
 /**
  * 召唤师战争 - 阵营选择界面（重构版）
  * 
@@ -68,9 +69,9 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
   isOpen,
   currentPlayerId,
   hostPlayerId,
-  selectedFactions,
-  readyPlayers,
-  playerNames,
+  selectedFactions = {} as Record<PlayerId, FactionId | 'unselected'>,
+  readyPlayers = {} as Record<PlayerId, boolean>,
+  playerNames = {} as Record<PlayerId, string>,
   customDeckData,
   onSelect,
   onReady,
@@ -346,6 +347,9 @@ export const FactionSelection: React.FC<FactionSelectionProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       data-testid="sw-faction-selection"
+      data-game-page="true"
+      data-game-id="summonerwars"
+      data-mobile-layout-preset="board-shell"
       className="fixed inset-0 flex flex-col bg-[#0d1117] overflow-hidden select-none text-white font-sans w-screen h-screen"
       style={{ zIndex: UI_Z_INDEX.overlay }}
     >
