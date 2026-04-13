@@ -33,7 +33,7 @@ description: 用于本仓库 PR 合并全流程：当用户说“合并PR/合并
 
 2) **目标分支**
 - 默认合并到当前分支。
-- 若当前分支不是 `main`，且需要切到 `main`：**必须先请求用户授权切换分支**（这是硬性规则，唯一允许的提问场景）。
+- 若需要切到 `main`：**可直接切换**（不再要求额外授权）。
 
 3) **远端同步**
 - 默认执行 `git fetch --all --prune`（不切分支、不改历史）。
@@ -104,6 +104,11 @@ npm run merge:audit:strict -- HEAD
   - 仅业务口径/规则变化
 - 若存在冲突汇报文档，登记写入同一文档；否则在最终汇报中单列一节。
 
+### G. 完成与关闭 PR（强制）
+> **合并完成标准：PR 必须关闭。**
+- 合并结果进入 `main` 并推送后，使用 `gh pr close <编号> --comment "已合并到 main"` 关闭 PR。
+- 若 PR 已显示为 Merged，仅需关闭/确认状态，无需二次合并。
+
 ## 输出要求（给用户的最终汇报）
 必须包含：
 - 目标 PR 分支、合并命令
@@ -115,3 +120,6 @@ npm run merge:audit:strict -- HEAD
 
 ## 资源
 - `references/git-merge-checklist.md`：合并清单与审计要求（来源 `docs/git-merge-checklist.md`）
+
+
+
