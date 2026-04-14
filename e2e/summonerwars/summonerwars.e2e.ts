@@ -3566,6 +3566,12 @@ test.describe('SummonerWars', () => {
 
     const summonCell = hostPage.locator('[data-valid-summon="true"]').first();
     await expect(summonCell).toBeVisible({ timeout: 8000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-summon-highlight', {
+        filename: '40-mobile-basic-flow-summon-highlight.png',
+      }),
+      fullPage: false,
+    });
     const summonRow = await summonCell.getAttribute('data-row');
     const summonCol = await summonCell.getAttribute('data-col');
     if (!summonRow || !summonCol) {
@@ -3597,6 +3603,12 @@ test.describe('SummonerWars', () => {
 
     const moveCell = hostPage.locator('[data-valid-move="true"]').first();
     await expect(moveCell).toBeVisible({ timeout: 8000 });
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-move-highlight', {
+        filename: '40-mobile-basic-flow-move-highlight.png',
+      }),
+      fullPage: false,
+    });
     const moveRow = await moveCell.getAttribute('data-row');
     const moveCol = await moveCell.getAttribute('data-col');
     if (!moveRow || !moveCol) {
