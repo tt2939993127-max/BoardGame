@@ -550,6 +550,25 @@ describe('黑熊骑兵派系能力', () => {
             expect(interactions.length).toBe(1);
             expect(interactions[0].data.sourceId).toBe('bear_cavalry_commission_choose_minion');
         });
+
+        it('手上没有随从时仍应给予额外随从额度（不强制创建交互）', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'bear_cavalry_commission', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+            });
+
+            const events = execPlayAction(state, '0', 'a1');
+            const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            expect(limitEvents.length).toBe(1);
+
+            const interactions = getLastInteractions();
+            expect(interactions.length).toBe(0);
+        });
     });
 });
 

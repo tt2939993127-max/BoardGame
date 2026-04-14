@@ -231,7 +231,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MERCENARY_SWORDSMAN, (ctx: CardiaAb
 ## E2E 测试覆盖评估
 
 ### 测试文件
-- **路径**: `e2e/cardia/cardia-deck1-card01-mercenary-swordsman.e2e.ts`
+- **路径**: `e2e/cardia-deck1-card01-mercenary-swordsman.e2e.ts`
 - **测试框架**: Playwright
 - **测试模式**: 联机模式 + 状态注入
 
@@ -332,7 +332,7 @@ Card01 雇佣剑士的实现和测试均符合规范，无需修复。
 **描述**: 当前 E2E 测试只覆盖了"对手有相对的牌"的场景，可以补充"对手没有相对的牌"的边界场景测试。
 
 **修复建议**:
-1. 在 `e2e/cardia/cardia-deck1-card01-mercenary-swordsman.e2e.ts` 中添加新的测试用例
+1. 在 `e2e/cardia-deck1-card01-mercenary-swordsman.e2e.ts` 中添加新的测试用例
 2. 场景：P1 打出雇佣剑士，但 P2 没有打出牌（或 P2 的牌已被弃掉）
 3. 验证：只有 P1 的牌被弃掉，P2 的 `playedCards` 保持不变
 

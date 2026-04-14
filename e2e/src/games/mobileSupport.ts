@@ -20,7 +20,7 @@ export interface ResolvedGameMobileSupport {
     mobileProfile: GameMobileProfile;
     preferredOrientation?: GameOrientationPreference;
     mobileLayoutPreset?: GameMobileLayoutPreset;
-    mobileBattlefieldZoom?: GameMobileBattlefieldZoom;
+    mobileBattlefieldZoom: GameMobileBattlefieldZoom;
     shellTargets: GameShellTarget[];
     mobileDelivery: GameManifestMobileDelivery;
 }

@@ -426,7 +426,7 @@ describe('InteractionSystem', () => {
         ]));
     });
 
-    it('buildTargetAiHint 允许游戏显式覆盖 ally relation', () => {
+    it('buildTargetAiHint 会以 target/actor 推导 relation，而不是接受外部覆盖', () => {
         const hint = buildTargetAiHint({
             actorPlayerId: '0',
             targetPlayerId: '2',
@@ -435,9 +435,9 @@ describe('InteractionSystem', () => {
             targetKind: 'player',
         });
 
-        expect(hint.relationToActor).toBe('ally');
+        expect(hint.relationToActor).toBe('enemy');
         expect(hint.tags).toEqual(expect.arrayContaining([
-            'relation:ally',
+            'relation:enemy',
             'intent:buff',
         ]));
     });

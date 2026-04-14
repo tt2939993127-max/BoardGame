@@ -87,10 +87,10 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
     /**
      * 游戏结束判定
      * 
-     * ⚠️ 重要：不同胜利条件在不同阶段检查
-     * - 阶段1（play）：无牌可打胜利条件
-     * - 阶段2（ability）：特殊胜利条件（精灵、机械精灵等能力引发的胜利）
-     * - 阶段3（end）：标准印戒胜利条件
+     * 规则优先级：
+     * 1. 直接胜利标记（如特殊能力已明确宣告胜利）
+     * 2. 标准印戒胜利条件（任意阶段立即生效）
+     * 3. 分阶段特殊判定（如 play 阶段无牌可打、ability 阶段特殊能力胜利）
      */
     isGameOver: (core): GameOverResult | undefined => {
         // 优先检查直接胜利标记（精灵能力等）
@@ -100,12 +100,37 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
             };
         }
         
-        // 导入 getTotalSignets 辅助函数
         const getTotalSignets = (player: PlayerState) => {
             return player.playedCards.reduce((sum: number, card: PlayedCard) => sum + card.signets, 0);
         };
+
+        const signetsCount: Record<PlayerId, number> = {};
+        for (const playerId of core.playerOrder) {
+            const player = core.players[playerId];
+            signetsCount[playerId] = getTotalSignets(player);
+        }
+
+        // PR 新规则：标准印戒胜利条件在所有阶段立即生效
+        const playersWithEnoughSignets = core.playerOrder.filter(
+            pid => signetsCount[pid] >= core.targetSignets
+        );
+
+        if (playersWithEnoughSignets.length > 0) {
+            if (playersWithEnoughSignets.length > 1) {
+                const maxSignets = Math.max(...playersWithEnoughSignets.map(pid => signetsCount[pid]));
+                const winnersWithMaxSignets = playersWithEnoughSignets.filter(
+                    pid => signetsCount[pid] === maxSignets
+                );
+
+                if (winnersWithMaxSignets.length > 1) {
+                    return { draw: true };
+                }
+                return { winner: winnersWithMaxSignets[0] };
+            }
+            return { winner: playersWithEnoughSignets[0] };
+        }
         
-        // ⚠️ 阶段1（打出卡牌）：检查无牌可打的胜利条件
+        // play 阶段：检查无牌可打的胜利条件
         if (core.phase === 'play') {
             const playersWithoutCards = core.playerOrder.filter(playerId => {
                 const player = core.players[playerId];
@@ -121,12 +146,6 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
             
             // 如果双方都无法出牌，比较印戒数量
             if (playersWithoutCards.length === 2) {
-                const signetsCount: Record<PlayerId, number> = {};
-                for (const playerId of core.playerOrder) {
-                    const player = core.players[playerId];
-                    signetsCount[playerId] = getTotalSignets(player);
-                }
-                
                 const p1Signets = signetsCount[core.playerOrder[0]];
                 const p2Signets = signetsCount[core.playerOrder[1]];
                 
@@ -139,15 +158,13 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
                 }
             }
             
-            // play 阶段其他情况不触发胜利
             return undefined;
         }
         
-        // ⚠️ 阶段2（能力阶段）：检查特殊胜利条件（能力引发的胜利）
+        // ability 阶段：检查特殊胜利条件（能力引发的胜利）
         if (core.phase === 'ability') {
             for (const playerId of core.playerOrder) {
-                const player = core.players[playerId];
-                const totalSignets = getTotalSignets(player);
+                const totalSignets = signetsCount[playerId];
                 
                 // 精灵能力：如果激活了精灵能力且有5个印戒，立即获胜
                 const hasElfAbility = core.ongoingAbilities.some(
@@ -161,7 +178,6 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
                 
                 // 机械精灵能力：如果激活了机械精灵且在当前遭遇中获胜，立即获胜
                 if (core.mechanicalSpiritActive && core.mechanicalSpiritActive.playerId === playerId) {
-                    // 检查最近一次遭遇是否该玩家获胜
                     if (core.previousEncounter && core.previousEncounter.winnerId === playerId) {
                         return {
                             winner: playerId,
@@ -170,48 +186,10 @@ export const CardiaDomain: DomainCore<CardiaCore, CardiaCommand, CardiaEvent> = 
                 }
             }
             
-            // ability 阶段没有特殊胜利条件触发，游戏继续
             return undefined;
         }
         
-        // ⚠️ 阶段3（回合结束阶段）：检查标准印戒胜利条件
-        if (core.phase !== 'end') {
-            // 非 play、ability、end 阶段，不触发任何胜利条件
-            return undefined;
-        }
-        
-        // 阶段3（回合结束阶段）：检查标准印戒胜利条件
-        const signetsCount: Record<PlayerId, number> = {};
-        for (const playerId of core.playerOrder) {
-            const player = core.players[playerId];
-            signetsCount[playerId] = getTotalSignets(player);
-        }
-        
-        // 找出所有达到目标印戒数的玩家
-        const playersWithEnoughSignets = core.playerOrder.filter(
-            pid => signetsCount[pid] >= core.targetSignets
-        );
-        
-        if (playersWithEnoughSignets.length > 0) {
-            // 如果多个玩家同时达到目标，比较印戒数量
-            if (playersWithEnoughSignets.length > 1) {
-                const maxSignets = Math.max(...playersWithEnoughSignets.map(pid => signetsCount[pid]));
-                const winnersWithMaxSignets = playersWithEnoughSignets.filter(
-                    pid => signetsCount[pid] === maxSignets
-                );
-                
-                // 如果有多个玩家拥有相同的最高印戒数，判定为平局
-                if (winnersWithMaxSignets.length > 1) {
-                    return { draw: true };
-                }
-                // 只有一个玩家拥有最高印戒数，该玩家获胜
-                return { winner: winnersWithMaxSignets[0] };
-            }
-            // 只有一个玩家达到目标，该玩家获胜
-            return { winner: playersWithEnoughSignets[0] };
-        }
-        
-        // end 阶段没有达到印戒胜利条件，游戏继续
+        // end 阶段或其他阶段：没有额外胜利条件
         return undefined;
     },
 };

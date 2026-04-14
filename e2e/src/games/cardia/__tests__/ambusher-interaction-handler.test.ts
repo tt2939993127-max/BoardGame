@@ -154,7 +154,7 @@ describe('伏击者交互处理器', () => {
         
         // 验证事件类型
         const event = result!.events[0];
-        expect(event.type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+        expect(event.type).toBe(CARDIA_EVENTS.CARDS_DISCARDED.type);
         
         // 验证事件 payload
         expect(event.payload).toEqual({

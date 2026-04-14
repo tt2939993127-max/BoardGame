@@ -190,11 +190,11 @@ Merge branch 'feature-x' into main
   原因：主分支的优化修复了多个 bug
 
 ## 对方删除 (UD)
-- e2e/smashup/ninja-hidden-ninja-skip-option.e2e.ts
+- e2e/auth.e2e.ts
   策略：保留文件
   原因：测试覆盖已修复的 bug，不应删除
 
-- docs/bugs/smashup/smashup-igor-double-trigger.md
+- docs/bugs/smashup-igor-double-trigger.md
   策略：保留文件
   原因：文档记录了重要的 bug 修复过程
 
@@ -302,11 +302,6 @@ npm run merge:audit:strict -- HEAD
 - 若本次没有冲突汇报文档，也必须在最终 PR 收尾汇报中单列“回归与行为变化登记”
 - 禁止只在脑中判断或口头带过，不落文档 / 汇报
 
-**目的**：
-- 防止把“原作者修的 bug”和“本次补修时额外挖出的回归”混为一谈
-- 防止把“只是业务变更 / FAQ 口径变化”误报成代码回归
-- 让后续规范更新、规则文档修订、测试口径调整都有可追溯入口
-
 ### 1. 文件完整性检查
 
 ```bash
@@ -318,11 +313,6 @@ echo "测试文件数量: $(git ls-files | grep -E '\.(test|spec|e2e)\.(ts|tsx)$
 echo "工具脚本数量: $(git ls-files | grep -E '^scripts/.*\.(mjs|js|ts)$' | wc -l)"
 echo "文档数量: $(git ls-files | grep -E '\.(md|txt)$' | wc -l)"
 ```
-
-**验证标准**：
-- ✅ 测试文件数量不应减少（除非有明确的迁移记录）
-- ✅ 工具脚本数量不应大幅减少
-- ✅ 文档数量不应大幅减少
 
 ### 2. 代码质量检查
 

@@ -27,12 +27,12 @@ describe.skip('TODO: Deck II - 革命者（Revolutionary）', () => {
     const result = executor!(mockContext);
 
     expect(result.events).toHaveLength(2);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED.type);
     expect((result.events[0].payload as any).playerId).toBe('player2');
     expect((result.events[0].payload as any).cardIds).toHaveLength(2);
     expect((result.events[0].payload as any).from).toBe('hand');
 
-    expect(result.events[1].type).toBe(CARDIA_EVENTS.CARD_DRAWN);
+    expect(result.events[1].type).toBe(CARDIA_EVENTS.CARD_DRAWN.type);
     expect((result.events[1].payload as any).playerId).toBe('player2');
     expect((result.events[1].payload as any).count).toBe(2);
   });
@@ -59,6 +59,6 @@ describe.skip('TODO: Deck II - 革命者（Revolutionary）', () => {
     const result = executor!(mockContext);
 
     expect(result.events).toHaveLength(1);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARD_DRAWN);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.CARD_DRAWN.type);
   });
 });

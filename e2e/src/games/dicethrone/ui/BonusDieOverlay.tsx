@@ -36,6 +36,8 @@ interface BonusDieOverlayProps {
     locale?: string;
     /** 自动关闭延迟（毫秒），默认 3000 */
     autoCloseDelay?: number;
+    /** 强制自动关闭延迟（毫秒），用于教程等场景 */
+    forceAutoCloseDelay?: number;
     
     // ===== 重掷交互模式 =====
     /** 奖励骰列表（多颗重掷模式） */
@@ -73,6 +75,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
     onClose,
     locale,
     autoCloseDelay = 3000,
+    forceAutoCloseDelay,
     bonusDice,
     canReroll,
     rerollLimitReached,
@@ -98,6 +101,10 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
         }
         return resolveBonusDieText(summaryEffectKey, { t, i18n }, summaryEffectParams);
     }, [summaryEffectKey, summaryEffectParams, i18n, t]);
+    const hasForceAutoClose = typeof forceAutoCloseDelay === 'number' && forceAutoCloseDelay > 0;
+    const resolvedAutoCloseDelay = hasForceAutoClose
+        ? forceAutoCloseDelay
+        : (displayOnly ? 8000 : autoCloseDelay);
 
     // 调试日志：组件渲染
     React.useEffect(() => {
@@ -150,10 +157,10 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
                 id="bonus-dice-reroll"
                 isVisible={isVisible}
                 onClose={onClose}
-                disableAutoClose={isInteractive}
+                disableAutoClose={isInteractive && !hasForceAutoClose}
                 disableBackdropClose={isInteractive}
                 blockPointerEvents={isInteractive}
-                autoCloseDelay={displayOnly ? 8000 : autoCloseDelay}
+                autoCloseDelay={resolvedAutoCloseDelay}
                 zIndex={UI_Z_INDEX.overlayRaised + 100}
                 closeOnContentClick={!isInteractive}
             >
@@ -288,7 +295,7 @@ export const BonusDieOverlay: React.FC<BonusDieOverlayProps> = ({
             id={`bonus-die-${value}`}
             isVisible={isVisible}
             onClose={onClose}
-            autoCloseDelay={autoCloseDelay}
+            autoCloseDelay={resolvedAutoCloseDelay}
             zIndex={UI_Z_INDEX.overlayRaised + 100}
         >
             <div data-testid="bonus-die-overlay">

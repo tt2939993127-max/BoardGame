@@ -80,7 +80,7 @@ const AbilitySlotCrop: React.FC<{
 export const AttackShowcaseOverlay: React.FC<AttackShowcaseOverlayProps> = ({
     data,
     locale,
-    opponentName,
+    opponentName: _opponentName,
     onDismiss,
 }) => {
     const { t } = useTranslation('game-dicethrone');

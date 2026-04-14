@@ -207,7 +207,7 @@ describe('钟表匠延迟效果', () => {
         
         // 7. 验证事件包含 DELAYED_EFFECT_TRIGGERED 和 MODIFIER_TOKEN_PLACED
         const delayedEffectTriggeredEvent = playCardEvents.find(
-            e => e.type === CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED
+            e => e.type === CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED.type
         );
         expect(delayedEffectTriggeredEvent).toBeDefined();
         expect(delayedEffectTriggeredEvent?.payload).toMatchObject({
@@ -218,7 +218,7 @@ describe('钟表匠延迟效果', () => {
         });
         
         const modifierTokenPlacedEvent = playCardEvents.find(
-            e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED &&
+            e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type &&
             (e.payload as any).cardId === 'p1_hand_card01'
         );
         expect(modifierTokenPlacedEvent).toBeDefined();

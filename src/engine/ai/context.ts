@@ -22,88 +22,23 @@ interface BuildAiDecisionContextArgs {
     seatController?: AiSeatController;
 }
 
-function isRecoverableInteractionValue(value: unknown): boolean {
-    if (!value || typeof value !== 'object') {
-        return false;
-    }
-    const candidate = value as {
-        skip?: unknown;
-        done?: unknown;
-        cancel?: unknown;
-        __cancel__?: unknown;
-        __emergency_skip__?: unknown;
-    };
-    return Boolean(
-        candidate.skip
-        || candidate.done
-        || candidate.cancel
-        || candidate.__cancel__
-        || candidate.__emergency_skip__,
-    );
-}
-
-function buildGenericInteractionFallbackActions(playerId: string, interaction: AiDecisionContext['interaction']): AiLegalAction[] {
-    if (!interaction || interaction.kind !== 'simple-choice') {
-        return [];
-    }
-
-    const options = Array.isArray(interaction.options) ? interaction.options : [];
-    const enabledOptions = options.filter((option) => option.disabled !== true);
-    const multi = interaction.multi as { min?: unknown; max?: unknown } | undefined;
-    const minCount = typeof multi?.min === 'number' ? multi.min : 1;
-    const actions: AiLegalAction[] = [];
-
-    if (minCount === 0) {
-        actions.push({
-            actionId: createAiLegalActionId('interaction-fallback', interaction.id, 'empty-selection'),
-            kind: 'interaction-choice',
-            label: '不选择任何项',
-            commands: [{
-                type: 'SYS_INTERACTION_RESPOND',
-                payload: { optionIds: [] },
-            }],
-            metadata: {
-                playerId,
-                interactionId: interaction.id,
-                optionIds: [],
-                generatedBy: 'engine-ai-fallback',
-            },
-        });
-    }
-
-    const recoverableOptions = enabledOptions.filter((option) => isRecoverableInteractionValue(option.value));
-    for (const option of recoverableOptions) {
-        actions.push({
-            actionId: createAiLegalActionId('interaction-fallback', interaction.id, option.id),
-            kind: 'interaction-choice',
-            label: option.label ?? option.id,
-            commands: [{
-                type: 'SYS_INTERACTION_RESPOND',
-                payload: multi ? { optionIds: [option.id] } : { optionId: option.id },
-            }],
-            metadata: {
-                playerId,
-                interactionId: interaction.id,
-                optionId: option.id,
-                generatedBy: 'engine-ai-fallback',
-                recoverable: true,
-            },
-        });
-    }
-
-    return actions;
+function shouldBlockHiddenInteractionActions(
+    visibleState: MatchState<unknown>,
+    interaction: ReturnType<typeof extractAiInteractionSnapshot>,
+): boolean {
+    return visibleState.sys?.interaction?.isBlocked === true && !interaction;
 }
 
 export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDecisionContext {
     const runtime = getGameAiRuntime(args.gameId);
     const interaction = extractAiInteractionSnapshot(args.visibleState);
-    const runtimeLegalActions = runtime?.buildLegalActions({
-        playerId: args.playerId,
-        state: args.visibleState,
-    }) ?? [];
-    const legalActions = runtimeLegalActions.length > 0
-        ? runtimeLegalActions
-        : buildGenericInteractionFallbackActions(args.playerId, interaction);
+    const responseWindow = extractAiResponseWindowSnapshot(args.visibleState);
+    const legalActions = shouldBlockHiddenInteractionActions(args.visibleState, interaction)
+        ? []
+        : (runtime?.buildLegalActions({
+            playerId: args.playerId,
+            state: args.visibleState,
+        }) ?? []);
 
     return {
         gameId: args.gameId,
@@ -111,7 +46,7 @@ export function buildAiDecisionContext(args: BuildAiDecisionContextArgs): AiDeci
         playerId: args.playerId,
         visibleState: args.visibleState,
         interaction,
-        responseWindow: extractAiResponseWindowSnapshot(args.visibleState),
+        responseWindow,
         legalActions,
         rulesVersion: args.rulesVersion,
         decisionBudgetMs: args.decisionBudgetMs,

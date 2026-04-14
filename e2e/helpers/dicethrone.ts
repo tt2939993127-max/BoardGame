@@ -566,6 +566,13 @@ export const waitForBoardReady = async (page: Page, timeout = 30000) => {
 };
 
 /**
+ * 等待教程棋盘准备就绪（兼容旧测试名称）
+ */
+export const waitForTutorialBoardReady = async (page: Page, timeout = 30000) => {
+    await waitForBoardReady(page, timeout);
+};
+
+/**
  * 从 URL 获取玩家 ID
  */
 export const getPlayerIdFromUrl = (page: Page): string | null => {

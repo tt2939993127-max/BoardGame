@@ -89,7 +89,7 @@ describe('reduceEncounterResolved - 卡牌显示修复', () => {
 
         // 执行 ENCOUNTER_RESOLVED 事件
         const event = {
-            type: CARDIA_EVENTS.ENCOUNTER_RESOLVED,
+            type: CARDIA_EVENTS.ENCOUNTER_RESOLVED.type,
             payload: {
                 slotIndex: 0,
                 winner: 'player1',
@@ -228,7 +228,7 @@ describe('reduceEncounterResolved - 卡牌显示修复', () => {
         };
 
         const event = {
-            type: CARDIA_EVENTS.ENCOUNTER_RESOLVED,
+            type: CARDIA_EVENTS.ENCOUNTER_RESOLVED.type,
             payload: {
                 slotIndex: 0,
                 winner: 'player2',

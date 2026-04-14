@@ -400,6 +400,7 @@ export const GameHUD = ({
         id: 'action-log',
         icon: <ListOrdered size={20} />,
         label: t('hud.actions.actionLog'),
+        mobilePopoverVerticalAnchor: 'column',
         content: (
             <div className="flex flex-col gap-2 pr-0.5 sm:pr-1">
                 {actionLogRows.length === 0 ? (

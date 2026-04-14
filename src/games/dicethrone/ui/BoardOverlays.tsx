@@ -148,6 +148,9 @@ export interface BoardOverlaysProps {
     // 选角相关
     selectedCharacters: Record<PlayerId, CharacterId>;
     hostPlayerId: PlayerId;
+
+    /** 教程模式下特写强制自动关闭延迟（毫秒） */
+    tutorialSpotlightAutoCloseDelayMs?: number;
 }
 
 /**
@@ -422,6 +425,7 @@ export const BoardOverlays: React.FC<BoardOverlaysProps> = (props) => {
                                 ? props.selectedCharacters[props.pendingBonusDiceSettlement.attackerId]
                                 : props.bonusDie.characterId
                         }
+                        forceAutoCloseDelay={props.tutorialSpotlightAutoCloseDelayMs}
                     />
                 )}
 

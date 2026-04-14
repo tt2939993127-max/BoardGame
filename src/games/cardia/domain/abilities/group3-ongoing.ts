@@ -31,7 +31,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MEDIATOR, (ctx: CardiaAbilityContex
     
     // 1. 放置持续标记（只影响当前遭遇）
     events.push({
-        type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+        type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
         payload: {
             abilityId: ctx.abilityId,
             cardId: ctx.cardId,
@@ -62,7 +62,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MEDIATOR, (ctx: CardiaAbilityContex
                 });
                 
                 events.push({
-                    type: CARDIA_EVENTS.SIGNET_REMOVED,
+                    type: CARDIA_EVENTS.SIGNET_REMOVED.type,
                     payload: {
                         cardId: winnerCard.uid,
                         playerId: winnerId,
@@ -88,7 +88,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MAGISTRATE, (ctx: CardiaAbilityCont
     return {
         events: [
             {
-                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
                 payload: {
                     abilityId: ctx.abilityId,
                     cardId: ctx.cardId,
@@ -155,7 +155,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TREASURER, (ctx: CardiaAbilityConte
             
             // 立即给上一个遭遇的获胜卡牌额外印戒
             events.push({
-                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED,
+                type: CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type,
                 timestamp: ctx.timestamp,
                 payload: {
                     cardId: previousWinnerCard.uid,
@@ -182,7 +182,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TREASURER, (ctx: CardiaAbilityConte
     // 1. 放置持续标记（保持持续能力的语义）
     // 记录目标卡牌信息，以便虚空法师移除时能收回额外印戒
     events.push({
-        type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+        type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
         payload: {
             abilityId: ctx.abilityId,
             cardId: ctx.cardId,
@@ -213,7 +213,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ADVISOR, (ctx: CardiaAbilityContext
     return {
         events: [
             {
-                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
                 payload: {
                     abilityId: ctx.abilityId,
                     cardId: ctx.cardId,
@@ -240,7 +240,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MECHANICAL_SPIRIT, (ctx: CardiaAbil
     return {
         events: [
             {
-                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
                 payload: {
                     abilityId: ctx.abilityId,
                     cardId: ctx.cardId,

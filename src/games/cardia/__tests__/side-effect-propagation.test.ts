@@ -151,8 +151,8 @@ describe('副作用传播完整性（D6）', () => {
       // 注意：这个测试已经在 puppeteer-fix.test.ts 中覆盖
       // 这里只做简单验证，确认事件类型存在
       
-      expect(CARDIA_EVENTS.SIGNET_MOVED).toBe('cardia:signet_moved');
-      expect(CARDIA_EVENTS.CARD_REPLACED).toBe('cardia:card_replaced');
+      expect(CARDIA_EVENTS.SIGNET_MOVED.type).toBe('SIGNET_MOVED');
+      expect(CARDIA_EVENTS.CARD_REPLACED.type).toBe('CARD_REPLACED');
     });
 
     it('TODO: Deck II - 应该在印戒移动时触发"印戒变化时"触发器', () => {

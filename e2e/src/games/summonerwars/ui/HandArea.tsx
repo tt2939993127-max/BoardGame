@@ -76,9 +76,9 @@ function getCardSpriteConfig(card: Card): { atlasId: string; frameIndex: number 
 
 const CARD_WIDTH_RATIO = 'var(--sw-hand-card-width-ratio, 0.16)';
 const HAND_REFERENCE_WIDTH = `var(--sw-hand-reference-width, ${BOARD_SHELL_REFERENCE_WIDTH})`;
-const MAGNIFY_BUTTON_OFFSET_RATIO = 0.004;
-const MAGNIFY_BUTTON_SIZE_RATIO = 0.022;
-const MAGNIFY_ICON_SIZE_RATIO = 0.012;
+const MAGNIFY_BUTTON_OFFSET_RATIO = 0.003;
+const MAGNIFY_BUTTON_SIZE_RATIO = 0.018;
+const MAGNIFY_ICON_SIZE_RATIO = 0.01;
 const LONG_PRESS_DURATION_MS = 420;
 const LONG_PRESS_MOVE_CANCEL_PX = 14;
 const LONG_PRESS_CLICK_BLOCK_MS = 450;
@@ -131,13 +131,11 @@ const HandCard: React.FC<{
     height: magnifyIconSize,
   };
 
-  const cardSpacingRatio = compactLayout
-    ? (totalCards > 6 ? -0.012 : totalCards > 4 ? -0.004 : 0.008)
-    : (totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05);
-  const selectedLift = compactLayout ? -14 : -30;
-  const hoverLift = compactLayout ? -6 : -20;
-  const hoverScale = compactLayout ? 1.02 : 1.08;
-  const cardWidthRatio = compactLayout ? '0.105' : CARD_WIDTH_RATIO;
+  const cardSpacingRatio = totalCards > 6 ? -0.06 : totalCards > 4 ? -0.055 : -0.05;
+  const selectedLift = -30;
+  const hoverLift = -20;
+  const hoverScale = 1.08;
+  const cardWidthRatio = CARD_WIDTH_RATIO;
 
   const handleMagnifyClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();

@@ -120,6 +120,3 @@ npm run merge:audit:strict -- HEAD
 
 ## 资源
 - `references/git-merge-checklist.md`：合并清单与审计要求（来源 `docs/git-merge-checklist.md`）
-
-
-

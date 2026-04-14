@@ -527,6 +527,8 @@
   "interaction": {
     "sw": {
       "eventTarget": "Choose an event target",
+      "magicEventChoice": "Magic phase: choose to play or discard",
+      "funeralPyre": "Funeral Pyre: choose a unit to heal",
       "bloodSummonTarget": "Blood Summon: choose the ally that takes damage",
       "bloodSummonCard": "Blood Summon: choose a unit card to summon",
       "bloodSummonPosition": "Blood Summon: choose a summon position",

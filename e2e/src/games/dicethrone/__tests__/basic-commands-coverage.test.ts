@@ -619,7 +619,7 @@ describe('AI legal actions', () => {
         expect(resolution?.action.kind).toBe('interaction-select-player');
         expect(resolution?.action.commands[0]).toEqual({
             type: 'RESOLVE_INTERACTION',
-            payload: { selectedPlayerIds: ['2'] },
+            payload: { selectedPlayerIds: ['0'] },
         });
     });
 

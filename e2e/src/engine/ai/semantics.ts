@@ -30,7 +30,6 @@ export interface CreateInteractionHintScorerOptions extends ScoreAiHintOptions {
 export interface BuildTargetAiHintOptions {
     actorPlayerId?: string;
     targetPlayerId?: string;
-    relationToActor?: AiRelationToActor;
     effectIntent?: AiEffectIntent;
     targetKind?: AiTargetKind;
     targetOwnerId?: string;
@@ -136,8 +135,7 @@ export function scoreAiHint(hint: AiHint, options: ScoreAiHintOptions = {}): num
 }
 
 export function buildTargetAiHint(options: BuildTargetAiHintOptions): AiHint {
-    const relationToActor = options.relationToActor
-        ?? inferAiRelationToActor(options.targetPlayerId, options.actorPlayerId);
+    const relationToActor = inferAiRelationToActor(options.targetPlayerId, options.actorPlayerId);
     const tags = [
         ...(options.tags ?? []),
         ...(options.targetKind ? [`target:${options.targetKind}`] : []),

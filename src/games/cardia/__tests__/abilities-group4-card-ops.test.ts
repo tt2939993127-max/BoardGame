@@ -163,14 +163,14 @@ describe('组 4：卡牌操作能力', () => {
       expect(executor.events.length).toBe(2);
       
       // 第一个事件：回收己方卡牌
-      const recycleEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARD_RECYCLED);
+      const recycleEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARD_RECYCLED.type);
       expect(recycleEvent).toBeDefined();
       expect((recycleEvent?.payload as any).playerId).toBe('player1');
       expect((recycleEvent?.payload as any).cardId).toBe('played1');
       expect((recycleEvent?.payload as any).from).toBe('field');
       
       // 第二个事件：弃掉对手相对的牌
-      const discardEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARDS_DISCARDED);
+      const discardEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARDS_DISCARDED.type);
       expect(discardEvent).toBeDefined();
       expect((discardEvent?.payload as any).playerId).toBe('player2');
       expect((discardEvent?.payload as any).cardIds).toContain('opp_played1'); // 对手第一张牌（encounterIndex = 0）
@@ -183,7 +183,7 @@ describe('组 4：卡牌操作能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.SWAMP_GUARD)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect((executor.events[0].payload as any).reason).toBe('no_field_cards');
       expect(executor.interaction).toBeUndefined();
     });
@@ -198,7 +198,7 @@ describe('组 4：卡牌操作能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.SWAMP_GUARD)!(contextWithSelection);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.CARD_RECYCLED);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.CARD_RECYCLED.type);
     });
 
     it('应该排除当前卡牌（不能回收自己）', () => {
@@ -216,7 +216,7 @@ describe('组 4：卡牌操作能力', () => {
       };
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.SWAMP_GUARD)!(contextWithSelection);
 
-      const discardEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARDS_DISCARDED);
+      const discardEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARDS_DISCARDED.type);
       expect((discardEvent?.payload as any).cardIds).toContain('opp_played1'); // 对手第一张牌（encounterIndex = 0）
     });
 
@@ -267,7 +267,7 @@ describe('组 4：卡牌操作能力', () => {
 
       // 第二次调用应该返回事件
       expect(executor.interaction).toBeUndefined();
-      const removeModifierEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED);
+      const removeModifierEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type);
       expect(removeModifierEvents.length).toBe(2); // played1 有 2 个修正标记
       
       // 验证移除的是正确的卡牌
@@ -286,7 +286,7 @@ describe('组 4：卡牌操作能力', () => {
 
       // 第二次调用应该返回事件
       expect(executor.interaction).toBeUndefined();
-      const removeOngoingEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_REMOVED);
+      const removeOngoingEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type);
       expect(removeOngoingEvents.length).toBe(2); // played2 有 2 个持续标记
       
       // 验证移除的是正确的卡牌
@@ -302,7 +302,7 @@ describe('组 4：卡牌操作能力', () => {
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.VOID_MAGE)!(mockContext);
 
       expect(executor.events).toHaveLength(1);
-      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET);
+      expect(executor.events[0].type).toBe(CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type);
       expect(executor.interaction).toBeUndefined();
     });
 
@@ -321,8 +321,8 @@ describe('组 4：卡牌操作能力', () => {
       };
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.VOID_MAGE)!(contextWithSelection);
 
-      const removeModifierEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED);
-      const removeOngoingEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_REMOVED);
+      const removeModifierEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type);
+      const removeOngoingEvents = executor.events.filter(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type);
       
       expect(removeModifierEvents.length).toBe(1);
       expect(removeOngoingEvents.length).toBe(1);
@@ -345,8 +345,8 @@ describe('组 4：卡牌操作能力', () => {
 
       expect(executor.events.length).toBe(2);
       
-      const removeModifierEvent = executor.events.find(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED);
-      const removeOngoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_REMOVED);
+      const removeModifierEvent = executor.events.find(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type);
+      const removeOngoingEvent = executor.events.find(e => e.type === CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type);
       
       expect(removeModifierEvent?.payload.cardId).toBe('opp_played1');
       expect(removeOngoingEvent?.payload.cardId).toBe('opp_played1');
@@ -389,7 +389,7 @@ describe('组 4：卡牌操作能力', () => {
       };
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.SWAMP_GUARD)!(contextWithSelection);
 
-      const recycleEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARD_RECYCLED);
+      const recycleEvent = executor.events.find(e => e.type === CARDIA_EVENTS.CARD_RECYCLED.type);
       expect(recycleEvent).toBeDefined();
       
       // 回收卡牌会改变场上卡牌数量，需要重新计算遭遇结果
@@ -407,7 +407,7 @@ describe('组 4：卡牌操作能力', () => {
       };
       const executor = abilityExecutorRegistry.resolve(ABILITY_IDS.VOID_MAGE)!(contextWithSelection);
 
-      const removeModifierEvent = executor.events.find(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED);
+      const removeModifierEvent = executor.events.find(e => e.type === CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type);
       expect(removeModifierEvent).toBeDefined();
       
       // 移除修正标记会改变卡牌影响力，需要重新计算遭遇结果

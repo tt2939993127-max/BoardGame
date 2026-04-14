@@ -32,7 +32,7 @@ const COMMON_CRITICAL_PATHS = [
     'dicethrone/images/Common/character-portraits',
 ] as const;
 
-const HAND_ATLAS_CHARACTER_IDS = new Set<SelectableCharacterId>(['gunslinger', 'samurai']);
+const HAND_ATLAS_CHARACTER_IDS: ReadonlySet<SelectableCharacterId> = new Set(['gunslinger', 'samurai']);
 
 function dedupePreserveOrder(paths: string[]): string[] {
     return [...new Set(paths.filter(Boolean))];

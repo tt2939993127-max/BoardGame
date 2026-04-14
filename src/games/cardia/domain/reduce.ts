@@ -15,102 +15,102 @@ import { FLOW_EVENTS } from '../../../engine/systems/FlowSystem';
  */
 export function reduce(core: CardiaCore, event: CardiaEvent): CardiaCore {
     switch (event.type) {
-        case CARDIA_EVENTS.CARD_PLAYED:
+        case CARDIA_EVENTS.CARD_PLAYED.type:
             return reduceCardPlayed(core, event);
         
-        case CARDIA_EVENTS.CARD_DRAWN:
+        case CARDIA_EVENTS.CARD_DRAWN.type:
             return reduceCardDrawn(core, event);
         
-        case CARDIA_EVENTS.ENCOUNTER_RESOLVED:
+        case CARDIA_EVENTS.ENCOUNTER_RESOLVED.type:
             return reduceEncounterResolved(core, event);
         
-        case CARDIA_EVENTS.ABILITY_ACTIVATED:
+        case CARDIA_EVENTS.ABILITY_ACTIVATED.type:
             return reduceAbilityActivated(core, event);
         
-        case CARDIA_EVENTS.ABILITY_SKIPPED:
+        case CARDIA_EVENTS.ABILITY_SKIPPED.type:
             // 能力跳过事件不改变状态，仅用于触发 FlowSystem 自动推进
             return core;
         
-        case CARDIA_EVENTS.ABILITY_COPIED:
+        case CARDIA_EVENTS.ABILITY_COPIED.type:
             // 能力复制事件不改变状态，实际执行在 execute 层处理
             return core;
         
-        case CARDIA_EVENTS.ONGOING_ABILITY_PLACED:
+        case CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type:
             return reduceOngoingAbilityPlaced(core, event);
         
-        case CARDIA_EVENTS.ONGOING_ABILITY_REMOVED:
+        case CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type:
             return reduceOngoingAbilityRemoved(core, event);
         
-        case CARDIA_EVENTS.MODIFIER_TOKEN_PLACED:
+        case CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type:
             return reduceModifierTokenPlaced(core, event);
         
-        case CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED:
+        case CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type:
             return reduceModifierTokenRemoved(core, event);
         
-        case CARDIA_EVENTS.MODIFIER_ADDED:
+        case CARDIA_EVENTS.MODIFIER_ADDED.type:
             return reduceModifierAdded(core, event);
         
-        case CARDIA_EVENTS.MODIFIER_REMOVED:
+        case CARDIA_EVENTS.MODIFIER_REMOVED.type:
             return reduceModifierRemoved(core, event);
         
-        case CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED:
+        case CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED.type:
             return reduceCardInfluenceModified(core, event);
         
-        case CARDIA_EVENTS.ENCOUNTER_RESULT_CHANGED:
+        case CARDIA_EVENTS.ENCOUNTER_RESULT_CHANGED.type:
             return reduceEncounterResultChanged(core, event);
         
-        case CARDIA_EVENTS.SIGNET_MOVED:
+        case CARDIA_EVENTS.SIGNET_MOVED.type:
             return reduceSignetMoved(core, event);
         
-        case CARDIA_EVENTS.SIGNET_REMOVED:
+        case CARDIA_EVENTS.SIGNET_REMOVED.type:
             return reduceSignetRemoved(core, event);
         
-        case CARDIA_EVENTS.EXTRA_SIGNET_PLACED:
+        case CARDIA_EVENTS.EXTRA_SIGNET_PLACED.type:
             return reduceExtraSignetPlaced(core, event);
         
-        case CARDIA_EVENTS.SIGNET_GRANTED:
+        case CARDIA_EVENTS.SIGNET_GRANTED.type:
             return reduceSignetGranted(core, event);
         
-        case CARDIA_EVENTS.CARD_REPLACED:
+        case CARDIA_EVENTS.CARD_REPLACED.type:
             return reduceCardReplaced(core, event);
         
-        case CARDIA_EVENTS.CARDS_DISCARDED:
+        case CARDIA_EVENTS.CARDS_DISCARDED.type:
             return reduceCardsDiscarded(core, event);
         
-        case CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK:
+        case CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type:
             return reduceCardsDiscardedFromDeck(core, event);
         
-        case CARDIA_EVENTS.CARD_RECYCLED:
+        case CARDIA_EVENTS.CARD_RECYCLED.type:
             return reduceCardRecycled(core, event);
         
-        case CARDIA_EVENTS.DECK_SHUFFLED:
+        case CARDIA_EVENTS.DECK_SHUFFLED.type:
             return reduceDeckShuffled(core, event);
         
-        case CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED:
+        case CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type:
             return reduceDelayedEffectRegistered(core, event);
         
-        case CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED:
+        case CARDIA_EVENTS.DELAYED_EFFECT_TRIGGERED.type:
             return reduceDelayedEffectTriggered(core, event);
         
-        case CARDIA_EVENTS.INVENTOR_PENDING_SET:
+        case CARDIA_EVENTS.INVENTOR_PENDING_SET.type:
             return reduceInventorPendingSet(core, event);
         
-        case CARDIA_EVENTS.INVENTOR_PENDING_CLEARED:
+        case CARDIA_EVENTS.INVENTOR_PENDING_CLEARED.type:
             return reduceInventorPendingCleared(core, event);
         
-        case CARDIA_EVENTS.TURN_ENDED:
+        case CARDIA_EVENTS.TURN_ENDED.type:
             return reduceTurnEnded(core, event);
         
-        case CARDIA_EVENTS.PHASE_CHANGED:
+        case CARDIA_EVENTS.PHASE_CHANGED.type:
             return reducePhaseChanged(core, event);
         
         case FLOW_EVENTS.PHASE_CHANGED:
             return reducePhaseChanged(core, event as any);
         
-        case CARDIA_EVENTS.REVEAL_ORDER_CHANGED:
+        case CARDIA_EVENTS.REVEAL_ORDER_CHANGED.type:
             return reduceRevealOrderChanged(core, event);
         
-        case CARDIA_EVENTS.GAME_WON:
+        case CARDIA_EVENTS.GAME_WON.type:
             return reduceGameWon(core, event);
         
         default:

@@ -192,7 +192,9 @@ function tricksterGnomePodSpecial(ctx: AbilityContext): AbilityResult {
     minionOptions.push(createSkipOption());
 
     const limitEvt = emitSpecialLimitUsed(ctx.playerId, 'trickster_gnome_pod', ctx.baseIndex, ctx.now);
-    const resolved = resolveOrPrompt(ctx, minionOptions, {
+    const limitEvents = limitEvt ? [limitEvt] : [];
+
+    const result = resolveOrPrompt(ctx, minionOptions, {
         id: 'trickster_gnome_pod',
         title: '侏儒：你可以消灭这里一个力量低于你在此基地随从数量的随从（或跳过）',
         sourceId: 'trickster_gnome_pod',
@@ -206,10 +208,10 @@ function tricksterGnomePodSpecial(ctx: AbilityContext): AbilityResult {
         if (!target) return { events: [] };
         return { events: [destroyMinion(target.uid, target.defId, ctx.baseIndex, target.owner, ctx.playerId, 'trickster_gnome_pod', ctx.now)] };
     });
-    return {
-        events: limitEvt ? [limitEvt, ...(resolved.events ?? [])] : resolved.events,
-        matchState: resolved.matchState,
-    };
+    if (result.matchState) {
+        return { events: [...limitEvents, ...result.events], matchState: result.matchState };
+    }
+    return { events: [...limitEvents, ...result.events] };
 }
 
 function registerTricksterPodAbilities(): void {

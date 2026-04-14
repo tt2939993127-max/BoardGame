@@ -268,6 +268,10 @@
     "playerLabel": "玩家{{playerId}}",
     "playCard": "打出卡牌",
     "playUpgradeCard": "打出升级卡",
+    "sellCard": "卖出卡牌",
+    "sellCardCp": "获得 1 CP",
+    "discardCard": "弃置卡牌",
+    "undoSellCard": "撤回卖牌",
     "advancePhase": "推进阶段：{{phase}}",
     "abilityActivated": "发动技能：{{abilityName}}",
     "abilityActivatedDefense": "发动防御技能：{{abilityName}}",
@@ -2655,6 +2659,9 @@
   "cardSpotlight": {
     "playerPlayed": "{{player}} 打出了卡牌",
     "confirm": "确认"
+  },
+  "compareRoll": {
+    "confirming": "确认中..."
   },
   "endgame": {
     "ariaHero": "英雄：{{hero}}",

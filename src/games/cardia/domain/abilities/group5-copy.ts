@@ -66,7 +66,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.GOVERNESS, (ctx: CardiaAbilityConte
         return {
             events: [
                 {
-                    type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET,
+                    type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type,
                     payload: {
                         abilityId: ctx.abilityId,
                         playerId: ctx.playerId,
@@ -124,7 +124,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.GOVERNESS, (ctx: CardiaAbilityConte
         // 在事件前添加 ABILITY_COPIED 事件（用于日志记录）
         const events: any[] = [
             {
-                type: CARDIA_EVENTS.ABILITY_COPIED,
+                type: CARDIA_EVENTS.ABILITY_COPIED.type,
                 payload: {
                     sourceCardId: targetCard.uid,
                     sourceAbilityId: targetAbilityId,
@@ -194,7 +194,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ILLUSIONIST, (ctx: CardiaAbilityCon
         return {
             events: [
                 {
-                    type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET,
+                    type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type,
                     payload: {
                         abilityId: ctx.abilityId,
                         playerId: ctx.playerId,
@@ -235,7 +235,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ILLUSIONIST, (ctx: CardiaAbilityCon
         // 在事件前添加 ABILITY_COPIED 事件（用于日志记录）
         const events: any[] = [
             {
-                type: CARDIA_EVENTS.ABILITY_COPIED,
+                type: CARDIA_EVENTS.ABILITY_COPIED.type,
                 payload: {
                     sourceCardId: targetCard.uid,
                     sourceAbilityId: targetAbilityId,
@@ -299,7 +299,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ELEMENTALIST, (ctx: CardiaAbilityCo
         return {
             events: [
                 {
-                    type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET,
+                    type: CARDIA_EVENTS.ABILITY_NO_VALID_TARGET.type,
                     payload: {
                         abilityId: ctx.abilityId,
                         playerId: ctx.playerId,
@@ -341,7 +341,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ELEMENTALIST, (ctx: CardiaAbilityCo
         const events: any[] = [
             // 弃掉手牌（从手牌移到弃牌堆）
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: ctx.playerId,
                     cardIds: [targetCard.uid],
@@ -351,7 +351,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ELEMENTALIST, (ctx: CardiaAbilityCo
             },
             // 复制能力（用于日志记录）
             {
-                type: CARDIA_EVENTS.ABILITY_COPIED,
+                type: CARDIA_EVENTS.ABILITY_COPIED.type,
                 payload: {
                     sourceCardId: targetCard.uid,
                     sourceAbilityId: targetAbilityId,
@@ -364,7 +364,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ELEMENTALIST, (ctx: CardiaAbilityCo
             ...result.events,
             // 抽一张牌
             {
-                type: CARDIA_EVENTS.CARD_DRAWN,
+                type: CARDIA_EVENTS.CARD_DRAWN.type,
                 payload: {
                     playerId: ctx.playerId,
                     count: 1,

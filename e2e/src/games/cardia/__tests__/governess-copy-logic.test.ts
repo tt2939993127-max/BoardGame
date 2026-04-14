@@ -181,7 +181,7 @@ describe('女导师能力复制逻辑', () => {
 
     // 验证事件
     expect(result.events.length).toBeGreaterThan(0);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED.type);
     expect((result.events[0].payload as any).sourceAbilityId).toBe(ABILITY_IDS.INVENTOR);
 
     // ✅ 关键验证：发明家的交互应该被返回
@@ -298,7 +298,7 @@ describe('女导师能力复制逻辑', () => {
 
     // 验证：破坏者不返回交互
     expect(result.events.length).toBeGreaterThan(0);
-    expect(result.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED);
+    expect(result.events[0].type).toBe(CARDIA_EVENTS.ABILITY_COPIED.type);
     expect(result.interaction).toBeUndefined(); // 破坏者没有交互
   });
 });

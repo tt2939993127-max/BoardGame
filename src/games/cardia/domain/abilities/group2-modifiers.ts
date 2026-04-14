@@ -24,7 +24,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SURGEON, (ctx: CardiaAbilityContext
     return {
         events: [
             {
-                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                 payload: {
                     effectType: 'modifyInfluence',
                     target: 'self',
@@ -51,7 +51,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TAX_COLLECTOR, (ctx: CardiaAbilityC
     return {
         events: [
             {
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 payload: {
                     cardId: ctx.cardId,
                     value: 4,
@@ -104,7 +104,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.GENIUS, (ctx: CardiaAbilityContext)
     return {
         events: [
             {
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 payload: {
                     cardId: ctx.selectedCardId,
                     value: 3,
@@ -130,7 +130,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MESSENGER, (ctx: CardiaAbilityConte
         return {
             events: [
                 {
-                    type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                    type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                     payload: {
                         effectType: 'modifyInfluence',
                         target: 'self',
@@ -187,7 +187,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MESSENGER, (ctx: CardiaAbilityConte
     return {
         events: [
             {
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 payload: {
                     cardId: ctx.selectedCardId,
                     value: -3,
@@ -263,7 +263,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.CLOCKMAKER, (ctx: CardiaAbilityCont
         
         if (previousCard) {
             events.push({
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 payload: {
                     cardId: previousCard.uid,
                     value: 3,
@@ -277,7 +277,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.CLOCKMAKER, (ctx: CardiaAbilityCont
     
     // 注册延迟效果，为下一张打出的牌添加 +3
     events.push({
-        type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+        type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
         payload: {
             effectType: 'modifyInfluence',
             target: 'self',
@@ -362,7 +362,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.POISONER, (ctx: CardiaAbilityContex
     return {
         events: [
             {
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 payload: {
                     cardId: oppositeCard.uid,
                     value: -reductionNeeded,
@@ -403,7 +403,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.LIBRARIAN, (ctx: CardiaAbilityConte
     return {
         events: [
             {
-                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                 payload: {
                     effectType: 'modifyInfluence',
                     target: 'self',
@@ -429,7 +429,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.ENGINEER, (ctx: CardiaAbilityContex
     return {
         events: [
             {
-                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                 payload: {
                     effectType: 'modifyInfluence',
                     target: 'self',
@@ -487,7 +487,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TELEKINETIC_MAGE, (ctx: CardiaAbili
     for (const modifierToken of modifierTokens) {
         // 移除源卡牌的修正标记
         events.push({
-            type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED,
+            type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type,
             payload: {
                 cardId: sourceCard.uid,
                 source: modifierToken.source,
@@ -497,7 +497,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TELEKINETIC_MAGE, (ctx: CardiaAbili
         
         // 在目标卡牌上放置修正标记
         events.push({
-            type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+            type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
             payload: {
                 cardId: targetCard.uid,
                 value: modifierToken.value,
@@ -516,7 +516,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TELEKINETIC_MAGE, (ctx: CardiaAbili
     for (const ability of ongoingAbilities) {
         // 移除源卡牌的持续标记
         events.push({
-            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+            type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
             payload: {
                 abilityId: ability.abilityId,
                 cardId: sourceCard.uid,
@@ -527,7 +527,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.TELEKINETIC_MAGE, (ctx: CardiaAbili
         
         // 在目标卡牌上放置持续标记
         events.push({
-            type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+            type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
             payload: {
                 abilityId: ability.abilityId,
                 cardId: targetCard.uid,
@@ -571,7 +571,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MERCENARY_SWORDSMAN, (ctx: CardiaAb
     return {
         events: [
             {
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: ctx.playerId,
                     cardIds: [currentCard.uid],
@@ -580,7 +580,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MERCENARY_SWORDSMAN, (ctx: CardiaAb
                 timestamp: ctx.timestamp,
             },
             ...(oppositeCard ? [{
-                type: CARDIA_EVENTS.CARDS_DISCARDED,
+                type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                 payload: {
                     playerId: ctx.opponentId,
                     cardIds: [oppositeCard.uid],
@@ -626,7 +626,7 @@ export function registerModifierInteractionHandlers(): void {
             state,
             events: [
                 {
-                    type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                    type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                     payload: {
                         cardId: selectedCard.cardUid,
                         value: 3,
@@ -649,7 +649,7 @@ export function registerModifierInteractionHandlers(): void {
                 state,
                 events: [
                     {
-                        type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                        type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                         payload: {
                             effectType: 'modifyInfluence',
                             target: 'self',
@@ -671,7 +671,7 @@ export function registerModifierInteractionHandlers(): void {
                 state,
                 events: [
                     {
-                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                         payload: {
                             cardId: selection.cardUid,
                             value: -3,
@@ -707,7 +707,7 @@ export function registerModifierInteractionHandlers(): void {
             state,
             events: [
                 {
-                    type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED,
+                    type: CARDIA_EVENTS.DELAYED_EFFECT_REGISTERED.type,
                     payload: {
                         effectType: 'modifyInfluence',
                         target: 'self',
@@ -783,7 +783,7 @@ export function registerModifierInteractionHandlers(): void {
                 return {
                     state,
                     events: [{
-                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                         payload: {
                             cardId,
                             value: 7,
@@ -895,7 +895,7 @@ export function registerModifierInteractionHandlers(): void {
                     return {
                         state,
                         events: [{
-                            type: CARDIA_EVENTS.CARDS_DISCARDED,
+                            type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                             payload: {
                                 playerId,
                                 cardIds: [availableCards[0].uid],
@@ -945,7 +945,7 @@ export function registerModifierInteractionHandlers(): void {
                 return {
                     state,
                     events: [{
-                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                         payload: {
                             cardId,
                             value: 7,
@@ -964,7 +964,7 @@ export function registerModifierInteractionHandlers(): void {
             return {
                 state,
                 events: [{
-                    type: CARDIA_EVENTS.CARDS_DISCARDED,
+                    type: CARDIA_EVENTS.CARDS_DISCARDED.type,
                     payload: {
                         playerId,
                         cardIds: [selectedCard],
@@ -1013,7 +1013,7 @@ export function registerModifierInteractionHandlers(): void {
                 state,
                 events: [
                     {
-                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                         payload: {
                             cardId: selectedCard.cardUid,
                             value: 3,
@@ -1023,7 +1023,7 @@ export function registerModifierInteractionHandlers(): void {
                         timestamp,
                     },
                     {
-                        type: CARDIA_EVENTS.INVENTOR_PENDING_SET,
+                        type: CARDIA_EVENTS.INVENTOR_PENDING_SET.type,
                         payload: {
                             playerId,
                             timestamp,
@@ -1042,7 +1042,7 @@ export function registerModifierInteractionHandlers(): void {
                 state,
                 events: [
                     {
-                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                        type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                         payload: {
                             cardId: selectedCard.cardUid,
                             value: -3,
@@ -1052,7 +1052,7 @@ export function registerModifierInteractionHandlers(): void {
                         timestamp,
                     },
                     {
-                        type: CARDIA_EVENTS.INVENTOR_PENDING_CLEARED,
+                        type: CARDIA_EVENTS.INVENTOR_PENDING_CLEARED.type,
                         payload: {
                             playerId,
                         },
@@ -1081,7 +1081,7 @@ export function registerModifierInteractionHandlers(): void {
         for (const modifierToken of modifierTokens) {
             // 移除源卡牌的修正标记
             events.push({
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_REMOVED.type,
                 payload: {
                     cardId: sourceCardId,
                     source: modifierToken.source,
@@ -1091,7 +1091,7 @@ export function registerModifierInteractionHandlers(): void {
             
             // 在目标卡牌上放置修正标记
             events.push({
-                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+                type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
                 payload: {
                     cardId: targetCardId,
                     value: modifierToken.value,
@@ -1110,7 +1110,7 @@ export function registerModifierInteractionHandlers(): void {
         for (const ability of ongoingAbilities) {
             // 移除源卡牌的持续标记
             events.push({
-                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_REMOVED.type,
                 payload: {
                     abilityId: ability.abilityId,
                     cardId: sourceCardId,
@@ -1121,7 +1121,7 @@ export function registerModifierInteractionHandlers(): void {
             
             // 在目标卡牌上放置持续标记
             events.push({
-                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED,
+                type: CARDIA_EVENTS.ONGOING_ABILITY_PLACED.type,
                 payload: {
                     abilityId: ability.abilityId,
                     cardId: targetCardId,

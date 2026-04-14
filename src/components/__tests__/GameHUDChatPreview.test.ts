@@ -155,7 +155,7 @@ describe('FabMenu helpers', () => {
             getHorizontalAlignment: () => 'left',
         });
 
-        expect(layout.position).toEqual({ left: 120, top: 116 });
+        expect(layout.position).toEqual({ left: 120, top: 130 });
         expect(layout.listOffset).toEqual({ x: 0, y: 0 });
         expect(layout.alignment).toEqual({ v: 'bottom', h: 'left' });
     });
@@ -173,8 +173,8 @@ describe('FabMenu helpers', () => {
             getHorizontalAlignment: () => 'right',
         });
 
-        expect(layout.position).toEqual({ left: 120, top: 12 });
-        expect(layout.listOffset).toEqual({ x: 0, y: 0 });
+        expect(layout.position).toEqual({ left: 120, top: 6 });
+        expect(layout.listOffset).toEqual({ x: 0, y: -32 });
         expect(layout.alignment).toEqual({ v: 'top', h: 'right' });
     });
 });

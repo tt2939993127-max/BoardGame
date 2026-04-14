@@ -1263,6 +1263,11 @@ export interface LimitModifiedEvent extends GameEvent<'su:limit_modified'> {
         sameNameOnly?: boolean;
         /** 预锁定的 defId（与 sameNameOnly 配合使用，跳过首次锁定直接限定） */
         sameNameDefId?: string;
+        /**
+         * 仅 immediate 额外随从：若玩家选择“放弃这次额外随从”，是否需要消费掉 pendingMinionPlayEffects 的队列首项。
+         * 用于避免“本应绑定本次额外随从的效果”泄漏到后续普通随从。
+         */
+        consumePendingMinionPlayEffectOnSkip?: boolean;
     };
 }
 

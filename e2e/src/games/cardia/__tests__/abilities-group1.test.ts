@@ -277,7 +277,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
             const result = executor!(mockContext);
             
             expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
             expect(result.events[0].payload).toEqual({
                 playerId: 'player1',
                 count: 2,
@@ -297,13 +297,13 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
             expect(result.events).toHaveLength(2);
             
             // 第一个事件：弃掉2张手牌
-            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED.type);
             expect(result.events[0].payload.playerId).toBe('player1');
             expect(result.events[0].payload.cardIds).toHaveLength(2);
             expect(result.events[0].payload.from).toBe('hand');
             
             // 第二个事件：抽2张牌
-            expect(result.events[1].type).toBe(CARDIA_EVENTS.CARD_DRAWN);
+            expect(result.events[1].type).toBe(CARDIA_EVENTS.CARD_DRAWN.type);
             expect(result.events[1].payload).toEqual({
                 playerId: 'player1',
                 count: 2,
@@ -318,7 +318,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
             const result = executor!(mockContext);
             
             expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARD_DRAWN);
+            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARD_DRAWN.type);
             expect(result.events[0].payload).toEqual({
                 playerId: 'player1',
                 count: 2,
@@ -386,13 +386,13 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
             expect(result.events).toHaveLength(2);
             
             // 第一个事件：弃掉部分手牌（保留 2 张，弃掉 2 张）
-            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED);
+            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED.type);
             expect(result.events[0].payload.playerId).toBe('player1');
             expect(result.events[0].payload.cardIds).toHaveLength(2);
             expect(result.events[0].payload.from).toBe('hand');
             
             // 第二个事件：弃掉整个牌库
-            expect(result.events[1].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+            expect(result.events[1].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
             expect(result.events[1].payload.playerId).toBe('player1');
             expect(result.events[1].payload.count).toBe(4); // 对手牌库有 4 张牌
         });
@@ -436,7 +436,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
             expect(result.events).toHaveLength(1);
             
             // 只有一个事件：弃掉整个牌库
-            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
             expect(result.events[0].payload.playerId).toBe('player1');
             expect(result.events[0].payload.count).toBe(4);
         });
@@ -450,7 +450,7 @@ describe('Cardia - 组 1：简单资源操作能力', () => {
             const result = executor!(mockContext);
             
             expect(result.events).toHaveLength(1);
-            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK);
+            expect(result.events[0].type).toBe(CARDIA_EVENTS.CARDS_DISCARDED_FROM_DECK.type);
         });
     });
 });

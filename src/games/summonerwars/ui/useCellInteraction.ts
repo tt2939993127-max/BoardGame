@@ -108,7 +108,7 @@ export function useCellInteraction({
   undoSnapshotCount,
   interaction,
   abilityMode, setAbilityMode, soulTransferMode,
-  mindCaptureMode, setMindCaptureMode,
+  mindCaptureMode, setMindCaptureMode: _setMindCaptureMode,
   afterAttackAbilityMode, setAfterAttackAbilityMode,
   rapidFireMode,
   grabFollowMode, setGrabFollowMode,
@@ -120,7 +120,6 @@ export function useCellInteraction({
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [selectedCardsForDiscard, setSelectedCardsForDiscard] = useState<string[]>([]);
   const [pendingBeforeAttack, setPendingBeforeAttack] = useState<PendingBeforeAttack | null>(null);
-  const [magicEventChoiceMode, setMagicEventChoiceMode] = useState<{ cardId: string } | null>(null);
   const [endPhaseConfirmPending, setEndPhaseConfirmPending] = useState(false);
   // 火祀召唤：选中伊路特-巴尔手牌后，先选牺牲品单位
   const [fireSacrificeSummonMode, setFireSacrificeSummonMode] = useState<{ handCardId: string } | null>(null);
@@ -130,7 +129,6 @@ export function useCellInteraction({
     if (currentPhase !== 'magic') {
       queueMicrotask(() => {
         setSelectedCardsForDiscard([]);
-        setMagicEventChoiceMode(null);
       });
     }
   }, [currentPhase]);
@@ -164,6 +162,13 @@ export function useCellInteraction({
       optionId,
     });
   }, [dispatch, swInteraction]);
+
+  const magicEventChoiceMode = useMemo(() => {
+    if (!swInteraction || swInteraction.type !== 'magic_event_choice') return null;
+    const cardId = typeof swInteraction.meta?.cardId === 'string' ? swInteraction.meta.cardId : undefined;
+    if (!cardId) return null;
+    return { cardId };
+  }, [swInteraction]);
 
   // ---------- 事件卡模式子 hook ----------
   const eventCardModes = useEventCardModes({
@@ -320,16 +325,6 @@ export function useCellInteraction({
         }
       }
       return targets;
-    }
-    // 喂养巨食兽：相邻友方单位（非自身）
-    if (abilityMode.abilityId === 'feed_beast') {
-      const sourcePos = findUnitPositionByInstanceId(core, abilityMode.sourceUnitId);
-      if (!sourcePos) return [];
-      const adj = getAdjacentCells(sourcePos);
-      return adj.filter(p => {
-        const unit = core.board[p.row]?.[p.col]?.unit;
-        return unit && unit.owner === (myPlayerId as '0' | '1') && unit.instanceId !== abilityMode.sourceUnitId;
-      });
     }
     // 寒冰冲撞：建筑新位置相邻的所有单位（任意阵营）
     if (abilityMode.abilityId === 'ice_ram' && abilityMode.structurePosition) {
@@ -635,14 +630,6 @@ export function useCellInteraction({
               targetPosition: { row: gameRow, col: gameCol },
               _noSnapshot: true,
             });
-          } else if (abilityMode.abilityId === 'feed_beast') {
-            dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-              abilityId: 'feed_beast',
-              sourceUnitId: abilityMode.sourceUnitId,
-              choice: 'destroy_adjacent',
-              targetPosition: { row: gameRow, col: gameCol },
-              _noSnapshot: true,
-            });
           } else if (abilityMode.abilityId === 'vanish') {
             dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
               abilityId: 'vanish',
@@ -934,8 +921,8 @@ export function useCellInteraction({
         const currentMagic = core.players[myPlayerId as '0' | '1'].magic;
         const canAfford = cost <= currentMagic;
         if ((event.playPhase === 'magic' || event.playPhase === 'any') && canAfford) {
-          // 进入选择模式：打出或弃牌
-          setMagicEventChoiceMode({ cardId });
+          // 进入系统交互：打出或弃牌
+          dispatch(SW_COMMANDS.REQUEST_MAGIC_EVENT_CHOICE, { cardId });
           return;
         }
       }
@@ -985,7 +972,7 @@ export function useCellInteraction({
         prev.includes(cardId) ? prev.filter(id => id !== cardId) : [...prev, cardId]
       );
     }
-  }, [abilityMode, core, currentPhase, isMyTurn, myHand, myPlayerId, setAbilityMode, setMagicEventChoiceMode, showToast, t]);
+  }, [abilityMode, core, currentPhase, dispatch, isMyTurn, myHand, myPlayerId, setAbilityMode, showToast, t]);
 
   // 手牌选中（召唤/建造阶段单选）
   const handleCardSelect = (cardId: string | null) => {
@@ -1059,11 +1046,10 @@ export function useCellInteraction({
     if (isMandatoryAbilityActive) return;
     // 非自己回合时禁止操作（防止快速点击越过回合边界）
     if (!isMyTurn) return;
+    // 系统交互未完成时禁止推进阶段（避免真相源被清空）
+    if (swInteraction) return;
     if (eventCardModes.hasActiveEventMode) {
       eventCardModes.clearAllEventModes();
-    }
-    if (magicEventChoiceMode) {
-      setMagicEventChoiceMode(null);
     }
     if (endPhaseConfirmPending) {
       setEndPhaseConfirmPending(false);
@@ -1093,17 +1079,7 @@ export function useCellInteraction({
       }
       return;
     }
-    if (!mindCaptureMode) return;
-    dispatch(SW_COMMANDS.ACTIVATE_ABILITY, {
-      abilityId: 'mind_capture_resolve',
-      sourceUnitId: mindCaptureMode.sourceUnitId,
-      choice,
-      targetPosition: mindCaptureMode.targetPosition,
-      hits: mindCaptureMode.hits,
-      _noSnapshot: true,
-    });
-    setMindCaptureMode(null);
-  }, [dispatch, mindCaptureMode, setMindCaptureMode, swInteraction]);
+  }, [dispatch, swInteraction]);
 
   const handleConfirmBeforeAttackCards = () => {
     if (!abilityMode || abilityMode.step !== 'selectCards') return;
@@ -1217,20 +1193,31 @@ export function useCellInteraction({
 
   // 魔力阶段事件卡选择回调
   const handlePlayMagicEvent = useCallback(() => {
-    if (!magicEventChoiceMode) return;
-    eventCardModes.handlePlayEvent(magicEventChoiceMode.cardId);
-    setMagicEventChoiceMode(null);
-  }, [magicEventChoiceMode, eventCardModes]);
+    if (!swInteraction || swInteraction.type !== 'magic_event_choice') return;
+    const option = swInteraction.options.find((opt) => {
+      const val = opt.value as { action?: string } | undefined;
+      return val?.action === 'magic_event_play';
+    });
+    if (option) {
+      respondInteractionOption(option.id);
+    }
+  }, [respondInteractionOption, swInteraction]);
 
   const handleDiscardMagicEvent = useCallback(() => {
-    if (!magicEventChoiceMode) return;
-    dispatch(SW_COMMANDS.DISCARD_FOR_MAGIC, { cardIds: [magicEventChoiceMode.cardId] });
-    setMagicEventChoiceMode(null);
-  }, [magicEventChoiceMode, dispatch]);
+    if (!swInteraction || swInteraction.type !== 'magic_event_choice') return;
+    const option = swInteraction.options.find((opt) => {
+      const val = opt.value as { action?: string } | undefined;
+      return val?.action === 'magic_event_discard';
+    });
+    if (option) {
+      respondInteractionOption(option.id);
+    }
+  }, [respondInteractionOption, swInteraction]);
 
   const handleCancelMagicEventChoice = useCallback(() => {
-    setMagicEventChoiceMode(null);
-  }, []);
+    if (!swInteraction || swInteraction.type !== 'magic_event_choice') return;
+    dispatch(INTERACTION_COMMANDS.CANCEL, { interactionId: swInteraction.id });
+  }, [dispatch, swInteraction]);
 
   // ---------- 返回 ----------
 
@@ -1240,7 +1227,6 @@ export function useCellInteraction({
     endPhaseConfirmPending, setEndPhaseConfirmPending,
     pendingBeforeAttack,
     magicEventChoiceMode,
-    setMagicEventChoiceMode,
     abilitySelectedCardIds: abilityMode?.step === 'selectCards' ? (abilityMode.selectedCardIds ?? []) : [],
     // 事件卡模式（透传）
     eventTargetMode: eventCardModes.eventTargetMode,

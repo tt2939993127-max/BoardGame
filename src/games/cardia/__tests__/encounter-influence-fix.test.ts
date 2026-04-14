@@ -95,7 +95,7 @@ describe('遭遇影响力回溯修复', () => {
         };
 
         const placeModifierEvent: CardiaEvent = {
-            type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED,
+            type: CARDIA_EVENTS.MODIFIER_TOKEN_PLACED.type,
             timestamp: 2,
             payload: {
                 cardId: 'p1_card07',
@@ -108,7 +108,7 @@ describe('遭遇影响力回溯修复', () => {
 
         const recalcEvents = recalculateEncounterState(core, 'p1_card07');
         const influenceEvent = recalcEvents.find(
-            e => e.type === CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED
+            e => e.type === CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED.type
         ) as Extract<CardiaEvent, { type: typeof CARDIA_EVENTS.CARD_INFLUENCE_MODIFIED }> | undefined;
         expect(influenceEvent?.payload.newInfluence).toBe(9);
 

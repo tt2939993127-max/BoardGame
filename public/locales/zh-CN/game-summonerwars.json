@@ -376,6 +376,8 @@
   "interaction": {
     "sw": {
       "eventTarget": "选择事件卡目标",
+      "magicEventChoice": "魔力阶段：选择打出或弃牌换魔力",
+      "funeralPyre": "殉葬火堆：选择治疗目标",
       "bloodSummonTarget": "血契召唤：选择承伤友方单位",
       "bloodSummonCard": "血契召唤：选择要召唤的单位卡",
       "bloodSummonPosition": "血契召唤：选择放置位置",

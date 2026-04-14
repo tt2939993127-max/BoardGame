@@ -79,8 +79,7 @@ const DEFAULT_GRID_CONFIG: GridConfig = {
   cols: BOARD_COLS,
   bounds: { x: 0.038, y: 0.135, width: 0.924, height: 0.73 },
 };
-const SUMMONERWARS_BOARD_REFERENCE_WIDTH = 1280;
-const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1;
+const MOBILE_LANDSCAPE_MAP_INITIAL_SCALE = 1.32;
 const DEFAULT_MAP_SIDE_RATIO = 0.1;
 const MAP_INTERNAL_TARGETS = new Set([
   'sw-my-summoner', 'sw-enemy-summoner', 'sw-my-gate', 'sw-start-archer',
@@ -97,21 +96,11 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   const effectiveLocale = locale || 'zh-CN';
   const { t } = useTranslation('game-summonerwars');
   const viewport = useRuntimeViewport();
-  const viewportSafeWidth = useMemo(() => {
-    const safeWidth = viewport.width - viewport.safeArea.left - viewport.safeArea.right;
-    return safeWidth > 0 ? safeWidth : viewport.width;
-  }, [viewport.safeArea.left, viewport.safeArea.right, viewport.width]);
-  const handReferenceWidth = useMemo(() => {
-    if (viewportSafeWidth <= 0) {
-      return SUMMONERWARS_BOARD_REFERENCE_WIDTH;
-    }
-    return Math.min(SUMMONERWARS_BOARD_REFERENCE_WIDTH, viewportSafeWidth);
-  }, [viewportSafeWidth]);
-  const useCompactHandLayout = handReferenceWidth < 1100;
-  const mapInitialScale = MOBILE_LANDSCAPE_MAP_INITIAL_SCALE;
+  const isMobileViewport = viewport.width <= 1023;
+  const isLandscapeMobileViewport = isMobileViewport && viewport.width > viewport.height;
+  const useCompactHandLayout = isLandscapeMobileViewport;
+  const mapInitialScale = isLandscapeMobileViewport ? MOBILE_LANDSCAPE_MAP_INITIAL_SCALE : 1;
   const mapSideRatio = DEFAULT_MAP_SIDE_RATIO;
-  const mapContainerPadding = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
-  const mapContainerPaddingBlock = '0px';
   const mapShadeWidth = `calc(${BOARD_SHELL_REFERENCE_WIDTH} * ${mapSideRatio})`;
   const activeEventLabelClass = 'text-xs px-1.5 py-0.5';
   const activeEventCardStyle = { width: `calc(${BOARD_SHELL_REFERENCE_WIDTH} * 0.045)` };
@@ -122,10 +111,22 @@ export const SummonerWarsBoard: React.FC<Props> = ({
   };
   const opponentBarClass = 'absolute top-3 right-3 pointer-events-auto flex flex-col items-end gap-2';
   const playerBarClass = 'absolute left-3 bottom-3 z-20 pointer-events-auto flex flex-col items-start gap-3';
-  const phaseEndButtonClass = 'absolute right-3 z-40 pointer-events-auto sw-phase-end-button';
-  const discardPileDockClass = 'absolute right-3 bottom-3 z-20 pointer-events-auto sw-discard-pile-dock';
-  const phaseTrackerClass = 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
-  const phaseTrackerWrapperClass = 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const phaseControlsClass = isLandscapeMobileViewport
+    ? 'absolute right-3 bottom-3 z-30 pointer-events-auto flex flex-col items-end gap-3'
+    : 'absolute right-3 bottom-3 z-20 pointer-events-auto flex flex-col items-end gap-3';
+  const phaseTrackerClass = isLandscapeMobileViewport
+    ? 'bg-slate-900/46 backdrop-blur-sm px-2 py-2 rounded-lg border border-slate-700/20 min-w-[6rem] max-w-[6rem]'
+    : 'bg-slate-900/40 backdrop-blur-sm px-3 py-3 rounded-lg border border-slate-700/20 min-w-[8rem]';
+  const phaseTrackerWrapperClass = isLandscapeMobileViewport
+    ? 'absolute top-[20%] right-2 z-20 -translate-y-1/2 pointer-events-auto'
+    : 'absolute top-1/2 right-2 z-20 -translate-y-1/2 pointer-events-auto';
+  const boardShellVars = isLandscapeMobileViewport
+    ? { '--sw-hand-card-width-ratio': '0.14' } as React.CSSProperties
+    : undefined;
+  const boardReferenceVars = { '--sw-board-reference-width': '100vw' } as React.CSSProperties;
+  const boardShellStyle = boardShellVars
+    ? { ...boardReferenceVars, ...boardShellVars }
+    : boardReferenceVars;
 
   // 阵营选择状态
   const rootPid = (playerID || '0') as PlayerId;
@@ -671,13 +672,21 @@ export const SummonerWarsBoard: React.FC<Props> = ({
     respondInteractionOption(optionId);
   }, [findInteractionOptionId, respondInteractionOption, swInteraction]);
   const handleSkipFuneralPyre = useCallback(() => {
+    if (swInteraction?.type === 'funeral_pyre') {
+      const optionId = findInteractionOptionId((option) => {
+        const value = option.value as { action?: string; skip?: boolean } | undefined;
+        return value?.action === 'funeral_pyre_skip' || value?.skip === true;
+      });
+      respondInteractionOption(optionId);
+      return;
+    }
     if (!interaction.funeralPyreMode) return;
     dispatch(SW_COMMANDS.FUNERAL_PYRE_HEAL, {
       cardId: interaction.funeralPyreMode.cardId,
       skip: true,
     });
     interaction.setFuneralPyreMode(null);
-  }, [interaction, dispatch]);
+  }, [dispatch, findInteractionOptionId, interaction, respondInteractionOption, swInteraction]);
 
   // 欺心巫族事件卡回调
   const handleConfirmMindControl = useCallback(() => interaction.handleConfirmMindControl(), [interaction]);
@@ -839,7 +848,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
         data-mobile-profile={SUMMONER_WARS_MANIFEST.mobileProfile}
         data-mobile-layout-preset={SUMMONER_WARS_MANIFEST.mobileLayoutPreset}
         data-preferred-orientation={SUMMONER_WARS_MANIFEST.preferredOrientation}
-        style={{ '--sw-board-reference-width': `${SUMMONERWARS_BOARD_REFERENCE_WIDTH}px` } as React.CSSProperties}
+        style={boardShellStyle}
       >
         <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-neutral-900">
           {/* 阵营选择阶段 */}
@@ -887,7 +896,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   {/* 地图层 */}
                   <div className="absolute inset-0 z-10 flex items-center justify-center" data-testid="sw-map-layer" data-tutorial-id="sw-map-area" style={shakeStyle}>
                 <MapContainer
-                  className="w-full h-full flex items-center justify-center"
+                  className="w-full h-full flex items-center justify-center px-[10vw]"
                   initialScale={mapInitialScale}
                   dragBoundsPaddingRatioY={0.3}
                   interactionDisabled={mapInteractionDisabled}
@@ -897,10 +906,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   contentTestId="sw-map-content"
                   scaleTestId="sw-map-scale"
                 >
-                  <div
-                    className="relative inline-block"
-                    style={{ paddingInline: mapContainerPadding, paddingBlock: mapContainerPaddingBlock }}
-                  >
+                  <div className="relative inline-block">
                     <div className="relative">
                       <OptimizedImage
                         src="summonerwars/common/map.png"
@@ -1089,8 +1095,8 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   </div>
                 </div>
 
-                {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
-                <div className={phaseEndButtonClass} data-testid="sw-phase-controls">
+                  {/* 右下区域：结束阶段按钮 + 弃牌堆 */}
+                <div className={phaseControlsClass} data-testid="sw-phase-controls">
                   <div className="flex gap-2">
                     {currentPhase === 'magic' && isMyTurn && interaction.selectedCardsForDiscard.length > 0 && (
                       <GameButton onClick={interaction.handleConfirmDiscard} variant="secondary" size="sm" data-testid="sw-confirm-discard">
@@ -1107,13 +1113,13 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                         : t('action.endPhase')}
                     </GameButton>
                   </div>
-                </div>
-                <div className={discardPileDockClass} data-tutorial-id="sw-discard-pile">
-                  <DeckPile
-                    type="discard" count={myDiscardCount} position="right"
-                    topCard={myDiscard[myDiscard.length - 1] ?? null}
-                    onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
-                  />
+                  <div data-tutorial-id="sw-discard-pile">
+                    <DeckPile
+                      type="discard" count={myDiscardCount} position="right"
+                      topCard={myDiscard[myDiscard.length - 1] ?? null}
+                      onClick={() => setShowDiscardOverlay(true)} testId="sw-deck-discard"
+                    />
+                  </div>
                 </div>
 
                 {/* 右侧：阶段指示器 */}
@@ -1124,6 +1130,7 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                     isMyTurn={isMyTurn}
                     moveCount={core.players[playerID === '1' ? '1' : '0']?.moveCount ?? 0}
                     attackCount={core.players[playerID === '1' ? '1' : '0']?.attackCount ?? 0}
+                    compact={isLandscapeMobileViewport}
                     className={phaseTrackerClass}
                   />
                 </div>
@@ -1200,7 +1207,6 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                   <div
                     className="absolute bottom-0 left-1/2 -translate-x-1/2 pointer-events-auto z-30"
                     data-tutorial-id="sw-hand-area"
-                    style={{ '--sw-hand-reference-width': `${handReferenceWidth}px` } as React.CSSProperties}
                   >
                     <HandArea
                       cards={myHand}
@@ -1214,12 +1220,12 @@ export const SummonerWarsBoard: React.FC<Props> = ({
                       onCardClick={interaction.handleCardClick}
                       onCardSelect={interaction.handleCardSelect}
                       onPlayEvent={interaction.handlePlayEvent}
-                    onMagnifyCard={handleMagnifyCard}
-                    bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
-                    abilitySelectingCards={abilityMode?.step === 'selectCards'}
-                    interactionBusy={handInteractionBusy}
-                    compactLayout={useCompactHandLayout}
-                  />
+                      onMagnifyCard={handleMagnifyCard}
+                      bloodSummonSelectingCard={interaction.bloodSummonMode?.step === 'selectCard'}
+                      abilitySelectingCards={abilityMode?.step === 'selectCards'}
+                      interactionBusy={handInteractionBusy}
+                      compactLayout={useCompactHandLayout}
+                    />
                   </div>
                 </div>
                 </div>

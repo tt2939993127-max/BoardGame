@@ -193,7 +193,7 @@ describe('宫廷卫士回合推进', () => {
         
         // 5. 验证有交互被创建（派系选择）
         const abilityInteractionEvent = activateEvents.find(
-            e => e.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED
+            e => e.type === CARDIA_EVENTS.ABILITY_INTERACTION_REQUESTED.type
         );
         expect(abilityInteractionEvent).toBeDefined();
         

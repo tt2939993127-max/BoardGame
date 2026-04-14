@@ -91,6 +91,44 @@ describe('FlowSystem Auto-Advance', () => {
     expect(second.finalState.core.currentEncounter?.loserId).toBeUndefined();
   });
 
+  it('审判官赢得平局时，仍应跳过 ability 阶段并把平局改判为己方获胜', () => {
+    const runner = createRunner();
+
+    seedHands(
+      runner,
+      createTestCard({ uid: 'p0-hand-judge', defId: 'deck_i_card_11', ownerId: '0', baseInfluence: 4, abilityIds: [] }),
+      createTestCard({ uid: 'p1-hand-judge', defId: 'deck_i_card_12', ownerId: '1', baseInfluence: 4, abilityIds: [] })
+    );
+
+    const state = runner.getState();
+    runner.setState({
+      ...state,
+      core: {
+        ...state.core,
+        ongoingAbilities: [
+          {
+            abilityId: ABILITY_IDS.MAGISTRATE,
+            cardId: 'magistrate-marker',
+            playerId: '0',
+            effectType: 'winTies',
+            timestamp: 1,
+          },
+        ],
+      },
+    });
+
+    runner.dispatch(CARDIA_COMMANDS.PLAY_CARD, { playerId: '0', cardUid: 'p0-hand-judge', slotIndex: 0 });
+    const second = runner.dispatch(CARDIA_COMMANDS.PLAY_CARD, { playerId: '1', cardUid: 'p1-hand-judge', slotIndex: 0 });
+
+    expect(second.success).toBe(true);
+    expect(second.finalState.sys.phase).toBe('play');
+    expect(second.finalState.core.currentEncounter).toBeUndefined();
+    expect(second.finalState.core.encounterHistory.at(-1)?.winnerId).toBe('0');
+    expect(second.finalState.core.encounterHistory.at(-1)?.loserId).toBe('1');
+    expect(second.finalState.core.players['0'].playedCards.at(-1)?.signets).toBe(1);
+    expect(second.finalState.core.players['1'].playedCards.at(-1)?.signets).toBe(0);
+  });
+
   it('失败者跳过能力后，应自动推进出 ability 阶段', () => {
     const runner = createRunner();
 

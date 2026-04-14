@@ -307,7 +307,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
 
 ### 4.1 测试文件
 
-**测试文件**: `e2e/cardia/cardia-deck1-card13-swamp-guard.e2e.ts`
+**测试文件**: `e2e/cardia-deck1-card13-swamp-guard.e2e.ts`
 
 **测试模式**: ✅ 联机模式 + 状态注入
 
@@ -447,7 +447,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
 ### 建议 1: 新增"没有己方场上卡牌"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia/cardia-deck1-card13-swamp-guard.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia-deck1-card13-swamp-guard.e2e.ts` 中新增测试用例
 2. 测试场景：
    - P1 打出沼泽守卫（13），P2 打出女导师（14）
    - P1 失败，激活沼泽守卫能力
@@ -462,7 +462,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
 ### 建议 2: 新增"没有相对的牌"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia/cardia-deck1-card13-swamp-guard.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia-deck1-card13-swamp-guard.e2e.ts` 中新增测试用例
 2. 测试场景：
    - P1 之前打出了 2 张牌（card01 和 card03）
    - P2 之前打出了 1 张牌（card02，encounterIndex=0）
@@ -487,7 +487,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.SWAMP_GUARD, (ctx: CardiaAbilityCon
 - **能力定义**: `src/games/cardia/domain/abilityRegistry.ts`
 - **能力执行器**: `src/games/cardia/domain/abilities/group4-card-ops.ts`
 - **交互处理器**: `src/games/cardia/domain/abilities/group4-card-ops.ts` (registerCardOpsInteractionHandlers)
-- **E2E 测试**: `e2e/cardia/cardia-deck1-card13-swamp-guard.e2e.ts`
+- **E2E 测试**: `e2e/cardia-deck1-card13-swamp-guard.e2e.ts`
 - **单元测试**: `src/games/cardia/__tests__/abilities-group4-card-ops.test.ts`
 - **i18n 文案**: `public/locales/zh-CN/game-cardia.json`
 

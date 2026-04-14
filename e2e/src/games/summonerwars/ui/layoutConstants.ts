@@ -1,1 +1,4 @@
-export const BOARD_SHELL_REFERENCE_WIDTH = 'var(--sw-board-reference-width, 1280px)';
+export const SUMMONER_WARS_BOARD_REFERENCE_WIDTH_PX = 1920;
+export const SUMMONER_WARS_MOBILE_HAND_REFERENCE_WIDTH_PX = 900;
+
+export const BOARD_SHELL_REFERENCE_WIDTH = `var(--sw-board-reference-width, ${SUMMONER_WARS_BOARD_REFERENCE_WIDTH_PX}px)`;

@@ -22,7 +22,7 @@ const entry: GameManifestEntry = {
     bestPlayers: [2],
     ai: {
         capture: true,
-        localAi: false,
+        localAi: true,
         remoteAi: false,
     },
     cursorTheme: 'cardia',

@@ -193,13 +193,13 @@ function bearHugProcessNext(
 function bearCavalryCommission(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
     const handMinions = player.hand.filter(c => c.type === 'minion');
-    if (handMinions.length === 0) {
-        return { events: [] };
-    }
-
     // 给予 1 点“额外随从额度”（banked），保证后续链式交互打出的随从不会被额度门禁拦住
     // （交互链中真正打出的随从会消费这次额度，详见 interactionChainE2E 相关用例）
     const events: SmashUpEvent[] = [grantExtraMinion(ctx.playerId, 'bear_cavalry_commission', ctx.now)];
+    if (handMinions.length === 0) {
+        // 规则口径：playCards 阶段获得的普通额外随从可暂存到本阶段稍后使用
+        return { events };
+    }
 
     // 让玩家选择要打出的手牌随从
     const options = handMinions.map((c, i) => {

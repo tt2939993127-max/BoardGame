@@ -27,6 +27,7 @@ const DEFAULT_BOARD_SHELL_DESIGN_WIDTH = 1280;
 const BOARD_SHELL_DESIGN_WIDTH_BY_GAME: Record<string, number> = {
     dicethrone: 940,
     smashup: 1160,
+    summonerwars: 900,
 };
 
 const parseCssPixels = (value: string) => {
@@ -255,10 +256,43 @@ export const useRuntimeViewport = (
         window.addEventListener('orientationchange', updateViewport);
         visualViewport?.addEventListener('resize', updateViewport);
 
+        const attributeObserver = typeof MutationObserver === 'function'
+            ? new MutationObserver((mutations) => {
+                if (!mutations.some((mutation) => mutation.type === 'attributes')) {
+                    return;
+                }
+                updateViewport();
+            })
+            : null;
+
+        attributeObserver?.observe(document.documentElement, {
+            attributes: true,
+            attributeFilter: [
+                'data-game-page',
+                'data-game-id',
+                'data-mobile-profile',
+                'data-mobile-layout-preset',
+                'data-preferred-orientation',
+            ],
+        });
+        if (document.body) {
+            attributeObserver?.observe(document.body, {
+                attributes: true,
+                attributeFilter: [
+                    'data-game-page',
+                    'data-game-id',
+                    'data-mobile-profile',
+                    'data-mobile-layout-preset',
+                    'data-preferred-orientation',
+                ],
+            });
+        }
+
         return () => {
             window.removeEventListener('resize', updateViewport);
             window.removeEventListener('orientationchange', updateViewport);
             visualViewport?.removeEventListener('resize', updateViewport);
+            attributeObserver?.disconnect();
         };
     }, [syncCssVars]);
 

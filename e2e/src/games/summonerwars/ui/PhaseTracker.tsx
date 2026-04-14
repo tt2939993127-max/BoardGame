@@ -39,6 +39,7 @@ export interface PhaseTrackerProps {
   moveCount?: number;
   /** 本回合已攻击次数 */
   attackCount?: number;
+  compact?: boolean;
   className?: string;
 }
 
@@ -48,6 +49,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   isMyTurn,
   moveCount = 0,
   attackCount = 0,
+  compact = false,
   className = '',
 }) => {
   const { t, i18n } = useTranslation('game-summonerwars');
@@ -83,18 +85,32 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
   const detailPhase = detailPhaseId
     ? phasesWithCount.find(phase => phase.id === detailPhaseId) ?? null
     : null;
+  const turnHeaderClass = compact
+    ? 'text-center mb-1.5 pb-1.5 border-b border-slate-600/50'
+    : 'text-center mb-2 pb-2 border-b border-slate-600/50';
+  const turnLabelClass = compact
+    ? 'text-sm text-amber-400 font-bold'
+    : 'text-base text-amber-400 font-bold';
+  const listClass = compact ? 'flex flex-col gap-1' : 'flex flex-col gap-1.5';
+  const itemClass = compact
+    ? 'flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs transition-all'
+    : 'flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all';
+  const countBadgeClass = compact
+    ? 'px-1.5 py-0.5 rounded text-[10px] font-bold min-w-[1.25rem] text-center'
+    : 'px-2 py-0.5 rounded text-xs font-bold min-w-[1.5rem] text-center';
+  const currentDotClass = compact ? 'w-2 h-2 rounded-full bg-green-400 animate-pulse' : 'w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse';
 
   return (
     <div className={`relative flex flex-col gap-1.5 ${className}`}>
       {/* 回合数 */}
-      <div className="text-center mb-2 pb-2 border-b border-slate-600/50">
-        <span className="text-base text-amber-400 font-bold">
+      <div className={turnHeaderClass}>
+        <span className={turnLabelClass}>
           {t('phaseTracker.turn', { count: turnNumber })}
         </span>
       </div>
       
       {/* 阶段列表 */}
-      <div className="flex flex-col gap-1.5">
+      <div className={listClass}>
         {phasesWithCount.map((phase) => {
           const isCurrent = phase.id === phaseCursor;
           const isPast = PHASE_ORDER.indexOf(phaseCursor) > PHASE_ORDER.indexOf(phase.id);
@@ -126,7 +142,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
                   setSelectedPhaseId(phase.id);
                 }}
                 className={`
-                  flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-all
+                  ${itemClass}
                   ${isCurrent 
                     ? 'bg-gradient-to-r from-amber-600 to-amber-700 text-white shadow-lg shadow-amber-500/30' 
                     : isPast 
@@ -146,7 +162,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
                   {phase.count !== undefined && (
                     <span
                       className={`
-                        px-2 py-0.5 rounded text-xs font-bold min-w-[1.5rem] text-center
+                        ${countBadgeClass}
                         ${isCurrent ? 'bg-amber-500/50 text-white' : 'bg-slate-700 text-slate-300'}
                       `}
                       data-testid={`sw-phase-count-${phase.id}`}
@@ -157,7 +173,7 @@ export const PhaseTracker: React.FC<PhaseTrackerProps> = ({
                   
                   {/* 当前阶段指示点 */}
                   {isCurrent && isMyTurn && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className={currentDotClass} />
                   )}
                 </div>
               </div>

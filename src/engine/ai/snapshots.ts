@@ -1,6 +1,5 @@
-import type { MatchState, ResponseWindowState } from '../types';
+import type { MatchState } from '../types';
 import type { AiHint, AiInteractionSnapshot, AiResponseWindowSnapshot } from './types';
-import { buildResponseWindowFingerprint } from '../systems/ResponseWindowSystem';
 
 const toJsonSafe = <T>(value: T): T => {
     if (value === undefined) return value;
@@ -18,15 +17,9 @@ export function extractAiInteractionSnapshot(viewState: unknown): AiInteractionS
             options?: Array<{
                 id?: unknown;
                 label?: unknown;
-                labelKey?: unknown;
-                labelParams?: unknown;
                 value?: unknown;
                 disabled?: unknown;
-                disabledReason?: unknown;
-                disabledReasonKey?: unknown;
-                disabledReasonParams?: unknown;
                 displayMode?: unknown;
-                _ai?: unknown;
             }>;
             multi?: unknown;
         };
@@ -42,13 +35,8 @@ export function extractAiInteractionSnapshot(viewState: unknown): AiInteractionS
             .map((option) => ({
                 id: option.id as string,
                 ...(typeof option.label === 'string' ? { label: option.label } : {}),
-                ...(typeof option.labelKey === 'string' ? { labelKey: option.labelKey } : {}),
-                ...(option.labelParams && typeof option.labelParams === 'object' ? { labelParams: toJsonSafe(option.labelParams as Record<string, string | number>) } : {}),
                 ...(option.value !== undefined ? { value: toJsonSafe(option.value) } : {}),
                 ...(typeof option.disabled === 'boolean' ? { disabled: option.disabled } : {}),
-                ...(typeof option.disabledReason === 'string' ? { disabledReason: option.disabledReason } : {}),
-                ...(typeof option.disabledReasonKey === 'string' ? { disabledReasonKey: option.disabledReasonKey } : {}),
-                ...(option.disabledReasonParams && typeof option.disabledReasonParams === 'object' ? { disabledReasonParams: toJsonSafe(option.disabledReasonParams as Record<string, string | number>) } : {}),
                 ...(typeof option.displayMode === 'string' ? { displayMode: option.displayMode } : {}),
                 ...(option._ai && typeof option._ai === 'object' ? { _ai: toJsonSafe(option._ai as AiHint) } : {}),
             }))
@@ -66,20 +54,18 @@ export function extractAiInteractionSnapshot(viewState: unknown): AiInteractionS
 
 export function extractAiResponseWindowSnapshot(viewState: unknown): AiResponseWindowSnapshot | null {
     const state = viewState as MatchState<unknown> | undefined;
-    const current = state?.sys?.responseWindow?.current as ResponseWindowState['current'] | null | undefined;
+    const current = state?.sys?.responseWindow?.current as {
+        windowType?: unknown;
+        currentResponderIndex?: unknown;
+        responderQueue?: unknown;
+        allowedCommands?: unknown;
+    } | null | undefined;
 
     if (!current) return null;
 
     const snapshot: AiResponseWindowSnapshot = {};
     if (typeof current.windowType === 'string') {
         snapshot.windowType = current.windowType;
-    }
-    if (typeof current.sourceId === 'string') {
-        snapshot.sourceId = current.sourceId;
-    }
-    const fingerprint = buildResponseWindowFingerprint(current);
-    if (fingerprint) {
-        snapshot.fingerprint = fingerprint;
     }
     if (typeof current.currentResponderIndex === 'number') {
         snapshot.currentResponderIndex = current.currentResponderIndex;

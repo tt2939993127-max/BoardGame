@@ -200,7 +200,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MEDIATOR, (ctx: CardiaAbilityContex
 
 ### 4.1 测试文件
 
-**测试文件**: `e2e/cardia/cardia-deck1-card04-mediator-comprehensive.e2e.ts`
+**测试文件**: `e2e/cardia-deck1-card04-mediator-comprehensive.e2e.ts`
 
 **测试模式**: ✅ 联机模式 + 状态注入
 
@@ -318,7 +318,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MEDIATOR, (ctx: CardiaAbilityContex
 ### 建议 1: 补充"虚空法师移除持续标记"测试用例
 
 **修复步骤**:
-1. 在 `e2e/cardia/cardia-deck1-card04-mediator-comprehensive.e2e.ts` 中新增测试用例
+1. 在 `e2e/cardia-deck1-card04-mediator-comprehensive.e2e.ts` 中新增测试用例
 2. 测试场景：
    - 第一回合：P1 打出调停者（影响力4），P2 打出高影响力卡牌
    - 激活调停者能力，强制平局
@@ -340,7 +340,7 @@ abilityExecutorRegistry.register(ABILITY_IDS.MEDIATOR, (ctx: CardiaAbilityContex
 - **规则文档**: `src/games/cardia/rule/卡迪亚规则.md`
 - **能力定义**: `src/games/cardia/domain/abilityRegistry.ts`
 - **能力执行器**: `src/games/cardia/domain/abilities/group3-ongoing.ts`
-- **E2E 测试**: `e2e/cardia/cardia-deck1-card04-mediator-comprehensive.e2e.ts`
+- **E2E 测试**: `e2e/cardia-deck1-card04-mediator-comprehensive.e2e.ts`
 - **i18n 文案**: `public/locales/zh-CN/game-cardia.json`
 
 ### B. 关键代码片段

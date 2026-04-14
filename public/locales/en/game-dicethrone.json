@@ -269,6 +269,10 @@
     "playerLabel": "Player {{playerId}}",
     "playCard": "Play card",
     "playUpgradeCard": "Play upgrade card",
+    "sellCard": "Sell card",
+    "sellCardCp": "Gain 1 CP",
+    "discardCard": "Discard card",
+    "undoSellCard": "Undo sell",
     "advancePhase": "Advance phase: {{phase}}",
     "abilityActivated": "Activate ability: {{abilityName}}",
     "abilityActivatedDefense": "Activate defensive ability: {{abilityName}}",
@@ -2639,6 +2643,9 @@
   "cardSpotlight": {
     "playerPlayed": "{{player}} played a card",
     "confirm": "OK"
+  },
+  "compareRoll": {
+    "confirming": "Confirming..."
   },
   "selection": {
     "title": "Select Your Hero",

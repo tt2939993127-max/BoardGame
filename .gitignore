@@ -19,6 +19,7 @@ ENV/
 # 构建输出
 dist
 dist-ssr
+*.tgz
 *.local
 *.tgz
 
@@ -207,3 +208,7 @@ android/build/
 android/captures/
 android/keystore.properties
 android/keystores/
+
+# Python/cache/temp artifacts
+**/__pycache__/
+.merge_file_*

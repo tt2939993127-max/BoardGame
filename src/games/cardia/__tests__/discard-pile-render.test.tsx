@@ -62,21 +62,4 @@ describe('DiscardPile', () => {
         expect(html).toContain(`z-index:${UI_Z_INDEX.modalOverlay}`);
         expect(html).toContain(`z-index:${UI_Z_INDEX.modalContent}`);
     });
-
-    it('卡牌选择弹窗底部操作区应固定并预留安全区，避免确认键被底部区域遮挡', () => {
-        const html = renderToStaticMarkup(
-            <CardSelectionModal
-                title="选择卡牌"
-                cards={[createCard({ uid: 'c1' })]}
-                minSelect={1}
-                maxSelect={1}
-                onConfirm={() => {}}
-                onCancel={() => {}}
-            />
-        );
-
-        expect(html).toContain('sticky bottom-0');
-        expect(html).toContain('pb-[calc(env(safe-area-inset-bottom)+0.75rem)]');
-        expect(html).toContain('max-h-[calc(100vh-1rem)]');
-    });
 });

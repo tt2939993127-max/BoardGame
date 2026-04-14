@@ -120,6 +120,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
     const choice = useCurrentChoice(access);
     const gameMode = useGameMode();
     const isSpectator = !!gameMode?.isSpectator;
+    const isTutorialMode = gameMode?.mode === 'tutorial';
 
     // 使用引擎层 useSpectatorMoves Hook 自动拦截观察者操作
     const engineMoves = useSpectatorMoves(
@@ -1606,6 +1607,7 @@ export const DiceThroneBoard: React.FC<DiceThroneBoardProps> = ({ G: rawG, dispa
                     // 选角相关
                     selectedCharacters={G.selectedCharacters}
                     hostPlayerId={G.hostPlayerId}
+                    tutorialSpotlightAutoCloseDelayMs={isTutorialMode ? 3000 : undefined}
                 />
 
                 {/* 同一 slot 多 variant 选择弹窗：点击 slot 时该 slot 有多个 variant 满足条件 */}

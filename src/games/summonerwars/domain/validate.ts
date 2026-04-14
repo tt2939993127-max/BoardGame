@@ -567,6 +567,24 @@ export function validateCommand(
       return { valid: true };
     }
 
+    case SW_COMMANDS.REQUEST_MAGIC_EVENT_CHOICE: {
+      if (core.phase !== 'magic') return { valid: false, error: '当前不是魔力阶段' };
+      const cardId = payload.cardId as string;
+      const player = core.players[playerId];
+      const card = player.hand.find(c => c.id === cardId);
+      if (!card || card.cardType !== 'event') {
+        return { valid: false, error: '手牌中没有该事件卡' };
+      }
+      const eventCard = card as EventCard;
+      if (eventCard.playPhase !== 'magic' && eventCard.playPhase !== 'any') {
+        return { valid: false, error: '该事件卡不能在魔力阶段打出' };
+      }
+      if (eventCard.cost > player.magic) {
+        return { valid: false, error: '魔力不足' };
+      }
+      return { valid: true };
+    }
+
     case SW_COMMANDS.END_PHASE: {
       return { valid: true };
     }

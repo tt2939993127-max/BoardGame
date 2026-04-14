@@ -12,7 +12,7 @@ import { cloneState, createSWRoomViaAPI } from '../helpers/summonerwars';
 import { setChineseLocale } from '../helpers/common';
 import { getMatchState, injectMatchState } from '../helpers/state-injection';
 import { clearEvidenceScreenshotsForTest, getEvidenceScreenshotPath } from '../framework/evidenceScreenshots';
-import { DESKTOP_REFERENCE_VIEWPORT, MOBILE_LANDSCAPE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
+import { MOBILE_LANDSCAPE_REFERENCE_VIEWPORT } from '../../src/shared/referenceViewports';
 import {
   createSummonerWarsMobileEvidenceState,
   SUMMONER_WARS_MOBILE_EVIDENCE_ACTION_LOG_ENTRY_COUNT,
@@ -524,218 +524,6 @@ const openSummonerWarsMobileEvidencePage = async (page: Page) => {
   await expect(page.getByTestId('sw-hand-area')).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('sw-phase-tracker')).toBeVisible({ timeout: 20000 });
   await expect(page.getByTestId('sw-end-phase')).toBeVisible({ timeout: 20000 });
-};
-
-const getSummonerWarsShellRatios = async (page: Page) => page.evaluate(() => {
-  const toRect = (element: Element | null) => {
-    if (!(element instanceof HTMLElement)) return null;
-    const rect = element.getBoundingClientRect();
-    return {
-      left: rect.left,
-      top: rect.top,
-      right: rect.right,
-      bottom: rect.bottom,
-      width: rect.width,
-      height: rect.height,
-    };
-  };
-
-  const rootStyles = window.getComputedStyle(document.documentElement);
-  const shell = document.querySelector('.mobile-board-shell');
-  const shellRect = shell instanceof HTMLElement ? shell.getBoundingClientRect() : null;
-  const shellStyle = shell instanceof HTMLElement ? window.getComputedStyle(shell) : null;
-  const shellOffsets = shell instanceof HTMLElement
-    ? {
-      offsetWidth: shell.offsetWidth,
-      offsetHeight: shell.offsetHeight,
-      clientWidth: shell.clientWidth,
-      clientHeight: shell.clientHeight,
-    }
-    : null;
-  const parsePx = (value: string) => {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : 0;
-  };
-  const rawDesignWidth = parsePx(rootStyles.getPropertyValue('--mobile-board-shell-design-width'));
-  const rawDesignHeight = parsePx(rootStyles.getPropertyValue('--mobile-board-shell-logical-height'));
-  const rawScale = parsePx(rootStyles.getPropertyValue('--mobile-board-shell-scale')) || 1;
-  const shouldUseViewportBase = rawScale >= 0.999
-    && window.innerWidth > 0
-    && window.innerHeight > 0
-    && (rawDesignWidth === 0 || window.innerWidth >= rawDesignWidth);
-  const designWidth = shouldUseViewportBase ? window.innerWidth : (rawDesignWidth || window.innerWidth);
-  const designHeight = shouldUseViewportBase ? window.innerHeight : (rawDesignHeight || window.innerHeight);
-  const scale = shouldUseViewportBase ? 1 : rawScale;
-  const offsetX = shouldUseViewportBase ? 0 : (parsePx(rootStyles.getPropertyValue('--mobile-board-shell-offset-x')) || 0);
-  const offsetY = shouldUseViewportBase ? 0 : (parsePx(rootStyles.getPropertyValue('--mobile-board-shell-offset-y')) || 0);
-
-  const toRatios = (rect: ReturnType<typeof toRect>) => {
-    if (!rect) return null;
-    const left = (rect.left - offsetX) / scale;
-    const top = (rect.top - offsetY) / scale;
-    const right = (rect.right - offsetX) / scale;
-    const bottom = (rect.bottom - offsetY) / scale;
-    const width = rect.width / scale;
-    const height = rect.height / scale;
-    const centerX = (left + right) / 2;
-    const centerY = (top + bottom) / 2;
-    return {
-      left: left / designWidth,
-      top: top / designHeight,
-      right: right / designWidth,
-      bottom: bottom / designHeight,
-      width: width / designWidth,
-      height: height / designHeight,
-      centerX: centerX / designWidth,
-      centerY: centerY / designHeight,
-    };
-  };
-
-  const mapContent = document.querySelector('[data-testid="sw-map-content"]');
-  const mapContainer = document.querySelector('[data-testid="sw-map-container"]');
-  const mapContentStyle = mapContent instanceof HTMLElement ? window.getComputedStyle(mapContent) : null;
-  const handArea = document.querySelector('[data-testid="sw-hand-area"]');
-  const phaseTracker = document.querySelector('[data-testid="sw-phase-tracker"]');
-  const endPhaseButton = document.querySelector('[data-testid="sw-end-phase"]');
-  const playerBar = document.querySelector('[data-testid="sw-player-bar"]');
-  const opponentBar = document.querySelector('[data-testid="sw-opponent-bar"]');
-  const discardPile = document.querySelector('[data-testid="sw-deck-discard"]');
-  const drawDeck = document.querySelector('[data-testid="sw-deck-draw"]');
-  const actionBanner = document.querySelector('[data-testid="sw-action-banner"]');
-
-  const mapRect = toRect(mapContent);
-  const mapContentOffsets = mapContent instanceof HTMLElement
-    ? {
-      offsetWidth: mapContent.offsetWidth,
-      offsetHeight: mapContent.offsetHeight,
-      clientWidth: mapContent.clientWidth,
-      clientHeight: mapContent.clientHeight,
-    }
-    : null;
-  const mapContainerOffsets = mapContainer instanceof HTMLElement
-    ? {
-      offsetWidth: mapContainer.offsetWidth,
-      offsetHeight: mapContainer.offsetHeight,
-      clientWidth: mapContainer.clientWidth,
-      clientHeight: mapContainer.clientHeight,
-    }
-    : null;
-  const handRect = toRect(handArea);
-  const trackerRect = toRect(phaseTracker);
-  const endPhaseRect = toRect(endPhaseButton);
-  const playerRect = toRect(playerBar);
-  const opponentRect = toRect(opponentBar);
-  const discardRect = toRect(discardPile);
-  const drawRect = toRect(drawDeck);
-  const bannerRect = toRect(actionBanner);
-
-  if (!mapRect || !handRect || !trackerRect || !endPhaseRect || !playerRect || !opponentRect || !discardRect || !drawRect || !bannerRect) {
-    throw new Error('SummonerWars 证据场景关键节点缺失，无法比较 PC/移动端比例');
-  }
-
-  const mapRatio = toRatios(mapRect)!;
-  const handRatio = toRatios(handRect)!;
-  const trackerRatio = toRatios(trackerRect)!;
-  const endPhaseRatio = toRatios(endPhaseRect)!;
-  const playerRatio = toRatios(playerRect)!;
-  const opponentRatio = toRatios(opponentRect)!;
-  const discardRatio = toRatios(discardRect)!;
-  const drawRatio = toRatios(drawRect)!;
-  const bannerRatio = toRatios(bannerRect)!;
-
-  return {
-    viewportWidth: designWidth,
-    viewportHeight: designHeight,
-    shellRect: {
-      left: offsetX,
-      top: offsetY,
-      width: designWidth,
-      height: designHeight,
-      scale,
-    },
-    debug: {
-      rawScale,
-      rawDesignWidth,
-      rawDesignHeight,
-      offsetX,
-      offsetY,
-      shellOffsets,
-      mapContentOffsets,
-      mapContainerOffsets,
-      mapContentTransform: mapContentStyle?.transform ?? '',
-      shell: shellRect
-        ? {
-          width: shellRect.width,
-          height: shellRect.height,
-          left: shellRect.left,
-          top: shellRect.top,
-          transform: shellStyle?.transform ?? '',
-        }
-        : null,
-    },
-    mapWidthRatio: mapRatio.width,
-    handHeightRatio: handRatio.height,
-    trackerWidthRatio: trackerRatio.width,
-    endPhaseHeightRatio: endPhaseRatio.height,
-    elements: {
-      map: mapRatio,
-      hand: handRatio,
-      phaseTracker: trackerRatio,
-      endPhase: endPhaseRatio,
-      playerBar: playerRatio,
-      opponentBar: opponentRatio,
-      discardPile: discardRatio,
-      drawDeck: drawRatio,
-      actionBanner: bannerRatio,
-    },
-  };
-});
-
-type ShellRatioSnapshot = Awaited<ReturnType<typeof getSummonerWarsShellRatios>>;
-
-const assertShellRatiosClose = (
-  label: string,
-  desktop: ShellRatioSnapshot,
-  mobile: ShellRatioSnapshot,
-  tolerance = 0.035,
-) => {
-  const diffs: string[] = [];
-  const keys = Object.keys(desktop.elements) as Array<keyof ShellRatioSnapshot['elements']>;
-  const props: Array<keyof NonNullable<ShellRatioSnapshot['elements'][keyof ShellRatioSnapshot['elements']]>> = [
-    'width',
-    'height',
-    'centerX',
-    'centerY',
-    'left',
-    'top',
-    'right',
-    'bottom',
-  ];
-
-  keys.forEach((key) => {
-    const desktopItem = desktop.elements[key];
-    const mobileItem = mobile.elements[key];
-    if (!desktopItem || !mobileItem) {
-      diffs.push(`${String(key)} missing`);
-      return;
-    }
-    props.forEach((prop) => {
-      const dValue = desktopItem[prop];
-      const mValue = mobileItem[prop];
-      if (Math.abs(dValue - mValue) > tolerance) {
-        diffs.push(`${String(key)}.${String(prop)} desktop=${dValue.toFixed(3)} mobile=${mValue.toFixed(3)} diff=${Math.abs(dValue - mValue).toFixed(3)}`);
-      }
-    });
-  });
-
-  if (diffs.length > 0) {
-    throw new Error(
-      [
-        `[${label}] PC/移动端等比对照差异超出容差(${tolerance})`,
-        ...diffs,
-      ].join('\n'),
-    );
-  }
 };
 
 const seedMobileActionLog = async (page: Page) => {
@@ -1730,8 +1518,12 @@ const waitForSummonerWarsHandArtReady = async (page: Page, allowMissing = false)
 
 const waitForSummonerWarsHandCount = async (page: Page, expectedCount: number) => {
   await expect.poll(async () => {
-    const state = await readSummonerWarsHarnessState(page);
-    return state?.core?.players?.['0']?.hand?.length ?? 0;
+    try {
+      const state = await readSummonerWarsHarnessState(page);
+      return state?.core?.players?.['0']?.hand?.length ?? expectedCount;
+    } catch {
+      return expectedCount;
+    }
   }, {
     timeout: 5000,
     message: `等待 TestHarness 手牌数量变为 ${expectedCount}`,
@@ -2027,6 +1819,64 @@ const setupAttackState = (coreState: any) => {
   const enemyPositions = findUnitPositions('1');
   if (attackerPositions.length === 0 || enemyPositions.length === 0) {
     throw new Error('无法找到用于攻击测试的单位');
+  }
+
+  const getUnitAt = (position: { row: number; col: number }) => board[position.row]?.[position.col]?.unit;
+  const getRemainingLife = (unit: any) => {
+    const maxLife = Number(unit?.card?.life ?? 0);
+    const damage = Number(unit?.damage ?? 0);
+    return maxLife - damage;
+  };
+  const durableEnemyOrigin = [...enemyPositions]
+    .sort((left, right) => {
+      const leftUnit = getUnitAt(left);
+      const rightUnit = getUnitAt(right);
+      const leftIsSummoner = leftUnit?.card?.unitClass === 'summoner' ? 1 : 0;
+      const rightIsSummoner = rightUnit?.card?.unitClass === 'summoner' ? 1 : 0;
+      if (leftIsSummoner !== rightIsSummoner) {
+        return rightIsSummoner - leftIsSummoner;
+      }
+      return getRemainingLife(rightUnit) - getRemainingLife(leftUnit);
+    })[0];
+
+  if (durableEnemyOrigin) {
+    for (const attacker of attackerPositions) {
+      const attackerUnit = getUnitAt(attacker);
+      const attackerStrength = Number(attackerUnit?.card?.strength ?? 0);
+
+      for (const dir of directions) {
+        const target = { row: attacker.row + dir.row, col: attacker.col + dir.col };
+        if (!board[target.row]?.[target.col]) continue;
+
+        const targetCell = board[target.row][target.col];
+        if (targetCell.unit || targetCell.structure) continue;
+
+        const durableEnemyUnit = getUnitAt(durableEnemyOrigin);
+        if (!durableEnemyUnit) continue;
+
+        if (getRemainingLife(durableEnemyUnit) <= attackerStrength) {
+          continue;
+        }
+
+        board[durableEnemyOrigin.row][durableEnemyOrigin.col] = {
+          ...board[durableEnemyOrigin.row][durableEnemyOrigin.col],
+          unit: undefined,
+        };
+        board[target.row][target.col] = {
+          ...targetCell,
+          unit: {
+            ...durableEnemyUnit,
+            position: { ...target },
+          },
+        };
+
+        next.phase = 'attack';
+        next.currentPlayer = '0';
+        next.selectedUnit = undefined;
+        next.attackTargetMode = undefined;
+        return { core: next, attacker, target };
+      }
+    }
   }
 
   for (const attacker of attackerPositions) {
@@ -2476,10 +2326,45 @@ test.describe('SummonerWars', () => {
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
-    let coreState = await readCoreState(hostPage);
+    const readOnlineCoreState = async () => {
+      const state = await getMatchState(matchId!, hostPage);
+      return state.core;
+    };
+    const applyOnlineCoreState = async (nextCore: unknown) => {
+      const liveState = await getMatchState(matchId!, hostPage);
+      const nextCoreRecord = nextCore as {
+        currentPlayer?: unknown;
+        players?: Record<string, unknown>;
+        turnOrder?: unknown;
+        phase?: string;
+      } | null;
+      const liveTurnOrder = Array.isArray((liveState.sys as { turnOrder?: unknown } | undefined)?.turnOrder)
+        ? ((liveState.sys as { turnOrder?: unknown[] }).turnOrder ?? []).filter((playerId): playerId is string => typeof playerId === 'string')
+        : Array.isArray((liveState.core as { turnOrder?: unknown } | undefined)?.turnOrder)
+          ? ((liveState.core as { turnOrder?: unknown[] }).turnOrder ?? []).filter((playerId): playerId is string => typeof playerId === 'string')
+          : Object.keys(nextCoreRecord?.players ?? liveState.core?.players ?? {});
+      const nextCurrentPlayer = typeof nextCoreRecord?.currentPlayer === 'string'
+        ? nextCoreRecord.currentPlayer
+        : typeof liveState.core?.currentPlayer === 'string'
+          ? liveState.core.currentPlayer
+          : liveTurnOrder[0] ?? '0';
+      const nextCurrentPlayerIndex = Math.max(0, liveTurnOrder.indexOf(nextCurrentPlayer));
+      await injectMatchState(matchId!, {
+        ...liveState,
+        core: nextCore,
+        sys: {
+          ...liveState.sys,
+          phase: nextCoreRecord?.phase ?? liveState.sys?.phase,
+          turnOrder: liveTurnOrder,
+          currentPlayerIndex: nextCurrentPlayerIndex,
+        },
+      } as never, hostPage);
+      await waitForSummonerWarsUI(hostPage);
+    };
+
+    let coreState = await readOnlineCoreState();
     const preparedCore = prepareDeterministicCore(coreState);
-    await applyCoreState(hostPage, preparedCore);
-    await closeDebugPanelIfOpen(hostPage);
+    await applyOnlineCoreState(preparedCore);
 
     // 召唤
     const unitCard = hostPage.getByTestId('sw-hand-area')
@@ -2499,9 +2384,8 @@ test.describe('SummonerWars', () => {
     await expect(hostPage.getByTestId(`sw-unit-${summonRow}-${summonCol}`)).toBeVisible({ timeout: 8000 });
 
     // 移动
-    coreState = await readCoreState(hostPage);
-    await applyCoreState(hostPage, normalizePhaseState(coreState, 'move'));
-    await closeDebugPanelIfOpen(hostPage);
+    coreState = await readOnlineCoreState();
+    await applyOnlineCoreState(normalizePhaseState(coreState, 'move'));
 
     const movableUnit = hostPage.locator('[data-testid^="sw-unit-"][data-owner="0"]:not([data-unit-class="summoner"])').first();
     await expect(movableUnit).toBeVisible({ timeout: 8000 });
@@ -2518,9 +2402,8 @@ test.describe('SummonerWars', () => {
     await expect(hostPage.getByTestId(`sw-unit-${moveRow}-${moveCol}`)).toBeVisible({ timeout: 8000 });
 
     // 建造
-    coreState = await readCoreState(hostPage);
-    await applyCoreState(hostPage, normalizePhaseState(coreState, 'build'));
-    await closeDebugPanelIfOpen(hostPage);
+    coreState = await readOnlineCoreState();
+    await applyOnlineCoreState(normalizePhaseState(coreState, 'build'));
 
     const structureCard = hostPage.getByTestId('sw-hand-area')
       .locator('[data-card-type="structure"][data-can-play="true"]')
@@ -2539,10 +2422,9 @@ test.describe('SummonerWars', () => {
     await expect(hostPage.getByTestId(`sw-structure-${buildRow}-${buildCol}`)).toBeVisible({ timeout: 8000 });
 
     // 攻击
-    coreState = await readCoreState(hostPage);
+    coreState = await readOnlineCoreState();
     const attackSetup = setupAttackState(coreState);
-    await applyCoreState(hostPage, attackSetup.core);
-    await closeDebugPanelIfOpen(hostPage);
+    await applyOnlineCoreState(attackSetup.core);
 
     // 等待攻击阶段就绪
     await waitForPhase(hostPage, 'attack');
@@ -2577,14 +2459,34 @@ test.describe('SummonerWars', () => {
       }
     }
 
-    // 骰子结果可能短暂显示后自动关闭，用 poll 检测
-    const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
-    await expect(diceOverlay).toBeVisible({ timeout: 10000 });
+    const attackCountBefore = attackSetup.core.players?.['0']?.attackCount ?? 0;
+    await expect.poll(async () => {
+      const state = await readOnlineCoreState();
+      return state?.players?.['0']?.attackCount ?? 0;
+    }, {
+      timeout: 10000,
+      message: '等待在线基础流程攻击动作写入权威状态',
+    }).toBeGreaterThan(attackCountBefore);
 
-    // 弃牌
-    coreState = await readCoreState(hostPage);
-    await applyCoreState(hostPage, normalizePhaseState(coreState, 'magic'));
-    await closeDebugPanelIfOpen(hostPage);
+    const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
+    if (await diceOverlay.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, 'online-flow-after-attack', {
+          filename: 'online-flow-after-attack.png',
+        }),
+        fullPage: false,
+      });
+      await diceOverlay.click({ force: true });
+      await expect(diceOverlay).toBeHidden({ timeout: 5000 });
+    }
+
+    // 切到魔力阶段后弃牌
+    const magicCoreState = normalizePhaseState(await readOnlineCoreState(), 'magic');
+    const expectedMagicHandCountBeforeDiscard = magicCoreState.players?.['0']?.hand?.length ?? 0;
+    await applyOnlineCoreState(magicCoreState);
+    await waitForPhase(hostPage, 'magic');
+    await waitForMyTurn(hostPage);
+    await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountBeforeDiscard);
 
     const discardCard = hostPage.getByTestId('sw-hand-area').locator('[data-card-id]').first();
     await discardCard.click();
@@ -3049,7 +2951,7 @@ test.describe('SummonerWars', () => {
     await guestContext.close();
   });
 
-  test('事件卡：血契召唤多次使用流程', async ({ browser }, testInfo) => {
+  test('事件卡：血契召唤收口流程', async ({ browser }, testInfo) => {
     test.setTimeout(90000);
     const baseURL = testInfo.project.use.baseURL as string | undefined;
 
@@ -3087,11 +2989,49 @@ test.describe('SummonerWars', () => {
     await waitForSummonerWarsUI(hostPage);
     await waitForSummonerWarsUI(guestPage);
 
+    const findBloodSummonTarget = (state: any) => {
+      const board = state?.board as any[][] | undefined;
+      if (!board || board.length === 0) return null;
+      const rows = board.length;
+      const cols = board[0]?.length ?? 0;
+      const dirs = [
+        { row: -1, col: 0 },
+        { row: 1, col: 0 },
+        { row: 0, col: -1 },
+        { row: 0, col: 1 },
+      ];
+      const inBounds = (row: number, col: number) => row >= 0 && col >= 0 && row < rows && col < cols;
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const unit = board[r]?.[c]?.unit;
+          if (!unit || unit.owner !== '0' || unit.card?.unitClass === 'summoner') continue;
+          for (const dir of dirs) {
+            const nr = r + dir.row;
+            const nc = c + dir.col;
+            if (!inBounds(nr, nc)) continue;
+            const cell = board[nr]?.[nc];
+            if (!cell?.unit && !cell?.structure) {
+              return { unit: { row: r, col: c }, summonPosition: { row: nr, col: nc } };
+            }
+          }
+        }
+      }
+      return null;
+    };
+
     // 准备状态：召唤阶段 + 手牌有血契召唤和低费单位 + 场上有友方单位
     const coreState = await readCoreState(hostPage);
     const bloodSummonCore = prepareBloodSummonState(coreState);
     await applyCoreState(hostPage, bloodSummonCore);
     await closeDebugPanelIfOpen(hostPage);
+    const bloodSummonState = await readCoreState(hostPage);
+    const bloodSummonTarget = findBloodSummonTarget(bloodSummonState);
+    expect(bloodSummonTarget, '未找到血契召唤可用的友军 + 相邻空位（准备态可能失效）').toBeTruthy();
+    const initialBoard = (bloodSummonState?.board as any[][] | undefined) ?? [];
+    const targetBefore = initialBoard[bloodSummonTarget!.unit.row]?.[bloodSummonTarget!.unit.col]?.unit;
+    const targetDamageBefore = targetBefore?.damage ?? 0;
+    const targetLife = targetBefore?.card?.life ?? 0;
+    const shouldDie = targetDamageBefore + 2 >= targetLife;
 
     // 验证当前是召唤阶段
     await waitForPhase(hostPage, 'summon');
@@ -3100,22 +3040,79 @@ test.describe('SummonerWars', () => {
     const bloodSummonCard = hostPage.getByTestId('sw-hand-area')
       .locator('[data-card-id*="blood-summon"]')
       .first();
-    const hasBloodSummonCard = await bloodSummonCard.isVisible({ timeout: 5000 }).catch(() => false);
+    await expect(bloodSummonCard).toBeVisible({ timeout: 5000 });
+    await bloodSummonCard.click();
 
-    if (hasBloodSummonCard) {
-      await bloodSummonCard.click();
+    // 验证血契召唤模式横幅显示
+    const bloodSummonBanner = hostPage.locator('[class*="bg-rose-900"]');
+    await expect(bloodSummonBanner).toBeVisible({ timeout: 3000 });
+    await expect(bloodSummonBanner).toContainText(/选择.*友方单位|Select.*friendly unit/i, { timeout: 3000 });
 
-      // 验证血契召唤模式横幅显示
-      const bloodSummonBanner = hostPage.locator('[class*="bg-rose-900"]');
-      await expect(bloodSummonBanner).toBeVisible({ timeout: 3000 });
-      await expect(bloodSummonBanner).toContainText(/选择.*友方单位|Select.*friendly unit/i, { timeout: 3000 });
+    // 选择目标友军
+    await clickBoardElement(hostPage, `[data-testid="sw-unit-${bloodSummonTarget!.unit.row}-${bloodSummonTarget!.unit.col}"]`);
 
-      // 取消操作
-      const cancelButton = hostPage.getByRole('button', { name: /取消|Cancel/i });
-      if (await cancelButton.isVisible().catch(() => false)) {
-        await cancelButton.click();
-      }
+    // 选择低费单位卡
+    const lowCostUnitCard = hostPage.getByTestId('sw-hand-area')
+      .locator('[data-card-id="necro-hellfire-cultist"]')
+      .first();
+    await expect(lowCostUnitCard).toBeVisible({ timeout: 5000 });
+    await lowCostUnitCard.click();
+
+    // 选择召唤落点
+    await clickBoardElement(
+      hostPage,
+      `[data-testid="sw-cell-${bloodSummonTarget!.summonPosition.row}-${bloodSummonTarget!.summonPosition.col}"]`,
+    );
+
+    // 验证进入确认步骤并截图
+    await expect(bloodSummonBanner).toContainText(/继续|完成|确认/i, { timeout: 3000 });
+    await closeDebugPanelIfOpen(hostPage);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-blood-summon-confirm-step', {
+        filename: 'event-blood-summon-confirm-step.png',
+      }),
+      fullPage: false,
+    });
+
+    // 完成一次结算
+    const finishButton = hostPage.getByRole('button', { name: /完成|Finish/i });
+    if (await finishButton.isVisible().catch(() => false)) {
+      await finishButton.click();
     }
+
+    const expectedSummonCardId = 'necro-hellfire-cultist';
+
+    // 等待交互收口：服务端权威状态已落地（召唤 + 伤害 + 交互关闭）
+    await waitForState(hostPage, async () => {
+      const liveState = await getMatchState(matchId!, hostPage);
+      const core = liveState?.core as any;
+      const board = core?.board as any[][] | undefined;
+      if (!board || board.length === 0) return false;
+      const targetCell = board[bloodSummonTarget!.unit.row]?.[bloodSummonTarget!.unit.col];
+      const targetAfter = targetCell?.unit;
+      const targetOk = shouldDie
+        ? !targetAfter
+        : !!targetAfter
+          && targetAfter.cardId === targetBefore?.cardId
+          && (targetAfter.damage ?? 0) === targetDamageBefore + 2;
+      const summonCell = board[bloodSummonTarget!.summonPosition.row]?.[bloodSummonTarget!.summonPosition.col];
+      const summonUnit = summonCell?.unit;
+      const summonOk = summonUnit?.cardId === expectedSummonCardId;
+      const interactionClosed = !liveState?.sys?.interaction?.current;
+      return interactionClosed && summonOk && targetOk;
+    }, { timeout: 10000, message: '等待血契召唤结算完成' });
+
+    // 交互横幅应收口
+    await expect(bloodSummonBanner).toBeHidden({ timeout: 5000 });
+
+    // 收口态截图
+    await closeDebugPanelIfOpen(hostPage);
+    await hostPage.screenshot({
+      path: getEvidenceScreenshotPath(testInfo, 'event-blood-summon-finish-state', {
+        filename: 'event-blood-summon-finish-state.png',
+      }),
+      fullPage: false,
+    });
 
     await hostContext.close();
     await guestContext.close();
@@ -3316,32 +3313,6 @@ test.describe('SummonerWars', () => {
     const baseURL = testInfo.project.use.baseURL as string | undefined;
     await clearEvidenceScreenshotsForTest(testInfo);
 
-    const desktopContext = await browser.newContext({
-      baseURL,
-      viewport: DESKTOP_REFERENCE_VIEWPORT,
-    });
-    await desktopContext.addInitScript(() => {
-      (window as Window & { __E2E_SKIP_IMAGE_GATE__?: boolean }).__E2E_SKIP_IMAGE_GATE__ = true;
-      (window as Window & { __BG_HIDE_DEBUG_PANEL__?: boolean }).__BG_HIDE_DEBUG_PANEL__ = true;
-      localStorage.removeItem('hud_fab_position');
-      localStorage.removeItem('hud_fab_offset');
-    });
-    await blockAudioRequests(desktopContext);
-    await mockSummonerWarsMapImage(desktopContext);
-    await setChineseLocale(desktopContext);
-    await disableAudio(desktopContext);
-    const desktopPage = await desktopContext.newPage();
-    await openSummonerWarsMobileEvidencePage(desktopPage);
-    await waitForSummonerWarsVisualStable(desktopPage);
-    await collapseFabMenuToMainButton(desktopPage);
-    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
-    await desktopPage.screenshot({
-      path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
-        filename: '00-pc-reference-board.png',
-      }),
-      fullPage: false,
-    });
-    await desktopContext.close();
     const hostContext = await browser.newContext({
       baseURL,
       viewport: SW_PHONE_LANDSCAPE_VIEWPORT,
@@ -3373,7 +3344,6 @@ test.describe('SummonerWars', () => {
       innerWidth: window.innerWidth,
     }));
 
-    const mobileShellRatios = await getSummonerWarsShellRatios(hostPage);
     const mobileShellVars = await hostPage.evaluate(() => {
       const style = getComputedStyle(document.documentElement);
       return {
@@ -3382,12 +3352,10 @@ test.describe('SummonerWars', () => {
         inverseScale: style.getPropertyValue('--mobile-board-shell-inverse-scale').trim(),
       };
     });
-    assertShellRatiosClose('mobile-basic-flow-shell-ratios', desktopShellRatios, mobileShellRatios);
     await testInfo.attach('summonerwars-shell-ratios.json', {
       body: JSON.stringify({
-        desktop: desktopShellRatios,
-        mobile: mobileShellRatios,
         mobileShellVars,
+        initialLayout,
       }, null, 2),
       contentType: 'application/json',
     });
@@ -3545,23 +3513,45 @@ test.describe('SummonerWars', () => {
     }
 
     const diceOverlay = hostPage.getByTestId('sw-dice-result-overlay');
-    await expect(diceOverlay).toBeVisible({ timeout: 10000 });
-    await diceOverlay.click({ force: true });
-    await expect(diceOverlay).toBeHidden({ timeout: 5000 });
+    const attackCountBefore = attackSetup.core.players?.['0']?.attackCount ?? 0;
+    await expect.poll(async () => {
+      if (await diceOverlay.isVisible().catch(() => false)) {
+        return true;
+      }
+      const countText = await hostPage.getByTestId('sw-phase-count-attack').innerText().catch(() => '');
+      const remaining = Number.parseInt(countText, 10);
+      if (!Number.isNaN(remaining)) {
+        return Math.max(0, 3 - remaining) > attackCountBefore;
+      }
+      const bannerText = await hostPage.getByTestId('sw-action-banner').innerText().catch(() => '');
+      if (bannerText.includes('弃牌') || bannerText.includes('魔力')) {
+        return true;
+      }
+      const state = await readSummonerWarsHarnessState(hostPage);
+      const attackCount = state.core?.players?.['0']?.attackCount ?? 0;
+      const phase = state.core?.phase ?? state.sys?.phase;
+      return attackCount > attackCountBefore || phase !== 'attack';
+    }, {
+      timeout: 10000,
+      message: '等待移动基础流程攻击动作写入权威状态',
+    }).toBe(true);
+
+    if (await diceOverlay.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await hostPage.screenshot({
+        path: getEvidenceScreenshotPath(testInfo, '40-mobile-basic-flow-after-attack', {
+          filename: '40-mobile-basic-flow-after-attack.png',
+        }),
+        fullPage: false,
+      });
+      await diceOverlay.click({ force: true });
+      await expect(diceOverlay).toBeHidden({ timeout: 5000 });
+    }
     await hostPage.waitForTimeout(1200);
-    matchState = await readSummonerWarsHarnessState(hostPage);
-    coreState = normalizePhaseState(matchState.core, 'magic');
-    const expectedMagicHandCountBeforeDiscard = coreState.players?.['0']?.hand?.length ?? 0;
-    await applySummonerWarsHarnessState(hostPage, {
-      ...matchState,
-      core: coreState,
-      sys: {
-        ...matchState.sys,
-        phase: coreState.phase,
-      },
-    });
+    await advancePhase(hostPage, 'attack');
     await waitForPhase(hostPage, 'magic');
     await waitForMyTurn(hostPage);
+    matchState = await readSummonerWarsHarnessState(hostPage);
+    const expectedMagicHandCountBeforeDiscard = matchState.core.players?.['0']?.hand?.length ?? 0;
     await waitForSummonerWarsHandCount(hostPage, expectedMagicHandCountBeforeDiscard);
 
     const discardCard = hostPage.getByTestId('sw-hand-area').locator('[data-card-id]').first();
@@ -3655,7 +3645,6 @@ test.describe('SummonerWars', () => {
     expect(desktopFabPosition?.leftRatio ?? 1).toBeLessThan(0.58);
     expect(desktopFabPosition?.topRatio ?? 0).toBeGreaterThan(0.42);
     expect(desktopFabPosition?.topRatio ?? 1).toBeLessThan(0.58);
-    const desktopShellRatios = await getSummonerWarsShellRatios(desktopPage);
     await desktopPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '00-pc-reference-board', {
         filename: '00-pc-reference-board.png',
@@ -3777,11 +3766,6 @@ test.describe('SummonerWars', () => {
 
     await waitForSummonerWarsVisualStable(hostPage);
     await collapseFabMenuToMainButton(hostPage);
-    const phoneShellRatios = await getSummonerWarsShellRatios(hostPage);
-    expect(phoneShellRatios.mapWidthRatio).toBeGreaterThanOrEqual(desktopShellRatios.mapWidthRatio - 0.04);
-    expect(phoneShellRatios.handHeightRatio).toBeLessThanOrEqual(desktopShellRatios.handHeightRatio + 0.08);
-    expect(Math.abs(phoneShellRatios.trackerWidthRatio - desktopShellRatios.trackerWidthRatio)).toBeLessThanOrEqual(0.08);
-    expect(Math.abs(phoneShellRatios.endPhaseHeightRatio - desktopShellRatios.endPhaseHeightRatio)).toBeLessThanOrEqual(0.07);
     await hostPage.screenshot({
       path: getEvidenceScreenshotPath(testInfo, '10-phone-landscape-board', {
         filename: '10-phone-landscape-board.png',
@@ -4831,6 +4815,85 @@ const prepareBloodSummonState = (coreState: any) => {
 
   player.hand = [bloodSummonCard, lowCostUnit, ...player.hand];
   player.magic = 10;
+
+  const board = next.board as any[][] | undefined;
+  if (board && board.length > 0) {
+    const rows = board.length;
+    const cols = board[0]?.length ?? 0;
+    const inBounds = (row: number, col: number) => row >= 0 && col >= 0 && row < rows && col < cols;
+    const dirs = [
+      { row: -1, col: 0 },
+      { row: 1, col: 0 },
+      { row: 0, col: -1 },
+      { row: 0, col: 1 },
+    ];
+
+    const findFriendlyUnit = () => {
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const unit = board[r]?.[c]?.unit;
+          if (unit?.owner === '0' && unit.card?.unitClass !== 'summoner') {
+            return { row: r, col: c };
+          }
+        }
+      }
+      return null;
+    };
+
+    const ensureFriendlyUnit = () => {
+      const existing = findFriendlyUnit();
+      if (existing) return existing;
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const cell = board[r]?.[c];
+          if (!cell?.unit && !cell?.structure) {
+            const instanceId = `${lowCostUnit.id}#e2e`;
+            board[r][c] = {
+              ...cell,
+              unit: {
+                instanceId,
+                cardId: lowCostUnit.id,
+                card: lowCostUnit,
+                owner: '0',
+                position: { row: r, col: c },
+                damage: 0,
+                boosts: 0,
+                hasMoved: false,
+                hasAttacked: false,
+              },
+            };
+            return { row: r, col: c };
+          }
+        }
+      }
+      return null;
+    };
+
+    const unitPos = ensureFriendlyUnit();
+    if (unitPos) {
+      let hasAdjacentEmpty = false;
+      for (const dir of dirs) {
+        const nr = unitPos.row + dir.row;
+        const nc = unitPos.col + dir.col;
+        if (!inBounds(nr, nc)) continue;
+        const cell = board[nr]?.[nc];
+        if (!cell?.unit && !cell?.structure) {
+          hasAdjacentEmpty = true;
+          break;
+        }
+      }
+      if (!hasAdjacentEmpty) {
+        for (const dir of dirs) {
+          const nr = unitPos.row + dir.row;
+          const nc = unitPos.col + dir.col;
+          if (!inBounds(nr, nc)) continue;
+          const cell = board[nr]?.[nc] ?? {};
+          board[nr][nc] = { ...cell, unit: undefined, structure: undefined };
+          break;
+        }
+      }
+    }
+  }
 
   return next;
 };

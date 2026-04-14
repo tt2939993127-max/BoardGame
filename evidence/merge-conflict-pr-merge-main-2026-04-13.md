@@ -6,35 +6,54 @@
 - 触发命令: `git merge origin/main --no-commit --no-ff`
 
 ## 2. 冲突文件
+- .windsurf/skills/merge-pr-workflow/SKILL.md
+- e2e/src/games/mobileSupport.ts
+- src/assets/audio/registry-slim.json
+- src/games/mobileSupport.ts
 - src/games/smashup/__tests__/factionAbilities.test.ts
+- src/games/smashup/abilities/tricksters.ts
 
 ## 3. 解决策略
+### .windsurf/skills/merge-pr-workflow/SKILL.md
+- 策略：保留 `origin/main` 内容
+- 原因：冲突仅为文件尾空行差异，不涉及语义变化。
+
+### src/games/mobileSupport.ts / e2e/src/games/mobileSupport.ts
+- 策略：保留 `ResolvedGameMobileSupport.mobileBattlefieldZoom` 为必填，同时维持 manifest entry 输入侧可选。
+- 原因：`resolveGameMobileSupport()` 已统一补默认值 `'none'`，resolved 契约必须稳定输出该字段。
+
+### src/assets/audio/registry-slim.json
+- 策略：以当前分支生成结果为准，并重新运行 `node scripts/audio/generate-slim-registry.mjs --force` 校验生成物。
+- 原因：冲突来自生成产物差异，正确做法是回到生成链路验证，而不是手工拼接冲突标记。
+
+### src/games/smashup/abilities/tricksters.ts
+- 策略：保留单次 `emitSpecialLimitUsed` + `limitEvents` 聚合返回。
+- 原因：避免重复记录 special limit，同时保留交互返回 `matchState` 的安全拼接逻辑。
+
 ### src/games/smashup/__tests__/factionAbilities.test.ts
-- 策略：合并双方变更（保留主分支新增内容 + 保留分支已有引用）
-- 冲突块裁决：
-  - Import 冲突：保留 `queueImmediateExtraPlayInteractions` 引入，并合并双方 import 列表
-- 合并要点：确保额外回合交互相关 helper 未被静默丢失
-- 原因：该 helper 与派系能力交互链路相关，删除会导致测试覆盖与行为缺失
+- 策略：保留 `specialLimitUsed` 断言，移除依赖后续 `player_mismatch` 的二次激活断言。
+- 原因：该测试应验证侏儒 special limit 是否已记录，而不是依赖响应链推进后的玩家切换副作用。
 
 ## 4. 风险与验证
-- 风险点：额外回合交互链路与测试覆盖变化
+- 风险点：移动端 resolved 契约收紧后是否影响现有测试；Smash Up 侏儒 special limit 逻辑与测试口径是否一致。
 - 验证命令：
-  - `npx vitest src/games/__tests__/mobileSupport.test.ts`
-  - `npx vitest src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx`
-  - `npx eslint src/games/mobileSupport.ts e2e/src/games/mobileSupport.ts src/core/ui/portal.tsx e2e/src/core/ui/portal.tsx vitest.setup.ts src/games/dicethrone/__tests__/BonusDieOverlay.test.tsx`（仅警告）
-  - `npm run i18n:check`（仅 warning）
+  - `node scripts/infra/vitest-cli-safe.mjs run src/games/__tests__/mobileSupport.test.ts src/games/smashup/__tests__/factionAbilities.test.ts --configLoader native`
+  - `npx eslint e2e/src/games/mobileSupport.ts src/games/mobileSupport.ts src/games/smashup/__tests__/factionAbilities.test.ts src/games/smashup/abilities/tricksters.ts`（仅 warning）
+  - `node scripts/audio/generate-slim-registry.mjs --force`
+  - `npm run quality:changed:pre-commit`
 - 验证结果：
-  - mobileSupport / BonusDieOverlay 单测通过
-  - ESLint：仅 warning（react-refresh/only-export-components）
-  - i18n:check：1 条动态 key warning（summonerwars CardSelectorOverlay）
+  - mobileSupport / factionAbilities 目标测试通过（55 tests passed）
+  - ESLint：0 errors，仅既有 warning
+  - slim registry 重新生成成功（303 条）
+  - `quality:changed:pre-commit` 全量通过
 
 ## 5. 回归与行为变化登记
 - 原 PR 目标问题：同步 origin/main 以继续合并主线 PR
 - 本次额外发现的真实回归：
-  - mobileSupport 默认值缺失导致 mobileBattlefieldZoom 相关断言失败
-  - BonusDieOverlay server renderer 触发 HudPortal 报错
+  - mobileSupport resolved 类型与默认值约束不一致，导致 merge 后类型口径分叉
+  - Smash Up 侏儒 special limit 测试口径偏向 `player_mismatch`，无法准确证明 limit 记录
 - 仅业务口径 / 规则变化：无
 
 ## 6. 结果
-- 提交：待补
+- 提交：待本轮 merge commit
 - 推送：待补

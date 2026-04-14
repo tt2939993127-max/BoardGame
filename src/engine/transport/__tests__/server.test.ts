@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { GameTransportServer, type GameEngineConfig } from '../server';
-import { buildAiProgressMarker } from '../onlineAiRecovery';
+import { buildAiProgressMarker, resolveForceEndTurnForStalledAi } from '../onlineAiRecovery';
 import { createInteractionSystem, createSimpleChoice, INTERACTION_COMMANDS } from '../../systems/InteractionSystem';
 import { createSimpleChoiceSystem } from '../../systems/SimpleChoiceSystem';
 import { createResponseWindowSystem, RESPONSE_WINDOW_EVENTS } from '../../systems/ResponseWindowSystem';
@@ -610,6 +610,40 @@ describe('buildAiProgressMarker（响应窗口语义指纹）', () => {
 
         expect(buildAiProgressMarker(baseState as any))
             .toBe(buildAiProgressMarker(reopenedState as any));
+    });
+});
+
+describe('resolveForceEndTurnForStalledAi（action-loop）', () => {
+    it('重复交替动作循环应触发 action-loop 兜底', () => {
+        const sharedState = createOnlineAiRecoveryState({
+            activePlayerId: '1',
+            phase: 'main1',
+        }).G as any;
+
+        sharedState.sys = {
+            ...sharedState.sys,
+            actionLog: {
+                maxEntries: 50,
+                entries: [
+                    { actorId: '1', kind: 'DISCARD_CARD' },
+                    { actorId: '1', kind: 'UNDO_SELL_CARD' },
+                    { actorId: '1', kind: 'DISCARD_CARD' },
+                    { actorId: '1', kind: 'UNDO_SELL_CARD' },
+                ],
+            },
+        };
+
+        const candidate = resolveForceEndTurnForStalledAi({
+            sharedState,
+            seatControllers: {
+                '0': { type: 'human' },
+                '1': { type: 'local-ai' },
+            },
+            seatStates: {},
+        });
+
+        expect(candidate?.reason).toBe('active-turn');
+        expect(candidate?.resolution.action.commands[0]?.type).toBe('ADVANCE_PHASE');
     });
 });
 
@@ -1662,7 +1696,13 @@ describe('GameTransportServer（离座与重连）', () => {
         await serverInternal.runOnlineAiRecoveryTick();
         await nextTick();
 
-        expect(executeSpy).not.toHaveBeenCalled();
+        expect(executeSpy).toHaveBeenCalledTimes(1);
+        expect(executeSpy).toHaveBeenCalledWith(
+            expect.anything(),
+            '1',
+            'ADVANCE_PHASE',
+            {},
+        );
         expect(feedbackReporter).not.toHaveBeenCalled();
     });
 
@@ -1790,7 +1830,6 @@ describe('GameTransportServer（离座与重连）', () => {
         expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
             id: 'option-disabled',
             disabled: true,
-            disabledReason: '目标已失效',
         }));
         expect(snapshot.interaction?.seat?.options).toContainEqual(expect.objectContaining({
             id: 'option-manual',
@@ -1886,7 +1925,7 @@ describe('GameTransportServer（离座与重连）', () => {
 
         expect(firstCommand).toEqual({
             type: 'SYS_INTERACTION_CANCEL',
-            payload: { reason: 'empty-options' },
+            payload: {},
         });
     });
 

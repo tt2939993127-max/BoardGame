@@ -24,6 +24,7 @@ import type { SmashUpCommand } from '../domain/types';
 import { SU_EVENTS } from '../domain/types';
 import { SMASHUP_FACTION_IDS } from '../domain/ids';
 import { SmashUpDomain, smashUpSystemsForTest } from '../game';
+import { createScoringBaseRef, createScoringSession, setScoringSession } from '../domain/scoringSession';
 import { defaultTestRandom } from './testRunner';
 
 beforeAll(() => {
