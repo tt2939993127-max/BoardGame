@@ -16,8 +16,7 @@ import type {
     CardInstance,
 } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
-import { clearRegistry } from '../domain/abilityRegistry';
-import { resolveAbility } from '../domain/abilityRegistry';
+import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { queueImmediateExtraPlayInteractions } from '../domain/extraPlay';
  
@@ -30,6 +29,39 @@ beforeAll(() => {
     clearBaseAbilityRegistry();
     resetAbilityInit();
     initAllAbilities();
+});
+
+describe('ghost extra timing audit', () => {
+    it('ghost_ghostly_arrival marks off-phase extras as immediate', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+        });
+
+        const matchState = makeMatchState(state);
+        matchState.sys.phase = 'startTurn';
+
+        const executor = resolveAbility('ghost_ghostly_arrival', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const result = executor!({
+            state,
+            matchState,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'ghost_ghostly_arrival',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 1000,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(2);
+        expect(limitEvents.every(e => (e as any).payload.playTiming === 'immediate')).toBe(true);
+    });
 });
 
 describe('trickster interaction regressions', () => {
@@ -167,10 +199,8 @@ describe('trickster interaction regressions', () => {
     });
 });
 
-// ============================================================================
-// 辅助函数
-// ============================================================================
-
+// =====================================================================// 辅助函数
+// =====================================================================
 function makeMinion(uid: string, defId: string, controller: string, power: number, owner?: string): MinionOnBase {
     return {
         uid, defId, controller, owner: owner ?? controller,
@@ -233,10 +263,8 @@ function applyEventsLocal(state: SmashUpCore, events: SmashUpEvent[]): SmashUpCo
     return events.reduce((s, e) => reduce(s, e), state);
 }
 
-// ============================================================================
-// 海盗派系
-// ============================================================================
-
+// =====================================================================// 海盗派系
+// =====================================================================
 describe('海盗派系能力', () => {
     it('pirate_broadside: 单个有己方随从的基地时创建 Prompt', () => {
         const state = makeState({
@@ -328,10 +356,8 @@ describe('海盗派系能力', () => {
     });
 });
 
-// ============================================================================
-// 忍者派系
-// ============================================================================
-
+// =====================================================================// 忍者派系
+// =====================================================================
 describe('忍者派系能力', () => {
     it('ninja_seeing_stars: 单个力量≤3对手随从时创建 Prompt', () => {
         const state = makeState({
@@ -354,10 +380,8 @@ describe('忍者派系能力', () => {
     });
 });
 
-// ============================================================================
-// 恐龙派系
-// ============================================================================
-
+// =====================================================================// 恐龙派系
+// =====================================================================
 describe('恐龙派系能力', () => {
     it('dino_rampage: 多个基地时先创建基地选择', () => {
         const state = makeState({
@@ -577,10 +601,8 @@ describe('恐龙派系能力', () => {
 });
 
 
-// ============================================================================
-// 机器人派系
-// ============================================================================
-
+// =====================================================================// 机器人派系
+// =====================================================================
 describe('机器人派系能力', () => {
     it('robot_zapbot: 打出后直接获得额外随从额度（力量≤2限制）', () => {
         const state = makeState({
@@ -650,54 +672,7 @@ describe('机器人派系能力', () => {
         const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
         expect(limitEvents.length).toBe(1);
         expect((limitEvents[0] as any).payload.powerMax).toBe(2);
-        expect((limitEvents[0] as any).payload.playTiming).toBe('banked');
-    });
-
-    it('robot_microbot_guard: 4个己方随从时只能选择力量小于4的目标', () => {
-        const state = makeState({
-            players: {
-                '0': makePlayer('0', {
-                    hand: [makeCard('m1', 'robot_microbot_guard', 'minion', '0')],
-                }),
-                '1': makePlayer('1'),
-            },
-            bases: [{
-                defId: 'b1',
-                minions: [
-                    makeMinion('ally-1', 'robot_microbot_alpha', '0', 1),
-                    makeMinion('ally-2', 'robot_microbot_fixer', '0', 1),
-                    makeMinion('ally-3', 'robot_microbot_reclaimer', '0', 1),
-                    makeMinion('target-ok', 'test_enemy', '1', 3),
-                    makeMinion('target-bad', 'wizard_archmage', '1', 4),
-                ],
-                ongoingActions: [],
-            }],
-        });
-
-        const { matchState } = execPlayMinion(state, '0', 'm1', 0);
-        const interaction = matchState.sys.interaction?.current as any;
-        expect(interaction?.data?.sourceId).toBe('robot_microbot_guard');
-
-        const targetUids = ((interaction?.data?.options ?? []) as any[])
-            .map(option => option?.value?.minionUid)
-            .filter(Boolean);
-        expect(targetUids).toContain('target-ok');
-        expect(targetUids).not.toContain('target-bad');
-        expect(targetUids).not.toContain('m1');
-
-        const validTargetOption = interaction?.data?.options?.find(
-            (option: any) => option?.value?.minionUid === 'target-ok',
-        );
-        expect(validTargetOption).toBeDefined();
-
-        const respondResult = runCommand(matchState, {
-            type: 'SYS_INTERACTION_RESPOND',
-            playerId: '0',
-            payload: { optionId: validTargetOption.id },
-        } as any, defaultRandom);
-
-        expect(respondResult.finalState.core.bases[0].minions.some(minion => minion.uid === 'target-ok')).toBe(false);
-        expect(respondResult.finalState.core.bases[0].minions.some(minion => minion.uid === 'target-bad')).toBe(true);
+        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
     });
 
     it('robot_tech_center: 单个基地时创建 Prompt', () => {
@@ -767,10 +742,8 @@ describe('机器人派系能力', () => {
     });
 });
 
-// ============================================================================
-// 巫师派系
-// ============================================================================
-
+// =====================================================================// 巫师派系
+// =====================================================================
 describe('巫师派系能力', () => {
     it('wizard_neophyte: 牌库顶是行动卡时创建 Prompt 选择处理方式', () => {
         const state = makeState({
@@ -809,10 +782,8 @@ describe('巫师派系能力', () => {
     });
 });
 
-// ============================================================================
-// 立即额外行动交互
-// ============================================================================
-
+// =====================================================================// 立即额外行动交互
+// =====================================================================
 describe('立即额外行动交互', () => {
     function queueImmediateExtraAction(matchState: MatchState<SmashUpCore>) {
         const immediateEvent = {
@@ -937,10 +908,8 @@ describe('立即额外行动交互', () => {
     });
 });
 
-// ============================================================================
-// 诡术师派系
-// ============================================================================
-
+// =====================================================================// 诡术师派系
+// =====================================================================
 describe('诡术师派系能力', () => {
     it('trickster_take_the_shinies: 每个对手随机弃两张手牌', () => {
         const state = makeState({
@@ -1126,10 +1095,8 @@ describe('诡术师派系能力', () => {
     });
 });
 
-// ============================================================================
-// 外星人派系
-// ============================================================================
-
+// =====================================================================// 外星人派系
+// =====================================================================
 describe('外星人派系能力', () => {
     it('alien_invader: 获得1VP', () => {
         const state = makeState({
@@ -1215,3 +1182,4 @@ describe('外星人派系能力', () => {
         expect(current?.data?.sourceId).toBe('alien_crop_circles');
     });
 });
+

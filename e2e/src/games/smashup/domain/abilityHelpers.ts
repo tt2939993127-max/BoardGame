@@ -22,6 +22,7 @@ import { resolveLiveBaseIndex } from './utils';
 import type {
     SmashUpCore,
     MinionOnBase,
+    TitanState,
     MinionPlayedEvent,
     LimitModifiedEvent,
     MinionReturnedEvent,
@@ -43,23 +44,17 @@ import type {
     CardInstance,
     SmashUpEvent,
     CardsDrawnEvent,
+    DeckReshuffledEvent,
     DeckReorderedEvent,
     AbilityFeedbackEvent,
     OngoingCardCounterChangedEvent,
     CardToDeckBottomEvent,
-    TitanState,
-    TitanPlayedEvent,
-    TitanMovedEvent,
     TitanRemovedFromPlayEvent,
-    TitanPowerCounterAddedEvent,
-    TitanPowerCounterRemovedEvent,
-    TitanPlayAsKind,
-    ActionCardDef,
-    SpecialLimitUsedEvent,
 } from './types';
 import { SU_EVENT_TYPES as SU_EVENTS } from './events';
 import { getEffectivePower } from './ongoingModifiers';
-import { collectTriggers } from './ongoingEffects';
+import { triggerAllBaseAbilities } from './baseAbilities';
+import { collectTriggers, fireTriggers } from './ongoingEffects';
 import { getCardDef, getMinionDef, getTitanDef } from '../data/cards';
 import { drawCards } from './utils';
 
@@ -109,6 +104,57 @@ export function createSkipOption(label: string = '跳过'): EnginePromptOption<{
  */
 export function getMinionPower(state: SmashUpCore, minion: MinionOnBase, baseIndex: number): number {
     return getEffectivePower(state, minion, baseIndex);
+}
+
+// ============================================================================
+// 泰坦查询与离场
+// ============================================================================
+
+export function getTitanByUid(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    titanUid: string,
+): TitanState | undefined {
+    const core = 'core' in state ? state.core : state;
+    return (core.titans ?? []).find((titan) => titan.uid === titanUid);
+}
+
+export function getTitansOnBase(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    baseIndex: number,
+): TitanState[] {
+    const core = 'core' in state ? state.core : state;
+    return (core.titans ?? []).filter(
+        (titan) => titan.location.zone === 'base' && titan.location.baseIndex === baseIndex,
+    );
+}
+
+export function getTitanByController(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    controllerId: PlayerId,
+): TitanState | undefined {
+    const core = 'core' in state ? state.core : state;
+    return (core.titans ?? []).find(
+        (titan) => titan.controllerId === controllerId && titan.location.zone === 'base',
+    );
+}
+
+export function removeTitanFromPlay(
+    titan: TitanState,
+    reason: string,
+    now: number,
+): TitanRemovedFromPlayEvent {
+    return {
+        type: SU_EVENTS.TITAN_REMOVED_FROM_PLAY,
+        payload: {
+            titanUid: titan.uid,
+            defId: titan.defId,
+            ownerId: titan.ownerId,
+            controllerId: titan.controllerId,
+            fromBaseIndex: titan.location.zone === 'base' ? titan.location.baseIndex : undefined,
+            reason,
+        },
+        timestamp: now,
+    };
 }
 
 // ============================================================================
@@ -190,22 +236,6 @@ export function getAllTitans(state: SmashUpCore): TitanState[] {
     return state.titans ?? [];
 }
 
-export function getTitansOnBase(state: SmashUpCore, baseIndex: number): TitanState[] {
-    return getAllTitans(state).filter(
-        titan => titan.location.zone === 'base' && titan.location.baseIndex === baseIndex,
-    );
-}
-
-export function getTitanByUid(state: SmashUpCore, titanUid: string): TitanState | undefined {
-    return getAllTitans(state).find(titan => titan.uid === titanUid);
-}
-
-export function getTitanByController(state: SmashUpCore, controllerId: PlayerId): TitanState | undefined {
-    return getAllTitans(state).find(
-        titan => titan.controllerId === controllerId && titan.location.zone === 'base',
-    );
-}
-
 export function getSetAsideTitansPlayableAs(
     state: SmashUpCore,
     playerId: PlayerId,
@@ -268,25 +298,6 @@ export function moveTitan(
             fromBaseIndex,
             toBaseIndex,
             ...(toBaseDefId ? { toBaseDefId } : {}),
-            reason,
-        },
-        timestamp: now,
-    };
-}
-
-export function removeTitanFromPlay(
-    titan: TitanState,
-    reason: string,
-    now: number,
-): TitanRemovedFromPlayEvent {
-    return {
-        type: SU_EVENTS.TITAN_REMOVED_FROM_PLAY,
-        payload: {
-            titanUid: titan.uid,
-            defId: titan.defId,
-            ownerId: titan.ownerId,
-            controllerId: titan.controllerId,
-            ...(titan.location.zone === 'base' ? { fromBaseIndex: titan.location.baseIndex } : {}),
             reason,
         },
         timestamp: now,
@@ -890,6 +901,8 @@ export function fireMinionPlayedTriggers(params: {
 
     // 2. 基地能力触发 onMinionPlayed（改为入队，按 Wiki 同时触发排序解决）
     const minionDef = getMinionDef(defId);
+    const sourceEventId = `minion-played:${cardUid}:${baseIndex}:${now}`;
+    const frameId = `minion-played-frame:${cardUid}:${baseIndex}:${now}`;
     const queuedBase = collectBaseAbilityTriggers({
         core,
         timing: 'onMinionPlayed',
@@ -898,6 +911,8 @@ export function fireMinionPlayedTriggers(params: {
         triggerMinionUid: cardUid,
         triggerMinionDefId: defId,
         triggerMinionPower: minionDef?.power ?? power,
+        frameId,
+        sourceEventId,
         now,
     });
     if (queuedBase) events.push(queuedBase as unknown as SmashUpEvent);
@@ -912,6 +927,8 @@ export function fireMinionPlayedTriggers(params: {
         triggerMinionUid: cardUid,
         triggerMinionDefId: defId,
         triggerMinion: playedMinion,
+        frameId,
+        sourceEventId,
         random,
         now,
     });
@@ -991,10 +1008,48 @@ export function grantExtraAction(
     };
 }
 
+export function buildStandardDrawEvents(
+    state: SmashUpCore | MatchState<SmashUpCore>,
+    playerId: PlayerId,
+    count: number,
+    random: RandomFn,
+    now: number,
+): SmashUpEvent[] {
+    const core = 'core' in state ? state.core : state;
+    const player = core.players[playerId];
+    if (!player || count <= 0) return [];
+
+    const drawResult = drawCards(player, count, random);
+    const events: SmashUpEvent[] = [];
+
+    if (drawResult.reshuffledDeckUids && drawResult.reshuffledDeckUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.DECK_RESHUFFLED,
+            payload: {
+                playerId,
+                deckUids: drawResult.reshuffledDeckUids,
+            },
+            timestamp: now,
+        } as DeckReshuffledEvent);
+    }
+
+    if (drawResult.drawnUids.length > 0) {
+        events.push({
+            type: SU_EVENTS.CARDS_DRAWN,
+            payload: {
+                playerId,
+                count: drawResult.drawnUids.length,
+                cardUids: drawResult.drawnUids,
+            },
+            timestamp: now,
+        } as CardsDrawnEvent);
+    }
+
+    return events;
+}
+
 export function resolveExtraPlayTiming(matchState?: Pick<MatchState<SmashUpCore>, 'sys'>): 'banked' | 'immediate' {
-    const phase = matchState?.sys?.phase;
-    // startTurn 阶段产生的额外出牌应当视作“本回合可用额度”，避免打断计分/结算链路
-    return phase === 'playCards' || phase === 'startTurn' ? 'banked' : 'immediate';
+    return matchState?.sys?.phase === 'playCards' ? 'banked' : 'immediate';
 }
 
 export function grantContextualExtraMinion(
@@ -1243,35 +1298,6 @@ export function drawMadnessCards(
         payload: { playerId, count: actualCount, cardUids, reason },
         timestamp: now,
     };
-}
-
-export function buildStandardDrawEvents(
-    state: SmashUpCore,
-    playerId: PlayerId,
-    count: number,
-    random: RandomFn,
-    now: number,
-): SmashUpEvent[] {
-    if (count <= 0) return [];
-    const player = state.players[playerId];
-    if (!player) return [];
-    const draw = drawCards(player, count, random);
-    const events: SmashUpEvent[] = [];
-    if (draw.reshuffledDeckUids && draw.reshuffledDeckUids.length > 0) {
-        events.push({
-            type: SU_EVENTS.DECK_REORDERED,
-            payload: { playerId, deckUids: draw.reshuffledDeckUids },
-            timestamp: now,
-        } as DeckReorderedEvent);
-    }
-    if (draw.drawnUids.length > 0) {
-        events.push({
-            type: SU_EVENTS.CARDS_DRAWN,
-            payload: { playerId, count: draw.drawnUids.length, cardUids: draw.drawnUids },
-            timestamp: now,
-        } as CardsDrawnEvent);
-    }
-    return events;
 }
 
 /**

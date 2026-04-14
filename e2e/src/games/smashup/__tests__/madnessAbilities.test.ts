@@ -34,6 +34,74 @@ beforeAll(() => {
     initAllAbilities();
 });
 
+describe('extra timing regression coverage', () => {
+    it('cthulhu_whispers_in_darkness marks off-phase extra actions as immediate', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+        const executor = resolveAbility('cthulhu_whispers_in_darkness', 'onPlay');
+        expect(executor).toBeDefined();
+        const ms = makeMatchState(state);
+        ms.sys.phase = 'startTurn';
+
+        const result = executor!({
+            state,
+            matchState: ms,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'cthulhu_whispers_in_darkness',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 0,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(2);
+        expect(limitEvents.every(e => (e as any).payload.playTiming === 'immediate')).toBe(true);
+    });
+
+    it('miskatonic_those_meddling_kids_pod_mode marks off-phase extra action as immediate', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const handler = getInteractionHandler('miskatonic_those_meddling_kids_pod_mode');
+        expect(handler).toBeDefined();
+        const ms = makeMatchState(state);
+        ms.sys.phase = 'startTurn';
+
+        const result = handler!(ms, '0', { mode: 'madness' }, undefined, defaultRandom, 0);
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(1);
+        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
+    });
+
+    it('innsmouth_recruitment handler marks off-phase extra minions as immediate', () => {
+        const state = makeStateWithMadness({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+        });
+
+        const handler = getInteractionHandler('innsmouth_recruitment');
+        expect(handler).toBeDefined();
+        const ms = makeMatchState(state);
+        ms.sys.phase = 'startTurn';
+
+        const result = handler!(ms, '0', { count: 2 }, undefined, defaultRandom, 0);
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(2);
+        expect(limitEvents.every(e => (e as any).payload.playTiming === 'immediate')).toBe(true);
+    });
+});
+
 describe('interaction handler regressions', () => {
     it('cthulhu_corruption resolves selected target', () => {
         const core = makeStateWithMadness({

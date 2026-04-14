@@ -249,6 +249,7 @@ const hasPendingScoreBasesSpecialActivation = (state: SmashUpState, playerId: Pl
             if (result.valid) return true;
         }
 
+
         for (const titan of state.core.titans ?? []) {
             const result = validate(state, createCommand(playerId, SU_COMMANDS.ACTIVATE_SPECIAL, {
                 titanUid: titan.uid,
@@ -1278,46 +1279,56 @@ const buildTalentActions = (state: SmashUpState, playerId: PlayerId): AiLegalAct
     return actions;
 };
 
-const buildSpecialActions = (state: SmashUpState, playerId: PlayerId): AiLegalAction[] => {
+const buildSpecialActions = (
+    state: SmashUpState,
+    playerId: PlayerId,
+    options?: { includeMinions?: boolean; includeTitans?: boolean },
+): AiLegalAction[] => {
     const actions: AiLegalAction[] = [];
+    const includeMinions = options?.includeMinions ?? true;
+    const includeTitans = options?.includeTitans ?? true;
 
     state.core.bases.forEach((base, baseIndex) => {
-        for (const minion of base.minions) {
-            if (minion.controller !== playerId) continue;
-            appendAction(actions, state, playerId, {
-                actionId: createAiLegalActionId('activate-special', minion.uid, baseIndex),
-                kind: 'activate-special',
-                label: `激活特殊能力 ${minion.defId}`,
-                commands: [{
-                    type: SU_COMMANDS.ACTIVATE_SPECIAL,
-                    payload: { minionUid: minion.uid, baseIndex },
-                }],
-                metadata: {
-                    baseIndex,
-                    minionUid: minion.uid,
-                    defId: minion.defId,
-                    scoringBase: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
-                },
-            });
+        if (includeMinions) {
+            for (const minion of base.minions) {
+                if (minion.controller !== playerId) continue;
+                appendAction(actions, state, playerId, {
+                    actionId: createAiLegalActionId('activate-special', minion.uid, baseIndex),
+                    kind: 'activate-special',
+                    label: `激活特殊能力 ${minion.defId}`,
+                    commands: [{
+                        type: SU_COMMANDS.ACTIVATE_SPECIAL,
+                        payload: { minionUid: minion.uid, baseIndex },
+                    }],
+                    metadata: {
+                        baseIndex,
+                        minionUid: minion.uid,
+                        defId: minion.defId,
+                        scoringBase: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
+                    },
+                });
+            }
         }
 
-        for (const titan of state.core.titans ?? []) {
-            appendAction(actions, state, playerId, {
-                actionId: createAiLegalActionId('activate-special', 'titan', titan.uid, baseIndex),
-                kind: 'activate-special',
-                label: `激活泰坦特殊能力 ${titan.defId}`,
-                commands: [{
-                    type: SU_COMMANDS.ACTIVATE_SPECIAL,
-                    payload: { titanUid: titan.uid, baseIndex },
-                }],
-                metadata: {
-                    baseIndex,
-                    titanUid: titan.uid,
-                    defId: titan.defId,
-                    sourceType: 'titan',
-                    scoringBase: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
-                },
-            });
+        if (includeTitans) {
+            for (const titan of state.core.titans ?? []) {
+                appendAction(actions, state, playerId, {
+                    actionId: createAiLegalActionId('activate-special', 'titan', titan.uid, baseIndex),
+                    kind: 'activate-special',
+                    label: `激活泰坦特殊能力 ${titan.defId}`,
+                    commands: [{
+                        type: SU_COMMANDS.ACTIVATE_SPECIAL,
+                        payload: { titanUid: titan.uid, baseIndex },
+                    }],
+                    metadata: {
+                        baseIndex,
+                        titanUid: titan.uid,
+                        defId: titan.defId,
+                        sourceType: 'titan',
+                        scoringBase: getScoringEligibleBaseIndices(state.core).includes(baseIndex),
+                    },
+                });
+            }
         }
     });
 
@@ -1454,7 +1465,7 @@ export function buildSmashUpAiLegalActions(args: {
     }
 
     if (phase === 'playCards') {
-        actions.push(...buildSpecialActions(state, playerId));
+        actions.push(...buildSpecialActions(state, playerId, { includeMinions: true, includeTitans: true }));
         actions.push(...buildTalentActions(state, playerId));
         actions.push(...buildPlayableCardActions(state, playerId));
         const advanceAction = buildAdvancePhaseAction(state, playerId);
@@ -1463,7 +1474,7 @@ export function buildSmashUpAiLegalActions(args: {
     }
 
     if (phase === 'scoreBases') {
-        actions.push(...buildSpecialActions(state, playerId));
+        actions.push(...buildSpecialActions(state, playerId, { includeMinions: true, includeTitans: true }));
         const advanceAction = buildAdvancePhaseAction(state, playerId);
         if (advanceAction) actions.push(advanceAction);
         return actions;

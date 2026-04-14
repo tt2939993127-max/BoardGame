@@ -889,41 +889,69 @@ export class GameTransportServer {
                 continue;
             }
 
-            const progressMarker = buildAiProgressMarker(match.state);
-            const recoveryFingerprint = this.buildOnlineAiRecoveryFingerprint(match, candidate, progressMarker);
-            const trackerKey = `${candidate.playerId}:${candidate.reason}:${recoveryFingerprint}`;
-            const currentTracker = this.onlineAiRecoveryTrackers.get(match.matchID);
             let effectiveCandidate = candidate;
+            const currentWindow = (match.state.sys as { responseWindow?: { current?: unknown } } | undefined)
+                ?.responseWindow?.current as {
+                    responderQueue?: unknown;
+                    currentResponderIndex?: unknown;
+                    windowType?: unknown;
+                    sourceId?: unknown;
+                } | undefined;
+            const responderQueue = Array.isArray(currentWindow?.responderQueue) ? currentWindow.responderQueue : [];
+            const responderIndex = typeof currentWindow?.currentResponderIndex === 'number'
+                ? currentWindow.currentResponderIndex
+                : 0;
+            const currentResponderId = typeof responderQueue[responderIndex] === 'string'
+                ? responderQueue[responderIndex]
+                : null;
+            const hasHumanResponder = responderQueue.some((responderId) => {
+                const id = typeof responderId === 'string' ? responderId : '';
+                return id && seatControllers[id]?.type === 'human';
+            });
+            const phase = typeof match.state.sys?.phase === 'string' ? match.state.sys.phase : '';
+            const windowType = typeof currentWindow?.windowType === 'string' ? currentWindow.windowType : '';
+            const queueSignature = responderQueue
+                .map((value) => (typeof value === 'string' ? value : ''))
+                .filter((value) => value.length > 0)
+                .join('|');
+            const isAiTurnBlockedByHumanResponseWindow = candidate.reason === 'active-turn'
+                && Boolean(currentWindow)
+                && resolveCurrentPlayerId(match.state) === candidate.playerId
+                && typeof currentResponderId === 'string'
+                && seatControllers[currentResponderId]?.type === 'human';
 
-            if (candidate.reason === 'response-window' && currentTracker?.key === trackerKey && currentTracker.failureCount > 0) {
-                const currentWindow = (match.state.sys as { responseWindow?: { current?: unknown } } | undefined)
-                    ?.responseWindow?.current as {
-                        responderQueue?: unknown;
-                        currentResponderIndex?: unknown;
-                        windowType?: unknown;
-                        sourceId?: unknown;
-                    } | undefined;
-                const responderQueue = Array.isArray(currentWindow?.responderQueue) ? currentWindow.responderQueue : [];
-                const hasHumanResponder = responderQueue.some((responderId) => {
-                    const id = typeof responderId === 'string' ? responderId : '';
-                    return id && seatControllers[id]?.type === 'human';
-                });
+            if (isAiTurnBlockedByHumanResponseWindow) {
+                const suffix = `response-window-human:${candidate.playerId}:${currentResponderId}:${phase}:${windowType}:${queueSignature}`;
+                effectiveCandidate = {
+                    ...candidate,
+                    reason: 'response-window',
+                    requiresConfirmedAdvancePhase: true,
+                    fingerprintHint: suffix,
+                    resolution: {
+                        playerId: candidate.playerId,
+                        attemptKey: `force-end-turn:${candidate.playerId}:${suffix}`,
+                        source: 'local-ai',
+                        action: {
+                            actionId: `force-end-turn:${suffix}`,
+                            kind: 'force-end-turn',
+                            label: '强制结束 AI 回合',
+                            commands: [{ type: 'SYS_RESPONSE_WINDOW_FORCE_CLOSE', payload: {} }],
+                        },
+                    },
+                };
+            }
+
+            const progressMarker = buildAiProgressMarker(match.state);
+            const recoveryFingerprint = this.buildOnlineAiRecoveryFingerprint(match, effectiveCandidate, progressMarker);
+            const trackerKey = `${effectiveCandidate.playerId}:${effectiveCandidate.reason}:${recoveryFingerprint}`;
+            const currentTracker = this.onlineAiRecoveryTrackers.get(match.matchID);
+
+            if (effectiveCandidate.reason === 'response-window' && currentTracker?.key === trackerKey && currentTracker.failureCount > 0) {
                 if (!hasHumanResponder) {
-                    const responderIndex = typeof currentWindow?.currentResponderIndex === 'number'
-                        ? currentWindow.currentResponderIndex
-                        : 0;
-                    const responderId = typeof responderQueue[responderIndex] === 'string'
-                        ? responderQueue[responderIndex]
-                        : candidate.playerId;
-                    const phase = typeof match.state.sys?.phase === 'string' ? match.state.sys.phase : '';
-                    const windowType = typeof currentWindow?.windowType === 'string' ? currentWindow.windowType : '';
-                    const queueSignature = responderQueue
-                        .map((value) => (typeof value === 'string' ? value : ''))
-                        .filter((value) => value.length > 0)
-                        .join('|');
+                    const responderId = currentResponderId ?? candidate.playerId;
                     const suffix = `response-loop:${responderId}:${phase}:${windowType}:${queueSignature}`;
                     effectiveCandidate = {
-                        ...candidate,
+                        ...effectiveCandidate,
                         reason: 'response-loop',
                         fingerprintHint: suffix,
                         resolution: {

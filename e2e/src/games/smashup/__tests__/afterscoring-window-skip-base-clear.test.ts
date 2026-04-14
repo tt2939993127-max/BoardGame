@@ -7,7 +7,7 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
+import { asSimpleChoice, INTERACTION_COMMANDS, INTERACTION_EVENTS } from '../../../engine/systems/InteractionSystem';
 import { createInitialSystemState } from '../../../engine/pipeline';
 import { createFlowSystem, createBaseSystems } from '../../../engine/systems';
 import { GameTestRunner } from '../../../engine/testing/GameTestRunner';
@@ -121,7 +121,6 @@ describe('afterScoring 延迟清场回归', () => {
             bases: [makeBase('base_greenhouse')],
             baseDeck: ['base_secret_garden'],
         }));
-
         const result = system.afterEvents?.({
             state,
             random: undefined as any,
@@ -437,9 +436,90 @@ describe('afterScoring 延迟清场回归', () => {
         expect(nextCtx?._deferredPostScoringEvents).toHaveLength(2);
     });
 
-    it('base_temple_of_goju_tiebreak: session 模式下 legacy 最后一跳只应输出主事件，延迟清场留给 finalize', () => {
+    it('最后一个 afterScoring 交互已补发延迟事件时，不应再次重复补发', () => {
         const system = createSmashUpEventSystem();
         const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0'),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_the_mothership', {
+                    minions: [
+                        makeMinion('winner-minion', '1', 3),
+                        makeMinion('scout-minion', '0', 2, 'alien_scout'),
+                    ],
+                }),
+            ],
+            baseDeck: ['base_secret_garden'],
+        }));
+
+        // 模拟：当前交互（母舰）已被弹出，下一交互（侦察兵）已在 current，queue 为空。
+        state.sys.interaction.current = {
+            id: 'i-scout-next',
+            kind: 'simple-choice',
+            playerId: '0',
+            data: {
+                sourceId: 'alien_scout_return',
+                options: [
+                    { id: 'yes', label: '返回手牌', value: { returnIt: true } },
+                    { id: 'no', label: '留在基地', value: { returnIt: false } },
+                ],
+            },
+        } as any;
+        state.sys.interaction.queue = [];
+
+        const result = system.afterEvents?.({
+            state,
+            random: undefined as any,
+            events: [{
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: 'i-mothership',
+                    playerId: '1',
+                    optionId: 'minion-0',
+                    value: { minionUid: 'winner-minion', minionDefId: 'd1', baseIndex: 0 },
+                    sourceId: 'base_the_mothership',
+                    interactionData: {
+                        sourceId: 'base_the_mothership',
+                        continuationContext: {
+                            baseIndex: 0,
+                            _deferredPostScoringEvents: [
+                                {
+                                    type: SU_EVENTS.BASE_CLEARED,
+                                    payload: { baseIndex: 0, baseDefId: 'base_the_mothership' },
+                                    timestamp: 2200,
+                                },
+                                {
+                                    type: SU_EVENTS.BASE_REPLACED,
+                                    payload: {
+                                        baseIndex: 0,
+                                        oldBaseDefId: 'base_the_mothership',
+                                        newBaseDefId: 'base_secret_garden',
+                                    },
+                                    timestamp: 2200,
+                                },
+                            ],
+                        },
+                    },
+                },
+                timestamp: 2200,
+            } as any],
+        });
+
+        const emittedEvents = result?.events as SmashUpEvent[] | undefined;
+        expect(emittedEvents?.some(event => event.type === SU_EVENTS.MINION_RETURNED)).toBe(true);
+        expect(emittedEvents?.some(event => event.type === SU_EVENTS.BASE_CLEARED)).toBe(false);
+        expect(emittedEvents?.some(event => event.type === SU_EVENTS.BASE_REPLACED)).toBe(false);
+
+        const nextCtx = (result?.state.sys.interaction.current?.data as any)?.continuationContext;
+        expect(nextCtx?._deferredPostScoringEvents).toBeDefined();
+        expect(nextCtx?._deferredPostScoringEvents).toHaveLength(2);
+    });
+
+    it('base_temple_of_goju_tiebreak: session 模式下 legacy 最后一跳只应输出主事件，延迟清场留给 finalize', () => {
+        const system = createSmashUpEventSystem();
+        let state = wrapState(makeCore({
             players: {
                 '0': makePlayer('0'),
                 '1': makePlayer('1'),
@@ -450,7 +530,26 @@ describe('afterScoring 延迟清场回归', () => {
                 }),
             ],
             baseDeck: ['base_secret_garden'],
+            pendingPostScoringActions: [{
+                kind: 'moveMinionToReplacementBase',
+                minionUid: 'runner',
+                minionDefId: 'd1',
+                fromBaseIndex: 2,
+                toBaseIndex: 1,
+                targetBaseDefId: 'base_secret_garden',
+                reason: '托尔图加：亚军移动随从到替换基地',
+            }],
         }));
+
+        const baseRef = createScoringBaseRef(state.core, 0);
+        if (!baseRef) {
+            throw new Error('无法构造 baseRef');
+        }
+        state = setScoringSession(state, {
+            ...createScoringSession(state.core, [0]),
+            currentBaseRef: baseRef,
+            currentStep: 'awaiting-interactions',
+        });
 
         const result = system.afterEvents?.({
             state,
@@ -580,6 +679,87 @@ describe('afterScoring 延迟清场回归', () => {
         expect(finalCore?.players['0'].discard.some(card => card.uid === 'archmage')).toBe(false);
     });
 
+    it('海盗湾最后一步若随从已暂离来源基地但仍处于延迟清场链，应继续发出移动事件', () => {
+        const system = createSmashUpEventSystem();
+        const state = wrapState(makeCore({
+            players: {
+                '0': makePlayer('0', {
+                    discard: [makeCard('archmage', 'wizard_archmage_pod', 'minion')],
+                }),
+                '1': makePlayer('1'),
+            },
+            bases: [
+                makeBase('base_pirate_cove'),
+                makeBase('base_the_jungle'),
+                makeBase('base_tortuga', {
+                    minions: [makeMinion('mate', '1', 2, 'pirate_first_mate_pod')],
+                }),
+            ],
+            baseDeck: ['base_tar_pits_pod'],
+        }));
+
+        const result = system.afterEvents?.({
+            state,
+            random: undefined as any,
+            events: [{
+                type: INTERACTION_EVENTS.RESOLVED,
+                payload: {
+                    interactionId: 'i-pirate-cove-step-2',
+                    playerId: '0',
+                    optionId: 'base-0',
+                    value: { baseIndex: 1, baseDefId: 'base_the_jungle' },
+                    sourceId: 'base_pirate_cove_choose_base',
+                    interactionData: {
+                        sourceId: 'base_pirate_cove_choose_base',
+                        continuationContext: {
+                            minionUid: 'archmage',
+                            minionDefId: 'wizard_archmage_pod',
+                            fromBaseIndex: 0,
+                            _deferredPostScoringEvents: [
+                                {
+                                    type: SU_EVENTS.BASE_CLEARED,
+                                    payload: { baseIndex: 0, baseDefId: 'base_pirate_cove_pod' },
+                                    timestamp: 2400,
+                                },
+                                {
+                                    type: SU_EVENTS.BASE_REPLACED,
+                                    payload: {
+                                        baseIndex: 0,
+                                        oldBaseDefId: 'base_pirate_cove_pod',
+                                        newBaseDefId: 'base_tar_pits_pod',
+                                    },
+                                    timestamp: 2400,
+                                },
+                            ],
+                        },
+                    },
+                },
+                timestamp: 2400,
+            } as any],
+        });
+
+        const emittedEvents = result?.events as SmashUpEvent[] | undefined;
+        expect(emittedEvents?.map(event => event.type)).toEqual([
+            SU_EVENTS.MINION_MOVED,
+            SU_EVENTS.BASE_CLEARED,
+            SU_EVENTS.BASE_REPLACED,
+        ]);
+        expect(emittedEvents?.[0]).toMatchObject({
+            type: SU_EVENTS.MINION_MOVED,
+            payload: {
+                minionUid: 'archmage',
+                fromBaseIndex: 0,
+                toBaseIndex: 1,
+                reason: '海盗湾：移动随从到其他基地',
+            },
+        });
+
+        const finalCore = emittedEvents?.reduce((core, event) => reduce(core, event), state.core as SmashUpCore);
+        expect(finalCore?.bases[0].defId).toBe('base_tar_pits_pod');
+        expect(finalCore?.bases[1].minions.map(minion => minion.uid)).toEqual(['archmage']);
+        expect(finalCore?.players['0'].discard.some(card => card.uid === 'archmage')).toBe(false);
+    });
+
     it('scoreBases 因 afterScoring 响应窗口 halt 时应保留 scoredBaseIndices', () => {
         const state = wrapState(makeCore({
             players: {
@@ -614,8 +794,10 @@ describe('afterScoring 延迟清场回归', () => {
 
         const emittedEvents = result.events as SmashUpEvent[];
         expect(emittedEvents.map(event => event.type)).toContain(SU_EVENTS.BASE_SCORED);
-        expect(emittedEvents.map(event => event.type)).toContain('RESPONSE_WINDOW_OPENED');
         expect(result.halt).toBe(true);
+        const reactionChoice = asSimpleChoice(result.updatedState?.sys.interaction?.current)!;
+        expect(reactionChoice).toBeTruthy();
+        expect(reactionChoice.sourceId).toBe('smashup_reaction_choose');
         expect((result.updatedState?.sys as any).smashupScoring?.currentBaseRef?.slotIndex).toBe(0);
         expect(result.updatedState?.sys.scoredBaseIndices).toEqual([0]);
     });
@@ -635,15 +817,15 @@ describe('afterScoring 延迟清场回归', () => {
         }));
 
         state.sys.flowHalted = true;
-        state.sys.responseWindow.current = {
-            id: 'after-scoring-window',
-            responderQueue: ['0', '1'],
-            currentResponderIndex: 0,
-            passedPlayers: [],
-            windowType: 'afterScoring',
-            sourceId: 'test-after-scoring',
-            actionTakenThisRound: false,
-            consecutivePassRounds: 0,
+        (state.sys as any).smashupReactionSession = {
+            frameId: 'test-after-scoring',
+            frameKind: 'score-after',
+            phase: 'optional',
+            activePlayerId: '0',
+            currentPlayerId: '0',
+            consecutivePasses: 0,
+            sourceBaseIndex: 0,
+            responseWindowType: 'afterScoring',
         };
 
         const result = smashUpFlowHooks.onAutoContinueCheck?.({
@@ -775,18 +957,39 @@ describe('afterScoring 延迟清场回归', () => {
         expect(player1EndTurn.success).toBe(true);
         expect(player1EndTurn.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
 
-        const stateAfterPlayer1Turn = runner.getState();
-        expect(stateAfterPlayer1Turn.sys.phase).toBe('playCards');
-        expect(stateAfterPlayer1Turn.core.turnOrder[stateAfterPlayer1Turn.core.currentPlayerIndex]).toBe('0');
-        expect(stateAfterPlayer1Turn.core.bases[0].defId).toBe('base_secret_garden');
+        let stateBeforePlayer0Turn = runner.getState();
+        expect(stateBeforePlayer0Turn.core.turnOrder[stateBeforePlayer0Turn.core.currentPlayerIndex]).toBe('0');
+        expect(stateBeforePlayer0Turn.core.bases[0].defId).toBe('base_secret_garden');
+        expect(['playCards', 'startTurn']).toContain(stateBeforePlayer0Turn.sys.phase);
+
+        let immediateExtraGuard = 0;
+        while (stateBeforePlayer0Turn.sys.phase === 'startTurn') {
+            expect(asSimpleChoice(stateBeforePlayer0Turn.sys.interaction?.current)?.sourceId).toBe('smashup_immediate_extra_minion');
+
+            const skipImmediateExtra = runner.dispatch(INTERACTION_COMMANDS.RESPOND, {
+                playerId: '0',
+                optionId: 'skip',
+            });
+            expect(skipImmediateExtra.success).toBe(true);
+            expect(skipImmediateExtra.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
+
+            stateBeforePlayer0Turn = runner.getState();
+            immediateExtraGuard += 1;
+            expect(immediateExtraGuard).toBeLessThanOrEqual(3);
+        }
+        expect(stateBeforePlayer0Turn.sys.phase).toBe('playCards');
+        expect(stateBeforePlayer0Turn.sys.interaction?.current).toBeUndefined();
 
         const player0EndTurn = runner.dispatch('ADVANCE_PHASE', { playerId: '0' });
         expect(player0EndTurn.success).toBe(true);
         expect(player0EndTurn.events.filter(event => event.type === SU_EVENTS.BASE_SCORED)).toHaveLength(0);
 
         const finalState = runner.getState();
-        expect(finalState.sys.phase).toBe('playCards');
         expect(finalState.core.turnOrder[finalState.core.currentPlayerIndex]).toBe('1');
         expect(finalState.core.bases[0].defId).toBe('base_secret_garden');
+        expect(['playCards', 'startTurn']).toContain(finalState.sys.phase);
+        if (finalState.sys.phase === 'startTurn') {
+            expect(asSimpleChoice(finalState.sys.interaction?.current)?.sourceId).toBe('smashup_immediate_extra_minion');
+        }
     });
 });

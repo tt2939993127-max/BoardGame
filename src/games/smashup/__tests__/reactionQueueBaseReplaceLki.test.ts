@@ -4,7 +4,7 @@ import { SU_EVENTS } from '../domain/types';
 import { makeMatchState, makeState, makeBase } from './helpers';
 import { clearBaseAbilityRegistry, registerBaseAbility } from '../domain/baseAbilities';
 import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
-import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
+import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { reduce } from '../domain/reduce';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
 
@@ -34,10 +34,13 @@ describe('Reaction queue: base replacement vs LKI', () => {
     const t: TriggerInstance = {
       id: `afterScoring:base_old:1:0`,
       timing: 'afterScoring' as any,
+      frameId: 'score-after:0:1',
+      sourceEventId: 'score-after:0:1',
       sourceDefId: 'base_old',
       sourceBaseIndex: 0,
       ownerPlayerId: '0',
       mandatory: true,
+      resolutionClass: 'mandatory',
       witnessRequirement: 'inPlayAtTriggerTime',
       witnessed: true,
       baseIndex: 0,
@@ -53,18 +56,13 @@ describe('Reaction queue: base replacement vs LKI', () => {
     } as any);
 
     const ms1 = makeMatchState({ ...core1, triggerQueue: [t] });
-    const handler = getInteractionHandler('reaction_queue_choose_next');
-
-    // With single trigger, reaction queue auto-resolves; use postProcess-like behavior by directly running maybeResolveReactionQueue
-    // (we just assert that consumption + feedback can happen via the resolver interaction path too)
-    // Here, we force interaction path by duplicating trigger.
+    // Even after the base is replaced, the queued trigger should still survive into the same reaction frame.
     const ms2 = makeMatchState({ ...core1, triggerQueue: [t, { ...t, id: `${t.id}:2` }] });
     const rq = maybeResolveReactionQueue(ms2 as any, { shuffle: (a: any[]) => a, random: () => 0.5, d: () => 1, range: (m: number) => m } as any, 1)!;
     const current = rq.state.sys.interaction.current as any;
-    expect(current.data.sourceId).toBe('reaction_queue_choose_next');
-    const opt = current.data.options.find((o: any) => (o.label as string).includes('base_old'));
-    expect(opt).toBeTruthy();
-    expect(handler).toBeTruthy();
+    expect(current).toBeDefined();
+    expect(current.data.sourceId).toBe('smashup_reaction_choose');
+    expect(current.data.options.some((option: any) => String(option.label).includes('base_old'))).toBe(true);
   });
 });
 

@@ -1,21 +1,15 @@
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
-import type {
-    SmashUpCore,
-    SmashUpEvent,
-    BuriedCardOnBase,
-    MinionPlayedEvent,
-    ActionPlayedEvent,
-    OngoingAttachedEvent,
-} from './types';
+import type { SmashUpCore, SmashUpEvent, BuriedCardOnBase, MinionPlayedEvent, OngoingAttachedEvent } from './types';
 import { SU_EVENTS } from './types';
 import { registerInteractionHandler, type InteractionHandler } from './abilityInteractionHandlers';
 import { getBaseDef, getCardDef } from '../data/cards';
 import { resolveOnPlay, resolveOnUncover, resolveSpecial } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
+import { buildActionPlayedEvent } from './actionPlayEvent';
 import { collectTriggers } from './ongoingEffects';
-import { triggerBaseAbility } from './baseAbilities';
 import { buildMinionTargetOptions } from './abilityHelpers';
+import { triggerBaseAbility } from './baseAbilities';
 
 type UncoverChoiceValue = { cardUid: string; baseIndex: number } | { skip: true };
 
@@ -204,27 +198,6 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
     }
 
     if (def.type === 'action') {
-        const actionDef = def as any;
-        const subtype = actionDef.subtype as string;
-        const specialTiming = actionDef.specialTiming ?? 'beforeScoring';
-        if (subtype !== 'special' && !isStandardActionTimingAllowed(matchState)) {
-            const events: SmashUpEvent[] = [{
-                type: SU_EVENTS.BURIED_CARD_UNCOVERED,
-                payload: { playerId, cardUid, baseIndex, reason, discardWithoutPlay: true },
-                timestamp: now,
-            } as SmashUpEvent];
-            if (uncoverTriggers) events.push(uncoverTriggers);
-            return { state: matchState, events };
-        }
-        if (subtype === 'special' && !isSpecialTimingAllowed(matchState, specialTiming)) {
-            const events: SmashUpEvent[] = [{
-                type: SU_EVENTS.BURIED_CARD_UNCOVERED,
-                payload: { playerId, cardUid, baseIndex, reason, discardWithoutPlay: true },
-                timestamp: now,
-            } as SmashUpEvent];
-            if (uncoverTriggers) events.push(uncoverTriggers);
-            return { state: matchState, events };
-        }
         const executeResult = executeUncoveredAction({
             matchState,
             playerId,
@@ -233,7 +206,7 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
             random,
             now,
         });
-        const events: SmashUpEvent[] = [{
+        const uncoveredEvents: SmashUpEvent[] = [{
             type: SU_EVENTS.BURIED_CARD_UNCOVERED,
             payload: {
                 playerId,
@@ -244,8 +217,8 @@ export function uncoverBuriedCard(params: UncoverBuriedCardParams): {
             },
             timestamp: now,
         } as SmashUpEvent, ...executeResult.events];
-        if (uncoverTriggers) events.push(uncoverTriggers);
-        return { state: executeResult.state, events };
+        if (uncoverTriggers) uncoveredEvents.push(uncoverTriggers);
+        return { state: executeResult.state, events: uncoveredEvents };
     }
 
     return { state: matchState, events: [uncoverEvent] };
@@ -429,20 +402,81 @@ const handleUncoverOngoingPickTargetMinion: InteractionHandler = (state, playerI
     const ctx = data?.continuationContext as { cardUid: string; defId: string; baseIndex: number } | undefined;
     if (!ctx) return { state, events: [] };
     const targetMinionUid = (value as any)?.targetMinionUid as string | undefined;
-    const targetBaseIndex = (value as any)?.baseIndex as number | undefined;
+    const targetBaseIndex = (value as any)?.baseIndex as number | undefined ?? ctx.baseIndex;
     if (!targetMinionUid || targetBaseIndex === undefined) return { state, events: [] };
 
     const buried = (state.core.bases[ctx.baseIndex]?.buriedCards ?? []).find(card => card.uid === ctx.cardUid);
     if (!buried) return { state, events: [] };
 
-    return executeUncoveredAction({
-        matchState: state,
-        playerId,
-        buried,
-        baseIndex: ctx.baseIndex,
-        random,
-        now,
-        targetMinionUid,
-        targetBaseIndex,
-    });
+    const attach: OngoingAttachedEvent = {
+        type: SU_EVENTS.ONGOING_ATTACHED,
+        payload: {
+            cardUid: ctx.cardUid,
+            defId: ctx.defId,
+            ownerId: playerId,
+            targetType: 'minion',
+            targetBaseIndex,
+            targetMinionUid,
+        },
+        timestamp: now,
+    } as any;
+
+    const events: SmashUpEvent[] = [
+        buildActionPlayedEvent({
+            playerId,
+            cardUid: ctx.cardUid,
+            defId: ctx.defId,
+            isExtraAction: true,
+            fromBuried: true,
+            targetBaseIndex,
+            targetMinionUid,
+            timestamp: now,
+        }),
+        attach,
+    ];
+
+    let currentState = state;
+    const executor = resolveOnPlay(ctx.defId);
+    if (executor) {
+        const abilityCtx: AbilityContext = {
+            state: currentState.core,
+            matchState: currentState,
+            playerId,
+            cardUid: ctx.cardUid,
+            defId: ctx.defId,
+            baseIndex: targetBaseIndex,
+            targetMinionUid,
+            random,
+            now,
+        };
+        const result = executor(abilityCtx);
+        events.push(...result.events);
+        if (result.matchState) {
+            currentState = result.matchState;
+        }
+    }
+
+    const resolvedBase = currentState.core.bases[targetBaseIndex] ?? currentState.core.bases[ctx.baseIndex];
+    if (resolvedBase) {
+        const baseAbilityResult = triggerBaseAbility(resolvedBase.defId, 'onActionPlayed', {
+            state: currentState.core,
+            matchState: currentState,
+            random,
+            baseIndex: targetBaseIndex,
+            baseDefId: resolvedBase.defId,
+            playerId,
+            actionTargetBaseIndex: targetBaseIndex,
+            actionTargetType: 'minion',
+            actionTargetMinionUid: targetMinionUid,
+            now,
+        });
+        events.push(...baseAbilityResult.events);
+        if (baseAbilityResult.matchState) {
+            return { state: baseAbilityResult.matchState, events };
+        }
+    }
+
+    return { state: currentState, events };
 };
+
+

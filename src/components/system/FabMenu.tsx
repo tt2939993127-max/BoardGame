@@ -17,13 +17,17 @@ export interface FabAction {
     icon: ReactNode;
     label: string;
     onClick?: () => void;
-    content?: ReactNode; // 侧边面板内容
+    content?: ReactNode | ((context: FabPanelRenderContext) => ReactNode); // 侧边面板内容
     color?: string;      // 颜色覆盖
     active?: boolean;    // 通知提示
     onActivate?: (isActive: boolean) => void;
     preview?: ReactNode; // 通知简略信息
     mobilePopoverVerticalAnchor?: 'button' | 'column';
 }
+
+export type FabPanelRenderContext = {
+    closePanel: () => void;
+};
 
 interface FabMenuProps {
     items: FabAction[];
@@ -728,6 +732,14 @@ const Panel = ({
             {item.label}
         </div>
     );
+    const panelContext: FabPanelRenderContext = {
+        closePanel: () => {
+            onRequestClose?.();
+        },
+    };
+    const renderedContent = typeof item.content === 'function'
+        ? item.content(panelContext)
+        : item.content;
 
     if (isMobileSheetPanel) {
         const sheetHorizontalMargin = 12;
@@ -790,7 +802,7 @@ const Panel = ({
                             </div>
                         </div>
                         <div className="px-3 pb-3 pt-3">
-                            {item.content}
+                            {renderedContent}
                         </div>
                     </div>
                 </motion.div>
@@ -839,7 +851,7 @@ const Panel = ({
                     data-testid={`fab-panel-${item.id}`}
                 >
                     {panelHeading}
-                    {item.content}
+                    {renderedContent}
                 </motion.div>
             </div>,
         </AnimatePresence>,

@@ -166,7 +166,7 @@ const OnlineAiSeatBridge = ({
     engineConfig: GameEngineConfig;
     seatControllers: Record<string, AiSeatController>;
     seatCredentials: Record<string, string>;
-    onForceEndAiPhaseReady?: (handler: (() => void) | null) => void;
+    onForceEndAiPhaseReady?: (handler: (() => Promise<boolean>) | null) => void;
 }) => {
     const { state } = useGameClient();
     const toast = useToast();
@@ -625,10 +625,10 @@ const OnlineAiSeatBridge = ({
         };
     }, [aiRetryVersion, connectionVersion, scheduleRecoveryFailureNotice, seatControllers, state, toast]);
 
-    const forceEndAiPhase = useCallback(() => {
+    const forceEndAiPhase = useCallback(async (): Promise<boolean> => {
         if (!state) {
             toast.info(t('hud.ai.forceEndPhaseNotReady', { ns: 'game' }));
-            return;
+            return false;
         }
 
         const seatStates = Object.fromEntries(
@@ -646,13 +646,13 @@ const OnlineAiSeatBridge = ({
 
         if (!candidate) {
             toast.info(t('hud.ai.forceEndPhaseUnavailable', { ns: 'game' }));
-            return;
+            return false;
         }
 
         const targetClient = clientsRef.current[candidate.playerId];
         if (!targetClient?.isConnected) {
             toast.warning(t('hud.ai.forceEndPhaseSeatOffline', { ns: 'game' }));
-            return;
+            return false;
         }
 
         const attemptKey = candidate.resolution.attemptKey;
@@ -660,39 +660,50 @@ const OnlineAiSeatBridge = ({
             dedupeKey: `game.ai-force-end-turn.manual.submitting.${attemptKey}`,
         });
 
-        submitOnlineAiResolutionSequence({
-            client: targetClient,
-            initialResolution: candidate.resolution,
-            lastAiAttemptKeyRef,
-            scheduleRetry: () => {
-                setAiRetryVersion((version) => version + 1);
-            },
-            maxSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS + 1,
-            resolveNextResolution: ({ authoritativeState, stepIndex }) => {
-                if (stepIndex >= MAX_FORCE_END_TURN_FOLLOW_UP_STEPS) {
-                    return null;
-                }
-                return resolveForceEndTurnRecoveryStep({
-                    authoritativeState,
-                    seatControllers,
-                    playerId: candidate.playerId,
-                    allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true && stepIndex === 0,
-                });
-            },
-            onCompleted: () => {
-                toast.warning(
-                    t('hud.ai.forceEndPhaseSuccess', { ns: 'game' }),
-                    t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
-                    { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}` },
-                );
-            },
-            onRejected: (reason) => {
-                toast.warning(
-                    t('hud.ai.forceEndPhaseFailed', { ns: 'game', reason }),
-                    t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
-                    { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}.${reason}` },
-                );
-            },
+        return await new Promise<boolean>((resolve) => {
+            let settled = false;
+            const finish = (value: boolean) => {
+                if (settled) return;
+                settled = true;
+                resolve(value);
+            };
+
+            submitOnlineAiResolutionSequence({
+                client: targetClient,
+                initialResolution: candidate.resolution,
+                lastAiAttemptKeyRef,
+                scheduleRetry: () => {
+                    setAiRetryVersion((version) => version + 1);
+                },
+                maxSteps: MAX_FORCE_END_TURN_FOLLOW_UP_STEPS + 1,
+                resolveNextResolution: ({ authoritativeState, stepIndex }) => {
+                    if (stepIndex >= MAX_FORCE_END_TURN_FOLLOW_UP_STEPS) {
+                        return null;
+                    }
+                    return resolveForceEndTurnRecoveryStep({
+                        authoritativeState,
+                        seatControllers,
+                        playerId: candidate.playerId,
+                        allowAdvancePhase: candidate.requiresConfirmedAdvancePhase === true && stepIndex === 0,
+                    });
+                },
+                onCompleted: () => {
+                    toast.warning(
+                        t('hud.ai.forceEndPhaseSuccess', { ns: 'game' }),
+                        t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
+                        { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}` },
+                    );
+                    finish(true);
+                },
+                onRejected: (reason) => {
+                    toast.warning(
+                        t('hud.ai.forceEndPhaseFailed', { ns: 'game', reason }),
+                        t('hud.ai.forceEndPhaseTitle', { ns: 'game' }),
+                        { dedupeKey: `game.ai-force-end-turn.manual.${attemptKey}.${reason}` },
+                    );
+                    finish(false);
+                },
+            });
         });
     }, [seatControllers, state, t, toast]);
 
@@ -825,7 +836,7 @@ const OnlineGameHudBridge = ({
     onLeave?: () => void;
     onDestroy?: () => void;
     onForceExit?: () => void;
-    onForceEndAiPhase?: () => void;
+    onForceEndAiPhase?: () => Promise<boolean>;
     showForceEndAiPhase?: boolean;
     isLoading?: boolean;
     seatControllers: Record<string, AiSeatController>;
@@ -1073,7 +1084,7 @@ export const MatchRoom = () => {
     const [localStorageTick, setLocalStorageTick] = useState(0);
     const [onlineAiSeatControllers, setOnlineAiSeatControllers] = useState<Record<string, AiSeatController>>({});
     const [onlineAiSeatCredentials, setOnlineAiSeatCredentials] = useState<Record<string, string>>({});
-    const [forceEndAiPhaseHandler, setForceEndAiPhaseHandler] = useState<(() => void) | null>(null);
+    const [forceEndAiPhaseHandler, setForceEndAiPhaseHandler] = useState<(() => Promise<boolean>) | null>(null);
     const tutorialStartedRef = useRef(false);
     const lastTutorialStepIdRef = useRef<string | null>(null);
     const tutorialModalIdRef = useRef<string | null>(null);
@@ -1083,7 +1094,7 @@ export const MatchRoom = () => {
         () => Object.values(onlineAiSeatControllers).some((controller) => controller.type !== 'human'),
         [onlineAiSeatControllers],
     );
-    const handleForceEndAiPhaseReady = useCallback((handler: (() => void) | null) => {
+    const handleForceEndAiPhaseReady = useCallback((handler: (() => Promise<boolean>) | null) => {
         setForceEndAiPhaseHandler(() => handler);
     }, []);
 

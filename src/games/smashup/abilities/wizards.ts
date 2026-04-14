@@ -19,6 +19,7 @@ import {
     revealDeckTop,
     buildAbilityFeedback,
     findCardInPlayerZone,
+    filterCardsPresentInPlayerZone,
     resolveExtraPlayTiming,
 } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
@@ -30,6 +31,8 @@ import { registerInteractionHandler } from '../domain/abilityInteractionHandlers
 import { getCardDef, getBaseDef } from '../data/cards';
 import { appendResolvedActionAbility, getExternalActionEffectiveHandSize } from '../domain/externalActionPlay';
 import { validateActionPlaySemantics } from '../domain/playLegality';
+import { reduce } from '../domain/reduce';
+import { buildActionPlayedEvent } from '../domain/actionPlayEvent';
 
 function getCurrentDeckTopSnapshotCards<T extends { uid: string; defId: string }>(
     state: SmashUpCore,
@@ -755,7 +758,7 @@ export function registerWizardInteractionHandlers(): void {
 
         const events: SmashUpEvent[] = [
             { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, timestamp }),
         ];
         return appendResolvedActionAbility({
             state,
@@ -793,7 +796,7 @@ export function registerWizardInteractionHandlers(): void {
         if (playMode === 'ongoing-base') {
             const events: SmashUpEvent[] = [
                 { type: SU_EVENTS.CARD_REMOVED_FROM_DECK, payload: { playerId, cardUid, defId, reason: 'wizard_neophyte' }, timestamp } as SmashUpEvent,
-                { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+                buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, targetBaseIndex: baseIndex, timestamp }),
                 { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'base', targetBaseIndex: baseIndex }, timestamp } as SmashUpEvent,
             ];
             return appendResolvedActionAbility({
@@ -812,7 +815,7 @@ export function registerWizardInteractionHandlers(): void {
         if (playMode === 'special-base' || playMode === 'standard-base') {
             const events: SmashUpEvent[] = [
                 { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as SmashUpEvent,
-                { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+                buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, targetBaseIndex: baseIndex, timestamp }),
             ];
             return appendResolvedActionAbility({
                 state,
@@ -873,8 +876,9 @@ export function registerWizardInteractionHandlers(): void {
         }
 
         const events: SmashUpEvent[] = [
-            { type: SU_EVENTS.CARDS_DRAWN, payload: { playerId, count: 1, cardUids: [cardUid] }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+            { type: SU_EVENTS.CARD_REMOVED_FROM_DECK, payload: { playerId, cardUid, defId, reason: 'wizard_neophyte' }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, targetBaseIndex: baseIndex, targetMinionUid: minionUid, timestamp }),
+            { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'minion', targetBaseIndex: baseIndex, targetMinionUid: minionUid }, timestamp } as SmashUpEvent,
         ];
         return appendResolvedActionAbility({
             state,
@@ -965,7 +969,7 @@ export function registerWizardInteractionHandlers(): void {
 
         const events: SmashUpEvent[] = [
             { type: SU_EVENTS.CARD_TRANSFERRED, payload: { cardUid, defId, fromPlayerId: pid, toPlayerId: playerId, reason: 'wizard_mass_enchantment' }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, timestamp }),
         ];
         return appendResolvedActionAbility({
             state,
@@ -1002,7 +1006,7 @@ export function registerWizardInteractionHandlers(): void {
 
         const events: SmashUpEvent[] = [
             { type: SU_EVENTS.CARD_TRANSFERRED, payload: { cardUid, defId, fromPlayerId: pid, toPlayerId: playerId, reason: 'wizard_mass_enchantment' }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, targetBaseIndex: baseIndex, timestamp }),
         ];
         if (playMode === 'ongoing-base') {
             events.push({ type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'base', targetBaseIndex: baseIndex }, timestamp } as SmashUpEvent);
@@ -1046,7 +1050,7 @@ export function registerWizardInteractionHandlers(): void {
 
         const events: SmashUpEvent[] = [
             { type: SU_EVENTS.CARD_TRANSFERRED, payload: { cardUid, defId, fromPlayerId: pid, toPlayerId: playerId, reason: 'wizard_mass_enchantment' }, timestamp } as SmashUpEvent,
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid, defId, isExtraAction: true }, timestamp } as SmashUpEvent,
+            buildActionPlayedEvent({ playerId, cardUid, defId, isExtraAction: true, targetBaseIndex: baseIndex, targetMinionUid: minionUid, timestamp }),
             { type: SU_EVENTS.ONGOING_ATTACHED, payload: { cardUid, defId, ownerId: playerId, targetType: 'minion', targetBaseIndex: baseIndex, targetMinionUid: minionUid }, timestamp } as SmashUpEvent,
         ];
         return appendResolvedActionAbility({

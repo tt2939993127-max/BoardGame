@@ -530,6 +530,11 @@ export interface TriggerInstance {
 
     /** Wiki ordering */
     mandatory: boolean;
+    resolutionClass: 'mandatory' | 'optional';
+    /** 同一张牌/同一时点产生的反应 frame */
+    frameId?: string;
+    /** 触发源事件快照 id */
+    sourceEventId?: string;
     /** who decides / is credited */
     ownerPlayerId: PlayerId;
     witnessRequirement: WitnessRequirement;
@@ -563,6 +568,27 @@ export interface TriggerInstance {
     /** LKI snapshots captured at queue time */
     lkiMinion?: MinionLkiSnapshot;
     lkiBase?: BaseLkiSnapshot;
+}
+
+export type SmashUpReactionPhase = 'mandatory' | 'optional';
+
+export type SmashUpReactionFrameKind =
+    | 'generic'
+    | 'turn-start'
+    | 'turn-end'
+    | 'score-before'
+    | 'score-when'
+    | 'score-after';
+
+export interface SmashUpReactionSession {
+    frameId: string;
+    frameKind: SmashUpReactionFrameKind;
+    phase: SmashUpReactionPhase;
+    activePlayerId: PlayerId;
+    currentPlayerId: PlayerId;
+    consecutivePasses: number;
+    sourceBaseIndex?: number;
+    responseWindowType?: 'meFirst' | 'afterScoring';
 }
 
 export type DuelOutcomeKind =
@@ -948,6 +974,9 @@ export interface MinionPlayedEvent extends GameEvent<'su:minion_played'> {
         fromDeck?: boolean;
         /** 从埋葬区打出（揭开时使用） */
         fromBuried?: boolean;
+        targetBaseIndex?: number;
+        targetType?: 'base' | 'minion';
+        targetMinionUid?: string;
         /** 弃牌堆出牌来源能力 ID（用于每回合限制追踪） */
         discardPlaySourceId?: string;
         /** 是否消耗正常随从额度 */

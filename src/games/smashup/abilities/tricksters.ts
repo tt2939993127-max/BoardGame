@@ -182,9 +182,6 @@ function tricksterGnomePodSpecial(ctx: AbilityContext): AbilityResult {
     );
     if (targets.length === 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.no_valid_targets', ctx.now)] };
 
-    const limitEvt = emitSpecialLimitUsed(ctx.playerId, 'trickster_gnome_pod', ctx.baseIndex, ctx.now);
-    const limitEvents = limitEvt ? [limitEvt] : [];
-
     const options = targets.map(t => {
         const def = getCardDef(t.defId) as MinionCardDef | undefined;
         const name = def?.name ?? t.defId;
@@ -193,6 +190,9 @@ function tricksterGnomePodSpecial(ctx: AbilityContext): AbilityResult {
     });
     const minionOptions = buildMinionTargetOptions(options, { state: ctx.state, sourcePlayerId: ctx.playerId, effectType: 'destroy' });
     minionOptions.push(createSkipOption());
+
+    const limitEvt = emitSpecialLimitUsed(ctx.playerId, 'trickster_gnome_pod', ctx.baseIndex, ctx.now);
+    const limitEvents = limitEvt ? [limitEvt] : [];
 
     const result = resolveOrPrompt(ctx, minionOptions, {
         id: 'trickster_gnome_pod',

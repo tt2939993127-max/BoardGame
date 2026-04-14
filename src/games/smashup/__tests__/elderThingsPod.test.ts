@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { SU_COMMANDS, SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
-import { clearRegistry } from '../domain/abilityRegistry';
+import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { INTERACTION_COMMANDS } from '../../../engine/systems/InteractionSystem';
@@ -405,6 +405,38 @@ describe('elder_things (base): Elder Thing', () => {
         expect(base0.minions.some(m => m.defId === 'elder_thing_elder_thing')).toBe(false);
         // and not in discard
         expect(afterChoice.finalState.core.players['0'].discard.some(c => c.uid === 'et1')).toBe(false);
+    });
+});
+
+describe('elder_things_pod extra timing regression coverage', () => {
+    it('elder_thing_touch_of_madness_pod marks off-phase extra action as immediate', () => {
+        const core = makeState({
+            players: {
+                '0': makePlayer('0', { deck: [makeCard('d1', 'test_card', 'minion', '0')] }),
+                '1': makePlayer('1'),
+            },
+            turnOrder: ['0', '1'],
+            bases: [{ defId: 'base_a', minions: [], ongoingActions: [] }],
+        });
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'startTurn';
+        const executor = resolveAbility('elder_thing_touch_of_madness_pod', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const result = executor!({
+            state: core,
+            matchState: ms,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'elder_thing_touch_of_madness_pod',
+            baseIndex: 0,
+            random: defaultTestRandom,
+            now: 0,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(1);
+        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
     });
 });
 

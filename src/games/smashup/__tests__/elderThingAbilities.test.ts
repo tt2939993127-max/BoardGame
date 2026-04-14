@@ -24,7 +24,7 @@ import type {
     CardInstance,
 } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
-import { clearRegistry } from '../domain/abilityRegistry';
+import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { applyEvents, makeMatchState as makeMatchStateFromHelpers } from './helpers';
@@ -38,6 +38,68 @@ beforeAll(() => {
     clearInteractionHandlers();
     resetAbilityInit();
     initAllAbilities();
+});
+
+describe('elder thing extra timing regression coverage', () => {
+    it('elder_thing_touch_of_madness marks off-phase extra action as immediate', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    deck: [makeCard('d1', 'test', 'minion', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(state);
+        ms.sys.phase = 'startTurn';
+        const executor = resolveAbility('elder_thing_touch_of_madness', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const result = executor!({
+            state,
+            matchState: ms,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'elder_thing_touch_of_madness',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 0,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(1);
+        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
+    });
+
+    it('elder_thing_begin_the_summoning marks empty-discard off-phase extra action as immediate', () => {
+        const state = makeState({
+            players: {
+                '0': makePlayer('0', {
+                    discard: [makeCard('disc1', 'test_action', 'action', '0')],
+                }),
+                '1': makePlayer('1'),
+            },
+        });
+        const ms = makeMatchState(state);
+        ms.sys.phase = 'startTurn';
+        const executor = resolveAbility('elder_thing_begin_the_summoning', 'onPlay');
+        expect(executor).toBeDefined();
+
+        const result = executor!({
+            state,
+            matchState: ms,
+            playerId: '0',
+            cardUid: 'a1',
+            defId: 'elder_thing_begin_the_summoning',
+            baseIndex: 0,
+            random: defaultRandom,
+            now: 0,
+        });
+
+        const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+        expect(limitEvents).toHaveLength(1);
+        expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
+    });
 });
 
 // ============================================================================

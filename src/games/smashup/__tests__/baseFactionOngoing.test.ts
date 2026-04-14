@@ -1642,20 +1642,27 @@ describe('诡术师 ongoing 能力', () => {
             expect(events).toHaveLength(0);
         });
 
-        test('POD 版不在 onTurnStart 自动给额外随从额度', () => {
-            const base = makeBase({
-                ongoingActions: [{ uid: 'em-1', defId: 'trickster_enshrouding_mist_pod', ownerId: '0' }],
-            });
+        test('onPlay 在非出牌阶段也应为 immediate extra', () => {
+            const base = makeBase();
             const state = makeState([base]);
+            const ms = makeMatchState(state);
+            ms.sys.phase = 'startTurn';
 
-            const { events } = fireTriggers(state, 'onTurnStart', {
+            const executor = resolveAbility('trickster_enshrouding_mist', 'onPlay')!;
+            const result = executor({
                 state,
+                matchState: ms,
                 playerId: '0',
+                cardUid: 'em-1',
+                defId: 'trickster_enshrouding_mist',
+                baseIndex: 0,
                 random: dummyRandom,
                 now: 1000,
             });
 
-            expect(events).toHaveLength(0);
+            expect(result.events).toHaveLength(1);
+            expect(result.events?.[0].type).toBe(SU_EVENTS.LIMIT_MODIFIED);
+            expect((result.events?.[0] as any).payload.playTiming).toBe('immediate');
         });
     });
 

@@ -44,6 +44,14 @@ vi.mock('react-i18next', () => ({
     initReactI18next: { type: '3rdParty', init: () => {} },
 }));
 
+vi.mock('../../../core', async () => {
+    const actual = await vi.importActual<typeof import('../../../core')>('../../../core');
+    return {
+        ...actual,
+        HudPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    };
+});
+
 vi.mock('framer-motion', () => {
     const motion = new Proxy({}, {
         get: (_target, tag) => {

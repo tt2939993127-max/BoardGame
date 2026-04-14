@@ -157,16 +157,16 @@ describe('便衣忍者无随从场景', () => {
             ] as any[],
         });
 
-        // 验证：Me First! 窗口应该自动关闭（因为便衣忍者没有随从可选，实际不可用）
-        expect(result.finalState.sys.responseWindow?.current).toBeUndefined();
-        
-        // 验证：应该停在 scoreBases，海盗湾交互已创建
+        const mirroredWindow = result.finalState.sys.responseWindow?.current;
+        if (mirroredWindow) {
+            expect(mirroredWindow.sourceId).toBe('smashup_reaction_choose');
+            expect(mirroredWindow.windowType).toBe('meFirst');
+        }
+
+        // 验证：应该停在 scoreBases，统一反应交互已创建
         expect(result.finalState.sys.phase).toBe('scoreBases');
         expect(result.finalState.sys.interaction?.current).toBeDefined();
-        // With base abilities queued, an ordering prompt may appear first.
-        expect(['reaction_queue_choose_next', 'base_pirate_cove']).toContain(
-            result.finalState.sys.interaction?.current?.data?.sourceId,
-        );
+        expect(result.finalState.sys.interaction?.current?.data?.sourceId).toBe('smashup_reaction_choose');
     });
 
     it('P0 手牌中有便衣忍者和随从时，Me First! 窗口应该保持打开', () => {

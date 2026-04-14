@@ -164,7 +164,7 @@ function getMergeCommitsInRange(baseRef, headRef) {
 }
 
 function hasMergeConflictEvidence(commit) {
-  const changedFiles = runGit(['diff-tree', '--no-commit-id', '--name-only', '-r', commit], { allowFailure: true })
+  const changedFiles = runGit(['show', '--pretty=format:', '--name-only', '--no-renames', commit], { allowFailure: true })
     .split(/\r?\n/)
     .map((value) => value.trim())
     .filter(Boolean);
@@ -1231,7 +1231,7 @@ if (isPrePushMode && aheadCount > 1 && effectiveBaseRef !== baseRef) {
 }
 
 runMergeConflictGuards({
-  baseRef,
+  baseRef: effectiveBaseRef,
   headRef: resolvedTargetHead,
 });
 

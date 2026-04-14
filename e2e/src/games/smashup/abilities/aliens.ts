@@ -17,9 +17,9 @@ import type {
     CardOrTitanChoiceValue,
 } from '../domain/types';
 import {
-    buildBaseTargetOptions, buildMinionTargetOptions, getMinionPower,
-    getSetAsideTitansPlayableAs, grantExtraMinion, moveMinion, playTitan, shuffleBaseDeck,
-    resolveOrPrompt, buildAbilityFeedback, buildPlayerTargetOptions,
+    buildBaseTargetOptions, buildMinionTargetOptions, buildPlayerTargetOptions, getMinionPower,
+    grantContextualExtraMinion, grantExtraMinion, moveMinion, shuffleBaseDeck,
+    resolveOrPrompt, buildAbilityFeedback, getSetAsideTitansPlayableAs, playTitan,
 } from '../domain/abilityHelpers';
 import { getBaseDef, getCardDef, getMinionDef } from '../data/cards';
 import { createSimpleChoice, queueInteraction } from '../../../engine/systems/InteractionSystem';
@@ -459,7 +459,7 @@ function alienAbduction(ctx: AbilityContext): AbilityResult {
             targets.push({ uid: m.uid, defId: m.defId, baseIndex: i, label: `${def?.name ?? m.defId} (力量 ${getMinionPower(ctx.state, m, i)}) @ ${baseDef?.name ?? `基地 ${i + 1}`}` });
         }
     }
-    if (targets.length === 0) return { events: [grantExtraMinion(ctx.playerId, 'alien_abduction', ctx.now)] };
+    if (targets.length === 0) return { events: [grantContextualExtraMinion(ctx, 'alien_abduction')] };
     return {
         events: [], matchState: queueInteraction(ctx.matchState, createSimpleChoice(
             `alien_abduction_${ctx.now}`, ctx.playerId, '选择要返回手牌的随从', buildMinionTargetOptions(targets, { state: ctx.state, sourcePlayerId: ctx.playerId }), { sourceId: 'alien_abduction', targetType: 'minion' }
@@ -955,7 +955,7 @@ export function registerAlienInteractionHandlers(): void {
         } as MinionReturnedEvent;
         events.push(returnEvent);
         // 额外随从额度
-        events.push(grantExtraMinion(playerId, 'alien_abduction', timestamp));
+        events.push(grantContextualExtraMinion({ playerId, now: timestamp, matchState: state }, 'alien_abduction'));
         return { state, events };
     });
 }

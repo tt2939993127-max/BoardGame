@@ -107,7 +107,7 @@ describe('Alien Scout - No Duplicate Scoring', () => {
                 // 执行 ADVANCE_PHASE 进入记分阶段
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
                 // Base abilities are queued; choose Scout first if an ordering prompt appears.
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'afterScoring:alien_scout:0:0' } },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'trigger:afterScoring:alien_scout:0:0' } },
                 // 用户选择"返回手牌"
                 { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'yes' } },
             ] as any[],
@@ -145,10 +145,10 @@ describe('Alien Scout - No Duplicate Scoring', () => {
                 // 执行 ADVANCE_PHASE 进入记分阶段
                 { type: 'ADVANCE_PHASE', playerId: '0', payload: undefined },
                 // Choose each Scout trigger first (reaction ordering prompt).
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'afterScoring:alien_scout:0:0' } },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'trigger:afterScoring:alien_scout:0:0' } },
                 // 用户选择"返回手牌"（第一个侦察兵）
                 { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'yes' } },
-                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'afterScoring:alien_scout:0:1' } },
+                { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'trigger:afterScoring:alien_scout:0:1' } },
                 // 用户选择"返回手牌"（第二个侦察兵）
                 { type: INTERACTION_COMMANDS.RESPOND, playerId: '0', payload: { optionId: 'yes' } },
             ] as any[],

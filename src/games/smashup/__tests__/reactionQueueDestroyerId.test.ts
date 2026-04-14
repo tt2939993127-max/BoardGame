@@ -4,7 +4,7 @@ import type { SmashUpCore, TriggerInstance } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
 import { clearRegistry } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
-import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
+import { clearInteractionHandlers, getInteractionHandler } from '../domain/abilityInteractionHandlers';
 import { defaultTestRandom } from './testRunner';
 import { makeMatchState, makePlayer, makeState, getInteractionsFromMS } from './helpers';
 import { maybeResolveReactionQueue } from '../domain/reactionQueue';
@@ -53,11 +53,31 @@ describe('reaction queue: preserves destroyerId context', () => {
         const rq = maybeResolveReactionQueue(ms, defaultTestRandom, 1);
         expect(rq).toBeDefined();
 
-        // Only one trigger => should execute directly and create the "play mad monster party" prompt.
         const after = rq!.state;
         const interactions = getInteractionsFromMS(after) as any[];
         expect(interactions.length).toBeGreaterThanOrEqual(1);
-        expect(interactions[0]?.data?.sourceId).toBe('vampire_mad_monster_party_pod_play');
+
+        const first = interactions[0];
+        if (first?.data?.sourceId === 'smashup_reaction_choose') {
+            const option = first.data.options.find((opt: any) => opt.id === `trigger:${trigger.id}`)
+                ?? first.data.options.find((opt: any) => String(opt.id).includes('trigger:'));
+            expect(option).toBeDefined();
+            const handler = getInteractionHandler('smashup_reaction_choose');
+            expect(handler).toBeDefined();
+            const resolved = handler!(
+                after as any,
+                first.playerId,
+                option.value,
+                first.data,
+                defaultTestRandom as any,
+                2,
+            );
+            const nextState = resolved?.state ?? after;
+            const nextInteractions = getInteractionsFromMS(nextState) as any[];
+            expect(nextInteractions.some(i => i?.data?.sourceId === 'vampire_mad_monster_party_pod_play')).toBe(true);
+        } else {
+            expect(first?.data?.sourceId).toBe('vampire_mad_monster_party_pod_play');
+        }
     });
 });
 

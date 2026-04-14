@@ -323,8 +323,8 @@ describe('scoreBases 阶段自动推进', () => {
             state: state as any,
         });
 
-        expect(legalActions.some(action => action.kind === 'activate-special')).toBe(false);
-        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(true);
+        expect(legalActions.some(action => action.kind === 'activate-special')).toBe(true);
+        expect(legalActions.some(action => action.kind === 'advance-phase')).toBe(false);
     });
 
     it('AI 在 optional multi 交互中应保留空选动作，避免 special 链卡死', () => {
@@ -678,7 +678,7 @@ describe('scoreBases 阶段自动推进', () => {
                         playerId: '1',
                         kind: 'simple-choice',
                         data: {
-                            sourceId: 'reaction_queue_choose_next',
+                            sourceId: 'smashup_reaction_choose',
                             options: [
                                 {
                                     id: 'trigger-a',
@@ -898,7 +898,7 @@ describe('scoreBases 阶段自动推进', () => {
                         playerId: '0',
                         kind: 'simple-choice',
                         data: {
-                            sourceId: 'reaction_queue_choose_next',
+                            sourceId: 'smashup_reaction_choose',
                             options: buildTriggerChoiceOptions([
                                 'wizard_portal_order',
                                 'base_tortuga',
@@ -1013,7 +1013,7 @@ describe('scoreBases 阶段自动推进', () => {
                         playerId: '0',
                         kind: 'simple-choice',
                         data: {
-                            sourceId: 'reaction_queue_choose_next',
+                            sourceId: 'smashup_reaction_choose',
                             options: buildTriggerChoiceOptions([
                                 'pirate_first_mate_choose_base',
                                 'base_tortuga',

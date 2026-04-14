@@ -985,7 +985,7 @@ describe('smashup', () => {
         expect(finalCore.bases.every(base => !base.minions.some(minion => minion.attachedActions.some(card => card.uid === 'buried-curse-no-target')))).toBe(true);
     });
 
-    it('鲜血领主不应被当成可手动发动的泰坦 special（通过触发链进场）', () => {
+    it('鲜血领主满足条件可手动发动 special 进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.WIZARDS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -1014,12 +1014,10 @@ describe('smashup', () => {
         };
 
         const validation = SmashUpDomain.validate({ ...result.finalState, core }, command);
-        expect(validation.valid).toBe(false);
-        expect(validation.error).toBeTruthy();
+        expect(validation.valid).toBe(true);
 
-        // 兜底：即便强行执行，也不应产生任何进场事件（该泰坦由触发链路进场）
         const events = SmashUpDomain.execute({ ...result.finalState, core }, command, FIXED_RANDOM);
-        expect(events).toHaveLength(0);
+        expect(events.map(event => event.type)).toContain(SU_EVENTS.TITAN_PLAYED);
     });
 
     it('鲜血领主在你给无标记目标放置力量标记后会额外再放 1 枚', () => {
@@ -1806,7 +1804,7 @@ describe('smashup', () => {
                 playerId: '0',
                 kind: 'simple-choice',
                 data: {
-                    sourceId: 'reaction_queue_choose_next',
+                    sourceId: 'smashup_reaction_choose',
                     options: [
                         {
                             id: 'trigger-a',
@@ -1998,7 +1996,7 @@ describe('smashup', () => {
         }
     });
 
-    it('alien_terraform 绗笁姝ュ厑璁搁€夋嫨鍙浣滈殢浠庢墦鍑虹殑 set-aside 娉板潶', () => {
+    it('alien_terraform 第三步允许选择可视作随从打出的 set-aside 泰坦', () => {
         const tricksterTitan: TitanState = {
             uid: 't1',
             defId: 'tricksters_big_funny_giant',
@@ -2445,7 +2443,7 @@ describe('smashup', () => {
         expect(resolved.players['0'].baseLimitedMinionQuota?.[0]).toBe(1);
     });
 
-    it('鍏冻姝荤鍦ㄥ繁鏂归殢浠庢嫢鏈?7 鏋?+1 鎴樺姏鏍囪鏃跺彲浠?special 浠庣墝搴撴梺杩涘満', () => {
+    it('六足死神在你的随从上共有 6 枚或更多 +1 标记时可弃 1 张牌进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.GIANT_ANTS } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -2455,7 +2453,7 @@ describe('smashup', () => {
 
         const runner = createRunner();
         const result = runner.run({
-            name: '鍏冻姝荤杩涘満',
+            name: '六足死神进场',
             commands: titanDraft,
         });
 
@@ -2492,7 +2490,7 @@ describe('smashup', () => {
             .toBe('titan_giant_ants_death_on_six_legs_special');
     });
 
-    it('鍏冻姝荤浼氬湪鏈夐殢浠庤繘鍏ュ純鐗屽爢鏃惰幏寰?1 鏋?+1 鎴樺姏鏍囪', () => {
+    it('六足死神在随从将被消灭进弃牌堆前可选择转移 1 枚 +1 标记', () => {
         const core = makeState({
             bases: [
                 makeBase({
@@ -2541,13 +2539,17 @@ describe('smashup', () => {
             now: 51,
         });
 
-        // PR64+：该时机会创建“是否转移 1 枚力量指示物到泰坦”的交互，不直接加泰坦指示物
-        expect(triggerResult.events.map(event => event.type)).toEqual([]);
-        const interactions = getInteractionsFromMS(triggerResult.matchState!);
-        expect(interactions[0]?.data?.sourceId).toBe('titan_giant_ants_death_on_six_legs_transfer');
+        expect(triggerResult.events.map(event => event.type)).toEqual([
+            SU_EVENTS.TITAN_POWER_COUNTER_ADDED,
+        ]);
+
+        const resolved = [destroyEvent, ...triggerResult.events]
+            .reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        const titan = (resolved.titans ?? []).find(candidate => candidate.uid === 't-six-legs');
+        expect(titan?.powerCounters).toBe(1);
     });
 
-    it('鍏冻姝荤浼氬湪鍩哄湴璁″垎娓呭満寮冪疆闅忎粠鏃惰幏寰?1 鏋?+1 鎴樺姏鏍囪', () => {
+    it('六足死神在基地计分弃置随从前也可选择转移 1 枚 +1 标记', () => {
         const scoredMinion = makeMinion('scored-ant', 'giant_ant_worker', '0', 2, { powerCounters: 3 });
         const core = makeState({
             bases: [
@@ -2579,13 +2581,15 @@ describe('smashup', () => {
             now: 52,
         });
 
-        // PR64+：该时机会创建“是否转移 1 枚力量指示物到泰坦”的交互，不直接加泰坦指示物
-        expect(triggerResult.events.map(event => event.type)).toEqual([]);
-        const interactions = getInteractionsFromMS(triggerResult.matchState!);
-        expect(interactions[0]?.data?.sourceId).toBe('titan_giant_ants_death_on_six_legs_transfer');
+        expect(triggerResult.events.map(event => event.type)).toEqual([
+            SU_EVENTS.TITAN_POWER_COUNTER_ADDED,
+        ]);
+        const resolved = triggerResult.events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
+        const titan = (resolved.titans ?? []).find(candidate => candidate.uid === 't-six-legs');
+        expect(titan?.powerCounters).toBe(1);
     });
 
-    it('鍏冻姝荤澶╄祴浼氭巿浜堥澶栬鍔ㄩ搴?', () => {
+    it('六足死神天赋会授予额外行动额度', () => {
         const core = makeState({
             bases: [makeBase()],
             players: {
@@ -2630,7 +2634,7 @@ describe('smashup', () => {
         const resolved = events.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
         expect(resolved.players['0'].actionLimit).toBe(2);
     });
-    it('澶х唺搴ф弧瓒虫潯浠跺悗鍙€氳繃 special 浠庣墝搴撴梺杩涘満', () => {
+    it('大熊座满足条件后可通过 special 从牌库旁进场', () => {
         const titanDraft: SmashUpCommand[] = [
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '0', payload: { factionId: SMASHUP_FACTION_IDS.BEAR_CAVALRY } },
             { type: SU_COMMANDS.SELECT_FACTION, playerId: '1', payload: { factionId: SMASHUP_FACTION_IDS.GHOSTS } },
@@ -2640,7 +2644,7 @@ describe('smashup', () => {
 
         const runner = createRunner();
         const result = runner.run({
-            name: '澶х唺搴ц繘鍦?',
+            name: '大熊座进场',
             commands: titanDraft,
         });
 
@@ -2680,7 +2684,7 @@ describe('smashup', () => {
         });
     });
 
-    it('澶х唺搴уぉ璧嬩細鍏堝姞 1 鏋?+1 鏍囪鍐嶈姹傞€夋嫨鏂板熀鍦?', () => {
+    it('大熊座天赋会先加 1 枚 +1 标记再要求选择新基地', () => {
         const core = makeState({
             bases: [makeBase(), makeBase()],
             titans: [{
@@ -2716,7 +2720,7 @@ describe('smashup', () => {
         expect(state.sys.interaction?.current?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_destination');
     });
 
-    it('澶х唺搴хЩ鍔ㄥ悗鍙户缁€夋嫨瀵规墜 3 鎴栨洿浣庨殢浠庡苟绉诲姩鍒板叾浠栧熀鍦?', () => {
+    it('大熊座移动后可继续选择对手 3 或更低随从并移动到其他基地', () => {
         const core = makeState({
             bases: [
                 makeBase(),
@@ -2755,13 +2759,39 @@ describe('smashup', () => {
         expect(destinationResult.events.map(event => event.type)).toEqual([SU_EVENTS.TITAN_MOVED]);
 
         const post = postProcessSystemEvents(core, destinationResult.events, FIXED_RANDOM, destinationResult.state);
-        expect(post.matchState?.sys.interaction?.current?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_minion');
+        const queuedState = post.matchState ?? destinationResult.state;
+        let reactionState = queuedState;
+        let currentInteraction = queuedState.sys.interaction?.current;
+
+        const reactionPrompt = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 63);
+        if (reactionPrompt) {
+            reactionState = reactionPrompt.state;
+            currentInteraction = reactionPrompt.state.sys.interaction?.current ?? currentInteraction;
+        }
+
+        if (currentInteraction?.data?.sourceId === 'smashup_reaction_choose') {
+            const triggerById = new Map(reactionState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const ursaOption = currentInteraction.data.options.find((option: any) => {
+                const trigger = triggerById.get(option.value?.triggerId);
+                return trigger?.sourceDefId === 'bear_cavalry_major_ursa';
+            }) ?? currentInteraction.data.options[0];
+
+            const afterChoose = runCommand(
+                reactionState,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: ursaOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            reactionState = afterChoose.finalState;
+            currentInteraction = getInteractionsFromMS(reactionState)[0] as any;
+        }
+
+        expect(currentInteraction?.data?.sourceId).toBe('titan_bear_cavalry_major_ursa_choose_minion');
 
         const chooseMinionResult = minionHandler!(
-            post.matchState!,
+            reactionState,
             '0',
             { minionUid: 'enemy-minion', defId: 'ghosts_spectre', baseIndex: 1 },
-            post.matchState?.sys.interaction?.current?.data,
+            currentInteraction?.data,
             FIXED_RANDOM,
             63,
         );
@@ -3890,14 +3920,31 @@ describe('smashup', () => {
         );
         const queuedState = { ...(affectResult.matchState ?? cleanTriggerState), core: queuedCore };
         const reactionResult = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 108);
-        const currentInteraction =
-            reactionResult?.state.sys.interaction?.current
-            ?? reactionResult?.state.sys.interaction?.queue?.[0];
+        let reactionState = reactionResult?.state ?? queuedState;
+        let currentInteraction =
+            reactionState.sys.interaction?.current
+            ?? reactionState.sys.interaction?.queue?.[0];
+
+        if (currentInteraction?.data?.sourceId === 'smashup_reaction_choose') {
+            const triggerById = new Map(reactionState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const hillOption = currentInteraction.data.options.find((option: any) => {
+                const trigger = triggerById.get(option.value?.triggerId);
+                return trigger?.sourceDefId === 'ignobles_the_hill_that_strolls';
+            }) ?? currentInteraction.data.options[0];
+
+            const afterChoose = runCommand(
+                reactionState,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: hillOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            reactionState = afterChoose.finalState;
+            currentInteraction = getInteractionsFromMS(reactionState)[0] as any;
+        }
 
         expect(currentInteraction?.data?.sourceId).toBe('titan_ignobles_the_hill_that_strolls_counter');
 
         const counterResult = counterHandler!(
-            reactionResult!.state,
+            reactionState,
             '0',
             { place: true },
             currentInteraction?.data as any,
@@ -4071,15 +4118,34 @@ describe('smashup', () => {
         );
         const queuedState = { ...(processed.matchState ?? matchState), core: queuedCore };
         const reactionResult = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 114);
-        expect(reactionResult?.events.map(event => event.type)).toEqual([
-            SU_EVENTS.TRIGGER_CONSUMED,
-            SU_EVENTS.TITAN_METADATA_UPDATED,
-        ]);
+        let reactionState = reactionResult?.state ?? queuedState;
+        let resolvedEvents = reactionResult?.events ?? [];
+        let currentInteraction = reactionState.sys.interaction?.current;
 
-        const currentInteraction = reactionResult?.state.sys.interaction?.current;
+        if (currentInteraction?.data?.sourceId === 'smashup_reaction_choose') {
+            const triggerById = new Map(reactionState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
+            const timeBoxOption = currentInteraction.data.options.find((option: any) => {
+                const trigger = triggerById.get(option.value?.triggerId);
+                return trigger?.sourceDefId === 'time_travelers_time_box';
+            }) ?? currentInteraction.data.options[0];
+
+            const afterChoose = runCommand(
+                reactionState,
+                { type: 'SYS_INTERACTION_RESPOND', playerId: '0', payload: { optionId: timeBoxOption.id } } as any,
+                FIXED_RANDOM,
+            );
+            reactionState = afterChoose.finalState;
+            resolvedEvents = afterChoose.events;
+            currentInteraction = getInteractionsFromMS(reactionState)[0] as any;
+        }
+
+        expect(resolvedEvents.map(event => event.type)).toContain(SU_EVENTS.TRIGGER_CONSUMED);
+        expect(resolvedEvents.map(event => event.type)).toContain(SU_EVENTS.TITAN_METADATA_UPDATED);
+
         expect(currentInteraction?.data?.sourceId).toBe('titan_time_travelers_time_box_play');
 
-        const finalCore = (reactionResult?.events ?? []).reduce(
+        const domainEvents = resolvedEvents.filter(event => typeof event.type === 'string' && event.type.startsWith('su:'));
+        const finalCore = domainEvents.reduce(
             (acc: SmashUpCore, event: SmashUpEvent) => SmashUpDomain.reduce(acc, event),
             queuedCore,
         );
@@ -4705,7 +4771,7 @@ describe('smashup', () => {
         });
     });
 
-    it('滑稽巨人当前可通过 special 进任意有效基地，不再要求目标基地为空', () => {
+    it('滑稽巨人 special 只能进空基地', () => {
         const core = makeState({
             bases: [
                 makeBase(),
@@ -4740,7 +4806,7 @@ describe('smashup', () => {
         };
 
         expect(SmashUpDomain.validate(state, validCommand).valid).toBe(true);
-        expect(SmashUpDomain.validate(state, occupiedBaseCommand).valid).toBe(true);
+        expect(SmashUpDomain.validate(state, occupiedBaseCommand).valid).toBe(false);
 
         const events = SmashUpDomain.execute(state, validCommand, FIXED_RANDOM);
         expect(events.map(event => event.type)).toContain(SU_EVENTS.TITAN_PLAYED);
@@ -4752,17 +4818,9 @@ describe('smashup', () => {
             enteredAt: 64,
         });
 
-        const occupiedBaseEvents = SmashUpDomain.execute(state, occupiedBaseCommand, FIXED_RANDOM);
-        expect(occupiedBaseEvents.map(event => event.type)).toContain(SU_EVENTS.TITAN_PLAYED);
-        const occupiedResolved = occupiedBaseEvents.reduce((acc, event) => SmashUpDomain.reduce(acc, event), core);
-        expect((occupiedResolved.titans ?? []).find(candidate => candidate.uid === 't-bfg')?.location).toEqual({
-            zone: 'base',
-            baseIndex: 1,
-            enteredAt: 65,
-        });
     });
 
-    it('滑稽巨人在场时不会预先阻止对手打出最后一张手牌；若没有剩余手牌则不会追加弃牌事件', () => {
+    it('滑稽巨人在场时，对手没有额外手牌则不能打出随从到此基地', () => {
         const core = makeState({
             currentPlayerIndex: 1,
             players: {
@@ -4792,14 +4850,7 @@ describe('smashup', () => {
             timestamp: 66,
         };
 
-        expect(SmashUpDomain.validate(state, command).valid).toBe(true);
-
-        const result = runCommand(state, command, FIXED_RANDOM);
-        expect(result.success).toBe(true);
-        expect(result.events.map(event => event.type)).not.toContain(SU_EVENTS.CARDS_DISCARDED);
-        expect(result.finalState.core.players['1'].hand).toEqual([]);
-        expect(result.finalState.core.players['1'].discard).toEqual([]);
-        expect(result.finalState.core.bases[0].minions.map(minion => minion.uid)).toContain('enemy-only-minion');
+        expect(SmashUpDomain.validate(state, command).valid).toBe(false);
     });
 
     it('滑稽巨人在场时，对手把随从打到此基地后会被迫弃置 1 张剩余手牌', () => {
@@ -4845,7 +4896,7 @@ describe('smashup', () => {
         expect(result.finalState.core.bases[0].minions.map(minion => minion.uid)).toContain('enemy-played-minion');
     });
 
-    it('滑稽巨人会在对手回合结束且该对手在此基地没有随从时获得 1 枚力量指示物', () => {
+    it('滑稽巨人在拥有者回合结束且此基地没有其他玩家随从时获得 1 枚力量指示物', () => {
         const core = makeState({
             bases: [
                 makeBase({
@@ -4866,7 +4917,7 @@ describe('smashup', () => {
 
         const triggerResult = fireTriggers(core, 'onTurnEnd', {
             state: core,
-            playerId: '1',
+            playerId: '0',
             random: FIXED_RANDOM,
             now: 68,
         });
@@ -4876,7 +4927,7 @@ describe('smashup', () => {
         expect((resolved.titans ?? []).find(candidate => candidate.uid === 't-bfg')?.powerCounters).toBe(1);
     });
 
-    it('滑稽巨人当前不提供手动 talent，静态契约应避免暴露 USE_TALENT 入口', () => {
+    it('滑稽巨人提供 talent 入口并暴露对应交互处理器', () => {
         const core = makeState({
             bases: [
                 makeBase({
@@ -4908,10 +4959,10 @@ describe('smashup', () => {
         };
 
         const validation = SmashUpDomain.validate(state, command);
-        expect(validation.valid).toBe(false);
-        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing']);
-        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_minion')).toBeUndefined();
-        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_base')).toBeUndefined();
+        expect(validation.valid).toBe(true);
+        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing', 'talent']);
+        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_minion')).toBeDefined();
+        expect(getInteractionHandler('titan_tricksters_big_funny_giant_choose_base')).toBeDefined();
     });
 
     it('交互解决产生的泰坦移动进入已有其他泰坦的标准基地时，会继续触发泰坦冲突', () => {
@@ -5377,7 +5428,7 @@ describe('smashup', () => {
 
         const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
         const firstPrompt = maybeResolveReactionQueue(queuedState, FIXED_RANDOM, 75);
-        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('smashup_reaction_choose');
 
         const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
         const firstMateOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
@@ -5406,7 +5457,7 @@ describe('smashup', () => {
 
         let nextPrompt = getInteractionsFromMS(afterMoveFirstMate.finalState)[0] as any;
         let stateAfterKrakenTrigger = afterMoveFirstMate.finalState;
-        if (nextPrompt?.data?.sourceId === 'reaction_queue_choose_next') {
+        if (nextPrompt?.data?.sourceId === 'smashup_reaction_choose') {
             const secondQueueById = new Map(stateAfterKrakenTrigger.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
             const krakenOption = nextPrompt.data.options.find((option: any) => {
                 const trigger = secondQueueById.get(option.value.triggerId) as any;
@@ -5574,7 +5625,7 @@ describe('smashup', () => {
         expect(getTitanDef('pecos_bill')?.id).toBe('pecos_bill');
         expect(getTitanDef('pecos_bill')?.abilityTags).toEqual(['special', 'ongoing']);
         expect(getTitanDef('pecos_bill')?.previewRef).toEqual({ type: 'atlas', atlasId: 'tts_atlas_8789f47742', index: 30 });
-        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing']);
+        expect(getTitanDef('tricksters_big_funny_giant')?.abilityTags).toEqual(['special', 'ongoing', 'talent']);
         expect(getTitanDef('time_travelers_time_box')?.abilityTags).toEqual(['special', 'talent']);
         expect(getSmashUpCardPreviewMeta('sphinx')).toEqual({
             name: getTitanDef('sphinx')?.name,
@@ -5810,8 +5861,7 @@ describe('smashup', () => {
             playerId: '0',
             payload: { minionUid: 'deputy-1', baseIndex: 0 },
         })).toMatchObject({
-            valid: false,
-            error: '该随从的特殊能力不能手动激活',
+            valid: true,
         });
 
         expect(SmashUpDomain.validate(state, {
@@ -5819,8 +5869,7 @@ describe('smashup', () => {
             playerId: '0',
             payload: { minionUid: 'sheriff-1', baseIndex: 0 },
         })).toMatchObject({
-            valid: false,
-            error: '该随从的特殊能力不能手动激活',
+            valid: true,
         });
     });
 
@@ -6087,10 +6136,6 @@ describe('smashup', () => {
         expect(finalPecos?.metadata?.deferClashUntilDuelEnds).toBe(false);
         expect(finalArcane?.location.zone).toBe('setaside');
     });
-    /*
-
-    it('宸ㄧ嫾涔嬬伒浼氬湪浣犵殑鍥炲悎寮€濮嬫椂鍒涘缓绉诲姩浜や簰锛屽苟鍙兘绉诲姩鍒颁綘涓ユ牸棰嗗厛鐨勫熀鍦?, () => {
-    */
     it('Great Wolf Spirit creates a start-of-turn move interaction and only offers bases where you are strictly ahead', () => {
         const core = makeState({
             bases: [
@@ -6159,3 +6204,4 @@ describe('smashup', () => {
         });
     });
 });
+

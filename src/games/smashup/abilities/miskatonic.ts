@@ -11,7 +11,7 @@ import { SU_EVENTS, MADNESS_CARD_DEF_ID } from '../domain/types';
 import type { SmashUpEvent, OngoingDetachedEvent, CardsDrawnEvent, MinionCardDef, SmashUpCore } from '../domain/types';
 import type { MatchState } from '../../../engine/types';
 import {
-    drawMadnessCards, grantExtraAction, grantExtraMinion,
+    drawMadnessCards, grantContextualExtraAction, grantContextualExtraMinion, grantExtraAction, grantExtraMinion,
     returnMadnessCard, destroyMinion, addTempPower, addPowerCounter, addPermanentPower,
     getMinionPower, buildMinionTargetOptions, buildActionMinionTargetOptions, buildBaseTargetOptions,
     resolveOrPrompt, buildAbilityFeedback,
@@ -120,7 +120,7 @@ function miskatonicPsychologicalProfiling(ctx: AbilityContext): AbilityResult {
         }
     }
     // 额外打出1个战术
-    events.push(grantExtraAction(ctx.playerId, 'miskatonic_psychological_profiling', ctx.now));
+    events.push(grantContextualExtraAction(ctx, 'miskatonic_psychological_profiling'));
     return { events };
 }
 
@@ -278,9 +278,9 @@ function miskatonicLostKnowledge(ctx: AbilityContext): AbilityResult {
     if (madnessEvt) events.push(madnessEvt);
     // 额外打出1个随从到此基地（restrictToBase 限定到 ongoing 所在基地）
     if (ctx.baseIndex !== undefined) {
-        events.push(grantExtraMinion(ctx.playerId, 'miskatonic_lost_knowledge', ctx.now, ctx.baseIndex));
+        events.push(grantContextualExtraMinion(ctx, 'miskatonic_lost_knowledge', ctx.baseIndex));
     } else {
-        events.push(grantExtraMinion(ctx.playerId, 'miskatonic_lost_knowledge', ctx.now));
+        events.push(grantContextualExtraMinion(ctx, 'miskatonic_lost_knowledge'));
     }
     return { events };
 }
@@ -952,7 +952,7 @@ export function registerMiskatonicInteractionHandlers(): void {
             const events: SmashUpEvent[] = [];
             const evt = drawMadnessCards(playerId, 1, state.core, 'miskatonic_those_meddling_kids_pod', timestamp);
             if (evt) events.push(evt);
-            events.push(grantExtraAction(playerId, 'miskatonic_those_meddling_kids_pod', timestamp));
+            events.push(grantContextualExtraAction({ playerId, now: timestamp, matchState: state }, 'miskatonic_those_meddling_kids_pod'));
             return { state, events };
         }
         if (v.mode === 'destroy') {

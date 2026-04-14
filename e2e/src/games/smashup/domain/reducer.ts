@@ -31,7 +31,6 @@ import type {
     SmashUpCore,
     SmashUpEvent,
     MinionPlayedEvent,
-    ActionPlayedEvent,
     CardsDiscardedEvent,
     FactionSelectedEvent,
     AllFactionsSelectedEvent,
@@ -52,8 +51,8 @@ import type {
     PermanentPowerAddedEvent,
     CardToDeckBottomEvent,
     SpecialAfterScoringArmedEvent,
+    RevealHandEvent,
     RevealDeckTopEvent,
-    DeckInspectedEvent,
 } from './types';
 import type { PlayerId } from '../../../engine/types';
 import { SU_COMMANDS, SU_EVENTS, STARTING_HAND_SIZE } from './types';
@@ -64,17 +63,22 @@ import { autoMulligan } from '../../../engine/primitives/mulligan';
 import { maybeQueueStartingHandMulliganPrompt } from './mulliganHandlers';
 import { resolveOnPlay, resolveSpecial, resolveTalent, resolveOnDestroy, resolveOngoingActivation } from './abilityRegistry';
 import type { AbilityContext } from './abilityRegistry';
-import { triggerActiveBaseAbility, triggerBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
+import { triggerActiveBaseAbility, triggerExtendedBaseAbility } from './baseAbilities';
 import { fireTriggers, collectTriggers, isMinionProtected, getConsumableProtectionSource } from './ongoingEffects';
 import { maybeResolveReactionQueue } from './reactionQueue';
 import { canPlayFromDiscard } from './discardPlayability';
 import { reduce } from './reduce';
-import { getEffectivePower } from './ongoingModifiers';
 import { buildAffectRecords, type AffectRecord } from './affect';
+import { buildActionPlayedEvent } from './actionPlayEvent';
+import { getSmashUpReactionWindowContext } from './reactionWindowState';
 
 // ============================================================================
 // execute：命令 → 事件
 // ============================================================================
+
+function findTitanByUid(core: SmashUpCore, titanUid: string) {
+    return (core.titans ?? []).find(titan => titan.uid === titanUid);
+}
 
 export function execute(
     state: MatchState<SmashUpCore>,
@@ -106,12 +110,7 @@ export function execute(
     }
     // 返回手牌保护过滤（deep_roots / entangled / ghost_incorporeal 等）
     const afterProtectedAffect = filterProtectedAffectEvents(afterDestroyMove.events, state.core, command.playerId);
-    const afterReturnTriggers = processReturnToHandTriggers(afterProtectedAffect, state, command.playerId, random, now);
-    if (afterReturnTriggers.matchState) {
-        state.sys = afterReturnTriggers.matchState.sys;
-    }
-    // 放入牌库底保护过滤（bear_cavalry_superiority / ghost_incorporeal 等）
-    const afterAffect = processAffectTriggers(afterReturnTriggers.events, state, command.playerId, random, now);
+    const afterAffect = processAffectTriggers(afterProtectedAffect, state, command.playerId, random, now);
     if (afterAffect.matchState) {
         state.sys = afterAffect.matchState.sys;
     }
@@ -151,6 +150,7 @@ function executeCommand(
                 ? player.discard.find(c => c.uid === command.payload.cardUid)!
                 : player.hand.find(c => c.uid === command.payload.cardUid)!;
             const minionDef = getMinionDef(card.defId);
+            const reactionWindow = getSmashUpReactionWindowContext(state);
             const baseIndex = command.payload.baseIndex;
             const events: SmashUpEvent[] = [];
             let updatedState: MatchState<SmashUpCore> | undefined;
@@ -171,7 +171,7 @@ function executeCommand(
                         return info ? { discardPlaySourceId: info.sourceId, consumesNormalLimit: info.consumesNormalLimit } : {};
                     })() : {}),
                     // meFirst 响应窗口中打出 beforeScoringPlayable 随从不消耗正常额度
-                    ...(state.sys.responseWindow?.current?.windowType === 'meFirst' && (() => {
+                    ...(reactionWindow?.windowType === 'meFirst' && (() => {
                         if (minionDef?.beforeScoringPlayable) return true;
                         const fusionDef = getFusionDef(card.defId);
                         return fusionDef?.minionBeforeScoringPlayable === true;
@@ -185,7 +185,7 @@ function executeCommand(
             events.push(playedEvt);
 
             // meFirst 响应窗口中打出 beforeScoringPlayable 随从时，记录 specialLimitGroup 使用
-            if (state.sys.responseWindow?.current?.windowType === 'meFirst' && minionDef?.beforeScoringPlayable) {
+            if (reactionWindow?.windowType === 'meFirst' && minionDef?.beforeScoringPlayable) {
                 const limitGroup = minionDef.specialLimitGroup;
                 if (limitGroup) {
                     events.push({
@@ -208,22 +208,39 @@ function executeCommand(
         }
 
         case SU_COMMANDS.PLAY_ACTION: {
-            const player = core.players[command.playerId];
+            const shouldBypassReactionChoose = (
+                state.sys.interaction?.current?.kind === 'simple-choice'
+                && (state.sys.interaction.current.data as { sourceId?: string } | undefined)?.sourceId === 'smashup_reaction_choose'
+            );
+            const workingState = shouldBypassReactionChoose
+                ? {
+                    ...state,
+                    sys: {
+                        ...state.sys,
+                        interaction: {
+                            ...state.sys.interaction,
+                            current: undefined,
+                        },
+                    },
+                }
+                : state;
+
+            const player = workingState.core.players[command.playerId];
             const card = player.hand.find(c => c.uid === command.payload.cardUid)!;
             const def = getCardDef(card.defId) as ActionCardDef | FusionCardDef | undefined;
+            const reactionWindow = getSmashUpReactionWindowContext(workingState);
             const events: SmashUpEvent[] = [];
             let updatedState: MatchState<SmashUpCore> | undefined;
 
-            const event: ActionPlayedEvent = {
-                type: SU_EVENTS.ACTION_PLAYED,
-                payload: {
-                    playerId: command.playerId,
-                    cardUid: card.uid,
-                    defId: card.defId,
-                },
+            const event = buildActionPlayedEvent({
+                playerId: command.playerId,
+                cardUid: card.uid,
+                defId: card.defId,
+                targetBaseIndex: command.payload.targetBaseIndex,
+                targetMinionUid: command.payload.targetMinionUid,
                 sourceCommandType: command.type,
                 timestamp: now,
-            };
+            });
             events.push(event);
 
             const subtype = (def as any)?.type === 'fusion'
@@ -250,8 +267,8 @@ function executeCommand(
                 const ongoingExecutor = resolveOnPlay(card.defId);
                 if (ongoingExecutor) {
                     const ctx: AbilityContext = {
-                        state: core,
-                        matchState: state,
+                        state: workingState.core,
+                        matchState: workingState,
                         playerId: command.playerId,
                         cardUid: card.uid,
                         defId: card.defId,
@@ -281,8 +298,8 @@ function executeCommand(
                         const executor = resolveSpecial(card.defId) ?? resolveOnPlay(card.defId);
                         if (executor) {
                             const ctx: AbilityContext = {
-                                state: core,
-                                matchState: state,
+                                state: workingState.core,
+                                matchState: workingState,
                                 playerId: command.playerId,
                                 cardUid: card.uid,
                                 defId: card.defId,
@@ -299,16 +316,15 @@ function executeCommand(
                         }
                     } else if (specialTiming === 'afterScoring') {
                         // afterScoring：检查是否在响应窗口中
-                        const responseWindow = state.sys.responseWindow?.current;
-                        const isInAfterScoringWindow = responseWindow?.windowType === 'afterScoring';
+                        const isInAfterScoringWindow = reactionWindow?.windowType === 'afterScoring';
                         
                         if (isInAfterScoringWindow) {
                             // 在 afterScoring 响应窗口中：立即执行
                             const executor = resolveSpecial(card.defId) ?? resolveOnPlay(card.defId);
                             if (executor) {
                                 const ctx: AbilityContext = {
-                                    state: core,
-                                    matchState: state,
+                                    state: workingState.core,
+                                    matchState: workingState,
                                     playerId: command.playerId,
                                     cardUid: card.uid,
                                     defId: card.defId,
@@ -343,8 +359,8 @@ function executeCommand(
                     const executor = resolveOnPlay(card.defId);
                     if (executor) {
                         const ctx: AbilityContext = {
-                            state: core,
-                            matchState: state,
+                            state: workingState.core,
+                            matchState: workingState,
                             playerId: command.playerId,
                             cardUid: card.uid,
                             defId: card.defId,
@@ -363,47 +379,6 @@ function executeCommand(
             }
 
             // 基地能力触发：onActionPlayed（如工坊：额外打出一张战术）
-            const targetBaseIdx = command.payload.targetBaseIndex;
-            const actionTargetType = command.payload.targetMinionUid ? 'minion' : 'base';
-            if (targetBaseIdx !== undefined) {
-                const base = core.bases[targetBaseIdx];
-                if (base) {
-                    const currentActionMS = updatedState ?? state;
-                    const baseCtx = {
-                        state: core,
-                        matchState: currentActionMS,
-                        baseIndex: targetBaseIdx,
-                        baseDefId: base.defId,
-                        playerId: command.playerId,
-                        actionTargetBaseIndex: targetBaseIdx,
-                        actionTargetType,
-                        actionTargetMinionUid: command.payload.targetMinionUid,
-                        now,
-                    };
-                    const bResult = triggerBaseAbility(base.defId, 'onActionPlayed', baseCtx);
-                    events.push(...bResult.events);
-                    if (bResult.matchState) {
-                        updatedState = bResult.matchState;
-                    }
-                }
-
-                const currentActionMS = updatedState ?? state;
-                const queuedOngoing = collectTriggers(core, 'onActionPlayed', {
-                    state: core,
-                    matchState: currentActionMS,
-                    playerId: command.playerId,
-                    baseIndex: targetBaseIdx,
-                    actionTargetBaseIndex: targetBaseIdx,
-                    actionTargetType,
-                    actionTargetMinionUid: command.payload.targetMinionUid,
-                    random,
-                    now,
-                });
-                if (queuedOngoing) {
-                    events.push(queuedOngoing);
-                }
-            }
-
             return updatedState ? { events, updatedState } : { events };
         }
 
@@ -609,6 +584,44 @@ function executeCommand(
             }
 
             // ongoing 行动卡天赋（基地上或随从附着）
+            if (titanUid) {
+                const titan = findTitanByUid(core, titanUid);
+                if (!titan || titan.location.zone !== 'base') return { events: [] };
+
+                const talentEvt: TalentUsedEvent = {
+                    type: SU_EVENTS.TALENT_USED,
+                    payload: {
+                        playerId: command.playerId,
+                        titanUid,
+                        defId: titan.defId,
+                        baseIndex,
+                    },
+                    sourceCommandType: command.type,
+                    timestamp: now,
+                };
+                events.push(talentEvt);
+
+                const executor = resolveTalent(titan.defId);
+                if (executor) {
+                    const ctx: AbilityContext = {
+                        state: core,
+                        matchState: state,
+                        playerId: command.playerId,
+                        cardUid: titanUid,
+                        defId: titan.defId,
+                        baseIndex,
+                        random,
+                        now,
+                    };
+                    const result = executor(ctx);
+                    events.push(...result.events);
+                    if (result.matchState) {
+                        return { events, updatedState: result.matchState };
+                    }
+                }
+                return { events };
+            }
+
             if (ongoingCardUid) {
                 let ongoing = base?.ongoingActions.find(o => o.uid === ongoingCardUid);
                 if (!ongoing) {
@@ -705,7 +718,7 @@ function executeCommand(
             const { minionUid: spUid, titanUid: spTitanUid, baseIndex: spIdx } = command.payload;
             const spBase = core.bases[spIdx];
             if (spTitanUid) {
-                const titan = core.titans?.find(candidate => candidate.uid === spTitanUid);
+                const titan = findTitanByUid(core, spTitanUid);
                 if (!titan) return { events: [] };
 
                 const executor = resolveSpecial(titan.defId);
@@ -727,7 +740,6 @@ function executeCommand(
                 }
                 return { events: result.events };
             }
-
             const spMinion = spBase?.minions.find(m => m.uid === spUid);
             if (!spMinion) return { events: [] };
 
@@ -753,8 +765,9 @@ function executeCommand(
 
         case SU_COMMANDS.ACTIVATE_TITAN_ONGOING: {
             const { titanUid, baseIndex } = command.payload;
-            const titan = core.titans?.find(candidate => candidate.uid === titanUid);
+            const titan = findTitanByUid(core, titanUid);
             if (!titan) return { events: [] };
+
             const executor = resolveOngoingActivation(titan.defId);
             if (!executor) return { events: [] };
 
@@ -1039,7 +1052,7 @@ export function processDestroyTriggers(
         const minion = base?.minions.find(m => m.uid === minionUid);
         // ✅ 优先从 state 读取 owner（兜底修复：即使事件中的 ownerId 错了也能修复）
         const ownerId = minion?.owner ?? eventOwnerId;
-        const destroyerId = eventDestroyerId ?? minion?.controller ?? ownerId;
+        const destroyerId = eventDestroyerId ?? playerId ?? minion?.controller ?? ownerId;
 
         // === Phase 1: 先检查防止消灭触发器（基地能力 + ongoing） ===
         // 在触发 onDestroy 之前，先确认消灭是否会被防止
@@ -1166,6 +1179,8 @@ export function processDestroyTriggers(
                 )
                 : [...saveEvents];
         if (!isPendingSave && !hasSaveEvent) {
+            const sourceEventId = `minion-destroyed:${minionUid}:${fromBaseIndex}:${now}`;
+            const frameId = `minion-destroyed-frame:${minionUid}:${fromBaseIndex}:${now}`;
             // reaction-phase triggers for onMinionDestroyed are queued and resolved later (Wiki simultaneous ordering)
             const queuedDestroyReactions = collectTriggers(core, 'onMinionDestroyed', {
                 state: core,
@@ -1177,6 +1192,8 @@ export function processDestroyTriggers(
                 triggerMinion: minion,
                 destroyerId,
                 reason: de.payload.reason,
+                frameId,
+                sourceEventId,
                 random,
                 now,
             });
@@ -1204,6 +1221,13 @@ export function processDestroyTriggers(
 
         const filteredLocal = filterProtectedDestroyEvents(localEvents, core, destroyerId);
         extraEvents.push(...filteredLocal);
+    }
+
+    // 记录已处理的消灭事件，防止同一事件在后续流程中重复触发
+    if (skipDestroyEventKeys) {
+        for (const de of destroyEvents) {
+            skipDestroyEventKeys.add(buildDestroyEventKey(de));
+        }
     }
 
     // 需要抑制的随从 uid：已被 replacement 改写去向（回手/移动走/放回牌库）+ 待交互拯救
@@ -1364,6 +1388,8 @@ export function processMoveTriggers(
     let ms: MatchState<SmashUpCore> | undefined;
     for (const me of moveEvents) {
         const { minionUid, minionDefId, fromBaseIndex, toBaseIndex } = me.payload;
+        const sourceEventId = `minion-moved:${minionUid}:${fromBaseIndex}:${toBaseIndex}:${now}`;
+        const frameId = `minion-moved-frame:${minionUid}:${fromBaseIndex}:${toBaseIndex}:${now}`;
 
         // 触发 ongoing 拦截器 onMinionMoved（改为入队，按 Wiki 同时触发排序解决）
         const queued = collectTriggers(core, 'onMinionMoved', {
@@ -1371,6 +1397,8 @@ export function processMoveTriggers(
             matchState: ms ?? state,
             playerId,
             baseIndex: toBaseIndex,
+            frameId,
+            sourceEventId,
             moveFromBaseIndex: fromBaseIndex,
             moveToBaseIndex: toBaseIndex,
             triggerMinionUid: minionUid,
@@ -1489,6 +1517,13 @@ export function processDestroyMoveCycle(
 ): PostProcessResult {
     let currentEvents = events;
     let ms: MatchState<SmashUpCore> | undefined;
+
+    const destroySysAny = (state.sys as any);
+    if (!destroySysAny._processedDestroyEvents || !(destroySysAny._processedDestroyEvents instanceof Set)) {
+        destroySysAny._processedDestroyEvents = new Set<string>();
+    }
+    const processedDestroyEventKeys = (options?.skipDestroyEventKeys ?? destroySysAny._processedDestroyEvents) as Set<string>;
+    const mergedOptions = { ...(options ?? {}), skipDestroyEventKeys: processedDestroyEventKeys };
     
     // 跟踪已处理的 MINION_DESTROYED 事件（防止重复处理）
     const processedDestroyUids = new Set<string>();
@@ -1502,7 +1537,7 @@ export function processDestroyMoveCycle(
         }
     }
     
-    const afterDestroy = processDestroyTriggers(currentEvents, ms ?? state, playerId, random, now, options);
+    const afterDestroy = processDestroyTriggers(currentEvents, ms ?? state, playerId, random, now, mergedOptions);
     if (afterDestroy.matchState) ms = afterDestroy.matchState;
     const afterMove = processMoveTriggers(afterDestroy.events, ms ?? state, playerId, random, now);
     if (afterMove.matchState) ms = afterMove.matchState;
@@ -1525,7 +1560,7 @@ export function processDestroyMoveCycle(
         }
         
         // 只对新的 MINION_DESTROYED 事件运行 destroy 触发器
-        const extraDestroy = processDestroyTriggers(newDestroyEvents, ms ?? state, playerId, random, now, options);
+        const extraDestroy = processDestroyTriggers(newDestroyEvents, ms ?? state, playerId, random, now, mergedOptions);
         if (extraDestroy.matchState) ms = extraDestroy.matchState;
 
         // 替换原事件中的新 MINION_DESTROYED 为处理后的结果
@@ -1576,16 +1611,20 @@ export function processAffectTriggers(
     const extraEvents: SmashUpEvent[] = [];
     let ms: MatchState<SmashUpCore> | undefined;
 
-    for (const event of events) {
+    for (const [eventIndex, event] of events.entries()) {
         const affectRecords = buildAffectRecords(core, event, playerId);
-        for (const record of affectRecords) {
+        for (const [recordIndex, record] of affectRecords.entries()) {
             if (!record.countsForOnMinionAffected || !record.triggerMinion || record.baseIndex === undefined) continue;
+            const sourceEventId = `minion-affected:${event.type}:${record.triggerMinionUid}:${record.affectType}:${record.baseIndex}:${eventIndex}:${recordIndex}:${now}`;
+            const frameId = `minion-affected-frame:${event.type}:${record.triggerMinionUid}:${record.affectType}:${record.baseIndex}:${eventIndex}:${recordIndex}:${now}`;
 
             const queued = collectTriggers(core, 'onMinionAffected', {
                 state: core,
                 matchState: ms ?? state,
                 playerId: record.sourcePlayerId ?? playerId,
                 baseIndex: record.baseIndex,
+                frameId,
+                sourceEventId,
                 sourceCardUid: record.sourceCardUid,
                 sourceBaseIndex: record.sourceBaseIndex,
                 sourceControllerId: record.sourceControllerId,
@@ -1612,49 +1651,49 @@ export function processAffectTriggers(
 export function processDeckInspectionTriggers(
     events: SmashUpEvent[],
     state: MatchState<SmashUpCore>,
-    _playerId: PlayerId,
+    playerId: PlayerId,
     random: RandomFn,
     now: number,
 ): PostProcessResult {
     const core = state.core;
     const extraEvents: SmashUpEvent[] = [];
     let ms: MatchState<SmashUpCore> | undefined;
-    const seenInspectionKeys = new Set<string>();
 
-    for (const event of events) {
-        let inspectorPlayerId: PlayerId | undefined;
-        let reason: string | undefined;
+    for (const [eventIndex, evt] of events.entries()) {
+        if (evt.type !== SU_EVENTS.REVEAL_HAND && evt.type !== SU_EVENTS.REVEAL_DECK_TOP && evt.type !== SU_EVENTS.DECK_INSPECTED) continue;
 
-        if (event.type === SU_EVENTS.DECK_INSPECTED) {
-            const payload = (event as DeckInspectedEvent).payload;
-            inspectorPlayerId = payload.inspectorPlayerId;
-            reason = payload.reason;
-        } else if (event.type === SU_EVENTS.REVEAL_DECK_TOP) {
-            const payload = (event as RevealDeckTopEvent).payload;
-            inspectorPlayerId = payload.sourcePlayerId ?? (payload.viewerPlayerId === 'all' ? undefined : payload.viewerPlayerId);
-            reason = payload.reason;
-        }
-
-        if (!inspectorPlayerId || !reason) continue;
-        const dedupeKey = `${inspectorPlayerId}:${reason}:${event.timestamp ?? now}`;
-        if (seenInspectionKeys.has(dedupeKey)) continue;
-        seenInspectionKeys.add(dedupeKey);
+        const isReveal = evt.type === SU_EVENTS.REVEAL_HAND || evt.type === SU_EVENTS.REVEAL_DECK_TOP;
+        const payload = (evt as RevealHandEvent | RevealDeckTopEvent | DeckInspectedEvent).payload as any;
+        const targetPlayerIds = Array.isArray(payload.targetPlayerId)
+            ? payload.targetPlayerId
+            : [payload.targetPlayerId];
+        const inspectionZone = isReveal
+            ? (evt.type === SU_EVENTS.REVEAL_HAND ? 'hand' : 'deck')
+            : 'deck';
+        const inspectionCausePlayerId = (isReveal ? payload.sourcePlayerId : payload.inspectorPlayerId) ?? playerId;
+        const sourceEventId = `deck-inspected:${evt.type}:${inspectionZone}:${targetPlayerIds.join(',')}:${eventIndex}:${now}`;
+        const frameId = `deck-inspected-frame:${evt.type}:${inspectionZone}:${targetPlayerIds.join(',')}:${eventIndex}:${now}`;
 
         const queued = collectTriggers(core, 'onDeckInspected', {
             state: core,
             matchState: ms ?? state,
-            playerId: inspectorPlayerId,
-            reason,
+            playerId: inspectionCausePlayerId,
+            frameId,
+            sourceEventId,
+            inspectionCards: isReveal ? payload.cards : [],
+            inspectionZone,
+            inspectionTargetPlayerIds: targetPlayerIds,
+            inspectionCausePlayerId,
             random,
             now,
         });
+
         if (queued) extraEvents.push(queued);
     }
 
-    return extraEvents.length > 0
-        ? { events: [...events, ...extraEvents], matchState: ms }
-        : { events };
+    if (extraEvents.length === 0) return { events };
+    return { events: [...events, ...extraEvents], matchState: ms };
 }
 
-// reduce 函数已提取到 ./reduce.ts
 export { reduce } from './reduce';
+

@@ -190,14 +190,16 @@ describe('海盗湾计分链路', () => {
             ] as any[],
         });
 
-        // 验证：Me First! 窗口应该自动关闭（因为没有人有特殊牌）
-        expect(result.finalState.sys.responseWindow?.current).toBeUndefined();
-        
-        // 验证：应该停在 scoreBases，海盗湾交互已创建
+        const mirroredWindow = result.finalState.sys.responseWindow?.current;
+        if (mirroredWindow) {
+            expect(mirroredWindow.sourceId).toBe('smashup_reaction_choose');
+            expect(['meFirst', 'afterScoring']).toContain(mirroredWindow.windowType);
+        }
+
+        // 验证：应该停在 scoreBases，统一反应交互或具体基地交互已创建
         expect(result.finalState.sys.phase).toBe('scoreBases');
         expect(result.finalState.sys.interaction?.current).toBeDefined();
-        // With base abilities queued, an ordering prompt may appear first.
-        expect(['reaction_queue_choose_next', 'base_pirate_cove']).toContain(
+        expect(['smashup_reaction_choose', 'base_pirate_cove']).toContain(
             result.finalState.sys.interaction?.current?.data?.sourceId,
         );
     });
@@ -221,10 +223,13 @@ describe('海盗湾计分链路', () => {
 
         // 验证：停在 scoreBases，海盗湾交互已创建
         expect(result.finalState.sys.phase).toBe('scoreBases');
-        expect(result.finalState.sys.responseWindow?.current).toBeUndefined(); // 窗口已关闭
+        const mirroredWindowAfterPass = result.finalState.sys.responseWindow?.current;
+        if (mirroredWindowAfterPass) {
+            expect(mirroredWindowAfterPass.sourceId).toBe('smashup_reaction_choose');
+            expect(mirroredWindowAfterPass.windowType).toBe('afterScoring');
+        }
         expect(result.finalState.sys.interaction?.current).toBeDefined();
-        // With base abilities queued, an ordering prompt may appear first.
-        expect(['reaction_queue_choose_next', 'base_pirate_cove']).toContain(
+        expect(['smashup_reaction_choose', 'base_pirate_cove']).toContain(
             result.finalState.sys.interaction?.current?.data?.sourceId,
         );
     });

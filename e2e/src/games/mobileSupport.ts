@@ -1,8 +1,8 @@
 import type {
     GameManifestMobileDelivery,
     GameManifestEntry,
-    GameMobileLayoutPreset,
     GameMobileBattlefieldZoom,
+    GameMobileLayoutPreset,
     GameMobileProfile,
     GameOrientationPreference,
     GameShellTarget,

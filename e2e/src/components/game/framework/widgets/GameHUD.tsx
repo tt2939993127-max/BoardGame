@@ -59,7 +59,7 @@ interface GameHUDProps {
     onDestroy?: () => void;
     onForceExit?: () => void;
     showForceEndAiPhase?: boolean;
-    onForceEndAiPhase?: () => void;
+    onForceEndAiPhase?: () => boolean | void | Promise<boolean | void>;
     isLoading?: boolean;
 }
 
@@ -132,6 +132,7 @@ export const GameHUD = ({
     const { openModal, closeModal } = useModalStack();
     const { unreadTotal, requests, ensureRealtimeConnection } = useOptionalSocial();
     const [copied, setCopied] = useState(false);
+    const [isForceEndingAiPhase, setIsForceEndingAiPhase] = useState(false);
 
     // 撤回状态
     const undoState = useUndo();
@@ -441,6 +442,20 @@ export const GameHUD = ({
     // 本地模式：无聊天主按钮，设置按钮应作为离主球最近的第一个卫星按钮
     const useChatAsMain = isOnline || isTutorial;
     const canForceEndAiPhase = Boolean(showForceEndAiPhase && onForceEndAiPhase);
+    const handleForceEndAiPhaseClick = useCallback(async (closePanel: () => void) => {
+        if (!onForceEndAiPhase || isForceEndingAiPhase) {
+            return;
+        }
+        setIsForceEndingAiPhase(true);
+        try {
+            const result = await onForceEndAiPhase();
+            if (result !== false) {
+                closePanel();
+            }
+        } finally {
+            setIsForceEndingAiPhase(false);
+        }
+    }, [isForceEndingAiPhase, onForceEndAiPhase]);
 
     if (useChatAsMain) {
         // [0] 聊天（主按钮）
@@ -888,18 +903,27 @@ export const GameHUD = ({
             icon: <AlertTriangle size={20} />,
             label: t('hud.ai.forceEndPhase'),
             color: 'text-amber-400',
-            content: (
+            content: ({ closePanel }) => (
                 <div className="space-y-3">
                     <p className="text-xs text-white/70">
                         {t('hud.ai.forceEndPhaseHint')}
                     </p>
                     <button
                         type="button"
-                        onClick={() => onForceEndAiPhase?.()}
-                        className="w-full rounded-md border border-amber-500/40 bg-amber-500/15 px-3 py-2 text-xs font-bold text-amber-200 transition-colors hover:bg-amber-500/25"
+                        onClick={() => {
+                            void handleForceEndAiPhaseClick(closePanel);
+                        }}
+                        disabled={isForceEndingAiPhase}
+                        className={`w-full rounded-md border px-3 py-2 text-xs font-bold transition-colors ${
+                            isForceEndingAiPhase
+                                ? 'cursor-wait border-amber-500/25 bg-amber-500/10 text-amber-200/70'
+                                : 'border-amber-500/40 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25'
+                        }`}
                         data-testid="hud-force-end-ai-phase"
                     >
-                        {t('hud.ai.forceEndPhaseConfirm')}
+                        {isForceEndingAiPhase
+                            ? t('hud.ai.forceEndPhaseSubmitting')
+                            : t('hud.ai.forceEndPhaseConfirm')}
                     </button>
                 </div>
             ),

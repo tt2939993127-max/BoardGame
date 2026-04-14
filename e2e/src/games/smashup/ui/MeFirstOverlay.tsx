@@ -10,7 +10,8 @@ import { GameButton } from './GameButton';
 import type { MatchState } from '../../../engine/types';
 import type { SmashUpCore, ActionCardDef, FusionCardDef } from '../domain/types';
 import { getCardDef } from '../data/cards';
-import { isActionLikeRespondableInWindow, isCardActionLike, isCardMinionLike } from '../domain/utils';
+import { isCardActionLike, isCardMinionLike } from '../domain/utils';
+import { getSmashUpReactionWindowPresentation } from '../domain/reactionWindowState';
 import { UI_Z_INDEX } from '../../../core';
 import { PLAYER_CONFIG } from './playerConfig';
 
@@ -32,7 +33,7 @@ export const MeFirstOverlay: React.FC<{
     onSelectCard: (card: MeFirstPendingCard | null) => void;
 }> = ({ G, dispatch, playerID, pendingCard, onSelectCard }) => {
     const { t } = useTranslation('game-smashup');
-    const responseWindow = G.sys.responseWindow?.current;
+    const reactionWindow = getSmashUpReactionWindowPresentation(G);
 
     const handlePass = useCallback(() => {
         onSelectCard(null);
@@ -43,12 +44,10 @@ export const MeFirstOverlay: React.FC<{
     const hasInteraction = !!G.sys.interaction?.current;
 
     // 支持 meFirst 和 afterScoring 两种窗口类型
-    if (!responseWindow) return null;
-    if (responseWindow.windowType !== 'meFirst' && 
-        responseWindow.windowType !== 'afterScoring') return null;
+    if (!reactionWindow) return null;
     if (hasInteraction || pendingCard) return null;
 
-    const currentResponderId = responseWindow.responderQueue[responseWindow.currentResponderIndex];
+    const currentResponderId = reactionWindow.activePlayerId;
     const isMyResponse = playerID === currentResponderId;
     const core = G.core;
 
@@ -60,12 +59,28 @@ export const MeFirstOverlay: React.FC<{
         if (!isCardActionLike(c)) return false;
         const def = getCardDef(c.defId) as ActionCardDef | FusionCardDef | undefined;
         if (!def) return false;
-        return isActionLikeRespondableInWindow(def, responseWindow.windowType);
+        const subtype = (def as any).type === 'fusion'
+            ? (def as FusionCardDef).actionSubtype
+            : (def as ActionCardDef).subtype;
+        if (subtype !== 'special') return false;
+        
+        // 检查 specialTiming 是否匹配窗口类型
+        const cardTiming = (def as any).type === 'fusion'
+            ? ((def as FusionCardDef).actionSpecialTiming ?? 'beforeScoring')
+            : ((def as ActionCardDef).specialTiming ?? 'beforeScoring'); // 默认为 beforeScoring
+        if (reactionWindow.windowType === 'meFirst') {
+            // meFirst 窗口：只允许 beforeScoring 卡牌
+            return cardTiming === 'beforeScoring';
+        } else if (reactionWindow.windowType === 'afterScoring') {
+            // afterScoring 窗口：只允许 afterScoring 卡牌
+            return cardTiming === 'afterScoring';
+        }
+        return false;
     }) ?? [];
     
     const beforeScoringMinions = myPlayer?.hand.filter(c => {
         // beforeScoringPlayable 随从只在 meFirst 窗口可用
-        if (responseWindow.windowType === 'afterScoring') return false;
+        if (reactionWindow.windowType === 'afterScoring') return false;
         if (!isCardMinionLike(c)) return false;
         const def = getCardDef(c.defId);
         return (def as any)?.beforeScoringPlayable === true;
@@ -74,7 +89,7 @@ export const MeFirstOverlay: React.FC<{
     const hasRespondableCards = responseCards.length > 0 || beforeScoringMinions.length > 0;
     
     // 窗口标题
-    const windowTitle = responseWindow.windowType === 'afterScoring' 
+    const windowTitle = reactionWindow.windowType === 'afterScoring'
         ? t('ui.after_scoring_title', { defaultValue: '计分后响应' })
         : t('ui.me_first_title');
 
@@ -133,9 +148,9 @@ export const MeFirstOverlay: React.FC<{
 
                 {/* 响应进度 */}
                 <div className="flex justify-center gap-2 mt-3">
-                    {responseWindow.responderQueue.map((pid, idx) => {
-                        const isPassed = responseWindow.passedPlayers.includes(pid);
-                        const isCurrent = idx === responseWindow.currentResponderIndex;
+                    {reactionWindow.responderQueue.map((pid, idx) => {
+                        const isPassed = reactionWindow.passedPlayers.includes(pid);
+                        const isCurrent = idx === reactionWindow.currentResponderIndex;
                         const conf = PLAYER_CONFIG[parseInt(pid) % PLAYER_CONFIG.length];
                         return (
                             <div

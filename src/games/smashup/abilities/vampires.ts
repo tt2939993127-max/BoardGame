@@ -28,6 +28,8 @@ import type { MinionPlayedEvent } from '../domain/types';
 import { registerInteractionHandler } from '../domain/abilityInteractionHandlers';
 import type { MatchState, PlayerId, RandomFn } from '../../../engine/types';
 import { matchesDefId } from '../domain/utils';
+import { drawCards } from '../domain/utils';
+import { buildActionPlayedEvent } from '../domain/actionPlayEvent';
 
 // ============================================================================
 // 注册入口
@@ -218,7 +220,7 @@ function registerVampirePodOngoingEffects(): void {
         const ctx = (iData as any)?.continuationContext as { cardUid: string; defId: string } | undefined;
         if (!ctx) return { state, events: [] };
         const events: SmashUpEvent[] = [
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid: ctx.cardUid, defId: ctx.defId, isExtraAction: true }, timestamp } as any,
+            buildActionPlayedEvent({ playerId, cardUid: ctx.cardUid, defId: ctx.defId, isExtraAction: true, timestamp }) as any,
         ];
         events.push(...buildStandardDrawEvents(state.core, playerId, 2, random, timestamp));
         return { state, events };
@@ -255,7 +257,7 @@ function registerVampirePodOngoingEffects(): void {
         const base = state.core.bases[ctx.baseIndex];
         if (!base) return { state, events: [] };
         const events: SmashUpEvent[] = [
-            { type: SU_EVENTS.ACTION_PLAYED, payload: { playerId, cardUid: ctx.cardUid, defId: 'vampire_mad_monster_party_pod', isExtraAction: true }, timestamp } as any,
+            buildActionPlayedEvent({ playerId, cardUid: ctx.cardUid, defId: 'vampire_mad_monster_party_pod', isExtraAction: true, timestamp }) as any,
         ];
         for (const m of base.minions) {
             if (m.controller === playerId) events.push(addPowerCounter(m.uid, ctx.baseIndex, 1, 'vampire_mad_monster_party_pod', timestamp));

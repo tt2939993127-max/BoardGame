@@ -19,7 +19,7 @@ import type {
     CardInstance,
 } from '../domain/types';
 import { initAllAbilities, resetAbilityInit } from '../abilities';
-import { clearRegistry } from '../domain/abilityRegistry';
+import { clearRegistry, resolveAbility } from '../domain/abilityRegistry';
 import { clearBaseAbilityRegistry } from '../domain/baseAbilities';
 import { clearInteractionHandlers } from '../domain/abilityInteractionHandlers';
 import { applyEvents, makeMatchState as makeMatchStateFromHelpers } from './helpers';
@@ -544,7 +544,7 @@ describe('黑熊骑兵派系能力', () => {
 
             const events = execPlayAction(state, '0', 'a1');
             const limitEvents = events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
-            expect(limitEvents.length).toBe(1);
+            expect(limitEvents.length).toBe(0);
 
             const interactions = getLastInteractions();
             expect(interactions.length).toBe(1);
@@ -681,6 +681,39 @@ describe('食人花派系能力', () => {
             expect(limitEvents.length).toBe(1);
             expect((limitEvents[0] as any).payload.limitType).toBe('minion');
             expect((limitEvents[0] as any).payload.delta).toBe(1);
+        });
+
+        it('off-phase 额外随从应标记为 immediate', () => {
+            const state = makeState({
+                players: {
+                    '0': makePlayer('0', {
+                        hand: [makeCard('a1', 'killer_plant_insta_grow', 'action', '0')],
+                    }),
+                    '1': makePlayer('1'),
+                },
+                bases: [{ defId: 'b1', minions: [], ongoingActions: [] }],
+            });
+
+            const matchState = makeMatchState(state);
+            matchState.sys.phase = 'startTurn';
+
+            const executor = resolveAbility('killer_plant_insta_grow', 'onPlay');
+            expect(executor).toBeDefined();
+
+            const result = executor!({
+                state,
+                matchState,
+                playerId: '0',
+                cardUid: 'a1',
+                defId: 'killer_plant_insta_grow',
+                baseIndex: 0,
+                random: defaultRandom,
+                now: 1000,
+            });
+
+            const limitEvents = result.events.filter(e => e.type === SU_EVENTS.LIMIT_MODIFIED);
+            expect(limitEvents).toHaveLength(1);
+            expect((limitEvents[0] as any).payload.playTiming).toBe('immediate');
         });
 
         it('额度正确累加（reduce 验证）', () => {

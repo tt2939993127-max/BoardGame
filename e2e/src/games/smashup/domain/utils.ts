@@ -258,7 +258,14 @@ export function canUseBaseLimitedMinionQuota(
     if (quota <= 0) return false;
     if (player.baseLimitedSameNameRequired?.[baseIndex]) {
         const requiredDefId = player.baseLimitedSameNameDefId?.[baseIndex];
-        if (requiredDefId && !isSameNameDefId(cardDefId, requiredDefId)) return false;
+        if (requiredDefId) {
+            if (!isSameNameDefId(cardDefId, requiredDefId)) return false;
+        } else {
+            const baseMinions = state.bases[baseIndex]?.minions ?? [];
+            if (!baseMinions.some(minion => isSameNameDefId(cardDefId, minion.defId))) {
+                return false;
+            }
+        }
     }
     const baseDefId = state.bases[baseIndex]?.defId;
     const baseDef = baseDefId ? getBaseDef(baseDefId) : undefined;

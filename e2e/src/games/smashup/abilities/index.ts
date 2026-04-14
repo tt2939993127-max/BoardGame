@@ -50,10 +50,10 @@ import {
     registerPodBaseAbilityAliases,
 } from '../domain/baseAbilities';
 import { registerMultiBaseScoringInteractionHandler } from '../domain/index';
+import { registerDuelInteractionHandlers } from '../domain/duel';
 import { registerReactionQueueInteractionHandlers } from '../domain/reactionQueueHandlers';
 import { registerMulliganInteractionHandlers } from '../domain/mulliganHandlers';
 import { registerImmediateExtraPlayInteractionHandlers } from '../domain/extraPlay';
-import { registerDuelInteractionHandlers } from '../domain/duel';
 import { registerAllOngoingModifiers } from './ongoing_modifiers';
 import { clearPowerModifierRegistry, registerPodPowerModifierAliases } from '../domain/ongoingModifiers';
 import { clearOngoingEffectRegistry, registerPodOngoingAliases } from '../domain/ongoingEffects';
@@ -174,3 +174,4 @@ export function resetAbilityInit(): void {
     clearDiscardPlayProviders();
     clearTitanAbilityValidators();
 }
+

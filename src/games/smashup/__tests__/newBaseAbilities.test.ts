@@ -40,13 +40,21 @@ import { buildBuryCardEvents } from '../domain/bury';
 import { reduce } from '../domain/reduce';
 import { runCommand, defaultTestRandom } from './testRunner';
 
+const dummyRandom: RandomFn = defaultTestRandom;
+
 beforeAll(() => {
     initAllAbilities();
 });
 
-function resolveDuelChain(initialState: MatchState<SmashUpCore>) {
-    return resolveInteractionChain(initialState, (prompt) => {
+function resolveDuelChain(
+    initialState: ReturnType<typeof makeMatchState>,
+    overrides: Partial<Record<string, (prompt: any, state: ReturnType<typeof makeMatchState>, step: number) => { optionId?: string; optionIds?: string[]; mergedValue?: unknown }>> = {},
+) {
+    return resolveInteractionChain(initialState, (prompt, state, step) => {
         const sourceId = prompt?.data?.sourceId as string | undefined;
+        const custom = sourceId ? overrides[sourceId] : undefined;
+        if (custom) return custom(prompt, state, step);
+
         if (sourceId === 'smashup_duel_pinkerton') {
             const option = findInteractionOption(prompt, entry => entry?.value?.amount === 0);
             if (!option) throw new Error('未找到 Pinkerton 的 0 指示物选项');
@@ -60,16 +68,36 @@ function resolveDuelChain(initialState: MatchState<SmashUpCore>) {
         if (sourceId === 'smashup_duel_run_em_off_move') {
             return { optionId: prompt.data.options[0].id };
         }
+
         throw new Error(`未处理的决斗交互 sourceId: ${sourceId ?? 'unknown'}`);
-    });
+    }, dummyRandom);
 }
 
-const dummyRandom: RandomFn = {
-    random: () => 0.5,
-    d: () => 1,
-    range: (min: number) => min,
-    shuffle: <T>(arr: T[]) => [...arr],
-};
+describe('new base extra timing regression coverage', () => {
+    it('base_the_workshop marks off-phase extra actions as immediate', () => {
+        const core = makeState({
+            bases: [{
+                defId: 'base_the_workshop',
+                minions: [],
+                ongoingActions: [],
+            }],
+        });
+        const ms = makeMatchState(core);
+        ms.sys.phase = 'startTurn';
+
+        const result = triggerBaseAbilityWithMS('base_the_workshop', 'onActionPlayed', {
+            state: core,
+            matchState: ms,
+            baseIndex: 0,
+            baseDefId: 'base_the_workshop',
+            playerId: '0',
+            actionTargetBaseIndex: 0,
+            now: 1000,
+        } as BaseAbilityContext);
+
+        expect((result.events[0] as any).payload.playTiming).toBe('immediate');
+    });
+});
 
 /** 构造最小测试状态 */
 function makeState(overrides: Partial<SmashUpCore> = {}): SmashUpCore {
@@ -1801,7 +1829,7 @@ describe('Oops Samurai bases', () => {
         expect(queued).toBeDefined();
         const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
         const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1000);
-        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('smashup_reaction_choose');
 
         const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
         const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
@@ -1815,7 +1843,7 @@ describe('Oops Samurai bases', () => {
         );
 
         const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
-        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+        const secondResolved = secondPrompt?.data?.sourceId === 'smashup_reaction_choose'
             ? (() => {
                 const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
                 const secondOption = secondPrompt.data.options.find((option: any) => {
@@ -1880,7 +1908,7 @@ describe('Oops Samurai bases', () => {
         expect(queued).toBeDefined();
         const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
         const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1000);
-        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('smashup_reaction_choose');
 
         const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
         const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
@@ -1894,7 +1922,7 @@ describe('Oops Samurai bases', () => {
         );
 
         const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
-        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+        const secondResolved = secondPrompt?.data?.sourceId === 'smashup_reaction_choose'
             ? (() => {
                 const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
                 const secondOption = secondPrompt.data.options.find((option: any) => {
@@ -1958,7 +1986,7 @@ describe('Oops Samurai bases', () => {
         expect(queued).toBeDefined();
         const queuedState = makeMatchState({ ...core, triggerQueue: (queued as any).payload.triggers });
         const firstPrompt = maybeResolveReactionQueue(queuedState, dummyRandom, 1005);
-        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('reaction_queue_choose_next');
+        expect(firstPrompt?.state.sys.interaction.current?.data?.sourceId).toBe('smashup_reaction_choose');
 
         const firstQueueById = new Map(firstPrompt!.state.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
         const firstOption = (firstPrompt!.state.sys.interaction.current as any).data.options.find((option: any) => {
@@ -1972,7 +2000,7 @@ describe('Oops Samurai bases', () => {
         );
 
         const secondPrompt = getInteractionsFromMS(firstResolved.finalState)[0] as any;
-        const secondResolved = secondPrompt?.data?.sourceId === 'reaction_queue_choose_next'
+        const secondResolved = secondPrompt?.data?.sourceId === 'smashup_reaction_choose'
             ? (() => {
                 const secondQueueById = new Map(firstResolved.finalState.core.triggerQueue?.map(trigger => [trigger.id, trigger]) ?? []);
                 const secondOption = secondPrompt.data.options.find((option: any) => {

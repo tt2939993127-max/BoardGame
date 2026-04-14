@@ -6,7 +6,7 @@
 
 import { registerAbility } from '../domain/abilityRegistry';
 import type { AbilityContext, AbilityResult } from '../domain/abilityRegistry';
-import { grantExtraMinion, grantExtraAction, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, recoverCardsFromDiscard, buildAbilityFeedback } from '../domain/abilityHelpers';
+import { grantContextualExtraMinion, grantContextualExtraAction, grantExtraMinion, destroyMinion, getMinionPower, buildMinionTargetOptions, buildBaseTargetOptions, recoverCardsFromDiscard, buildAbilityFeedback } from '../domain/abilityHelpers';
 import { SU_EVENTS } from '../domain/types';
 import type { CardsDrawnEvent, VpAwardedEvent, SmashUpEvent, MinionPlayedEvent, OngoingDetachedEvent, CardsDiscardedEvent, ActionPlayedEvent, CardToDeckBottomEvent, MinionControlChangedEvent } from '../domain/types';
 import type { MinionCardDef, ActionCardDef } from '../domain/types';
@@ -154,8 +154,8 @@ function ghostShadyDeal(ctx: AbilityContext): AbilityResult {
 function ghostGhostlyArrival(ctx: AbilityContext): AbilityResult {
     return {
         events: [
-            grantExtraMinion(ctx.playerId, 'ghost_ghostly_arrival', ctx.now),
-            grantExtraAction(ctx.playerId, 'ghost_ghostly_arrival', ctx.now),
+            grantContextualExtraMinion(ctx, 'ghost_ghostly_arrival'),
+            grantContextualExtraAction(ctx, 'ghost_ghostly_arrival'),
         ],
     };
 }
@@ -195,13 +195,17 @@ function ghostHauntingChecker(ctx: ProtectionCheckContext): boolean {
  * ghost_make_contact onPlay：控制对手一个随从
  * 前置条件：你只能在本卡是你的唯一手牌时打出它
  *
- * 注意：控制权转移由 ONGOING_ATTACHED 的 reduce 逻辑自动完成（reducer.ts 中 defId === 'ghost_make_contact' 分支）。
+ * 注意：附着成功时显式发出 MINION_CONTROL_CHANGED，
+ * reducer 只消费该事件更新控制者，不再在 ONGOING_ATTACHED 中偷偷改控制权。
  * 打出时 UI 层已通过 ongoing-minion 模式让玩家选择了目标随从（targetMinionUid），
  * 无需再弹交互——只需验证前置条件即可。
  */
 function ghostMakeContact(ctx: AbilityContext): AbilityResult {
-    const handAfterPlay = ctx.handSizeAfterPlay ?? (ctx.state.players[ctx.playerId].hand.length - 1);
-    if (handAfterPlay > 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
+    // 前置条件：本卡必须是唯一手牌（打出后手牌为空）
+    const player = ctx.state.players[ctx.playerId];
+    const otherHandCards = player.hand.filter(c => c.uid !== ctx.cardUid);
+    if (otherHandCards.length > 0) return { events: [buildAbilityFeedback(ctx.playerId, 'feedback.condition_not_met', ctx.now)] };
+
     return { events: buildMakeContactControlChangeEvents(ctx) };
 }
 
@@ -562,7 +566,7 @@ export function registerGhostInteractionHandlers(): void {
  * ghost_make_contact_pod onPlay：
  * 打出到随从时检查手牌——
  *   - 有手牌 → 立即自毁（产生 ONGOING_DETACHED，控制权不转移）
- *   - 无手牌 → 控制随从（reducer ONGOING_ATTACHED 时已自动完成）
+ *   - 无手牌 → 显式发出控制权变更事件
  */
 function ghostMakeContactPod(ctx: AbilityContext): AbilityResult {
     const player = ctx.state.players[ctx.playerId];
