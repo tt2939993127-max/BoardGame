@@ -21,6 +21,25 @@ const toPlainRecord = (value: unknown): Record<string, unknown> => (
         : {}
 );
 
+function collectSeatIds(matchInfo: MatchInfo, rawSeatControllers: Record<string, unknown>): string[] {
+    const seatIds = new Set<string>();
+
+    for (const player of matchInfo.players) {
+        if (typeof player?.id === 'number' && Number.isInteger(player.id) && player.id >= 0) {
+            seatIds.add(String(player.id));
+        }
+    }
+
+    for (const rawSeatId of Object.keys(rawSeatControllers)) {
+        const parsed = Number(rawSeatId);
+        if (Number.isInteger(parsed) && parsed >= 0) {
+            seatIds.add(String(parsed));
+        }
+    }
+
+    return Array.from(seatIds).sort((left, right) => Number(left) - Number(right));
+}
+
 function shouldTrustOnlineAiSeatControllers(args: {
     setupData: Record<string, unknown>;
     storedAiSeatCredentials: Record<string, string>;
@@ -66,8 +85,8 @@ export async function loadOnlineAiSeatState({
         storedAiSeatCredentials,
     });
     const seatControllers: Record<string, AiSeatController> = {};
-    for (let index = 0; index < matchInfo.players.length; index += 1) {
-        const playerId = String(index);
+    const seatIds = collectSeatIds(matchInfo, rawSeatControllers);
+    for (const playerId of seatIds) {
         const rawController = rawSeatControllers[playerId];
         seatControllers[playerId] = (
             trustSeatControllers
@@ -84,8 +103,7 @@ export async function loadOnlineAiSeatState({
         ? { ...storedAiSeatCredentials }
         : {};
     if (claimMissingSeatCredential) {
-        for (let index = 0; index < matchInfo.players.length; index += 1) {
-            const playerId = String(index);
+        for (const playerId of seatIds) {
             if (!isAiSeatController(seatControllers[playerId]) || seatCredentials[playerId]) {
                 continue;
             }
