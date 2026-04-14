@@ -281,6 +281,35 @@ function isRunnableVitestTestFile(file) {
   return !/(\.property\.test\.|audit.*\.test\.|Audit.*\.test\.|debug.*\.test\.|Debug.*\.test\.)/.test(file);
 }
 
+function ensurePassWithNoTests(vitestArgs) {
+  return vitestArgs.includes('--passWithNoTests')
+    ? vitestArgs
+    : [...vitestArgs, '--passWithNoTests'];
+}
+
+function resolveRunnableVitestWorkspaceTarget(file) {
+  const normalized = normalizeFile(file);
+  const candidates = normalized.startsWith('e2e/src/')
+    ? [normalized.slice('e2e/'.length), normalized]
+    : [normalized];
+
+  for (const candidate of candidates) {
+    if (candidate.startsWith('e2e/src/')) continue;
+    if (!isRunnableVitestTestFile(candidate)) continue;
+    if (fileExistsInWorkspace(candidate)) return candidate;
+  }
+
+  return null;
+}
+
+function collectRunnableVitestWorkspaceTargets(files) {
+  return dedupeValues(
+    files
+      .map((file) => resolveRunnableVitestWorkspaceTarget(file))
+      .filter(Boolean),
+  );
+}
+
 function isDocOnly(file) {
   return file.endsWith('.md') || file.startsWith('evidence/');
 }
@@ -563,7 +592,7 @@ function affectsCoreArea(file) {
 }
 
 function isGameFile(file) {
-  return file.startsWith('src/games/');
+  return file.startsWith('src/games/') || file.startsWith('e2e/src/games/');
 }
 
 function isGameSourceFile(file) {
@@ -595,7 +624,7 @@ function collectGameIds(files, { sourceOnly = false } = {}) {
   const ids = new Set();
   for (const file of files) {
     if (sourceOnly && !isGameSourceFile(file)) continue;
-    const match = file.match(/^src\/games\/([^/]+)\//);
+    const match = file.match(/^(?:src|e2e\/src)\/games\/([^/]+)\//);
     if (match && KNOWN_GAME_IDS.has(match[1])) ids.add(match[1]);
   }
   return [...ids];
@@ -659,9 +688,7 @@ function createVitestCommands({ label, reason, target, vitestArgs }) {
   // Vitest 会在 “No test files found” 时以 exit code 1 退出。
   // 我们的增量门禁会按目录拆分执行（例如 src/shared），而该目录可能没有独立测试文件；
   // 这不应阻塞提交/门禁，因此统一开启 passWithNoTests。
-  const safeVitestArgs = vitestArgs.includes('--passWithNoTests')
-    ? vitestArgs
-    : [...vitestArgs, '--passWithNoTests'];
+  const safeVitestArgs = ensurePassWithNoTests(vitestArgs);
   if (!shards || shards.length === 0) {
     return [{
       label,
@@ -692,9 +719,13 @@ function collectCommands(files, baseRef, affectsTypecheck) {
     files,
     isPrePushMode ? affectsPrePushGlobalVitest : isCoreSourceFile,
   );
-  const coreTestFiles = files.filter((file) => isNonGameTestFile(file) && fileExistsInWorkspace(file));
+  const coreTestFiles = collectRunnableVitestWorkspaceTargets(
+    files.filter((file) => isNonGameTestFile(file)),
+  );
   const gameSourceIds = collectGameIds(files, { sourceOnly: true });
-  const gameTestFiles = files.filter((file) => isGameFile(file) && isTestFile(file) && fileExistsInWorkspace(file));
+  const gameTestFiles = collectRunnableVitestWorkspaceTargets(
+    files.filter((file) => isGameFile(file) && isTestFile(file)),
+  );
 
   if (hasAny(files, affectsTypecheck)) {
     commands.push({
@@ -844,7 +875,7 @@ function collectCommands(files, baseRef, affectsTypecheck) {
           label: 'Changed core test files',
           reason: '仅改动核心测试文件，按文件精确运行',
           command: process.execPath,
-          args: [...VITEST_SAFE_ENTRY, 'run', ...dedupeValues(coreTestFiles), ...FAST_VITEST_ARGS],
+          args: [...VITEST_SAFE_ENTRY, 'run', ...coreTestFiles, ...ensurePassWithNoTests(FAST_VITEST_ARGS)],
         });
       }
       if (gameSourceIds.length > 0) {
@@ -865,7 +896,7 @@ function collectCommands(files, baseRef, affectsTypecheck) {
           label: 'Changed game test files',
           reason: '仅改动游戏测试文件，按文件精确运行',
           command: process.execPath,
-          args: [...VITEST_SAFE_ENTRY, 'run', ...dedupeValues(gameTestFiles), ...GAME_VITEST_ARGS],
+          args: [...VITEST_SAFE_ENTRY, 'run', ...gameTestFiles, ...ensurePassWithNoTests(GAME_VITEST_ARGS)],
         });
       }
     }
