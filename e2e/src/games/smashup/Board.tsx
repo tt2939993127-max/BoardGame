@@ -58,6 +58,7 @@ import {
     isActionLikeRespondableInWindow,
     mustUseBaseLimitedMinionQuota,
     mustUseGlobalPowerLimitedMinionQuota,
+    canUseBaseLimitedMinionQuota,
     isSameNameDefId,
     isCardActionLike,
     isCardMinionLike,
@@ -1195,10 +1196,7 @@ const SmashUpBoard: FC<Props> = ({ G, dispatch, playerID: rawPlayerID, reset, ma
                     if (onlyBaseQuota) {
                         const bQuota = player.baseLimitedMinionQuota?.[i] ?? 0;
                         if (bQuota <= 0) continue;
-                        if (player.baseLimitedSameNameRequired?.[i]) {
-                            const hasSameNameOnBase = core.bases[i].minions.some(m => isSameNameDefId(card.defId, m.defId));
-                            if (!hasSameNameOnBase) continue;
-                        }
+                        if (!canUseBaseLimitedMinionQuota(core, player, i, card.defId, basePower)) continue;
                     }
                     if (minionDef?.playConstraint) {
                         if (checkPlayConstraintUI(minionDef.playConstraint, core, i, playerID)) {

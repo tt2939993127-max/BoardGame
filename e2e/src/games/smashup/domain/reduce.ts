@@ -61,6 +61,7 @@ import {
     getRemainingBaseLimitedPowerLimitedMinionQuotas,
     getRemainingGlobalPowerLimitedMinionQuotas,
     getRemainingUnrestrictedGlobalMinionQuota,
+    isSameNameDefId,
     resolveLiveBaseIndex,
 } from './utils';
 
@@ -405,6 +406,8 @@ export function reduce(state: SmashUpCore, event: SmashUpEvent): SmashUpCore {
                         usedDiscardPlayAbilities: newUsedAbilities,
                         baseLimitedMinionQuota: quotaResolution.baseLimitedMinionQuota,
                         baseLimitedMinionPowerCaps: quotaResolution.baseLimitedMinionPowerCaps,
+                        baseLimitedSameNameRequired: quotaResolution.baseLimitedSameNameRequired,
+                        baseLimitedSameNameDefId: quotaResolution.baseLimitedSameNameDefId,
                         extraMinionPowerCaps: quotaResolution.extraMinionPowerCaps,
                         extraMinionPowerMax: quotaResolution.extraMinionPowerMax,
                         sameNameMinionRemaining: quotaResolution.sameNameMinionRemaining,

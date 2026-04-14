@@ -1647,7 +1647,7 @@ describe('GameTransportServer（离座与重连）', () => {
         }));
     });
 
-    it('online AI watchdog 在 responseWindow 当前响应者为 human 时不得误触发强制结束 AI 回合', async () => {
+    it('online AI watchdog 在 AI 当前阶段卡在 human 响应窗口时，应先强制关闭响应窗口再推进阶段', async () => {
         const io = new MockIO();
         const storage = new InMemoryStorage();
         const feedbackReporter = vi.fn(async () => undefined);
@@ -1689,21 +1689,66 @@ describe('GameTransportServer（离座与重连）', () => {
             ) => Promise<boolean>;
         };
 
-        await serverInternal.loadMatch('match-watchdog-response-window-human');
-        const executeSpy = vi.spyOn(serverInternal, 'executeCommandInternal');
+        const match = await serverInternal.loadMatch('match-watchdog-response-window-human');
+        const executed: string[] = [];
+        vi.spyOn(serverInternal, 'executeCommandInternal').mockImplementation(async (activeMatch, _playerID, commandType) => {
+            executed.push(commandType);
+
+            if (commandType === 'SYS_RESPONSE_WINDOW_FORCE_CLOSE') {
+                activeMatch.state = {
+                    ...activeMatch.state,
+                    sys: {
+                        ...activeMatch.state.sys,
+                        eventStream: {
+                            ...(activeMatch.state.sys?.eventStream ?? {}),
+                            nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                        },
+                        responseWindow: {
+                            ...(activeMatch.state.sys?.responseWindow ?? {}),
+                            current: undefined,
+                        },
+                    },
+                };
+                return true;
+            }
+
+            if (commandType === 'ADVANCE_PHASE') {
+                activeMatch.state = {
+                    ...activeMatch.state,
+                    core: {
+                        ...activeMatch.state.core,
+                        activePlayerId: '0',
+                        currentPlayerIndex: 0,
+                    },
+                    sys: {
+                        ...activeMatch.state.sys,
+                        eventStream: {
+                            ...(activeMatch.state.sys?.eventStream ?? {}),
+                            nextId: (activeMatch.state.sys?.eventStream?.nextId ?? 1) + 1,
+                        },
+                        phase: 'main1',
+                        turnNumber: (activeMatch.state.sys?.turnNumber ?? 4) + 1,
+                    },
+                };
+                return true;
+            }
+
+            return false;
+        });
 
         await serverInternal.runOnlineAiRecoveryTick();
         await serverInternal.runOnlineAiRecoveryTick();
         await nextTick();
 
-        expect(executeSpy).toHaveBeenCalledTimes(1);
-        expect(executeSpy).toHaveBeenCalledWith(
-            expect.anything(),
-            '1',
-            'ADVANCE_PHASE',
-            {},
-        );
-        expect(feedbackReporter).not.toHaveBeenCalled();
+        expect(executed).toEqual(['SYS_RESPONSE_WINDOW_FORCE_CLOSE', 'ADVANCE_PHASE']);
+        expect(match.state.sys.responseWindow.current).toBeUndefined();
+        expect(match.state.sys.phase).toBe('main1');
+        expect(match.state.core.activePlayerId).toBe('0');
+        expect(feedbackReporter).toHaveBeenCalledWith(expect.objectContaining({
+            matchId: 'match-watchdog-response-window-human',
+            playerId: '1',
+            incidentKind: 'force-end-turn-success',
+        }));
     });
 
     it('online AI watchdog 失败反馈应按 incident key 去重冷却', async () => {

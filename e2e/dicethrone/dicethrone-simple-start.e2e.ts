@@ -2840,9 +2840,88 @@ test.describe('DiceThrone Simple Start', () => {
                 phase: 'main2',
                 hasResponseWindow: false,
             });
+            await expect(forceEndPanel).toBeHidden({ timeout: 5000 });
 
             await expect(hostPage.getByText(/AI 强制结束失败|强制结束 AI 回合未成功/i)).toHaveCount(0);
             await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-manual-force-end-human-response-after');
+        } finally {
+            await setup.hostContext.close();
+        }
+    });
+
+    test('Online AI 当前阶段遇到 human 可响应卡时，服务端 watchdog 应自动关闭响应窗口并推进阶段', async ({ browser }, testInfo) => {
+        test.setTimeout(180000);
+        const baseURL = testInfo.project.use.baseURL as string | undefined;
+
+        const setup = await setupDTOnlineAiRoom(browser, baseURL);
+        if (!setup) {
+            test.skip(true, 'DiceThrone AI 联机房间创建失败');
+            return;
+        }
+
+        try {
+            const { hostPage, matchId } = setup;
+            await waitForTestHarness(hostPage, 15000);
+
+            await applyOnlineMatchState(matchId, hostPage, buildOnlineAiHumanResponseWindowState);
+            await waitForGameBoard(hostPage, 30000);
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                return {
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    phase: state.sys?.phase ?? null,
+                    responseWindowType: state.sys?.responseWindow?.current?.windowType ?? null,
+                    currentResponderId: (() => {
+                        const current = state.sys?.responseWindow?.current;
+                        const queue = Array.isArray(current?.responderQueue) ? current.responderQueue : [];
+                        const index = typeof current?.currentResponderIndex === 'number' ? current.currentResponderIndex : 0;
+                        return typeof queue[index] === 'string' ? queue[index] : null;
+                    })(),
+                    hostHandCount: Array.isArray(state.core?.players?.['0']?.hand)
+                        ? state.core.players['0'].hand.length
+                        : 0,
+                };
+            }, {
+                timeout: 10000,
+                message: '等待注入“AI 当前阶段 + human 可响应卡”自动 watchdog 场景完成',
+            }).toEqual({
+                activePlayerId: '1',
+                phase: 'main1',
+                responseWindowType: 'afterCardPlayed',
+                currentResponderId: '0',
+                hostHandCount: 1,
+            });
+
+            await clearEvidenceScreenshotsForTest(testInfo);
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-watchdog-human-response-before');
+
+            await expect.poll(async () => {
+                const state = await getMatchState(matchId, hostPage);
+                const failureToastVisible = await hostPage.evaluate(() => {
+                    return Array.from(document.querySelectorAll('*')).some((node) => {
+                        const text = node.textContent?.trim() ?? '';
+                        return text.includes('强制结束 AI 回合未成功')
+                            || text.includes('AI 强制结束失败（');
+                    });
+                });
+                return {
+                    activePlayerId: state.core?.activePlayerId ?? null,
+                    phase: state.sys?.phase ?? null,
+                    hasResponseWindow: Boolean(state.sys?.responseWindow?.current),
+                    failureToastVisible,
+                };
+            }, {
+                timeout: 40000,
+                message: '等待服务端 watchdog 自动关闭 human 响应窗口并把 AI 阶段推进到 main2',
+            }).toEqual({
+                activePlayerId: '1',
+                phase: 'main2',
+                hasResponseWindow: false,
+                failureToastVisible: false,
+            });
+
+            await saveEvidenceScreenshot(hostPage, testInfo, '20-online-ai-watchdog-human-response-after');
         } finally {
             await setup.hostContext.close();
         }
